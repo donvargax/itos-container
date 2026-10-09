@@ -1,0 +1,71 @@
+# GoReleaser (https://goreleaser.com), run by tools/bin/pinned at the version pinned there: the
+# one way a release is built (T-5). The release workflow (.github/workflows/release.yml) runs
+# `goreleaser release` at the tag it computed, which publishes a draft;
+# `tools/bin/pinned goreleaser release --snapshot --clean` builds the same archives locally and
+# publishes nothing. Harvested from itos's .goreleaser.yaml (its T-069), less its config schema.
+#
+# What it publishes: for linux and darwin on amd64 and arm64 and windows on amd64, as itos builds,
+# itos-container-<version>-<os>-<arch>.tar.gz (.zip for windows) holding the binary
+# (itos-container, or itos-container.exe), LICENSE and README.md at its top level; and
+# checksums.txt, every archive's SHA-256 in sha256sum's format, which the release workflow
+# attests.
+version: 2
+project_name: itos-container
+# Inside dist/, which git ignores: --clean empties this folder alone.
+dist: dist/goreleaser
+
+builds:
+  - id: itos-container
+    main: ./cmd/itos-container
+    binary: itos-container
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    # The tag is the version, and the full commit the commit it was built from: internal/version
+    # says both, stamped as the acceptance harness stamps the binary it builds
+    # (features/features_test.go's versionSymbol and commitSymbol); a snapshot's version, below,
+    # for a build that publishes nothing.
+    ldflags:
+      - -s -w -X github.com/donvargax/itos-container/internal/version.stamp={{ .Version }} -X github.com/donvargax/itos-container/internal/version.commit={{ .FullCommit }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - { goos: windows, goarch: arm64 }
+    # The commit's time, so a commit rebuilt by the same toolchain gives the same binaries.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: itos-container
+    ids: [itos-container]
+    name_template: "itos-container-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - { goos: windows, formats: [zip] }
+    # Every entry owned by root, by number, and dated at the commit.
+    builds_info: { owner: root, group: root, mode: 0755, mtime: "{{ .CommitDate }}" }
+    files:
+      - src: LICENSE
+        info: { owner: root, group: root, mode: 0644, mtime: "{{ .CommitDate }}" }
+      - src: README.md
+        info: { owner: root, group: root, mode: 0644, mtime: "{{ .CommitDate }}" }
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# The notes are tools/bin/release-notes', set by the workflow once the archives are attested.
+changelog:
+  disable: true
+
+release:
+  github: { owner: donvargax, name: itos-container }
+  name_template: "itos-container {{ .Version }}"
+  # A draft, published by the workflow once the archives are attested and the notes written. The
+  # tag is created locally only and never pushed: GitHub creates it at target_commitish when the
+  # draft is published, so the tag and a release with every asset appear together, and a run that
+  # fails half way leaves no tag, only a draft the next run replaces.
+  draft: true
+  replace_existing_draft: true
+  target_commitish: "{{ .FullCommit }}"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"

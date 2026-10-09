@@ -1,0 +1,17 @@
+# What itos-template new rendered this project from: the template as it was
+# named, the stack, the features, the answers, and the commit each of the
+# template's branches was at. itos-template update reads it; edit it only to
+# change what an update renders.
+version: 1
+template: https://github.com/donvargax/go-template-itos.git
+stack: go
+features:
+  - cli
+answers:
+  module: github.com/donvargax/itos-container
+  name: itos-container
+  owner: donvargax
+commits:
+  go/cli: c2da5d2c96823a3b519daf7e9d8d6cfe8cc6e099
+  main: ed5798615ccbb98e405f3f45e62a465b99027fb6
+  stack/go: ce622fbe7898fac6b15a785fad1781930ba0fb00

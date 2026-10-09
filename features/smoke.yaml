@@ -1,0 +1,34 @@
+# The smoke set: the scenarios every push runs, beside the ones its commits
+# name (features/README.md).
+#
+# The rule, checked by `itos tests smoke check scenario` and `itos config
+# check`: every feature file with a live scenario has at least one here, every
+# ID here is a live scenario of the file it is listed under, and a file with
+# more than one says why (`more`). `itos tests smoke run scenario` runs
+# exactly this set.
+#
+# How to pick one: a fast scenario that exercises what its file is about, not
+# an edge of it.
+#
+# The shape (itos.yaml's `tests.scenario.smoke` names this file): one entry
+# per feature file, `file` relative to features/, `more` saying why the file
+# has more than one (required when it does), and each scenario's `id` and
+# `why`. Quote a value holding `: `, and every ID (its `@` starts no plain
+# scalar).
+#
+#   - file: cli.feature
+#     scenarios:
+#       - id: "@ID-CLI-01"
+#         why: what it exercises, and why it was chosen
+- file: count.feature
+  scenarios:
+    - id: "@ID-COUNT-01"
+      why: count's whole path in one run, the counts on stdout and the hint on stderr, the file read through the disk adapter and the output shaped
+- file: cli.feature
+  scenarios:
+    - id: "@ID-CLI-01"
+      why: --version, the one call every build answers, the binary built, stamped and run in one step
+- file: completion.feature
+  scenarios:
+    - id: "@ID-COMPL-01"
+      why: the hidden completion command answers a new word from kong's model and leaves itself out

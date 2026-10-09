@@ -1,0 +1,28 @@
+#!/bin/sh
+# The pre-commit hook: the linters and the vulnerability check, at the
+# versions pinned here, over the module. itos's own hooks (commit-msg and
+# pre-push) are declared by itos hook install; this one is the project's,
+# declared once in each clone (README.md):
+#
+#   git config hook.itos-container-pre-commit.event pre-commit
+#   git config hook.itos-container-pre-commit.command tools/hooks/pre-commit
+#
+# git runs it from the top of the working tree, under sh on every platform
+# (Git for Windows' on Windows).
+set -eu
+
+# Prose and itos's own data need neither: Markdown, docs/**, tasks/** (the
+# ledger and the work registry) and feature files. itos.yaml, the ledger, the
+# registry and the smoke set are checked by itos's commit-msg hook.
+if [ -z "$(git diff --cached --name-only --diff-filter=ACMRD -- . ':(exclude)*.md' ':(exclude)docs/**' ':(exclude)tasks/**' ':(exclude)features/**/*.feature')" ]; then
+	exit 0
+fi
+
+# golangci-lint at its pinned release, its download checked against the
+# SHA-256 in tools/bin/pinned; the linters are .golangci.yml's.
+tools/bin/pinned golangci-lint run ./...
+
+# govulncheck at the version go.mod's tool block pins, go.sum checking it: a
+# vulnerability the code, its tests included, reaches. It asks the
+# vulnerability database, so it needs the network.
+go tool govulncheck -test ./...

@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, "stack/**", "go/**", "renovate/**"]
+  push:
+    branches: [main, "stack/**", "go/**", "renovate/**"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TO: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: >-
+          startsWith(github.base_ref, 'stack/') || startsWith(github.base_ref, 'go/') ||
+          startsWith(github.head_ref, 'stack/') || startsWith(github.head_ref, 'go/') ||
+          startsWith(github.head_ref, 'renovate/') || startsWith(github.ref, 'refs/heads/stack/') ||
+          startsWith(github.ref, 'refs/heads/go/') || startsWith(github.ref, 'refs/heads/renovate/')
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: donvargax/itos@1b9f1f9995be5d20aed3b4f8877a453bbd1e98a3 # v7.0.0-rc.1
+        with:
+          version: 6.0.0
+      - name: Range
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          out=$(itos ci range --json --head "$TO" --base "$BASE")
+          from=$(jq -er '.from | strings' <<<"$out")
+          echo "FROM=$from"
+          echo "FROM=$from" >> "$GITHUB_ENV"
+      - run: itos verify "$FROM" "$TO"
+      - run: itos ci run "$FROM" "$TO"
+
+  # Every test, the unit tests and the whole godog suite, on Linux, macOS and Windows, with each
+  # platform's paths, shell and line endings: what touches paths and CRLF breaks on Windows first.
+  platform:
+    name: Tests (${{ matrix.os }})
+    if: >-
+      startsWith(github.base_ref, 'stack/') || startsWith(github.base_ref, 'go/') ||
+      startsWith(github.head_ref, 'stack/') || startsWith(github.head_ref, 'go/') ||
+      startsWith(github.head_ref, 'renovate/') || startsWith(github.ref, 'refs/heads/stack/') ||
+      startsWith(github.ref, 'refs/heads/go/') || startsWith(github.ref, 'refs/heads/renovate/')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      # go test carries on past a package that fails, so one run shows a platform's every
+      # failure. The features build the binary they run themselves, itos-container.exe on
+      # windows, stamped with a known version and commit.
+      # GOCOVERDIR makes that binary a -cover build, so the scenarios run cover-enabled code
+      # rather than the same code with the counter left out. A GOCOVERDIR that is not there is
+      # a coverage failure the binary prints on stderr on every run, and stderr is what a
+      # scenario reads, so the folder is made first, in this step and not before it. What the
+      # runs write stays on the runner, for the piece that merges coverage to read.
+      # It is a step's variable, not the job's: the runner context is not there at job level.
+      # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
+      - name: Tests
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          go test ./... -count=1
+        env:
+          RAPID_CHECKS: 1
+          GOCOVERDIR: ${{ runner.temp }}/cover

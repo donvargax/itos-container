@@ -1,0 +1,111 @@
+#!/bin/sh
+# domain-coverage: holds each domain package to 80% statement coverage.
+# Adapted from github.com/donvargax/itos-template; the package list is read
+# from this branch's .golangci.yml. Run after unit tests in itos.yaml's plan.
+#
+# The domain packages are read from depguard's domain rule in .golangci.yml,
+# its files list, the one list of them: a new domain package is measured
+# once it is added there, never named twice. A package is a glob's folder,
+# **/internal/count/domain/** being ./internal/count/domain, its port and
+# infrastructure subpackages are not measured.
+#
+# Measured as go test -cover counts: the statements of a package's blocks
+# its own tests run, over all its statements, with RAPID_CHECKS=1 as the
+# unit tests run, so a property's one random case counts as an example
+# test does. That case is new each run (-count=1, never a fixed RAPID_SEED),
+# so a package near the floor may fall under it with no change: the branch
+# that case missed is one no example test pins, and the fix is that test.
+# A figure is printed cut to one decimal, never rounded up past the floor.
+set -eu
+cd -- "$(dirname -- "$0")/../.."
+
+floor=80
+
+# The domain rule's files, as ./ paths: under linters.settings.depguard's
+# rules, the key domain, its files list, each "**/<dir>/**" its <dir>.
+# Lines are read by their indentation; a carriage return (a Windows
+# checkout) is dropped.
+packages=$(awk '
+	{ sub(/\r$/, "") }
+	/^[ \t]*(#.*)?$/ { next }
+	{
+		match($0, /^ */); indent = RLENGTH
+		line = substr($0, indent + 1)
+	}
+	infiles && indent <= filesindent && line !~ /^- / { infiles = 0 }
+	indomain && indent <= domainindent { indomain = 0 }
+	inrules && indent <= rulesindent { inrules = 0 }
+	indepguard && indent <= depguardindent { indepguard = 0 }
+	line == "depguard:" { indepguard = 1; depguardindent = indent; next }
+	indepguard && line == "rules:" { inrules = 1; rulesindent = indent; next }
+	inrules && line == "domain:" { indomain = 1; domainindent = indent; next }
+	indomain && line == "files:" { infiles = 1; filesindent = indent; next }
+	infiles && line ~ /^- / {
+		glob = substr(line, 3)
+		gsub(/^["\047]|["\047][ \t]*(#.*)?$/, "", glob)
+		if (glob !~ /^\*\*\/.*\/\*\*$/) {
+			print "domain-coverage: the domain rule names " glob ", not a **/<folder>/** glob" > "/dev/stderr"
+			exit 2
+		}
+		print "./" substr(glob, 4, length(glob) - 6)
+	}
+' .golangci.yml)
+if [ -z "$packages" ]; then
+	echo "domain-coverage: .golangci.yml names no domain packages under depguard's domain rule" >&2
+	exit 2
+fi
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# shellcheck disable=SC2086 # one argument per package
+if ! RAPID_CHECKS=1 go test -count=1 -coverprofile="$tmp/cover.out" $packages >"$tmp/test.out" 2>&1; then
+	cat "$tmp/test.out" >&2
+	echo "domain-coverage: the domain's tests fail, so there is no figure to hold" >&2
+	exit 1
+fi
+
+# Each block of the profile is file:start,end statements count; a block in
+# it twice counts as run when either run it, as go tool cover merges them.
+# A package is a file's import path less its file name; its figure is its
+# statements run over its statements. The packages are printed in the
+# order the rule lists them, each by the ./ path given.
+module=$(go list -m)
+printf '%s\n' "$packages" | awk -v floor="$floor" -v module="$module" '
+	FNR == NR { order[++n] = $0; next }
+	FNR == 1 { next } # mode: set
+	{
+		split($0, f, " ")
+		block = f[1]
+		stmts[block] = f[2]
+		if (f[3] > 0) run[block] = 1
+	}
+	END {
+		for (block in stmts) {
+			file = block
+			sub(/:[^:]*$/, "", file)
+			pkg = file
+			sub(/\/[^\/]*$/, "", pkg)
+			pkg = "./" substr(pkg, length(module) + 2)
+			total[pkg] += stmts[block]
+			if (block in run) covered[pkg] += stmts[block]
+		}
+		refusals = ""
+		for (i = 1; i <= n; i++) {
+			pkg = order[i]
+			if (total[pkg] == 0) {
+				refusals = refusals "domain-coverage: " pkg " has no statements to measure\n"
+				continue
+			}
+			tenths = int(covered[pkg] * 1000 / total[pkg])
+			figure = sprintf("%d.%d%%", tenths / 10, tenths % 10)
+			printf "%s %s\n", pkg, figure
+			if (covered[pkg] * 100 < floor * total[pkg])
+				refusals = refusals sprintf("domain-coverage: %s is at %s, under the floor of %d%%: test the behaviour its uncovered statements carry\n", pkg, figure, floor)
+		}
+		if (refusals == "") exit 0
+		fflush()
+		printf "%s", refusals > "/dev/stderr"
+		exit 1
+	}
+' - "$tmp/cover.out"

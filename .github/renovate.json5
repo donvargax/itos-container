@@ -1,0 +1,34 @@
+// Renovate's shared rules come from the owner's preset repository.
+{
+	$schema: "https://docs.renovatebot.com/renovate-schema.json",
+	extends: [
+		"github>donvargax/renovate-config#v1.3.0",
+		"github>donvargax/renovate-config:go#v1.3.0",
+	],
+	enabledManagers: ["gomod", "github-actions", "renovate-config"],
+
+	// itos moves with its config pin and workflow action, not through Renovate.
+	ignoreDeps: ["donvargax/itos"],
+	automergeType: "branch",
+	automergeSchedule: ["at any time"],
+	semanticCommits: "enabled",
+	commitBody: "Renovate's update, landed on main once CI passed on its branch.\n\n{{#each upgrades}}{{#unless @first}}\n{{/unless}}- {{{depName}}} {{#if (equals updateType 'digest')}}{{{currentDigestShort}}} to {{{newDigestShort}}}{{else}}{{{currentVersion}}} to {{{newVersion}}}{{#if newDigestShort}} ({{{newDigestShort}}}){{/if}}{{/if}}{{/each}}",
+	commitTrailers: ["Task: T-2"],
+
+	packageRules: [
+		{
+			matchPackageNames: ["*"],
+			semanticCommitType: "build",
+			semanticCommitScope: null,
+		},
+		{
+			matchManagers: ["github-actions", "renovate-config"],
+			semanticCommitType: "ci",
+			semanticCommitScope: null,
+		},
+		{
+			matchManagers: ["github-actions"],
+			pinDigests: true,
+		},
+	],
+}

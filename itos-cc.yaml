@@ -1,0 +1,3 @@
+# Equivalent mutants need project-local proof and a reviewed reason.
+mutation:
+  exceptions: []

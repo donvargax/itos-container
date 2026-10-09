@@ -1,0 +1,107 @@
+#!/bin/sh
+# Runs a release tool at the version and SHA-256 pinned below. Adapted from
+# github.com/donvargax/itos-template, keeping its goreleaser case, which the release
+# workflow runs; the lint and mutation-proof cases are the ones this branch's CI
+# needs. govulncheck is pinned as a Go tool in go.mod.
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+
+die() {
+	echo "pinned: $*" >&2
+	exit 2
+}
+
+[ $# -ge 1 ] || die "usage: tools/bin/pinned <tool> <args>… | tools/bin/pinned --path <tool>"
+print=""
+if [ "$1" = "--path" ]; then
+	[ $# -eq 2 ] || die "usage: tools/bin/pinned --path <tool>"
+	print=1
+	shift
+fi
+tool=$1
+shift
+
+case "$(uname -s)-$(uname -m)" in
+Linux-x86_64) platform=linux-amd64 ;;
+Linux-aarch64 | Linux-arm64) platform=linux-arm64 ;;
+Darwin-x86_64) platform=darwin-amd64 ;;
+Darwin-arm64) platform=darwin-arm64 ;;
+MINGW*-x86_64 | MSYS*-x86_64 | CYGWIN*-x86_64) platform=windows-amd64 ;;
+MINGW*-aarch64 | MSYS*-aarch64 | CYGWIN*-aarch64 | MINGW*-arm64 | MSYS*-arm64) platform=windows-arm64 ;;
+*) die "no pinned $tool for $(uname -s)-$(uname -m)" ;;
+esac
+
+case "$tool" in
+golangci-lint)
+	version=2.14.0
+	case "$platform" in
+	linux-amd64) sum=ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab ;;
+	linux-arm64) sum=ee7ec5f3453d15ddf106fae5a4d6c71737712348a979d1fe9cd52ec7ea299bae ;;
+	darwin-amd64) sum=a5667c1c3536be1740133213e1e822bfb8f0d98ea12903174d6d5f635e4ed68d ;;
+	darwin-arm64) sum=5ef5f36a7147e91dc58ef9ef4d11bb7bad5ead0c76eb6c01327a73c641d1dcc3 ;;
+	windows-amd64) sum=b15f903d1649283a2ab6e8d2f0c317eaf1f9f6b3763950e7e8b7e72a43dd724f ;;
+	windows-arm64) sum=6399496aef883e5d2f77ea93e6e54fdd05bc2695f64071d8de0b0579cad92274 ;;
+	esac
+	case "$platform" in
+	windows-*) asset=golangci-lint-$version-$platform.zip exe=.exe ;;
+	*) asset=golangci-lint-$version-$platform.tar.gz exe= ;;
+	esac
+	url=https://github.com/golangci/golangci-lint/releases/download/v$version/$asset
+	member=golangci-lint-$version-$platform/golangci-lint$exe
+	;;
+goreleaser)
+	# v2.18.2, 2026-09-17.
+	version=2.18.2
+	case "$platform" in
+	linux-amd64) asset=goreleaser_Linux_x86_64.tar.gz sum=0a96edc9d9bc594e4a41cc4d59467c182062910ab24d9d1f6dd7b667d32606d3 ;;
+	linux-arm64) asset=goreleaser_Linux_arm64.tar.gz sum=a71681b29194f08f057a68cfcaa5c6b15d907a83a2622c51900c4faff828f322 ;;
+	darwin-amd64) asset=goreleaser_Darwin_x86_64.tar.gz sum=5e97d6517f73a0b6f71675a2911b15d3136c03c8907650c2b18e114b1c0f5205 ;;
+	darwin-arm64) asset=goreleaser_Darwin_arm64.tar.gz sum=a811ff154fe136a0cfb55d00126c151fc39ec370a663d805a9ca5547445aa70c ;;
+	*) die "no pinned $tool for $platform" ;;
+	esac
+	url=https://github.com/goreleaser/goreleaser/releases/download/v$version/$asset
+	member=goreleaser exe=
+	;;
+itos-cc)
+	version=0.5.0
+	case "$platform" in
+	linux-amd64) sum=a94a0d17418dd4ba39e89210468beaa0b34266db317f65ecf0c4bce6a5f4db6d ;;
+	linux-arm64) sum=9fd215a9e637590c354a782d66f86e7edf5a5f1704f364bcc4597e9f7df724af ;;
+	darwin-amd64) sum=67a5dfc5ce2120f019952f58e21b7800fd28cabd8e65d74aa69d65e381304b0e ;;
+	darwin-arm64) sum=f4acdd964c9581cc94c61231f2fd39eebfc58c91c70954666bda6c139187540a ;;
+	windows-amd64) sum=ae8a0dce924ffb4b171ecbf72b04aed54b232622cd13097f68d72cee090c7483 ;;
+	*) die "no pinned $tool for $platform" ;;
+	esac
+	case "$platform" in
+	windows-*) asset=itos-cc-$version-$platform.zip exe=.exe ;;
+	*) asset=itos-cc-$version-$platform.tar.gz exe= ;;
+	esac
+	url=https://github.com/donvargax/itos-cc/releases/download/v$version/$asset
+	member=itos-cc$exe
+	;;
+*) die "unknown pinned tool: $tool" ;;
+esac
+
+dir=$root/.tools/$tool-$version
+bin=$dir/$tool$exe
+if [ ! -x "$bin" ]; then
+	command -v curl >/dev/null 2>&1 || die "curl is not on the PATH, to fetch $tool $version"
+	if command -v sha256sum >/dev/null 2>&1; then check="sha256sum -c -"; else check="shasum -a 256 -c -"; fi
+	tmp=$(mktemp -d)
+	trap 'rm -rf "$tmp"' EXIT
+	curl -fsSL -o "$tmp/$asset" "$url" || die "cannot fetch $url"
+	(cd "$tmp" && echo "$sum  $asset" | $check >/dev/null) || die "$asset SHA-256 did not match the pinned release"
+	case "$asset" in
+	*.zip) (cd "$tmp" && unzip -q "$asset" "$member") || die "$asset holds no $member" ;;
+	*) tar -xzf "$tmp/$asset" -C "$tmp" "$member" || die "$asset holds no $member" ;;
+	esac
+	mkdir -p "$dir"
+	mv -f "$tmp/$member" "$bin.$$" && chmod +x "$bin.$$" && mv -f "$bin.$$" "$bin"
+	rm -rf "$tmp"
+	trap - EXIT
+fi
+if [ -n "$print" ]; then
+	echo "$bin"
+	exit 0
+fi
+exec "$bin" "$@"

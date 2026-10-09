@@ -1,0 +1,4 @@
+# Every text file checked out with LF on every platform, as the repository holds it. Git for
+# Windows would otherwise check out CRLF, and its sh would read the \r as part of each command of
+# tools/bin/ and tools/hooks/.
+* text=auto eol=lf

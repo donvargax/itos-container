@@ -1,0 +1,122 @@
+# Shared commit rules and checks. Stack branches add language gates with the
+# code they prove; the root remains language-neutral.
+version: 1
+
+# The source project's pin and checksum, copied with its workflow action.
+pin:
+  version: "7.0.0-rc.1"
+  checksums: "b4061c97aa46939e7dc289bf519c6a294d93aa476787d380794f33933c67122c" # SHA-256 of checksums.txt
+
+ledger:
+  files: "tasks/phase-{group}.yaml"
+  id: "T-\\d+"
+
+commits:
+  types: [feat, fix, refactor, perf, test, build, ci, chore, docs, style, revert]
+  header_lint: { use: builtin }
+  footers:
+    Task:
+      source: ledger
+      required_for: [refactor, perf, test, build, ci, chore, style, revert]
+      validate_for: all
+      read_at: commit
+    # The scenarios a feat or a fix turns green, by ID (itos commit --scenarios ID-COUNT-01):
+    # live ones, never @wip, judged against the feature files the commit carries.
+    Scenarios:
+      source: { tests: scenario }
+      strip_prefix: "@"
+      required_for: [feat, fix]
+      validate_for: [feat, fix]
+      must_be_live: true
+      read_at: commit
+    # What a user of a project made from this template must change for the commit, or none
+    # (itos commit --upgrading none): feat and fix are what a user can feel, and the release
+    # notes quote it.
+    Upgrading:
+      source: text
+      required_for: [feat, fix]
+    # The work registry item a commit belongs to, for the commits no ledger task ties to:
+    # a slice's scenarios committed red first, its specification, a chore it needs. Taken
+    # in place of Task for those types, since a slice has no task of its own.
+    Item:
+      source: registry
+      validate_for: all
+      read_at: commit
+      in_place_of: { Task: [test, docs, chore] }
+  scopes:
+    docs: { only: ["**/*.md", "docs/**", "tasks/**"] }
+
+# The scenarios, features/*.feature, run by godog through go test against the binary built
+# from this tree (features/README.md). -scenarios= is a regular expression over the scenarios'
+# tags, which the harness turns into godog's tag filter, as godog's own takes only exact tags.
+# Installed with its footer above and its CI selection below, never a kind without a runner.
+tests:
+  scenario:
+    adapter: gherkin
+    root: features
+    id: "ID-[A-Z]+-\\d+"
+    tag_prefix: "@"
+    wip_tag: "@wip"
+    run:
+      whole: "go test ./features -count=1"
+      select: "go test ./features -count=1 -scenarios={pattern}"
+      ids_pattern: "^@(?:{ids})$"
+      join: { each: "(?:{p})", sep: "|" }
+    recognize: # a task check read back as a selection, so CI runs it in the one run
+      - { command: "go test ./features -count=1", as: whole }
+      - { command: "go test ./features -count=1 -scenarios={pattern}", as: pattern }
+      - { command: "itos tests smoke run scenario", as: smoke }
+    smoke:
+      { file: features/smoke.yaml, every_file: true, add_hint: "add one to features/smoke.yaml" }
+    range_checks:
+      # Outside feat and fix, live scenarios only move, unchanged: itos's own rule, judged by
+      # the commit-msg hook and verify, so no commit but a feat or a fix weakens one.
+      - { name: scenario-moves, builtin: moves, except_types: [feat, fix] }
+
+hooks:
+  bin: itos
+
+ci:
+  steps:
+    - { run: itos config check, cost: static }
+    - { run: tools/bin/doc-caps, cost: static }
+    - run: >-
+        test -f AGENTS.md && test -f CLAUDE.md && test -f CONTRIBUTORS.md &&
+        test -f PLAN.md && test -f README.md && test -f docs/ORCHESTRATING.md &&
+        test -f docs/architecture.md && test -f docs/security.md &&
+        test -f docs/upgrading.md && test -f LICENSE && test -f .gitattributes &&
+        test -f .gitignore && test -f .github/workflows/ci.yml &&
+        test -f .github/renovate.json5 && test -x tools/bin/doc-caps
+      cost: static
+    - { run: "! gofmt -l cmd internal features | grep .", cost: static } # names each file gofmt would change
+    - { run: go build ./..., cost: static }
+    - { run: go vet ./..., cost: static }
+    - { run: go mod verify, cost: static }
+    - { run: go mod tidy -diff, cost: static }
+    - { run: itos tests smoke check scenario, cost: static }
+    - { run: tools/bin/pinned golangci-lint run ./..., cost: static }
+    - { run: go tool govulncheck -test ./..., cost: late }
+    - { run: "RAPID_CHECKS=1 go test ./cmd/... ./internal/...", cost: late }
+    - { run: tools/bin/domain-coverage, cost: late }
+    # The one merged run of the scenarios: the smoke set and those the range names, the
+    # whole suite when there is no green run to start from.
+    - { tests: scenario }
+    - { run: tools/bin/pinned itos-cc mutation sample --count 10, cost: late }
+  prose:
+    paths: ["**/*.md", "docs/**", "tasks/**"]
+    steps:
+      - itos config check
+      - tools/bin/doc-caps
+      - >-
+        test -f AGENTS.md && test -f CLAUDE.md && test -f CONTRIBUTORS.md &&
+        test -f PLAN.md && test -f README.md && test -f docs/ORCHESTRATING.md &&
+        test -f docs/architecture.md && test -f docs/security.md &&
+        test -f docs/upgrading.md && test -f LICENSE && test -f .gitattributes &&
+        test -f .gitignore && test -f .github/workflows/ci.yml &&
+        test -f .github/renovate.json5 && test -x tools/bin/doc-caps
+  watch: { provider: github }
+
+proof:
+  code:
+    paths: ["{cmd,internal}/**/*.go"]
+    check: "tools/bin/pinned itos-cc mutation check --since {base} --fail-uncovered --json cmd internal"

@@ -1,0 +1,27 @@
+#!/bin/sh
+# doc-caps: holds the documents every session reads to a size, in bytes, so
+# they stay short as the project grows. itos learned it late: its AGENTS.md
+# reached 24 KB and its docs/ORCHESTRATING.md 9 KB before anything held them.
+# Run by CI's plan on every push, a docs-only one included (itos.yaml's
+# ci.steps and ci.prose.steps); exit 1 naming each document over its cap.
+#
+# Each cap has headroom over the document's size when it was set
+# (2026-10-06): AGENTS.md 6533 bytes, CI's plan generated into its rules
+# block, and docs/ORCHESTRATING.md 1261, which may grow to ten lessons.
+# Raising a cap is a decision, not a fix: shorten the document first.
+set -eu
+cd -- "$(dirname -- "$0")/../.."
+
+over=0
+cap() { # <file> <bytes>
+	size=$(wc -c <"$1" | tr -d ' ')
+	if [ "$size" -gt "$2" ]; then
+		echo "doc-caps: $1 is $size bytes, over its cap of $2: shorten it" >&2
+		over=1
+	fi
+}
+
+cap AGENTS.md 8192
+cap docs/ORCHESTRATING.md 6144
+
+exit "$over"
