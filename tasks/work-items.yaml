@@ -6,13 +6,9 @@ items:
     title: Establish the generated seed as the commit tracking boundary
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
-    why: >
-      The generated seed predates this project ledger and has no Task footer. Start project commit
-      checks after that exact seed while retaining checks for the pilot draft and every later
-      commit. Do not rewrite history, claim inherited proof or relax any gate.
   - id: T-2
     title: Format the inherited release test fixture
     phase: 1
