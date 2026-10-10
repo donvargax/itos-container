@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "file": "internal/release/releasetest/releasetest.go",
+  "language": "go",
+  "tests": {
+    "internal/release/release_test.go": "41f61aedd48c32cdbbe7a70d4f94e4613eed8400fa032c5738eb28b4129119b4"
+  },
+  "units": [
+    {
+      "namespace": "github.com/donvargax/itos-container/internal/release/releasetest",
+      "name": "Example",
+      "hash": "e7b21a627362c8ab",
+      "start_line": 23,
+      "end_line": 93,
+      "killed": 3,
+      "survived": 0,
+      "uncovered": 0,
+      "sites": 3,
+      "mutants": [
+        {
+          "line": 27,
+          "column": 50,
+          "offset": 175,
+          "original": "!=",
+          "replacement": "==",
+          "outcome": "killed",
+          "scope": "all-tests"
+        },
+        {
+          "line": 77,
+          "column": 57,
+          "offset": 2221,
+          "original": "!=",
+          "replacement": "==",
+          "outcome": "killed",
+          "scope": "all-tests"
+        },
+        {
+          "line": 80,
+          "column": 58,
+          "offset": 2307,
+          "original": "!=",
+          "replacement": "==",
+          "outcome": "killed",
+          "scope": "all-tests"
+        }
+      ]
+    }
+  ]
+}
