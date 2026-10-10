@@ -9,3 +9,12 @@
   done_when:
     - run: test "$(itos config get commits.since)" = "23b8ce15410ec9431f5a1fe39a973d9cf0a3d8de" && git merge-base --is-ancestor 23b8ce15410ec9431f5a1fe39a973d9cf0a3d8de HEAD
     - run: itos config check
+- id: T-2
+  type: style
+  title: Format the inherited release test fixture
+  why: >
+    The first full CI run failed because the release test fixture map is not gofmt-aligned. Change
+    only whitespace in internal/release/releasetest/releasetest.go; preserve all fixture contents
+    and behavior, and retain the existing formatting gate.
+  done_when:
+    - run: test -z "$(gofmt -l internal/release/releasetest/releasetest.go)"
