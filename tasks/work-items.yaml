@@ -17,10 +17,6 @@ items:
     title: Format the inherited release test fixture
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
-    why: >
-      The first full CI run failed because the release test fixture map is not gofmt-aligned. Change
-      only whitespace in internal/release/releasetest/releasetest.go; preserve all fixture contents
-      and behavior, and retain the existing formatting gate.
