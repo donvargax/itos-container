@@ -16,8 +16,8 @@ items:
   - id: T-2
     title: Format the inherited release test fixture
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
     why: >
