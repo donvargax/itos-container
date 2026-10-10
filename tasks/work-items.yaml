@@ -1,4 +1,15 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-items: []
+items:
+  - id: T-1
+    title: Establish the generated seed as the commit tracking boundary
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+    why: >
+      The generated seed predates this project ledger and has no Task footer. Start project commit
+      checks after that exact seed while retaining checks for the pilot draft and every later
+      commit. Do not rewrite history, claim inherited proof or relax any gate.

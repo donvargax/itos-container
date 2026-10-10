@@ -1,2 +1,11 @@
 # Project-local tasks are added with itos task add, starting at T-1.
-[]
+- id: T-1
+  type: ci
+  title: Establish the generated seed as the commit tracking boundary
+  why: >
+    The generated seed predates this project ledger and has no Task footer. Start project commit
+    checks after that exact seed while retaining checks for the pilot draft and every later commit.
+    Do not rewrite history, claim inherited proof or relax any gate.
+  done_when:
+    - run: test "$(itos config get commits.since)" = "23b8ce15410ec9431f5a1fe39a973d9cf0a3d8de" && git merge-base --is-ancestor 23b8ce15410ec9431f5a1fe39a973d9cf0a3d8de HEAD
+    - run: itos config check
