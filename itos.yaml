@@ -12,6 +12,8 @@ ledger:
   id: "T-\\d+"
 
 commits:
+  # The generated seed predates the project ledger; every later commit is checked.
+  since: "23b8ce15410ec9431f5a1fe39a973d9cf0a3d8de"
   types: [feat, fix, refactor, perf, test, build, ci, chore, docs, style, revert]
   header_lint: { use: builtin }
   footers:
