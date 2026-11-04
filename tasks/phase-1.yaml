@@ -36,3 +36,14 @@
     and update or drop the overrides.
   done_when:
     - run: "rtk proxy sh -ec 'itos config check; itos ci plan --whole; for f in .github/workflows/ci.yml .github/workflows/release.yml; do grep -Eq \"uses: donvargax/itos@[0-9a-f]{40} # v8[.]45[.]3$\" \"$f\"; done; ! grep -Eq \"version:[[:space:]]+6[.]0[.]0\" .github/workflows/ci.yml .github/workflows/release.yml'"
+- id: T-4
+  type: build
+  title: tools/bin/pinned runs the current itos-cc, not 0.5.0
+  why: >
+    tools/bin/pinned pins itos-cc 0.5.0 (2026-11-03); the latest release is 0.47.2. CI's mutation
+    sample and proof.code's mutation check run through it, so the project's code proof runs a tool
+    forty-odd releases behind, without its narrower test runs and fixes. Move the pin and its five
+    checksums to the current release, read itos-cc's release notes for changed flags or config
+    (itos-cc.yaml), and keep the proof green.
+  done_when:
+    - run: rtk proxy tools/bin/pinned itos-cc mutation sample --count 10
