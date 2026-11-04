@@ -1,104 +1,175 @@
 # Configuration format guidelines
 
-These are the rules for every file itos-template reads or writes as configuration: a template's
-manifest, `itos-template.yaml`, and the record a made project keeps, `.itos-template.yaml`
-(`docs/manifest.md` is their format). Each rule names its source. No one guide covers configuration
-as CLIG covers command lines, so these gather what several hold, with the person's principles
-(decision 22). When itos-template does not follow a rule yet, the rule says so and names the item
-that will.
+These are format and validation requirements for the planned `itos-container.yaml`
+sandbox policy. The [charter](charter.md) selects the milestone from the binding
+[pilot contract](plans/container-pilot.md); they take precedence over upstream
+examples. Container commands and policy loading are **not implemented**. These rules
+do not describe an existing loader. The inherited executable exposes count, version
+and completion, and supplies no sandbox or runtime isolation evidence.
 
-Use these rules when you add or change a key, a value or a file. A decision record in
-`docs/decisions/` can change a rule; change this document in the same commit. `docs/CLI.md` holds
-the rules for flags, environment variables and where configuration is read from.
+The milestone is an offline owned run with no network, an approved hardened container,
+the checkout as its only host mount, a non-root identity and owned cleanup. Linux amd64
+with native Docker is a target requiring passing runtime evidence, not a supported-host
+claim. Network egress, credentials/accounts, network Git, LAN ingress, Compose and
+other platforms remain deferred. Describing the wider pilot does not authorize its
+later slices or settle an open security decision. Real-engine scenarios run only in CI.
 
-## Sources
+Files owned by other tools retain their formats: `itos.yaml` configures core itos's
+workflow, and the restricted `devcontainer.json` is JSON-with-comments, not YAML.
+Container policy keys do not belong in `itos.yaml`. The host's `ITOS_CONFIG` names core
+configuration, never the sandbox policy; [CLI.md](CLI.md) describes the extension seam
+and the limits on flags and environment settings.
 
-| Key      | Source                                                                                                                                       |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| K8S      | Kubernetes API Conventions, <https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md>      |
-| AIP      | Google API Improvement Proposals, <https://google.aip.dev>; the number after the key names the proposal, for example AIP `126`                |
-| CLIG     | Command Line Interface Guidelines, <https://clig.dev>, `#configuration`                                                                      |
-| JSON     | RFC 8259, The JavaScript Object Notation (JSON) Data Interchange Format, <https://www.rfc-editor.org/rfc/rfc8259>                             |
-| YAML     | YAML Ain't Markup Language, version 1.2.2, <https://yaml.org/spec/1.2.2/>                                                                    |
-| SCHEMA   | JSON Schema, <https://json-schema.org>                                                                                                       |
-| PERSON   | The person's principles for this repository, decision 22                                                                                     |
+## Sources and comparison
 
-## The principles
+Compared on **2026-11-04**, using each inspected main revision and the last commit
+that changed each guideline, not the arrival date of a local copy:
 
-- **Convention over configuration, made visible.** A key may have a default, so a file says only
-  what differs; every default is written down and can be printed, so nothing is implicit to a
-  reader (PERSON). In code, convention pays off on its own; in a configuration file, a reader
-  cannot learn it by reading the file, so the file's tool shows it.
-- **Explicit is better than implicit.** A value that changes what a tool does is written in the
-  file or shown as a default, never inferred from something else (PERSON).
-- **JSON is the data model, YAML its syntax.** A file is plain JSON data: objects, arrays,
-  strings, numbers, booleans and null (JSON). People write it as YAML, which reads JSON as well
-  (YAML), so a tool may write JSON into the same `.yaml` file and it reads the same (PERSON).
-- **No language of our own.** A format that wants loops, functions or shared fragments is a job
-  for a configuration language that writes JSON (CUE, Pkl, Jsonnet, Dhall, or one of the person's
-  own), on the author's side of the file; itos-template reads only its output (PERSON).
+| Project and inspected revision | Pinned sources | Last guideline changes (UTC) |
+| --- | --- | --- |
+| itos, `772cef549d90b9cca7170a2252ad85fc09bd880a` | [CLI](https://github.com/donvargax/itos/blob/772cef549d90b9cca7170a2252ad85fc09bd880a/docs/CLI.md), [extension protocol](https://github.com/donvargax/itos/blob/772cef549d90b9cca7170a2252ad85fc09bd880a/docs/extensions.md) | CLI: `50dfa0bcc8c0632aaa0d0041206e2c97cf9ae24f`, 2026-10-27 03:01:23. No CONFIG.md at this revision. |
+| itos-cc, `9361616f7204a236e809417726ad107ca4f9b805` | [CLI](https://github.com/donvargax/itos-cc/blob/9361616f7204a236e809417726ad107ca4f9b805/docs/CLI.md), [CONFIG](https://github.com/donvargax/itos-cc/blob/9361616f7204a236e809417726ad107ca4f9b805/docs/CONFIG.md) | CLI: `8a3f31cd899be858fa7eaea02ce9f05572d54346`, 2026-10-27 10:10:36. CONFIG: `405b36205f8a38a27260f69afe554412015077ec`, 2026-10-27 06:39:05. |
+| itos-template, `1533aee2ea3331816e793faaeaabd3f55f83bcaa` | [CLI](https://github.com/donvargax/itos-template/blob/1533aee2ea3331816e793faaeaabd3f55f83bcaa/docs/CLI.md), [CONFIG](https://github.com/donvargax/itos-template/blob/1533aee2ea3331816e793faaeaabd3f55f83bcaa/docs/CONFIG.md) | CLI: `79301eba51b9768a27906c720e39c49b08491e67`, 2026-10-12. CONFIG: `2d8bc3da85fd0aa8b6cc86f2b40b526c9726ffd3`, 2026-10-07. |
 
-## Rules
+itos-cc has the newest edits. Adopt its separation of format policy from implemented
+loader behaviour and retain strict JSON-data validation. Its loader's compatibility
+exceptions are project-specific, not sandbox permissions. The inherited CONFIG.md
+matched the template copy; CLI.md retained older render/merge guidance and lacked the
+template's later pre-v1 compatibility rule. Upstream decision numbers and implementation
+gaps are not local specifications or evidence.
 
-### Reading a file
+These rules retain donvargax's attribution and the owner's configuration principles,
+carried through itos-template and itos-cc. The owner permitted reuse of itos and
+itos-template infrastructure here under AGPL-3.0; preserve original and dependency licenses
+and notices. See [LICENSE](../LICENSE) and [CONTRIBUTORS.md](../CONTRIBUTORS.md).
 
-1. Read a file as YAML into JSON's data model, and refuse what JSON cannot say: custom tags
-   (`!!python/object`, `!foo`), several documents in one file, anchors, aliases and merge keys
-   (`&x`, `*x`, `<<`), keys that are not strings, and a key given twice. A tag can make a reader
-   build any object (the class behind CVE-2022-1471); an alias can expand without bound (a "billion
-   laughs", CVE-2019-11253); and a template's manifest comes from anything git clone takes
-   (decision 9), so a file is untrusted. Repetition anchors would remove is met by the format's
-   structure first (a root's checks run on every render), then by a configuration language on the
-   author's side (PERSON; YAML; JSON). The rule refuses what JSON's data model cannot say, not every
-   YAML spelling, so what never reaches the data is taken (quotes, comments, block or flow style),
-   and so is the non-specific tag `!`, the one tag allowed: it marks a plain value as no other
-   tag's, building no object and expanding nothing, and is read as if it were not there.
-2. Refuse a key the format does not list, so a misspelt key never passes for an option (K8S;
-   PERSON).
-3. Name every problem at once, each by the path of its key from the top (`stacks[1].checks[0]`),
-   so an author fixes them in one go (AIP `193`). Not yet the paths: the idea
-   config-key-paths.
-4. Check every value before using any: a reference to another part of the file (a feature's
-   stack, its needs) names something the file holds; a pattern is valid; a default is an answer its
-   question takes.
+| Key | External guideline source |
+| --- | --- |
+| K8S | [Kubernetes API Conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md), including lists of named objects and primitive types. |
+| AIP | [Google API Improvement Proposals](https://google.aip.dev), especially 126 (enums), 140 (names), 180 (compatibility) and 193 (errors). |
+| CLIG | [Command Line Interface Guidelines: configuration](https://clig.dev/#configuration). |
+| JSON | [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259), the JSON data model. |
+| YAML | [YAML 1.2.2](https://yaml.org/spec/1.2.2/), data syntax subject to the restrictions below. |
+| SCHEMA | [JSON Schema](https://json-schema.org), for a versioned editor and producer contract. |
+| OWNER | The owner's visible-defaults, explicit-values and no-embedded-language principles, attributed in the pinned upstream guides above. |
 
-### Versions and change
+## Requests, approval and frozen sessions
 
-5. Begin every file with `version`, an integer. A tool refuses a file whose version it does not
-   know, so a file written for a later tool is never misread by an earlier one (K8S).
-6. A new key comes with a new version that names it. A version keeps reading every file of the
-   versions before it, as they were written (K8S; AIP `180`).
-7. Removing a key, renaming it or changing what a value means is a breaking change: a major
-   release, and an `Upgrading:` footer saying what an author changes (AIP `180`; `docs/CLI.md`,
-   "Changing the interface").
+Treat the checkout policy and restricted manifest as **untrusted requests**. Neither
+authorizes itself. Keep these project requests under version control; approval and
+session records belong outside the checkout. `doctor`, `approve` and `run` must share
+strict parsing, validation and effective-value resolution without executing checkout
+code or repository helpers.
+Host-user approval is explicit, held in host-owned state outside the writable checkout,
+and covers the reviewed effective policy and supported manifest settings. Include
+effective defaults and applicable differences from prior approval in that review.
 
-### Shape
+`run` must refuse missing or malformed policy, unsupported options, invalid values and
+absent, mismatched or superseded approval before starting resources. Missing policy or
+manifest must never fall back to unrestricted startup. A valid file alone is not an
+approval. Use a frozen effective session configuration in trusted material the worker
+cannot alter; do not re-read newly edited values as authorization during startup.
+Editing checkout files or recording another approval cannot widen a live session.
+New permissions require a new approved run after stopping the old session.
 
-8. Name keys in snake case, one style in every file (AIP `140`).
-9. Write a list of things with names as a list of objects, each with its `name`, never as an
-   object keyed by name: order is kept, and an object's members stay the same shape (K8S, "Lists of
-   named subobjects preferred over maps").
-10. Prefer a string from a known set over a boolean for anything that may grow a third value, and a
-    list over a single value for anything that may hold more than one (`scans: [credentials]`) (K8S,
-    "Primitive types"; AIP `126`). `case_forms` is a boolean that would change format if forms
-    became selectable.
-11. Write a path relative to the file's top, with `/`, on every system.
-12. Keep a value whole: a list of words, not a string a tool splits (a check is `[go, test,
-    ./...]`, decision 15).
-13. Hold no secret. A credential belongs in the environment or a secret store, never in a file a
-    repository keeps (PLAN.md's principles).
+The restricted manifest describes one image-based worker under the same boundary.
+It cannot authorize host commands, builds, Features, Compose services, extra mounts,
+runtime security flags, host environment interpolation or credential sourcing. It
+cannot configure or replace the trusted guard/proxy or independently publish ports.
+Image metadata must not introduce unreviewed commands, identity or permissions.
+Exact supported fields, JSON-with-comments syntax, metadata treatment and in-container
+lifecycle semantics need specifications; no Dev Containers CLI fallback is authorized.
 
-### Defaults and documentation
+## Format policy
 
-14. Write every key, its type, whether it is required and its default where people read the
-    format (`docs/manifest.md`), with an example.
-15. Let a tool print a file as it reads it, every default filled in, so convention stays visible
-    (PERSON; CLIG `#configuration`). Not yet: the idea config-print-defaults.
-16. Publish a JSON Schema of each format, versioned with it, so an editor checks and completes a
-    file and a tool that writes one has its contract (SCHEMA). Not yet: the idea config-schema.
+The requirements below guide future behaviour specifications. No YAML parser or
+JSON-with-comments library is selected by this document. Choose maintained libraries,
+record the reason in those specifications and pin versions before implementation.
 
-### Writing a file
+### Data and validation
 
-17. A file itos-template writes (the record) is written in the format's own order, a key per line,
-    with no YAML-only feature, so what a tool writes reads back the same and a diff shows only what
-    changed.
+1. Use JSON's data model: objects, arrays, strings, numbers, booleans and null, with
+   YAML as the policy file's syntax (JSON, YAML). Quotes, comments and block/flow styles
+   are data spellings. The non-specific `!` tag is allowed as a data spelling, read as
+   if absent; it builds no object and expands nothing.
+2. Reject duplicate keys, unknown keys, non-string keys, multiple documents, anchors,
+   aliases, merge keys and non-JSON/custom tags before using configuration or starting
+   resources. Apply these checks throughout nested mappings and lists as well as at
+   the root. JSON-type tags may only express JSON values; no tag can construct an
+   arbitrary object. A permissive decoder that silently drops keys is insufficient.
+3. Validate every value before using any: types, accepted values, references, patterns
+   and defaults must all satisfy the specified schema. Refuse unsupported options
+   rather than ignore them or substitute a weaker runtime (K8S, OWNER).
+4. Report actionable problems with the key's path from the top, including list indices
+   where relevant. Collect validation problems where possible so authors can correct
+   them together; an unreadable or malformed document may prevent further validation
+   (AIP 193). Exact rule IDs and diagnostics belong to later behaviour specifications;
+   their JSON/exit mapping stays in the UI as [CLI.md](CLI.md) requires.
+5. Make every default explicit and visible in documentation and the reviewed effective
+   configuration. Values come from written data or documented defaults, not guesses
+   about the host. No default can approve a permission (OWNER, CLIG).
+6. Embed no language, interpolation engine, shell evaluation or host-side setup in the
+   policy reader. Authors may generate plain JSON data themselves; the controller
+   reads that output, never executes a checkout generator. A data spelling is not
+   permission to run a command (OWNER).
+
+The newer itos-cc loader accepts ignored `x-` keys, treats absent/empty files as empty
+configuration, reads a missing `version` as version 1 and adds keys within version 1
+before its 1.0 release. **None of those exceptions is adopted here.** Unknown sandbox
+keys remain errors; an absent or empty policy cannot start a session, and the version
+must be explicit. Its shell-string test commands and environment inheritance likewise
+do not establish sandbox argv or credential rules.
+
+### Versions and shape
+
+7. Begin the policy with an integer `version` and reject unsupported versions instead
+   of guessing their meaning. A new key needs a format version that defines it;
+   retained earlier versions must keep their written meaning. Removing or renaming a
+   key, or changing a value's meaning, is a breaking change requiring migration
+   guidance and the release treatment in [CLI.md](CLI.md) (K8S, AIP 180). No initial
+   policy/schema version is assigned here.
+8. Use `snake_case` keys consistently. Represent ordered named collections as lists
+   of objects with names rather than maps keyed by name, so order and object shape
+   remain explicit (AIP 140, K8S).
+9. Prefer an enum string over a boolean when another state may be needed, and a list
+   over a scalar when multiple values may be needed (K8S, AIP 126).
+10. Keep values whole: commands use argv lists, never strings to split or implicitly
+    evaluate with a shell. This principle does not select lifecycle hooks or authorize
+    host command execution.
+11. Express paths relative to the configuration file with `/` separators. This is
+    representation guidance, not a decision about safe checkout identity, symlinks,
+    manifest discovery, output locations or host-state storage. Those require the
+    pilot's security specifications before implementation.
+12. Keep secrets out of repository configuration, examples, generated files and
+    diagnostics. General advice about environment variables or secret stores does
+    not authorize host credential sourcing or forwarding. Credentials/accounts are
+    outside the offline milestone; later work needs its own reviewed contract.
+
+### Documentation, defaults and writing
+
+13. Document every supported key's type, requirements, default and example before
+    implementing it. Examples must reflect specified behaviour; this page provides
+    no runnable policy or invented key catalog (OWNER).
+14. Make the effective configuration, including all defaults, reviewable without
+    executing checkout code or revealing secrets. This is a required capability for
+    doctor/approval design, not an existing print-defaults command (OWNER, CLIG).
+15. Publish a JSON Schema versioned with the settled format so editors and producers
+    can validate it (SCHEMA). No schema artifact exists as a result of this task.
+    Schema validation alone cannot establish host approval or runtime isolation.
+16. Make generated writes stable and deterministic, in the format's defined key
+    order, one key per line, using only the permitted JSON-compatible data. Preserve
+    meaning on read-back and avoid unrelated diff churn. `init` must not overwrite
+    existing files; its non-runnable examples and paths still need specifications.
+
+## Remaining specification work
+
+The pilot leaves the exact policy schema, approval canonicalization/fingerprint and
+storage, safe checkout/engine identity, manifest discovery/output paths, reserved
+environment names, image metadata, lifecycle hooks, resource/time limits and
+cancellation details open. Resolve them through the assigned specifications and the
+person's security decisions, not an illustrative configuration here.
+
+Format policy is not loader compliance. Implement each required behaviour with
+black-box scenarios and red-first step definitions; use domain-owned ports and fakes,
+and run real-engine scenarios only in CI. This documentation-only foundation task
+adds no loader, dependency, schema, gate or mutation proof.

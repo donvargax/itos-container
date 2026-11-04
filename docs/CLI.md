@@ -1,183 +1,222 @@
 # CLI design guidelines
 
-These are the rules for the itos-template command line. Each rule names its source. They are
-itos's (github.com/donvargax/itos, `docs/CLI.md`, as of 2026-10-06), kept where they hold for any
-CLI, with what itos learned applying them. When itos-template does not follow a rule yet, the rule
-says so.
+These rules describe the planned `itos container` extension. The [charter](charter.md)
+selects the milestone from the binding [pilot contract](plans/container-pilot.md); both
+take precedence over upstream examples. Container commands and policy loading are
+**not implemented**. The current [entry point](../cmd/itos-container/main.go) exposes
+the inherited count, version and completion commands, not a sandbox. This document
+changes none of their behaviour.
 
-Use these rules when you add or change a command, a flag, an exit code or an output. A decision
-record in `docs/decisions/` can change a rule; change this document in the same commit.
+The first milestone is an offline owned run: explicit argv in an approved, hardened
+container with no network, the checkout as its only host mount, a non-root identity
+and owned resources cleaned up on exit. Linux amd64 with native Docker is the target,
+requiring passing runtime evidence before any support claim. Network egress,
+credentials/accounts, network Git, LAN ingress, Compose and other platforms are
+deferred. Describing later pilot commands here does not authorize their implementation
+or settle an open security decision. Real-engine scenarios run only in CI; agents
+never receive the Docker socket.
 
-## Sources
+## Sources and comparison
 
-| Key      | Source                                                                                                                                                         |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CLIG     | Command Line Interface Guidelines, <https://clig.dev>. The anchor after the key names the section, for example CLIG `#help`.                                   |
-| GNU-CLI  | GNU Coding Standards, "Standards for Command Line Interfaces", <https://www.gnu.org/prep/standards/html_node/Command_002dLine-Interfaces.html>                 |
-| GNU-VER  | GNU Coding Standards, "--version", <https://www.gnu.org/prep/standards/html_node/_002d_002dversion.html>                                                       |
-| GNU-HELP | GNU Coding Standards, "--help", <https://www.gnu.org/prep/standards/html_node/_002d_002dhelp.html>                                                             |
-| GNU-ERR  | GNU Coding Standards, "Formatting Error Messages", <https://www.gnu.org/prep/standards/html_node/Errors.html>                                                  |
-| POSIX    | POSIX.1-2024 Base Definitions, section 12.2, "Utility Syntax Guidelines", <https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html#tag_12_02> |
-| COBRA    | Cobra README, "Concepts", <https://github.com/spf13/cobra/blob/main/README.md#concepts>                                                                        |
-| ITOS     | itos's decision 35, only machine output is the contract: <https://github.com/donvargax/itos/tree/main/docs/decisions>                                          |
+Compared on **2026-11-04**, using each inspected main revision and the last commit
+that changed each guideline, not the date a copy arrived here:
 
-## The contract with scripts
+| Project and inspected revision | Pinned sources | Last guideline changes (UTC) |
+| --- | --- | --- |
+| itos, `772cef549d90b9cca7170a2252ad85fc09bd880a` | [CLI](https://github.com/donvargax/itos/blob/772cef549d90b9cca7170a2252ad85fc09bd880a/docs/CLI.md), [extension protocol](https://github.com/donvargax/itos/blob/772cef549d90b9cca7170a2252ad85fc09bd880a/docs/extensions.md) | CLI: `50dfa0bcc8c0632aaa0d0041206e2c97cf9ae24f`, 2026-10-27 03:01:23. No CONFIG.md at this revision. |
+| itos-cc, `9361616f7204a236e809417726ad107ca4f9b805` | [CLI](https://github.com/donvargax/itos-cc/blob/9361616f7204a236e809417726ad107ca4f9b805/docs/CLI.md), [CONFIG](https://github.com/donvargax/itos-cc/blob/9361616f7204a236e809417726ad107ca4f9b805/docs/CONFIG.md) | CLI: `8a3f31cd899be858fa7eaea02ce9f05572d54346`, 2026-10-27 10:10:36. CONFIG: `405b36205f8a38a27260f69afe554412015077ec`, 2026-10-27 06:39:05. |
+| itos-template, `1533aee2ea3331816e793faaeaabd3f55f83bcaa` | [CLI](https://github.com/donvargax/itos-template/blob/1533aee2ea3331816e793faaeaabd3f55f83bcaa/docs/CLI.md), [CONFIG](https://github.com/donvargax/itos-template/blob/1533aee2ea3331816e793faaeaabd3f55f83bcaa/docs/CONFIG.md) | CLI: `79301eba51b9768a27906c720e39c49b08491e67`, 2026-10-12. CONFIG: `2d8bc3da85fd0aa8b6cc86f2b40b526c9726ffd3`, 2026-10-07. |
 
-Scripts can rely on three things only (ITOS):
+itos-cc has the newest guideline edits. Adopt its clearer distinction between design
+policy and implemented behaviour, and its typed problems with stable rule IDs, per-problem
+exit codes and flat subject fields. Its exit-code choices and command-specific exceptions
+remain its own. The inherited CONFIG.md matched the template copy; the inherited CLI.md
+still used render/merge examples and lacked that copy's later pre-v1 compatibility rule.
+Neither upstream's implementation gaps nor its numbered decisions become local facts.
 
-- The exit code.
-- The `--json` output, less every key named `message` or `fix`. These keys hold the same sentences
-  as the plain output.
-- The files that itos-template writes.
+These guidelines retain attribution to donvargax and the owner's permitted reuse of
+itos and itos-template infrastructure. Preserve the original projects' and dependencies'
+licenses and notices; see [LICENSE](../LICENSE) and [CONTRIBUTORS.md](../CONTRIBUTORS.md).
 
-All plain output is for people. It can change in any release. A script reads `--json` and the exit
-code, never the plain output and never a `message`. Once there is a release, CI runs the last
-release's scenarios against the new binary; a change to the contract is a breaking change, and a
-breaking change makes a major release.
+| Key | External guideline source |
+| --- | --- |
+| CLIG | [Command Line Interface Guidelines](https://clig.dev), especially help, naming, arguments and flags, output, errors, configuration and future-proofing. |
+| GNU-CLI | [Standards for Command Line Interfaces](https://www.gnu.org/prep/standards/html_node/Command_002dLine-Interfaces.html). |
+| GNU-VER | [Version output](https://www.gnu.org/prep/standards/html_node/_002d_002dversion.html). |
+| GNU-HELP | [Help output](https://www.gnu.org/prep/standards/html_node/_002d_002dhelp.html). |
+| GNU-ERR | [Formatting Error Messages](https://www.gnu.org/prep/standards/html_node/Errors.html). |
+| POSIX | [POSIX.1-2024 Utility Syntax Guidelines](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html#tag_12_02). |
+| COBRA | [Cobra command concepts](https://github.com/spf13/cobra/blob/main/README.md#concepts), as naming guidance, not a parser selection. |
+| PROBLEMS | [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457), the model for per-problem status and extension members used by itos-cc. This is a CLI object, not an HTTP response. |
 
-### Exit codes
+## Extension dispatch and environment
 
-| Code | Meaning                                                                                                                   |
-| ---- | ------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Success.                                                                                                                  |
-| 1    | A check said no: a render's check failed, a merge left conflicts, a template refused a combination.                       |
-| 2    | A usage error or a manifest or config error.                                                                              |
-| 3    | The environment is missing something: a tool, a template that cannot be reached, a git repository.                        |
-| 70   | An internal error that no code classified. Report it.                                                                     |
-| 75   | A temporary failure. The same command can pass when you run it again with no change, for example after a network failure. |
+Core itos's existing extension seam finds `itos-container` on `PATH` for
+`itos container`, passes the remaining arguments unread and returns the extension's
+exit status. A built-in command wins over an extension; dispatch alone supplies no
+isolation. `itos help container` dispatches `itos-container --help`.
 
-These codes follow grep and diff (0 yes, 1 no, 2 trouble) and the BSD `sysexits.h` values
-`EX_SOFTWARE` for 70 and `EX_TEMPFAIL` for 75 (CLIG `#the-basics`: map the non-zero codes to the
-most important failure modes).
+Flags before `container` belong to itos. Arguments after it belong to the extension.
+After the `--` of `run` or `exec`, every word belongs to the workload: no further wrapper
+flag parsing, expansion, joining into a shell string or injected agent permission flags.
 
-## Rules
+The host protocol supplies the following to the extension/controller, not to the worker:
 
-### Command names and grammar
+| Variable | Host protocol meaning |
+| --- | --- |
+| `ITOS_ROOT` | Absolute effective working directory after an itos `--root` before `container`; the extension runs in that directory. This alone does not establish safe checkout identity. |
+| `ITOS_CONFIG` | Absolute core itos configuration path, which may not exist. It never names `itos-container.yaml`. Container keys do not belong in `itos.yaml`. |
+| `ITOS_JSON` | `1` when itos received `--json` before `container`, otherwise unset by the host protocol. Planned control commands honor it as a JSON request. |
+| `ITOS_BIN` | The invoking itos executable for callbacks. |
+| `ITOS_VERSION` | That executable's version; the itos launcher uses it to keep callbacks on the same version. |
 
-1. Keep the program name short and lowercase. (POSIX guidelines 1 and 2; CLIG `#naming`.)
-2. Write a subcommand name in lowercase, with dashes between words. (CLIG `#naming`.)
-3. Name a group of commands with a noun, and an action in a group with a verb in the imperative.
-   (CLIG `#subcommands`; COBRA `#concepts`.)
-4. Use the singular for a group name.
-5. Do not give two commands similar names or overlapping meanings. (CLIG `#subcommands`.)
-6. Do not name a command with an everyday verb when the same verb in a request can point to a
-   different command: an agent picks a command by its name before it reads the help. (Learned in
-   itos: "I need to ask someone this" meant one command, and the word "ask" pointed to another.)
-7. Do not add an implicit default subcommand, one that runs an action when given no subcommand.
-   (CLIG `#future-proofing`.)
-8. Do not accept an abbreviation of a subcommand. Make an alias only when you name it explicitly.
-   (CLIG `#future-proofing`.)
+Core dispatch inherits the host environment. That is not permission to import it into
+the worker. Proposed product-specific settings use the `ITOS_CONTAINER_` prefix, in
+uppercase with underscores. This naming rule defines no new variable or flag. Where a
+future specification allows a setting through several interfaces, its precedence is
+flag, environment, then file (CLIG). No override can grant permissions, bypass host-user
+approval or widen a running session. See [configuration boundaries](CONFIG.md).
 
-### Help and version
+## Planned command contract
 
-9. Show help for the program alone, `--help`, `help <command>` and `<command> --help`, and for
-   `-h` in any position. Write help to stdout and exit 0. (CLIG `#help`; GNU-HELP.)
-10. In the help of each command, give the shape of its `--json` output and its exit codes.
-11. Support `--version` and `version`, printing the same. The first line of the output is
-    `itos-template <version>`; a second line, `commit <full commit id>`, follows when the build
-    knows the commit it was built from. (GNU-CLI; GNU-VER; CLIG `#arguments-and-flags`.)
-12. For an unknown command, exit 2. If you can guess the command the person meant, name it.
-    (CLIG `#help`.)
-13. For a group with no subcommand, name the subcommands the group takes.
-14. End the help with an example or two and the address for issue reports. (CLIG `#help`;
-    GNU-HELP.)
+All commands in this table are unimplemented. Their scope comes from the pilot; the
+charter determines which slices may be built now.
 
-### Flags and arguments
+| Command after `itos container` | Required behaviour |
+| --- | --- |
+| `init` | Prepare non-runnable policy and single-worker manifest examples without overwriting existing files. Output paths remain unspecified. |
+| `doctor` | Inspect strict policy, the restricted manifest, selected local engine, cached images/metadata, checkout layout, identity, preparation and approval. Inspect only; do not execute checkout code or change resources. |
+| `approve` | Show effective permissions, differences from prior approval and applicable weaker-mode warnings; record explicit host-user consent in host-owned state outside the writable checkout. Approval cannot start a session. |
+| `run -- <argv...>` | Require an explicit command, validate matching approval and start an approved foreground session with bounded startup. Preserve every argument boundary; use no implicit shell. |
+| `exec <session> -- <argv...>` | Run an explicit command only in a live owned session, under its frozen policy, identity, mounts and restrictions. Never extend its foreground lifetime. |
+| `status` | Report owned sessions, state, effective policy identity and recovery information without secrets. |
+| `stop <session>` | Stop and remove only the named session's owned resources, preserving checkout edits and project state. Finish interrupted cleanup without pruning foreign resources. |
 
-kong declares every command's flags in one place (decision 4), which gives rules 19 to 21 and 24
-by construction; check each when a flag is added. kong refuses an unknown flag by itself;
-`internal/cli`'s `Flags`, its mappers and a hook on kong's parse, refuse the rest of rule 20 in our
-words: a flag with no value, a switch given a value and a once-only flag given twice. A flag is a
-switch (a bool), once-only (a string) or repeatable (a slice); a flag of another kind is added
-there first.
+`init`, ordinary `doctor` and `approve` never execute checkout code, install hooks, log
+in, pull/build images or start a session. Host inspection must not invoke
+repository-configured helpers. `run` must refuse missing, incompatible or unapproved
+cached image content; it cannot pull/build an image as a fallback.
 
-15. Give each flag a long form. Give a one-letter form only to the most common flags. (CLIG
-    `#arguments-and-flags`; GNU-CLI.)
-16. Use the standard name when one exists: `--json`, `-q`/`--quiet`, `-h`/`--help`, `--force`,
-    `--version`. (CLIG `#arguments-and-flags`.)
-17. Let a flag mean the same thing in every command. (CLIG `#subcommands`.)
-18. Use a flag to change an action, never to select a different action. (COBRA `#concepts`.)
-19. Accept `--flag=value` and `--flag value`. (CLIG `#arguments-and-flags`; GNU-CLI.)
-20. Refuse an unknown flag, a flag with no value, a switch given a value and a once-only flag given
-    twice, with exit 2. (CLIG `#robustness-guidelines`.)
-21. Give an option-argument to its option only. Never read it as a global flag. (POSIX guidelines
-    6 and 14.)
-22. Do not make an option-argument optional. (POSIX guideline 7.) An offer that can be declined is
-    a switch with its `--no-` pair (kong's negatable flags), never `--flag [no]`: itos broke this
-    rule with `init --plugin [<scope>]` and paid for it.
-23. Let `--` end the options, and let `-` mean stdin or stdout. (POSIX guidelines 10 and 13; CLIG
-    `#arguments-and-flags`.)
-24. Accept flags in any position. (CLIG `#arguments-and-flags`.)
-25. Check each argument before you use it, and refuse a bad one with exit 2. (CLIG
-    `#robustness-guidelines`.)
+The pilot separately proposes `doctor --probe`: an explicit request for bounded,
+disposable runtime probes using trusted test material, with no agent or real credentials
+and no checkout-supplied scripts. It is not part of ordinary inspection, and its
+real-engine scenarios run only in CI.
 
-### Output
+There is no detached or keep-alive mode. Primary workload exit refuses new `exec`
+requests and tears down active commands and session resources. Owned recovery records
+support inspection and cleanup, never an unattended agent restart. Record ownership
+before workload execution; ambiguous or foreign resources cannot be removed merely
+because their labels resemble an owned session. Cleanup preserves checkout edits and
+project state; exact recovery storage and retry details still need specifications.
 
-26. Write the main output to stdout. Write logs, progress and errors to stderr. (CLIG
-    `#the-basics`.)
-27. Print JSON only with `--json`. `--json` prints one object with `"schema": 1`, and a later
-    release only adds keys to it. (CLIG `#output`; ITOS.)
-28. When the plain output looks like data, write a line on stderr telling the reader to use
-    `--json` in scripts.
-29. With `--json`, print the object for every failure too, a usage error included: `"ok": false`
-    and the rule ID of each problem. (CLIG `#output`; ITOS.)
-30. Do not use colour, and pass `NO_COLOR` on to the programs itos-template runs. (CLIG `#output`,
-    `#environment-variables`.)
+## Names, help and arguments
 
-### Errors and exit codes
+These are design requirements, not assertions that the container commands exist:
 
-31. Get the exit code from the kind of the error, in the UI alone (decision 17): the domain's and
-    infra's errors are sealed sets, each kind given its code in one switch that a lint refuses to
-    leave one out of, never a default; only an error no switch classified, a bug, exits 70. Read
-    the kind of a failure of a program you run (git) from what it says, never pass its own code
-    through. (CLIG `#the-basics`.)
-32. Start each error line with `itos-template:`. Write it for people: say what happened and what
-    to do next. Do not show a raw command line as the message. (GNU-ERR; CLIG `#errors`.)
-33. Let the help and the code agree on each exit code; a scenario checks each one the help names.
+- Use a short lowercase executable name, lowercase dash-separated subcommands, singular
+  noun groups and imperative actions. Avoid overlapping or ambiguous names. Do not add
+  an implicit action or accept subcommand abbreviations; an alias requires an explicit
+  specification (POSIX, CLIG, COBRA).
+- Show help for the bare executable, `--help`, `help <command>`, `<command> --help` and
+  `-h` within the extension's arguments. Help goes to stdout with exit 0; groups name
+  their subcommands. Include safe examples, the
+  [issue-report address](https://github.com/donvargax/itos-container/issues), JSON shape
+  or its documented exception, and exit codes (CLIG, GNU-HELP).
+- `--version` and `version` print the same first line, `itos-container <version>`, and
+  `commit <full commit id>` when known (GNU-CLI, GNU-VER). An unknown command exits 2;
+  suggest the intended command when possible.
+- Give flags long names and reserve short names for common options. Use standard names
+  when applicable, consistently across commands. Flags modify an action rather than
+  select another one; mentioning a conventional flag does not add it to the interface.
+- Accept `--flag=value` and `--flag value`. Refuse unknown flags, missing values,
+  switch values and repeated once-only flags with exit 2. Bind a value only to its
+  option and never give an option an optional value. Validate every argument before
+  using it. Keep declarations in a shared command model (CLIG, POSIX).
+- Accept wrapper flags in any position within the extension's arguments before its
+  workload separator. `--` ends wrapper options; the workload may itself contain
+  `--help`, `--json`, `-` or more separators. Where a control command specifies stream
+  input/output, `-` means stdin/stdout; it does not bypass required policy validation.
+- Prompt only when stdin and stdout are terminals. Specify explicit noninteractive
+  inputs before introducing a prompt; never treat a missing terminal as consent.
+  Approval must remain a deliberate host-user action, not a general force override.
+- Do not make CI depend on a network update check. An eventual check needs an opt-out;
+  this rule creates no update-check feature (CLIG).
 
-### Environment variables
+## Output and the contract with scripts
 
-34. Start each environment variable itos-template reads with `ITOS_TEMPLATE_`, in uppercase with
-    underscores, one per flag where a flag is worth setting once for a shell (kong's `env` tag).
-    (CLIG `#environment-variables`.)
-35. Read settings in this order: flag, then environment variable, then the config file. (CLIG
-    `#configuration`.)
-36. Do not let a run in CI depend on the network for an update check, and give an opt-out for the
-    check. (CLIG `#future-proofing`, "Don't create a time bomb".)
+Scripts rely on exit codes, structured output excluding `message` and `fix`, and the
+data of written files. Plain output, messages, fixes and file comments are for people
+and may change. Stable rule IDs and their meanings are part of the structured contract
+(itos and itos-cc). Do not turn prose into a second machine interface.
 
-### Prompts
+For planned noninteractive control commands, `--json` or inherited `ITOS_JSON=1`
+requests exactly one stdout object with `schema: 1`, `ok` and typed problems on failure,
+including usage/configuration failures. JSON schema 1 evolves by adding compatible
+keys. Each problem carries a stable dotted lowercase `rule`, its own `exit`, and
+human-readable `message` and `fix`. Subject fields sit beside these as flat members;
+`rule`, `exit`, `message` and `fix` are reserved. Behaviour specifications must define
+the exact problem IDs and multiple-problem exit mapping; none are invented here.
 
-37. Ask a question only when stdin and stdout are terminals. Give a flag for each question, so that
-    a script never needs a terminal: `new` takes every answer as `--answer key=value`. (CLIG
-    `#interactivity`.)
+Main control output goes to stdout; diagnostics, logs and progress go to stderr. If
+plain output resembles data, direct scripts to JSON with a stderr hint. Error lines
+start with `itos-container:` and explain the problem and next action, without dumping
+raw commands or secrets (GNU-ERR, CLIG). Use no colour. `NO_COLOR` is a presentation
+convention, not authority to forward host variables to a worker.
 
-### Configuration
+The pilot's proposed exception is to **refuse JSON mode for interactive `run` and
+`exec`**, including inherited `ITOS_JSON=1`, before workload startup. Never mix workload
+terminal output with a JSON object. Specify that refusal's diagnostic in its behaviour
+scenarios; this document does not assign it a new rule ID.
 
-38. Keep a project's settings in a file in the repository, under version control: a template's
-    manifest in the template, a made project's record of what it was rendered from in the project.
-    (CLIG `#configuration`.)
+### Wrapper and workload exit codes
 
-### Entry points for other programs
+The sources disagree. itos and its extension conventions retain the following
+wrapper codes, which the pilot binds this project to:
 
-39. itos runs itos-template as `itos template`, an extension. An entry point uses the protocol of
-    the program that calls it: itos's extension protocol for `itos template`, this contract for a
-    person or a script.
+| Code | Wrapper meaning |
+| --- | --- |
+| 0 | Success. |
+| 1 | Policy or check refusal. |
+| 2 | Usage, configuration or unknown-command error. |
+| 3 | Missing environment requirement. |
+| 70 | Unclassified internal error. |
+| 75 | Temporary failure that may succeed when repeated unchanged. |
 
-### Changing the interface
+itos-cc's newer [Square-style codes](https://github.com/square/exit) use 80 for
+usage/configuration, 81 for unknown commands, 82 for missing requirements and 100 for
+internal errors, with interrupt 130 as its own additional decision. Those numbers and
+its precedence/signal rules are not adopted here merely because its guideline is newer.
 
-40. A rename of a command or a flag, or a change to an exit code, is a breaking change. Put the
-    breaking changes that are ready into one major release together.
-41. Do not keep code to stay compatible with an old interface: an old name exits 2 naming the new
-    one. Only the previous-release check judges compatibility, against the contract above.
+Once a workload starts, preserve its exit status. Report cleanup errors separately;
+if the workload succeeds but required cleanup fails, return nonzero and retain owned
+recovery information. The inherited rule against passing through helper-tool codes
+does not override workload exit preservation. A workload's numeric status need not
+mean the same thing as a wrapper code. Exact cleanup, timeout, signal forwarding and
+cancellation outcomes require scenarios; no new code is chosen here.
 
-### Shell completion
+Classify controller/helper failures deliberately. Keep exit codes, JSON, problem IDs
+and their mapping in the UI, never the domain. Help and tested behaviour must agree on
+the codes they promise. Existing counting behaviour is unchanged.
 
-42. `completion <shell>` prints a short completion stub for `bash`, `zsh`, `fish` or `powershell`.
-    The stub asks the same executable through the hidden `__complete` command; it does not carry a
-    second copy of the command model. `__complete` takes the words after the command, with the last
-    word being completed and an empty last word meaning a new word. It prints one candidate per
-    line, followed by exactly one final instruction: `:files` leaves file-name completion to the
-    shell, and `:none` asks it to offer no further candidates. Candidates come from kong's command
-    and flag model, including only values kong declares; values read from a template manifest are
-    not completion candidates. The printed comments name where to install each stub; fish names
-    its completions directory, and PowerShell names `$PROFILE`. (Decision 25.)
+## Compatibility and completion
+
+Renamed commands/flags, changed exit codes and incompatible structured/file data are
+breaking changes. Group ready breaking changes and document migration; use a major
+release from 1.0 and a minor release before 1.0, as the newer upstream guidance does.
+Avoid compatibility shims: before v1 drop a retired name; from v1 a retired name can
+refuse with exit 2 and identify its replacement rather than execute an old interface.
+No upstream previous-release checker or other compliance machinery is claimed to run
+here. New behaviour needs this repository's scenario-first work and existing gates.
+
+Preserve the inherited completion design: `completion <shell>` emits a short stub for
+bash, zsh, fish or PowerShell that calls the same executable's hidden `__complete`.
+Use the command model rather than a second command list. Completion receives words
+after the executable, with an empty final word indicating a new word; it emits one
+candidate per line and one final `:files` or `:none` instruction. Document installation
+in the stub. Suggest declared commands, flags and values only; do not inspect or execute
+checkout policy to generate candidates. This does not claim completion of future
+container commands before their implementation.
+
+Update these rules with a specified interface change. Exact policy schemas, discovery
+paths, approval identities, lifecycle hooks, resource limits and cancellation semantics
+remain open in the pilot; [CONFIG.md](CONFIG.md) records the configuration boundary.
