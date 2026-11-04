@@ -235,8 +235,8 @@ items:
   - id: T-11
     title: Specify the offline owned-run lifecycle contract
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p1-allow-gherkin-specification-commits
@@ -256,8 +256,8 @@ items:
   - id: T-12
     title: CI runs on Linux, each pull request once; other platforms by hand
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-13
