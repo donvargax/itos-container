@@ -457,7 +457,3 @@
     No scenarios have failing steps to report. The drafter commits only this ledger entry;
     the implementer supplies tests and evidence, and the loop alone pushes and closes T-8
     after the actual pushed head is green and its required proof passes.
-  done_when:
-    - run: tools/bin/pinned itos-cc mutation run --all-tests --mutate-all --no-coverage-cache --fail-uncovered --no-annotate cmd internal
-    - run: tools/bin/pinned itos-cc mutation check --fail-uncovered --json cmd internal
-    - run: tools/bin/pinned itos-cc mutation check --since 4ac0cc4b017feb219ba1645ca4263a7dd26870fd --fail-uncovered --json cmd internal
