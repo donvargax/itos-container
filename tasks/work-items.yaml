@@ -214,14 +214,15 @@ items:
       acceptance and refusal through doctor without executing checkout code, expanding host
       variables or allowing unsupported permissions. Broken down from
       p2-specify-policy-manifest-approval.
-  - id: p2-doctor-host-readiness
+  - id: slice-3
     title: Inspect checkout, local engine and cached-image readiness
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p2-doctor-host-readiness.
       Specify safe checkout and engine identity, then implement read-only inspection in the doctor
       slice using reusable inspection ports and fakes. Cover unsupported layouts, remote engines,
       missing or incompatible cached images, and typed diagnostics. Select and pin the engine
@@ -232,7 +233,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-1, slice-2, p2-doctor-host-readiness]
+    depends_on: [slice-1, slice-2, slice-3]
     kind: idea
     why: >
       Build the approve slice using shared validation and identity code. Specify canonicalization,
