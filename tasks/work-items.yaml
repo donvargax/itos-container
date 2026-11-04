@@ -348,7 +348,7 @@ items:
     title: An engine fixture image the real-engine scenarios can use
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-16]
     kind: task
   - id: slice-6
