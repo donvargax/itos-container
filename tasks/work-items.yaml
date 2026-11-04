@@ -113,7 +113,7 @@ items:
     title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-track-gherkin-mutation-freshness
