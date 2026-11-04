@@ -238,3 +238,17 @@ items:
       permissions and differences, deliberate consent, checkout separation, changed configurations,
       superseded records and approval material inaccessible to the worker. Broken down from
       p2-specify-policy-manifest-approval.
+  - id: p3-offline-run-lifecycle-contract
+    title: Specify the offline owned-run lifecycle contract
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Record the later run slice's contract in docs/plans/offline-run-lifecycle.md: literal argv,
+      interactive JSON refusal, ownership before execution, hardened offline startup, bounded waits,
+      signals, cancellation, workload exits and safe cleanup with recovery. Include black-box
+      acceptance cases and identify security choices requiring the person's decision. This PR
+      specifies behavior without implementing runtime commands. Broken down from
+      p2-specify-policy-manifest-approval.
