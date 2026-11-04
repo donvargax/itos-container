@@ -173,3 +173,7 @@ items:
     why: >
       The offline owned-run milestone needs accurate scenario, configuration and release guidance
       that preserves existing gates, provenance and limits on support claims.
+
+      Already covered. Include features/README.md and comments in itos.yaml and
+      .github/workflows/release.yml, preserving existing gates, provenance and limits on
+      container-support claims.
