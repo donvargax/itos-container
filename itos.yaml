@@ -103,7 +103,6 @@ ci:
     # The one merged run of the scenarios: the smoke set and those the range names, the
     # whole suite when there is no green run to start from.
     - { tests: scenario }
-    - { run: tools/bin/pinned itos-cc mutation sample --count 10, cost: late }
   prose:
     paths: ["**/*.md", "docs/**", "tasks/**"]
     steps:
@@ -121,7 +120,7 @@ ci:
 proof:
   code:
     paths: ["{cmd,internal}/**/*.go"]
-    check: "tools/bin/pinned itos-cc mutation check --since {base} --fail-uncovered --json cmd internal"
+    check: "tools/bin/pinned itos-cc mutation run --count 10 --since {base} --seed {base} --fail-uncovered=lines --json cmd internal"
 
 # An item's work reaches main through one pull request, a draft until it is marked
 # ready, merged once its checks and Codex's review pass. Docs-only commits outside
