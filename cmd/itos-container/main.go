@@ -28,6 +28,10 @@ import (
 	"github.com/donvargax/itos-container/internal/count/command"
 	"github.com/donvargax/itos-container/internal/count/disk"
 	"github.com/donvargax/itos-container/internal/count/input"
+	doctor "github.com/donvargax/itos-container/internal/doctor/command"
+	"github.com/donvargax/itos-container/internal/doctor/inspection"
+	policydisk "github.com/donvargax/itos-container/internal/policy/disk"
+	policyyaml "github.com/donvargax/itos-container/internal/policy/yaml"
 	"github.com/donvargax/itos-container/internal/version"
 )
 
@@ -38,6 +42,7 @@ type commandLine struct {
 	ShowVersion kong.VersionFlag `name:"version" help:"Print the version and the commit it was built from, and exit."`
 
 	Count      command.CLI    `cmd:"" help:"Count the lines and words of a file, or of standard input."`
+	Doctor     doctor.CLI     `cmd:"" help:"Inspect the strict offline sandbox policy."`
 	Version    struct{}       `cmd:"" help:"Print the version and the commit it was built from."`
 	Completion cli.Completion `cmd:"" help:"Print a shell completion script."`
 	Complete   struct{}       `cmd:"" name:"__complete" hidden:""`
@@ -92,6 +97,9 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	switch command, _, _ := strings.Cut(ctx.Command(), " "); command {
 	case "count":
 		return c.Count.Run(ui)
+	case "doctor":
+		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: policydisk.Files{}}}
+		return c.Doctor.Run(ui)
 	case "version":
 		// What --version prints, as kong prints it.
 		_, _ = fmt.Fprintln(stdout, parser.Model.Vars()["version"])

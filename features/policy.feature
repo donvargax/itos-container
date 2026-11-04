@@ -117,7 +117,7 @@ Feature: Strict offline sandbox policy
     Given policy inspection has isolated host state and a recording engine endpoint
 
   # Missing network data defaults closed, but nothing defaults a policy or version.
-  @wip @slice-1 @ID-POLICY-01
+  @slice-1 @ID-POLICY-01
   Scenario: minimal policy exposes every effective default without approving a run
     Given the policy file contains:
       """
@@ -132,7 +132,7 @@ Feature: Strict offline sandbox policy
       """
     And the engine recorder has no connections
 
-  @wip @slice-1 @ID-POLICY-02
+  @slice-1 @ID-POLICY-02
   Scenario Outline: permitted YAML spellings retain the same offline policy
     Given the policy file contains:
       """
@@ -155,7 +155,7 @@ Feature: Strict offline sandbox policy
       | ! {version: ! 1, manifest: ! .devcontainer/devcontainer.json, network: ! {mode: ! offline}}                                             |
       | !!map {version: !!int 1, manifest: !!str .devcontainer/devcontainer.json, network: !!map {mode: !!str offline}}                          |
 
-  @wip @slice-1 @ID-POLICY-03
+  @slice-1 @ID-POLICY-03
   Scenario: plain policy inspection names its scope and effective defaults
     Given the policy file contains:
       """
@@ -169,7 +169,7 @@ Feature: Strict offline sandbox policy
     And its standard output says "manifest: .devcontainer/devcontainer.json"
     And its standard output says "Host readiness and approval were not checked"
 
-  @wip @slice-1 @ID-POLICY-04
+  @slice-1 @ID-POLICY-04
   Scenario: the extension JSON request is honored and an explicit flag can decline it
     Given the policy file contains:
       """
@@ -187,7 +187,7 @@ Feature: Strict offline sandbox policy
     And its standard output says "Policy only"
     And its standard output says "Host readiness and approval were not checked"
 
-  @wip @slice-1 @ID-POLICY-05
+  @slice-1 @ID-POLICY-05
   Scenario: doctor help explains the limited validation mode without reading policy
     When itos-container runs with "doctor --help"
     Then its standard output says "--policy-only"
@@ -201,7 +201,7 @@ Feature: Strict offline sandbox policy
     And its standard output says "3  policy cannot be read"
     And the engine recorder has no connections
 
-  @wip @slice-1 @ID-POLICY-06
+  @slice-1 @ID-POLICY-06
   Scenario: a missing policy never becomes an unrestricted default
     When itos-container runs with "doctor --policy-only --json"
     Then its policy JSON reports exactly these problems:
@@ -214,7 +214,7 @@ Feature: Strict offline sandbox policy
   # The new working-directory Given changes only the harness's next process cwd.
   # The core-config Given sets ITOS_CONFIG to the absolute fixture filename,
   # matching the extension protocol, without loading that file as configuration.
-  @wip @slice-1 @ID-POLICY-07
+  @slice-1 @ID-POLICY-07
   Scenario: policy lookup neither searches parents nor substitutes core configuration
     Given the policy file contains:
       """
@@ -231,7 +231,7 @@ Feature: Strict offline sandbox policy
       | policy.missing |      | 2    |
     And it exits with code 2
 
-  @wip @slice-1 @ID-POLICY-08
+  @slice-1 @ID-POLICY-08
   Scenario: a policy path that is a directory reports an unreadable requirement
     Given an empty folder "itos-container.yaml"
     When itos-container runs with "doctor --policy-only --json"
@@ -241,7 +241,7 @@ Feature: Strict offline sandbox policy
     And it exits with code 3
 
   # The empty-file Given writes zero bytes; it does not call the command or assert.
-  @wip @slice-1 @ID-POLICY-09
+  @slice-1 @ID-POLICY-09
   Scenario: an empty policy cannot supply a version by default
     Given the policy file is empty
     When itos-container runs with "doctor --policy-only --json"
@@ -250,7 +250,7 @@ Feature: Strict offline sandbox policy
       | policy.empty |      | 2    |
     And it exits with code 2
 
-  @wip @slice-1 @ID-POLICY-10
+  @slice-1 @ID-POLICY-10
   Scenario Outline: comments and document markers alone are not policy data
     Given the policy file contains:
       """
@@ -268,7 +268,7 @@ Feature: Strict offline sandbox policy
       | ---                        |
       |                            |
 
-  @wip @slice-1 @ID-POLICY-11
+  @slice-1 @ID-POLICY-11
   Scenario Outline: malformed YAML is a configuration error
     Given the policy file contains:
       """
@@ -285,7 +285,7 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: [                                                         |
       | {version: !!int not_an_integer, manifest: .devcontainer/devcontainer.json}         |
 
-  @wip @slice-1 @ID-POLICY-12
+  @slice-1 @ID-POLICY-12
   Scenario Outline: a second YAML document is refused even when it is empty
     Given the policy file contains:
       """
@@ -305,7 +305,7 @@ Feature: Strict offline sandbox policy
       | version: 1               |
       | # empty second document  |
 
-  @wip @slice-1 @ID-POLICY-13
+  @slice-1 @ID-POLICY-13
   Scenario Outline: policy data must be an object with explicit required fields
     Given the policy file contains:
       """
@@ -326,7 +326,7 @@ Feature: Strict offline sandbox policy
       | {manifest: .devcontainer/devcontainer.json}     | policy.required | /version  |
       | {version: 1}                                   | policy.required | /manifest |
 
-  @wip @slice-1 @ID-POLICY-14
+  @slice-1 @ID-POLICY-14
   Scenario Outline: values are checked without coercion or null defaults
     Given the policy file contains:
       """
@@ -355,7 +355,7 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, network: {mode: false}}                             | /network/mode |
       | {version: 1, manifest: a.json, network: {mode: [offline]}}                         | /network/mode |
 
-  @wip @slice-1 @ID-POLICY-15
+  @slice-1 @ID-POLICY-15
   Scenario Outline: unsupported policy versions are not guessed or downgraded
     Given the policy file contains:
       """
@@ -375,7 +375,7 @@ Feature: Strict offline sandbox policy
       | 2       |
 
   # Empty collections and false do not make unsupported permissions permissible.
-  @wip @slice-1 @ID-POLICY-16
+  @slice-1 @ID-POLICY-16
   Scenario Outline: unknown and deferred fields are refused at every schema level
     Given the policy file contains:
       """
@@ -403,7 +403,7 @@ Feature: Strict offline sandbox policy
 
   # Structural checks also inspect lists inside an unknown field before decoding
   # could discard it; error paths must identify the repeated decoded key.
-  @wip @slice-1 @ID-POLICY-17
+  @slice-1 @ID-POLICY-17
   Scenario Outline: duplicate keys cannot silently select a value
     Given the policy file contains:
       """
@@ -422,7 +422,7 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, network: {mode: offline, mode: bridge}}              | /network/mode |
       | {version: 1, manifest: a.json, extra: [{name: one, name: two}]}                     | /extra/0/name |
 
-  @wip @slice-1 @ID-POLICY-18
+  @slice-1 @ID-POLICY-18
   Scenario Outline: non-string mapping keys are refused without stringifying them
     Given the policy file contains:
       """
@@ -440,7 +440,7 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, network: {true: value}}          | /network |
       | {version: 1, manifest: a.json, extra: [{[a, b]: value}]}        | /extra/0 |
 
-  @wip @slice-1 @ID-POLICY-19
+  @slice-1 @ID-POLICY-19
   Scenario: anchors aliases and merge keys are all rejected before schema projection
     Given the policy file contains:
       """
@@ -461,7 +461,7 @@ Feature: Strict offline sandbox policy
       | policy.alias     | /network/mode | 2    |
     And it exits with code 2
 
-  @wip @slice-1 @ID-POLICY-20
+  @slice-1 @ID-POLICY-20
   Scenario Outline: tags and numbers cannot introduce values outside JSON data
     Given the policy file contains:
       """
@@ -483,7 +483,7 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, extra: [.inf]}                        | policy.non_json_number | /extra/0     |
       | {version: 1, manifest: a.json, extra: [-.inf]}                       | policy.non_json_number | /extra/0     |
 
-  @wip @slice-1 @ID-POLICY-21
+  @slice-1 @ID-POLICY-21
   Scenario Outline: no alternate network mode enables a wider milestone
     Given the policy file contains:
       """
@@ -508,7 +508,7 @@ Feature: Strict offline sandbox policy
 
   # A date or yes/on without quotes remains a string under the core scalar rules.
   # These filenames request no host expansion; policy-only does not open them.
-  @wip @slice-1 @ID-POLICY-22
+  @slice-1 @ID-POLICY-22
   Scenario Outline: relative manifest paths remain literal data
     Given the policy file contains:
       """
@@ -536,7 +536,7 @@ Feature: Strict offline sandbox policy
       | yes                                       | yes                                   |
 
   # The block scalar's strip chomping supplies a path without a trailing newline.
-  @wip @slice-1 @ID-POLICY-28
+  @slice-1 @ID-POLICY-28
   Scenario: a block string is another spelling of a literal manifest path
     Given the policy file contains:
       """
@@ -551,7 +551,7 @@ Feature: Strict offline sandbox policy
       {"version":1,"manifest":"config files/devcontainer.json","network":{"mode":"offline"}}
       """
 
-  @wip @slice-1 @ID-POLICY-23
+  @slice-1 @ID-POLICY-23
   Scenario Outline: invalid lexical paths are refused rather than cleaned or expanded
     Given the policy file contains:
       """
@@ -581,7 +581,7 @@ Feature: Strict offline sandbox policy
       | "config/\\nmanifest.json"          |
       | "config/\u007fmanifest.json"       |
 
-  @wip @slice-1 @ID-POLICY-24
+  @slice-1 @ID-POLICY-24
   Scenario: independent schema problems are returned together without a partial policy
     Given the policy file contains:
       """
@@ -601,7 +601,7 @@ Feature: Strict offline sandbox policy
       | policy.unknown_key  | /accounts       | 2    |
     And it exits with code 2
 
-  @wip @slice-1 @ID-POLICY-25
+  @slice-1 @ID-POLICY-25
   Scenario Outline: invalid input diagnostics identify the problem without echoing values
     Given the policy file contains:
       """
@@ -633,7 +633,7 @@ Feature: Strict offline sandbox policy
   # with initializeCommand writing that recorder. Snapshot checkout/host-state
   # file bytes and entries after setup, with recorder storage outside both trees.
   # The Then steps compare observations; they never set up or validate policy.
-  @wip @slice-1 @ID-POLICY-26
+  @slice-1 @ID-POLICY-26
   Scenario: policy-only inspection leaves checkout and host state unchanged and runs no helpers
     Given the policy file contains:
       """
@@ -656,7 +656,7 @@ Feature: Strict offline sandbox policy
   # Ordinary doctor's success/readiness contract belongs to slice-3. Invalid policy
   # must nevertheless reach these same typed refusals before manifest or engine work.
   # This assertion checks the policy problem without imposing policy-only's scope.
-  @wip @slice-1 @ID-POLICY-27
+  @slice-1 @ID-POLICY-27
   Scenario: ordinary doctor refuses invalid policy before inspecting other requirements
     Given the policy file contains:
       """

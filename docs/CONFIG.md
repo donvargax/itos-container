@@ -3,9 +3,9 @@
 These are format and validation requirements for the planned `itos-container.yaml`
 sandbox policy. The [charter](charter.md) selects the milestone from the binding
 [pilot contract](plans/container-pilot.md); they take precedence over upstream
-examples. Container commands and policy loading are **not implemented**. These rules
-do not describe an existing loader. The inherited executable exposes count, version
-and completion, and supplies no sandbox or runtime isolation evidence.
+examples. Strict policy validation is implemented through `doctor --policy-only`;
+the inherited count, version and completion commands remain. Manifest, host readiness,
+approval and runtime isolation are not implemented by this policy slice.
 
 The milestone is an offline owned run with no network, an approved hardened container,
 the checkout as its only host mount, a non-root identity and owned cleanup. Linux amd64
@@ -82,9 +82,33 @@ lifecycle semantics need specifications; no Dev Containers CLI fallback is autho
 
 ## Format policy
 
-The requirements below guide future behaviour specifications. No YAML parser or
-JSON-with-comments library is selected by this document. Choose maintained libraries,
-record the reason in those specifications and pin versions before implementation.
+The requirements below guide behaviour specifications. Slice-1 selects the maintained
+`go.yaml.in/yaml/v3 v3.0.6` node parser, pinned in go.mod/go.sum, for structural validation
+before projection. Its YAML 1.1 scalar extensions are constrained to YAML 1.2 core
+meanings. Its MIT/Apache notices are preserved in THIRD_PARTY_NOTICES.md and releases.
+Manifest parsing remains a separate specification.
+
+### Implemented version 1
+
+`doctor --policy-only` reads exactly `itos-container.yaml` in the effective working
+directory, without searching parents or using `ITOS_CONFIG`. The
+[versioned schema](schemas/itos-container-v1.schema.json) describes the closed data
+contract; the YAML restrictions below also apply. The complete behaviour is specified
+in [policy.feature](../features/policy.feature).
+
+| Key | Type and requirement | Default |
+| --- | --- | --- |
+| version | Required integer, exactly 1; integral numeric spellings are equivalent | None |
+| manifest | Required nonempty literal relative path, such as .devcontainer/devcontainer.json | None |
+| network | Optional closed object containing only mode | {mode: offline} |
+| network.mode | Optional string, exactly offline | offline |
+
+Null never means omission. Paths use slash separators and preserve spaces and Unicode.
+Absolute or drive-qualified paths, backslashes, empty/dot/dot-dot components and ASCII
+controls are refused. There is no trimming, expansion or referenced-file read in policy
+inspection. Structural errors prevent schema projection; an invalid version prevents
+interpreting other fields. Independent version 1 errors are collected. No partial
+effective policy is returned. Safe filesystem identity belongs to the later host slice.
 
 ### Data and validation
 
@@ -126,8 +150,8 @@ do not establish sandbox argv or credential rules.
    of guessing their meaning. A new key needs a format version that defines it;
    retained earlier versions must keep their written meaning. Removing or renaming a
    key, or changing a value's meaning, is a breaking change requiring migration
-   guidance and the release treatment in [CLI.md](CLI.md) (K8S, AIP 180). No initial
-   policy/schema version is assigned here.
+   guidance and the release treatment in [CLI.md](CLI.md) (K8S, AIP 180). The initial
+   policy/schema version is assigned by slice-1 above.
 8. Use `snake_case` keys consistently. Represent ordered named collections as lists
    of objects with names rather than maps keyed by name, so order and object shape
    remain explicit (AIP 140, K8S).
@@ -149,12 +173,12 @@ do not establish sandbox argv or credential rules.
 
 13. Document every supported key's type, requirements, default and example before
     implementing it. Examples must reflect specified behaviour; this page provides
-    no runnable policy or invented key catalog (OWNER).
+    the settled version 1 catalog above (OWNER).
 14. Make the effective configuration, including all defaults, reviewable without
     executing checkout code or revealing secrets. This is a required capability for
-    doctor/approval design, not an existing print-defaults command (OWNER, CLIG).
+    doctor/approval design; policy-only inspection shows effective defaults (OWNER, CLIG).
 15. Publish a JSON Schema versioned with the settled format so editors and producers
-    can validate it (SCHEMA). No schema artifact exists as a result of this task.
+    can validate it (SCHEMA). Version 1 is linked above.
     Schema validation alone cannot establish host approval or runtime isolation.
 16. Make generated writes stable and deterministic, in the format's defined key
     order, one key per line, using only the permitted JSON-compatible data. Preserve
@@ -163,7 +187,7 @@ do not establish sandbox argv or credential rules.
 
 ## Remaining specification work
 
-The pilot leaves the exact policy schema, approval canonicalization/fingerprint and
+The pilot leaves approval canonicalization/fingerprint and
 storage, safe checkout/engine identity, manifest discovery/output paths, reserved
 environment names, image metadata, lifecycle hooks, resource/time limits and
 cancellation details open. Resolve them through the assigned specifications and the
@@ -171,5 +195,5 @@ person's security decisions, not an illustrative configuration here.
 
 Format policy is not loader compliance. Implement each required behaviour with
 black-box scenarios and red-first step definitions; use domain-owned ports and fakes,
-and run real-engine scenarios only in CI. This documentation-only foundation task
-adds no loader, dependency, schema, gate or mutation proof.
+and run real-engine scenarios only in CI. The policy slice
+supplies no runtime isolation evidence.

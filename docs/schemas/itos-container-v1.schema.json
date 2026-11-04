@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "itos-container offline policy version 1",
+  "description": "A policy request, never host approval. YAML representation restrictions also apply.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "manifest"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "manifest": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\\\u0000-\\u001f\\u007f]+(?:/[^/\\\\\\u0000-\\u001f\\u007f]+)*$(?![\\s\\S])",
+      "description": "Literal relative path using slash separators; no empty or dot components, drives, backslashes or ASCII controls."
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "mode": "offline"
+      },
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "offline",
+          "default": "offline"
+        }
+      }
+    }
+  }
+}
