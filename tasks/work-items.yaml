@@ -47,8 +47,8 @@ items:
   - id: T-7
     title: Align CI triggers and Go test conditions with main and work branches
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p1-foundation-mutation-baseline
