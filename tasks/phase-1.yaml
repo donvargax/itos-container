@@ -23,19 +23,68 @@
   title: "Finish the move to itos 8: the by-hand steps of itos upgrade 7.0.0-rc.1 to 8.45.3"
   why: >
     itos upgrade moved the pin and itos.yaml to 8.45.3 and rewrote AGENTS.md's itos block
-    (2026-11-03), and itos config check passes. Left by hand, from its report: the itos action in
-    .github/workflows/ci.yml and release.yml still pins v7.0.0-rc.1's commit; the CI plan's code
-    proof moved from work done into ci run (proof.code, record its results before pushing); numbered
-    work add, task add and work promote mint their IDs; a plain itos push no longer pushes tags (use
-    --tag; check the release workflow); itos refuses --no-verify, commit -a and git add -A; check
-    every step itos config check and ci plan name. Run itos upgrade 8.45.3 again to reprint the
-    list; it is idempotent. From Copilot's review of PR #2 (2026-11-04):
-    .github/workflows/ci.yml:36-38 and release.yml:81-83 still pin the v7.0.0-rc.1 itos action and
-    install the 6.0.0 launcher through their version overrides; docs/upgrading.md asks for the
-    repository pin and the action to move together. Move both action references to 8.45.3's commit
-    and update or drop the overrides.
+    (2026-11-03), and itos config check passes. The manual migration is incomplete:
+    .github/workflows/ci.yml and .github/workflows/release.yml still use the v7.0.0-rc.1 action
+    at 1b9f1f9995be5d20aed3b4f8877a453bbd1e98a3 and override its launcher with version 6.0.0.
+    This is foundation work under docs/charter.md, not a new container behaviour; it needs task
+    checks, no Gherkin scenarios or step definitions.
+
+    Pin both action references to donvargax/itos@0a8c1bcfce6ae7b67b39197ee3990a90343f35ac
+    with the comment v8.45.3. Remove each action's with/version override entirely. The upstream
+    tag https://api.github.com/repos/donvargax/itos/git/ref/tags/v8.45.3 identifies that commit;
+    https://github.com/donvargax/itos/blob/0a8c1bcfce6ae7b67b39197ee3990a90343f35ac/action.yml
+    resolves a SHA to its release when no version input is supplied. No new library or service
+    is needed. Keep itos.yaml's 8.45.3 pin and checksum
+    d91adcab38594aabbaabc828a6a82b027580374d3e55ea3968d7dee75e8dfaea unchanged. A release-looking
+    comment beside an arbitrary SHA is not evidence of the correct action.
+
+    Update docs/upgrading.md to distinguish the supported upgrade command from these manual
+    workflow edits and record the remaining migration rules. Code proof is enforced by ci run
+    through proof.code, so required changed-code mutation results must be recorded and committed
+    before the coordinator pushes, using the parent of the item's actual first commit, specs
+    included. Keep the proof configuration, thresholds, existing CI steps and verify/ci run
+    calls intact. The whole plan's no-start proof message is not a proof pass; a workflow/docs
+    change alone touches no proof.code path and must not fabricate mutation records. The pinned
+    itos-cc upgrade belongs to T-4.
+
+    Numbered work add, task add and work promote mint their IDs; do not prescribe IDs by hand.
+    A plain itos push does not publish tags; a deliberate tag push needs --tag. The existing
+    release workflow creates a local tag and publishes its draft through GitHub, without an
+    itos push call: preserve that sequence and its version condition, and do not enable releases
+    or add a tag-push step. Keep the bans on --no-verify, commit -a and git add -A. Document these
+    migration rules without rewriting the template claims in PLAN.md, README.md or AGENTS.md;
+    that foundation cleanup is separate work. No runtime, dependency, platform or gate expansion
+    belongs to this task.
+
+    The checks below use the runner's existing shell tools, without requiring RTK in CI. They are
+    cheap configuration and workflow checks for the existing task/CI gates; let the configured
+    hooks and CI run the wider plan. Review its listed steps without changing
+    their selection or cost. Before implementation, both exact-action checks fail on the v7 SHA
+    and both no-override checks fail on with/version 6.0.0. Configuration validity and plan
+    construction are preservation checks, not evidence that the workflow migration is complete.
   done_when:
-    - run: "rtk proxy sh -ec 'itos config check; itos ci plan --whole; for f in .github/workflows/ci.yml .github/workflows/release.yml; do grep -Eq \"uses: donvargax/itos@[0-9a-f]{40} # v8[.]45[.]3$\" \"$f\"; done; ! grep -Eq \"version:[[:space:]]+6[.]0[.]0\" .github/workflows/ci.yml .github/workflows/release.yml'"
+    - run: itos config check
+    - run: itos ci plan --whole
+    - run: |
+        sh -eu <<'SH'
+        test "$(itos config get pin.version)" = 8.45.3
+        test "$(itos config get pin.checksums)" = d91adcab38594aabbaabc828a6a82b027580374d3e55ea3968d7dee75e8dfaea
+        for f in .github/workflows/ci.yml .github/workflows/release.yml; do
+          grep -Eq '^[[:space:]]*(- )?uses: donvargax/itos@0a8c1bcfce6ae7b67b39197ee3990a90343f35ac # v8[.]45[.]3$' "$f"
+        done
+        ! grep -Eq 'version:[[:space:]]+6[.]0[.]0' .github/workflows/ci.yml .github/workflows/release.yml
+        SH
+    - run: |
+        sh -eu <<'SH'
+        for f in .github/workflows/ci.yml .github/workflows/release.yml; do
+          awk '
+            /^[[:space:]]*-[[:space:]]/ { in_itos = 0 }
+            /^[[:space:]]*(- )?uses: donvargax\/itos@/ { in_itos = 1; seen++ }
+            in_itos && /^[[:space:]]*with:/ { invalid = 1 }
+            END { exit (seen != 1 || invalid) }
+          ' "$f"
+        done
+        SH
 - id: T-4
   type: build
   title: tools/bin/pinned runs the current itos-cc, not 0.5.0
