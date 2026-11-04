@@ -63,13 +63,13 @@ goreleaser)
 	member=goreleaser exe=
 	;;
 itos-cc)
-	version=0.5.0
+	version=0.47.2
 	case "$platform" in
-	linux-amd64) sum=a94a0d17418dd4ba39e89210468beaa0b34266db317f65ecf0c4bce6a5f4db6d ;;
-	linux-arm64) sum=9fd215a9e637590c354a782d66f86e7edf5a5f1704f364bcc4597e9f7df724af ;;
-	darwin-amd64) sum=67a5dfc5ce2120f019952f58e21b7800fd28cabd8e65d74aa69d65e381304b0e ;;
-	darwin-arm64) sum=f4acdd964c9581cc94c61231f2fd39eebfc58c91c70954666bda6c139187540a ;;
-	windows-amd64) sum=ae8a0dce924ffb4b171ecbf72b04aed54b232622cd13097f68d72cee090c7483 ;;
+	linux-amd64) sum=5e05856d4ed7ec245c8c94de3fd90dbf8868ccfd5bba16f395efbfb2717f8a4c ;;
+	linux-arm64) sum=4077632ceb1838414c5f4de1b6d6f7807e59b3250b71346e454caf0ff4015bdd ;;
+	darwin-amd64) sum=456adc7c5b9808aff34c19ab9d513c3c2858b7a68385aa78fc679e31536f9dcb ;;
+	darwin-arm64) sum=bd7969e2c5e7121ccef24fb7fede28eb719e61e07eed79ce2df8ac63272d0fb4 ;;
+	windows-amd64) sum=2cb032aab757e387ada20d1eb900a2478a36d7661d0dca42071410a74b240bc1 ;;
 	*) die "no pinned $tool for $platform" ;;
 	esac
 	case "$platform" in
