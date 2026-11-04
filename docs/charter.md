@@ -20,7 +20,8 @@ with no network at all, the checkout as the only host mount, a non-root identity
 resources torn down on exit, every one of those properties proven by a scenario that fails
 without it. In the contract's terms: implementation slices 1 to 3.
 
-1. **Foundation:** finish the move to itos 8 (`itos-8-upgrade`); replace the template claims
+1. **Foundation:** finish the move to itos 8 (`itos-8-upgrade`) and to the current itos-cc
+   (`p1-itos-cc-upgrade`); replace the template claims
    inherited in `PLAN.md`, `README.md` and `AGENTS.md` with this project's; adapt
    `docs/CLI.md` and `docs/CONFIG.md` to `itos container`'s commands and
    `itos-container.yaml`, comparing with the current guidelines of itos and itos-cc, whichever
