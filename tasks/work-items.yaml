@@ -139,6 +139,11 @@ items:
       Include this distinction in the planned coordinator guidance refresh: use itos work show and
       tasks/phase-1.yaml for inspection. itos task executes checks, including T-8's full mutation
       measurement, so drafting guidance must not present it as read-only inspection.
+
+      Include task-specific implementer briefs in the coordinator-guidance refresh: resolve
+      placeholders, derive instructions from the ledger's task type and checks, and reserve
+      lifecycle actions for the loop. T-8 needs test-task checks without new behavior scenarios.
+      This prevents conflicting guidance during the offline owned-run milestone.
   - id: p1-track-gherkin-mutation-freshness
     title: Review Gherkin inputs in mutation freshness tracking
     phase: 1
