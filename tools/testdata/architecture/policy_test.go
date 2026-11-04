@@ -123,7 +123,7 @@ func TestPolicy(t *testing.T) {
 	r := root(t)
 	linter := strings.TrimSpace(must(t, r, filepath.Join(r, "tools/bin/pinned"), "--path", "golangci-lint"))
 	var probes []probe
-	for _, file := range []string{"cases.json", "review-cases.json"} {
+	for _, file := range []string{"cases.json", "review-cases.json", "thread-cases.json"} {
 		var cases []probe
 		if err := json.Unmarshal([]byte(read(t, filepath.Join(r, "tools/testdata/architecture", file))), &cases); err != nil {
 			t.Fatal(err)

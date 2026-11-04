@@ -86,6 +86,17 @@ including `internal/engine/group/docker/domain`, which inherits the adapter role
 The lib fixture retains its os/exec import and cmd wiring; its assertion requires
 the layout path/reason, not an unrelated import-rule diagnostic.
 
+Three subsequent review threads added 18 compile-first fixtures. Against the
+pre-fix checker, six trailing-comma suppressions escaped, eight build-constrained
+porttest helpers were wrongly refused, and a valid two-module workspace failed
+inspection. Three targeted/prose comment controls passed. The test-first commit
+is `cea5b82`; the enforcement commit enables these fixtures in the normal matrix.
+Suppression parsing now accepts a trailing comma. Both ignored-file checks use
+the pure package role, preserving the distinct test-support role of porttest.
+Module loading takes its identity from the packages inspected by `go list ./...`,
+validates every package against it, and still resolves test dependencies; it no
+longer assumes `go list -m -json` returns a single object in workspace mode.
+
 T-13 supersedes the local snapshot proof. The merge from main removes all
 `.metrics/mutate` snapshots, including those moved or added by T-14. Main's
 `proof.code.check` runs a fresh seeded sample in CI and measures changed-line

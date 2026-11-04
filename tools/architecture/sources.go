@@ -34,7 +34,7 @@ func excludedPureFiles(dir, module string, pkgs []Package) ([]string, error) {
 			return err
 		}
 		r := classify(filepath.ToSlash(rel))
-		if r.kind == "domain" || r.layer == "port" {
+		if r.kind == "domain" || r.kind == "port" {
 			violations = append(violations, fmt.Sprintf("toplevel: %s/%s: ignored Go file %s; domain or port package excluded from go list", module, filepath.ToSlash(rel), entry.Name()))
 		}
 		return nil

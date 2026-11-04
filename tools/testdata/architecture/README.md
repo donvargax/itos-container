@@ -6,8 +6,8 @@ errors never satisfy a negative test. Run through `tools/bin/architecture-check 
 The matrix stays under testdata so ordinary `go test ./...` does not launch the linter.
 
 `review-cases.json` specifies T-14's follow-up refusals and approved pure imports;
-TestPolicy always runs both files. Before enforcement, the new data was appended
-temporarily to `cases.json` and run with the original checker: 97 assertions failed
+TestPolicy always runs it alongside `cases.json`. Before enforcement, the new data
+was appended temporarily to `cases.json` and run with the original checker: 97 assertions failed
 after compilation, with no infrastructure errors. Ignored-file probes also compile
 by explicit filename, independently of their build constraints.
 
@@ -16,8 +16,8 @@ it in TestPolicy's input list and running `TestPolicy/thread-` against the pre-f
 checker produced 15 assertion failures after compilation: six trailing-comma
 suppressions escaped, eight valid build-constrained porttest helpers were refused,
 and a valid two-module workspace failed inspection. Three targeted/prose comment
-controls passed. The test commit leaves the new data separate; the enforcement
-commit adds it to the permanent matrix. Workspace probes explicitly enable their
+controls passed. The test commit left the new data separate; TestPolicy now includes
+it in the permanent matrix. Workspace probes explicitly enable their
 disposable go.work file for compilation, lint and inspection.
 
 For the initial red evidence only, `T14_BASELINE=1 go test ./tools/testdata/architecture

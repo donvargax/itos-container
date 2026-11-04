@@ -36,23 +36,15 @@ func Run(ctx context.Context, dir, name string, args ...string) ([]byte, error) 
 
 // Load returns the current module identity and its packages, never an empty success.
 func Load(ctx context.Context, dir string) (string, []Package, error) {
-	b, err := Run(ctx, dir, "go", "list", "-m", "-json")
-	if err != nil {
-		return "", nil, err
-	}
-	var mod struct {
-		Path string
-		Main bool
-	}
-	if err = json.Unmarshal(b, &mod); err != nil {
-		return "", nil, err
-	}
-	if !mod.Main || mod.Path == "" {
-		return "", nil, fmt.Errorf("no current module")
-	}
 	pkgs, err := List(ctx, dir, "./...")
 	if err != nil {
 		return "", nil, err
+	}
+	// In workspace mode, go list -m reports every workspace module. Package
+	// metadata identifies the module actually inspected by ./... in dir.
+	mod := pkgs[0].Module
+	if mod == nil || !mod.Main || mod.Path == "" {
+		return "", nil, fmt.Errorf("no current module")
 	}
 	// Ordinary go list exposes TestImports but does not resolve them. Validate
 	// the test graph as well, without treating synthetic test binaries as roles.
@@ -94,7 +86,7 @@ func List(ctx context.Context, dir string, args ...string) ([]Package, error) {
 	return pkgs, nil
 }
 
-type role struct{ kind, owner, layer, root string }
+type role struct{ kind, owner, root string }
 
 func under(path, root string) bool { return path == root || strings.HasPrefix(path, root+"/") }
 func classify(path string) role {
@@ -117,7 +109,7 @@ func classify(path string) role {
 			return role{}
 		}
 		if layer == "port" && len(parts) >= 5 && parts[4] == "porttest" {
-			return role{"support", owner, layer, owner + "/port/porttest"}
+			return role{"support", owner, owner + "/port/porttest"}
 		}
 		if support(strings.Join(parts[4:], "/")) {
 			return role{}
@@ -126,7 +118,7 @@ func classify(path string) role {
 		if kind != "domain" && kind != "port" && kind != "command" {
 			kind = "adapter"
 		}
-		return role{kind, owner, layer, owner + "/" + layer}
+		return role{kind, owner, owner + "/" + layer}
 	}
 	if under(path, "cmd") {
 		return role{kind: "cmd"}

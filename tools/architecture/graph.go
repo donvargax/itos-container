@@ -26,7 +26,7 @@ func Inspect(ctx context.Context, dir string, checks Checks) ([]string, error) {
 		if checks.Toplevel && from.kind == "" {
 			violations = append(violations, fmt.Sprintf("toplevel: %s: unclassified package", p.ImportPath))
 		}
-		if checks.Toplevel && (from.kind == "domain" || from.layer == "port") {
+		if checks.Toplevel && (from.kind == "domain" || from.kind == "port") {
 			for _, file := range p.IgnoredGoFiles {
 				violations = append(violations, fmt.Sprintf("toplevel: %s: ignored Go file %s; domains and ports must be inspected on every build", p.ImportPath, file))
 			}

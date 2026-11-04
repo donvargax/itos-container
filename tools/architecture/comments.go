@@ -10,7 +10,8 @@ import (
 	"strings"
 )
 
-var nolint = regexp.MustCompile(`(?i)^nolint(?:\s*:\s*([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*))?(?:\s|//|$)`)
+// A trailing comma does not undo a listed suppression.
+var nolint = regexp.MustCompile(`(?i)^nolint(?:\s*:\s*([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*)(?:\s*,)?)?(?:\s|//|$)`)
 
 // Suppressions examines Go comments (never string literals), including generated files.
 func Suppressions(dir string) ([]string, error) {

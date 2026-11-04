@@ -64,16 +64,18 @@ imports, test imports, role coverage and binary dependencies. Its composable
 `--siblings --outside --linked --toplevel` checks run by default, in the hook and
 CI. Import-free unclassified packages, production test support and Go comments
 suppressing depguard fail; targeted `nolint:gosec` remains permitted. Usage/load
-errors exit 2, named architecture violations exit 1.
+errors exit 2, named architecture violations exit 1. Module identity comes from
+the inspected packages, so a Go workspace's other modules do not change it.
 
 The only top-level Go roots are `cmd`, `internal`, `features` and `tools`; every
 other root fails even when cmd imports it. Imports with `testdata`, underscore-
 or dot-prefixed path elements fail because `go list ./...` skips those packages.
 Domains and ports refuse `IgnoredGoFiles`, including build-tagged and OS-specific
 files; source-directory discovery also catches wholly excluded domain/port packages.
-Suppression checks trim names in every comma-separated list position,
-ignore case and recognize an adjacent `//` explanation. They inspect comments,
-so directive text in strings and targeted suppressions remain valid.
+Test-support helpers under `port/porttest` may use build constraints.
+Suppression checks trim names in every comma-separated list position, ignore case
+and recognize both a trailing comma and an adjacent `//` explanation. They inspect
+comments, so directive text in strings and targeted suppressions remain valid.
 
 `--fixtures` runs the compile-first negative/positive matrix against the actual
 pinned linter and policy. The hook's `--fixtures-if-staged` and CI's
