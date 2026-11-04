@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"golang.org/x/term"
 )
 
 // The logs are held here: a run is quiet by default, and nothing count
@@ -58,16 +56,33 @@ func TestLoggerWritesNothingBelowAWarning(t *testing.T) {
 	}
 }
 
-// A terminal gets text, a person reads it. Where the run has no terminal to
-// offer, this is not shown: nothing else here can make one, and a test that
-// skipped it would still hold what the run does.
+// A terminal gets text, even when the test runner itself has redirected I/O.
 func TestLoggerWritesTextToATerminal(t *testing.T) {
-	f, ok := terminalFile(t)
-	if !ok {
-		t.Skip("no terminal to write to in this run")
+	path := filepath.Join(t.TempDir(), "terminal-log")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if h := logger(f).Handler(); !isText(h) {
-		t.Errorf("handler %T, want *slog.TextHandler", h)
+	defer func() { _ = f.Close() }()
+	l := loggerFor(f, func(fd int) bool {
+		if fd != int(f.Fd()) {
+			t.Fatalf("terminal detector received fd %d, want %d", fd, f.Fd())
+		}
+		return true
+	})
+	l.Info("quiet")
+	l.Warn("disk full", "path", "report")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"level=WARN", `msg="disk full"`, "path=report"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("terminal log %q lacks %q", data, want)
+		}
+	}
+	if strings.Contains(string(data), "quiet") {
+		t.Errorf("terminal log includes an info message: %q", data)
 	}
 }
 
@@ -91,19 +106,6 @@ func TestLoggerWritesJSONToAWriterThatIsNotAFile(t *testing.T) {
 	if h := logger(&buf).Handler(); isText(h) {
 		t.Errorf("handler %T, want *slog.JSONHandler", h)
 	}
-}
-
-// terminalFile is a file this run's terminal is, opening the standard input
-// or output whichever is one; false where neither is, as under go test in
-// CI, which is where a scenario's runs happen too.
-func terminalFile(t *testing.T) (*os.File, bool) {
-	t.Helper()
-	for _, name := range []*os.File{os.Stdout, os.Stderr, os.Stdin} {
-		if term.IsTerminal(int(name.Fd())) {
-			return name, true
-		}
-	}
-	return nil, false
 }
 
 // isText is whether h is the text handler, and not the JSON one.

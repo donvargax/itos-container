@@ -384,24 +384,80 @@
   type: test
   title: Record a fresh foundation mutation baseline with pinned itos-cc
   why: >
-    T-4 upgrades the launcher to 0.47.2, whose sample finds zero eligible cached mutants from the
-    inherited three-Example snapshot. Its changed-code check judges no Go sources, so passing it
-    does not establish a foundation baseline. Specify separate first-milestone work to measure
-    project-local evidence with the pinned tool, all-tests, fail-uncovered and no-annotate; kill
-    survivors and cover untested code without weakening gates, then commit the resulting evidence.
-    Already covers generating fresh foundation mutation evidence after T-4: zero eligible cached
-    mutants means passing checks do not establish the milestone's baseline. This existing item
-    already requires fresh project-local mutation evidence after T-4. Zero eligible cached mutants
-    and passing compatibility checks do not establish the foundation proof needed for the charter’s
-    offline owned-run milestone. Already covers fresh project-local mutation evidence after T-4.
-    Zero eligible sampling candidates under 0.47.2 means passing compatibility checks cannot
-    establish the foundation proof required for the charter’s offline owned-run milestone. Already
-    covers fresh project-local mutation evidence after T-4. The reported zero eligible cached
-    mutants reinforces that passing upgrade checks does not establish the foundation baseline
-    required for the offline owned-run milestone. CLI/config guidance and CI alignment remain
-    covered by p1-adapt-cli-config-guidelines and p1-align-ci-branch-conditions. Consolidate
-    p1-foundation-mutation-baseline into this item, retaining its T-4 dependency and proof
-    requirements. T-4's zero eligible records establish no foundation baseline; fresh project-local
-    evidence is still required.
+    T-4 pinned itos-cc to 0.47.2, but its sample found zero eligible cached mutants and its
+    changed-code check judged no Go sources. The only committed snapshot records three Example
+    mutants in internal/release/releasetest/releasetest.go, without current strict coverage
+    evidence. Establish a fresh project-local baseline for the inherited Go foundation under
+    docs/charter.md. This is a test task, not container behaviour; no new Gherkin scenarios or
+    step definitions are required. Keep the dependency on completed T-4. The duplicate idea
+    p1-foundation-mutation-baseline describes this same work; registry consolidation belongs
+    to the coordinator, not a hand edit of owners or statuses.
+
+    Use tools/bin/pinned itos-cc at the existing 0.47.2 pin, never a different binary on PATH
+    or a newly resolved latest release. Measure all admitted Go source under cmd and internal,
+    including the CLI, counting adapters/domain/fake and release helpers. The first check below
+    runs the whole test suite for coverage and each mutant. --mutate-all reruns recorded kills;
+    --no-coverage-cache forces measurement instead of reusing coverage cache entries;
+    --no-annotate leaves source comments untouched. Keep strict --fail-uncovered for whole
+    functions, including executable blocks in functions with no mutation sites. No --since,
+    --changed, --count, --site or narrowed path selection may replace this full baseline.
+    Neither a successful sample nor a changed-code check over no functions establishes it.
+
+    Run the initial measurement during implementation, retain its actual failure details in
+    the handoff, then add deterministic tests that kill non-equivalent survivors and exercise
+    uncovered executable code. Reuse the existing ports, fakes, fixtures and Go test tools;
+    add no dependency or service. Preserve whitespace tokenization, newline-terminated additive
+    pieces and all existing CLI behaviour and scenarios. Use focused assertions on observable
+    results, including genuine error paths, rather than assertions that merely mirror code.
+    Fix flaky tests without retries that conceal failures or reducing their checks. If a
+    behaviour-preserving test seam is necessary, explain it and commit that refactor separately
+    with Task T-8; retain the behaviour and mutation obligations. Do not delete or reshape
+    executable code merely to remove sites or uncovered blocks. A discovered behaviour defect
+    needs separately specified scenarios and red steps; report it instead of silently fixing it.
+
+    Only a genuinely equivalent mutant may be recorded through the pinned tool's mutation
+    except command in itos-cc.yaml. Give its exact identity and a reason demonstrating equivalent
+    observable behaviour for the person to review. An untested branch, difficult error path,
+    uncovered mutant or block, flaky outcome or missing/stale coverage is never an exception.
+    Keep such failures visible until tested or report a concrete blocker. Add no exclusions,
+    annotations that suppress checks, reduced coverage mode or replacement test command. Keep
+    the existing pins, dependencies, proof.code paths, thresholds, hooks and CI plan unchanged.
+
+    After the last source, test or exception change, complete the full fresh run successfully
+    and require the full-scope cached check below to pass against that exact tree. Commit the
+    tool-generated .metrics/mutate/ files by explicit path, including refreshed legacy records
+    and strict coverage evidence for zero-site functions. Never hand-edit a snapshot, import
+    another project's cache, stage a folder or commit .metrics/coverage scratch/cache output.
+    A partial or interrupted run is not the baseline. Review that results actually judged
+    functions and mutants across the admitted cmd/internal scope, record the totals and any
+    exceptions, and identify each file the tool reports as not built on the measured platform.
+    Do not hard-code a mutant count that can change as tests or legitimate seams change.
+
+    Record the tool version, Go version, host OS/architecture, commands, measured source/test
+    commit, counts, failures repaired and final verdicts in the implementation handoff. This
+    baseline covers the admitted code on that platform only; it proves neither other platforms
+    nor container isolation. Preserve the inherited multi-platform Go checks. Real-engine
+    scenarios remain CI-only and agents never receive the Docker socket. No container runtime,
+    policy, approval, network or credential implementation belongs to this task.
+
+    Changed-code proof is additional to the whole-foundation baseline. T-8's actual first
+    commit is its promotion/specification commit 1536aa563c94175e761b5d2186a7bc3f322e29fb;
+    use its parent 4ac0cc4b017feb219ba1645ca4263a7dd26870fd for the range check below, not a
+    later take or implementation commit. Reconfirm that history with itos work show T-8 if
+    the branch changes. Remeasure any stale evidence after subsequent edits before handoff.
+
+    Keep the full measurement as this foundation task's completion check, not a new recurring
+    CI or hook step. The cached whole-scope and range checks then validate the saved evidence
+    without running tests or writing results. Use the runner's existing shell tools, with no
+    RTK requirement in the stored commands. Let configured hooks and CI run their wider gates.
+    Before implementation, the whole-scope cached check fails on missing records such as
+    cmd/itos-container/main.go and on the legacy snapshot's missing current coverage evidence.
+    The full run generates the missing evidence and exposes the test gaps; its initial failing
+    mutants and coverage blocks must be reported from that run, not invented in this spec.
+    No scenarios have failing steps to report. The drafter commits only this ledger entry;
+    the implementer supplies tests and evidence, and the loop alone pushes and closes T-8
+    after the actual pushed head is green and its required proof passes.
   done_when:
-    - run: rtk proxy tools/bin/pinned itos-cc mutation run --all-tests --mutate-all --no-coverage-cache --fail-uncovered --no-annotate cmd internal
+    - run: tools/bin/pinned itos-cc mutation run --all-tests --mutate-all --no-coverage-cache --fail-uncovered --no-annotate cmd internal
+    - run: tools/bin/pinned itos-cc mutation check --fail-uncovered --json cmd internal
+    - run: tools/bin/pinned itos-cc mutation check --since 4ac0cc4b017feb219ba1645ca4263a7dd26870fd --fail-uncovered --json cmd internal

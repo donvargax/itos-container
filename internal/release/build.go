@@ -90,6 +90,12 @@ func BinaryMoved(from, to string) ([]string, error) {
 // replacement's after it, the main module left out; the toolchain is
 // go.mod's toolchain line, else its go line, as go mod edit -json reads them.
 func BuiltAt(rev string) (Build, error) {
+	return builtAt(rev, goIn)
+}
+
+// builtAt keeps the Go subprocess boundary explicit so malformed tool output
+// and failed commands can be exercised without replacing the host's toolchain.
+func builtAt(rev string, runGo func(string, string, ...string) (string, error)) (Build, error) {
 	dir, err := os.MkdirTemp("", "release-built-")
 	if err != nil {
 		return Build{}, err
@@ -100,7 +106,7 @@ func BuiltAt(rev string) (Build, error) {
 	}
 	b := Build{Modules: map[string]string{}}
 	for _, goos := range systems {
-		out, err := goIn(dir, goos, "list", "-deps", "-json=Module", binary)
+		out, err := runGo(dir, goos, "list", "-deps", "-json=Module", binary)
 		if err != nil {
 			return Build{}, fmt.Errorf("at %s: %v", rev, err)
 		}
@@ -116,7 +122,7 @@ func BuiltAt(rev string) (Build, error) {
 			}
 		}
 	}
-	out, err := goIn(dir, "", "mod", "edit", "-json")
+	out, err := runGo(dir, "", "mod", "edit", "-json")
 	if err != nil {
 		return Build{}, fmt.Errorf("at %s: %v", rev, err)
 	}
@@ -170,6 +176,12 @@ func goIn(dir, goos string, args ...string) (string, error) {
 // repository and its working tree as they are.
 func extract(rev, dir string) error {
 	cmd := exec.Command("git", "archive", "--format=tar", rev) //nolint:gosec // a revision is the only variable, git reads it
+	return extractCommand(cmd, rev, dir)
+}
+
+// extractCommand also accepts a prepared command to test pipe and process
+// failures using real subprocesses.
+func extractCommand(cmd *exec.Cmd, rev, dir string) error {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	pipe, err := cmd.StdoutPipe()

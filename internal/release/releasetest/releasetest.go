@@ -8,8 +8,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"testing"
 )
+
+// testingT is the portion of testing.T used by the fixtures. A test can supply
+// a recorder that stops on Fatal to verify failures without failing its parent.
+type testingT interface {
+	Helper()
+	TempDir() string
+	Setenv(string, string)
+	Fatal(...any)
+	Fatalf(string, ...any)
+}
 
 // Example makes an example repository: a module whose binary,
 // ./cmd/itos-container, links example.com/lib; example.com/testonly only its
@@ -20,7 +29,7 @@ import (
 // commit, so no release has been cut and none is due. The go line
 // and toolchain are below any Go that runs the test, and GOTOOLCHAIN=local,
 // so no toolchain is fetched either.
-func Example(t *testing.T, tagged bool) string {
+func Example(t testingT, tagged bool) string {
 	t.Helper()
 	home := t.TempDir()
 	config := filepath.Join(home, "gitconfig")
@@ -94,7 +103,7 @@ tool example.com/tool/cmd/tool
 
 // Change replaces old with new in the file, or writes new whole when old is
 // "", failing the test when old is not there.
-func Change(t *testing.T, path, old, new string) {
+func Change(t testingT, path, old, new string) {
 	t.Helper()
 	text := ""
 	if old != "" {
@@ -115,7 +124,7 @@ func Change(t *testing.T, path, old, new string) {
 	}
 }
 
-func Git(t *testing.T, dir string, args ...string) {
+func Git(t testingT, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...) //nolint:gosec // this test names every argument
 	cmd.Dir = dir
@@ -125,7 +134,7 @@ func Git(t *testing.T, dir string, args ...string) {
 }
 
 // Commit stages every change in repo and commits it with message.
-func Commit(t *testing.T, repo, message string) {
+func Commit(t testingT, repo, message string) {
 	t.Helper()
 	Git(t, repo, "add", "--all")
 	Git(t, repo, "commit", "--quiet", "-m", message)

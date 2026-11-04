@@ -146,3 +146,26 @@ func TestAFailureToWriteJSONIsALineOnStderr(t *testing.T) {
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("the disk is full") }
+
+// Error groups may have no leaves; their aggregate has no failure code or
+// message. Nested groups still preserve the highest code and every message.
+type errorGroup []error
+
+func (errorGroup) Error() string     { return "error group" }
+func (g errorGroup) Unwrap() []error { return g }
+
+func TestEmptyAndNestedErrorGroups(t *testing.T) {
+	if got := Code(errorGroup{}); got != 0 {
+		t.Errorf("empty group code = %d, want 0", got)
+	}
+	if got := Message(errorGroup{}); got != "" {
+		t.Errorf("empty group message = %q", got)
+	}
+	group := errorGroup{&port.Missing{Path: "a"}, errorGroup{errors.New("broken"), &port.Unreadable{Path: "b"}}}
+	if got := Code(group); got != CodeInternal {
+		t.Errorf("nested group code = %d, want %d", got, CodeInternal)
+	}
+	if got, want := Message(group), "the file a is not there\nbroken\nthe file b cannot be read as text"; got != want {
+		t.Errorf("nested group message = %q, want %q", got, want)
+	}
+}

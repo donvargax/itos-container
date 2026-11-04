@@ -1,3 +1,21 @@
 # Equivalent mutants need project-local proof and a reviewed reason.
 mutation:
-  exceptions: []
+  exceptions:
+    - file: cmd/itos-container/main.go
+      function: github.com/donvargax/itos-container/cmd/itos-container#run
+      hash: 62a146aba98870d1
+      line_in_function: 21
+      column: 15
+      original: '>'
+      replacement: '>='
+      reason: run replaces empty args with the single --help argument before this condition. len(args) is therefore at least one here, so > 0 and >= 0 are both true and evaluate the same command comparison.
+      line_text: if len(args) > 0 && args[0] == "__complete" {
+    - file: internal/release/release.go
+      function: github.com/donvargax/itos-container/internal/release#Newest
+      hash: 169323ab8c351ad2
+      line_in_function: 4
+      column: 58
+      original: '>'
+      replacement: '>='
+      reason: 'compareTags returns zero only for identical tag strings: after numeric and length comparisons it uses strings.Compare. Assigning t to newest again when they are identical cannot change the selected tag or any observable result.'
+      line_text: if IsTag(t) && (newest == "" || compareTags(t, newest) > 0) {

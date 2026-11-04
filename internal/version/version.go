@@ -36,10 +36,16 @@ const Dev = "(devel)"
 // Version is the version this binary says it is: the stamp, else the module
 // version Go recorded, without its leading v, else Dev.
 func Version() string {
+	return version(debug.ReadBuildInfo)
+}
+
+// version accepts the build-info reader so a binary without metadata can be
+// tested even when the test executable itself always contains Go build info.
+func version(readBuildInfo func() (*debug.BuildInfo, bool)) string {
 	if stamp != "" {
 		return stamp
 	}
-	if info, ok := debug.ReadBuildInfo(); ok {
+	if info, ok := readBuildInfo(); ok {
 		return fromModule(info.Main.Version)
 	}
 	return Dev
