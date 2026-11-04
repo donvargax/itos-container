@@ -177,15 +177,9 @@ items:
     title: Validate the strict offline sandbox policy
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-14]
     kind: slice
-    why: >
-      Was p2-strict-offline-policy.
-      Specify the versioned schema, explicit defaults, path rules and maintained YAML parser with a
-      pinned version. Add black-box scenarios for valid policy and malformed, duplicate, unknown or
-      unsupported values. Expose validation through doctor and keep reusable policy logic outside
-      command domains. Broken down from p2-specify-policy-manifest-approval.
   - id: slice-2
     title: Validate the restricted single-worker manifest
     phase: 1
