@@ -118,12 +118,13 @@ func (r *runner) lint(packages []string, p probe) {
 	config := filepath.Join(dir, ".golangci.yml")
 	if r.generator != "original" {
 		config = filepath.Join(r.temp, p.Name+".yml")
-		out, err = command(dir, r.generator, "config", dir, config)
+		out, err = command(dir, r.generator, "config", dir)
 		checkOutput(err, out)
-		before := string(read(config))
-		out, err = command(dir, r.generator, "config", dir, config)
+		write(config, out)
+		before := out
+		out, err = command(dir, r.generator, "config", dir)
 		checkOutput(err, out)
-		if string(read(config)) != before {
+		if out != before {
 			panic("configuration generation is not deterministic")
 		}
 	}
