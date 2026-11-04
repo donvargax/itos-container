@@ -187,14 +187,15 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p2-strict-offline-policy
+  - id: slice-1
     title: Validate the strict offline sandbox policy
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p2-strict-offline-policy.
       Specify the versioned schema, explicit defaults, path rules and maintained YAML parser with a
       pinned version. Add black-box scenarios for valid policy and malformed, duplicate, unknown or
       unsupported values. Expose validation through doctor and keep reusable policy logic outside
@@ -230,7 +231,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p2-strict-offline-policy, p2-restricted-worker-manifest, p2-doctor-host-readiness]
+    depends_on: [slice-1, p2-restricted-worker-manifest, p2-doctor-host-readiness]
     kind: idea
     why: >
       Build the approve slice using shared validation and identity code. Specify canonicalization,
