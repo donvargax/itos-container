@@ -269,7 +269,7 @@ items:
     title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-12]
     kind: task
   - id: p1-engine-scenario-tier

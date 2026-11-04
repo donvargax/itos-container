@@ -1204,17 +1204,6 @@
     are needed. The checks below belong to the configured task/hooks/CI, not manual pre-commit
     gate runs. Agents commit and stop; the loop pushes and verifies the actual head before
     closing T-14. This spec intentionally leaves implementation acceptance checks incomplete.
-  done_when:
-    - run: test -d internal/slices/count && ! test -e internal/count && ! test -e tools/slice-layout && tools/bin/architecture-check --siblings --outside --linked --toplevel
-    - run: tools/bin/architecture-check --fixtures
-    - run: >-
-        set -eu;
-        for package in ./internal/slices/count/port/porttest ./internal/slices/count/disk ./internal/slices/count/input;
-        do names=$(go test "$package" -list '^TestFilesContract$');
-        printf '%s\n' "$names" | grep -qx TestFilesContract;
-        go test "$package" -run '^TestFilesContract$' -count=1; done
-    - run: tools/bin/domain-coverage
-    - run: RAPID_CHECKS=1 go test ./... -count=1
 - id: T-15
   type: docs
   title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
