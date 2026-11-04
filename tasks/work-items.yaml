@@ -1,8 +1,7 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue:
-  - T-15
+queue: []
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -247,7 +246,7 @@ items:
     title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-14]
     kind: task
   - id: T-12
@@ -274,8 +273,8 @@ items:
   - id: T-16
     title: Scenarios that need a real engine have a tag, a switch and one Linux job
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-remove-dead-release
