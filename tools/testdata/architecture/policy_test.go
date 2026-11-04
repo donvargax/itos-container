@@ -22,6 +22,7 @@ type probe struct {
 	Files                                  map[string]string
 	Flags                                  []string
 	CompileFiles                           []string
+	Workspace                              bool
 }
 type issue struct {
 	FromLinter, Text string
@@ -56,6 +57,10 @@ func write(t *testing.T, dir, name, data string) {
 }
 func command(t *testing.T, dir, program string, args ...string) (string, int) {
 	t.Helper()
+	return commandWithWorkspace(t, dir, false, program, args...)
+}
+func commandWithWorkspace(t *testing.T, dir string, workspace bool, program string, args ...string) (string, int) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 	c := exec.CommandContext(ctx, program, args...)
@@ -67,7 +72,11 @@ func command(t *testing.T, dir, program string, args ...string) (string, int) {
 		}
 		c.Env = append(c.Env, env)
 	}
-	c.Env = append(c.Env, "GOWORK=off", "GOFLAGS=-mod=readonly")
+	if workspace {
+		c.Env = append(c.Env, "GOWORK=auto", "GOFLAGS=")
+	} else {
+		c.Env = append(c.Env, "GOWORK=off", "GOFLAGS=-mod=readonly")
+	}
 	b, err := c.CombinedOutput()
 	if ctx.Err() != nil {
 		t.Fatalf("infrastructure: command timed out: %s %v\n%s", program, args, b)
@@ -129,6 +138,15 @@ func TestPolicy(t *testing.T) {
 	for _, p := range probes {
 		t.Run(p.Name, func(t *testing.T) {
 			dir := fixture(t)
+			run := func(program string, args ...string) (string, int) {
+				return commandWithWorkspace(t, dir, p.Workspace, program, args...)
+			}
+			compile := func(target string) {
+				t.Helper()
+				if out, code := run("go", "test", "-run=^$", target); code != 0 {
+					t.Fatalf("infrastructure: compile %s exit %d\n%s", target, code, out)
+				}
+			}
 			for file, text := range p.Files {
 				write(t, dir, file, text)
 			}
@@ -149,13 +167,13 @@ func TestPolicy(t *testing.T) {
 				}
 			}
 			// A type error (including an external test's imports) is never a refusal.
-			must(t, dir, "go", "test", "-run=^$", "./...")
+			compile("./...")
 			// Explicit filenames also compile probes excluded by build constraints.
 			for _, file := range p.CompileFiles {
-				must(t, dir, "go", "test", "-run=^$", file)
+				compile(file)
 			}
 			report := filepath.Join(dir, "lint.json")
-			out, code := command(t, dir, linter, "run", "--config", filepath.Join(dir, ".golangci.yml"), "--enable-only", "depguard", "--issues-exit-code", "7", "--max-issues-per-linter", "0", "--max-same-issues", "0", "--uniq-by-line=false", "--output.json.path", report, "--output.text.path", os.DevNull, "--show-stats=false", "./...")
+			out, code := run(linter, "run", "--config", filepath.Join(dir, ".golangci.yml"), "--enable-only", "depguard", "--issues-exit-code", "7", "--max-issues-per-linter", "0", "--max-same-issues", "0", "--uniq-by-line=false", "--output.json.path", report, "--output.text.path", os.DevNull, "--show-stats=false", "./...")
 			if code != 0 && code != 7 {
 				t.Fatalf("infrastructure: lint exit %d\n%s", code, out)
 			}
@@ -201,7 +219,7 @@ func TestPolicy(t *testing.T) {
 			if len(flags) == 0 {
 				flags = []string{"--siblings", "--outside", "--linked", "--toplevel"}
 			}
-			out, code = command(t, dir, checker, flags...)
+			out, code = run(checker, flags...)
 			if p.Kind == "allow" {
 				if code != 0 {
 					t.Fatalf("allowed arrow refused: exit %d\n%s", code, out)

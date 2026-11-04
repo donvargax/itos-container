@@ -11,6 +11,15 @@ temporarily to `cases.json` and run with the original checker: 97 assertions fai
 after compilation, with no infrastructure errors. Ignored-file probes also compile
 by explicit filename, independently of their build constraints.
 
+`thread-cases.json` records the three subsequent PR findings. Temporarily including
+it in TestPolicy's input list and running `TestPolicy/thread-` against the pre-fix
+checker produced 15 assertion failures after compilation: six trailing-comma
+suppressions escaped, eight valid build-constrained porttest helpers were refused,
+and a valid two-module workspace failed inspection. Three targeted/prose comment
+controls passed. The test commit leaves the new data separate; the enforcement
+commit adds it to the permanent matrix. Workspace probes explicitly enable their
+disposable go.work file for compilation, lint and inspection.
+
 For the initial red evidence only, `T14_BASELINE=1 go test ./tools/testdata/architecture
 -run TestPolicy -count=1 -v` judges the inherited linter alone. Missing graph enforcement
 is reported as an expected-refusal assertion, never as a successful negative proof.
