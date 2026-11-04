@@ -138,3 +138,18 @@ func TestReadBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestIssuePathsSurviveSiblingTraversal(t *testing.T) {
+	_, issues := read("extra: [{branch: [{one: &mark 1, two: *mark}, {'<<': {a: 0}, three: .inf}, {false: !tag null}]}]")
+	want := []port.Issue{
+		{Kind: port.Anchor, Path: []string{"extra", "0", "branch", "0", "one"}},
+		{Kind: port.Alias, Path: []string{"extra", "0", "branch", "0", "two"}},
+		{Kind: port.MergeKey, Path: []string{"extra", "0", "branch", "1", "<<"}},
+		{Kind: port.NonFinite, Path: []string{"extra", "0", "branch", "1", "three"}},
+		{Kind: port.NonStringKey, Path: []string{"extra", "0", "branch", "2"}},
+		{Kind: port.Tag, Path: []string{"extra", "0", "branch", "2"}},
+	}
+	if !reflect.DeepEqual(issues, want) {
+		t.Fatalf("issues = %#v; want %#v", issues, want)
+	}
+}

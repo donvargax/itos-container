@@ -128,6 +128,9 @@ Feature: Strict offline sandbox policy
   # readable and JSON paths lossless after JSON decoding and RFC 6901 escaping.
   # Apply the same escaping to the manifest in successful human output, including
   # C1 controls and Unicode line separators. Preserve the decoded manifest in JSON.
+  # Deep nesting below unknown fields must not retain a separate ancestor-path
+  # copy for every node. Inspect the whole tree and preserve diagnostic locations
+  # while using traversal storage proportional to depth, plus retained issues.
   #
   # Layout handoff: features/steps_test.go and features/policy_steps_test.go now
   # define every step below, and all 28 scenarios are live. Preserve their IDs,
@@ -779,6 +782,25 @@ Feature: Strict offline sandbox policy
       | mode          |
       |               |
       | --policy-only |
+
+  # GC tracing observes the CLI process without importing product code. Frequent
+  # collection exposes retained ancestor paths on these small hostile inputs.
+  # The 64 MiB threshold is a regression fixture, not a new policy/runtime limit.
+  @wip @slice-1 @bug-4 @ID-POLICY-35
+  Scenario Outline: deeply nested unknown policy data cannot retain quadratic traversal paths
+    Given the policy file contains <depth> nested sequences below an unknown field
+    When itos-container runs with "doctor --policy-only --json" and the environment "GODEBUG=gctrace=1;GOGC=10;GOMEMLIMIT=off"
+    Then its GC trace reports less than 64 MiB of heap
+    And its policy JSON reports exactly these problems:
+      | rule               | path   | exit |
+      | policy.unknown_key | /extra | 2    |
+    And it exits with code 2
+    And the engine recorder has no connections
+
+    Examples:
+      | depth |
+      | 6000  |
+      | 8000  |
 
   # New Given: create only harness-owned helper executables on the child PATH for
   # git, docker, devcontainer, sh, bash and npm. Each records execution and exits;
