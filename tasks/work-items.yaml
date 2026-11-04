@@ -32,6 +32,11 @@ items:
       pushes tags (use --tag; check the release workflow); itos refuses --no-verify, commit -a and
       git add -A; check every step itos config check and ci plan name. Run itos upgrade 8.45.3 again
       to reprint the list; it is idempotent.
+
+      From Copilot's review of PR #2 (2026-11-04): .github/workflows/ci.yml:36-38 and
+      release.yml:81-83 still pin the v7.0.0-rc.1 itos action and install the 6.0.0 launcher through
+      their version overrides; docs/upgrading.md asks for the repository pin and the action to move
+      together. Move both action references to 8.45.3's commit and update or drop the overrides.
   - id: p1-adapt-cli-config-guidelines
     title: docs/CLI.md and docs/CONFIG.md describe itos container's commands and itos-container.yaml, from the newest of itos's and itos-cc's guidelines
     phase: 1
