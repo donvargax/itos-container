@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "file": "internal/count/port/files.go",
+  "file": "internal/slices/count/port/files.go",
   "language": "go",
   "tests": {
     "internal/cli/cli_test.go": "564425f1ac18e4f6a920276d1230f4493240378a0fe6a605b32aff77681d3d19",

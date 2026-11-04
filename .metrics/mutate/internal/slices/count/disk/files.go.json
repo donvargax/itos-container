@@ -1,31 +1,30 @@
 {
   "version": 1,
-  "file": "internal/count/port/porttest/files.go",
+  "file": "internal/slices/count/disk/files.go",
   "language": "go",
   "tests": {
-    "internal/count/command/command_test.go": "9afeaaa027e245cb891f01cb9914b893eb2db8180f99f548bd7df7e4ee7819bc",
-    "internal/count/domain/count_test.go": "cb4bd8e5d81613fcdacfca9b04f3338b244e24b309d9eee8b54d0d21b7a1658b",
-    "internal/count/input/input_test.go": "0cda6f27f3da391cceb38761e6a477e55744f539f1b124109454f7dab53dbd56",
-    "internal/count/port/porttest/files_test.go": "acc0ac3830cf98c0f48de30ed14f7afeddb162d5c1539a0655b2bf50891119ee"
+    "cmd/itos-container/foundation_test.go": "8ad264ca6cba405eccfdfd56315a7026e1f6fca861675d7ac2ab0040d885a1c4",
+    "cmd/itos-container/main_test.go": "e6f255315e3f08b0d569491bf12260520b3c0857018f62f6545e4beeb95d90e5",
+    "internal/count/disk/files_test.go": "70839874d8124869f6ebc5598d8e49dcde9f96aefad9ba3293686a141aa30ba2"
   },
   "units": [
     {
-      "namespace": "github.com/donvargax/itos-container/internal/count/port/porttest.Files",
+      "namespace": "github.com/donvargax/itos-container/internal/count/disk.Files",
       "name": "Read",
-      "hash": "084700e1d09c01fd",
-      "start_line": 15,
-      "end_line": 24,
+      "hash": "93c37a729bb9918b",
+      "start_line": 20,
+      "end_line": 26,
       "killed": 1,
       "survived": 0,
       "uncovered": 0,
       "sites": 1,
       "mutants": [
         {
-          "line": 20,
-          "column": 5,
-          "offset": 159,
-          "original": "!",
-          "replacement": "",
+          "line": 22,
+          "column": 9,
+          "offset": 100,
+          "original": "!=",
+          "replacement": "==",
           "outcome": "killed",
           "scope": "all-tests",
           "suite_evidence": {
@@ -55,9 +54,9 @@
       ],
       "go_coverage": {
         "version": 2,
-        "file": "internal/count/port/porttest/files.go",
-        "function": "github.com/donvargax/itos-container/internal/count/port/porttest.Files#Read",
-        "function_hash": "084700e1d09c01fd",
+        "file": "internal/count/disk/files.go",
+        "function": "github.com/donvargax/itos-container/internal/count/disk.Files#Read",
+        "function_hash": "93c37a729bb9918b",
         "producer": "go test -count=1 -covermode=set -coverpkg=./... -coverprofile=coverage.out ./...; scope=all-tests",
         "inputs": {
           "@go-env": "a064fa8f6b2ae161429ed8b0928ba65699203429b1ef062f51690f90c17469fd",
@@ -102,36 +101,22 @@
         "complete": true,
         "blocks": [
           {
-            "span": "16.2,16.41",
-            "line": 16,
-            "column": 2,
-            "weight": 1,
-            "covered": true
-          },
-          {
-            "span": "17.3,18.1",
-            "line": 17,
-            "column": 3,
-            "weight": 1,
-            "covered": true
-          },
-          {
-            "span": "19.2,20.9",
-            "line": 19,
+            "span": "21.2,22.16",
+            "line": 21,
             "column": 2,
             "weight": 2,
             "covered": true
           },
           {
-            "span": "21.3,22.1",
-            "line": 21,
+            "span": "23.3,24.1",
+            "line": 23,
             "column": 3,
             "weight": 1,
             "covered": true
           },
           {
-            "span": "23.2,23.42",
-            "line": 23,
+            "span": "25.2,25.18",
+            "line": 25,
             "column": 2,
             "weight": 1,
             "covered": true
@@ -140,11 +125,11 @@
       }
     },
     {
-      "namespace": "github.com/donvargax/itos-container/internal/count/port/porttest",
-      "name": "Unreadable",
-      "hash": "3f6ea4f333c8a393",
-      "start_line": 27,
-      "end_line": 27,
+      "namespace": "github.com/donvargax/itos-container/internal/count/disk",
+      "name": "classifyReadError",
+      "hash": "bd8761ded9feaff3",
+      "start_line": 28,
+      "end_line": 33,
       "killed": 0,
       "survived": 0,
       "uncovered": 0,
@@ -152,9 +137,9 @@
       "mutants": [],
       "go_coverage": {
         "version": 2,
-        "file": "internal/count/port/porttest/files.go",
-        "function": "github.com/donvargax/itos-container/internal/count/port/porttest#Unreadable",
-        "function_hash": "3f6ea4f333c8a393",
+        "file": "internal/count/disk/files.go",
+        "function": "github.com/donvargax/itos-container/internal/count/disk#classifyReadError",
+        "function_hash": "bd8761ded9feaff3",
         "producer": "go test -count=1 -covermode=set -coverpkg=./... -coverprofile=coverage.out ./...; scope=all-tests",
         "inputs": {
           "@go-env": "a064fa8f6b2ae161429ed8b0928ba65699203429b1ef062f51690f90c17469fd",
@@ -199,9 +184,23 @@
         "complete": true,
         "blocks": [
           {
-            "span": "27.49,27.86",
-            "line": 27,
-            "column": 49,
+            "span": "29.2,29.36",
+            "line": 29,
+            "column": 2,
+            "weight": 1,
+            "covered": true
+          },
+          {
+            "span": "30.3,31.1",
+            "line": 30,
+            "column": 3,
+            "weight": 1,
+            "covered": true
+          },
+          {
+            "span": "32.2,32.37",
+            "line": 32,
+            "column": 2,
             "weight": 1,
             "covered": true
           }

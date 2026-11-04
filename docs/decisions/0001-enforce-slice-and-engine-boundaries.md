@@ -60,3 +60,97 @@ nested domain rapid controls were also refused by the old rule. Existing product
 scenarios remain preservation checks, unchanged. The full compile-first matrix
 and task acceptance checks run through the configured hooks; mutation proof uses
 the item's first-spec parent, not the take or implementation commit.
+
+The final matrix contains 132 import/layout controls, plus coverage, deny-prefix,
+inspection, linked-support and disposable Git-selection tests. Follow-up red
+probes caught two external-test self imports, three misplaced nested support
+packages and two unresolved test dependencies that ordinary `go list` accepted.
+The checker now validates test dependency loading as well as its import arrows.
+
+Strict proof used `tools/bin/pinned itos-cc mutation run --since
+913e8298f5af56d6273bda9a2cc8c3494b443555 --all-tests --fail-uncovered
+--no-annotate --json cmd internal`. This is the parent of T-14's actual first
+spec commit (`a1caf86`), including its later specifications in the range.
+The final run freshly judged 39 sites: 38 killed, one existing equivalent
+exception, zero survivors and zero uncovered sites or executable blocks.
+No cached mutation result was reused. The pinned tool renewed the existing
+main-argument exception after the classifier injection; its reason is unchanged,
+and no new exception was introduced. Generated snapshots follow the count move;
+the tool removed orphaned snapshots, with no hand-edited evidence.
+
+The initial proof exposed assertion branches in `FilesContract` that conforming
+adapters never exercised. Faulty port implementations now prove the suite detects
+wrong bytes, errors and paths, repeated-read failures, and shared storage. A
+recording reporter exercises those same assertions; the storage check mutates
+every byte so partially overlapping returns also fail. These are tests of the
+port's existing promise, not new counting behaviour.
+
+`itos task T-14` passed after the final implementation commit: the combined
+structural check, explicit fixture matrix, three `TestFilesContract` entry points,
+per-domain coverage (count 100.0%) and the full `RAPID_CHECKS=1` product suite,
+including unchanged black-box scenarios. Commit hooks passed lint and vulnerability
+checks. The configured strict mutation check passed on the generated snapshots.
+Push and verification of the actual pushed head remain the coordinator's work.
+
+<details>
+<summary>Initial compiled fixtures: failing assertions before enforcement</summary>
+
+Each module compiled first. These assertions failed against the inherited
+linter; the final matrix passes their corresponding refusals and controls.
+
+```text
+expected refusal: internal/slices/newname/domain/probe.go imports os; rule domain; got none
+expected refusal: internal/slices/newname/domain/probe.go imports os/exec; rule domain; got none
+expected refusal: internal/slices/newname/domain/probe.go imports net; rule domain; got none
+expected refusal: internal/slices/newname/domain/probe.go imports net/http; rule domain; got none
+expected refusal: internal/slices/newname/domain/probe.go imports syscall; rule domain; got none
+expected refusal: internal/slices/newname/domain/probe.go imports golang.org/x/sys/unix; rule domain; got none
+expected refusal: internal/slices/newname/domain/probe.go imports encoding/json; rule domain; got none
+expected refusal: internal/slices/newname/domain/probe.go imports flag; rule domain; got none
+expected refusal: internal/slices/newname/domain/probe.go imports github.com/alecthomas/kong; rule domain; got none
+expected refusal: internal/slices/newname/domain/nested/probe.go imports os; rule domain; got none
+expected refusal: internal/slices/newname/port/probe.go imports os/exec; rule port; got none
+expected refusal: internal/slices/newname/port/probe.go imports github.com/donvargax/itos-container/internal/slices/newname/domain; rule siblings; current linter produced []
+expected refusal: internal/slices/newname/port/probe.go imports github.com/donvargax/itos-container/internal/slices/newname/portother; rule siblings; current linter produced []
+expected refusal: internal/engine/shared/domain/nested/probe.go imports os; rule domain; got none
+expected refusal: internal/engine/shared/port/probe.go imports os/exec; rule port; got none
+expected refusal: internal/engine/shared/port/probe.go imports github.com/donvargax/itos-container/internal/engine/shared/domain; rule siblings; current linter produced []
+expected refusal: internal/engine/shared/port/probe.go imports github.com/donvargax/itos-container/internal/engine/shared/portother; rule siblings; current linter produced []
+expected refusal: internal/slices/count/domain/probe.go imports github.com/donvargax/itos-container/internal/slices/count/disk; rule siblings; current linter produced []
+expected refusal: internal/slices/count/domain/probe.go imports github.com/donvargax/itos-container/internal/slices/countother/disk; rule siblings; current linter produced []
+expected refusal: internal/slices/count/command/probe.go imports github.com/donvargax/itos-container/internal/slices/count/disk; rule siblings; current linter produced []
+expected refusal: internal/slices/count/command/probe.go imports github.com/donvargax/itos-container/internal/slices/countother/disk; rule siblings; current linter produced []
+expected refusal: internal/slices/count/domain/probe.go imports github.com/donvargax/itos-container/internal/slices/countother/domain; rule siblings; current linter produced []
+expected refusal: internal/engine/shared/domain/probe.go imports github.com/donvargax/itos-container/internal/slices/count/domain; rule outside; current linter produced []
+expected refusal: internal/slices/count/domain/probe_test.go imports github.com/donvargax/itos-container/internal/slices/countother/domain; rule siblings; current linter produced []
+expected refusal: internal/engine/shared/domain/probe_test.go imports github.com/donvargax/itos-container/internal/slices/count/domain; rule outside; current linter produced []
+expected refusal: internal/slices/count/domain/external_test.go imports github.com/donvargax/itos-container/internal/slices/countother/domain; rule siblings; current linter produced []
+expected refusal: internal/engine/shared/domain/external_test.go imports github.com/donvargax/itos-container/internal/slices/count/domain; rule outside; current linter produced []
+expected refusal: internal/slices/count/input/probe.go imports github.com/donvargax/itos-container/internal/slices/count/command; rule siblings; current linter produced []
+expected refusal: internal/slices/count/input/probe.go imports github.com/donvargax/itos-container/internal/slices/count/disk; rule siblings; current linter produced []
+expected refusal: internal/slices/count/disk/probe.go imports github.com/donvargax/itos-container/internal/slices/countother/domain; rule siblings; current linter produced []
+expected refusal: internal/slices/count/disk/probe.go imports github.com/donvargax/itos-container/internal/cli; rule siblings; current linter produced []
+expected refusal: internal/flat/probe.go imports ; rule unclassified; current linter produced []
+expected refusal: internal/engine/shared/probe.go imports ; rule unclassified; current linter produced []
+expected refusal: internal/engine/shared/adapters/disk/probe.go imports ; rule unclassified; current linter produced []
+expected refusal: internal/engine/shared/command/probe.go imports ; rule unclassified; current linter produced []
+expected refusal: internal/slices/count/probe.go imports ; rule unclassified; current linter produced []
+expected refusal: pkg/public/probe.go imports ; rule unclassified; current linter produced []
+expected refusal: internal/flat/probe.go imports os/exec; rule unclassified; got none
+expected refusal: internal/cli/probe.go imports github.com/donvargax/itos-container/internal/slices/count/port; rule ui; got none
+expected refusal: internal/cli/probe_test.go imports github.com/donvargax/itos-container/internal/slices/count/port; rule ui; got none
+expected refusal: internal/version/probe.go imports github.com/donvargax/itos-container/internal/cli; rule version; got none
+expected refusal: internal/release/probe.go imports github.com/donvargax/itos-container/internal/slices/count/port; rule release; got none
+expected refusal: tools/probe/probe.go imports github.com/donvargax/itos-container/internal/version; rule toplevel; current linter produced []
+expected refusal: internal/slices/count/domain/probe.go imports github.com/donvargax/itos-container/internal/slices/count/port/porttest; rule test support; current linter produced []
+expected refusal: internal/engine/shared/domain/probe.go imports github.com/donvargax/itos-container/internal/engine/shared/port/porttest; rule test support; current linter produced []
+expected refusal: internal/slices/count/domain/probe.go imports ; rule suppresses depguard; current linter produced []
+expected refusal: internal/slices/count/domain/probe.go imports ; rule suppresses depguard; current linter produced []
+expected refusal: internal/slices/count/domain/probe.go imports ; rule suppresses depguard; current linter produced []
+expected refusal: internal/slices/count/domain/probe.go imports ; rule suppresses depguard; current linter produced []
+expected refusal: internal/slices/count/domain/probe.go imports ; rule suppresses depguard; current linter produced []
+allowed arrow refused: [{FromLinter:depguard Text:import 'pgregory.net/rapid' is not allowed from list 'rapid': rapid is used only by domain property tests Pos:{Filename:internal/slices/fresh/domain/nested/probe_test.go}}]
+allowed arrow refused: [{FromLinter:depguard Text:import 'pgregory.net/rapid' is not allowed from list 'rapid': rapid is used only by domain property tests Pos:{Filename:internal/engine/fresh/domain/nested/probe_test.go}}]
+```
+
+</details>
