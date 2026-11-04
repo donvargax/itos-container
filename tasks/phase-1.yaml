@@ -328,3 +328,12 @@
     checks. Keyword checks do not prove correct prose or isolation: review both documents against
     this entry, especially source differences, current versus planned behaviour, workload exits
     and the approval boundary. Let configured hooks and CI run the wider gates unchanged.
+- id: T-7
+  type: ci
+  title: Align CI triggers and Go test conditions with main and work branches
+  why: >
+    The offline owned-run milestone needs reliable CI proof on main and work branches. Correct
+    inherited branch conditions while preserving existing checks and the charter's Linux-only
+    runtime scope.
+  done_when:
+    - run: "awk '/^  push:/ {p=1} /^  pull_request:/ {r=1} /^[[:space:]]+(branches|branches-ignore|tags|tags-ignore|paths|paths-ignore|if):/ {bad=1} /uses: actions\\/setup-go@/ {g++} /run: itos verify/ {v=1} /run: itos ci run/ {c=1} /go test \\.\\/\\.\\.\\. -count=1/ {t=1} /os: \\[ubuntu-latest, macos-latest, windows-latest\\]/ {m=1} END {exit !(p && r && !bad && g == 2 && v && c && t && m)}' .github/workflows/ci.yml"

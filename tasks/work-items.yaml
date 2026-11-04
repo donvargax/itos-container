@@ -44,17 +44,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p1-align-ci-branch-conditions
+  - id: T-7
     title: Align CI triggers and Go test conditions with main and work branches
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      The offline owned-run milestone needs reliable CI proof on main and work branches. Correct
-      inherited branch conditions while preserving existing checks and the charter's Linux-only
-      runtime scope.
+    kind: task
   - id: p1-foundation-mutation-baseline
     title: Establish a fresh foundation mutation baseline
     phase: 1
