@@ -308,7 +308,7 @@ items:
   - id: T-17
     title: Bugbot is not requested for the rest of 2026-11-04
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
