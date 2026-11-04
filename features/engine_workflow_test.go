@@ -36,6 +36,7 @@ type workflowJob struct {
 }
 
 type workflowStep struct {
+	ID              string            `yaml:"id"`
 	If              string            `yaml:"if"`
 	Shell           string            `yaml:"shell"`
 	Timeout         int               `yaml:"timeout-minutes"`
@@ -206,16 +207,21 @@ func engineWorkflowIssues(data []byte) []string {
 	require(engine.Timeout == 10 && !engine.ContinueOnError && len(engine.Needs) == 0, "engine job budget and independence")
 	require(len(engine.Env) == 0, "engine switch must be step-local")
 	enabledPath := ""
-	if len(engine.Steps) != 4 {
-		require(false, "engine must have checkout, setup-go, preflight and scenarios only")
-	} else {
-		checkout, setup, preflight, run := engine.Steps[0], engine.Steps[1], engine.Steps[2], engine.Steps[3]
+	require(len(engine.Steps) == 6, "engine must have checkout, setup-go, preflight, preparation, scenarios and cleanup only")
+	if len(engine.Steps) >= 3 {
+		checkout, setup, preflight := engine.Steps[0], engine.Steps[1], engine.Steps[2]
 		require(checkout.Uses == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" && checkout.With["ref"] == "${{ env.TO }}", "checkout head and pin")
 		require(setup.Uses == "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e" && setup.With["go-version-file"] == "go.mod" && setup.With["cache-dependency-path"] == "go.sum", "setup-go toolchain and pin")
 		require(preflight.Name == "Docker server preflight" && preflight.Shell == "bash" && !preflight.ContinueOnError && preflight.If == "" && validEnginePreflight(preflight.Run), "bounded read-only local-server preflight without ignored failures")
-		require(run.Run == engineInvocation && run.Timeout == 5 && run.If == "" && !run.ContinueOnError && len(run.Env) == 1 && run.Env["ITOS_CONTAINER_ENGINE_TESTS"] == "1", "complete invocation and step budget")
-		enabledPath = "jobs.engine.steps.3.env.ITOS_CONTAINER_ENGINE_TESTS"
 	}
+	for i, run := range engine.Steps {
+		if run.Name == "Engine scenarios" {
+			require(run.Run == engineInvocation && run.Timeout == 5 && run.If == "" && !run.ContinueOnError && validFixtureEnvironment(run.Env), "complete invocation, fixture outputs and step budget")
+			enabledPath = "jobs.engine.steps." + strconv.Itoa(i) + ".env.ITOS_CONTAINER_ENGINE_TESTS"
+		}
+	}
+	require(enabledPath != "", "complete invocation missing")
+	issues = append(issues, engineFixtureWorkflowIssues(data)...)
 	for _, name := range []string{"platform", "platform-macos", "platform-windows"} {
 		job, ok := workflow.Jobs[name]
 		require(ok, "preserve "+name)
