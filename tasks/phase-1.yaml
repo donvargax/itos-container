@@ -564,3 +564,28 @@
         sh -eu -c 'f=docs/ORCHESTRATING.md; for text in "itos guide work" "itos guide commit" "itos guide brief" "itos commit" "executes checks" placeholders "test task" T-8 T-9 drafter implementer loop "CI-only" "Docker socket"; do grep -Fq "$text" "$f"; done'
     - run: >-
         sh -eu -c 'f=docs/ORCHESTRATING.md; for text in cmd/itos-container/main.go features/README.md .github/workflows/ci.yml .github/workflows/release.yml proof/T-8-foundation-baseline.md .metrics/mutate/ proof.code; do grep -Fq "$text" "$f"; done'
+
+- id: T-10
+  type: ci
+  title: The depguard rules hold every slice to internal/count's layout, not only count
+  why: >
+    docs/architecture.md ("Slices") makes every command a vertical slice before the first container
+    command is written; .golangci.yml's depguard rules name only internal/count's domain and disk
+    packages, so a new slice could import os from its domain or an adapter could import the domain
+    and only a review would notice. Generalise them: a domain package of any slice denies os,
+    os/exec, net, net/http and every adapter, and an adapter imports only its slice's port. Prove
+    each rule with a fixture that breaks it.
+  done_when:
+    - run: tools/bin/check-slice-layout
+- id: T-11
+  type: docs
+  title: Specify the offline owned-run lifecycle contract
+  why: >
+    Record the later run slice's contract in docs/plans/offline-run-lifecycle.md: literal argv,
+    interactive JSON refusal, ownership before execution, hardened offline startup, bounded waits,
+    signals, cancellation, workload exits and safe cleanup with recovery. Include black-box
+    acceptance cases and identify security choices requiring the person's decision. This PR
+    specifies behavior without implementing runtime commands. Broken down from
+    p2-specify-policy-manifest-approval.
+  done_when:
+    - run: sh -eu -c 'f=docs/plans/offline-run-lifecycle.md; test -s "$f"; for section in "## Arguments and JSON" "## Ownership and startup" "## Timeouts and cancellation" "## Workload exits" "## Cleanup and recovery" "## Acceptance scenarios" "## Security decisions"; do grep -Fqx "$section" "$f"; done'

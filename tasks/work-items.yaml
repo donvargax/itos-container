@@ -2,8 +2,7 @@
 phases:
   1: null
 queue:
-  - p1-slice-layout-lint
-  - p2-specify-policy-manifest-approval
+  - T-10
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -107,22 +106,9 @@ items:
     title: Specify offline policy, manifest and host-owned approval
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The offline owned-run milestone requires settled schemas, manifest paths, approval
-      canonicalization, checkout/engine identity, host-owned storage and lifecycle semantics before
-      runtime implementation. Define black-box acceptance scenarios without executing checkout code.
-
-      Already covers schemas, checkout/engine identity and host-owned approval storage. Include
-      maintained parser selection, its rationale and version pin in this specification before
-      implementing the milestone's configuration and approval behavior.
-
-      Already includes lifecycle semantics and black-box acceptance scenarios. Explicitly cover
-      bounded timeouts, signal forwarding, cancellation, workload exit preservation, cleanup
-      failures and recovery, and interactive JSON refusal before implementing diagnostics and exit
-      mappings for the offline owned-run milestone.
   - id: T-9
     title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
     phase: 1
@@ -180,17 +166,72 @@ items:
       Already covered. Include features/README.md and comments in itos.yaml and
       .github/workflows/release.yml, preserving existing gates, provenance and limits on
       container-support claims.
-  - id: p1-slice-layout-lint
+  - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: task
+  - id: slice-1
+    title: Validate the strict offline sandbox policy
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
     why: >
-      docs/architecture.md ("Slices") makes every command a vertical slice before the first
-      container command is written; .golangci.yml's depguard rules name only internal/count's domain
-      and disk packages, so a new slice could import os from its domain or an adapter could import
-      the domain and only a review would notice. Generalise them: a domain package of any slice
-      denies os, os/exec, net, net/http and every adapter, and an adapter imports only its slice's
-      port. Prove each rule with a fixture that breaks it.
+      Was p2-strict-offline-policy.
+      Specify the versioned schema, explicit defaults, path rules and maintained YAML parser with a
+      pinned version. Add black-box scenarios for valid policy and malformed, duplicate, unknown or
+      unsupported values. Expose validation through doctor and keep reusable policy logic outside
+      command domains. Broken down from p2-specify-policy-manifest-approval.
+  - id: slice-2
+    title: Validate the restricted single-worker manifest
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      Was p2-restricted-worker-manifest.
+      Specify discovery, JSON-with-comments parsing, supported fields, reserved environment names,
+      image metadata and lifecycle hooks. Select and pin a maintained parser. Cover observable
+      acceptance and refusal through doctor without executing checkout code, expanding host
+      variables or allowing unsupported permissions. Broken down from
+      p2-specify-policy-manifest-approval.
+  - id: slice-3
+    title: Inspect checkout, local engine and cached-image readiness
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      Was p2-doctor-host-readiness.
+      Specify safe checkout and engine identity, then implement read-only inspection in the doctor
+      slice using reusable inspection ports and fakes. Cover unsupported layouts, remote engines,
+      missing or incompatible cached images, and typed diagnostics. Select and pin the engine
+      library; real-engine scenarios run only in CI. Broken down from
+      p2-specify-policy-manifest-approval.
+  - id: slice-4
+    title: Review and record explicit host-owned approval
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-1, slice-2, slice-3]
+    kind: slice
+    why: >
+      Was p2-explicit-host-approval.
+      Build the approve slice using shared validation and identity code. Specify canonicalization,
+      fingerprints and host-owned storage before implementation. Scenarios must cover effective
+      permissions and differences, deliberate consent, checkout separation, changed configurations,
+      superseded records and approval material inaccessible to the worker. Broken down from
+      p2-specify-policy-manifest-approval.
+  - id: T-11
+    title: Specify the offline owned-run lifecycle contract
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
