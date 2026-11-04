@@ -6,7 +6,8 @@
     "cmd/itos-container/foundation_test.go": "8ad264ca6cba405eccfdfd56315a7026e1f6fca861675d7ac2ab0040d885a1c4",
     "cmd/itos-container/main_test.go": "e6f255315e3f08b0d569491bf12260520b3c0857018f62f6545e4beeb95d90e5",
     "internal/count/command/command_test.go": "9afeaaa027e245cb891f01cb9914b893eb2db8180f99f548bd7df7e4ee7819bc",
-    "internal/count/input/input_test.go": "0cda6f27f3da391cceb38761e6a477e55744f539f1b124109454f7dab53dbd56"
+    "internal/count/command/input_test.go": "306f152d879453b1d54c5f9664487596fd74b458e7c1950cc1d4a9392c2cbd94",
+    "internal/count/input/input_test.go": "727324e8be75f08e749b020333292c0ea787154ff4b28b4b422dc419b63ab1d5"
   },
   "units": [
     {
@@ -39,9 +40,10 @@
               "internal/cli/completion_test.go": "deac3e4ecdb88c8076553c073ef47f585429ecabde142e0afe0d69537c0a390c",
               "internal/cli/flags_test.go": "562ad79150bf66c8e05ca1984ef929504fb7950ce4eb994ead1ca8eae44be157",
               "internal/count/command/command_test.go": "9afeaaa027e245cb891f01cb9914b893eb2db8180f99f548bd7df7e4ee7819bc",
+              "internal/count/command/input_test.go": "306f152d879453b1d54c5f9664487596fd74b458e7c1950cc1d4a9392c2cbd94",
               "internal/count/disk/files_test.go": "70839874d8124869f6ebc5598d8e49dcde9f96aefad9ba3293686a141aa30ba2",
               "internal/count/domain/count_test.go": "cb4bd8e5d81613fcdacfca9b04f3338b244e24b309d9eee8b54d0d21b7a1658b",
-              "internal/count/input/input_test.go": "0cda6f27f3da391cceb38761e6a477e55744f539f1b124109454f7dab53dbd56",
+              "internal/count/input/input_test.go": "727324e8be75f08e749b020333292c0ea787154ff4b28b4b422dc419b63ab1d5",
               "internal/count/port/porttest/files_test.go": "acc0ac3830cf98c0f48de30ed14f7afeddb162d5c1539a0655b2bf50891119ee",
               "internal/release/build_test.go": "1635e36568f89a7bf2575ad2b4151a35269e6b2dafd06cbcbc355dbdd6dd94bc",
               "internal/release/release_test.go": "41f61aedd48c32cdbbe7a70d4f94e4613eed8400fa032c5738eb28b4129119b4",
@@ -71,9 +73,10 @@
               "internal/cli/completion_test.go": "deac3e4ecdb88c8076553c073ef47f585429ecabde142e0afe0d69537c0a390c",
               "internal/cli/flags_test.go": "562ad79150bf66c8e05ca1984ef929504fb7950ce4eb994ead1ca8eae44be157",
               "internal/count/command/command_test.go": "9afeaaa027e245cb891f01cb9914b893eb2db8180f99f548bd7df7e4ee7819bc",
+              "internal/count/command/input_test.go": "306f152d879453b1d54c5f9664487596fd74b458e7c1950cc1d4a9392c2cbd94",
               "internal/count/disk/files_test.go": "70839874d8124869f6ebc5598d8e49dcde9f96aefad9ba3293686a141aa30ba2",
               "internal/count/domain/count_test.go": "cb4bd8e5d81613fcdacfca9b04f3338b244e24b309d9eee8b54d0d21b7a1658b",
-              "internal/count/input/input_test.go": "0cda6f27f3da391cceb38761e6a477e55744f539f1b124109454f7dab53dbd56",
+              "internal/count/input/input_test.go": "727324e8be75f08e749b020333292c0ea787154ff4b28b4b422dc419b63ab1d5",
               "internal/count/port/porttest/files_test.go": "acc0ac3830cf98c0f48de30ed14f7afeddb162d5c1539a0655b2bf50891119ee",
               "internal/release/build_test.go": "1635e36568f89a7bf2575ad2b4151a35269e6b2dafd06cbcbc355dbdd6dd94bc",
               "internal/release/release_test.go": "41f61aedd48c32cdbbe7a70d4f94e4613eed8400fa032c5738eb28b4129119b4",
@@ -92,7 +95,7 @@
         "function_hash": "420e548e0492ffb7",
         "producer": "go test -count=1 -covermode=set -coverpkg=./... -coverprofile=coverage.out ./...; scope=all-tests",
         "inputs": {
-          "@go-env": "a064fa8f6b2ae161429ed8b0928ba65699203429b1ef062f51690f90c17469fd",
+          "@go-env": "969f7d4b0f1ecb66bee305932ef9295a5c3c7b80ab33102fbfa35179bc68582a",
           "@producer": "eb100cc518731eb37736d72cff93fa5d1e0af9fc5b875e3c81e5117d07adbc20",
           "cmd/itos-container/foundation_test.go": "8ad264ca6cba405eccfdfd56315a7026e1f6fca861675d7ac2ab0040d885a1c4",
           "cmd/itos-container/main.go": "97651247968c87fb95e33ca70f1daa3b902efc64748b9893dc173448f8c852f4",
@@ -111,12 +114,13 @@
           "internal/cli/flags_test.go": "562ad79150bf66c8e05ca1984ef929504fb7950ce4eb994ead1ca8eae44be157",
           "internal/count/command/command.go": "9c00a33f3e6e4fa707236b9c2a2bf19d466a4b5823bea9b8fa7b8878d189f7a7",
           "internal/count/command/command_test.go": "9afeaaa027e245cb891f01cb9914b893eb2db8180f99f548bd7df7e4ee7819bc",
+          "internal/count/command/input_test.go": "306f152d879453b1d54c5f9664487596fd74b458e7c1950cc1d4a9392c2cbd94",
           "internal/count/disk/files.go": "f7e939f4b4fb4aecf3a77e6ecfb68b30a43437059da1e939902302137c471f2d",
           "internal/count/disk/files_test.go": "70839874d8124869f6ebc5598d8e49dcde9f96aefad9ba3293686a141aa30ba2",
           "internal/count/domain/count.go": "fdd9761fd2a95bffe83733fb960e359fe12c799ebec97a2114829105bba09efa",
           "internal/count/domain/count_test.go": "cb4bd8e5d81613fcdacfca9b04f3338b244e24b309d9eee8b54d0d21b7a1658b",
           "internal/count/input/input.go": "58a5eaf63d40b2b4cf71b1afa4ca0abf28eb8ac31088a7db4b8f378a0389a0c8",
-          "internal/count/input/input_test.go": "0cda6f27f3da391cceb38761e6a477e55744f539f1b124109454f7dab53dbd56",
+          "internal/count/input/input_test.go": "727324e8be75f08e749b020333292c0ea787154ff4b28b4b422dc419b63ab1d5",
           "internal/count/port/files.go": "38a9fc857a4ea3ed07ba1419ff3820230f08dcd594fee4e39eebfd82325c3af2",
           "internal/count/port/porttest/files.go": "4d15e251ac4af37a19af196e0504a3a39eec1ecf0ef61e34c6bc66fb2137eab7",
           "internal/count/port/porttest/files_test.go": "acc0ac3830cf98c0f48de30ed14f7afeddb162d5c1539a0655b2bf50891119ee",
@@ -129,7 +133,8 @@
           "internal/version/foundation_test.go": "4d842bf9c4acec700a15dc38604186435836e6991d167ca9edbd7ff0473d7c6c",
           "internal/version/version.go": "dc3a417629284775a6f5b7c5888dbaa49ad6bf6d01f01d56b5324903db10834b",
           "internal/version/version_test.go": "08fab3fc897b6f89b46461c7e626876b12e56b658f1e78e16f5af356a7dd9ff5",
-          "itos-cc.yaml": "b174d95bb1f6196c6ea8f035322186169f6763b1066e1429ba0a3e28ae4d6b6b"
+          "itos-cc.yaml": "b174d95bb1f6196c6ea8f035322186169f6763b1066e1429ba0a3e28ae4d6b6b",
+          "tools/slice-layout/main.go": "97cd3e2f7ce529219c8747c130fba4bc108fb1f89d83f54b407abfaaa0c41192"
         },
         "complete": true,
         "blocks": [
