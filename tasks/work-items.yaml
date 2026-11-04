@@ -143,6 +143,8 @@ items:
       Already covers preventing redundant measurement after T-8, which the source registry marks
       done. Have the coordinator reconcile the stale p1-foundation-mutation-baseline entry without
       repeating the completed measurement.
+
+      From arc42's review: its stale-entry clause is moot, and PLAN still denies doctor.
   - id: p1-refresh-remaining-template-guidance
     title: Refresh remaining template guidance
     phase: 1
