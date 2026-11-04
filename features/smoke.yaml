@@ -32,3 +32,7 @@
   scenarios:
     - id: "@ID-COMPL-01"
       why: the hidden completion command answers a new word from kong's model and leaves itself out
+- file: policy.feature
+  scenarios:
+    - id: "@ID-POLICY-01"
+      why: policy inspection reads the fixed file, supplies offline defaults and returns the effective policy without engine access

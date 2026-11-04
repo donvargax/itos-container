@@ -1,0 +1,942 @@
+[
+  {
+    "Name": "domain-os",
+    "File": "internal/slices/newname/domain/probe.go",
+    "Import": "os",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "domain-os-exec",
+    "File": "internal/slices/newname/domain/probe.go",
+    "Import": "os/exec",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "domain-net",
+    "File": "internal/slices/newname/domain/probe.go",
+    "Import": "net",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "domain-net-http",
+    "File": "internal/slices/newname/domain/probe.go",
+    "Import": "net/http",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "domain-syscall",
+    "File": "internal/slices/newname/domain/probe.go",
+    "Import": "syscall",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "domain-golang.org-x-sys-unix",
+    "File": "internal/slices/newname/domain/probe.go",
+    "Import": "golang.org/x/sys/unix",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "domain-encoding-json",
+    "File": "internal/slices/newname/domain/probe.go",
+    "Import": "encoding/json",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "domain-flag",
+    "File": "internal/slices/newname/domain/probe.go",
+    "Import": "flag",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "domain-github.com-alecthomas-kong",
+    "File": "internal/slices/newname/domain/probe.go",
+    "Import": "github.com/alecthomas/kong",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "slices/newname-nested-io",
+    "File": "internal/slices/newname/domain/nested/probe.go",
+    "Import": "os",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "slices/newname-port-io",
+    "File": "internal/slices/newname/port/probe.go",
+    "Import": "os/exec",
+    "Kind": "lint",
+    "Rule": "port,store-ports-io"
+  },
+  {
+    "Name": "slices/newname-port-domain",
+    "File": "internal/slices/newname/port/probe.go",
+    "Import": "$module/internal/slices/newname/domain",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "slices/newname-port-portother",
+    "File": "internal/slices/newname/port/probe.go",
+    "Import": "$module/internal/slices/newname/portother",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "engine/shared-nested-io",
+    "File": "internal/engine/shared/domain/nested/probe.go",
+    "Import": "os",
+    "Kind": "lint",
+    "Rule": "domain"
+  },
+  {
+    "Name": "engine/shared-port-io",
+    "File": "internal/engine/shared/port/probe.go",
+    "Import": "os/exec",
+    "Kind": "lint",
+    "Rule": "port,store-ports-io"
+  },
+  {
+    "Name": "engine/shared-port-domain",
+    "File": "internal/engine/shared/port/probe.go",
+    "Import": "$module/internal/engine/shared/domain",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "engine/shared-port-portother",
+    "File": "internal/engine/shared/port/probe.go",
+    "Import": "$module/internal/engine/shared/portother",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "domain-adapter-count",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "$module/internal/slices/count/disk",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "domain-adapter-countother",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "$module/internal/slices/countother/disk",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "command-adapter-count",
+    "File": "internal/slices/count/command/probe.go",
+    "Import": "$module/internal/slices/count/disk",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "command-adapter-countother",
+    "File": "internal/slices/count/command/probe.go",
+    "Import": "$module/internal/slices/countother/disk",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "sibling-production",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "$module/internal/slices/countother/domain",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "engine-slice-production",
+    "File": "internal/engine/shared/domain/probe.go",
+    "Import": "$module/internal/slices/count/domain",
+    "Kind": "graph",
+    "Rule": "outside"
+  },
+  {
+    "Name": "sibling-internal-test",
+    "File": "internal/slices/count/domain/probe_test.go",
+    "Import": "$module/internal/slices/countother/domain",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "engine-slice-internal-test",
+    "File": "internal/engine/shared/domain/probe_test.go",
+    "Import": "$module/internal/slices/count/domain",
+    "Kind": "graph",
+    "Rule": "outside"
+  },
+  {
+    "Name": "sibling-external-test",
+    "File": "internal/slices/count/domain/external_test.go",
+    "Import": "$module/internal/slices/countother/domain",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "engine-slice-external-test",
+    "File": "internal/engine/shared/domain/external_test.go",
+    "Import": "$module/internal/slices/count/domain",
+    "Kind": "graph",
+    "Rule": "outside"
+  },
+  {
+    "Name": "adapter-domain",
+    "File": "internal/slices/count/input/probe.go",
+    "Import": "$module/internal/slices/count/domain",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "adapter-command",
+    "File": "internal/slices/count/input/probe.go",
+    "Import": "$module/internal/slices/count/command",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "adapter-disk",
+    "File": "internal/slices/count/input/probe.go",
+    "Import": "$module/internal/slices/count/disk",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "adapter-other-owner",
+    "File": "internal/slices/count/disk/probe.go",
+    "Import": "$module/internal/slices/countother/domain",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "adapter-ui",
+    "File": "internal/slices/count/disk/probe.go",
+    "Import": "$module/internal/cli",
+    "Kind": "graph",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "layout-internal/flat",
+    "File": "internal/flat/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "layout-internal/engine/shared",
+    "File": "internal/engine/shared/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "layout-internal/engine/shared/adapters/disk",
+    "File": "internal/engine/shared/adapters/disk/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "layout-internal/engine/shared/command",
+    "File": "internal/engine/shared/command/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "layout-internal/slices/count",
+    "File": "internal/slices/count/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "layout-pkg/public",
+    "File": "pkg/public/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "flat-import",
+    "File": "internal/flat/probe.go",
+    "Import": "os/exec",
+    "Kind": "lint",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "ui-project-probe.go",
+    "File": "internal/cli/probe.go",
+    "Import": "$module/internal/slices/count/port",
+    "Kind": "lint",
+    "Rule": "ui"
+  },
+  {
+    "Name": "ui-project-probe_test.go",
+    "File": "internal/cli/probe_test.go",
+    "Import": "$module/internal/slices/count/port",
+    "Kind": "lint",
+    "Rule": "ui-tests"
+  },
+  {
+    "Name": "version-leaf",
+    "File": "internal/version/probe.go",
+    "Import": "$module/internal/cli",
+    "Kind": "lint",
+    "Rule": "version"
+  },
+  {
+    "Name": "release-slice",
+    "File": "internal/release/probe.go",
+    "Import": "$module/internal/slices/count/port",
+    "Kind": "lint",
+    "Rule": "release"
+  },
+  {
+    "Name": "outside-internal",
+    "File": "tools/probe/probe.go",
+    "Import": "$module/internal/version",
+    "Kind": "graph",
+    "Rule": "toplevel"
+  },
+  {
+    "Name": "unlinked-fake-slices/count",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "$module/internal/slices/count/port/porttest",
+    "Kind": "graph",
+    "Rule": "test support",
+    "Flags": [
+      "--toplevel"
+    ]
+  },
+  {
+    "Name": "unlinked-fake-engine/shared",
+    "File": "internal/engine/shared/domain/probe.go",
+    "Import": "$module/internal/engine/shared/port/porttest",
+    "Kind": "graph",
+    "Rule": "test support",
+    "Flags": [
+      "--toplevel"
+    ]
+  },
+  {
+    "Name": "suppression-//nolint:depguard",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Source": "package domain\n//nolint:depguard\nconst X=1\n"
+  },
+  {
+    "Name": "suppression-//nolint:unused,depguard",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Source": "package domain\n//nolint:unused,depguard\nconst X=1\n"
+  },
+  {
+    "Name": "suppression-//nolint",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Source": "package domain\n//nolint\nconst X=1\n"
+  },
+  {
+    "Name": "suppression-//nolint:all",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Source": "package domain\n//nolint:all\nconst X=1\n"
+  },
+  {
+    "Name": "suppression-/*nolint:depguard*/",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Source": "package domain\n/*nolint:depguard*/\nconst X=1\n"
+  },
+  {
+    "Name": "allowed-comment-51",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "",
+    "Kind": "allow",
+    "Rule": "siblings",
+    "Source": "package domain\nconst X=\"//nolint:depguard\"\n"
+  },
+  {
+    "Name": "allowed-comment-52",
+    "File": "internal/slices/count/domain/probe.go",
+    "Import": "",
+    "Kind": "allow",
+    "Rule": "siblings",
+    "Source": "package domain\n//nolint:gosec -- fixture control\nconst X=1\n"
+  },
+  {
+    "Name": "allowed-slices/fresh-domain-bytes",
+    "File": "internal/slices/fresh/domain/probe.go",
+    "Import": "bytes",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-domain-errors",
+    "File": "internal/slices/fresh/domain/probe.go",
+    "Import": "errors",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-domain-strings",
+    "File": "internal/slices/fresh/domain/probe.go",
+    "Import": "strings",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-domain-$module/internal/slices/fresh/domain/nested",
+    "File": "internal/slices/fresh/domain/probe.go",
+    "Import": "$module/internal/slices/fresh/domain/nested",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-domain-$module/internal/slices/fresh/port",
+    "File": "internal/slices/fresh/domain/probe.go",
+    "Import": "$module/internal/slices/fresh/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-domain-$module/internal/engine/shared/domain",
+    "File": "internal/slices/fresh/domain/probe.go",
+    "Import": "$module/internal/engine/shared/domain",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-domain-$module/internal/engine/shared/port",
+    "File": "internal/slices/fresh/domain/probe.go",
+    "Import": "$module/internal/engine/shared/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-port-bytes",
+    "File": "internal/slices/fresh/port/probe.go",
+    "Import": "bytes",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-port-errors",
+    "File": "internal/slices/fresh/port/probe.go",
+    "Import": "errors",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-port-strings",
+    "File": "internal/slices/fresh/port/probe.go",
+    "Import": "strings",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-port-$module/internal/slices/fresh/port/nested",
+    "File": "internal/slices/fresh/port/probe.go",
+    "Import": "$module/internal/slices/fresh/port/nested",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-port-$module/internal/engine/shared/port",
+    "File": "internal/slices/fresh/port/probe.go",
+    "Import": "$module/internal/engine/shared/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-disk-$module/internal/slices/fresh/domain",
+    "File": "internal/slices/fresh/disk/probe.go",
+    "Import": "$module/internal/slices/fresh/domain",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-disk-$module/internal/slices/fresh/port",
+    "File": "internal/slices/fresh/disk/probe.go",
+    "Import": "$module/internal/slices/fresh/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-disk-$module/internal/slices/fresh/disk/nested",
+    "File": "internal/slices/fresh/disk/probe.go",
+    "Import": "$module/internal/slices/fresh/disk/nested",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-disk-$module/internal/engine/shared/domain",
+    "File": "internal/slices/fresh/disk/probe.go",
+    "Import": "$module/internal/engine/shared/domain",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-slices/fresh-disk-$module/internal/engine/shared/port",
+    "File": "internal/slices/fresh/disk/probe.go",
+    "Import": "$module/internal/engine/shared/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "test-fake-slices/fresh-domain",
+    "File": "internal/slices/fresh/domain/probe_test.go",
+    "Import": "$module/internal/slices/fresh/port/porttest",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "test-fake-slices/fresh-domain/nested",
+    "File": "internal/slices/fresh/domain/nested/probe_test.go",
+    "Import": "$module/internal/slices/fresh/port/porttest",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "test-fake-slices/fresh-port",
+    "File": "internal/slices/fresh/port/probe_test.go",
+    "Import": "$module/internal/slices/fresh/port/porttest",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "test-fake-slices/fresh-disk",
+    "File": "internal/slices/fresh/disk/probe_test.go",
+    "Import": "$module/internal/slices/fresh/port/porttest",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "rapid-slices/fresh-probe.go",
+    "File": "internal/slices/fresh/domain/nested/probe.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "lint",
+    "Rule": "domain,rapid"
+  },
+  {
+    "Name": "rapid-slices/fresh-probe_test.go",
+    "File": "internal/slices/fresh/domain/nested/probe_test.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "allow",
+    "Rule": "rapid"
+  },
+  {
+    "Name": "allowed-engine/fresh-domain-bytes",
+    "File": "internal/engine/fresh/domain/probe.go",
+    "Import": "bytes",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-domain-errors",
+    "File": "internal/engine/fresh/domain/probe.go",
+    "Import": "errors",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-domain-strings",
+    "File": "internal/engine/fresh/domain/probe.go",
+    "Import": "strings",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-domain-$module/internal/engine/fresh/domain/nested",
+    "File": "internal/engine/fresh/domain/probe.go",
+    "Import": "$module/internal/engine/fresh/domain/nested",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-domain-$module/internal/engine/fresh/port",
+    "File": "internal/engine/fresh/domain/probe.go",
+    "Import": "$module/internal/engine/fresh/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-domain-$module/internal/engine/shared/domain",
+    "File": "internal/engine/fresh/domain/probe.go",
+    "Import": "$module/internal/engine/shared/domain",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-domain-$module/internal/engine/shared/port",
+    "File": "internal/engine/fresh/domain/probe.go",
+    "Import": "$module/internal/engine/shared/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-port-bytes",
+    "File": "internal/engine/fresh/port/probe.go",
+    "Import": "bytes",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-port-errors",
+    "File": "internal/engine/fresh/port/probe.go",
+    "Import": "errors",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-port-strings",
+    "File": "internal/engine/fresh/port/probe.go",
+    "Import": "strings",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-port-$module/internal/engine/fresh/port/nested",
+    "File": "internal/engine/fresh/port/probe.go",
+    "Import": "$module/internal/engine/fresh/port/nested",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-port-$module/internal/engine/shared/port",
+    "File": "internal/engine/fresh/port/probe.go",
+    "Import": "$module/internal/engine/shared/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-disk-$module/internal/engine/fresh/domain",
+    "File": "internal/engine/fresh/disk/probe.go",
+    "Import": "$module/internal/engine/fresh/domain",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-disk-$module/internal/engine/fresh/port",
+    "File": "internal/engine/fresh/disk/probe.go",
+    "Import": "$module/internal/engine/fresh/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-disk-$module/internal/engine/fresh/disk/nested",
+    "File": "internal/engine/fresh/disk/probe.go",
+    "Import": "$module/internal/engine/fresh/disk/nested",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-disk-$module/internal/engine/shared/domain",
+    "File": "internal/engine/fresh/disk/probe.go",
+    "Import": "$module/internal/engine/shared/domain",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "allowed-engine/fresh-disk-$module/internal/engine/shared/port",
+    "File": "internal/engine/fresh/disk/probe.go",
+    "Import": "$module/internal/engine/shared/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "test-fake-engine/fresh-domain",
+    "File": "internal/engine/fresh/domain/probe_test.go",
+    "Import": "$module/internal/engine/fresh/port/porttest",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "test-fake-engine/fresh-domain/nested",
+    "File": "internal/engine/fresh/domain/nested/probe_test.go",
+    "Import": "$module/internal/engine/fresh/port/porttest",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "test-fake-engine/fresh-port",
+    "File": "internal/engine/fresh/port/probe_test.go",
+    "Import": "$module/internal/engine/fresh/port/porttest",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "test-fake-engine/fresh-disk",
+    "File": "internal/engine/fresh/disk/probe_test.go",
+    "Import": "$module/internal/engine/fresh/port/porttest",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "rapid-engine/fresh-probe.go",
+    "File": "internal/engine/fresh/domain/nested/probe.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "lint",
+    "Rule": "domain,rapid"
+  },
+  {
+    "Name": "rapid-engine/fresh-probe_test.go",
+    "File": "internal/engine/fresh/domain/nested/probe_test.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "allow",
+    "Rule": "rapid"
+  },
+  {
+    "Name": "rapid-command",
+    "File": "internal/slices/fresh/command/probe_test.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "lint",
+    "Rule": "command,rapid"
+  },
+  {
+    "Name": "rapid-port",
+    "File": "internal/slices/fresh/port/probe_test.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "lint",
+    "Rule": "port-tests,rapid"
+  },
+  {
+    "Name": "rapid-disk",
+    "File": "internal/slices/fresh/disk/probe_test.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "lint",
+    "Rule": "rapid"
+  },
+  {
+    "Name": "command-allowed-$module/internal/slices/fresh/domain",
+    "File": "internal/slices/fresh/command/probe.go",
+    "Import": "$module/internal/slices/fresh/domain",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "command-allowed-$module/internal/slices/fresh/port",
+    "File": "internal/slices/fresh/command/probe.go",
+    "Import": "$module/internal/slices/fresh/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "command-allowed-$module/internal/engine/shared/domain",
+    "File": "internal/slices/fresh/command/probe.go",
+    "Import": "$module/internal/engine/shared/domain",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "command-allowed-$module/internal/engine/shared/port",
+    "File": "internal/slices/fresh/command/probe.go",
+    "Import": "$module/internal/engine/shared/port",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "command-allowed-$module/internal/cli",
+    "File": "internal/slices/fresh/command/probe.go",
+    "Import": "$module/internal/cli",
+    "Kind": "allow",
+    "Rule": "siblings"
+  },
+  {
+    "Name": "two-slices-sharing",
+    "File": "internal/slices/alpha/domain/probe.go",
+    "Import": "$module/internal/engine/shared/domain",
+    "Kind": "allow",
+    "Rule": "siblings",
+    "Files": {
+      "internal/slices/beta/domain/base.go": "package domain\nimport _ \"github.com/donvargax/itos-container/internal/engine/shared/domain\"\n"
+    }
+  },
+  {
+    "Name": "rapid-direct-slices/fresh",
+    "File": "internal/slices/fresh/domain/probe_test.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "allow",
+    "Rule": "rapid"
+  },
+  {
+    "Name": "rapid-direct-engine/fresh",
+    "File": "internal/engine/fresh/domain/probe_test.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "allow",
+    "Rule": "rapid"
+  },
+  {
+    "Name": "standard-library-internal/cli/probe.go",
+    "File": "internal/cli/probe.go",
+    "Import": "encoding/json",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/version/probe.go",
+    "File": "internal/version/probe.go",
+    "Import": "runtime/debug",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/release/probe.go",
+    "File": "internal/release/probe.go",
+    "Import": "os/exec",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/release/probe_test.go",
+    "File": "internal/release/probe_test.go",
+    "Import": "testing",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/release/releasetest/probe.go",
+    "File": "internal/release/releasetest/probe.go",
+    "Import": "os",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/slices/fresh/command/probe.go",
+    "File": "internal/slices/fresh/command/probe.go",
+    "Import": "fmt",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/slices/fresh/domain/probe_test.go",
+    "File": "internal/slices/fresh/domain/probe_test.go",
+    "Import": "testing",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/slices/fresh/domain/nested/probe_test.go",
+    "File": "internal/slices/fresh/domain/nested/probe_test.go",
+    "Import": "os",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/engine/fresh/port/probe_test.go",
+    "File": "internal/engine/fresh/port/probe_test.go",
+    "Import": "testing",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/engine/fresh/port/nested/probe_test.go",
+    "File": "internal/engine/fresh/port/nested/probe_test.go",
+    "Import": "os",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/slices/fresh/port/porttest/probe.go",
+    "File": "internal/slices/fresh/port/porttest/probe.go",
+    "Import": "testing",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/cli",
+    "File": "internal/cli/external_test.go",
+    "Import": "$module/internal/cli",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/version",
+    "File": "internal/version/external_test.go",
+    "Import": "$module/internal/version",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/slices/count/domain",
+    "File": "internal/slices/count/domain/external_test.go",
+    "Import": "$module/internal/slices/count/domain",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/engine/shared/domain",
+    "File": "internal/engine/shared/domain/external_test.go",
+    "Import": "$module/internal/engine/shared/domain",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "layout-nested-internal/engine/shared/domain/fakes",
+    "File": "internal/engine/shared/domain/fakes/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "layout-nested-internal/slices/count/domain/porttest",
+    "File": "internal/slices/count/domain/porttest/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "layout-nested-internal/release/fakes",
+    "File": "internal/release/fakes/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "external-own-internal/cli/nested",
+    "File": "internal/cli/nested/external_test.go",
+    "Import": "$module/internal/cli/nested",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/version/nested",
+    "File": "internal/version/nested/external_test.go",
+    "Import": "$module/internal/version/nested",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "test-leaf-project-internal/cli",
+    "File": "internal/cli/probe_test.go",
+    "Import": "$module/internal/slices/count/port",
+    "Kind": "lint",
+    "Rule": "ui-tests"
+  },
+  {
+    "Name": "test-leaf-project-internal/version",
+    "File": "internal/version/probe_test.go",
+    "Import": "$module/internal/slices/count/port",
+    "Kind": "lint",
+    "Rule": "version-tests"
+  }
+]

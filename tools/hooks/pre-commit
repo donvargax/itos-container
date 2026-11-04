@@ -18,6 +18,11 @@ if [ -z "$(git diff --cached --name-only --diff-filter=ACMRD -- . ':(exclude)*.m
 	exit 0
 fi
 
+# Package roles cannot be bypassed by a lint suppression. The expensive matrix
+# runs only when staged paths change an enforcement input.
+tools/bin/architecture-check --siblings --outside --linked --toplevel
+tools/bin/architecture-check --fixtures-if-staged
+
 # golangci-lint at its pinned release, its download checked against the
 # SHA-256 in tools/bin/pinned; the linters are .golangci.yml's.
 tools/bin/pinned golangci-lint run ./...

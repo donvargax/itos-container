@@ -1,9 +1,22 @@
+# Port contract suites and fakes are test support, never linked into the binary.
+# Keep running their tests; measure product code in the CI proof (itos ADR-0053).
+exclude: ["**/porttest/**"]
+
 # Equivalent mutants need project-local proof and a reviewed reason.
 mutation:
+  tests:
+    list: itos tests list scenario --tsv
+    run: "go test ./features -count=1 -scenarios='{pattern}'"
+    ids_pattern: "^@(?:{ids})$"
+    join: { each: "{id}", sep: "|" }
+    whole: go test ./features -count=1
+    support:
+      - features/*_test.go
+      - features/testdata/**
   exceptions:
     - file: cmd/itos-container/main.go
       function: github.com/donvargax/itos-container/cmd/itos-container#run
-      hash: 62a146aba98870d1
+      hash: c8a26582a13aa7cc
       line_in_function: 21
       column: 15
       original: '>'
