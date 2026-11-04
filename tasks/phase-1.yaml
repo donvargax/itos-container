@@ -332,8 +332,53 @@
   type: ci
   title: Align CI triggers and Go test conditions with main and work branches
   why: >
-    The offline owned-run milestone needs reliable CI proof on main and work branches. Correct
-    inherited branch conditions while preserving existing checks and the charter's Linux-only
-    runtime scope.
+    The offline owned-run milestone needs reliable CI proof on main and work branches. The
+    inherited .github/workflows/ci.yml limits push and pull_request to main, stack/**, go/** and
+    renovate/**. A push to T-7 therefore does not trigger CI. A pull request from T-7 to main
+    triggers CI, but the main job's Go setup and the entire platform job are skipped by their
+    stack/go/renovate conditions; a push to main skips them too. This is foundation CI work
+    under docs/charter.md, not container behaviour: no scenarios or step definitions are needed.
+
+    Implementation edits only .github/workflows/ci.yml, in a ci commit tied to Task T-7. Keep
+    the existing on mapping and its pull_request and push entries, removing both branches
+    lists without replacement filters. CI must cover main, T-* and other work branches,
+    including Renovate, without maintaining branch-name allowlists. Leave the default event
+    activity types unchanged. Add no branches-ignore, tags, tags-ignore, paths or paths-ignore
+    filter. Unfiltered push also includes tag pushes, as documented in
+    https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushbranchestagsbranches-ignoretags-ignore
+    (checked 2026-11-04); this does not change release.yml or authorize publishing tags/releases.
+
+    Remove the complete if expression from the ci job's actions/setup-go step and from the
+    platform job. Both Go setup steps and the platform suite must be eligible on every
+    workflow run, subject to normal failure handling, with no replacement job/step condition
+    or shell branch test. Keep the platform matrix exactly ubuntu-latest, macos-latest and
+    windows-latest, fail-fast false, bash shell, and go test ./... -count=1. Preserve the
+    RAPID_CHECKS=1 and GOCOVERDIR environment and directory creation so the inherited unit,
+    property and full godog suite still run with their existing coverage setup on each OS.
+
+    Preserve job names, runner selection, permissions, concurrency, checkout/setup-go/itos
+    action pins, go.mod/go.sum inputs and the ci checkout's fetch-depth 0. Keep TO, the Range
+    step and its BASE/token handling, FROM export, and both itos verify and itos ci run calls
+    with their existing arguments and order. Do not add continue-on-error, swallow failures,
+    alter range selection or weaken proof. Leave itos.yaml's plan, prose selection, hooks,
+    thresholds and proof.code scope unchanged. No new tool, dependency, service or runtime
+    probe is needed; do not add engine access or alter other workflows.
+
+    The three-OS matrix is inherited Go portability coverage, not container-host support.
+    The charter still targets only Linux amd64 with native Docker for the offline milestone,
+    contingent on runtime evidence. Do not remove macOS/Windows Go checks to match that target
+    or claim sandbox isolation from these tests. This workflow-only implementation touches
+    no proof.code path and must not manufacture mutation records; fresh foundation mutation
+    evidence remains separate work.
+
+    Retain the check below at the existing task/CI tier, using the runner's awk without RTK,
+    network access or a new YAML parser. Before implementation it exits 1 because the two
+    branches lists and two if blocks set bad; the event, setup, command and matrix matches
+    already pass and are preservation assertions. The same check must pass after the four
+    removals. It is a static guard, not proof that hosted jobs ran: review the diff against
+    the preservation rules above, and let configured hooks and CI run their wider gates.
+    The coordinating loop must check the actual pushed head's CI and platform results before
+    closing the item; the drafter commits only this ledger specification, leaving the task
+    check failing until implementation and leaving ownership/status to the loop.
   done_when:
     - run: "awk '/^  push:/ {p=1} /^  pull_request:/ {r=1} /^[[:space:]]+(branches|branches-ignore|tags|tags-ignore|paths|paths-ignore|if):/ {bad=1} /uses: actions\\/setup-go@/ {g++} /run: itos verify/ {v=1} /run: itos ci run/ {c=1} /go test \\.\\/\\.\\.\\. -count=1/ {t=1} /os: \\[ubuntu-latest, macos-latest, windows-latest\\]/ {m=1} END {exit !(p && r && !bad && g == 2 && v && c && t && m)}' .github/workflows/ci.yml"
