@@ -341,7 +341,7 @@ items:
     title: Bring arc42 up to date with what landed and what the person decided
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-20

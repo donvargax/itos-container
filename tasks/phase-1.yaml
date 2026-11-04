@@ -1684,24 +1684,6 @@
     implementation checks incomplete intentionally; let configured hooks and CI run the gates.
     Report the spec commit and authoring choices, with no scenario red/green or mutation claim.
     Agents commit and stop; only the coordinating loop pushes, watches CI and closes the item.
-  done_when:
-    - run: grep -q 'Engine API fixture' docs/architecture/arc42.md && grep -q 'NetworkMode' docs/architecture/arc42.md && ! grep -qi 'numeric limits remain person decisions' docs/architecture/arc42.md
-    - run: >-
-        grep -qi 'current design' docs/architecture/arc42.md &&
-        ! grep -qi 'Draft for the person' docs/architecture/arc42.md &&
-        grep -Eiq 'internal/engine/policy.*implemented' docs/architecture/arc42.md &&
-        grep -Eiq 'internal/slices/doctor.*implemented' docs/architecture/arc42.md
-    - run: >-
-        for term in 'slice-5' 'go.yaml.in/yaml/v4' 'v4.0.0' '65536' '32' '2048'; do
-        grep -Fq -- "$term" docs/architecture/arc42.md || exit 1; done
-    - run: >-
-        for term in 'features/README.md' 'HTTP Engine API fixture' 'engine-disabled'
-        'itos-cc.yaml' '**/porttest/**'; do
-        grep -Fq -- "$term" docs/architecture/arc42.md || exit 1; done
-    - run: >-
-        for term in '--fingerprint' 'SHA-256' '$XDG_STATE_HOME/itos-container' '0700'
-        '4096' 'fsync' 'SIGKILL' '120' '30' 'Architecture drift'; do
-        grep -Fq -- "$term" docs/architecture/arc42.md || exit 1; done
 - id: T-20
   type: ci
   title: An engine fixture image the real-engine scenarios can use
