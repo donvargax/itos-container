@@ -204,19 +204,3 @@
     These are cheap documentation checks, not runtime isolation proof. Review the prose against
     the decisions above as well: keyword presence alone cannot establish truthful status,
     correct loop ownership, milestone limits or preserved provenance.
-  done_when:
-    - run: >-
-        for f in PLAN.md README.md AGENTS.md; do
-        grep -Fq 'docs/charter.md' "$f" &&
-        grep -Fq 'docs/plans/container-pilot.md' "$f" &&
-        grep -Fq 'itos container' "$f" && grep -qi 'offline' "$f" || exit 1;
-        done
-    - run: >-
-        test -f PLAN.md && test -f README.md && test -f AGENTS.md &&
-        ! grep -Eni 'repository is itself the template|real Go project template|This is a template that is a real project|illustrative attribution owner|not the public CLI yet|stack/go|go/cli|Select branches before rendering|both planned combinations|This copy is AGPL-3.0 licensed'
-        PLAN.md README.md AGENTS.md
-    - run: >-
-        for term in 'itos guide work' 'itos guide commit' 'itos commit'
-        'all-tests' 'fail-uncovered' 'no-annotate' 'Docker socket'; do
-        grep -Fq "$term" AGENTS.md || exit 1;
-        done

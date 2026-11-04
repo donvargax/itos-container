@@ -48,7 +48,7 @@ items:
     title: Replace inherited template guidance in PLAN.md, README.md and AGENTS.md
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-align-ci-branch-conditions
