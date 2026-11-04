@@ -294,3 +294,15 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p1-engine-scenario-tier
+    title: Scenarios that need a real engine have a tag, a switch and one Linux job
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The charter wants every isolation property proven by a scenario, and no test can reach a real
+      engine: no tag, switch or job exists. Blocks the charter's step 3, the offline owned run. An
+      @engine tag behind an environment variable, skipped elsewhere, and one required Linux job with
+      native Docker. Specify it with or just after T-11.
