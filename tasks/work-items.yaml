@@ -335,3 +335,10 @@ items:
       diagnostics; this item takes what remains, such as a parser with no aliases or tag directives,
       or rejecting those before decoding. The contract lists resource limits as an open decision.
       slice-2's manifest parser wants the same.
+  - id: T-18
+    title: Move to itos 8.45.7, and turn on push.pr.review_stall
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
