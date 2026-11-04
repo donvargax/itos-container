@@ -32,9 +32,10 @@ imports only the port it implements, never the domain; a fake of each port lives
 domain's tests. Code two slices share is an engine package of its own with the same rules,
 never one slice importing another's domain.
 
-`tools/bin/check-slice-layout` discovers slices by their `domain` or `port` directory and
-generates concrete depguard rules in a disposable effective configuration. `.golangci.yml`
-remains the base for the full lint suite, with paths resolved from the checkout. Every
+CI and the project pre-commit hook both run `tools/bin/check-slice-layout`. It discovers
+slices by their `domain` or `port` directory and generates concrete depguard rules in a
+disposable effective configuration. `.golangci.yml` remains the base for the full lint
+suite, with paths resolved from the checkout. Every
 adapter name and nested package is protected; an external adapter test may import only its
 exact subject and its slice's port subtree within the module. Rapid is available only to
 domain tests. The checker then runs compilable import and coverage fixtures through the same

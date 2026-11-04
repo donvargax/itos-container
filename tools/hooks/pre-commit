@@ -18,9 +18,9 @@ if [ -z "$(git diff --cached --name-only --diff-filter=ACMRD -- . ':(exclude)*.m
 	exit 0
 fi
 
-# golangci-lint at its pinned release, its download checked against the
-# SHA-256 in tools/bin/pinned; the linters are .golangci.yml's.
-tools/bin/pinned golangci-lint run ./...
+# Full pinned lint with the discovered slice rules, then the import and
+# coverage fixtures, through the same entry point as CI.
+tools/bin/check-slice-layout
 
 # govulncheck at the version go.mod's tool block pins, go.sum checking it: a
 # vulnerability the code, its tests included, reaches. It asks the
