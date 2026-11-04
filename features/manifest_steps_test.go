@@ -34,6 +34,7 @@ func (w *world) manifestSteps(sc *godog.ScenarioContext) {
 	})
 	sc.Step(`^the unselected conventional manifest exists with "([^"]*)"$`, w.unselectedManifest)
 	sc.Step(`^the manifest text is:$`, func(doc *godog.DocString) error { return w.manifestText(doc.Content) })
+	sc.Step(`^the (manifest|metadata) input exceeds the "([^"]*)" budget$`, w.manifestBudgetInput)
 	sc.Step(`^the manifest inspection input "([^"]*)" has the exact text:$`, func(source string, doc *godog.DocString) error {
 		if source != "manifest" {
 			return fmt.Errorf("unknown manifest fixture source %q", source)

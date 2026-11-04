@@ -29,6 +29,21 @@ Feature: Inspect the restricted single-worker manifest
   # reject duplicate decoded keys in every object, including otherwise unused editor data;
   # the parser alone is not a schema validator. Do not strip comments with a custom lexer.
   #
+  # Inspection resource bounds (security review): manifest bytes and supplied metadata
+  # are each limited to 65536 bytes. Bound the actual file read, including growth after
+  # stat, before parsing; no partial value escapes. Both parser modes enforce depth 32
+  # and 2048 nodes before HuJSON constructs its recursive tree. The root is depth 1;
+  # object keys, values and array elements are nodes one level below their container.
+  # HuJSON has no budget hook. A nonrecursive, non-decoding preflight counts tokens
+  # outside strings/comments without stripping or rewriting input; HuJSON alone decides
+  # syntax. Byte/token excess takes precedence, including unfinished input. Then limit
+  # the sum of JSON-pointer path bytes to 65536 before conversion/duplicate diagnostics.
+  # Count full escaped paths for both keys and values and decimal array indices, with
+  # an empty root path. These bounds also cover unused editor data. Excess returns one
+  # root manifest.complexity problem (exit 2), or manifest.metadata for a label, without
+  # raw input or partial effective settings. This is an inspection bound, not a runtime
+  # resource quota. Keep the reviewed parser and reference dependencies unchanged.
+  #
   # Reference-parser decision, reviewed 2026-11-04:
   # github.com/distribution/reference v0.6.0, with github.com/opencontainers/go-digest
   # v1.0.0 as its pinned dependency; preserve their Apache-2.0 licenses and notices.
@@ -233,6 +248,47 @@ Feature: Inspect the restricted single-worker manifest
 
   Background:
     Given a manifest inspection checkout
+
+  @slice-2 @ID-MANIFEST-31 @wip
+  Scenario: Refuse an oversized selected manifest before parsing
+    Given the manifest input exceeds the "bytes" budget
+    When itos-container runs with "doctor --manifest-only --json" and a 5 second deadline
+    Then its JSON output reports "manifest.complexity" at "" with exit 2
+    And it finishes before the deadline
+    And it exits with code 2
+
+  @slice-2 @ID-MANIFEST-32 @wip
+  Scenario Outline: Bound manifest representation before conversion and diagnostics
+    Given the manifest input exceeds the "<budget>" budget
+    When itos-container runs with "doctor --manifest-only --json" and a 5 second deadline
+    Then its JSON output reports "manifest.complexity" at "" with exit 2
+    And it finishes before the deadline
+    And it exits with code 2
+
+    Examples:
+      | budget           |
+      | array depth      |
+      | object depth     |
+      | unfinished depth |
+      | array nodes      |
+      | object nodes     |
+      | paths            |
+
+  @slice-2 @ID-MANIFEST-33 @wip
+  Scenario Outline: Apply inspection budgets to supplied image metadata
+    Given the metadata input exceeds the "<budget>" budget
+    When the manifest inspection contract runs with supplied metadata in JSON mode
+    Then its JSON output reports "manifest.metadata" at "" with exit 2
+    And it exits with code 2
+
+    Examples:
+      | budget       |
+      | bytes        |
+      | array depth  |
+      | object depth |
+      | array nodes  |
+      | object nodes |
+      | paths        |
 
   # Policy-selected paths and syntax. Every location resolves the same defaults; comments
   # and trailing commas must not require a second parser or rewrite the source file.
