@@ -37,6 +37,14 @@ Feature: Strict offline sandbox policy
   # Do not inherit timestamp objects or YAML 1.1 boolean coercions. A plain date,
   # yes or on is a string. Structural checks visit every mapping/list, even below
   # an unknown field, without resolving aliases or merging mappings.
+  # Before YAML decoding, refuse source lines starting with % (optionally after
+  # a byte-order mark) as one root policy.syntax problem. This reserves directive
+  # lines, including %TAG and %YAML, so tag prefixes cannot amplify parser
+  # allocations before the representation limits run. Check the whole input,
+  # including later documents, with LF, CR, CRLF, NEL, LS and PS line breaks.
+  # This source restriction also applies inside multiline quoted scalars; indent
+  # such continuation lines to keep literal % text. Inline and indented percent
+  # text, comments and the permitted built-in tags remain ordinary YAML data.
   #
   # Use main's T-14 pin, go.yaml.in/yaml/v3 v3.0.5, reviewed on 2026-11-04 at
   # https://pkg.go.dev/go.yaml.in/yaml/v3@v3.0.5. The YAML organization maintains
@@ -869,6 +877,45 @@ Feature: Strict offline sandbox policy
       | policy.complexity |      | 2    |
     And it exits with code 2
     And the engine recorder has no connections
+
+  @wip @slice-1 @ID-POLICY-39
+  Scenario Outline: tag directives cannot amplify node construction before policy limits
+    Given the policy file reuses a 32768 byte tag prefix on <count> scalars in "<position>"
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule          | path | exit |
+      | policy.syntax |      | 2    |
+    And it exits with code 2
+    And the engine recorder has no connections
+
+    Examples:
+      | count | position          |
+      | 4678  | first document    |
+      | 4678  | after initial BOM |
+      | 4677  | second document   |
+
+  @wip @slice-1 @ID-POLICY-40
+  Scenario Outline: directive lines are refused even without tag expansion
+    Given the policy file contains:
+      """
+      <directive>
+      ---
+      version: 1
+      manifest: a.json
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule          | path | exit |
+      | policy.syntax |      | 2    |
+    And it exits with code 2
+
+    Examples:
+      | directive                         |
+      | %YAML 1.1                         |
+      | %TAG !e! tag:example:              |
+      | %TAG !! tag:yaml.org,2002:         |
+      | %TAG ! tag:yaml.org,2002:          |
 
   # New Given: create only harness-owned helper executables on the child PATH for
   # git, docker, devcontainer, sh, bash and npm. Each records execution and exits;

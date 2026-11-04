@@ -56,4 +56,20 @@ func (w *world) policyLimitSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the policy file contains (\d+) nested tagged sequences below an unknown field$`, func(depth int) error {
 		return write("extra: " + strings.Repeat("!x [", depth) + "0" + strings.Repeat("]", depth) + "\n")
 	})
+	sc.Step(`^the policy file reuses a (\d+) byte tag prefix on (\d+) scalars in "([^"]*)"$`, func(size, count int, position string) error {
+		data := "%TAG !e! " + strings.Repeat("x", size) + "\n---\n[" + strings.Repeat("!e!s 0,", count) + "]\n"
+		switch position {
+		case "first document":
+		case "after initial BOM":
+			data = "\ufeff" + data
+		case "second document":
+			data = "0\n...\n" + data
+		default:
+			return fmt.Errorf("unknown directive fixture position %q", position)
+		}
+		if len(data) > 65536 {
+			return fmt.Errorf("directive fixture exceeds policy input limit: %d bytes", len(data))
+		}
+		return write(data)
+	})
 }
