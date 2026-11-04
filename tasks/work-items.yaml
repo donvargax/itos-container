@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - T-12
   - T-14
   - T-13
   - T-15
@@ -257,7 +256,7 @@ items:
     title: CI runs on Linux, each pull request once; other platforms by hand
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-13

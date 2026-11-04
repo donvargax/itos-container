@@ -784,8 +784,70 @@
     nothing, cancel-in-progress on a pull request's own runs, never on main. Today every branch push
     runs twice (41863302515, 41863312223). Keep item branches' CI through the pull request, which is
     what T-7 wanted. Read itos's file; do not invent. Touch no other workflow.
-  done_when:
-    - run: "! grep -Eq 'os:.*(macos|windows)-latest' .github/workflows/ci.yml && grep -q ready_for_review .github/workflows/ci.yml && grep -q workflow_dispatch .github/workflows/ci.yml"
+
+    This is foundation CI configuration, not container behaviour. The drafter edits only this
+    ledger entry in a docs commit with Item T-12; no scenarios or step definitions are needed.
+    Implementation edits only .github/workflows/ci.yml in a ci commit with Task T-12. This entry
+    supersedes T-7's unfiltered push, default pull-request activities and automatic three-OS
+    matrix requirements, while retaining its coverage of arbitrary item branches via their PRs.
+
+    The referenced local itos workflow was read at f1d8d393d72244a15e64a2638c8e34abed11e46d,
+    with no working-tree changes to that file. Copy its event and concurrency rules, not its
+    unrelated planner, platform gates or release job. Set pull_request.types to exactly
+    [opened, synchronize, reopened, ready_for_review] and push.branches to exactly [main].
+    Add an empty workflow_dispatch entry, with no inputs. Keep these event entries in that
+    order and add no other trigger, branch, tag or path filter. A branch push alone does not
+    run CI; a non-draft PR from any branch does, including Renovate. A main push still runs
+    independently after merge. Once means one workflow per qualifying event, not deleting
+    either the existing ci plan or the separate full Linux test suite.
+
+    Keep concurrency.group exactly ci-${{ github.ref }} and set cancel-in-progress to
+    ${{ github.event_name == 'pull_request' }}. Only newer runs of the same PR cancel an
+    in-progress run; a main push or manual run never cancels a running job. Retain the ci and
+    platform job IDs. Both get the reference's job-level condition
+    ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }} so drafts
+    execute no jobs, and ready_for_review tests the same head without needing another push.
+    The ci runner stays ubuntu-latest and platform.matrix.os becomes [ubuntu-latest].
+
+    Keep manual portability coverage in two additional jobs, platform-macos and
+    platform-windows, with fixed runners macos-latest and windows-latest and names
+    Tests (macos-latest) and Tests (windows-latest). Each has only the job-level condition
+    ${{ github.event_name == 'workflow_dispatch' }}. A manual dispatch on its selected ref
+    runs ci, the Linux platform suite and both manual platform suites; there is no OS selector.
+    No needs relationship makes Linux wait for a manual platform. Keep platform's existing
+    Tests (${{ matrix.os }}) name, matrix runner expression and fail-fast false. These four
+    jobs are the entire jobs mapping. Use the existing two-space layout, inline lists and
+    one-line expressions, which the scoped static checks below read without a new parser.
+
+    Copy the existing platform steps, bash default, action pins and Go version/cache inputs
+    unchanged into each manual job. All three platform suites retain go test ./... -count=1,
+    RAPID_CHECKS=1, GOCOVERDIR and its mkdir step. Preserve ci's permissions, checkout depth,
+    checkout/setup-go/itos pins, TO, Range step with BASE/token handling and FROM export, and
+    the itos verify and itos ci run calls with their existing arguments and order. Adjust only
+    the scheduling comments to describe automatic Linux and manual portability coverage.
+    No step-level condition, continue-on-error or swallowed failure may replace these checks.
+    Leave itos.yaml, hooks, proof configuration, dependencies, other workflows and release
+    machinery unchanged. T-13 separately owns mutation proof and coverage plumbing. These
+    workflow edits touch no proof.code path and require no fabricated mutation evidence.
+    Manual Go portability tests neither expand the charter's host support nor prove isolation.
+
+    Retain the original check and add scoped event, concurrency and job-routing checks at the
+    existing task/CI tier, using the runner's shell tools without RTK, network access or a new
+    dependency. Before implementation, the original check fails on the three-OS matrix and
+    lacks ready_for_review and workflow_dispatch; the event check fails on unrestricted push
+    and absent activity/manual entries; the concurrency check fails on cancel-in-progress
+    false; the job check fails on missing draft guards, the three-OS matrix and absent manual
+    jobs. These are static assertions, not evidence of hosted runs. Review the unchanged test
+    steps and pins as well; let the configured hooks and CI execute their existing gates.
+
+    The coordinator verifies the pushed head with a draft PR, marks it ready without another
+    commit, then updates that PR: no draft job executes, readiness runs both Linux jobs, and
+    updates create only a PR run and can cancel only that PR's older run. It also verifies main
+    remains eligible without in-progress cancellation, and dispatches the workflow manually
+    to confirm all three test platforms remain runnable. Record run URLs, event/ref/head and
+    job conclusions; a queued or cancelled manual runner is not a passing portability test.
+    Agents commit and stop; the loop owns pushing, dispatching, CI observation and closure.
+    This spec intentionally leaves completion checks red until the implementation exists.
 - id: T-13
   type: ci
   title: The code proof is a fresh seeded mutation run in CI, with no committed evidence
