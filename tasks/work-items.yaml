@@ -280,3 +280,10 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: T-13
+    title: The code proof is a fresh seeded mutation run in CI, with no committed evidence
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task

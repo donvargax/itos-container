@@ -599,3 +599,23 @@
     what T-7 wanted. Read itos's file; do not invent. Touch no other workflow.
   done_when:
     - run: "! grep -Eq 'os:.*(macos|windows)-latest' .github/workflows/ci.yml && grep -q ready_for_review .github/workflows/ci.yml && grep -q workflow_dispatch .github/workflows/ci.yml"
+- id: T-13
+  type: ci
+  title: The code proof is a fresh seeded mutation run in CI, with no committed evidence
+  why: >
+    The code proof reads agent-committed evidence: itos.yaml proof.code.check is mutation check over
+    a committed .metrics/mutate, and AGENTS.md requires a local run. It already failed T-8 with
+    mutation.coverage-stale because the host's Go differs from CI's (41832816369). itos ADR-0057 and
+    itos-cc ADR-0059 removed this approach for the same reason; read them. Settled: proof.code.check
+    becomes tools/bin/pinned itos-cc mutation run --count 10 --since {base} --seed {base}
+    --fail-uncovered=lines --json cmd internal, judged fresh in CI: deterministic per range, since a
+    gate must be (itos ADR-0051), and ten sites rather than itos's one because the tree is small.
+    The committed .metrics/mutate go, with AGENTS.md's local-run requirement and whatever else names
+    them. The unseeded mutation sample step in ci goes: its seed defaults to HEAD, so each push
+    draws anew, the random-survivor failure itos's nightly suffered, moved into the required job.
+    Read itos-cc.yaml's mutation.tests in donvargax/itos for how scenarios
+    count, and make the coverage the proof reads real: ci.yml's GOCOVERDIR feeds a merge step that
+    does not exist here, so finish it or remove it. itos-cc.yaml's exceptions stay. No nightly:
+    nothing slow or random remains once this lands.
+  done_when:
+    - run: "! git ls-files .metrics/mutate | grep -q . && grep -q 'mutation run --count 10 --since {base} --seed {base}' itos.yaml && ! grep -q 'mutation sample' itos.yaml"
