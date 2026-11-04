@@ -1,5 +1,14 @@
 # Equivalent mutants need project-local proof and a reviewed reason.
 mutation:
+  tests:
+    list: itos tests list scenario --tsv
+    run: "go test ./features -count=1 -scenarios='{pattern}'"
+    ids_pattern: "^@(?:{ids})$"
+    join: { each: "{id}", sep: "|" }
+    whole: go test ./features -count=1
+    support:
+      - features/*_test.go
+      - features/testdata/**
   exceptions:
     - file: cmd/itos-container/main.go
       function: github.com/donvargax/itos-container/cmd/itos-container#run

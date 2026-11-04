@@ -65,20 +65,11 @@ jobs:
       # go test carries on past a package that fails, so one run shows a platform's every
       # failure. The features build the binary they run themselves, itos-container.exe on
       # windows, stamped with a known version and commit.
-      # GOCOVERDIR makes that binary a -cover build, so the scenarios run cover-enabled code
-      # rather than the same code with the counter left out. A GOCOVERDIR that is not there is
-      # a coverage failure the binary prints on stderr on every run, and stderr is what a
-      # scenario reads, so the folder is made first, in this step and not before it. What the
-      # runs write stays on the runner, for the piece that merges coverage to read.
-      # It is a step's variable, not the job's: the runner context is not there at job level.
       # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
       - name: Tests
-        run: |
-          mkdir -p "$GOCOVERDIR"
-          go test ./... -count=1
+        run: go test ./... -count=1
         env:
           RAPID_CHECKS: 1
-          GOCOVERDIR: ${{ runner.temp }}/cover
 
   # Manual portability coverage exercises macOS and Windows paths, shells and line endings.
   platform-macos:
@@ -97,20 +88,11 @@ jobs:
       # go test carries on past a package that fails, so one run shows a platform's every
       # failure. The features build the binary they run themselves, itos-container.exe on
       # windows, stamped with a known version and commit.
-      # GOCOVERDIR makes that binary a -cover build, so the scenarios run cover-enabled code
-      # rather than the same code with the counter left out. A GOCOVERDIR that is not there is
-      # a coverage failure the binary prints on stderr on every run, and stderr is what a
-      # scenario reads, so the folder is made first, in this step and not before it. What the
-      # runs write stays on the runner, for the piece that merges coverage to read.
-      # It is a step's variable, not the job's: the runner context is not there at job level.
       # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
       - name: Tests
-        run: |
-          mkdir -p "$GOCOVERDIR"
-          go test ./... -count=1
+        run: go test ./... -count=1
         env:
           RAPID_CHECKS: 1
-          GOCOVERDIR: ${{ runner.temp }}/cover
 
   platform-windows:
     name: Tests (windows-latest)
@@ -128,17 +110,8 @@ jobs:
       # go test carries on past a package that fails, so one run shows a platform's every
       # failure. The features build the binary they run themselves, itos-container.exe on
       # windows, stamped with a known version and commit.
-      # GOCOVERDIR makes that binary a -cover build, so the scenarios run cover-enabled code
-      # rather than the same code with the counter left out. A GOCOVERDIR that is not there is
-      # a coverage failure the binary prints on stderr on every run, and stderr is what a
-      # scenario reads, so the folder is made first, in this step and not before it. What the
-      # runs write stays on the runner, for the piece that merges coverage to read.
-      # It is a step's variable, not the job's: the runner context is not there at job level.
       # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
       - name: Tests
-        run: |
-          mkdir -p "$GOCOVERDIR"
-          go test ./... -count=1
+        run: go test ./... -count=1
         env:
           RAPID_CHECKS: 1
-          GOCOVERDIR: ${{ runner.temp }}/cover

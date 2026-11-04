@@ -862,8 +862,172 @@
     count, and make the coverage the proof reads real: ci.yml's GOCOVERDIR feeds a merge step that
     does not exist here, so finish it or remove it. itos-cc.yaml's exceptions stay. No nightly:
     nothing slow or random remains once this lands.
+
+    This is foundation CI configuration, not container behaviour. The drafter edits only this
+    ledger entry in a docs commit with Item T-13; no scenarios or step definitions are needed.
+    Implement the configuration and tracked-record removals in a ci commit with Task T-13,
+    and update the guidance in a separate docs commit with Item T-13. This specification
+    supersedes the local proof and committed-evidence requirements in T-3, T-4, T-5, T-8 and
+    T-9, including their whole-function proof mode, and T-7/T-12's preservation of the unused
+    workflow coverage output. It does not reopen those completed tasks or rewrite their history.
+
+    Read itos ADR-0057 and ADR-0051 at 8ee479efb43b940ad3729d72f8cb842d7aca36b7 in
+    donvargax/itos, and itos-cc ADR-0059 at
+    bcb081778820602cbc968f8759c7b5a2d0effdc6 in donvargax/itos-cc.
+    Those reference files and itos's itos-cc.yaml had no working-tree edits when read.
+    The counted-run and listed-test contracts were also checked against the pinned release's
+    https://github.com/donvargax/itos-cc/blob/v0.47.2/README.md. Use the existing 0.47.2 launcher
+    pin and checksums; no new library, download mechanism or service is needed. Take the fresh
+    CI proof decision from those sources, not their unrelated nightly, release or local tiers.
+
+    Set proof.code.check to exactly tools/bin/pinned itos-cc mutation run --count 10
+    --since {base} --seed {base} --fail-uncovered=lines --json cmd internal. Keep proof.code.paths
+    exactly ["{cmd,internal}/**/*.go"]. Core itos supplies {base} from the judged CI range;
+    neither HEAD nor a take/spec commit is a replacement seed or a hand-picked proof base.
+    Ten is the maximum sampled sites across the changed functions, not ten per function or
+    a full baseline. The same base and eligible sites give the same draw; a changed candidate
+    set can change the draw. Added/changed lines still require measured coverage, including
+    in functions without mutation sites. A survivor or uncovered changed line fails CI; add
+    tests, never redraw, suppress the failure or except uncovered code. Only genuinely
+    equivalent mutants can have reasons for the person's review. Keep both existing exception
+    entries, identities and reasons unchanged. Do not add --all-tests, --test-command,
+    --no-coverage, alternate reports, exclusions or failure-swallowing flags to this proof.
+    A counted run already writes no snapshot, source annotation or coverage cache.
+
+    Remove the mutation sample step from itos.yaml, without moving it into another job or hook.
+    Keep the other CI steps, costs, prose selection, scenario selection, domain-coverage floor,
+    proof paths, pins and hooks. No nightly job is added, and existing non-mutation checks are
+    neither moved nor claimed to become deterministic through this change. Remove every tracked
+    .metrics/mutate file by explicit path, and add root-anchored /.metrics/mutate/ and
+    /.metrics/coverage/ ignores. No generated mutation or coverage evidence is committed,
+    restored into CI from another machine, or substituted for a fresh judgment. Preserve other
+    metrics and the historical T-8 report; do not hand-edit generated records before deleting them.
+
+    Add mutation.tests to itos-cc.yaml using itos's listed-scenario configuration, adapted to
+    this repository's installed itos command (there is no tools/bin/itos launcher here).
+    The list command is itos tests list scenario --tsv; run is
+    go test ./features -count=1 -scenarios='{pattern}'; ids_pattern is ^@(?:{ids})$;
+    join is { each: "{id}", sep: "|" }; whole is go test ./features -count=1; support lists
+    features/*_test.go and features/testdata/**. Keep this block before exceptions in the
+    existing two-space YAML style. The list selects live scenarios only, retaining the IDs,
+    paths and fingerprints itos supplies. Do not substitute the smoke set, list @wip cases,
+    filter out scenarios to get coverage green, or copy the upstream project's exceptions
+    or exclusions. At drafting there are 29 live scenarios across cli, completion and count;
+    this is an observation, not a fixed future count.
+
+    Use the pinned tool's documented per-test fallback for listed coverage. The existing
+    features/features_test.go builds the tested binary with -cover, -covermode=atomic and
+    -coverpkg=./... when GOCOVERDIR is set, and the scenario environment preserves it.
+    It does not split one whole run's ITOS_CC_TEST_COVERDIR into per-ID folders: itos-cc must
+    collect the fallback individual runs under the GOCOVERDIR it supplies and consume those
+    counters itself. Its own-test measurement and listed-scenario reach jointly feed the proof;
+    listing tests alone is not coverage evidence. Preserve this harness and its clean child
+    environment, ordinary no-coverage runs and live-scenario semantics. No new runner, wrapper,
+    per-ID collector, step definition or Go code change belongs to this task. If the pinned tool
+    cannot measure this documented fallback, stop with its diagnostic rather than drop cases
+    or expand the task silently.
+
+    Choose removal of ci.yml's unused coverage collection. In platform, platform-macos and
+    platform-windows, remove the GOCOVERDIR environment entry, its mkdir command, and comments
+    promising a later coverage merge. Keep each go test ./... -count=1 and RAPID_CHECKS=1.
+    Those jobs still run every test; coverage consumed by proof is produced in the ci job by
+    itos-cc, not passed between jobs. Preserve all T-12 event, draft, concurrency, runner and
+    manual-dispatch rules, job names, actions, Go setup, permissions and range selection.
+    Keep itos verify and itos ci run with their existing arguments and order. No artifact
+    transfer, additional coverage merge step or change to another workflow is needed.
+
+    Update AGENTS.md's Finishing section, docs/ORCHESTRATING.md's Proof guidance,
+    docs/upgrading.md and README.md's proof description to state that CI alone judges the fresh
+    counted proof: agents commit and stop, with no local mutation run or committed evidence.
+    Explain the sampled-site and changed-line scope honestly, retain failure remediation and
+    reasoned equivalent exceptions, and remove the instruction to choose a local item-parent
+    base. Keep existing scenario red-first obligations; those are not mutation proof runs.
+    Remove instructions to keep cached checking or sampling and all-tests/no-annotate recipes
+    presented as current requirements. In docs/upgrading.md, mark T-4's old results as historical
+    and acknowledge the two T-8 exceptions instead of describing the current list as empty.
+    Add a dated T-13 supersession note to docs/proof/T-8-foundation-baseline.md: its measurements
+    and reproduction commands describe past evidence retained in Git history, not today's
+    handoff procedure. Preserve the report's measurements, failures and source commits.
+    Historical mentions in PLAN.md and closed ledger entries need no deletion. Keep generated
+    agent rules, document caps, charter, contract and unrelated guidance unchanged.
+
+    Implementation paths are itos.yaml, itos-cc.yaml, .gitignore, .github/workflows/ci.yml,
+    the currently tracked .metrics/mutate files, AGENTS.md, docs/ORCHESTRATING.md,
+    docs/upgrading.md, README.md and docs/proof/T-8-foundation-baseline.md. No proof.code source
+    changes are needed; a normal T-13 range can therefore have no applicable code proof.
+    The final completion check separately exercises the new configuration over the known
+    nonempty historical T-8 range beginning at 4ac0cc4b017feb219ba1645ca4263a7dd26870fd.
+    This is a one-time CI integration check, not the base of T-13 or a new recurring full-tree
+    gate. It runs only on Linux CI after the existing build/test preparation has made the
+    Go dependencies available; counted trials run offline. Agents must not run it locally.
+    Mark it after push, late, with a 900-second timeout; the cheap configuration assertions
+    are static, so local closure checks cannot accidentally start the integration run.
+    Keep its report in the CI log, not the checkout. Require selected and executed sites,
+    successful listed-test coverage collection and no uncovered changed lines or unexcepted
+    survivors. An empty/not-applicable report, missing listed coverage, missing dependencies
+    or a cancelled run is not acceptance. Record the actual range, seed, head, sampling counts,
+    coverage verdict and CI URL; these observations prove the wiring, not whole-tree coverage.
+
+    Keep the original completion check and add the scoped checks below at the existing task/CI
+    tier, using installed shell tools and itos, never RTK or a new parser in CI. Before work,
+    the original and exact-command checks fail on cached mutation check and mutation sample;
+    the storage check fails on the 15 tracked records and absent ignores; the listed-tests
+    check fails because mutation.tests is absent; and the workflow check fails on GOCOVERDIR.
+    The exception check is a preservation assertion. Review guidance and the unchanged gates
+    against this entry as well; keyword presence alone would not prove the procedure correct.
+    The runtime check establishes post-change integration, not a behaviour scenario's red step.
+    Let configured hooks and CI run the checks; do not run gates by hand while drafting.
+    The spec leaves completion checks failing until implemented. The loop alone pushes,
+    observes CI and closes the item after the actual pushed head passes.
   done_when:
     - run: "! git ls-files .metrics/mutate | grep -q . && grep -q 'mutation run --count 10 --since {base} --seed {base}' itos.yaml && ! grep -q 'mutation sample' itos.yaml"
+      cost: static
+    - run: >-
+        test "$(itos config get proof.code.check)" =
+        'tools/bin/pinned itos-cc mutation run --count 10 --since {base} --seed {base} --fail-uncovered=lines --json cmd internal'
+      cost: static
+    - run: >-
+        test -z "$(git ls-files .metrics/mutate .metrics/coverage)" &&
+        git check-ignore -q --no-index .metrics/mutate/T-13-probe.json &&
+        git check-ignore -q --no-index .metrics/coverage/T-13-probe
+      cost: static
+    - run: |
+        sh -eu <<'SH'
+        block=$(sed -n '/^  tests:$/,/^  exceptions:$/p' itos-cc.yaml)
+        while IFS= read -r line; do
+          printf '%s\n' "$block" | grep -Fqx "$line"
+        done <<'EXPECTED'
+          tests:
+            list: itos tests list scenario --tsv
+            run: "go test ./features -count=1 -scenarios='{pattern}'"
+            ids_pattern: "^@(?:{ids})$"
+            join: { each: "{id}", sep: "|" }
+            whole: go test ./features -count=1
+            support:
+              - features/*_test.go
+              - features/testdata/**
+          exceptions:
+        EXPECTED
+        SH
+      cost: static
+    - run: >-
+        ! grep -q 'GOCOVERDIR' .github/workflows/ci.yml &&
+        test "$(grep -Fc 'go test ./... -count=1' .github/workflows/ci.yml)" -eq 3 &&
+        test "$(grep -Fc 'RAPID_CHECKS: 1' .github/workflows/ci.yml)" -eq 3
+      cost: static
+    - run: >-
+        test "$(sed -n '/^  exceptions:$/,$p' itos-cc.yaml)" =
+        "$(git show f89f5ece1c6df5b314dac9de394e15af7a56bf91:itos-cc.yaml | sed -n '/^  exceptions:$/,$p')"
+      cost: static
+    - run: >-
+        test "${GITHUB_ACTIONS:-}" = true &&
+        tools/bin/pinned itos-cc mutation run --count 10
+        --since 4ac0cc4b017feb219ba1645ca4263a7dd26870fd
+        --seed 4ac0cc4b017feb219ba1645ca4263a7dd26870fd
+        --fail-uncovered=lines --json cmd internal
+      after: push
+      cost: late
+      timeout: 900
 - id: T-14
   type: ci
   title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade

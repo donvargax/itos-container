@@ -54,10 +54,16 @@ go test ./features -count=1
 ```
 
 The inherited CI configuration runs Go gates and tests on Linux, macOS and Windows.
-Domain coverage must stay at least 80 percent. Changed code requires fresh mutation
-proof; CI samples recorded outcomes. T-4 reported zero eligible sample records, so that
-passing sample is not a refreshed foundation baseline. Baseline work is separately
-recorded. Properties run one random case per CI push and more in ordinary local runs.
+Domain coverage must stay at least 80 percent. CI alone judges fresh changed-code proof:
+up to ten mutation sites across changed functions, plus measured coverage of added or
+changed lines, including functions without sites. Core itos supplies the judged range's
+base for both selection and seed; the same base and eligible sites give the same draw.
+Own tests and listed live scenarios contribute coverage. Survivors need tests, with only
+truly equivalent mutants excepted for the person's review; uncovered code needs tests.
+Agents commit and stop, with no local mutation runs or committed mutation/coverage evidence.
+The sampled proof is not a full baseline. T-8's [foundation report](docs/proof/T-8-foundation-baseline.md)
+retains the historical full measurement; T-4's earlier sample judged zero eligible records.
+Properties run one random case per CI push and more in ordinary local runs.
 
 See [docs/architecture.md](docs/architecture.md) for the counting example's layers and
 [docs/upgrading.md](docs/upgrading.md) before changing tool pins. Retargeting `docs/CLI.md`
