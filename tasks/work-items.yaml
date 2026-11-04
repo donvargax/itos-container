@@ -6,7 +6,6 @@ queue:
   - T-14
   - T-13
   - p1-arc42-draft
-  - T-10
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -182,7 +181,7 @@ items:
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
     owner: donvargax
-    status: todo
+    status: dropped
     depends_on: []
     kind: task
   - id: slice-1
