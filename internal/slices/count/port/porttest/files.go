@@ -1,7 +1,7 @@
 // Package porttest provides in-memory fakes for counting-domain tests.
 package porttest
 
-import "github.com/donvargax/itos-container/internal/count/port"
+import "github.com/donvargax/itos-container/internal/slices/count/port"
 
 // Files holds test inputs and configured read failures in memory.
 type Files struct {

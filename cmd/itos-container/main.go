@@ -6,7 +6,7 @@
 // The main output goes to stdout; logs, structured, and errors go to stderr.
 //
 // main only assembles: the count command is a slice, its kong struct and its
-// handler in a package of its own (internal/count/command), and main parses
+// handler in a package of its own (internal/slices/count/command), and main parses
 // the command line, runs the one it names through the UI the slices share
 // (internal/cli) and exits with the code that slice returns. A usage error,
 // which kong finds before any slice runs, is the one failure main reports
@@ -25,9 +25,9 @@ import (
 	"golang.org/x/term"
 
 	"github.com/donvargax/itos-container/internal/cli"
-	"github.com/donvargax/itos-container/internal/count/command"
-	"github.com/donvargax/itos-container/internal/count/disk"
-	"github.com/donvargax/itos-container/internal/count/input"
+	"github.com/donvargax/itos-container/internal/slices/count/command"
+	"github.com/donvargax/itos-container/internal/slices/count/disk"
+	"github.com/donvargax/itos-container/internal/slices/count/input"
 	"github.com/donvargax/itos-container/internal/version"
 )
 
@@ -56,7 +56,7 @@ func main() {
 // what main exits with, so a test can read what a run printed.
 func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.Option) int {
 	slog.SetDefault(logger(stderr))
-	ui := &cli.UI{In: in, Stdout: stdout, Stderr: stderr}
+	ui := &cli.UI{In: in, Stdout: stdout, Stderr: stderr, Classify: command.Classify}
 	if len(args) == 0 {
 		args = []string{"--help"}
 	}

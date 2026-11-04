@@ -15,7 +15,7 @@ Container commands and isolation are not implemented yet. The current entry poin
 version and shell completion. Count accepts `-` for standard input and prints lines and
 words as text or one JSON object with `--json`.
 
-The counting domain in `internal/count` uses a Files port, a read-only disk adapter and
+The counting domain in `internal/slices/count` uses a Files port, a read-only disk adapter and
 an in-memory fake; `internal/cli` maps typed failures to exit codes. Black-box scenarios
 in `features/` run through godog against the binary built for the test platform. This Go
 foundation does not demonstrate container isolation.
