@@ -150,3 +150,14 @@ items:
       bounded timeouts, signal forwarding, cancellation, workload exit preservation, cleanup
       failures and recovery, and interactive JSON refusal before implementing diagnostics and exit
       mappings for the offline owned-run milestone.
+  - id: p1-refresh-orchestrating-guide
+    title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The milestone needs accurate coordinator guidance. Replace template branch assumptions and
+      stale CLI, godog and proof coverage claims with instructions matching the charter and current
+      configuration.
