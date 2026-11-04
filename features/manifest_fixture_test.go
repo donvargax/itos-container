@@ -15,7 +15,8 @@ import (
 func (w *world) manifestCheckout() error {
 	m := &manifestWorld{checkout: filepath.Join(w.dir, "checkout"), host: filepath.Join(w.dir, "host"), recorder: filepath.Join(w.dir, "recorder"), env: map[string]string{}}
 	w.manifest = m
-	for _, dir := range []string{m.checkout, m.host, m.recorder} {
+	m.env["PATH"] = filepath.Join(m.host, "bin")
+	for _, dir := range []string{m.checkout, m.host, m.recorder, m.env["PATH"]} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}

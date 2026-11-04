@@ -236,7 +236,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # Policy-selected paths and syntax. Every location resolves the same defaults; comments
   # and trailing commas must not require a second parser or rewrite the source file.
-  @wip @slice-2 @ID-MANIFEST-01
+  @slice-2 @ID-MANIFEST-01
   Scenario Outline: Read the policy-selected manifest and accept JSON with comments
     Given the manifest is located only at "<file>"
     And the manifest text is:
@@ -268,7 +268,7 @@ Feature: Inspect the restricted single-worker manifest
       | .devcontainer.json              |
       | config files/worker.json        |
 
-  @wip @slice-2 @ID-MANIFEST-02
+  @slice-2 @ID-MANIFEST-02
   Scenario: A missing selected manifest never triggers fallback discovery or a default worker
     Given the policy selects manifest "config/worker.json"
     And the selected manifest does not exist
@@ -279,7 +279,7 @@ Feature: Inspect the restricted single-worker manifest
     Then its JSON output reports "manifest.missing" at "" with exit 2
     And it exits with code 2
 
-  @wip @slice-2 @ID-MANIFEST-03
+  @slice-2 @ID-MANIFEST-03
   Scenario Outline: Inspect only the selected manifest even when another conventional file exists
     Given the manifest is located only at "<file>"
     And the unselected conventional manifest exists with "<contents>"
@@ -295,7 +295,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # The mode is a user-facing validation scope. It must remain usable when host
   # readiness is added, and must not claim that metadata or approval was inspected.
-  @wip @slice-2 @ID-MANIFEST-28
+  @slice-2 @ID-MANIFEST-28
   Scenario: Explain the manifest-only scope and honor the extension JSON request
     When itos-container runs with "doctor --help"
     Then its standard output says "--manifest-only"
@@ -318,7 +318,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # Reject a FIFO without opening it for a blocking read. The five-second test deadline
   # bounds an incorrect reader; it does not define a product parsing/resource budget.
-  @wip @slice-2 @ID-MANIFEST-04
+  @slice-2 @ID-MANIFEST-04
   Scenario Outline: Refuse unsafe manifest candidates without following or executing them
     Given the manifest is located only at "<file>"
     And the manifest candidate has the layout "<layout>"
@@ -344,7 +344,7 @@ Feature: Inspect the restricted single-worker manifest
       | .devcontainer.json              | directory at the selected candidate       |
       | .devcontainer.json              | FIFO at the selected candidate            |
 
-  @wip @slice-2 @ID-MANIFEST-05
+  @slice-2 @ID-MANIFEST-05
   Scenario Outline: Reject malformed JSON and JSON5 extensions before interpreting fields
     Given the manifest text is:
       """
@@ -372,7 +372,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # Duplicate detection uses decoded keys, recursively, before a map could discard one.
   # The settings object is unused but must still have one unambiguous JSON meaning.
-  @wip @slice-2 @ID-MANIFEST-06
+  @slice-2 @ID-MANIFEST-06
   Scenario Outline: Refuse duplicate decoded keys at every depth
     Given the manifest text is:
       """
@@ -392,7 +392,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # A recognized unsafe field is not made acceptable by false, [] or {}. Unknown fields
   # fail too, including misspellings and fields from the unrestricted devcontainer spec.
-  @wip @slice-2 @ID-MANIFEST-07
+  @slice-2 @ID-MANIFEST-07
   Scenario Outline: Refuse unsupported execution and permission fields
     Given the manifest member "<field>" has JSON value <value>
     And host execution sentinels are installed
@@ -432,7 +432,7 @@ Feature: Inspect the restricted single-worker manifest
       | x-worker            | {}                                         |
       | $schema             | "https://example.invalid/schema.json"      |
 
-  @wip @slice-2 @ID-MANIFEST-08
+  @slice-2 @ID-MANIFEST-08
   Scenario Outline: Validate the types and values of supported manifest fields
     Given the manifest member "<field>" has JSON value <value>
     When itos-container runs with "doctor --manifest-only --json"
@@ -457,7 +457,7 @@ Feature: Inspect the restricted single-worker manifest
       | containerUser | 1000                       | /containerUser     |
       | remoteUser    | null                       | /remoteUser        |
 
-  @wip @slice-2 @ID-MANIFEST-09
+  @slice-2 @ID-MANIFEST-09
   Scenario Outline: Refuse an image that is not a valid digest-pinned reference
     Given the manifest member "image" has JSON value <image>
     When itos-container runs with "doctor --manifest-only --json"
@@ -482,7 +482,7 @@ Feature: Inspect the restricted single-worker manifest
       | "registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111 "              |
 
   # Ordinary doctor must apply the same refusal before slice-3 engine checks.
-  @wip @slice-2 @ID-MANIFEST-10
+  @slice-2 @ID-MANIFEST-10
   Scenario Outline: Require an explicit image instead of choosing a default
     Given the manifest has no "image" member
     When itos-container runs with "doctor <mode> --json"
@@ -497,7 +497,7 @@ Feature: Inspect the restricted single-worker manifest
   # Different valid requests are not approval mismatches. A supplied UID does not
   # fill in the other optional UID or grant permission to run either one.
   # An unqualified image name remains literal; validation must not add docker.io/library.
-  @wip @slice-2 @ID-MANIFEST-27
+  @slice-2 @ID-MANIFEST-27
   Scenario Outline: Accept pinned image and UID requests without host approval
     Given the manifest member "image" has JSON value "<image>"
     And the manifest member "<user_field>" has JSON value "1001"
@@ -526,7 +526,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # Workspace and identity are requests for one worker, not ways
   # to choose host paths, extra mounts, an elevated identity or a second user.
-  @wip @slice-2 @ID-MANIFEST-11
+  @slice-2 @ID-MANIFEST-11
   Scenario Outline: Refuse workspace locations outside the fixed checkout layout
     Given the manifest member "workspaceFolder" has JSON value <folder>
     And host execution sentinels are installed
@@ -551,7 +551,7 @@ Feature: Inspect the restricted single-worker manifest
       | "/workspace/a\u0000b"        |
       | "/workspace/not-created"     |
 
-  @wip @slice-2 @ID-MANIFEST-12
+  @slice-2 @ID-MANIFEST-12
   Scenario Outline: Refuse a workspace directory reached through a symlink or a file
     Given the checkout workspace entry "<entry>" has layout "<layout>"
     And the manifest member "workspaceFolder" has JSON value "/workspace/<entry>"
@@ -570,7 +570,7 @@ Feature: Inspect the restricted single-worker manifest
       | src/nested | intermediate symlink to an in-checkout directory       |
       | src/nested | intermediate symlink outside the checkout             |
 
-  @wip @slice-2 @ID-MANIFEST-13
+  @slice-2 @ID-MANIFEST-13
   Scenario Outline: Refuse user values that are not positive decimal UIDs
     Given the manifest member "<field>" has JSON value <user>
     When itos-container runs with "doctor --manifest-only --json"
@@ -604,7 +604,7 @@ Feature: Inspect the restricted single-worker manifest
   # different from the written dollar expression and must never enter effective settings.
   # UID 1 and values beyond uint64 prove decimal syntax without an assumed host UID range;
   # approval/readiness still own whether a requested identity can be used by the worker.
-  @wip @slice-2 @ID-MANIFEST-14
+  @slice-2 @ID-MANIFEST-14
   Scenario Outline: Preserve literal environment values and resolve an existing checkout subdirectory
     Given a checkout directory "src" exists
     And the manifest member "name" has JSON value "worker display"
@@ -631,7 +631,7 @@ Feature: Inspect the restricted single-worker manifest
       | 1001                 | 1002                 |
       | 18446744073709551616 | 18446744073709551617 |
 
-  @wip @slice-2 @ID-MANIFEST-15
+  @slice-2 @ID-MANIFEST-15
   Scenario Outline: Reject reserved environment namespaces regardless of case or empty values
     Given the manifest member "containerEnv" has JSON value {"<name>":""}
     When itos-container runs with "doctor --manifest-only --json"
@@ -685,7 +685,7 @@ Feature: Inspect the restricted single-worker manifest
       | OPENAI_BASE_URL                |
       | OPENCODE_CONFIG               |
 
-  @wip @slice-2 @ID-MANIFEST-16
+  @slice-2 @ID-MANIFEST-16
   Scenario Outline: Refuse variable-substitution syntax instead of expanding host or container values
     Given the manifest member "<field>" has JSON value <value>
     When itos-container runs with "doctor --manifest-only --json" and the environment "SLICE_2_HOST=host-only-marker"
@@ -709,7 +709,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # No hook is a supported command yet. Empty, array and object forms cannot bypass
   # that decision; initializeCommand must not run even before reporting its refusal.
-  @wip @slice-2 @ID-MANIFEST-17
+  @slice-2 @ID-MANIFEST-17
   Scenario Outline: Refuse every lifecycle hook while its runtime semantics remain unspecified
     Given the manifest member "<field>" has JSON value <value>
     And host execution sentinels are installed
@@ -734,7 +734,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # Editor settings are opaque data. Recognizing the namespace is not consent to
   # install extensions, expand an editor variable or invoke task/customization code.
-  @wip @slice-2 @ID-MANIFEST-18
+  @slice-2 @ID-MANIFEST-18
   Scenario: Report recognized editor customizations as unused without executing their data
     Given the manifest member "customizations" has JSON value {"vscode":{"extensions":["example.editor"],"settings":{"example.command":"./slice-2-record-execution","example.variable":"${localEnv:SLICE_2_HOST}"}}}
     And host execution sentinels are installed
@@ -752,7 +752,7 @@ Feature: Inspect the restricted single-worker manifest
     And its error output does not say "host-only-marker"
     And inspection has no host side effects
 
-  @wip @slice-2 @ID-MANIFEST-19
+  @slice-2 @ID-MANIFEST-19
   Scenario Outline: Refuse unknown editor namespaces and malformed recognized customizations
     Given the manifest member "customizations" has JSON value <value>
     When itos-container runs with "doctor --manifest-only --json"
@@ -770,7 +770,7 @@ Feature: Inspect the restricted single-worker manifest
       | {"vscode":{"settings":[]}}                  | manifest.value       | /customizations/vscode/settings       |
 
   # Absence is an explicit input, not the default result of skipping image inspection.
-  @wip @slice-2 @ID-MANIFEST-29
+  @slice-2 @ID-MANIFEST-29
   Scenario: Distinguish a supplied absent label from metadata that was never inspected
     Given the supplied devcontainer.metadata label is absent
     When the manifest inspection contract runs with supplied metadata in JSON mode
@@ -783,7 +783,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # The visible name must remain null even when metadata supplies one. A syntactically
   # acceptable label is never a second source of effective settings or commands.
-  @wip @slice-2 @ID-MANIFEST-20
+  @slice-2 @ID-MANIFEST-20
   Scenario Outline: Inspect permitted image metadata and report it as unused without merging
     Given the supplied devcontainer.metadata label is:
       """
@@ -816,7 +816,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # The whole label is checked, including later entries. Metadata has a stricter
   # descriptive-only field profile than the visible manifest, and cannot supply a user.
-  @wip @slice-2 @ID-MANIFEST-21
+  @slice-2 @ID-MANIFEST-21
   Scenario Outline: Refuse malformed or operational image metadata before accepting the manifest
     Given the supplied devcontainer.metadata label is:
       """
@@ -858,7 +858,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # Exercise diagnostics at the same validator/presenter boundary as the other label
   # cases. No CLI environment variable or engine lookup supplies the hostile input.
-  @wip @slice-2 @ID-MANIFEST-30
+  @slice-2 @ID-MANIFEST-30
   Scenario Outline: Supplied metadata diagnostics identify the label without echoing values
     Given the supplied devcontainer.metadata label is:
       """
@@ -880,7 +880,7 @@ Feature: Inspect the restricted single-worker manifest
       | [{"name":"slice-2-private-marker"                     |                      |
 
   # Show all independent mistakes, not only the first map iteration's result.
-  @wip @slice-2 @ID-MANIFEST-22
+  @slice-2 @ID-MANIFEST-22
   Scenario: Report independent manifest problems together with typed paths and one refusal code
     Given the manifest member "containerEnv" has JSON value {"PATH":"","APP_MODE":false}
     And the manifest member "remoteUser" has JSON value "0"
@@ -895,7 +895,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # A key can contain a slash or tilde without naming a child field. Escaped pointer
   # segments keep the refusal's subject unambiguous for scripts and remediation tools.
-  @wip @slice-2 @ID-MANIFEST-25
+  @slice-2 @ID-MANIFEST-25
   Scenario Outline: Keep diagnostic paths distinct from literal slashes and tildes in keys
     Given the manifest member "<field>" has JSON value <value>
     When itos-container runs with "doctor --manifest-only --json"
@@ -911,7 +911,7 @@ Feature: Inspect the restricted single-worker manifest
   # Synthetic marker only. Parser errors must not echo a source line, and semantic
   # errors must not dump the rejected command or environment value. The PATH
   # example is a rejected literal value, never a change to the controller's environment.
-  @wip @slice-2 @ID-MANIFEST-23
+  @slice-2 @ID-MANIFEST-23
   Scenario Outline: Diagnose rejected manifest input without disclosing raw values
     Given the manifest inspection input "<source>" has the exact text:
       """
@@ -934,7 +934,7 @@ Feature: Inspect the restricted single-worker manifest
   # exits 2, but cannot identify this file. Existing containment steps suffice;
   # the wording around those subjects remains free to change. Use the same exact-input
   # fixture as ID-MANIFEST-23, with no new setup behavior or assertion step definitions.
-  @wip @slice-2 @ID-MANIFEST-26
+  @slice-2 @ID-MANIFEST-26
   Scenario Outline: Plain manifest refusals identify their source without disclosing raw values
     Given the manifest inspection input "<source>" has the exact text:
       """
@@ -953,7 +953,7 @@ Feature: Inspect the restricted single-worker manifest
       | manifest | {"initializeCommand":"echo slice-2-private-marker"}    | .devcontainer/devcontainer.json |
       | manifest | {"containerEnv":{"PATH":"slice-2-private-marker"}}    | .devcontainer/devcontainer.json |
 
-  @wip @slice-2 @ID-MANIFEST-24
+  @slice-2 @ID-MANIFEST-24
   Scenario: Plain doctor output identifies the manifest and explains unused editor data
     Given the manifest member "customizations" has JSON value {"vscode":{"extensions":["example.editor"]}}
     And host execution sentinels are installed

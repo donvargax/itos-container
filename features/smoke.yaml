@@ -36,3 +36,7 @@
   scenarios:
     - id: "@ID-POLICY-01"
       why: policy inspection reads the fixed file, supplies offline defaults and returns the effective policy without engine access
+- file: manifest.feature
+  scenarios:
+    - id: "@ID-MANIFEST-01"
+      why: selected manifest parsing resolves literal defaults without engine inspection

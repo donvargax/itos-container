@@ -28,8 +28,8 @@ type effectiveNetwork struct {
 	Mode string `json:"mode"`
 }
 
-// presentPolicy presents policy inspection explicitly as limited validation. It makes
-// no readiness claim, including when invoked without the policy-only flag.
+// presentPolicy presents policy-only success or a policy refusal that prevents
+// later inspection. Neither result makes a readiness claim.
 func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 	problems := make([]policyProblem, 0, len(result.Issues))
 	code := 0

@@ -3,9 +3,10 @@
 These are format and validation requirements for the planned `itos-container.yaml`
 sandbox policy. The [charter](charter.md) selects the milestone from the binding
 [pilot contract](plans/container-pilot.md); they take precedence over upstream
-examples. Strict policy validation is implemented through `doctor --policy-only`;
-the inherited count, version and completion commands remain. Manifest, host readiness,
-approval and runtime isolation are not implemented by this policy slice.
+examples. Strict policy validation is implemented through `doctor --policy-only`, and
+policy plus manifest validation through `doctor --manifest-only`. The inherited count,
+version and completion commands remain. Host readiness, approval and runtime isolation
+are not implemented.
 
 The milestone is an offline owned run with no network, an approved hardened container,
 the checkout as its only host mount, a non-root identity and owned cleanup. Linux amd64
@@ -77,8 +78,9 @@ It cannot authorize host commands, builds, Features, Compose services, extra mou
 runtime security flags, host environment interpolation or credential sourcing. It
 cannot configure or replace the trusted guard/proxy or independently publish ports.
 Image metadata must not introduce unreviewed commands, identity or permissions.
-Exact supported fields, JSON-with-comments syntax, metadata treatment and in-container
-lifecycle semantics need specifications; no Dev Containers CLI fallback is authorized.
+The inspection profile below specifies supported fields, JSON-with-comments syntax
+and metadata treatment. No lifecycle hook is accepted while its runtime semantics
+remain open. No Dev Containers CLI fallback is authorized.
 
 ## Format policy
 
@@ -86,7 +88,7 @@ The requirements below guide behaviour specifications. Slice-1 selects the maint
 `go.yaml.in/yaml/v3 v3.0.5` node parser, pinned in go.mod/go.sum, for structural validation
 before projection. Its YAML 1.1 scalar extensions are constrained to YAML 1.2 core
 meanings. Its MIT/Apache notices are preserved in THIRD_PARTY_NOTICES.md and releases.
-Manifest parsing remains a separate specification.
+Manifest parsing uses the separately pinned HuJSON parser described below.
 
 ### Implemented version 1
 
@@ -141,6 +143,43 @@ controls are refused. There is no trimming, expansion or referenced-file read in
 inspection. Structural errors prevent schema projection; an invalid version prevents
 interpreting other fields. Independent version 1 errors are collected. No partial
 effective policy is returned. Safe filesystem identity belongs to the later host slice.
+
+### Implemented restricted manifest
+
+The policy has no image or UID. Its `manifest` selects exactly one relative file;
+other conventional files and parent directories are irrelevant. Every component
+below the checkout root must be a real directory and the candidate a readable
+regular file. Symlinks, including in-tree and dangling ones, and special files fail.
+
+`github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f` parses JSON with
+line/block comments and trailing commas. Duplicate decoded keys fail at every depth,
+including unused editor settings. Syntax and duplicates precede semantic checks.
+`github.com/distribution/reference v0.6.0` with `go-digest v1.0.0` validates literal
+named image references carrying a lowercase 64-digit sha256 digest, without lookup
+or normalization. The dependencies' licenses are in THIRD_PARTY_NOTICES.md.
+
+| Field | Request and default |
+| --- | --- |
+| `image` | Required pinned string; no implicit image or approval comparison. |
+| `name` | Nonempty display string without ASCII controls; omitted means null. |
+| `workspaceFolder` | `/workspace`, or an existing real checkout subdirectory below it; default `/workspace`. |
+| `containerEnv` | Literal string values under valid, nonreserved names; default `{}`. |
+| `containerUser`, `remoteUser` | Independent positive decimal UID strings without leading zeros or group suffixes; each defaults to null. |
+| `customizations.vscode` | Optional editor extensions and opaque settings, explicitly unused. |
+
+Effective strings containing `${` fail without expansion. Other shell-looking text
+stays literal. Reserved environment names and prefixes are matched with ASCII case
+folding; the exhaustive list and field constraints are in
+[manifest.feature](../features/manifest.feature). Unknown fields, permissions, hooks
+and editor namespaces fail even when their values are empty or false.
+
+The shared engine accepts a separately supplied `devcontainer.metadata` label. An
+explicitly absent label differs from an image never inspected. Present labels must
+be strict JSON arrays of objects with unique decoded keys; only valid display names
+and editor customizations are allowed and reported as unused. Operational settings
+are refused and nothing is merged into effective settings. Slice-3 owns obtaining
+that label; lookup failure cannot be represented as absence. Slice-4 owns resolving
+omitted identities and comparing image/UID requests with host-owned approval.
 
 ### Data and validation
 
@@ -220,8 +259,8 @@ do not establish sandbox argv or credential rules.
 ## Remaining specification work
 
 The pilot leaves approval canonicalization/fingerprint and
-storage, safe checkout/engine identity, manifest discovery/output paths, reserved
-environment names, image metadata, lifecycle hooks, resource/time limits and
+storage, safe checkout/engine identity, generated output paths,
+lifecycle hooks, resource/time limits and
 cancellation details open. Resolve them through the assigned specifications and the
 person's security decisions, not an illustrative configuration here.
 

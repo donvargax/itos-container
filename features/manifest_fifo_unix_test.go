@@ -1,7 +1,7 @@
-//go:build !windows
+//go:build unix
 
 package features
 
-import "golang.org/x/sys/unix"
+import "syscall"
 
-func manifestFIFO(path string) error { return unix.Mkfifo(path, 0o600) }
+func manifestFIFO(path string) error { return syscall.Mkfifo(path, 0o600) }
