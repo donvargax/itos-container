@@ -719,8 +719,193 @@
     Fixtures run only when the rules change, not on every commit. docs/architecture.md and AGENTS.md
     describe the result, and a record in docs/decisions says why. Behaviour does not change: every
     scenario passes before and after.
+
+    This is a foundation task, not new container behaviour. The drafter changes only this
+    ledger entry in a docs commit with Item T-14; no Gherkin, step definitions or implementation.
+    The implementer adds compile-valid architecture tests first in a test commit with Item
+    T-14, then implements the rules and move in commits tied to Task T-14. Record each new
+    refusal's failing assertion before enforcement and its pass afterwards. Existing product
+    scenarios are preservation checks, not red evidence for this task; do not retag or rewrite
+    them. Leave T-10's abandoned generator and registry history alone.
+
+    The local sources were read with clean worktrees at itos-cc/code-quality revision
+    bcb081778820602cbc968f8759c7b5a2d0effdc6 and itos revision
+    8ee479efb43b940ad3729d72f8cb842d7aca36b7. Read their referenced ADRs and copy the applicable
+    enforcement and contract-test patterns, adapting the module and paths, not their legacy
+    exceptions, generated assembly or unrelated linters. Reuse origin/T-10's compile-first
+    fixture harness from f6f339c0acd6c0901ca7ea0a172edd0241d24ab2, not its generator or obsolete
+    expected adapter/domain prohibition. Preserve source attribution, licenses and notices;
+    copying infrastructure does not relicense the source projects or dependencies.
+
+    Layout and arrows apply to new names without generating configuration. Move all count
+    packages and their tests to internal/slices/count, retaining command, domain, port,
+    port/porttest, disk and input. Engines use internal/engine/<name>/domain, port and named
+    adapter siblings, not an additional adapters directory. Nested packages inherit their
+    role; a domain-only or port-only owner needs no empty sibling directory. No production
+    engine is invented merely to exercise the rule: disposable fixtures supply two slices
+    and two engines. Name internal/cli, internal/version and internal/release explicitly,
+    including release/releasetest as test support, never all internal/** as an escape hatch.
+    Refuse unclassified packages, even those with no imports, including internal/flat,
+    internal/engine/<name> itself, misplaced engine children and any pkg/ package. A default
+    rule refusing imports is not enough to catch an import-free package in the wrong place.
+
+    Use strict, exact-package standard-library allowlists for production domains and ports,
+    initially bytes, errors and strings, which suffice for count. No $std wildcard or broad
+    encoding, net or module-prefix allowance may bypass that policy. Future additions require
+    a reviewed rule and fixture. A domain may use its own domain subpackages and port, plus
+    engine domains and ports; an engine domain never imports a slice. Among project packages,
+    a port imports only its own port subpackages and engine ports, never a domain, command,
+    UI, adapter or fake. Ports keep their own contract values to avoid a domain/port cycle;
+    upstream ADR-0047's permission for ports to import domains is not adopted by this item.
+    Test files may use standard-library test/fixture helpers and eligible porttest packages;
+    rapid remains confined to domain *_test.go files, including nested domain tests.
+
+    A command imports its own domain and ports, engine domains and ports, and internal/cli;
+    it imports no adapter, including its own disk/input adapters. An adapter imports its own
+    domain and port, its own helper subpackages, and engine domains/ports, but no command, UI,
+    foreign slice, or other adapter. Only cmd binds concrete adapters, including input.Files
+    with disk.Files. Apply project dependency arrows to Imports, TestImports and XTestImports;
+    external tests may import their package under test. Move command tests that assemble input
+    and disk into cmd's assembly tests or exercise command through porttest; do not exempt all
+    tests from the arrows. Keep adapter-specific I/O tests with their adapter. No engine reaches
+    a slice, even from tests. Use path-segment boundaries so countother is not count, and
+    portother is not port. Static depguard rules hold import categories; the graph checker
+    supplements them where depguard cannot express an importer's own owner or role.
+
+    internal/cli and its tests import no other project package. Put count's typed failure
+    classifier in internal/slices/count/command and have cmd supply it to the generic UI.
+    The UI owns rendering, joined-error traversal and the unclassified-error fallback;
+    classification of Missing and Unreadable belongs to the slice. Preserve existing count
+    text, JSON schema/fields/rule IDs, fix text, wrapping/joining semantics and exit codes,
+    including usage 2, environment 3 and unknown/internal 70. Move the relevant tests with
+    the classifier, and test the generic UI with synthetic errors/classifiers, not count's
+    port. Domains and ports acquire no JSON, exit codes or UI types. internal/version stays
+    a leaf; release production code imports no slice, engine, CLI or test helper. Its tests
+    retain releasetest. Existing release scripts and behaviour remain intact.
+
+    Adapt tools/bin/architecture-check to accept the exact combined invocation in done_when.
+    Unlike the reference script's one-flag-with-package interface, these four flags are
+    composable selectors over the current module, require no package operands, and together
+    run every structural check without fixtures. With no flags run the same four checks.
+    --siblings checks cross-slice and within-owner layer arrows, including engine layers;
+    --outside refuses any non-slice importer of a slice except cmd; --linked uses go list
+    -deps for each production main under cmd, excluding test imports, and refuses linked
+    porttest, fakes and release/releasetest; --toplevel checks package-role coverage and
+    outside imports of internal. Use go list's module identity and package/import fields,
+    not source-text import guesses, and propagate load errors. Exit 1 for a named violation,
+    2 for usage or inspection failure, 0 only after successful inspection. An empty target
+    list, malformed config or failed go list must not become a successful check.
+
+    Under --toplevel also reject production imports of test support even from a currently
+    unlinked package, and lint suppressions that disable depguard. Check Go comments, not
+    matching text inside string literals: reject nolint:depguard, lists including depguard,
+    bare nolint and nolint:all, while preserving the existing targeted nolint:gosec. Fake
+    implementations and shared contract helpers live in port/porttest (or explicitly named
+    test-support roles); only test files and test-support code may import them. Tests using
+    their own fake pass, production reaching it directly or transitively fails. Do not copy
+    upstream outside-import exception rows: there is no needed exception in today's module.
+    If a required existing arrow contradicts these rules, report it rather than broadening
+    allowances. Generated files obey the same rules as handwritten files.
+
+    Add the reusable FilesContract suite under internal/slices/count/port/porttest. A factory
+    supplies port.Files and logical fixture paths; the same assertions run as TestFilesContract
+    in porttest against Files, in disk against disk.Files using t.TempDir, and in input against
+    its named-file route with an injected Files port. Cover exact empty/nonempty bytes and nil
+    failure on success, missing/unreadable typed failures carrying the requested path and no
+    data, repeat reads, and independent returned byte storage. Use a directory for disk's
+    unreadable input so the test is deterministic even for privileged runners; configure the
+    fake to return the same contract failure. No chmod-only assumption, mocks, engine or
+    external service. Keep stdin and disk-specific OS/error mapping tests separately. Contract
+    suites assert the port's existing promise, not fake internals or new counting semantics.
+
+    Preserve tools/bin/domain-coverage's per-package 80% statement floor, including refusal
+    of empty discovery or a domain without measurable statements. Its present literal-glob
+    reader cannot discover the new wildcard layout: enumerate actual Go packages in slice
+    and engine domain roles, including nested domains, without tools/slice-layout. Exclude
+    ports, adapters, commands, test support and testdata from the denominator. Print a separate
+    figure for each domain; a fully covered count must not hide an under-covered new domain.
+    Adapt T-10's coverage fixtures to prove both owner roots, nested domains, a 66.6% failure,
+    empty discovery and zero statements. Keep the existing coverage gate and counting property.
+
+    Put negative fixtures and their tests under tools/testdata/architecture so go test ./...
+    does not run the expensive linter matrix. --fixtures explicitly runs that matrix, including
+    TestNoDenyEntryPrefixesAnother, against the actual pinned golangci-lint and committed
+    .golangci.yml, with no generated replacement policy. Compile each disposable module first,
+    including test imports. Import negatives require the precise importer, denied import and
+    rule diagnostic; layout and suppression negatives require their specific path and reason.
+    Compilation/configuration errors, timeouts, missing tools and unrelated linter findings
+    are infrastructure failures, never successful negative proofs. Supply a clean control for
+    every allowed arrow, especially adapter-to-own-domain and two slices sharing an engine.
+    Carry over the deny-prefix test's nested-prefix and exact-$ cases, refusing empty rules.
+
+    The matrix covers every settled rule: each forbidden domain package independently (os,
+    os/exec, net, net/http, syscall, golang.org/x/sys/unix, encoding/json, flag and kong); a
+    port doing I/O or importing a domain; own/foreign adapters reached from domain or command;
+    cross-slice imports from production, internal and external tests; engine-to-slice imports;
+    nested and unclassified packages and pkg/; UI-to-project imports; direct/unlinked and
+    transitive linked fakes; suppressions with each spelling above; allowed test-only fakes;
+    allowed pure/domain/port arrows and new owner names; and preservation of rapid's boundary.
+    Exercise --linked independently of the direct-import rule so a transitive leak cannot be
+    hidden by an earlier refusal. Test malformed package/config input as failures of inspection.
+
+    Run the cheap structural command in itos.yaml's static CI steps and the existing pre-commit
+    hook for non-prose changes. Run fixtures only when enforcement inputs change. Add
+    --fixtures-if-staged for the hook and --fixtures-if-changed <base> <head> for CI, using the
+    existing FROM/TO range and examining added, modified, deleted and both renamed paths.
+    Watch .golangci.yml, tools/bin/architecture-check, tools/architecture/**,
+    tools/testdata/architecture/**, tools/bin/domain-coverage, tools/hooks/pre-commit,
+    tools/bin/pinned, go.mod, go.sum and itos.yaml; these contain the rules, runners,
+    selection or pinned tools they depend on.
+    Missing/invalid range data is an inspection error, not an empty diff. Prove selection with
+    disposable git histories/indexes: an unrelated Go or prose edit does not launch fixtures;
+    each watched input, including deletion/rename, does; errors cannot skip the matrix. The
+    explicit --fixtures task check runs all fixtures regardless of selection. Do not make
+    every ordinary commit pay for them or add them to the platform go test invocation.
+
+    Reuse Go's standard library for package graph and fixture mechanics and the pinned linter
+    for import enforcement. For the copied deny-prefix test and tooling's YAML inspection,
+    use go.yaml.in/yaml/v3 v3.0.5, pinned in go.mod/go.sum, as the inspected itos-cc does, rather
+    than write a YAML parser. It is maintained by the YAML organization; the version's upstream
+    README and API are at https://pkg.go.dev/go.yaml.in/yaml/v3@v3.0.5 (checked 2026-11-04).
+    Keep reusable YAML/graph tooling under tools/architecture, imported by the checker/fixtures
+    without importing product internals. Its YAML import keeps the dependency visible to go mod
+    tidy; an import only under testdata would not. The full linter matrix stays under testdata.
+    This is a tooling dependency, not selection of the sandbox policy parser; it adds no network
+    service or runtime dependency to the product. Preserve its MIT/Apache notices. Do not add
+    a DI framework, generator, new linter or container library.
+
+    Implementation may change count's old/new paths, cmd assembly, generic UI and affected
+    tests, .golangci.yml, the named architecture/coverage tools and fixtures, hook/CI-plan
+    wiring, go.mod/go.sum, docs/architecture.md, AGENTS.md and a new docs/decisions record.
+    Record why this supersedes docs/architecture.md's Slices layout and adapter-only-port
+    sentence; keep the generated AGENTS block unchanged and within its cap. Update active
+    references to the moved package, not historical ledger entries or decision evidence.
+    Preserve hooks, unrelated linters, scenarios, licenses and runtime behaviour. T-13 owns
+    mutation-proof and workflow coverage plumbing; do not change those policies in this item.
+    Apply whichever proof policy is actually merged when implementing and report its evidence.
+
+    Before implementation the retained layout check fails because internal/slices/count does
+    not exist, and the combined checker and contract suites do not exist. Those missing tools
+    are incomplete work, not evidence of a rule refusing a compilable violation. The fixture
+    test commit must report expected-refusal assertions that fail against the current linter,
+    including new-slice domain I/O, port I/O, sibling imports, UI imports and unclassified
+    packages. Adapter-to-own-domain is a new positive control: today's count disk rule rejects
+    it. The current coverage check and full product suite are preservation checks; the new
+    discovery/negative fixtures expose the coverage gap. No scenario IDs or step definitions
+    are needed. The checks below belong to the configured task/hooks/CI, not manual pre-commit
+    gate runs. Agents commit and stop; the loop pushes and verifies the actual head before
+    closing T-14. This spec intentionally leaves implementation acceptance checks incomplete.
   done_when:
     - run: test -d internal/slices/count && ! test -e internal/count && ! test -e tools/slice-layout && tools/bin/architecture-check --siblings --outside --linked --toplevel
+    - run: tools/bin/architecture-check --fixtures
+    - run: >-
+        set -eu;
+        for package in ./internal/slices/count/port/porttest ./internal/slices/count/disk ./internal/slices/count/input;
+        do names=$(go test "$package" -list '^TestFilesContract$');
+        printf '%s\n' "$names" | grep -qx TestFilesContract;
+        go test "$package" -run '^TestFilesContract$' -count=1; done
+    - run: tools/bin/domain-coverage
+    - run: RAPID_CHECKS=1 go test ./... -count=1
 - id: T-15
   type: docs
   title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
