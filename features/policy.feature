@@ -808,7 +808,6 @@ Feature: Strict offline sandbox policy
 
     Examples:
       | mode          |
-      |               |
       | --policy-only |
 
   # Keep the review's hostile inputs, but observe only their bounded refusal.

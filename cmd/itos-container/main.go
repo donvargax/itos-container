@@ -25,6 +25,9 @@ import (
 	"golang.org/x/term"
 
 	"github.com/donvargax/itos-container/internal/cli"
+	manifestdisk "github.com/donvargax/itos-container/internal/engine/manifest/disk"
+	"github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
+	"github.com/donvargax/itos-container/internal/engine/manifest/reference"
 	"github.com/donvargax/itos-container/internal/engine/policy/disk"
 	policyyaml "github.com/donvargax/itos-container/internal/engine/policy/yaml"
 	"github.com/donvargax/itos-container/internal/slices/count/command"
@@ -42,7 +45,7 @@ type commandLine struct {
 	ShowVersion kong.VersionFlag `name:"version" help:"Print the version and the commit it was built from, and exit."`
 
 	Count      command.CLI    `cmd:"" help:"Count the lines and words of a file, or of standard input."`
-	Doctor     doctor.CLI     `cmd:"" help:"Inspect the strict offline sandbox policy."`
+	Doctor     doctor.CLI     `cmd:"" help:"Inspect the strict offline policy and restricted worker manifest."`
 	Version    struct{}       `cmd:"" help:"Print the version and the commit it was built from."`
 	Completion cli.Completion `cmd:"" help:"Print a shell completion script."`
 	Complete   struct{}       `cmd:"" name:"__complete" hidden:""`
@@ -99,6 +102,7 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		return c.Count.Run(ui)
 	case "doctor":
 		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}}
+		c.Doctor.Manifests = inspection.Manifests{Files: manifestdisk.Files{}, Parser: jsonc.Parser{}, References: reference.References{}}
 		return c.Doctor.Run(ui)
 	case "version":
 		// What --version prints, as kong prints it.
