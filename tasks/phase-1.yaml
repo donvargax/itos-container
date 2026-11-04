@@ -478,9 +478,135 @@
   why: >
     docs/architecture.md ("Slices") makes every command a vertical slice before the first container
     command is written; .golangci.yml's depguard rules name only internal/count's domain and disk
-    packages, so a new slice could import os from its domain or an adapter could import the domain
-    and only a review would notice. Generalise them: a domain package of any slice denies os,
-    os/exec, net, net/http and every adapter, and an adapter imports only its slice's port. Prove
-    each rule with a fixture that breaks it.
+    packages. A new domain can import os, and even count's input adapter can import its domain,
+    without a depguard refusal. This blocks the next milestone step's required slice boundaries.
+    This is a foundation CI task under docs/charter.md, not container behaviour: no Gherkin
+    scenarios, scenario IDs or step definitions are needed. The drafter changes only this ledger
+    entry; the implementer supplies the rules, checker and fixtures described below.
+
+    Discover slices from internal/<slice>/ directories containing a domain or port directory,
+    including a shared engine laid out the same way. Do not require command or an adapter to
+    exist before protecting a domain. Classify domain and its descendants as domain code, port
+    and its descendants as ports/fakes, command and its descendants as handlers, and every other
+    direct child package and its descendants as an adapter. This includes count/disk and
+    count/input, not just an adapter named disk or engine. internal/cli and internal/release
+    are not slices and must not be misclassified. Derive the module import prefix from go.mod.
+    Adding a slice or adapter must require no new handwritten rule or name list. Ignore fixture
+    testdata and tool caches when discovering the real tree; fixtures are checked explicitly.
+
+    Every domain package, including nested packages and its tests, must reject imports of os,
+    os/exec, net, net/http and their subpackages, and every adapter in its own or another slice.
+    Preserve the current os/net family bans, not merely those four exact packages. No code in
+    one slice may import another slice's domain or its descendants. A domain must not import
+    its command layer or internal/cli. Keep normal pure standard-library imports, the domain's
+    own package for external tests, its own port and port/porttest fake usable. These are import
+    boundaries, not a transitive I/O detector or evidence of container isolation.
+
+    An adapter's imports within this module may reach only its own slice's port subtree;
+    reject its domain, command, another adapter, another slice's port and unrelated internal
+    helpers. OS and third-party implementation libraries remain usable subject to the existing
+    other lint rules. Apply this to test files too, with the narrow additional permission for
+    an external test to import the adapter package it tests. Do not exempt all *_test.go files
+    or allow another adapter through that exception. Fakes under port/porttest remain available
+    to tests. Preserve rapid's restriction to domain property tests, generalising its allowed
+    file locations to every discovered domain's *_test.go files, including nested packages;
+    production domain code, adapters and handlers must still reject rapid.
+
+    Reuse tools/bin/pinned golangci-lint at its existing 2.14.0 pin, which includes depguard
+    2.2.1; no new dependency, parser library, service or pin change is needed. The inspected
+    sources are https://github.com/golangci/golangci-lint/blob/v2.14.0/go.mod and
+    https://github.com/OpenPeeDeeP/depguard/blob/v2.2.1/README.md. Depguard globs select files;
+    package allow/deny entries match import prefixes or an exact package with a trailing $.
+    A wildcard import such as internal/*/port does not mean each adapter's own port. Generate
+    concrete per-slice depguard rules deterministically from the discovered layout into a
+    temporary effective golangci configuration, retaining .golangci.yml as the base for all
+    existing lint settings. Use segment boundaries so count never grants access to countother
+    or portother. Run the pinned linter with that effective configuration; do not substitute a
+    custom Go-import scanner, fixture-only rules or a second manually maintained slice list.
+    Keep generated configuration out of the checkout and clean temporary files on exit.
+    Resolve configuration-relative paths against the source tree, not the temporary config's
+    directory, so moving the effective file cannot change which source files or exclusions apply.
+
+    Implement tools/bin/check-slice-layout as the executable task check and recurring lint
+    entry point. It must run the full existing lint suite on the actual checkout with the
+    effective rules, then verify the fixtures with the same rule-generation path and pinned
+    depguard. Replace only the current tools/bin/pinned golangci-lint run ./... CI step in
+    itos.yaml with tools/bin/check-slice-layout, retaining cost static and all other steps,
+    prose selection, hooks and proof settings. Keep all other enabled linters, formatters,
+    exclusions and thresholds; do not reduce the actual-tree run to depguard alone. Fixture
+    probes may select depguard alone so unrelated style diagnostics cannot satisfy a refusal.
+    Use existing shell/Go tooling without RTK in stored commands. Update only the lint/coverage
+    explanation in docs/architecture.md to describe the effective configuration and checker.
+
+    The existing tools/bin/domain-coverage reads literal directories from the depguard domain
+    files list. Generalising that glob alone would break its per-package accounting. Adapt it
+    to use the same discovered concrete domain package list, including nested domain packages,
+    with stable order and no duplicates. Keep its 80% floor for each package separately, its
+    statement accounting, test invocation and failure on missing measurable statements. Never
+    average domains together or silently skip a newly discovered domain or an empty selection.
+    Do not include ports, fakes, adapters, command, cli, release or checker fixtures in real-tree
+    domain coverage. This compatibility change belongs here because the lint change reaches it.
+
+    Commit deterministic, self-contained fixtures under tools/testdata/slice-layout/ and keep
+    deliberately invalid Go imports out of the product's ./... builds. Materialise fixtures in
+    disposable module trees with valid compilable imports, not in internal/. Include count and
+    at least two other slice names, a shared engine-shaped slice, a nested domain and an adapter
+    whose name is neither disk nor engine. The checker must prove automatic discovery by adding
+    a further slice/adapter in its temporary tree without editing configuration or name lists.
+    Exercise both production and test files. Every negative case must identify its intended
+    importer, denied import and depguard diagnostic; a missing executable, invalid config,
+    import cycle, type error, unrelated lint failure or timeout is a checker failure, never
+    evidence that the boundary works. Include clean controls so rejecting everything cannot pass.
+
+    The negative matrix must independently cover each of os, os/exec, net and net/http from
+    a non-count domain; a domain importing its own adapter, another slice's adapter, its command
+    or internal/cli; an adapter importing its own domain, command, sibling adapter, foreign port
+    and internal/cli;
+    and a handler importing another slice's domain. Include descendant-package imports and
+    lookalike slice/port names to catch prefix mistakes. Check rapid in a domain production
+    file and an adapter test. Positive cases must cover pure domain imports, its port and fake,
+    an adapter using OS I/O plus its own port, an external adapter test importing its subject,
+    a handler importing its own domain and a new domain property test using the existing rapid
+    dependency. Do not add fixture dependencies or run real engine/network workloads.
+
+    Prove coverage discovery with temporary, deterministic domains: one fully covered domain
+    alongside a second below 80% must fail naming the second; giving both adequate tests must
+    pass with each package named separately. Include a nested domain package, ensure adapter
+    statements cannot change a domain's denominator, and require an empty discovery to fail
+    explicitly. Exercise the actual coverage script through these fixtures, not a reimplementation
+    of its arithmetic. Keep the fixture checks at the existing static CI tier; do not add a
+    nightly, benchmark, broad mutation run or new host prerequisite for this lint task.
+
+    internal/count/input/input_test.go currently imports domain to check adapter-plus-counting
+    behaviour. Preserve those assertions as integration tests in the command test package,
+    where importing the slice's domain and adapter is appropriate, and keep focused adapter
+    tests against Files.Read and the port's bytes/typed failures. Do not grandfather the domain
+    import, delete the integration assertions or change counting behaviour to satisfy the rule.
+    Leave production count code, features and their steps unchanged. Separate test relocation
+    and fixture tests into test commits with Task T-10, and the checker/configuration/coverage
+    wiring into ci commits with Task T-10. Limit implementation paths to .golangci.yml,
+    itos.yaml, tools/bin/check-slice-layout, its helpers under tools/, tools/bin/domain-coverage,
+    tools/testdata/slice-layout/, the affected input/command test files, docs/architecture.md
+    and required project-local mutation evidence. Stage each actual file explicitly.
+
+    Before implementation tools/bin/check-slice-layout is absent. Its missing-command failure
+    is not a red boundary assertion. Build the fixture harness first and record actual red
+    assertions with the original rules: the non-count I/O and domain-to-adapter cases and the
+    unguarded input/foreign-domain cases must fail because the expected depguard refusal is
+    missing. The existing count-domain os/net bans and disk-to-count-domain ban are preservation
+    controls, not newly failing checks. Record the initially missing coverage discovery and new
+    domain rapid allowance too, then require the same fixtures to pass after enforcement. No
+    scenario has a failing step to report. Report fixture names, expected imports and actual
+    diagnostics rather than claiming this draft executed a checker that does not exist yet.
+
+    Test changes under internal are proof.code changes. Before implementation handoff, refresh
+    affected evidence with the pinned itos-cc, all-tests, fail-uncovered and no-annotate, and
+    commit the resulting .metrics/mutate/ files by explicit path. Kill survivors with tests;
+    never excuse uncovered code, hand-edit evidence or reshape production code to remove sites.
+    T-10's actual first commit is 8020a91f7c647b4fe739676b2b16b8e6265cc647; its parent and proof
+    base is 2f0536fe074e6cdb2a40beba9ea32b98927ad4e4. Reconfirm with itos work show T-10 if
+    history changes. This ledger-only draft changes no proof.code path and must not fabricate
+    mutation records. Let configured hooks and CI run their gates. Agents commit and stop;
+    the loop owns push, CI watching and closure after the actual pushed head is green.
   done_when:
     - run: tools/bin/check-slice-layout
