@@ -2,11 +2,7 @@
 phases:
   1: null
 queue:
-  - T-12
-  - T-14
-  - T-13
-  - p1-arc42-draft
-  - T-10
+  - T-15
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -124,28 +120,16 @@ items:
     title: Review Gherkin inputs in mutation freshness tracking
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The offline owned-run milestone depends on trustworthy scenario-backed proof. Verify and
-      configure support-file tracking so Gherkin-only changes invalidate affected cached mutation
-      evidence.
   - id: p1-check-proof-toolchain-alignment
     title: Check proof-toolchain alignment before measurement
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The offline owned-run milestone needs trustworthy foundation proof. Compare local compiler and
-      experiment settings with CI before expensive measurement to prevent unusable evidence and
-      repeated landing attempts, preserving all proof gates.
-
-      Include test-only ranges in the existing proof-toolchain alignment review. Clearly distinguish
-      empty source-function selection and an absent proof summary from fresh evidence for affected
-      code, preserving all proof gates.
   - id: p1-reconcile-foundation-status
     title: Reconcile foundation guidance after T-8
     phase: 1
@@ -178,19 +162,24 @@ items:
       Include README hook registration and verification instructions in the existing guidance
       refresh so contributors enable local lint and vulnerability checks. This foundation follow-up
       can wait unless it blocks the charter’s configuration, doctor and approval step.
+
+      Include docs/ORCHESTRATING.md in the existing guidance cleanup after T-12 lands: replace
+      unrestricted-push and automatic three-platform claims with the implemented CI policy. T-9's
+      completed refresh predates this change. Defer unless it blocks the charter's configuration,
+      doctor and approval step.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
     owner: donvargax
-    status: doing
+    status: dropped
     depends_on: []
     kind: task
   - id: slice-1
     title: Validate the strict offline sandbox policy
     phase: 1
     owner: donvargax
-    status: doing
-    depends_on: []
+    status: todo
+    depends_on: [T-14]
     kind: slice
     why: >
       Was p2-strict-offline-policy.
@@ -243,8 +232,8 @@ items:
   - id: T-11
     title: Specify the offline owned-run lifecycle contract
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: p1-allow-gherkin-specification-commits
@@ -254,47 +243,32 @@ items:
     status: dropped
     depends_on: []
     kind: idea
-  - id: p1-arc42-draft
+  - id: T-15
     title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
     phase: 1
     owner: null
     status: todo
     depends_on: [T-14]
-    kind: idea
-    why: >
-      The loop builds better from a detailed plan: steering overnight mostly supplied what the
-      documents left unsaid (what blocks what, the slice layout, how specs commit). An arc42
-      document gives every step a shared reference: goals and quality goals (charter), context and
-      scope, solution strategy, a building-block view that names each slice and engine and their
-      dependencies (the breakdown step's input), runtime views for the main commands, cross-cutting
-      concepts (ports, fakes, strict config reading), decisions (docs/decisions/), quality
-      requirements mapped to gates, and risks. Source it from docs/plans/container-pilot.md,
-      docs/charter.md, PLAN.md and docs/architecture.md; mark every open choice the contract leaves
-      to the person as open, never decided. A docs task; the person reviews it.
-
-      The queued architecture draft already covers slice dependencies, command composition and
-      shared contracts. Include doctor’s shared schemas, diagnostics and fixtures across slices 1–4,
-      slice-3’s prerequisites from slices 1–2, and slice-4’s approval integration and implementation
-      order.
+    kind: task
   - id: T-12
     title: CI runs on Linux, each pull request once; other platforms by hand
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: T-13
     title: The code proof is a fresh seeded mutation run in CI, with no committed evidence
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: [T-12]
     kind: task
   - id: T-14
     title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: [T-12]
     kind: task
   - id: p1-engine-scenario-tier
@@ -321,3 +295,19 @@ items:
       assumes a public repository, so attestation would fail here. internal/release has no importers
       and accounted for 71 of T-8's 225 mutants and T-8's Windows failure. Delete both until a
       release is wanted, amending AGENTS.md's preserve clause. Waits: nothing is blocked by it.
+  - id: p2-architecture-stdlib-on-go-list
+    title: The architecture check holds stdlib allowlists on go list arrows, which no comment can evade
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Probes of T-14's gate, 2026-11-04: a domain or handler with os/exec passes under a '// Code
+      generated … DO NOT EDIT.' header, as golangci-lint skips generated files; five more nolint
+      spellings pass (///nolint:depguard, // //nolint:depguard, a trailing comma, nolint:allx,
+      gosec,,depguard); a handler or porttest can import crypto/tls, log/syslog or database/sql; a
+      build-tagged handler file with os/exec passes. No agent has been seen doing these, so nothing
+      blocks. One check closes most: tools/bin/architecture-check reads each role's stdlib imports
+      from go list, with an allowlist per role, including IgnoredGoFiles. Details at the
+      coordinator.

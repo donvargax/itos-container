@@ -33,10 +33,20 @@ does not take an item. Report gaps and follow-up ideas with why they matter to t
 
 ## Code and isolation boundaries
 
-- Each command is a vertical slice laid out as `internal/count` is (`docs/architecture.md`,
-  "Slices"); a new command starts by creating its slice, never by growing another one.
-- Keep thin entry points over domain-owned behavior through ports. The domain knows no UI,
-  filesystem implementation, JSON or exit codes. Use our fakes in its tests, never mocks.
+- Each command is a vertical slice under `internal/slices/<command>/`, laid out as
+  `internal/slices/count`: command, domain, port and named adapter siblings. Shared behaviour
+  lives under `internal/engine/<name>/` with domain, port and adapter siblings, never a slice
+  importing another. Read `docs/architecture.md`, "Slices", before adding a package.
+- Keep handlers thin and I/O behind ports, including process/network/filesystem access. Domains
+  and ports use the reviewed exact-package allowlist in `.golangci.yml` (time for contract types);
+  additions need a reviewed rule and fixture. Porttest fakes do no I/O. Adapters may
+  import their own domain and port. Only cmd assembles adapters. The generic UI imports no
+  project package; cmd supplies each slice's classifier. Import arrows apply to tests too.
+- Use port/porttest fakes, never mocks; run the shared contract against each fake and adapter.
+  Test support never enters production. Static depguard and the go-list architecture checker
+  hold new names by default deny. Never suppress depguard. Enforcement-input changes run the
+  compile-first fixtures; ordinary code changes run only the cheap structural check.
+  Import no testdata, underscore- or dot-prefixed package; domains/ports have no ignored Go files.
 - Look for a maintained library before building what one likely solves; settle the choice and
   reason in the spec and pin its version. The count example uses Go's standard-library
   whitespace tokenization, not a custom word parser; preserve its Files port and in-memory fake.
@@ -60,14 +70,18 @@ does not take an item. Report gaps and follow-up ideas with why they matter to t
 
 ## Finishing
 
-Before handing code changes to the loop for its final push, record changed-code proof with the
-pinned itos-cc, all-tests, fail-uncovered and no-annotate; commit project-local `.metrics/mutate/`
-evidence by explicit path. Use the parent of the item's actual first commit, specs included,
-not an assumed take commit. Kill survivors with tests; only truly equivalent mutants may be
-excepted with a reason for the person to review. Uncovered mutants and executable code need
-tests, never exceptions. Never reshape code merely to remove mutation sites, hand-edit evidence
-or copy another project's cache. Documentation-only work touches no `proof.code` path and must
-not fabricate mutation results; a passing cached sample is not a fresh foundation baseline.
+CI alone judges fresh changed-code proof with the pinned itos-cc: up to ten mutation sites
+across changed functions, plus measured coverage of added or changed lines, including functions
+without mutation sites. `proof.code` supplies the command; core itos supplies the judged range's
+`{base}` for both `--since` and `--seed`. The same base and eligible sites give the same draw;
+changing the candidate set can change it. This sampled proof is not a full foundation baseline.
+Agents make no local mutation run and commit no generated mutation or coverage evidence;
+`.metrics/mutate/` and `.metrics/coverage/` are ignored and must not be restored into CI.
+Kill survivors with tests and cover uncovered changed lines; never redraw to escape failure.
+Only truly equivalent mutants may be excepted with a reason for the person to review. Uncovered
+code needs tests, never exceptions. Never reshape code merely to remove mutation sites or
+hand-edit evidence. Documentation-only work touches no `proof.code` path and fabricates no
+mutation results. Scenario red-first runs remain required as described above.
 
 Report commits, checks, behavior scenarios' failing-then-passing evidence when applicable, and
 remaining gaps. Stop after committing: the loop owns push, CI watching and closure. It closes

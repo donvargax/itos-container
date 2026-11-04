@@ -38,8 +38,8 @@ Feature: Strict offline sandbox policy
   # yes or on is a string. Structural checks visit every mapping/list, even below
   # an unknown field, without resolving aliases or merging mappings.
   #
-  # Select go.yaml.in/yaml/v3 v3.0.6, checked on 2026-11-04 with the module proxy
-  # and https://pkg.go.dev/go.yaml.in/yaml/v3@v3.0.6. The YAML organization maintains
+  # Use main's T-14 pin, go.yaml.in/yaml/v3 v3.0.5, reviewed on 2026-11-04 at
+  # https://pkg.go.dev/go.yaml.in/yaml/v3@v3.0.5. The YAML organization maintains
   # the stable v3 branch for security fixes; its node API retains keys, tags,
   # anchors and locations for strict validation before typed decoding.
   # https://github.com/yaml/go-yaml/blob/main/README.md documents that maintenance

@@ -1,6 +1,6 @@
 # Third-party notices
 
-## go.yaml.in/yaml/v3 v3.0.6
+## go.yaml.in/yaml/v3 v3.0.5
 
 The YAML parser retains its upstream license and copyright notice below.
 The application license does not relicense this dependency.

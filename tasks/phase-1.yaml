@@ -575,14 +575,197 @@
   type: docs
   title: Specify the offline owned-run lifecycle contract
   why: >
-    Record the later run slice's contract in docs/plans/offline-run-lifecycle.md: literal argv,
-    interactive JSON refusal, ownership before execution, hardened offline startup, bounded waits,
-    signals, cancellation, workload exits and safe cleanup with recovery. Include black-box
-    acceptance cases and identify security choices requiring the person's decision. This PR
-    specifies behavior without implementing runtime commands. Broken down from
-    p2-specify-policy-manifest-approval.
-  done_when:
-    - run: sh -eu -c 'f=docs/plans/offline-run-lifecycle.md; test -s "$f"; for section in "## Arguments and JSON" "## Ownership and startup" "## Timeouts and cancellation" "## Workload exits" "## Cleanup and recovery" "## Acceptance scenarios" "## Security decisions"; do grep -Fqx "$section" "$f"; done'
+    The pilot names an offline owned run but leaves lifecycle details scattered among its command,
+    approval, runtime and acceptance sections. Record the later run slice's contract in
+    docs/plans/offline-run-lifecycle.md so implementation cannot mistake a planning gap for permission.
+    This is a documentation task broken down from p2-specify-policy-manifest-approval. The drafter
+    changes only this ledger entry and its checks; the implementer creates only that document in a
+    docs commit tied to Item T-11. Neither role implements runtime commands or step definitions.
+    Black-box acceptance cases belong in the document as planning cases, not new features/ scenarios
+    for this docs task. No scenario IDs are minted here. Leave registry ownership and status alone.
+
+    Read docs/charter.md first, then PLAN.md, docs/plans/container-pilot.md, docs/architecture.md,
+    docs/CLI.md and docs/CONFIG.md. Link those authorities from the new document using relative paths.
+    State that container commands and isolation are not implemented; the existing count, version and
+    completion entry point supplies no runtime proof. The charter selects Linux amd64 with native
+    Docker as the first target, contingent on passing runtime evidence. The contract covers one
+    approved foreground worker, with no network, credentials or ingress, and the checkout as its
+    only host mount. Egress/proxy work, accounts, network Git, LAN publishing, Compose, other hosts,
+    remote engines and linked worktrees are outside this milestone. Do not change the charter or
+    pilot, add runnable configuration, or claim those deferred features through recovery examples.
+
+    Keep the seven level-two headings checked below. Distinguish binding pilot requirements,
+    ordinary interface choices recorded by this spec, and open security decisions reserved for the
+    person. A blocked detail must be identified where it affects a section as well as in Security
+    decisions; do not bury it in a concluding disclaimer. Completing this document is not approval
+    of its open questions and does not make a runtime implementation ready to start.
+
+    Arguments and JSON must describe itos container run -- <argv...> through the extension seam.
+    Require a nonempty executable argument after the separator; preserve every subsequent argument,
+    including empty strings, whitespace, Unicode, quotes, glob characters, dollar signs, semicolons,
+    redirection-looking text, --help, --json and another --. Never join argv into a shell string,
+    evaluate it on the host, infer a shell or add agent permission-skipping flags. A shell explicitly
+    named by the user is itself a worker command under the same boundary. Wrapper options stop at
+    the separator. Missing argv is usage failure 2 before resource creation; require a diagnostic
+    about the required command, so today's unknown-command failure cannot satisfy its future test.
+
+    Record the ordinary interface choice that run remains a streaming foreground interface even
+    when redirected. Refuse a wrapper --json or inherited ITOS_JSON=1 before resources or workload
+    output, without a redirected-output exception that silently enables batch JSON execution.
+    For this refusal choose one schema: 1, ok: false object on stdout with the typed problem
+    run.json-unsupported, exit 2, a message and a fix to remove the wrapper JSON request; diagnostic
+    prose belongs on stderr. This refusal object is not a JSON-wrapped workload stream. A --json
+    argument after -- belongs to the workload and does not request this refusal. Explain host
+    dispatch variables as controller inputs, never permission to inherit host environment in the
+    worker. No new flags, product environment variables or TTY modes are introduced by this task.
+
+    Ownership and startup must describe the ordering and failure transitions, not just a list of
+    engine options. Validate the strict policy, restricted manifest, selected local engine, cached
+    digest-pinned compatible image and current host-owned approval before creating resources.
+    Missing, mismatched or superseded approval refuses startup. Freeze the effective configuration;
+    edits to policy/manifest or a later approval cannot widen an existing session. Images must be
+    prepared by the person through the separately specified acquisition process; no automatic pull,
+    build, host hook, checkout helper or fallback session is permitted. Policy/manifest validation,
+    identity and approval formats are dependencies on slice-1 through slice-4, not duplicated loaders
+    or new schemas to invent here.
+
+    Describe preparing, ready, running, stopping, stopped and failed, including partial startup.
+    Concrete engine resource IDs and ownership must be durably recorded in host-owned state outside
+    the writable checkout before any worker process, including an image entrypoint or setup hook,
+    can execute. Record the create-response-loss/crash window as requiring reconciliation design;
+    a resource name or matching label alone cannot authorize deletion. State must not claim ready
+    until every required boundary is verified. A failed ownership write or unverifiable boundary
+    blocks execution and enters bounded cleanup or explicit recovery, never an unrecorded run.
+
+    Require the offline boundary from the first worker instruction: no external network path or
+    published port, no host namespaces, administrative capabilities, sudo, engine/SSH-agent sockets
+    or host environment/credential forwarding. Require no-new-privileges, a read-only image root,
+    the approved non-root UID/GID and explicit writable checkout, isolated project state and
+    container-owned temporary storage. The checkout is the only host filesystem mount. Do not use
+    a host temporary directory or host-wide chown as a shortcut. Supported setup hooks, if selected
+    by the manifest specification, execute only inside that boundary under frozen settings; their
+    failure prevents later setup and the foreground command. Hidden image metadata cannot widen
+    permissions. Keep the exact network mechanism, identity/storage mapping, image trust and hook
+    semantics in their security dependencies, not implicit choices made by this documentation task.
+
+    Timeouts and cancellation must inventory every controller wait: preflight/engine operations,
+    creation, startup/readiness, setup, attach, signal delivery, stop, removal and recovery. Require
+    finite startup and teardown budgets covering retries and individual calls, so retry loops or
+    a stalled engine cannot reset the total bound. Separate these from the intentional foreground
+    wait while a workload runs; do not invent a maximum workload duration. Describe cancellation
+    before creation, during partial startup, after launch and during cleanup. Once cancellation is
+    observed, do not start subsequent setup/workload phases; reconcile already in-flight operations.
+    Specify the required observations for SIGINT, SIGTERM, repeated cancellation, a workload that
+    handles or ignores a signal, and uncatchable controller loss. Normal cancellation must attempt
+    owned cleanup; interrupted/unavailable cleanup leaves recovery information. Signal targets,
+    forwarding/escalation policy, grace values, numeric budgets and platform cancellation outcomes
+    remain explicit person decisions under the pilot, not arbitrary constants or new exit codes.
+
+    Workload exits must separate wrapper refusal, observed workload termination and unknown outcome
+    after controller/engine loss. Preserve the workload's observed nonzero exit status even when
+    cleanup also fails; return zero only when the workload succeeds and required cleanup succeeds.
+    A successful workload followed by required-cleanup failure returns nonzero, with a separate
+    cleanup diagnostic and recovery reference. Show a result-precedence table covering those cases,
+    launch failure, timeout, cancellation and an unavailable workload result. Do not invent a child
+    status when none was observed or convert signal delivery alone into proof of termination. Keep
+    itos's wrapper meanings from docs/CLI.md (0, 1, 2, 3, 70 and 75); classify cleanup failures by
+    their cause within those meanings, rather than importing itos-cc's codes. Mark mappings that
+    depend on the person's signal/timeout decision as blocked. Codes, JSON and presentation stay
+    outside the domain. No signal number or timeout exit is implicitly approved by this document.
+
+    Cleanup and recovery must define completion as removal of the session's owned ephemeral
+    resources, including a partially created or already stopped worker and temporary storage,
+    while preserving checkout edits and persistent project state. Do not create proxy/guard or
+    session-network resources merely to match the later online pilot's cleanup list. Never prune
+    foreign resources, delete profiles, remove a shared image or discard evidence as a shortcut.
+    Labels alone are insufficient: an ambiguous, mismatched or foreign identity is refused, not
+    adopted. Repeated cleanup is safe when a recorded resource is already absent and preserves
+    another project's/session's resources. Keep a recovery record until required cleanup is
+    confirmed; report the session ID and the exact retry form itos container stop <session> with
+    that ID substituted. Preserve enough trusted ownership data to finish cleanup after controller
+    loss. Diagnostics and recovery metadata must not dump workload argv, inherited host environment,
+    workload output or synthetic secret markers. Distinguish that metadata from the approved frozen
+    configuration, whose storage is slice-4's contract; do not forbid storing the effective settings
+    the pilot requires. Deliberately streamed workload output is separate from controller logging
+    and is not a promise to redact arbitrary workload text.
+
+    Status/stop are recovery interfaces the later run implementation needs to have specified before
+    it can promise an actionable retry; this task adds neither command. Status inspects owned state;
+    stop cancels or completes only owned cleanup. Neither authorizes an unattended workload restart.
+    There is no detached/keep-alive mode. The foreground command's exit ends the session. Preserve
+    the pilot's future exec invariant (refuse new commands and terminate active ones at primary
+    exit), but do not pull an exec implementation into this milestone. Explain that forced
+    controller death cannot run its cleanup handler: retained isolation and eventual reconciliation
+    need CI evidence, not a promise of instantaneous cleanup. Whether and how the workload must
+    stop on controller loss is a blocking security decision, not an invented watchdog design.
+
+    Acceptance scenarios must contain a table headed Case, Setup, Action, Observable result,
+    Evidence tier and Expected failing assertion, using descriptive case names rather than minted
+    scenario IDs. Each row is a future black-box case with concrete synthetic fixtures, a public
+    action and observable output/status/files or independently observed engine resources. Given
+    setup prepares inputs only; it never invokes the subject behaviour and asserts it as setup.
+    Explain the future failing assertion and why a broken implementation would fail it. The
+    current binary has no run command, so an unknown-command refusal, undefined step or setup
+    failure is not red behaviour evidence. Refusal cases must check their specific diagnostic as
+    well as absence of side effects; absence alone would pass on the current binary.
+
+    Cover at least literal argv and explicit shell boundaries; missing argv; wrapper and inherited
+    JSON refusal versus a workload --json; invalid/missing/superseded approval and frozen policy;
+    missing or incompatible cached images without acquisition; failed ownership persistence and
+    interrupted creation before execution; non-root/read-only/mount/temp restrictions for UID 1000
+    and a different approved UID/GID; direct IPv4/IPv6, host-gateway and DNS denial from the first
+    worker instruction; setup failure preventing workload launch; stalled startup/engine calls and
+    bounded retries; cancellation at each phase, repeated signals and an ignoring workload; zero
+    and nonzero exits with both successful and failed cleanup; controller loss, unavailable engine
+    and interrupted cleanup recovery; repeated stop, absent resources and foreign/ambiguous labels;
+    two independent projects' resources and edits/state surviving another session's cleanup; and
+    synthetic sensitive markers excluded from controller diagnostics and recovery records. Distinguish
+    permission denial from a broken probe using positive controls; engine settings alone cannot
+    prove isolation. Mark cases needing open security decisions as blocked on the named question.
+
+    Trace those cases to the applicable pilot acceptance labels, including AC-01/AC-02/AC-03,
+    AC-05/AC-06/AC-07, AC-21/AC-22/AC-23/AC-25, AC-38/AC-40/AC-41 and the offline portions of
+    AC-10, AC-11, AC-28, AC-36, AC-37 and AC-42. Explicitly defer
+    AC-24 exec and AC-26/AC-27 ingress rather than claiming the offline contract covers them. Run
+    pure CLI refusals locally without engine access; domain sequencing/failure tests use the
+    engine and state-port fakes. Mark all actual isolation, engine resource, signal and interruption
+    probes CI-only on Linux amd64/native Docker. The pending p1-engine-scenario-tier work must
+    provide explicit selection before these become executable; an @wip tag alone is not an engine
+    access boundary. Later behaviour specs mint IDs through itos tests next-id and commit scenarios
+    as test with the implementing item; their implementer commits step definitions red first,
+    proves assertion failures with @wip removed only at the permitted tier, then implements.
+    T-11 creates no steps and claims neither red/green runtime evidence nor sandbox support.
+
+    Security decisions must contain a table headed Question, Required decision and Blocks. Name
+    at least approval canonicalization/storage and checkout/engine identity (slice-3/slice-4);
+    manifest hooks, image metadata and non-root/writable-state mapping (slice-2 and readiness);
+    image digests/provenance/acquisition (readiness); offline enforcement and verification before
+    the first process; crash-safe ownership/reconciliation of an uncertain create; resource and
+    timeout limits, signal forwarding/escalation and controller-loss policy; and recovery record
+    safety/concurrent cleanup. For each, state what the person must settle and which startup,
+    cleanup or acceptance case cannot proceed without it. Existing sibling items are dependencies,
+    not evidence that a decision is already settled. No dependency on a network service, security
+    exception or stronger support claim is authorized by finishing this task. Record no invented
+    decision number, default timeout, resource limit or selected library. Engine library selection
+    belongs to slice-3; this docs task needs no dependency and must not implement its own client.
+
+    Describe later code by the current docs/architecture.md Slices rules: each command owns its
+    vertical slice, shared behavior lives in an engine package, thin handlers delegate to domains,
+    domains use ports and fakes, and adapters do the I/O. T-14 owns the layout migration; do not
+    freeze conflicting paths here or edit its rules. Do not grow count into the run command or
+    import another slice's domain. Leave code, features, pins, CI, gates, other docs and mutation
+    evidence untouched. This spec and the document touch no proof.code path and need no mutation
+    results. The loop alone pushes, watches CI and closes the item after the actual head is green.
+
+    Preserve the original section check and add the link and acceptance/decision-table checks below
+    at the existing task/CI tier, using ordinary shell tools with no RTK or network requirement.
+    Before implementation the document does not exist: the section check fails at test -s, the
+    link check at its first grep, and the table check at its first header grep. These are static
+    documentation checks, not runtime proof; no behavioural failing step exists for this docs task.
+    Review the completed prose against this entry because keyword presence cannot establish safe
+    lifecycle semantics or distinguish a proposed choice from consent. Let configured hooks and CI
+    run their wider gates. The drafter commits this ledger specification with completion checks
+    still red; the implementer supplies the document and reports checks and unresolved decisions.
 - id: T-12
   type: ci
   title: CI runs on Linux, each pull request once; other platforms by hand
@@ -597,8 +780,70 @@
     nothing, cancel-in-progress on a pull request's own runs, never on main. Today every branch push
     runs twice (41863302515, 41863312223). Keep item branches' CI through the pull request, which is
     what T-7 wanted. Read itos's file; do not invent. Touch no other workflow.
-  done_when:
-    - run: "! grep -Eq 'os:.*(macos|windows)-latest' .github/workflows/ci.yml && grep -q ready_for_review .github/workflows/ci.yml && grep -q workflow_dispatch .github/workflows/ci.yml"
+
+    This is foundation CI configuration, not container behaviour. The drafter edits only this
+    ledger entry in a docs commit with Item T-12; no scenarios or step definitions are needed.
+    Implementation edits only .github/workflows/ci.yml in a ci commit with Task T-12. This entry
+    supersedes T-7's unfiltered push, default pull-request activities and automatic three-OS
+    matrix requirements, while retaining its coverage of arbitrary item branches via their PRs.
+
+    The referenced local itos workflow was read at f1d8d393d72244a15e64a2638c8e34abed11e46d,
+    with no working-tree changes to that file. Copy its event and concurrency rules, not its
+    unrelated planner, platform gates or release job. Set pull_request.types to exactly
+    [opened, synchronize, reopened, ready_for_review] and push.branches to exactly [main].
+    Add an empty workflow_dispatch entry, with no inputs. Keep these event entries in that
+    order and add no other trigger, branch, tag or path filter. A branch push alone does not
+    run CI; a non-draft PR from any branch does, including Renovate. A main push still runs
+    independently after merge. Once means one workflow per qualifying event, not deleting
+    either the existing ci plan or the separate full Linux test suite.
+
+    Keep concurrency.group exactly ci-${{ github.ref }} and set cancel-in-progress to
+    ${{ github.event_name == 'pull_request' }}. Only newer runs of the same PR cancel an
+    in-progress run; a main push or manual run never cancels a running job. Retain the ci and
+    platform job IDs. Both get the reference's job-level condition
+    ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }} so drafts
+    execute no jobs, and ready_for_review tests the same head without needing another push.
+    The ci runner stays ubuntu-latest and platform.matrix.os becomes [ubuntu-latest].
+
+    Keep manual portability coverage in two additional jobs, platform-macos and
+    platform-windows, with fixed runners macos-latest and windows-latest and names
+    Tests (macos-latest) and Tests (windows-latest). Each has only the job-level condition
+    ${{ github.event_name == 'workflow_dispatch' }}. A manual dispatch on its selected ref
+    runs ci, the Linux platform suite and both manual platform suites; there is no OS selector.
+    No needs relationship makes Linux wait for a manual platform. Keep platform's existing
+    Tests (${{ matrix.os }}) name, matrix runner expression and fail-fast false. These four
+    jobs are the entire jobs mapping. Use the existing two-space layout, inline lists and
+    one-line expressions, which the scoped static checks below read without a new parser.
+
+    Copy the existing platform steps, bash default, action pins and Go version/cache inputs
+    unchanged into each manual job. All three platform suites retain go test ./... -count=1,
+    RAPID_CHECKS=1, GOCOVERDIR and its mkdir step. Preserve ci's permissions, checkout depth,
+    checkout/setup-go/itos pins, TO, Range step with BASE/token handling and FROM export, and
+    the itos verify and itos ci run calls with their existing arguments and order. Adjust only
+    the scheduling comments to describe automatic Linux and manual portability coverage.
+    No step-level condition, continue-on-error or swallowed failure may replace these checks.
+    Leave itos.yaml, hooks, proof configuration, dependencies, other workflows and release
+    machinery unchanged. T-13 separately owns mutation proof and coverage plumbing. These
+    workflow edits touch no proof.code path and require no fabricated mutation evidence.
+    Manual Go portability tests neither expand the charter's host support nor prove isolation.
+
+    Retain the original check and add scoped event, concurrency and job-routing checks at the
+    existing task/CI tier, using the runner's shell tools without RTK, network access or a new
+    dependency. Before implementation, the original check fails on the three-OS matrix and
+    lacks ready_for_review and workflow_dispatch; the event check fails on unrestricted push
+    and absent activity/manual entries; the concurrency check fails on cancel-in-progress
+    false; the job check fails on missing draft guards, the three-OS matrix and absent manual
+    jobs. These are static assertions, not evidence of hosted runs. Review the unchanged test
+    steps and pins as well; let the configured hooks and CI execute their existing gates.
+
+    The coordinator verifies the pushed head with a draft PR, marks it ready without another
+    commit, then updates that PR: no draft job executes, readiness runs both Linux jobs, and
+    updates create only a PR run and can cancel only that PR's older run. It also verifies main
+    remains eligible without in-progress cancellation, and dispatches the workflow manually
+    to confirm all three test platforms remain runnable. Record run URLs, event/ref/head and
+    job conclusions; a queued or cancelled manual runner is not a passing portability test.
+    Agents commit and stop; the loop owns pushing, dispatching, CI observation and closure.
+    This spec intentionally leaves completion checks red until the implementation exists.
 - id: T-13
   type: ci
   title: The code proof is a fresh seeded mutation run in CI, with no committed evidence
@@ -617,8 +862,123 @@
     count, and make the coverage the proof reads real: ci.yml's GOCOVERDIR feeds a merge step that
     does not exist here, so finish it or remove it. itos-cc.yaml's exceptions stay. No nightly:
     nothing slow or random remains once this lands.
-  done_when:
-    - run: "! git ls-files .metrics/mutate | grep -q . && grep -q 'mutation run --count 10 --since {base} --seed {base}' itos.yaml && ! grep -q 'mutation sample' itos.yaml"
+
+    This is foundation CI configuration, not container behaviour. The drafter edits only this
+    ledger entry in a docs commit with Item T-13; no scenarios or step definitions are needed.
+    Implement the configuration and tracked-record removals in a ci commit with Task T-13,
+    and update the guidance in a separate docs commit with Item T-13. This specification
+    supersedes the local proof and committed-evidence requirements in T-3, T-4, T-5, T-8 and
+    T-9, including their whole-function proof mode, and T-7/T-12's preservation of the unused
+    workflow coverage output. It does not reopen those completed tasks or rewrite their history.
+
+    Read itos ADR-0057 and ADR-0051 at 8ee479efb43b940ad3729d72f8cb842d7aca36b7 in
+    donvargax/itos, and itos-cc ADR-0059 at
+    bcb081778820602cbc968f8759c7b5a2d0effdc6 in donvargax/itos-cc.
+    Those reference files and itos's itos-cc.yaml had no working-tree edits when read.
+    The counted-run and listed-test contracts were also checked against the pinned release's
+    https://github.com/donvargax/itos-cc/blob/v0.47.2/README.md. Use the existing 0.47.2 launcher
+    pin and checksums; no new library, download mechanism or service is needed. Take the fresh
+    CI proof decision from those sources, not their unrelated nightly, release or local tiers.
+
+    Set proof.code.check to exactly tools/bin/pinned itos-cc mutation run --count 10
+    --since {base} --seed {base} --fail-uncovered=lines --json cmd internal. Keep proof.code.paths
+    exactly ["{cmd,internal}/**/*.go"]. Core itos supplies {base} from the judged CI range;
+    neither HEAD nor a take/spec commit is a replacement seed or a hand-picked proof base.
+    Ten is the maximum sampled sites across the changed functions, not ten per function or
+    a full baseline. The same base and eligible sites give the same draw; a changed candidate
+    set can change the draw. Added/changed lines still require measured coverage, including
+    in functions without mutation sites. A survivor or uncovered changed line fails CI; add
+    tests, never redraw, suppress the failure or except uncovered code. Only genuinely
+    equivalent mutants can have reasons for the person's review. Keep both existing exception
+    entries, identities and reasons unchanged. Do not add --all-tests, --test-command,
+    --no-coverage, alternate reports, exclusions or failure-swallowing flags to this proof.
+    A counted run already writes no snapshot, source annotation or coverage cache.
+
+    Remove the mutation sample step from itos.yaml, without moving it into another job or hook.
+    Keep the other CI steps, costs, prose selection, scenario selection, domain-coverage floor,
+    proof paths, pins and hooks. No nightly job is added, and existing non-mutation checks are
+    neither moved nor claimed to become deterministic through this change. Remove every tracked
+    .metrics/mutate file by explicit path, and add root-anchored /.metrics/mutate/ and
+    /.metrics/coverage/ ignores. No generated mutation or coverage evidence is committed,
+    restored into CI from another machine, or substituted for a fresh judgment. Preserve other
+    metrics and the historical T-8 report; do not hand-edit generated records before deleting them.
+
+    Add mutation.tests to itos-cc.yaml using itos's listed-scenario configuration, adapted to
+    this repository's installed itos command (there is no tools/bin/itos launcher here).
+    The list command is itos tests list scenario --tsv; run is
+    go test ./features -count=1 -scenarios='{pattern}'; ids_pattern is ^@(?:{ids})$;
+    join is { each: "{id}", sep: "|" }; whole is go test ./features -count=1; support lists
+    features/*_test.go and features/testdata/**. Keep this block before exceptions in the
+    existing two-space YAML style. The list selects live scenarios only, retaining the IDs,
+    paths and fingerprints itos supplies. Do not substitute the smoke set, list @wip cases,
+    filter out scenarios to get coverage green, or copy the upstream project's exceptions
+    or exclusions. At drafting there are 29 live scenarios across cli, completion and count;
+    this is an observation, not a fixed future count.
+
+    Use the pinned tool's documented per-test fallback for listed coverage. The existing
+    features/features_test.go builds the tested binary with -cover, -covermode=atomic and
+    -coverpkg=./... when GOCOVERDIR is set, and the scenario environment preserves it.
+    It does not split one whole run's ITOS_CC_TEST_COVERDIR into per-ID folders: itos-cc must
+    collect the fallback individual runs under the GOCOVERDIR it supplies and consume those
+    counters itself. Its own-test measurement and listed-scenario reach jointly feed the proof;
+    listing tests alone is not coverage evidence. Preserve this harness and its clean child
+    environment, ordinary no-coverage runs and live-scenario semantics. No new runner, wrapper,
+    per-ID collector, step definition or Go code change belongs to this task. If the pinned tool
+    cannot measure this documented fallback, stop with its diagnostic rather than drop cases
+    or expand the task silently.
+
+    Choose removal of ci.yml's unused coverage collection. In platform, platform-macos and
+    platform-windows, remove the GOCOVERDIR environment entry, its mkdir command, and comments
+    promising a later coverage merge. Keep each go test ./... -count=1 and RAPID_CHECKS=1.
+    Those jobs still run every test; coverage consumed by proof is produced in the ci job by
+    itos-cc, not passed between jobs. Preserve all T-12 event, draft, concurrency, runner and
+    manual-dispatch rules, job names, actions, Go setup, permissions and range selection.
+    Keep itos verify and itos ci run with their existing arguments and order. No artifact
+    transfer, additional coverage merge step or change to another workflow is needed.
+
+    Update AGENTS.md's Finishing section, docs/ORCHESTRATING.md's Proof guidance,
+    docs/upgrading.md and README.md's proof description to state that CI alone judges the fresh
+    counted proof: agents commit and stop, with no local mutation run or committed evidence.
+    Explain the sampled-site and changed-line scope honestly, retain failure remediation and
+    reasoned equivalent exceptions, and remove the instruction to choose a local item-parent
+    base. Keep existing scenario red-first obligations; those are not mutation proof runs.
+    Remove instructions to keep cached checking or sampling and all-tests/no-annotate recipes
+    presented as current requirements. In docs/upgrading.md, mark T-4's old results as historical
+    and acknowledge the two T-8 exceptions instead of describing the current list as empty.
+    Add a dated T-13 supersession note to docs/proof/T-8-foundation-baseline.md: its measurements
+    and reproduction commands describe past evidence retained in Git history, not today's
+    handoff procedure. Preserve the report's measurements, failures and source commits.
+    Historical mentions in PLAN.md and closed ledger entries need no deletion. Keep generated
+    agent rules, document caps, charter, contract and unrelated guidance unchanged.
+
+    Implementation paths are itos.yaml, itos-cc.yaml, .gitignore, .github/workflows/ci.yml,
+    the currently tracked .metrics/mutate files, AGENTS.md, docs/ORCHESTRATING.md,
+    docs/upgrading.md, README.md and docs/proof/T-8-foundation-baseline.md. No proof.code source
+    changes are needed; a normal T-13 range can therefore have no applicable code proof.
+    The final completion check separately exercises the new configuration over the known
+    nonempty historical T-8 range beginning at 4ac0cc4b017feb219ba1645ca4263a7dd26870fd.
+    This is a one-time CI integration check, not the base of T-13 or a new recurring full-tree
+    gate. It runs only on Linux CI after the existing build/test preparation has made the
+    Go dependencies available; counted trials run offline. Agents must not run it locally.
+    Mark it after push, late, with a 900-second timeout; the cheap configuration assertions
+    are static, so local closure checks cannot accidentally start the integration run.
+    Keep its report in the CI log, not the checkout. Require selected and executed sites,
+    successful listed-test coverage collection and no uncovered changed lines or unexcepted
+    survivors. An empty/not-applicable report, missing listed coverage, missing dependencies
+    or a cancelled run is not acceptance. Record the actual range, seed, head, sampling counts,
+    coverage verdict and CI URL; these observations prove the wiring, not whole-tree coverage.
+
+    Keep the original completion check and add the scoped checks below at the existing task/CI
+    tier, using installed shell tools and itos, never RTK or a new parser in CI. Before work,
+    the original and exact-command checks fail on cached mutation check and mutation sample;
+    the storage check fails on the 15 tracked records and absent ignores; the listed-tests
+    check fails because mutation.tests is absent; and the workflow check fails on GOCOVERDIR.
+    The exception check is a preservation assertion. Review guidance and the unchanged gates
+    against this entry as well; keyword presence alone would not prove the procedure correct.
+    The runtime check establishes post-change integration, not a behaviour scenario's red step.
+    Let configured hooks and CI run the checks; do not run gates by hand while drafting.
+    The spec leaves completion checks failing until implemented. The loop alone pushes,
+    observes CI and closes the item after the actual pushed head passes.
 - id: T-14
   type: ci
   title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade
@@ -657,5 +1017,208 @@
     Fixtures run only when the rules change, not on every commit. docs/architecture.md and AGENTS.md
     describe the result, and a record in docs/decisions says why. Behaviour does not change: every
     scenario passes before and after.
+
+    This is a foundation task, not new container behaviour. The drafter changes only this
+    ledger entry in a docs commit with Item T-14; no Gherkin, step definitions or implementation.
+    The implementer adds compile-valid architecture tests first in a test commit with Item
+    T-14, then implements the rules and move in commits tied to Task T-14. Record each new
+    refusal's failing assertion before enforcement and its pass afterwards. Existing product
+    scenarios are preservation checks, not red evidence for this task; do not retag or rewrite
+    them. Leave T-10's abandoned generator and registry history alone.
+
+    The local sources were read with clean worktrees at itos-cc/code-quality revision
+    bcb081778820602cbc968f8759c7b5a2d0effdc6 and itos revision
+    8ee479efb43b940ad3729d72f8cb842d7aca36b7. Read their referenced ADRs and copy the applicable
+    enforcement and contract-test patterns, adapting the module and paths, not their legacy
+    exceptions, generated assembly or unrelated linters. Reuse origin/T-10's compile-first
+    fixture harness from f6f339c0acd6c0901ca7ea0a172edd0241d24ab2, not its generator or obsolete
+    expected adapter/domain prohibition. Preserve source attribution, licenses and notices;
+    copying infrastructure does not relicense the source projects or dependencies.
+
+    Layout and arrows apply to new names without generating configuration. Move all count
+    packages and their tests to internal/slices/count, retaining command, domain, port,
+    port/porttest, disk and input. Engines use internal/engine/<name>/domain, port and named
+    adapter siblings, not an additional adapters directory. Nested packages inherit their
+    role; a domain-only or port-only owner needs no empty sibling directory. No production
+    engine is invented merely to exercise the rule: disposable fixtures supply two slices
+    and two engines. Name internal/cli, internal/version and internal/release explicitly,
+    including release/releasetest as test support, never all internal/** as an escape hatch.
+    Refuse unclassified packages, even those with no imports, including internal/flat,
+    internal/engine/<name> itself, misplaced engine children and any pkg/ package. A default
+    rule refusing imports is not enough to catch an import-free package in the wrong place.
+
+    Use strict, exact-package standard-library allowlists for production domains and ports,
+    including bytes, context, errors, fmt, maps, slices, sort, strconv, strings, time for contract
+    types, and unicode. The coordinator reviewed these additions for the next slice; fixtures
+    prove them. No $std wildcard or broad
+    encoding, net or module-prefix allowance may bypass that policy. Future additions require
+    a reviewed rule and fixture. A domain may use its own domain subpackages and port, plus
+    engine domains and ports; an engine domain never imports a slice. Among project packages,
+    a port imports only its own port subpackages and engine ports, never a domain, command,
+    UI, adapter or fake. Ports keep their own contract values to avoid a domain/port cycle;
+    upstream ADR-0047's permission for ports to import domains is not adopted by this item.
+    Test files may use standard-library test/fixture helpers and eligible porttest packages;
+    rapid remains confined to domain *_test.go files, including nested domain tests.
+
+    Commands do no process, network or filesystem I/O; command-io refuses those imports outside
+    tests. The store-ports-io rule adapted from itos also holds ports and porttest code, whose
+    fakes stay in memory. A command imports its domain and ports, engine APIs and internal/cli;
+    it imports no adapter, including its own disk/input adapters. An adapter imports its own
+    domain and port, its own helper subpackages, and engine domains/ports, but no command, UI,
+    foreign slice, or other adapter. Only cmd binds concrete adapters, including input.Files
+    with disk.Files. Apply project dependency arrows to Imports, TestImports and XTestImports;
+    external tests may import their package under test. Move command tests that assemble input
+    and disk into cmd's assembly tests or exercise command through porttest; do not exempt all
+    tests from the arrows. Keep adapter-specific I/O tests with their adapter. No engine reaches
+    a slice, even from tests. Use path-segment boundaries so countother is not count, and
+    portother is not port. Static depguard rules hold import categories; the graph checker
+    supplements them where depguard cannot express an importer's own owner or role.
+
+    internal/cli and its tests import no other project package. Put count's typed failure
+    classifier in internal/slices/count/command and have cmd supply it to the generic UI.
+    The UI owns rendering, joined-error traversal and the unclassified-error fallback;
+    classification of Missing and Unreadable belongs to the slice. Preserve existing count
+    text, JSON schema/fields/rule IDs, fix text, wrapping/joining semantics and exit codes,
+    including usage 2, environment 3 and unknown/internal 70. Move the relevant tests with
+    the classifier, and test the generic UI with synthetic errors/classifiers, not count's
+    port. Domains and ports acquire no JSON, exit codes or UI types. internal/version stays
+    a leaf; release production code imports no slice, engine, CLI or test helper. Its tests
+    retain releasetest. Existing release scripts and behaviour remain intact.
+
+    Adapt tools/bin/architecture-check to accept the exact combined invocation in done_when.
+    Unlike the reference script's one-flag-with-package interface, these four flags are
+    composable selectors over the current module, require no package operands, and together
+    run every structural check without fixtures. With no flags run the same four checks.
+    --siblings checks cross-slice and within-owner layer arrows, including engine layers;
+    --outside refuses any non-slice importer of a slice except cmd; --linked uses go list
+    -deps for each production main under cmd, excluding test imports, and refuses linked
+    porttest, fakes and release/releasetest; --toplevel checks package-role coverage and
+    outside imports of internal. Use go list's module identity and package/import fields,
+    not source-text import guesses, and propagate load errors. Exit 1 for a named violation,
+    2 for usage or inspection failure, 0 only after successful inspection. An empty target
+    list, malformed config or failed go list must not become a successful check.
+
+    Under --toplevel allow only the existing top-level Go roots cmd, internal, features and tools;
+    reject lib and every other root even when cmd wires it. Refuse import path elements testdata
+    and names beginning with underscore or dot, which go list ./... skips. Refuse IgnoredGoFiles
+    in domains and ports, including build-tagged and OS-specific files. Match nolint directives
+    case-insensitively after trimming each comma-separated name, including whitespace after the
+    colon or comma and a directly adjacent // reason. Preserve targeted gosec suppressions.
+
+    Under --toplevel also reject production imports of test support even from a currently
+    unlinked package, and lint suppressions that disable depguard. Check Go comments, not
+    matching text inside string literals: reject nolint:depguard, lists including depguard,
+    bare nolint and nolint:all, while preserving the existing targeted nolint:gosec. Fake
+    implementations and shared contract helpers live in port/porttest (or explicitly named
+    test-support roles); only test files and test-support code may import them. Tests using
+    their own fake pass, production reaching it directly or transitively fails. Do not copy
+    upstream outside-import exception rows: there is no needed exception in today's module.
+    If a required existing arrow contradicts these rules, report it rather than broadening
+    allowances. Generated files obey the same rules as handwritten files.
+
+    Add the reusable FilesContract suite under internal/slices/count/port/porttest. A factory
+    supplies port.Files and logical fixture paths; the same assertions run as TestFilesContract
+    in porttest against Files, in disk against disk.Files using t.TempDir, and in input against
+    its named-file route with an injected Files port. Cover exact empty/nonempty bytes and nil
+    failure on success, missing/unreadable typed failures carrying the requested path and no
+    data, repeat reads, and independent returned byte storage. Use a directory for disk's
+    unreadable input so the test is deterministic even for privileged runners; configure the
+    fake to return the same contract failure. No chmod-only assumption, mocks, engine or
+    external service. Keep stdin and disk-specific OS/error mapping tests separately. Contract
+    suites assert the port's existing promise, not fake internals or new counting semantics.
+
+    Preserve tools/bin/domain-coverage's per-package 80% statement floor, including refusal
+    of empty discovery or a domain without measurable statements. Its present literal-glob
+    reader cannot discover the new wildcard layout: enumerate actual Go packages in slice
+    and engine domain roles, including nested domains, without tools/slice-layout. Exclude
+    ports, adapters, commands, test support and testdata from the denominator. Print a separate
+    figure for each domain; a fully covered count must not hide an under-covered new domain.
+    Adapt T-10's coverage fixtures to prove both owner roots, nested domains, a 66.6% failure,
+    empty discovery and zero statements. Keep the existing coverage gate and counting property.
+
+    Put negative fixtures and their tests under tools/testdata/architecture so go test ./...
+    does not run the expensive linter matrix. --fixtures explicitly runs that matrix, including
+    TestNoDenyEntryPrefixesAnother, against the actual pinned golangci-lint and committed
+    .golangci.yml, with no generated replacement policy. Compile each disposable module first,
+    including test imports. Import negatives require the precise importer, denied import and
+    rule diagnostic; layout and suppression negatives require their specific path and reason.
+    Compilation/configuration errors, timeouts, missing tools and unrelated linter findings
+    are infrastructure failures, never successful negative proofs. Supply a clean control for
+    every allowed arrow, especially adapter-to-own-domain and two slices sharing an engine.
+    Carry over the deny-prefix test's nested-prefix and exact-$ cases, refusing empty rules.
+
+    The matrix covers every settled rule: each forbidden domain package independently (os,
+    os/exec, net, net/http, syscall, golang.org/x/sys/unix, encoding/json, flag and kong); a
+    port doing I/O or importing a domain; own/foreign adapters reached from domain or command;
+    cross-slice imports from production, internal and external tests; engine-to-slice imports;
+    nested and unclassified packages and pkg/; UI-to-project imports; direct/unlinked and
+    transitive linked fakes; suppressions with each spelling above; allowed test-only fakes;
+    allowed pure/domain/port arrows and new owner names; and preservation of rapid's boundary.
+    Exercise --linked independently of the direct-import rule so a transitive leak cannot be
+    hidden by an earlier refusal. Test malformed package/config input as failures of inspection.
+
+    Run the cheap structural command in itos.yaml's static CI steps and the existing pre-commit
+    hook for non-prose changes. Run fixtures only when enforcement inputs change. Add
+    --fixtures-if-staged for the hook and --fixtures-if-changed <base> <head> for CI, using the
+    existing FROM/TO range and examining added, modified, deleted and both renamed paths.
+    Watch .golangci.yml, tools/bin/architecture-check, tools/architecture/**,
+    tools/testdata/architecture/**, tools/bin/domain-coverage, tools/hooks/pre-commit,
+    tools/bin/pinned, go.mod, go.sum and itos.yaml; these contain the rules, runners,
+    selection or pinned tools they depend on.
+    Missing/invalid range data is an inspection error, not an empty diff. Prove selection with
+    disposable git histories/indexes: an unrelated Go or prose edit does not launch fixtures;
+    each watched input, including deletion/rename, does; errors cannot skip the matrix. The
+    explicit --fixtures task check runs all fixtures regardless of selection. Do not make
+    every ordinary commit pay for them or add them to the platform go test invocation.
+
+    Reuse Go's standard library for package graph and fixture mechanics and the pinned linter
+    for import enforcement. For the copied deny-prefix test and tooling's YAML inspection,
+    use go.yaml.in/yaml/v3 v3.0.5, pinned in go.mod/go.sum, as the inspected itos-cc does, rather
+    than write a YAML parser. It is maintained by the YAML organization; the version's upstream
+    README and API are at https://pkg.go.dev/go.yaml.in/yaml/v3@v3.0.5 (checked 2026-11-04).
+    Keep reusable YAML/graph tooling under tools/architecture, imported by the checker/fixtures
+    without importing product internals. Its YAML import keeps the dependency visible to go mod
+    tidy; an import only under testdata would not. The full linter matrix stays under testdata.
+    This is a tooling dependency, not selection of the sandbox policy parser; it adds no network
+    service or runtime dependency to the product. Preserve its MIT/Apache notices. Do not add
+    a DI framework, generator, new linter or container library.
+
+    Implementation may change count's old/new paths, cmd assembly, generic UI and affected
+    tests, .golangci.yml, the named architecture/coverage tools and fixtures, hook/CI-plan
+    wiring, go.mod/go.sum, docs/architecture.md, AGENTS.md and a new docs/decisions record.
+    Record why this supersedes docs/architecture.md's Slices layout and adapter-only-port
+    sentence; keep the generated AGENTS block unchanged and within its cap. Update active
+    references to the moved package, not historical ledger entries or decision evidence.
+    Preserve hooks, unrelated linters, scenarios, licenses and runtime behaviour. T-13 owns
+    mutation-proof and workflow coverage plumbing; do not change those policies in this item.
+    Apply whichever proof policy is actually merged when implementing and report its evidence.
+
+    Before implementation the retained layout check fails because internal/slices/count does
+    not exist, and the combined checker and contract suites do not exist. Those missing tools
+    are incomplete work, not evidence of a rule refusing a compilable violation. The fixture
+    test commit must report expected-refusal assertions that fail against the current linter,
+    including new-slice domain I/O, port I/O, sibling imports, UI imports and unclassified
+    packages. Adapter-to-own-domain is a new positive control: today's count disk rule rejects
+    it. The current coverage check and full product suite are preservation checks; the new
+    discovery/negative fixtures expose the coverage gap. No scenario IDs or step definitions
+    are needed. The checks below belong to the configured task/hooks/CI, not manual pre-commit
+    gate runs. Agents commit and stop; the loop pushes and verifies the actual head before
+    closing T-14. This spec intentionally leaves implementation acceptance checks incomplete.
+- id: T-15
+  type: docs
+  title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
+  why: >
+    The loop builds better from a detailed plan: steering overnight mostly supplied what the
+    documents left unsaid (what blocks what, the slice layout, how specs commit). An arc42 document
+    gives every step a shared reference: goals and quality goals (charter), context and scope,
+    solution strategy, a building-block view that names each slice and engine and their dependencies
+    (the breakdown step's input), runtime views for the main commands, cross-cutting concepts
+    (ports, fakes, strict config reading), decisions (docs/decisions/), quality requirements mapped
+    to gates, and risks. Source it from docs/plans/container-pilot.md, docs/charter.md, PLAN.md and
+    docs/architecture.md; mark every open choice the contract leaves to the person as open, never
+    decided. A docs task; the person reviews it. The queued architecture draft already covers slice
+    dependencies, command composition and shared contracts. Include doctor’s shared schemas,
+    diagnostics and fixtures across slices 1–4, slice-3’s prerequisites from slices 1–2, and
+    slice-4’s approval integration and implementation order.
   done_when:
-    - run: test -d internal/slices/count && ! test -e internal/count && ! test -e tools/slice-layout && tools/bin/architecture-check --siblings --outside --linked --toplevel
+    - run: sh -eu -c 'f=docs/architecture/arc42.md; test -s "$f"; for section in "## Goals" "## Constraints" "## Context and scope" "## Solution strategy" "## Building-block view" "## Runtime view" "## Deployment view" "## Cross-cutting concepts" "## Decisions" "## Quality requirements" "## Risks and open questions" "## Glossary"; do grep -Fqx "$section" "$f"; done'

@@ -83,7 +83,7 @@ lifecycle semantics need specifications; no Dev Containers CLI fallback is autho
 ## Format policy
 
 The requirements below guide behaviour specifications. Slice-1 selects the maintained
-`go.yaml.in/yaml/v3 v3.0.6` node parser, pinned in go.mod/go.sum, for structural validation
+`go.yaml.in/yaml/v3 v3.0.5` node parser, pinned in go.mod/go.sum, for structural validation
 before projection. Its YAML 1.1 scalar extensions are constrained to YAML 1.2 core
 meanings. Its MIT/Apache notices are preserved in THIRD_PARTY_NOTICES.md and releases.
 Manifest parsing remains a separate specification.
