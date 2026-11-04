@@ -46,6 +46,31 @@ func (w *world) policySteps(sc *godog.ScenarioContext) {
 	sc.Step("^its doctor JSON reports exactly these policy problems:$", func(table *godog.Table) error {
 		return w.policyProblems(table, false)
 	})
+	sc.Step("^its error output is exactly:$", func(doc *godog.DocString) error {
+		if w.stderr != doc.Content+"\n" {
+			return fmt.Errorf("error output %q, expected %q", w.stderr, doc.Content+"\n")
+		}
+		return nil
+	})
+	sc.Step("^its policy JSON has this problem path encoded as JSON:$", func(doc *godog.DocString) error {
+		object, err := w.json()
+		if err != nil {
+			return err
+		}
+		var expected string
+		if err := json.Unmarshal([]byte(doc.Content), &expected); err != nil {
+			return err
+		}
+		problems, ok := object["problems"].([]any)
+		if !ok || len(problems) != 1 {
+			return fmt.Errorf("expected exactly one policy problem\n%s", w.report())
+		}
+		problem, ok := problems[0].(map[string]any)
+		if !ok || problem["path"] != expected {
+			return fmt.Errorf("incorrect policy problem path, expected %q\n%s", expected, w.report())
+		}
+		return nil
+	})
 	sc.Step("^the engine recorder has no connections$", func() error {
 		// Closing joins the accept loop so an already queued connection is observed.
 		if err := w.policy.listener.Close(); err != nil {

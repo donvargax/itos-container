@@ -114,6 +114,9 @@ Feature: Strict offline sandbox policy
   # go to stderr with the itos-container: prefix, location and corrective advice.
   # Never include source lines, offending scalar values or raw parser errors in
   # diagnostics/logs. Synthetic markers below are not credentials.
+  # Escape diagnostic locations on stderr with Go string escapes (without outer
+  # quotes), including controls, backslashes and quotes. Keep printable Unicode
+  # readable and JSON paths lossless after JSON decoding and RFC 6901 escaping.
   #
   # Layout handoff: features/steps_test.go and features/policy_steps_test.go now
   # define every step below, and all 28 scenarios are live. Preserve their IDs,
@@ -642,6 +645,32 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, network: {mode: SYNTHETIC_POLICY_MARKER}}                 | policy.network_mode | /network/mode |
       | {version: 1, manifest: a.json, unexpected: SYNTHETIC_POLICY_MARKER}                      | policy.unknown_key  | /unexpected   |
       | {version: 1, manifest: [SYNTHETIC_POLICY_MARKER                                         | policy.syntax       |               |
+
+  @slice-1 @bug-1 @ID-POLICY-29 @wip
+  Scenario Outline: diagnostic paths cannot inject terminal controls or extra lines
+    Given the policy file contains:
+      """
+      version: 1
+      manifest: a.json
+      "bad\n\r\t\b\f\u0000\u001b[31m\u007f\u0085\u2028\u2029~/ñ\\\"": ignored
+      """
+    When itos-container runs with "doctor --policy-only <format>"
+    Then its error output is exactly:
+      """
+      itos-container: itos-container.yaml/bad\n\r\t\b\f\x00\x1b[31m\x7f\u0085\u2028\u2029~0~1ñ\\\": Field is not supported; remove fields absent from the version 1 schema
+      """
+    And it exits with code 2
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON has this problem path encoded as JSON:
+      """
+      "/bad\n\r\t\b\f\u0000\u001b[31m\u007f\u0085\u2028\u2029~0~1ñ\\\""
+      """
+    And it exits with code 2
+
+    Examples:
+      | format |
+      |        |
+      | --json |
 
   # New Given: create only harness-owned helper executables on the child PATH for
   # git, docker, devcontainer, sh, bash and npm. Each records execution and exits;
