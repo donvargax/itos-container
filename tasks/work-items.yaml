@@ -44,16 +44,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p1-replace-template-instructions
+  - id: T-5
     title: Replace inherited template guidance in PLAN.md, README.md and AGENTS.md
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      The charter explicitly requires project-specific foundation guidance so subsequent work
-      follows the offline owned-run milestone and its boundaries.
+    kind: task
   - id: p1-align-ci-branch-conditions
     title: Align CI triggers and Go test conditions with main and work branches
     phase: 1

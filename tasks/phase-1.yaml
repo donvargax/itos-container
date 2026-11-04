@@ -124,3 +124,11 @@
     mutation sample already passes with 0.5.0 (three of three cached mutants), so it is only
     a compatibility check, never the upgrade assertion. Its HEAD-derived seed is deterministic
     for a given commit. Leave the existing wider CI plan and hooks in control of their gates.
+- id: T-5
+  type: docs
+  title: Replace inherited template guidance in PLAN.md, README.md and AGENTS.md
+  why: >
+    The charter explicitly requires project-specific foundation guidance so subsequent work follows
+    the offline owned-run milestone and its boundaries.
+  done_when:
+    - run: rtk proxy sh -c 'for f in PLAN.md README.md AGENTS.md; do rg -Fq "docs/charter.md" "$f" && rg -Fq "itos container" "$f" && rg -qi "offline" "$f" || exit 1; done; ! rg -n "repository is itself the template|real Go project template|This is a template that is a real project|illustrative attribution owner|not the public CLI yet" PLAN.md README.md AGENTS.md'
