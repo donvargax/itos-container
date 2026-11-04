@@ -268,3 +268,8 @@ items:
       requirements mapped to gates, and risks. Source it from docs/plans/container-pilot.md,
       docs/charter.md, PLAN.md and docs/architecture.md; mark every open choice the contract leaves
       to the person as open, never decided. A docs task; the person reviews it.
+
+      The queued architecture draft already covers slice dependencies, command composition and
+      shared contracts. Include doctor’s shared schemas, diagnostics and fixtures across slices 1–4,
+      slice-3’s prerequisites from slices 1–2, and slice-4’s approval integration and implementation
+      order.
