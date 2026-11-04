@@ -170,6 +170,10 @@ items:
       Already covered. Include features/README.md and comments in itos.yaml and
       .github/workflows/release.yml, preserving existing gates, provenance and limits on
       container-support claims.
+
+      Include README hook registration and verification instructions in the existing guidance
+      refresh so contributors enable local lint and vulnerability checks. This foundation follow-up
+      can wait unless it blocks the charter’s configuration, doctor and approval step.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
