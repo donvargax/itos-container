@@ -4,8 +4,8 @@ version: 1
 
 # The source project's pin and checksum, copied with its workflow action.
 pin:
-  version: "7.0.0-rc.1"
-  checksums: "b4061c97aa46939e7dc289bf519c6a294d93aa476787d380794f33933c67122c" # SHA-256 of checksums.txt
+  version: "8.45.3"
+  checksums: "d91adcab38594aabbaabc828a6a82b027580374d3e55ea3968d7dee75e8dfaea" # SHA-256 of checksums.txt
 
 ledger:
   files: "tasks/phase-{group}.yaml"
@@ -122,3 +122,19 @@ proof:
   code:
     paths: ["{cmd,internal}/**/*.go"]
     check: "tools/bin/pinned itos-cc mutation check --since {base} --fail-uncovered --json cmd internal"
+
+# An item's work reaches main through one pull request, a draft until it is marked
+# ready, merged once its checks and Codex's review pass. Docs-only commits outside
+# features/ (a take, a close, a plan) go straight to main.
+push:
+  mode: pr
+  pr:
+    draft: true
+    update: merge
+    review_by: [chatgpt-codex-connector]
+    reviewers:
+      - { login: chatgpt-codex-connector, kind: codex }
+      - { login: "cursor[bot]", kind: bugbot }
+    direct:
+      types: [docs]
+      except: ["features/**"]
