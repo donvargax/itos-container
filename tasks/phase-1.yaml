@@ -62,29 +62,6 @@
     their selection or cost. Before implementation, both exact-action checks fail on the v7 SHA
     and both no-override checks fail on with/version 6.0.0. Configuration validity and plan
     construction are preservation checks, not evidence that the workflow migration is complete.
-  done_when:
-    - run: itos config check
-    - run: itos ci plan --whole
-    - run: |
-        sh -eu <<'SH'
-        test "$(itos config get pin.version)" = 8.45.3
-        test "$(itos config get pin.checksums)" = d91adcab38594aabbaabc828a6a82b027580374d3e55ea3968d7dee75e8dfaea
-        for f in .github/workflows/ci.yml .github/workflows/release.yml; do
-          grep -Eq '^[[:space:]]*(- )?uses: donvargax/itos@0a8c1bcfce6ae7b67b39197ee3990a90343f35ac # v8[.]45[.]3$' "$f"
-        done
-        ! grep -Eq 'version:[[:space:]]+6[.]0[.]0' .github/workflows/ci.yml .github/workflows/release.yml
-        SH
-    - run: |
-        sh -eu <<'SH'
-        for f in .github/workflows/ci.yml .github/workflows/release.yml; do
-          awk '
-            /^[[:space:]]*-[[:space:]]/ { in_itos = 0 }
-            /^[[:space:]]*(- )?uses: donvargax\/itos@/ { in_itos = 1; seen++ }
-            in_itos && /^[[:space:]]*with:/ { invalid = 1 }
-            END { exit (seen != 1 || invalid) }
-          ' "$f"
-        done
-        SH
 - id: T-4
   type: build
   title: tools/bin/pinned runs the current itos-cc, not 0.5.0

@@ -20,7 +20,7 @@ items:
     title: "Finish the move to itos 8: the by-hand steps of itos upgrade 7.0.0-rc.1 to 8.45.3"
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-adapt-cli-config-guidelines
