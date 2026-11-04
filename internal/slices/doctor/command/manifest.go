@@ -102,6 +102,8 @@ func manifestDiagnostic(result port.Result, issue port.Issue) manifestProblem {
 		p.Rule, p.Message, p.Fix = "path", "Selected manifest cannot be read safely", "use readable real directories and a regular file, without symlinks or special files"
 	case port.Syntax:
 		p.Rule, p.Message, p.Fix = "syntax", "Manifest syntax is invalid", "provide one JSON object; only comments and trailing commas extend JSON"
+	case port.Complexity:
+		p.Rule, p.Message, p.Fix = "complexity", "Manifest exceeds inspection limits", "reduce input to 65536 bytes, depth 32, 2048 nodes and 65536 aggregate JSON-pointer path bytes"
 	case port.Duplicate:
 		p.Rule, p.Message, p.Fix = "duplicate", "Object key is repeated", "keep each decoded key once at every depth"
 	case port.Unsupported:
@@ -119,7 +121,7 @@ func manifestDiagnostic(result port.Result, issue port.Issue) manifestProblem {
 	case port.Interpolation:
 		p.Rule, p.Message, p.Fix = "interpolation", "Variable substitution is not supported", "use literal effective strings without dollar-brace expressions"
 	case port.MetadataFailure:
-		p.Rule, p.Message, p.Fix = "metadata", "Image metadata is outside the descriptive-only profile", "supply strict JSON containing objects with only valid names and unused editor customizations"
+		p.Rule, p.Message, p.Fix = "metadata", "Image metadata is outside the descriptive-only profile", "supply strict JSON within inspection limits containing objects with only valid names and unused editor customizations"
 		p.File, p.Image, p.Label = "", result.Image, "devcontainer.metadata"
 	default:
 		p.Rule, p.Message, p.Fix = "internal", "Unknown manifest failure", "report this as a bug"

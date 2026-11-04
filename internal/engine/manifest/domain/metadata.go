@@ -17,6 +17,12 @@ func WithMetadata(result port.Result, label port.Label, parser port.Parser) port
 	if !label.Present {
 		return result
 	}
+	// Reject before copying caller-supplied text into parser-owned bytes.
+	if len(label.Text) > port.MaxBytes {
+		result.Issues = []port.Issue{{Kind: port.MetadataFailure}}
+		result.Effective = nil
+		return result
+	}
 	value, issues := parser.Parse([]byte(label.Text), true)
 	if len(issues) == 0 {
 		if value.Kind != port.Array {

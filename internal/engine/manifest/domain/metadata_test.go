@@ -2,12 +2,28 @@ package domain_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/engine/manifest/domain"
 	"github.com/donvargax/itos-container/internal/engine/manifest/port"
 	"github.com/donvargax/itos-container/internal/engine/manifest/port/porttest"
 )
+
+func TestMetadataByteLimitBeforeParser(t *testing.T) {
+	for _, size := range []int{65536, 65537} {
+		base, _, _, _ := inspect(map[string]port.Value{"image": str("literal-image")})
+		parser := &porttest.Parser{Value: arr()}
+		got := domain.WithMetadata(base, port.Label{Present: true, Text: strings.Repeat(" ", size)}, parser)
+		if size == 65536 {
+			if len(parser.Calls) != 1 || len(got.Issues) != 0 || got.Effective == nil {
+				t.Fatal("at-limit metadata did not reach parser")
+			}
+		} else if len(parser.Calls) != 0 || got.Effective != nil || !reflect.DeepEqual(got.Issues, []port.Issue{{Kind: port.MetadataFailure}}) {
+			t.Fatal("oversized label reached parser or exposed partial settings")
+		}
+	}
+}
 
 func TestMetadataNeverMergesAndDistinguishesAbsence(t *testing.T) {
 	base, _, _, _ := inspect(map[string]port.Value{"image": str("literal-image")})

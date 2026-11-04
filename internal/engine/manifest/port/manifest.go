@@ -41,7 +41,11 @@ const (
 	Reserved
 	Interpolation
 	MetadataFailure
+	Complexity
 )
+
+// MaxBytes bounds each selected manifest and supplied metadata representation.
+const MaxBytes = 64 * 1024
 
 // Issue carries decoded path components, never rejected source values.
 type Issue struct {
@@ -51,6 +55,7 @@ type Issue struct {
 
 // Files reads one selected regular file and checks real checkout directories.
 // Every path is relative to the injected checkout root. Links are never accepted.
+// Reads exceeding MaxBytes return Complexity and no partial data, even on growth.
 type Files interface {
 	Read(path string) ([]byte, Failure)
 	Directory(path string) bool
@@ -58,6 +63,7 @@ type Files interface {
 
 // Parser checks syntax and decoded-key uniqueness before returning data. Strict
 // mode refuses comments and trailing commas. A failure returns no partial value.
+// Both modes bound input bytes, tree depth/nodes and aggregate diagnostic paths.
 type Parser interface {
 	Parse(data []byte, strict bool) (Value, []Issue)
 }

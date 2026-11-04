@@ -166,6 +166,24 @@ other conventional files and parent directories are irrelevant. Every component
 below the checkout root must be a real directory and the candidate a readable
 regular file. Symlinks, including in-tree and dangling ones, and special files fail.
 
+Manifest and supplied metadata inputs are each limited to 65536 bytes. The file
+reader limits bytes from the opened descriptor, so growth after its identity check
+cannot bypass the bound. Both JSON modes use a nonrecursive token preflight before
+HuJSON constructs a tree, limiting depth to 32 and nodes to 2048. The root is depth 1;
+object keys, values and array elements count as nodes below their container. Strings
+and comments hide structural punctuation without being stripped or rewritten. The
+reviewed HuJSON parser still decides syntax; byte/token budget excess takes precedence,
+including on unfinished input.
+
+Before conversion or duplicate diagnostics, the sum of full JSON-pointer path lengths
+is limited to 65536 bytes. Count escaped decoded keys for both key and value nodes,
+decimal indices for array elements, and all ancestors; the root path is empty.
+These limits cover opaque editor settings too. Excess produces one root
+`manifest.complexity` problem with exit 2 and no partial settings; supplied labels
+retain `manifest.metadata` with image/label attribution. Oversized labels are refused
+before copying their raw text into parser bytes. These are inspection limits, not
+worker resource quotas or host-support evidence.
+
 `github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f` parses JSON with
 line/block comments and trailing commas. Duplicate decoded keys fail at every depth,
 including unused editor settings. Syntax and duplicates precede semantic checks.

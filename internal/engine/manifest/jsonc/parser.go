@@ -16,12 +16,19 @@ type Parser struct{}
 
 // Parse checks the complete representation before returning domain values.
 func (Parser) Parse(data []byte, strict bool) (port.Value, []port.Issue) {
+	if len(data) > port.MaxBytes || !withinTokenBudget(data) {
+		return port.Value{}, []port.Issue{{Kind: port.Complexity}}
+	}
 	if strict && !json.Valid(data) {
 		return port.Value{}, []port.Issue{{Kind: port.Syntax}}
 	}
 	tree, err := hujson.Parse(data)
 	if err != nil {
 		return port.Value{}, []port.Issue{{Kind: port.Syntax}}
+	}
+	remaining := maxPathBytes
+	if !withinPathBudget(tree, 0, &remaining) {
+		return port.Value{}, []port.Issue{{Kind: port.Complexity}}
 	}
 	value, issues := convert(tree, nil)
 	if len(issues) != 0 {

@@ -25,6 +25,9 @@ func (f *Files) Read(path string) ([]byte, port.Failure) {
 	if !exists {
 		return nil, port.Missing
 	}
+	if len(data) > port.MaxBytes {
+		return nil, port.Complexity
+	}
 	return slices.Clone(data), port.None
 }
 

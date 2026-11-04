@@ -25,7 +25,7 @@ func TestManifestContractCoverage(t *testing.T) {
 	// These scenarios use only the test assembly and sentinels, cached beside
 	// this binary path just as they are during TestFeatures.
 	bin := filepath.Join(t.TempDir(), "itos-container")
-	for _, id := range []string{"ID-MANIFEST-29", "ID-MANIFEST-20", "ID-MANIFEST-21", "ID-MANIFEST-30"} {
+	for _, id := range []string{"ID-MANIFEST-29", "ID-MANIFEST-20", "ID-MANIFEST-21", "ID-MANIFEST-30", "ID-MANIFEST-33"} {
 		t.Run(id, func(t *testing.T) {
 			coverdir := t.TempDir()
 			t.Setenv("GOCOVERDIR", coverdir)

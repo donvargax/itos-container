@@ -68,9 +68,9 @@ also refuses a manifest with no image. Use `--policy-only` for the former scope.
 No real engine or local mutation run was used. Fresh changed-line coverage and
 sampled mutation proof remain CI's responsibility at the actual pushed head. Slice-3
 must obtain image metadata and distinguish lookup failure from confirmed absence;
-slice-4 owns image/UID approval comparisons. Slice-5 already records the outstanding
-aggregate resource budget, including the manifest parser. This item invents no
-resource limit or host-support claim.
+slice-4 owns image/UID approval comparisons. The later manifest security repair below
+adds inspection budgets; runtime resource quotas remain outside this item. No
+host-support claim is made.
 
 ## Per-ID coverage preparation repair
 
@@ -96,3 +96,42 @@ also exported executed blocks in all four product components. This is a
 test-harness repair for slice-2, with no changed product
 behavior or scenario expectations. No local mutation run was made; the coordinator
 must rerun the full changed-code proof in CI at the new pushed head.
+
+## Bounded manifest inspection security repair
+
+Review thread `PRRT_kwDOVCoNUM6z1uOX` identified the unbounded regular-file read
+and recursive JSON representation. Commit `a48f82f` first committed scenarios
+`ID-MANIFEST-31` through `ID-MANIFEST-33` and their raw-input steps with `@wip`.
+With those tags removed, the following run failed all 13 examples at the typed
+refusal assertion, after 39 setup/execution steps passed and with no undefined steps:
+
+```sh
+go test ./features -count=1 -scenarios='^@ID-MANIFEST-(31|32|33)$'
+```
+
+The oversized, deep, wide and long-path complete inputs returned valid settings
+instead of a refusal. The unfinished deep manifest returned `manifest.syntax`
+instead of the required early `manifest.complexity` refusal. No scenario assertion
+or input changed after that run; the implementation followed the new limits.
+
+The reader now consumes at most 65537 bytes from its already checked descriptor,
+returning no data when the 65536-byte limit is exceeded. A nonrecursive token
+preflight bounds both parser modes to depth 32 and 2048 nodes before HuJSON builds
+its recursive tree. A tree preflight limits aggregate escaped path lengths to
+65536 bytes before conversion and duplicate diagnostics. Supplied metadata also
+has its byte limit checked before copying into parser bytes. Existing schema,
+image/UID requests and metadata provenance remain unchanged.
+
+All 13 new examples pass within the complete live non-engine suite: 460 scenarios
+and 2992 steps passed. Manifest engine, doctor slice and command assembly package
+tests pass. Tests cover exact acceptance/rejection boundaries, read errors and
+a reader that continually grows (only 65537 bytes consumed), literal/comment
+punctuation, unfinished input, object keys, escaped paths and array paths. Files
+and Parser shared contracts cover the budgets against the fake and real adapters.
+
+The reported CI preparation failure at `6dce7f6` predates the existing repair
+`7487e17`. Its `TestManifestContractCoverage` regression passed again before this
+repair and now includes the new metadata budget ID. All five metadata IDs export
+executed validator, parser, reference and presenter blocks independently. No
+local mutation run or generated proof artifact is included; the outer loop must
+run fresh changed-code proof in CI at the pushed head.

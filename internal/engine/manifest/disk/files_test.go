@@ -2,14 +2,51 @@ package disk
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/engine/manifest/port"
 	"github.com/donvargax/itos-container/internal/engine/manifest/port/porttest"
 )
+
+func TestBoundedRead(t *testing.T) {
+	for _, size := range []int{0, 65536, 65537} {
+		data, failure := readBounded(strings.NewReader(strings.Repeat("x", size)))
+		if size <= 65536 {
+			if string(data) != strings.Repeat("x", size) || failure != port.None {
+				t.Fatalf("size %d: got %d bytes, %v", size, len(data), failure)
+			}
+		} else if data != nil || failure != port.Complexity {
+			t.Fatalf("oversized read: got %d bytes, %v", len(data), failure)
+		}
+	}
+	// A source that never reaches EOF models growth after the descriptor's Stat.
+	reader := &growingReader{}
+	if data, failure := readBounded(reader); data != nil || failure != port.Complexity || reader.bytes != 65537 {
+		t.Fatalf("growing read: %d bytes returned, %v, %d bytes consumed", len(data), failure, reader.bytes)
+	}
+	if data, failure := readBounded(io.MultiReader(strings.NewReader("partial"), failedReader{})); data != nil || failure != port.Path {
+		t.Fatalf("read error returned partial data: %q, %v", data, failure)
+	}
+}
+
+type growingReader struct{ bytes int }
+
+func (r *growingReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+	r.bytes += len(p)
+	return len(p), nil
+}
+
+type failedReader struct{}
+
+func (failedReader) Read([]byte) (int, error) { return 0, errors.New("read failure") }
 
 func TestFilesContract(t *testing.T) {
 	porttest.FilesContract(t, func(data []byte, failure port.Failure) port.Files {

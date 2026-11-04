@@ -44,9 +44,17 @@ func (f Files) Read(path string) ([]byte, port.Failure) {
 	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
 		return nil, port.Path
 	}
-	data, err := io.ReadAll(file)
+	return readBounded(file)
+}
+
+// Bound the opened descriptor's actual read, not a size that can change after Stat.
+func readBounded(reader io.Reader) ([]byte, port.Failure) {
+	data, err := io.ReadAll(io.LimitReader(reader, port.MaxBytes+1))
 	if err != nil {
 		return nil, port.Path
+	}
+	if len(data) > port.MaxBytes {
+		return nil, port.Complexity
 	}
 	return data, port.None
 }

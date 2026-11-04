@@ -41,6 +41,17 @@ func FilesContract(t Reporter, open func([]byte, port.Failure) port.Files) {
 			}
 		}
 	}
+	for _, size := range []int{65536, 65537} {
+		files := open(bytes.Repeat([]byte{'x'}, size), port.None)
+		data, failure := files.Read("worker.json")
+		if size == 65536 {
+			if len(data) != size || failure != port.None {
+				t.Errorf("read at byte limit returned %d bytes, %v", len(data), failure)
+			}
+		} else if data != nil || failure != port.Complexity {
+			t.Errorf("oversized read returned %d bytes, %v", len(data), failure)
+		}
+	}
 }
 
 // ParserFixture pairs raw representation and mode with the required parsed data.
@@ -70,6 +81,16 @@ func ParserContract(t Reporter, open func(ParserFixture) port.Parser) {
 	}
 	for _, data := range []string{`[/*c*/{}]`, `[{},]`} {
 		fixtures = append(fixtures, ParserFixture{Data: data, Strict: true, Issues: []port.Issue{{Kind: port.Syntax}}})
+	}
+	for _, strict := range []bool{false, true} {
+		for _, data := range []string{
+			strings.Repeat(" ", 65537),
+			strings.Repeat("[", 33),
+			"[" + strings.Repeat("0,", 2047) + "0]",
+			`{"` + strings.Repeat("a", 32768) + `":0}`,
+		} {
+			fixtures = append(fixtures, ParserFixture{Data: data, Strict: strict, Issues: []port.Issue{{Kind: port.Complexity}}})
+		}
 	}
 	for _, fixture := range fixtures {
 		parser := open(fixture)

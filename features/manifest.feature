@@ -249,7 +249,7 @@ Feature: Inspect the restricted single-worker manifest
   Background:
     Given a manifest inspection checkout
 
-  @slice-2 @ID-MANIFEST-31 @wip
+  @slice-2 @ID-MANIFEST-31
   Scenario: Refuse an oversized selected manifest before parsing
     Given the manifest input exceeds the "bytes" budget
     When itos-container runs with "doctor --manifest-only --json" and a 5 second deadline
@@ -257,7 +257,7 @@ Feature: Inspect the restricted single-worker manifest
     And it finishes before the deadline
     And it exits with code 2
 
-  @slice-2 @ID-MANIFEST-32 @wip
+  @slice-2 @ID-MANIFEST-32
   Scenario Outline: Bound manifest representation before conversion and diagnostics
     Given the manifest input exceeds the "<budget>" budget
     When itos-container runs with "doctor --manifest-only --json" and a 5 second deadline
@@ -274,7 +274,7 @@ Feature: Inspect the restricted single-worker manifest
       | object nodes     |
       | paths            |
 
-  @slice-2 @ID-MANIFEST-33 @wip
+  @slice-2 @ID-MANIFEST-33
   Scenario Outline: Apply inspection budgets to supplied image metadata
     Given the metadata input exceeds the "<budget>" budget
     When the manifest inspection contract runs with supplied metadata in JSON mode
