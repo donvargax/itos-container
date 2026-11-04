@@ -178,7 +178,7 @@ items:
     title: Validate the strict offline sandbox policy
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: [T-14]
     kind: slice
     why: >
