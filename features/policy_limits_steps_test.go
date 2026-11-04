@@ -5,11 +5,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cucumber/godog"
 )
 
 func (w *world) policyLimitSteps(sc *godog.ScenarioContext) {
+	sc.Step(`^itos-container runs with "([^"]*)" and the environment "([^"]*)" and a (\d+) second deadline$`, func(args, vars string, seconds int) error {
+		w.deadline = time.Duration(seconds) * time.Second
+		return w.runWith(w.withEnv(vars), args)
+	})
 	write := func(data string) error {
 		return os.WriteFile(filepath.Join(w.dir, "itos-container.yaml"), []byte(data), 0o600)
 	}

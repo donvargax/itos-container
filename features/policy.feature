@@ -846,8 +846,9 @@ Feature: Strict offline sandbox policy
   @wip @slice-1 @ID-POLICY-38
   Scenario: custom tags at every depth cannot amplify retained diagnostic paths
     Given the policy file contains 6000 nested tagged sequences below an unknown field
-    When itos-container runs with "doctor --policy-only --json" and the environment "GODEBUG=gctrace=1;GOGC=10;GOMEMLIMIT=off"
-    Then its GC trace reports less than 64 MiB of heap
+    When itos-container runs with "doctor --policy-only --json" and the environment "GODEBUG=gctrace=1;GOGC=10;GOMEMLIMIT=off" and a 5 second deadline
+    Then it finishes before the deadline
+    And its GC trace reports less than 64 MiB of heap
     And its policy JSON reports exactly these problems:
       | rule              | path | exit |
       | policy.complexity |      | 2    |
