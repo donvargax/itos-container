@@ -7,7 +7,7 @@ questions:
     decision: none
   - id: q-2
     item: "slice-4"
-    question: "A1 revised: what approval interaction replaces q-1's scriptable-only route?"
+    question: "A1 again: q-1 made approval a scriptable --fingerprint, which is bad to use by hand. Follow the direnv model instead?"
     answer: >-
       The person changed A1 (2026-11-04); this answer supersedes q-1's interaction choice.
       Approval follows the direnv model. Bare approve at a terminal prints the effective settings

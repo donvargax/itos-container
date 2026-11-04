@@ -340,15 +340,15 @@ items:
   - id: T-19
     title: Bring arc42 up to date with what landed and what the person decided
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-20
     title: An engine fixture image the real-engine scenarios can use
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-16]
     kind: task
   - id: slice-6
@@ -430,3 +430,15 @@ items:
       T-11's stall, signal, engine-loss and controller-kill cases. Waits: 10 s call, 120 s startup,
       30 s teardown. Signals: forward once, 10 s grace, then SIGKILL; observed exit wins. Controller
       loss leaves the worker isolated until stop.
+  - id: p3-approval-before-egress
+    title: Revisit who may approve a sandbox before it can grant network or credentials
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person's q-2, 2026-11-04: an agent on the host can approve its own sandbox through
+      --fingerprint or a faked terminal. Offline-only permissions make that cheap for now. Before
+      the egress and credentials stages, when an approval grants something worth taking, weigh a
+      host-side confirmation an agent cannot drive, per the stage.
