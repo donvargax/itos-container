@@ -187,3 +187,15 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p2-strict-offline-policy
+    title: Validate the strict offline sandbox policy
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Specify the versioned schema, explicit defaults, path rules and maintained YAML parser with a
+      pinned version. Add black-box scenarios for valid policy and malformed, duplicate, unknown or
+      unsupported values. Expose validation through doctor and keep reusable policy logic outside
+      command domains. Broken down from p2-specify-policy-manifest-approval.
