@@ -35,6 +35,15 @@ without it. In the contract's terms: implementation slices 1 to 3.
 Foundation leftovers (docs, tooling, CI polish) are taken only when they block the next
 step above; otherwise the loop moves on to that step and they wait.
 
+## Architecture is a hypothesis
+
+`docs/architecture/arc42.md` (once it exists) is the current design, not a promise. Build from
+its building-block view; when the code shows a section is wrong, do not diverge quietly: in the
+same pull request, record a decision in `docs/decisions/` naming the section it overrides and
+why, and update that section. A spec reviewer refuses a change that departs from the document
+without one. Triage files a drift it sees elsewhere as its own idea, titled "Architecture
+drift: …".
+
 ## Not yet
 
 Egress through a proxy, credentials and accounts, Git over the network from inside the
