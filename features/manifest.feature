@@ -6,9 +6,16 @@ Feature: Inspect the restricted single-worker manifest
 
   # Slice-2 specifies inspection only. Follow docs/charter.md, the restricted-manifest
   # section of docs/plans/container-pilot.md, docs/CONFIG.md and docs/CLI.md.
-  # Implement doctor as its own vertical slice, following internal/count; reusable
-  # manifest validation belongs outside command domains for doctor/approve/run to share.
+  # T-14 lands first. Extend slice-1's internal/slices/doctor; do not create a second
+  # doctor slice. Shared validation and the image-reference validator belong to
+  # internal/engine/manifest/{domain,port,<adapter>}, reused by doctor/approve/run.
+  # Follow T-14's why in tasks/phase-1.yaml: a slice imports no adapter or other slice;
+  # cmd/ binds adapters. An adapter may import its own domain and port. Each port has
+  # a port/porttest contract suite run against its in-memory fake and its adapter.
+  # JSON/parser/library types and file I/O stay in adapters; rules, exits and JSON
+  # presentation stay beside doctor, outside the domain. No engine reaches a slice.
   # Do not add behavior to count or introduce a Dev Containers CLI dependency.
+  # The order is slice-1, slice-2, slice-3. No container engine is needed for this slice.
   #
   # Parser decision, reviewed 2026-11-04:
   # github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
@@ -22,18 +29,43 @@ Feature: Inspect the restricted single-worker manifest
   # reject duplicate decoded keys in every object, including otherwise unused editor data;
   # the parser alone is not a schema validator. Do not strip comments with a custom lexer.
   #
-  # Discovery is relative to the effective checkout root supplied by the extension seam:
-  # exactly one of .devcontainer/devcontainer.json and .devcontainer.json must exist.
-  # Both is an error even for identical bytes or an invalid candidate; no precedence,
-  # parent search, recursive search, YAML policy override, or unrestricted fallback.
-  # A candidate and every component below the root must be real directories/a regular
+  # Reference-parser decision, reviewed 2026-11-04:
+  # github.com/distribution/reference v0.6.0, with github.com/opencontainers/go-digest
+  # v1.0.0 as its pinned dependency; preserve their Apache-2.0 licenses and notices.
+  # https://github.com/distribution/reference/releases/tag/v0.6.0
+  # https://github.com/distribution/reference/blob/v0.6.0/reference.go
+  # Use this maintained reference grammar rather than a handwritten image parser.
+  # The manifest engine owns the validation contract and a reference adapter wrapping
+  # Parse, requiring a named, digested reference and a sha256 digest of 64 lowercase
+  # hexadecimal digits. Register sha256 support in that adapter. Preserve the literal
+  # reference: do not add a registry, namespace, tag or digest, trim it or resolve it.
+  # A tag together with a digest is allowed; a tag alone is not pinned. This performs
+  # no registry request and establishes neither image availability nor approval.
+  # Pin these modules when implementing; this specification changes no dependencies.
+  #
+  # Slice-1's closed policy has version, manifest and network, with no image or UID.
+  # Read exactly its manifest path relative to the effective checkout root supplied
+  # by the extension seam. There is no automatic discovery, candidate precedence,
+  # parent search or fallback. Other conventional manifest files are irrelevant.
+  # A selected path and every component below the root must be real directories/a regular
   # file, never symlinks (even in-tree or dangling ones) or special files. Check the
-  # candidates without executing helpers. Root identity itself is slice-3's contract.
+  # selected path without executing helpers. Root identity itself is slice-3's contract.
+  #
+  # doctor --manifest-only validates policy, then the selected manifest and workspace,
+  # without engine access, image metadata lookup, host readiness or approval checks.
+  # Its success has schema=1, scope="manifest", ok=true, problems=[] and exit 0;
+  # manifest refusals keep scope="manifest" and return 2. Policy failures preserve
+  # slice-1's rules/exits and short-circuit manifest validation. --policy-only keeps
+  # its existing policy-only behavior; combining it with --manifest-only is usage 2.
+  # Honor ITOS_JSON=1 and explicit --no-json as slice-1 does. Help and plain success
+  # identify the limited scope and say metadata, host readiness and approval were not
+  # checked. Ordinary doctor reuses this file validation before slice-3 readiness;
+  # slice-3 supplies inspected metadata, never a default absent label on lookup failure.
   #
   # Supported fields are case-sensitive and exhaustive:
-  # - image: required string, exactly the policy's validated digest-pinned worker image.
-  #   No image from metadata, host variables, a tag, or an implicit default. Reuse the
-  #   policy's image-reference validation; do not write another reference parser here.
+  # - image: required digest-pinned string validated by this engine's reference validator.
+  #   No image from metadata, host variables or an implicit default. Any syntactically
+  #   valid pinned request is accepted here; slice-4 compares it with host approval.
   # - name: optional nonempty display string without ASCII control characters; default
   #   null. It grants no authority and is never a checkout, engine or approval identity.
   # - workspaceFolder: default /workspace, the controller-selected checkout mount target.
@@ -53,9 +85,12 @@ Feature: Inspect the restricted single-worker manifest
   #   These are controller, identity, trust, tool-loading or account namespaces, not a
   #   general secret detector. Configuration must contain no credentials; accepting a
   #   literal application variable never authorizes host credential sourcing.
-  # - containerUser and remoteUser: optional strings, each exactly the policy's positive
-  #   decimal worker UID, without leading zeroes, names, or :group suffixes. Both default
-  #   to that UID; neither can select a second identity or override an image/user check.
+  # - containerUser and remoteUser: optional positive decimal UID strings matching
+  #   [1-9][0-9]*, without leading zeroes, names, signs, whitespace or :group suffixes.
+  #   Each omitted value is null (unspecified), not a host/image/policy-derived UID.
+  #   Explicit null is invalid. Preserve decimal text without machine-integer coercion.
+  #   Validate each request independently; slice-4 resolves omissions and compares both
+  #   with the one host-approved non-root identity. Acceptance here grants no identity.
   # - customizations: optional object containing only vscode; vscode is an object with
   #   only extensions (array of nonempty strings) and settings (object of opaque JSON
   #   data). All of vscode is explicitly unused, never installed, interpreted or expanded.
@@ -77,33 +112,39 @@ Feature: Inspect the restricted single-worker manifest
   # later spec admits a hook. Do not accept a command now and silently ignore it or run it
   # on the host. This slice does not invent runtime protections or claim AC-42 proof.
   #
-  # Image metadata is read from the exact cached worker image through the engine port,
-  # never by starting it. An absent devcontainer.metadata label is allowed. If present,
+  # Metadata validation accepts the devcontainer.metadata label's presence and raw value
+  # as given data, plus the requested image reference for diagnostic attribution. There
+  # is no Engine API, endpoint selection or cached-image lookup in this validator or its
+  # fixtures. Slice-3 reads the label and calls this same engine API. An explicitly
+  # absent label is allowed; not-yet-inspected is distinct from absent. If present,
   # its string must be strict JSON (no comments/trailing commas), an array of objects,
   # without duplicate decoded keys at any depth. Only name and customizations.vscode,
   # constrained as above, are allowed in each object. They are reported as unused and
   # never merged with checkout settings. Even operational fields supported in the visible
   # manifest (image, workspaceFolder, containerEnv, containerUser, remoteUser) are refused
   # in metadata, as are every hook and unsupported permission. [] and [{}] are allowed.
-  # Inspect all entries, not just the first. A missing/unreadable cached image is slice-3's
-  # readiness failure, never permission to assume metadata is absent or pull/build an image.
+  # Inspect all entries, not just the first. A missing/unreadable cached image remains
+  # slice-3's readiness failure; it cannot supply an absent-label validation input.
   #
   # Public JSON fragment on successful manifest inspection:
-  # manifest = {valid:true, path:<relative candidate>, effective:{name, image,
+  # manifest = {valid:true, path:<selected relative path>, effective:{name, image,
   # workspaceFolder, containerEnv, containerUser, remoteUser}, unused:[<JSON pointers>],
-  # image_metadata:{present:<bool>, unused:[<label JSON pointers>]}}.
+  # image_metadata:{checked:<bool>, present:<bool or null>, unused:[<label JSON pointers>]}}.
+  # --manifest-only always reports checked=false, present=null, unused=[]; it makes no
+  # claim about an image label. Supplied metadata yields checked=true and its presence.
   # The six effective fields always include defaults. unused pointers are sorted;
   # report /customizations/vscode once, and /<index>/name or /<index>/customizations/vscode
   # for metadata. Ignored values never enter effective. Other doctor checks and overall
-  # success, including approval readiness, belong to their slices: valid manifest
-  # assertions do not equate this fragment to permission to run or require overall ok=true.
+  # success, including approval readiness, belong to their slices: this limited mode's
+  # ok=true is configuration validity only, never permission to run.
   #
   # On manifest refusal, schema=1, ok=false, manifest.valid=false and no manifest.effective.
   # Each problem has rule, exit, nonempty message/fix, and path (a decoded-key JSON pointer;
   # the root is ""). Build each pointer from decoded key segments, escaping ~ as ~0 and
   # / as ~1 within each segment, including duplicate keys and image-label problems.
-  # A slash in a key is not a nesting boundary. File problems have file=<relative candidate>;
-  # discovery problems have file="". Image-label problems instead have image=<policy image> and
+  # A slash in a key is not a nesting boundary. File problems have file=<selected path>;
+  # a missing file still names the selected policy path. Image-label problems instead have
+  # image=<requested manifest image> and
   # label="devcontainer.metadata". No raw input values/lines/commands appear in diagnostics.
   # Configuration refusals below all have exit=2; together they return 2. Do not stop at
   # the first independent semantic problem. No problem order is a second public API.
@@ -114,31 +155,32 @@ Feature: Inspect the restricted single-worker manifest
   # typed problems or diagnostic subjects rather than freezing error prose.
   #
   # New fixture steps required by this spec (none exist in features/steps_test.go yet):
-  # "a manifest inspection checkout" creates an ordinary temporary checkout with a
-  # slice-1-valid offline policy, worker UID/GID 1000:1000, and the image below. It writes
-  # .devcontainer/devcontainer.json containing only that image. A stateful local Engine
-  # API fake advertises compatible cached image content with no metadata label, through
-  # slice-3's supported local endpoint selection. It cannot reach a real Docker socket.
-  # Use the real binary/adapters, not a test-only flag, production-code import or canned
-  # doctor result. Resolve policy/endpoint fixture spellings from those sibling specs;
-  # this file does not introduce an alternate policy schema or remote-engine exception.
+  # "a manifest inspection checkout" creates an ordinary temporary checkout and writes
+  # itos-container.yaml as {version: 1, manifest: .devcontainer/devcontainer.json,
+  # network: {mode: offline}}, with no image or identity keys. It writes the selected
+  # manifest containing only the image below. There is no engine fixture or endpoint.
+  # File scenarios use the real binary/adapters, never a production-code import or
+  # canned doctor result. The --manifest-only option is a public data-validation mode,
+  # not a test-only input channel. It never accepts metadata through flags or environment.
   # Clear inherited engine/account variables and place HOME, XDG and engine configuration
   # in the fixture's temporary directories; never inspect a caller's login or engine state.
   # The fixture starts with no approval; this suite does not write host approval records.
-  # It records checkout/control-state bytes and modes, engine mutations, and invocations
+  # It records checkout/control-state bytes and modes and invocations
   # of PATH traps for docker, devcontainer and checkout helpers, all in its temp directory.
   # Trap programs only record invocation; never delegate to the host's tools.
   #
-  # Fixture image (synthetic, served only by the local fake; never pull it):
+  # Fixture image (synthetic reference text only; never pull or inspect it):
   # registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111
   # All remaining Given steps only write/remove/move fixture files, set raw member/label
-  # bytes or create directories/symlinks/special-file fixtures. They never call doctor or
+  # input data or create directories/symlinks/special-file fixtures. They never call doctor or
   # assert validation. A manifest "member ... has JSON value" edits that single member;
   # "manifest text is" preserves the exact doc string, including duplicate keys and escapes.
   # The unsafe-path fixture supplies valid bytes behind links, and a dangling-link case;
   # outside targets remain inside the test's temporary parent, never a real host secret.
-  # Candidate layouts modify the sole selected manifest location, not always the nested
-  # default. A workspace entry can name several components: an intermediate-symlink
+  # "the policy selects manifest" changes only that policy member; location steps move
+  # the file and update the member. Unsafe layouts modify that selected location, not
+  # always the nested default. A workspace entry can name several components: an
+  # intermediate-symlink
   # layout links its first component to a directory containing the remaining path.
   # All symlink targets other than explicit dangling cases exist and contain valid data,
   # so accepting an in-checkout link or checking only the final component is detectable.
@@ -147,78 +189,120 @@ Feature: Inspect the restricted single-worker manifest
   # editor tasks with those scripts, so an accidental helper call is observable.
   #
   # New Then steps parse actual stdout, never inspect code. "reports a valid manifest"
-  # checks one schema=1 object and manifest.valid/path; "JSON value at ... is" compares a
+  # checks one schema=1 object and manifest.valid/path, plus scope="manifest", ok=true
+  # and problems=[] for --manifest-only. "JSON value at ... is" compares a
   # decoded value exactly. "reports ... at ... with exit ..." checks ok=false, the invalid
   # manifest, absence of effective, and a complete matching problem including file or
   # image/label subjects. "inspection has no host side effects" compares recorded bytes/
-  # modes, absent execution markers, no trap invocations and no mutating engine requests;
-  # read-only inspection requests may occur. Merely checking that a container is absent
-  # would miss a pull/build or a started-then-removed resource.
+  # modes, absent execution markers and no trap invocations. No engine request is needed.
+  # Domain tests additionally use fakes to prove the file-only path calls no readiness
+  # dependency; absence of a container alone is not evidence of read-only behavior.
+  #
+  # Metadata scenarios exercise the shared validator's input/output contract, not doctor
+  # engine integration. "the supplied devcontainer.metadata label" sets raw data only;
+  # "the manifest inspection contract runs" passes it to the real manifest validator.
+  # Bind real parsing/reference adapters and in-memory file data at a test-only cmd/
+  # assembly, preserving T-14's import arrows. Use the same doctor presenter for the
+  # JSON/plain assertions, capturing its actual output and returned exit for the Then
+  # steps; no fabricated verdict, Engine API fake or production metadata
+  # injection flag. Keep the feature runner free of production imports. Domain tests use
+  # the owning ports' fakes; porttest suites run against fakes and actual adapters so a
+  # fake cannot silently change parsing semantics. Slice-3 owns binary-to-engine evidence.
   #
   # Reuse the existing run, run-with-environment, exit and output-containment steps.
-  # All scenarios are non-engine black-box tests against the local fake, runnable without
-  # Docker. They prove validation/inspection, not runtime isolation. Implementers commit
+  # File scenarios are black-box CLI tests; metadata cases are validator contract tests.
+  # All run without Docker and prove validation/inspection, not runtime isolation.
+  # Implementers commit
   # the missing steps red first, keep these @wip in that commit, then remove @wip for
-  # failing-then-passing runs. Today doctor is unknown: every scenario below must first
-  # fail its manifest-specific Then assertion, not setup, undefined steps or exit 2 alone.
+  # failing-then-passing runs. This branch has no doctor; after integrating slice-1 it
+  # still has no manifest validation. Metadata has no validator yet. Make the red tests
+  # compile and reach each manifest-specific assertion; missing APIs, undefined steps,
+  # unknown-command errors or exit 2 alone are not failing-then-passing proof.
 
   Background:
     Given a manifest inspection checkout
 
-  # Discovery and syntax. Both allowed locations resolve the same defaults; comments
+  # Policy-selected paths and syntax. Every location resolves the same defaults; comments
   # and trailing commas must not require a second parser or rewrite the source file.
   @wip @slice-2 @ID-MANIFEST-01
-  Scenario Outline: Discover the sole supported manifest and accept JSON with comments
-    Given the policy selects worker identity "<identity>"
-    And the manifest is located only at "<file>"
+  Scenario Outline: Read the policy-selected manifest and accept JSON with comments
+    Given the manifest is located only at "<file>"
     And the manifest text is:
       """
       {
-        // One cached worker, never a build recipe.
+        // One requested worker, never a build recipe.
         "image": "registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111",
         /* Deliberately use trailing commas in an object and an array. */
         "customizations": {"vscode": {"extensions": ["example.editor",],},},
       }
       """
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports a valid manifest at "<file>"
     And its JSON value at "/manifest/effective" is:
       """
-      {"name":null,"image":"registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111","workspaceFolder":"/workspace","containerEnv":{},"containerUser":"<uid>","remoteUser":"<uid>"}
+      {"name":null,"image":"registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111","workspaceFolder":"/workspace","containerEnv":{},"containerUser":null,"remoteUser":null}
       """
     And its JSON value at "/manifest/image_metadata" is:
       """
-      {"present":false,"unused":[]}
+      {"checked":false,"present":null,"unused":[]}
       """
+    And it exits with code 0
     And inspection has no host side effects
 
     Examples:
-      | file                            | identity  | uid  |
-      | .devcontainer/devcontainer.json  | 1000:1000 | 1000 |
-      | .devcontainer.json               | 1000:1000 | 1000 |
-      | .devcontainer/devcontainer.json  | 1234:2345 | 1234 |
+      | file                           |
+      | .devcontainer/devcontainer.json |
+      | .devcontainer.json              |
+      | config files/worker.json        |
 
   @wip @slice-2 @ID-MANIFEST-02
-  Scenario: Missing candidates do not trigger discovery elsewhere or a default worker
-    Given neither manifest candidate exists
+  Scenario: A missing selected manifest never triggers fallback discovery or a default worker
+    Given the policy selects manifest "config/worker.json"
+    And the selected manifest does not exist
+    And valid decoy manifests exist at ".devcontainer/devcontainer.json" and ".devcontainer.json"
     And valid decoy manifests exist at "devcontainer.json", ".devcontainer/devcontainer.jsonc" and ".devcontainer/other/devcontainer.json"
     And a valid decoy manifest exists in the checkout's parent directory
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.missing" at "" with exit 2
     And it exits with code 2
 
   @wip @slice-2 @ID-MANIFEST-03
-  Scenario Outline: Refuse two manifest candidates without choosing precedence
-    Given a second manifest candidate exists with "<contents>"
-    When itos-container runs with "doctor --json"
-    Then its JSON output reports "manifest.ambiguous" at "" with exit 2
-    And it exits with code 2
+  Scenario Outline: Inspect only the selected manifest even when another conventional file exists
+    Given the manifest is located only at "<file>"
+    And the unselected conventional manifest exists with "<contents>"
+    When itos-container runs with "doctor --manifest-only --json"
+    Then its JSON output reports a valid manifest at "<file>"
+    And it exits with code 0
 
     Examples:
-      | contents                           |
-      | the same valid bytes as the first  |
-      | malformed JSON                     |
+      | file                           | contents                          |
+      | .devcontainer/devcontainer.json | the same valid bytes as the first |
+      | .devcontainer/devcontainer.json | malformed JSON                    |
+      | .devcontainer.json              | malformed JSON                    |
+
+  # The mode is a user-facing validation scope. It must remain usable when host
+  # readiness is added, and must not claim that metadata or approval was inspected.
+  @wip @slice-2 @ID-MANIFEST-28
+  Scenario: Explain the manifest-only scope and honor the extension JSON request
+    When itos-container runs with "doctor --help"
+    Then its standard output says "--manifest-only"
+    And it exits with code 0
+    When itos-container runs with "doctor --manifest-only" and the environment "ITOS_JSON=1"
+    Then its JSON output reports a valid manifest at ".devcontainer/devcontainer.json"
+    And its JSON value at "/scope" is:
+      """
+      "manifest"
+      """
+    And it exits with code 0
+    When itos-container runs with "doctor --manifest-only --no-json" and the environment "ITOS_JSON=1"
+    Then its standard output says "Manifest only"
+    And its standard output says "Image metadata, host readiness and approval were not checked"
+    And it exits with code 0
+    When itos-container runs with "doctor --manifest-only --policy-only"
+    Then its error output says "--manifest-only"
+    And its error output says "--policy-only"
+    And it exits with code 2
 
   # Reject a FIFO without opening it for a blocking read. The step runner must have a
   # bounded command timeout so an incorrect implementation fails instead of hanging CI.
@@ -227,7 +311,7 @@ Feature: Inspect the restricted single-worker manifest
     Given the manifest is located only at "<file>"
     And the manifest candidate has the layout "<layout>"
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.path" at "" with exit 2
     And it exits with code 2
     And inspection has no host side effects
@@ -253,7 +337,7 @@ Feature: Inspect the restricted single-worker manifest
       """
       <text>
       """
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "<rule>" at "" with exit 2
     And it exits with code 2
 
@@ -281,7 +365,7 @@ Feature: Inspect the restricted single-worker manifest
       """
       <text>
       """
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.duplicate" at "<path>" with exit 2
     And it exits with code 2
 
@@ -299,7 +383,7 @@ Feature: Inspect the restricted single-worker manifest
   Scenario Outline: Refuse unsupported execution and permission fields
     Given the manifest member "<field>" has JSON value <value>
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.unsupported" at "/<field>" with exit 2
     And it exits with code 2
     And inspection has no host side effects
@@ -338,7 +422,7 @@ Feature: Inspect the restricted single-worker manifest
   @wip @slice-2 @ID-MANIFEST-08
   Scenario Outline: Validate the types and values of supported manifest fields
     Given the manifest member "<field>" has JSON value <value>
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.value" at "<path>" with exit 2
     And it exits with code 2
 
@@ -361,9 +445,9 @@ Feature: Inspect the restricted single-worker manifest
       | remoteUser    | null                       | /remoteUser        |
 
   @wip @slice-2 @ID-MANIFEST-09
-  Scenario Outline: Refuse an image that does not exactly match the policy's pinned worker
+  Scenario Outline: Refuse an image that is not a valid digest-pinned reference
     Given the manifest member "image" has JSON value <image>
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.image" at "/image" with exit 2
     And it exits with code 2
 
@@ -374,23 +458,61 @@ Feature: Inspect the restricted single-worker manifest
       | ""                                                                                                        |
       | "registry.example/worker:latest"                                                                          |
       | "registry.example/worker@sha256:1111"                                                                     |
-      | "registry.example/worker@sha256:2222222222222222222222222222222222222222222222222222222222222222"             |
-      | "registry.example/other@sha256:1111111111111111111111111111111111111111111111111111111111111111"              |
+      | "registry.example/worker"                                                                                 |
+      | "registry.example/worker@sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"             |
+      | "registry.example/worker@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"             |
+      | "registry.example/Worker@sha256:1111111111111111111111111111111111111111111111111111111111111111"               |
+      | "https://registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111"       |
+      | "registry.example/worker@sha512:1111"                                                                       |
 
+  # Ordinary doctor must apply the same refusal before slice-3 engine checks.
   @wip @slice-2 @ID-MANIFEST-10
-  Scenario: Require an explicit image instead of choosing a default
+  Scenario Outline: Require an explicit image instead of choosing a default
     Given the manifest has no "image" member
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor <mode> --json"
     Then its JSON output reports "manifest.image" at "/image" with exit 2
     And it exits with code 2
 
-  # Workspace and identity are constraints on the one policy-selected worker, not ways
+    Examples:
+      | mode            |
+      | --manifest-only |
+      |                 |
+
+  # Different valid requests are not approval mismatches. A supplied UID does not
+  # fill in the other optional UID or grant permission to run either one.
+  @wip @slice-2 @ID-MANIFEST-27
+  Scenario Outline: Accept pinned image and UID requests without host approval
+    Given the manifest member "image" has JSON value "<image>"
+    And the manifest member "<user_field>" has JSON value "1001"
+    When itos-container runs with "doctor --manifest-only --json"
+    Then its JSON output reports a valid manifest at ".devcontainer/devcontainer.json"
+    And its JSON value at "/manifest/effective/image" is:
+      """
+      "<image>"
+      """
+    And its JSON value at "/manifest/effective/containerUser" is:
+      """
+      <container_uid>
+      """
+    And its JSON value at "/manifest/effective/remoteUser" is:
+      """
+      <remote_uid>
+      """
+    And it exits with code 0
+
+    Examples:
+      | image                                                                                                   | user_field    | container_uid | remote_uid |
+      | registry.example/worker@sha256:2222222222222222222222222222222222222222222222222222222222222222             | containerUser | "1001"        | null       |
+      | registry.example/other@sha256:1111111111111111111111111111111111111111111111111111111111111111              | remoteUser    | null          | "1001"     |
+      | registry.example:5000/team/worker:release@sha256:1111111111111111111111111111111111111111111111111111111111111111 | containerUser | "1001"    | null       |
+
+  # Workspace and identity are requests for one worker, not ways
   # to choose host paths, extra mounts, an elevated identity or a second user.
   @wip @slice-2 @ID-MANIFEST-11
   Scenario Outline: Refuse workspace locations outside the fixed checkout layout
     Given the manifest member "workspaceFolder" has JSON value <folder>
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.workspace" at "/workspaceFolder" with exit 2
     And it exits with code 2
     And inspection has no host side effects
@@ -416,7 +538,7 @@ Feature: Inspect the restricted single-worker manifest
     Given the checkout workspace entry "<entry>" has layout "<layout>"
     And the manifest member "workspaceFolder" has JSON value "/workspace/<entry>"
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.workspace" at "/workspaceFolder" with exit 2
     And it exits with code 2
     And inspection has no host side effects
@@ -431,9 +553,9 @@ Feature: Inspect the restricted single-worker manifest
       | src/nested | intermediate symlink outside the checkout             |
 
   @wip @slice-2 @ID-MANIFEST-13
-  Scenario Outline: Neither manifest user can change the policy's non-root identity
+  Scenario Outline: Refuse user values that are not positive decimal UIDs
     Given the manifest member "<field>" has JSON value <user>
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.identity" at "/<field>" with exit 2
     And it exits with code 2
 
@@ -441,12 +563,22 @@ Feature: Inspect the restricted single-worker manifest
       | field         | user        |
       | containerUser | "root"      |
       | containerUser | "0"         |
-      | containerUser | "1001"      |
+      | containerUser | "-1"        |
+      | containerUser | "+1000"     |
+      | containerUser | " 1000"     |
+      | containerUser | "1000 "     |
+      | containerUser | "1.0"       |
+      | containerUser | ""          |
       | containerUser | "1000:0"    |
       | containerUser | "01000"     |
       | remoteUser    | "root"      |
       | remoteUser    | "0"         |
-      | remoteUser    | "1001"      |
+      | remoteUser    | "01000"     |
+      | remoteUser    | "-1"        |
+      | remoteUser    | "+1000"     |
+      | remoteUser    | " 1000"     |
+      | remoteUser    | "1.0"       |
+      | remoteUser    | ""          |
       | remoteUser    | "worker"    |
       | remoteUser    | "1000:1000" |
 
@@ -454,33 +586,33 @@ Feature: Inspect the restricted single-worker manifest
   # different from the written dollar expression and must never enter effective settings.
   @wip @slice-2 @ID-MANIFEST-14
   Scenario Outline: Preserve literal environment values and resolve an existing checkout subdirectory
-    Given the policy selects worker identity "<identity>"
-    And a checkout directory "src" exists
+    Given a checkout directory "src" exists
     And the manifest member "name" has JSON value "worker display"
     And the manifest member "workspaceFolder" has JSON value "/workspace/src"
-    And the manifest member "containerUser" has JSON value "<uid>"
-    And the manifest member "remoteUser" has JSON value "<uid>"
+    And the manifest member "containerUser" has JSON value "<container_uid>"
+    And the manifest member "remoteUser" has JSON value "<remote_uid>"
     And the manifest member "containerEnv" has JSON value {"APP_MODE":"offline","EMPTY":"","TEXT":"$SLICE_2_HOST $(touch slice-2-ran) `touch slice-2-ran` // literal /* literal */","LINES":"first\nsecond"}
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json" and the environment "SLICE_2_HOST=host-only-marker"
+    When itos-container runs with "doctor --manifest-only --json" and the environment "SLICE_2_HOST=host-only-marker"
     Then its JSON output reports a valid manifest at ".devcontainer/devcontainer.json"
     And its JSON value at "/manifest/effective" is:
       """
-      {"name":"worker display","image":"registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111","workspaceFolder":"/workspace/src","containerEnv":{"APP_MODE":"offline","EMPTY":"","TEXT":"$SLICE_2_HOST $(touch slice-2-ran) `touch slice-2-ran` // literal /* literal */","LINES":"first\nsecond"},"containerUser":"<uid>","remoteUser":"<uid>"}
+      {"name":"worker display","image":"registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111","workspaceFolder":"/workspace/src","containerEnv":{"APP_MODE":"offline","EMPTY":"","TEXT":"$SLICE_2_HOST $(touch slice-2-ran) `touch slice-2-ran` // literal /* literal */","LINES":"first\nsecond"},"containerUser":"<container_uid>","remoteUser":"<remote_uid>"}
       """
     And its standard output does not say "host-only-marker"
     And its error output does not say "host-only-marker"
     And inspection has no host side effects
 
     Examples:
-      | identity  | uid  |
-      | 1000:1000 | 1000 |
-      | 1234:2345 | 1234 |
+      | container_uid | remote_uid |
+      | 1000          | 1000       |
+      | 1234          | 1234       |
+      | 1001          | 1002       |
 
   @wip @slice-2 @ID-MANIFEST-15
   Scenario Outline: Reject reserved environment namespaces regardless of case or empty values
     Given the manifest member "containerEnv" has JSON value {"<name>":""}
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.reserved" at "/containerEnv/<name>" with exit 2
     And it exits with code 2
 
@@ -534,7 +666,7 @@ Feature: Inspect the restricted single-worker manifest
   @wip @slice-2 @ID-MANIFEST-16
   Scenario Outline: Refuse variable-substitution syntax instead of expanding host or container values
     Given the manifest member "<field>" has JSON value <value>
-    When itos-container runs with "doctor --json" and the environment "SLICE_2_HOST=host-only-marker"
+    When itos-container runs with "doctor --manifest-only --json" and the environment "SLICE_2_HOST=host-only-marker"
     Then its JSON output reports "manifest.interpolation" at "<path>" with exit 2
     And it exits with code 2
     And its standard output does not say "host-only-marker"
@@ -559,7 +691,7 @@ Feature: Inspect the restricted single-worker manifest
   Scenario Outline: Refuse every lifecycle hook while its runtime semantics remain unspecified
     Given the manifest member "<field>" has JSON value <value>
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.unsupported" at "/<field>" with exit 2
     And it exits with code 2
     And inspection has no host side effects
@@ -584,7 +716,7 @@ Feature: Inspect the restricted single-worker manifest
   Scenario: Report recognized editor customizations as unused without executing their data
     Given the manifest member "customizations" has JSON value {"vscode":{"extensions":["example.editor"],"settings":{"example.command":"./slice-2-record-execution","example.variable":"${localEnv:SLICE_2_HOST}"}}}
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json" and the environment "SLICE_2_HOST=host-only-marker"
+    When itos-container runs with "doctor --manifest-only --json" and the environment "SLICE_2_HOST=host-only-marker"
     Then its JSON output reports a valid manifest at ".devcontainer/devcontainer.json"
     And its JSON value at "/manifest/unused" is:
       """
@@ -601,7 +733,7 @@ Feature: Inspect the restricted single-worker manifest
   @wip @slice-2 @ID-MANIFEST-19
   Scenario Outline: Refuse unknown editor namespaces and malformed recognized customizations
     Given the manifest member "customizations" has JSON value <value>
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "<rule>" at "<path>" with exit 2
     And it exits with code 2
 
@@ -617,14 +749,24 @@ Feature: Inspect the restricted single-worker manifest
 
   # The visible name must remain null even when metadata supplies one. A syntactically
   # acceptable label is never a second source of effective settings or commands.
+  @wip @slice-2 @ID-MANIFEST-29
+  Scenario: Distinguish a supplied absent label from metadata that was never inspected
+    Given the supplied devcontainer.metadata label is absent
+    When the manifest inspection contract runs with supplied metadata in JSON mode
+    Then its JSON output reports a valid manifest at ".devcontainer/devcontainer.json"
+    And its JSON value at "/manifest/image_metadata" is:
+      """
+      {"checked":true,"present":false,"unused":[]}
+      """
+
   @wip @slice-2 @ID-MANIFEST-20
   Scenario Outline: Inspect permitted image metadata and report it as unused without merging
-    Given the cached fixture image's devcontainer.metadata label is:
+    Given the supplied devcontainer.metadata label is:
       """
       <label>
       """
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json"
+    When the manifest inspection contract runs with supplied metadata in JSON mode
     Then its JSON output reports a valid manifest at ".devcontainer/devcontainer.json"
     And its JSON value at "/manifest/effective/name" is:
       """
@@ -632,8 +774,12 @@ Feature: Inspect the restricted single-worker manifest
       """
     And its JSON value at "/manifest/image_metadata" is:
       """
-      {"present":true,"unused":<unused>}
+      {"checked":true,"present":true,"unused":<unused>}
       """
+    And inspection has no host side effects
+    When the manifest inspection contract runs with supplied metadata in plain mode
+    Then its standard output says "devcontainer.metadata"
+    And its standard output says "unused"
     And inspection has no host side effects
 
     Examples:
@@ -646,12 +792,12 @@ Feature: Inspect the restricted single-worker manifest
   # descriptive-only field profile than the visible manifest, and cannot supply a user.
   @wip @slice-2 @ID-MANIFEST-21
   Scenario Outline: Refuse malformed or operational image metadata before accepting the manifest
-    Given the cached fixture image's devcontainer.metadata label is:
+    Given the supplied devcontainer.metadata label is:
       """
       <label>
       """
     And host execution sentinels are installed
-    When itos-container runs with "doctor --json"
+    When the manifest inspection contract runs with supplied metadata in JSON mode
     Then its JSON output reports "manifest.metadata" at "<path>" with exit 2
     And it exits with code 2
     And inspection has no host side effects
@@ -684,13 +830,36 @@ Feature: Inspect the restricted single-worker manifest
       | [{"name":"display"},{"capAdd":["SYS_ADMIN"]}]             | /1/capAdd             |
       | [{"unknown":false}]                                     | /0/unknown            |
 
+  # Exercise diagnostics at the same validator/presenter boundary as the other label
+  # cases. No CLI environment variable or engine lookup supplies the hostile input.
+  @wip @slice-2 @ID-MANIFEST-30
+  Scenario Outline: Supplied metadata diagnostics identify the label without echoing values
+    Given the supplied devcontainer.metadata label is:
+      """
+      <text>
+      """
+    When the manifest inspection contract runs with supplied metadata in JSON mode
+    Then its JSON output reports "manifest.metadata" at "<path>" with exit 2
+    And its standard output does not say "slice-2-private-marker"
+    And its error output does not say "slice-2-private-marker"
+    When the manifest inspection contract runs with supplied metadata in plain mode
+    Then its error output says "devcontainer.metadata"
+    And its error output says "itos-container:"
+    And its standard output does not say "slice-2-private-marker"
+    And its error output does not say "slice-2-private-marker"
+
+    Examples:
+      | text                                                 | path                 |
+      | [{"initializeCommand":"echo slice-2-private-marker"}] | /0/initializeCommand |
+      | [{"name":"slice-2-private-marker"                     |                      |
+
   # Show all independent mistakes, not only the first map iteration's result.
   @wip @slice-2 @ID-MANIFEST-22
   Scenario: Report independent manifest problems together with typed paths and one refusal code
     Given the manifest member "containerEnv" has JSON value {"PATH":"","APP_MODE":false}
     And the manifest member "remoteUser" has JSON value "0"
     And the manifest member "privileged" has JSON value false
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.value" at "/containerEnv/APP_MODE" with exit 2
     And its JSON output reports "manifest.reserved" at "/containerEnv/PATH" with exit 2
     And its JSON output reports "manifest.unsupported" at "/privileged" with exit 2
@@ -703,7 +872,7 @@ Feature: Inspect the restricted single-worker manifest
   @wip @slice-2 @ID-MANIFEST-25
   Scenario Outline: Keep diagnostic paths distinct from literal slashes and tildes in keys
     Given the manifest member "<field>" has JSON value <value>
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "manifest.unsupported" at "<path>" with exit 2
     And it exits with code 2
 
@@ -714,7 +883,7 @@ Feature: Inspect the restricted single-worker manifest
       | customizations         | {"vs/code~1":{}}       | /customizations/vs~1code~01          |
 
   # Synthetic marker only. Parser errors must not echo a source line, and semantic
-  # errors must not dump the rejected command, environment or label value. The PATH
+  # errors must not dump the rejected command or environment value. The PATH
   # example is a rejected literal value, never a change to the controller's environment.
   @wip @slice-2 @ID-MANIFEST-23
   Scenario Outline: Diagnose rejected manifest input without disclosing raw values
@@ -722,7 +891,7 @@ Feature: Inspect the restricted single-worker manifest
       """
       <text>
       """
-    When itos-container runs with "doctor --json"
+    When itos-container runs with "doctor --manifest-only --json"
     Then its JSON output reports "<rule>" at "<path>" with exit 2
     And its standard output does not say "slice-2-private-marker"
     And its error output does not say "slice-2-private-marker"
@@ -733,12 +902,10 @@ Feature: Inspect the restricted single-worker manifest
       | manifest | {"name":"slice-2-private-marker"                                 | manifest.syntax      |                      |
       | manifest | {"initializeCommand":"echo slice-2-private-marker"}               | manifest.unsupported | /initializeCommand   |
       | manifest | {"containerEnv":{"PATH":"slice-2-private-marker"}}               | manifest.reserved    | /containerEnv/PATH   |
-      | metadata | [{"initializeCommand":"echo slice-2-private-marker"}]             | manifest.metadata    | /0/initializeCommand |
-      | metadata | [{"name":"slice-2-private-marker"                                 | manifest.metadata    |                      |
 
   # A separate plain-output path must not reintroduce parser source snippets or rejected
   # values. Check the diagnostic's subject before its exit code: unknown doctor already
-  # exits 2, but cannot identify this file or label. Existing containment steps suffice;
+  # exits 2, but cannot identify this file. Existing containment steps suffice;
   # the wording around those subjects remains free to change. Use the same exact-input
   # fixture as ID-MANIFEST-23, with no new setup behavior or assertion step definitions.
   @wip @slice-2 @ID-MANIFEST-26
@@ -747,7 +914,7 @@ Feature: Inspect the restricted single-worker manifest
       """
       <text>
       """
-    When itos-container runs with "doctor"
+    When itos-container runs with "doctor --manifest-only"
     Then its error output says "<subject>"
     And its error output says "itos-container:"
     And its standard output does not say "slice-2-private-marker"
@@ -759,20 +926,13 @@ Feature: Inspect the restricted single-worker manifest
       | manifest | {"name":"slice-2-private-marker"                       | .devcontainer/devcontainer.json |
       | manifest | {"initializeCommand":"echo slice-2-private-marker"}    | .devcontainer/devcontainer.json |
       | manifest | {"containerEnv":{"PATH":"slice-2-private-marker"}}    | .devcontainer/devcontainer.json |
-      | metadata | [{"initializeCommand":"echo slice-2-private-marker"}]  | devcontainer.metadata          |
-      | metadata | [{"name":"slice-2-private-marker"                      | devcontainer.metadata          |
 
   @wip @slice-2 @ID-MANIFEST-24
   Scenario: Plain doctor output identifies the manifest and explains unused editor data
     Given the manifest member "customizations" has JSON value {"vscode":{"extensions":["example.editor"]}}
-    And the cached fixture image's devcontainer.metadata label is:
-      """
-      [{"name":"image display"}]
-      """
     And host execution sentinels are installed
-    When itos-container runs with "doctor"
+    When itos-container runs with "doctor --manifest-only"
     Then its standard output says ".devcontainer/devcontainer.json"
     And its standard output says "customizations.vscode"
-    And its standard output says "devcontainer.metadata"
     And its standard output says "unused"
     And inspection has no host side effects
