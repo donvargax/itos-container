@@ -155,3 +155,14 @@ items:
       The offline owned-run milestone depends on trustworthy scenario-backed proof. Verify and
       configure support-file tracking so Gherkin-only changes invalidate affected cached mutation
       evidence.
+  - id: p1-check-proof-toolchain-alignment
+    title: Check proof-toolchain alignment before measurement
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The offline owned-run milestone needs trustworthy foundation proof. Compare local compiler and
+      experiment settings with CI before expensive measurement to prevent unusable evidence and
+      repeated landing attempts, preserving all proof gates.
