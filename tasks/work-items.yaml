@@ -113,3 +113,18 @@ items:
       Already covers fresh project-local mutation evidence after T-4. Zero eligible sampling
       candidates under 0.47.2 means passing compatibility checks cannot establish the foundation
       proof required for the charter’s offline owned-run milestone.
+
+      Already covers fresh project-local mutation evidence after T-4. The reported zero eligible
+      cached mutants reinforces that passing upgrade checks does not establish the foundation
+      baseline required for the offline owned-run milestone.
+  - id: p1-bound-pinned-tool-downloads
+    title: Bound pinned-tool download time
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The offline owned-run milestone needs reliable foundation proof tooling. Bound cache-miss
+      downloads so unattended checks fail promptly when downloads stall, preserving version pins,
+      checksum verification and required gates.
