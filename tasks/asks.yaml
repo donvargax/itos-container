@@ -9,3 +9,4 @@ questions:
     item: "slice-4"
     question: "A1 again: q-1 made approval a scriptable --fingerprint, which is bad to use by hand. Follow the direnv model instead?"
     answer: "Yes (the person, 2026-11-04), replacing q-1. Bare approve at a terminal prints the effective settings and what changed since the last approval, then asks y/N; the approval is stored, so nothing asks again until the settings change. No terminal: refused, naming --fingerprint, the optional non-interactive route for those exact settings. An agent on the host can still approve itself; revisit before the egress and credentials stages."
+    decision: none
