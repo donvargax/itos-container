@@ -12,8 +12,8 @@ Feature: Inspect the restricted single-worker manifest
   # Follow T-14's why in tasks/phase-1.yaml: a slice imports no adapter or other slice;
   # cmd/ binds adapters. An adapter may import its own domain and port. Each port has
   # a port/porttest contract suite run against its in-memory fake and its adapter.
-  # JSON/parser/library types and file I/O stay in adapters; rules, exits and JSON
-  # presentation stay beside doctor, outside the domain. No engine reaches a slice.
+  # JSON/parser/library types and file I/O stay in adapters. The domain owns validation;
+  # public rule IDs, exits and JSON presentation stay beside doctor. No engine reaches a slice.
   # Do not add behavior to count or introduce a Dev Containers CLI dependency.
   # The order is slice-1, slice-2, slice-3. No container engine is needed for this slice.
   #
@@ -61,6 +61,10 @@ Feature: Inspect the restricted single-worker manifest
   # identify the limited scope and say metadata, host readiness and approval were not
   # checked. Ordinary doctor reuses this file validation before slice-3 readiness;
   # slice-3 supplies inspected metadata, never a default absent label on lookup failure.
+  # This deliberately supersedes ID-POLICY-34's ordinary-doctor success example: it
+  # supplies no manifest, so ordinary doctor must now refuse the missing file. Keep
+  # its --policy-only terminal-escaping and JSON-preservation regression intact when
+  # implementing the scope change; do not retain policy-only success for ordinary doctor.
   #
   # Supported fields are case-sensitive and exhaustive:
   # - image: required digest-pinned string validated by this engine's reference validator.
@@ -154,7 +158,7 @@ Feature: Inspect the restricted single-worker manifest
   # just as in JSON mode. JSON is one stdout object; logs stay on stderr. Tests check
   # typed problems or diagnostic subjects rather than freezing error prose.
   #
-  # New fixture steps required by this spec (none exist in features/steps_test.go yet):
+  # New manifest fixture steps are required; existing generic run/output steps remain usable.
   # "a manifest inspection checkout" creates an ordinary temporary checkout and writes
   # itos-container.yaml as {version: 1, manifest: .devcontainer/devcontainer.json,
   # network: {mode: offline}}, with no image or identity keys. It writes the selected
@@ -187,6 +191,12 @@ Feature: Inspect the restricted single-worker manifest
   # "host execution sentinels" installs harmless recording scripts/traps and snapshots
   # state AFTER setup, without running any checkout script. It also seeds .git/hooks and
   # editor tasks with those scripts, so an accidental helper call is observable.
+  # Do not call slice-1's installPolicySentinels unchanged: it overwrites the selected
+  # manifest with initializeCommand. Preserve all manifest/policy bytes and label data.
+  # Snapshots use no-follow entry information: record link targets and special-file types,
+  # never traverse symlinks or open a FIFO/device. Read bytes only from regular files;
+  # the unsafe-layout Given must finish before doctor runs. Keep recorder output separate
+  # from the snapshotted trees, and compare it in the side-effect assertion.
   #
   # New Then steps parse actual stdout, never inspect code. "reports a valid manifest"
   # checks one schema=1 object and manifest.valid/path, plus scope="manifest", ok=true
@@ -210,13 +220,15 @@ Feature: Inspect the restricted single-worker manifest
   # fake cannot silently change parsing semantics. Slice-3 owns binary-to-engine evidence.
   #
   # Reuse the existing run, run-with-environment, exit and output-containment steps.
+  # Reuse the run-with-deadline and deadline assertion steps for unsafe-file cases.
   # File scenarios are black-box CLI tests; metadata cases are validator contract tests.
   # All run without Docker and prove validation/inspection, not runtime isolation.
-  # Implementers commit
-  # the missing steps red first, keep these @wip in that commit, then remove @wip for
-  # failing-then-passing runs. This branch has no doctor; after integrating slice-1 it
-  # still has no manifest validation. Metadata has no validator yet. Make the red tests
-  # compile and reach each manifest-specific assertion; missing APIs, undefined steps,
+  # Implementers commit the missing steps red first, keep these @wip in that commit,
+  # then remove @wip for
+  # failing-then-passing runs. Slice-1's doctor and T-14's layout are already present;
+  # doctor currently validates policy only, with no manifest option or metadata validator.
+  # Make the red tests compile and reach each manifest-specific assertion;
+  # missing APIs, undefined steps,
   # unknown-command errors or exit 2 alone are not failing-then-passing proof.
 
   Background:
@@ -304,15 +316,16 @@ Feature: Inspect the restricted single-worker manifest
     And its error output says "--policy-only"
     And it exits with code 2
 
-  # Reject a FIFO without opening it for a blocking read. The step runner must have a
-  # bounded command timeout so an incorrect implementation fails instead of hanging CI.
+  # Reject a FIFO without opening it for a blocking read. The five-second test deadline
+  # bounds an incorrect reader; it does not define a product parsing/resource budget.
   @wip @slice-2 @ID-MANIFEST-04
   Scenario Outline: Refuse unsafe manifest candidates without following or executing them
     Given the manifest is located only at "<file>"
     And the manifest candidate has the layout "<layout>"
     And host execution sentinels are installed
-    When itos-container runs with "doctor --manifest-only --json"
+    When itos-container runs with "doctor --manifest-only --json" and a 5 second deadline
     Then its JSON output reports "manifest.path" at "" with exit 2
+    And it finishes before the deadline
     And it exits with code 2
     And inspection has no host side effects
 
@@ -464,6 +477,9 @@ Feature: Inspect the restricted single-worker manifest
       | "registry.example/Worker@sha256:1111111111111111111111111111111111111111111111111111111111111111"               |
       | "https://registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111"       |
       | "registry.example/worker@sha512:1111"                                                                       |
+      | "sha256:1111111111111111111111111111111111111111111111111111111111111111"                                    |
+      | " registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111"              |
+      | "registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111 "              |
 
   # Ordinary doctor must apply the same refusal before slice-3 engine checks.
   @wip @slice-2 @ID-MANIFEST-10
@@ -480,6 +496,7 @@ Feature: Inspect the restricted single-worker manifest
 
   # Different valid requests are not approval mismatches. A supplied UID does not
   # fill in the other optional UID or grant permission to run either one.
+  # An unqualified image name remains literal; validation must not add docker.io/library.
   @wip @slice-2 @ID-MANIFEST-27
   Scenario Outline: Accept pinned image and UID requests without host approval
     Given the manifest member "image" has JSON value "<image>"
@@ -505,6 +522,7 @@ Feature: Inspect the restricted single-worker manifest
       | registry.example/worker@sha256:2222222222222222222222222222222222222222222222222222222222222222             | containerUser | "1001"        | null       |
       | registry.example/other@sha256:1111111111111111111111111111111111111111111111111111111111111111              | remoteUser    | null          | "1001"     |
       | registry.example:5000/team/worker:release@sha256:1111111111111111111111111111111111111111111111111111111111111111 | containerUser | "1001"    | null       |
+      | worker@sha256:1111111111111111111111111111111111111111111111111111111111111111                               | remoteUser    | null          | "1001"     |
 
   # Workspace and identity are requests for one worker, not ways
   # to choose host paths, extra mounts, an elevated identity or a second user.
@@ -584,6 +602,8 @@ Feature: Inspect the restricted single-worker manifest
 
   # These are literal, synthetic data, not credentials. A host marker is deliberately
   # different from the written dollar expression and must never enter effective settings.
+  # UID 1 and values beyond uint64 prove decimal syntax without an assumed host UID range;
+  # approval/readiness still own whether a requested identity can be used by the worker.
   @wip @slice-2 @ID-MANIFEST-14
   Scenario Outline: Preserve literal environment values and resolve an existing checkout subdirectory
     Given a checkout directory "src" exists
@@ -604,10 +624,12 @@ Feature: Inspect the restricted single-worker manifest
     And inspection has no host side effects
 
     Examples:
-      | container_uid | remote_uid |
-      | 1000          | 1000       |
-      | 1234          | 1234       |
-      | 1001          | 1002       |
+      | container_uid        | remote_uid           |
+      | 1                    | 1                    |
+      | 1000                 | 1000                 |
+      | 1234                 | 1234                 |
+      | 1001                 | 1002                 |
+      | 18446744073709551616 | 18446744073709551617 |
 
   @wip @slice-2 @ID-MANIFEST-15
   Scenario Outline: Reject reserved environment namespaces regardless of case or empty values
@@ -747,8 +769,7 @@ Feature: Inspect the restricted single-worker manifest
       | {"vscode":{"extensions":[""]}}              | manifest.value       | /customizations/vscode/extensions/0   |
       | {"vscode":{"settings":[]}}                  | manifest.value       | /customizations/vscode/settings       |
 
-  # The visible name must remain null even when metadata supplies one. A syntactically
-  # acceptable label is never a second source of effective settings or commands.
+  # Absence is an explicit input, not the default result of skipping image inspection.
   @wip @slice-2 @ID-MANIFEST-29
   Scenario: Distinguish a supplied absent label from metadata that was never inspected
     Given the supplied devcontainer.metadata label is absent
@@ -758,7 +779,10 @@ Feature: Inspect the restricted single-worker manifest
       """
       {"checked":true,"present":false,"unused":[]}
       """
+    And it exits with code 0
 
+  # The visible name must remain null even when metadata supplies one. A syntactically
+  # acceptable label is never a second source of effective settings or commands.
   @wip @slice-2 @ID-MANIFEST-20
   Scenario Outline: Inspect permitted image metadata and report it as unused without merging
     Given the supplied devcontainer.metadata label is:
@@ -776,10 +800,12 @@ Feature: Inspect the restricted single-worker manifest
       """
       {"checked":true,"present":true,"unused":<unused>}
       """
+    And it exits with code 0
     And inspection has no host side effects
     When the manifest inspection contract runs with supplied metadata in plain mode
     Then its standard output says "devcontainer.metadata"
     And its standard output says "unused"
+    And it exits with code 0
     And inspection has no host side effects
 
     Examples:
@@ -904,7 +930,7 @@ Feature: Inspect the restricted single-worker manifest
       | manifest | {"containerEnv":{"PATH":"slice-2-private-marker"}}               | manifest.reserved    | /containerEnv/PATH   |
 
   # A separate plain-output path must not reintroduce parser source snippets or rejected
-  # values. Check the diagnostic's subject before its exit code: unknown doctor already
+  # values. Check the diagnostic's subject before its exit code: an unknown option also
   # exits 2, but cannot identify this file. Existing containment steps suffice;
   # the wording around those subjects remains free to change. Use the same exact-input
   # fixture as ID-MANIFEST-23, with no new setup behavior or assertion step definitions.
