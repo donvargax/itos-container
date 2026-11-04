@@ -135,3 +135,33 @@ repair and now includes the new metadata budget ID. All five metadata IDs export
 executed validator, parser, reference and presenter blocks independently. No
 local mutation run or generated proof artifact is included; the outer loop must
 run fresh changed-code proof in CI at the pushed head.
+
+## Changed-code proof repair
+
+The CI run at `3ee3ff0` reported four uncovered disk-adapter refusal blocks,
+the explicit `/workspace` acceptance block, and a stale equivalent-mutant
+exception for command assembly. This repair adds tests for those existing
+behaviors; it changes no scenario, validation rule or proof gate.
+
+Two private disk helpers expose the existing inspection/open boundary. Tests
+rename real temporary entries after inspection and before opening, retaining the
+original inode so replacement cannot accidentally reuse its identity. They cover
+missing and replaced files/directories, invalid handles, refusal without returned
+bytes or directory handles, and closing the parent and rejected child handles.
+The directory opener used by tests still calls `os.Root.OpenRoot`; no mock result,
+timing-dependent race or privilege-dependent permission fixture is needed.
+The original checks and mutation operators remain in these helpers. A domain
+test also accepts an explicit `/workspace` without querying a checkout subdirectory.
+
+The pinned tool's `mutation except` identity form updated only the existing
+`run` exception hash to `b2da766ccecc42c2`, using its current source identity.
+Its site and reviewed reason are unchanged: empty arguments become `--help`
+before the comparison, so `len(args) > 0` and `len(args) >= 0` are equivalent.
+This is a source-based renewal of that reason, not a claim of fresh mutation
+results. No local mutation run was made, and no generated evidence is committed.
+
+The manifest engine, doctor slice and command assembly package tests pass.
+An ordinary focused Go test run measures 100% statement coverage in both the
+manifest disk and domain packages; its temporary profile is outside the checkout.
+CI must still judge fresh changed-line coverage and sampled mutation proof at
+the next pushed head. Existing red-first scenario evidence above remains applicable.

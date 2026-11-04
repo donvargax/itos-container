@@ -46,6 +46,19 @@ func TestDefaultAndExplicitSettings(t *testing.T) {
 	}
 }
 
+func TestExplicitWorkspaceRoot(t *testing.T) {
+	got, files, _, _ := inspect(map[string]port.Value{
+		"image": str("literal-image"), "workspaceFolder": str("/workspace"),
+	})
+	want := &port.Settings{Image: "literal-image", WorkspaceFolder: "/workspace", ContainerEnv: map[string]string{}}
+	if !reflect.DeepEqual(got.Effective, want) || len(got.Issues) != 0 {
+		t.Fatalf("explicit workspace root: %#v", got)
+	}
+	if len(files.DirectoryReads) != 0 {
+		t.Fatalf("workspace root queried a checkout subdirectory: %v", files.DirectoryReads)
+	}
+}
+
 func TestRepresentationAndReadFailuresShortCircuit(t *testing.T) {
 	for _, failure := range []port.Failure{port.Missing, port.Path} {
 		files := &porttest.Files{Failures: map[string]port.Failure{"selected": failure}}

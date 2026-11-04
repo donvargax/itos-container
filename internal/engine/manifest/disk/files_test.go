@@ -115,3 +115,120 @@ func TestNoFollowAndPathFailures(t *testing.T) {
 		t.Fatal("error mapping")
 	}
 }
+
+func TestCandidateChangesAfterInspection(t *testing.T) {
+	for _, tc := range []struct {
+		change string
+		want   port.Failure
+	}{
+		{"removed", port.Missing},
+		{"replaced file", port.Path},
+		{"replaced directory", port.Path},
+		{"closed root", port.Path},
+	} {
+		t.Run(tc.change, func(t *testing.T) {
+			path := t.TempDir()
+			candidate := filepath.Join(path, "worker.json")
+			if err := os.WriteFile(candidate, []byte("original"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			root, err := os.OpenRoot(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = root.Close() })
+			info, err := root.Lstat("worker.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Retain the original inode so a replacement cannot reuse its identity.
+			if err := os.Rename(candidate, filepath.Join(path, "original.json")); err != nil {
+				t.Fatal(err)
+			}
+			switch tc.change {
+			case "replaced file":
+				err = os.WriteFile(candidate, []byte("replacement must not escape"), 0o600)
+			case "replaced directory":
+				err = os.Mkdir(candidate, 0o700)
+			case "closed root":
+				err = root.Close()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if data, failure := readCandidate(root, "worker.json", info); data != nil || failure != tc.want {
+				t.Fatalf("changed candidate returned %q, %v; want no bytes, %v", data, failure, tc.want)
+			}
+		})
+	}
+}
+
+func TestDirectoryChangesAfterInspection(t *testing.T) {
+	for _, tc := range []struct {
+		change string
+		want   port.Failure
+	}{
+		{"removed", port.Missing},
+		{"replaced file", port.Path},
+		{"replaced directory", port.Path},
+		{"closed child", port.Path},
+	} {
+		t.Run(tc.change, func(t *testing.T) {
+			path := t.TempDir()
+			candidate := filepath.Join(path, "config")
+			if err := os.Mkdir(candidate, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			var parent, child *os.Root
+			open := func(root *os.Root, name string) (*os.Root, error) {
+				parent = root
+				if tc.change != "closed child" {
+					if err := os.Rename(candidate, filepath.Join(path, "original")); err != nil {
+						t.Fatal(err)
+					}
+				}
+				switch tc.change {
+				case "replaced file":
+					if err := os.WriteFile(candidate, []byte("not a directory"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				case "replaced directory":
+					if err := os.Mkdir(candidate, 0o700); err != nil {
+						t.Fatal(err)
+					}
+				}
+				opened, err := root.OpenRoot(name)
+				child = opened
+				if err == nil && tc.change == "closed child" {
+					if err := opened.Close(); err != nil {
+						t.Fatal(err)
+					}
+				}
+				return opened, err
+			}
+			t.Cleanup(func() {
+				if parent != nil {
+					_ = parent.Close()
+				}
+				if child != nil {
+					_ = child.Close()
+				}
+			})
+			root, failure := (Files{Root: path}).walkDirectories([]string{"config"}, open)
+			if root != nil || failure != tc.want {
+				t.Fatalf("changed directory returned %v, %v; want no handle, %v", root, failure, tc.want)
+			}
+			if parent == nil {
+				t.Fatal("directory was not inspected before opening")
+			}
+			if _, err := parent.Stat("."); !errors.Is(err, os.ErrClosed) {
+				t.Fatalf("parent descriptor was not closed: %v", err)
+			}
+			if child != nil {
+				if _, err := child.Stat("."); !errors.Is(err, os.ErrClosed) {
+					t.Fatalf("rejected child descriptor was not closed: %v", err)
+				}
+			}
+		})
+	}
+}

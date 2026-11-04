@@ -35,6 +35,13 @@ func (f Files) Read(path string) ([]byte, port.Failure) {
 	if !info.Mode().IsRegular() {
 		return nil, port.Path
 	}
+	return readCandidate(root, name, info)
+}
+
+// readCandidate checks the opened descriptor against the entry inspected before
+// opening. Keeping this boundary explicit lets tests replace real filesystem
+// entries between inspection and open without relying on a scheduler race.
+func readCandidate(root *os.Root, name string, info fs.FileInfo) ([]byte, port.Failure) {
 	file, err := openCandidate(root, name)
 	if err != nil {
 		return nil, fileFailure(err)
@@ -77,6 +84,12 @@ func validPath(path string) bool {
 }
 
 func (f Files) directory(parts []string) (*os.Root, port.Failure) {
+	return f.walkDirectories(parts, (*os.Root).OpenRoot)
+}
+
+// walkDirectories takes the real directory opener separately so adapter tests
+// can change an entry after inspection and before opening it, deterministically.
+func (f Files) walkDirectories(parts []string, open func(*os.Root, string) (*os.Root, error)) (*os.Root, port.Failure) {
 	path := f.Root
 	if path == "" {
 		path = "."
@@ -95,7 +108,7 @@ func (f Files) directory(parts []string) (*os.Root, port.Failure) {
 			_ = root.Close()
 			return nil, port.Path
 		}
-		next, err := root.OpenRoot(part)
+		next, err := open(root, part)
 		_ = root.Close()
 		if err != nil {
 			return nil, fileFailure(err)
