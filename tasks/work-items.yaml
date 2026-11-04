@@ -368,3 +368,14 @@ items:
     why: >
       T-11's missing-argv and JSON refusals, on the local tier; a valid argv refuses until later
       slices. Creates internal/slices/run.
+  - id: slice-8
+    title: Run preflight and frozen settings
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-4, slice-7]
+    kind: slice
+    why: >
+      Refuse invalid input, approval, identity and image with an empty Engine API journal, and write
+      the frozen snapshot. Host user is the effective UID, root refused. Host UID/GID overrides the
+      image; manifest values must equal it; no chown.
