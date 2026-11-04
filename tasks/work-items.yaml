@@ -86,3 +86,16 @@ items:
     why: >
       Keep the offline owned-run milestone's proof tooling maintained by extending existing update
       automation to tools/bin/pinned, preserving verified checksums alongside version updates.
+  - id: p1-fresh-mutation-baseline
+    title: Record a fresh foundation mutation baseline with pinned itos-cc
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-4]
+    kind: idea
+    why: >
+      T-4 upgrades the launcher to 0.47.2, whose sample finds zero eligible cached mutants from the
+      inherited three-Example snapshot. Its changed-code check judges no Go sources, so passing it
+      does not establish a foundation baseline. Specify separate first-milestone work to measure
+      project-local evidence with the pinned tool, all-tests, fail-uncovered and no-annotate; kill
+      survivors and cover untested code without weakening gates, then commit the resulting evidence.
