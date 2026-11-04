@@ -20,11 +20,11 @@ const (
 	CodeInternal    = 70
 )
 
-// UI is a command's ends: what it reads and where it writes. Nothing here
-// asks a question, so there is no terminal to know of.
 // Classifier gives a known failure its code and problems, or zero and nil.
 type Classifier func(error) (int, []Problem)
 
+// UI is a command's ends: what it reads and where it writes. Nothing here
+// asks a question, so there is no terminal to know of.
 type UI struct {
 	Classify Classifier
 	In       io.Reader

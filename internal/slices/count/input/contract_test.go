@@ -9,7 +9,7 @@ import (
 )
 
 func TestFilesContract(t *testing.T) {
-	porttest.FilesContract(t, func(*testing.T) (port.Files, porttest.Fixture) {
+	porttest.FilesContract(t, func() (port.Files, porttest.Fixture) {
 		files, paths := porttest.ContractFiles()
 		return input.Files{Disk: files, In: strings.NewReader("must not be read")}, paths
 	})
