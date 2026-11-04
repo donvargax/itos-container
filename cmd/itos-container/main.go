@@ -25,9 +25,13 @@ import (
 	"golang.org/x/term"
 
 	"github.com/donvargax/itos-container/internal/cli"
+	"github.com/donvargax/itos-container/internal/engine/policy/disk"
+	policyyaml "github.com/donvargax/itos-container/internal/engine/policy/yaml"
 	"github.com/donvargax/itos-container/internal/slices/count/command"
-	"github.com/donvargax/itos-container/internal/slices/count/disk"
+	countdisk "github.com/donvargax/itos-container/internal/slices/count/disk"
 	"github.com/donvargax/itos-container/internal/slices/count/input"
+	doctor "github.com/donvargax/itos-container/internal/slices/doctor/command"
+	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
 	"github.com/donvargax/itos-container/internal/version"
 )
 
@@ -38,6 +42,7 @@ type commandLine struct {
 	ShowVersion kong.VersionFlag `name:"version" help:"Print the version and the commit it was built from, and exit."`
 
 	Count      command.CLI    `cmd:"" help:"Count the lines and words of a file, or of standard input."`
+	Doctor     doctor.CLI     `cmd:"" help:"Inspect the strict offline sandbox policy."`
 	Version    struct{}       `cmd:"" help:"Print the version and the commit it was built from."`
 	Completion cli.Completion `cmd:"" help:"Print a shell completion script."`
 	Complete   struct{}       `cmd:"" name:"__complete" hidden:""`
@@ -88,10 +93,13 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		// With --json, the failure's object too.
 		return ui.Usage(commandName(args), err, wantsJSON(args))
 	}
-	c.Count.Files = input.Files{Disk: disk.Files{}, In: in}
+	c.Count.Files = input.Files{Disk: countdisk.Files{}, In: in}
 	switch command, _, _ := strings.Cut(ctx.Command(), " "); command {
 	case "count":
 		return c.Count.Run(ui)
+	case "doctor":
+		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}}
+		return c.Doctor.Run(ui)
 	case "version":
 		// What --version prints, as kong prints it.
 		_, _ = fmt.Fprintln(stdout, parser.Model.Vars()["version"])
