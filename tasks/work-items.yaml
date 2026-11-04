@@ -145,3 +145,12 @@ items:
       The offline owned-run milestone requires settled schemas, manifest paths, approval
       canonicalization, checkout/engine identity, host-owned storage and lifecycle semantics before
       runtime implementation. Define black-box acceptance scenarios without executing checkout code.
+
+      Already covers schemas, checkout/engine identity and host-owned approval storage. Include
+      maintained parser selection, its rationale and version pin in this specification before
+      implementing the milestone's configuration and approval behavior.
+
+      Already includes lifecycle semantics and black-box acceptance scenarios. Explicitly cover
+      bounded timeouts, signal forwarding, cancellation, workload exit preservation, cleanup
+      failures and recovery, and interactive JSON refusal before implementing diagnostics and exit
+      mappings for the offline owned-run milestone.
