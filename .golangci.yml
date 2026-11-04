@@ -110,15 +110,36 @@ linters:
           list-mode: strict
           files:
             - "**/internal/cli/**"
+            - "!$test"
           allow:
             - "$gostd"
+            - "github.com/alecthomas/kong$"
+        ui-tests:
+          list-mode: strict
+          files:
+            - "**/internal/cli/*_test.go"
+            - "**/internal/cli/**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/donvargax/itos-container/internal/cli$"
+            - "github.com/donvargax/itos-container/internal/cli/"
             - "github.com/alecthomas/kong$"
         version:
           list-mode: strict
           files:
             - "**/internal/version/**"
+            - "!$test"
           allow:
             - "$gostd"
+        version-tests:
+          list-mode: strict
+          files:
+            - "**/internal/version/*_test.go"
+            - "**/internal/version/**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/donvargax/itos-container/internal/version$"
+            - "github.com/donvargax/itos-container/internal/version/"
         release:
           list-mode: strict
           files:

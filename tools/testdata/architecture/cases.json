@@ -284,7 +284,7 @@
     "File": "internal/cli/probe_test.go",
     "Import": "$module/internal/slices/count/port",
     "Kind": "lint",
-    "Rule": "ui"
+    "Rule": "ui-tests"
   },
   {
     "Name": "version-leaf",
@@ -861,5 +861,82 @@
     "Import": "testing",
     "Kind": "allow",
     "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/cli",
+    "File": "internal/cli/external_test.go",
+    "Import": "$module/internal/cli",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/version",
+    "File": "internal/version/external_test.go",
+    "Import": "$module/internal/version",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/slices/count/domain",
+    "File": "internal/slices/count/domain/external_test.go",
+    "Import": "$module/internal/slices/count/domain",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/engine/shared/domain",
+    "File": "internal/engine/shared/domain/external_test.go",
+    "Import": "$module/internal/engine/shared/domain",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "layout-nested-internal/engine/shared/domain/fakes",
+    "File": "internal/engine/shared/domain/fakes/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "layout-nested-internal/slices/count/domain/porttest",
+    "File": "internal/slices/count/domain/porttest/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "layout-nested-internal/release/fakes",
+    "File": "internal/release/fakes/probe.go",
+    "Import": "",
+    "Kind": "layout",
+    "Rule": "unclassified"
+  },
+  {
+    "Name": "external-own-internal/cli/nested",
+    "File": "internal/cli/nested/external_test.go",
+    "Import": "$module/internal/cli/nested",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "external-own-internal/version/nested",
+    "File": "internal/version/nested/external_test.go",
+    "Import": "$module/internal/version/nested",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "test-leaf-project-internal/cli",
+    "File": "internal/cli/probe_test.go",
+    "Import": "$module/internal/slices/count/port",
+    "Kind": "lint",
+    "Rule": "ui-tests"
+  },
+  {
+    "Name": "test-leaf-project-internal/version",
+    "File": "internal/version/probe_test.go",
+    "Import": "$module/internal/slices/count/port",
+    "Kind": "lint",
+    "Rule": "version-tests"
   }
 ]

@@ -133,6 +133,10 @@ func TestPolicy(t *testing.T) {
 				text = source(p.File, imp)
 			}
 			write(t, dir, p.File, strings.ReplaceAll(text, "$module", module))
+			if strings.HasSuffix(p.File, "external_test.go") {
+				base := filepath.ToSlash(filepath.Join(filepath.Dir(p.File), "base.go"))
+				write(t, dir, base, source(base, ""))
+			}
 			if strings.HasPrefix(imp, module+"/") {
 				folder := strings.TrimPrefix(imp, module+"/")
 				if folder != filepath.ToSlash(filepath.Dir(p.File)) {

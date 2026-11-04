@@ -97,6 +97,9 @@ func classify(path string) role {
 			if under(path, "internal/release/releasetest") {
 				return role{kind: "support", owner: "release", root: "internal/release/releasetest"}
 			}
+			if support(path) {
+				return role{}
+			}
 			return role{kind: name, owner: name, root: "internal/" + name}
 		}
 	}
@@ -109,6 +112,9 @@ func classify(path string) role {
 		}
 		if layer == "port" && len(parts) >= 5 && parts[4] == "porttest" {
 			return role{"support", owner, layer, owner + "/port/porttest"}
+		}
+		if support(strings.Join(parts[4:], "/")) {
+			return role{}
 		}
 		kind := layer
 		if kind != "domain" && kind != "port" && kind != "command" {
