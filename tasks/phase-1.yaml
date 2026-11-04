@@ -1541,5 +1541,3 @@
     The person, 2026-11-04: no Bugbot reviews for the rest of the day only. It is not in review_by,
     so nothing waits on it; removing it from push.pr.reviewers stops the loop's review request
     asking for it. Restored by a following task on 2026-11-05.
-  done_when:
-    - run: "! grep -q 'cursor\\[bot\\]' itos.yaml"
