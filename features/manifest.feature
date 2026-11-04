@@ -108,8 +108,10 @@ Feature: Inspect the restricted single-worker manifest
   # Configuration refusals below all have exit=2; together they return 2. Do not stop at
   # the first independent semantic problem. No problem order is a second public API.
   # Human output explains the candidate/field and how to correct it, and explicitly says
-  # editor customizations/accepted metadata are unused. JSON is one stdout object;
-  # logs stay on stderr. Tests check typed problems rather than freezing error prose.
+  # editor customizations/accepted metadata are unused. Plain refusal diagnostics go to
+  # stderr and identify the candidate file or image label without echoing raw values,
+  # just as in JSON mode. JSON is one stdout object; logs stay on stderr. Tests check
+  # typed problems or diagnostic subjects rather than freezing error prose.
   #
   # New fixture steps required by this spec (none exist in features/steps_test.go yet):
   # "a manifest inspection checkout" creates an ordinary temporary checkout with a
@@ -712,7 +714,8 @@ Feature: Inspect the restricted single-worker manifest
       | customizations         | {"vs/code~1":{}}       | /customizations/vs~1code~01          |
 
   # Synthetic marker only. Parser errors must not echo a source line, and semantic
-  # errors must not dump the rejected command, environment or label value.
+  # errors must not dump the rejected command, environment or label value. The PATH
+  # example is a rejected literal value, never a change to the controller's environment.
   @wip @slice-2 @ID-MANIFEST-23
   Scenario Outline: Diagnose rejected manifest input without disclosing raw values
     Given the manifest inspection input "<source>" has the exact text:
@@ -729,8 +732,35 @@ Feature: Inspect the restricted single-worker manifest
       | source   | text                                                            | rule                 | path                 |
       | manifest | {"name":"slice-2-private-marker"                                 | manifest.syntax      |                      |
       | manifest | {"initializeCommand":"echo slice-2-private-marker"}               | manifest.unsupported | /initializeCommand   |
+      | manifest | {"containerEnv":{"PATH":"slice-2-private-marker"}}               | manifest.reserved    | /containerEnv/PATH   |
       | metadata | [{"initializeCommand":"echo slice-2-private-marker"}]             | manifest.metadata    | /0/initializeCommand |
       | metadata | [{"name":"slice-2-private-marker"                                 | manifest.metadata    |                      |
+
+  # A separate plain-output path must not reintroduce parser source snippets or rejected
+  # values. Check the diagnostic's subject before its exit code: unknown doctor already
+  # exits 2, but cannot identify this file or label. Existing containment steps suffice;
+  # the wording around those subjects remains free to change. Use the same exact-input
+  # fixture as ID-MANIFEST-23, with no new setup behavior or assertion step definitions.
+  @wip @slice-2 @ID-MANIFEST-26
+  Scenario Outline: Plain manifest refusals identify their source without disclosing raw values
+    Given the manifest inspection input "<source>" has the exact text:
+      """
+      <text>
+      """
+    When itos-container runs with "doctor"
+    Then its error output says "<subject>"
+    And its error output says "itos-container:"
+    And its standard output does not say "slice-2-private-marker"
+    And its error output does not say "slice-2-private-marker"
+    And it exits with code 2
+
+    Examples:
+      | source   | text                                                  | subject                        |
+      | manifest | {"name":"slice-2-private-marker"                       | .devcontainer/devcontainer.json |
+      | manifest | {"initializeCommand":"echo slice-2-private-marker"}    | .devcontainer/devcontainer.json |
+      | manifest | {"containerEnv":{"PATH":"slice-2-private-marker"}}    | .devcontainer/devcontainer.json |
+      | metadata | [{"initializeCommand":"echo slice-2-private-marker"}]  | devcontainer.metadata          |
+      | metadata | [{"name":"slice-2-private-marker"                      | devcontainer.metadata          |
 
   @wip @slice-2 @ID-MANIFEST-24
   Scenario: Plain doctor output identifies the manifest and explains unused editor data
