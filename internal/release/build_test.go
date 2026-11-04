@@ -86,7 +86,9 @@ func TestExtractReportsPipeAndStartFailures(t *testing.T) {
 	})
 	t.Run("executable missing", func(t *testing.T) {
 		cmd := exec.Command(filepath.Join(t.TempDir(), "missing"))
-		if err := extractCommand(cmd, "HEAD", t.TempDir()); err == nil || !errors.Is(err, os.ErrNotExist) {
+		// Windows resolves executable extensions before starting the process and
+		// reports exec.ErrNotFound; Unix reports os.ErrNotExist from process start.
+		if err := extractCommand(cmd, "HEAD", t.TempDir()); !errors.Is(err, os.ErrNotExist) && !errors.Is(err, exec.ErrNotFound) {
 			t.Fatalf("start failure = %v", err)
 		}
 	})
