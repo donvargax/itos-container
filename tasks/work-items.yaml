@@ -65,3 +65,14 @@ items:
       The offline owned-run milestone needs reliable CI proof on main and work branches. Correct
       inherited branch conditions while preserving existing checks and the charter's Linux-only
       runtime scope.
+  - id: p1-foundation-mutation-baseline
+    title: Establish a fresh foundation mutation baseline
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The offline owned-run milestone needs trustworthy code proof. After T-4 upgrades itos-cc,
+      generate fresh foundation mutation results so skipped legacy records and an empty sample
+      cannot masquerade as proof.
