@@ -1,8 +1,10 @@
 # T-8 foundation mutation baseline
 
-Measured on Linux amd64 with `tools/bin/pinned itos-cc` 0.47.2 and
-`go version go1.27.3-X:nodwarf5 linux/amd64`. This is evidence for the admitted
-Go foundation on that platform, not other platforms or container isolation.
+Measured on Linux amd64 with `tools/bin/pinned itos-cc` 0.47.2. The initial
+measurement used `go version go1.27.3-X:nodwarf5 linux/amd64`; the CI recovery
+below uses standard Go 1.27.2, selected by the workflow from `go.mod`.
+This is evidence for the admitted Go foundation on that platform, not other
+platforms or container isolation.
 No real-engine scenarios ran. Pins, dependencies, hooks, CI, proof paths and
 thresholds remain unchanged.
 
@@ -59,9 +61,11 @@ The exact identities and reasons are in `itos-cc.yaml` for the person's review.
 
 ## Reproduction
 
-Run from the repository root, without replacing the pinned launcher:
+Run from the repository root, without replacing the pinned launcher. Select
+the standard toolchain and clear the host's Go experiment setting first:
 
 ```sh
+export GOTOOLCHAIN=go1.27.2 GOEXPERIMENT=''
 tools/bin/pinned itos-cc mutation run --all-tests --mutate-all --no-coverage-cache --fail-uncovered --no-annotate cmd internal
 tools/bin/pinned itos-cc mutation check --fail-uncovered --json cmd internal
 tools/bin/pinned itos-cc mutation check --since 4ac0cc4b017feb219ba1645ca4263a7dd26870fd --fail-uncovered --json cmd internal
@@ -71,7 +75,7 @@ The range base is the parent of T-8's actual first specification commit,
 `1536aa563c94175e761b5d2186a7bc3f322e29fb`. The full run is the foundation
 baseline; the range check is additional proof.
 
-## Final result
+## Original local result
 
 All three commands above exited 0 after the last source, test and exception
 change. The measured tree was `ac3d7a69c18a53ee80809dda6ee37fcdcc2f4f22`; its
@@ -101,5 +105,57 @@ for future changes.
 The configured commit hooks accepted the commits. The whole test suite passed
 in the coverage and unmutated baseline stages. Pushing, hosted CI validation
 of the actual pushed head, review of the two equivalence reasons, and item
-closure remain with the coordinating loop; there is no hosted CI run to cite
-from this implementation session.
+closure remained with the coordinating loop at that handoff.
+
+## CI recovery
+
+The [landing run at 7e64b02](https://github.com/donvargax/itos-container/actions/runs/41832816369)
+failed strict proof with `mutation.coverage-stale` on `@go-env`, and its Windows
+test job failed `TestExtractReportsPipeAndStartFailures/executable_missing`.
+Linux and macOS tests passed. The failed run is the coordinator's supplied
+evidence; this recovery session could not fetch its logs because the GitHub
+connection required reauthentication.
+
+Test commit `ed380259f39e8b0d410eda4eaf701c143bf78ffd` recognizes both specific
+missing-executable errors. Windows performs extension lookup before starting
+the process and returns `exec.ErrNotFound`; Unix returns `os.ErrNotExist` from
+process start. Other errors, including a nil result, still fail the assertion.
+The focused release test passed on Linux with standard Go 1.27.2. No production
+code or behavior scenarios changed; Windows execution remains with platform CI.
+
+The old proof passes on the customized host toolchain, but switching to standard
+Go 1.27.2 reproduces `mutation.coverage-stale` on `@go-env` before any edits.
+The pinned itos-cc fingerprints `GOVERSION` and `GOEXPERIMENT`, among other build
+settings. The [pinned setup-go implementation](https://github.com/actions/setup-go/blob/b7ad1dad31e06c5925ef5d2fc7ad053ef454303e/src/installer.ts#L645)
+selects the `toolchain go1.27.2` directive in `go.mod`. Remeasuring with that
+standard compiler repairs the evidence instead of changing the freshness check.
+
+The recovery environment is Linux amd64 for both host and target, Go 1.27.2,
+`CGO_ENABLED=1`, `GOAMD64=v1`, and empty `GOFLAGS`, `GOEXPERIMENT`, `GOARM` and
+`GO386`. `GOTOOLCHAIN=go1.27.2` selects that compiler locally; itos-cc fingerprints
+the resolved compiler version rather than how it was selected. Use the exports
+above for local checks and coordinator landing commands on this host. Its default
+customized compiler cannot validate proof made by a different Go environment.
+
+The full fresh command in Reproduction exited 0 against source/test commit
+`ed380259f39e8b0d410eda4eaf701c143bf78ffd`, as did both cached checks. The exact
+previously failing landing range also passed:
+
+```sh
+tools/bin/pinned itos-cc mutation check --since 2110a1d52a6939c2ef3171ddbb5e55e0d6a39f2e --fail-uncovered --json cmd internal
+```
+
+Proof commit `e3738730433c749de1c84f561708c4b9e3f569c7` saves all 15 generated
+snapshot files. The run freshly judged all 225 mutants with no reuse: 223 killed,
+two existing equivalent exceptions, no other survivors and no uncovered mutants
+or executable blocks. All 73 function records have complete strict coverage,
+including 25 without sites. No file was reported not built. Both range checks
+report four files, seven functions with sites, 41 kills and one exception. The
+scope totals in the original result remain the same.
+
+The regenerated snapshots differ only in the changed test's fingerprints and
+the resolved Go environment fingerprint; mutation outcomes and coverage blocks
+are unchanged. No evidence was hand-edited and no coverage scratch output was
+staged. The full run's unmutated coverage and baseline tests passed. The
+coordinator must push and validate the actual head, including Windows execution,
+before closing the item. This session neither pushed nor launched hosted CI.
