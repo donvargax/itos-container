@@ -50,3 +50,34 @@ func TestPolicyPlainFailureAndPointers(t *testing.T) {
 		t.Fatalf("%d %q %q", code, stdout.String(), stderr.String())
 	}
 }
+
+func TestPolicyDiagnosticEscapesOnlyPresentation(t *testing.T) {
+	for _, tc := range []struct {
+		name, key, pointer, location string
+	}{
+		{"newline", "bad\nkey", "/bad\nkey", `itos-container.yaml/bad\nkey`},
+		{"literal escape", `bad\nkey`, `/bad\nkey`, `itos-container.yaml/bad\\nkey`},
+		{"terminal control", "\x1b[2J\r\x00\x7f", "/\x1b[2J\r\x00\x7f", `itos-container.yaml/\x1b[2J\r\x00\x7f`},
+		{"Unicode and pointer", "ñ~/\u0085\u2028\u2029", "/ñ~0~1\u0085\u2028\u2029", `itos-container.yaml/ñ~0~1\u0085\u2028\u2029`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			ui := cli.UI{Stdout: &stdout, Stderr: &stderr}
+			result := port.Result{Issues: []port.Issue{{Kind: port.UnknownKey, Path: []string{tc.key}}}}
+			if code := presentPolicy(&ui, result, true); code != 2 {
+				t.Fatalf("exit %d, want 2", code)
+			}
+			want := "itos-container: " + tc.location + ": Field is not supported; remove fields absent from the version 1 schema\n"
+			if stderr.String() != want {
+				t.Fatalf("stderr %q, want %q", stderr.String(), want)
+			}
+			var output struct{ Problems []policyProblem }
+			if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+				t.Fatal(err)
+			}
+			if len(output.Problems) != 1 || output.Problems[0].Path != tc.pointer {
+				t.Fatalf("problems %#v, want path %q", output.Problems, tc.pointer)
+			}
+		})
+	}
+}

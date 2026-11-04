@@ -646,7 +646,7 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, unexpected: SYNTHETIC_POLICY_MARKER}                      | policy.unknown_key  | /unexpected   |
       | {version: 1, manifest: [SYNTHETIC_POLICY_MARKER                                         | policy.syntax       |               |
 
-  @slice-1 @bug-1 @ID-POLICY-29 @wip
+  @slice-1 @bug-1 @ID-POLICY-29
   Scenario Outline: diagnostic paths cannot inject terminal controls or extra lines
     Given the policy file contains:
       """

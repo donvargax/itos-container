@@ -2,6 +2,7 @@ package command
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/donvargax/itos-container/internal/cli"
@@ -54,7 +55,10 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 			policy.Version, policy.Manifest, policy.Network.Mode)
 	}
 	for _, problem := range problems {
-		u.Line(fmt.Sprintf("%s%s: %s; %s", problem.File, problem.Path, problem.Message, problem.Fix))
+		// Keys are untrusted text. Escape the terminal location separately from
+		// the JSON Pointer, keeping ordinary locations free of outer quotes.
+		location := strconv.Quote(problem.File + problem.Path)
+		u.Line(fmt.Sprintf("%s: %s; %s", location[1:len(location)-1], problem.Message, problem.Fix))
 	}
 	return code
 }
