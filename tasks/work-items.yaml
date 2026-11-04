@@ -114,6 +114,11 @@ items:
       Already covers fresh project-local mutation evidence after T-4. The reported zero eligible
       cached mutants reinforces that passing upgrade checks does not establish the foundation
       baseline required for the offline owned-run milestone.
+
+      CLI/config guidance and CI alignment remain covered by p1-adapt-cli-config-guidelines and
+      p1-align-ci-branch-conditions. Consolidate p1-foundation-mutation-baseline into this item,
+      retaining its T-4 dependency and proof requirements. T-4's zero eligible records establish no
+      foundation baseline; fresh project-local evidence is still required.
   - id: p1-bound-pinned-tool-downloads
     title: Bound pinned-tool download time
     phase: 1
@@ -125,3 +130,14 @@ items:
       The offline owned-run milestone needs reliable foundation proof tooling. Bound cache-miss
       downloads so unattended checks fail promptly when downloads stall, preserving version pins,
       checksum verification and required gates.
+  - id: p1-correct-contributor-attribution
+    title: Correct CONTRIBUTORS.md attribution guidance
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The offline owned-run milestone needs foundation documentation that identifies itos-container
+      as the actual project. Correct the replaceable-owner claim while preserving upstream
+      provenance and third-party notices.
