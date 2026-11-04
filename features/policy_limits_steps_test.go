@@ -16,6 +16,20 @@ func (w *world) policyLimitSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the policy file contains (\d+) nested sequences below an unknown field$`, func(depth int) error {
 		return write("version: 1\nmanifest: a.json\nextra: " + strings.Repeat("[", depth) + "0" + strings.Repeat("]", depth) + "\n")
 	})
+
+	sc.Step(`^the policy file has (\d+) self-aliases below a key of (\d+) slashes$`, func(count, size int) error {
+		return write("? " + strings.Repeat("/", size) + "\n: &a [" + strings.Repeat("*a,", count) + "]\n")
+	})
+	sc.Step(`^the policy file has an explicit key repeating "([^"]*)" (\d+) times with suffix "([^"]*)"$`, func(text string, count int, suffix string) error {
+		return write("? '" + strings.Repeat(text, count) + suffix + "'\n: 0\n")
+	})
+	sc.Step(`^its combined policy output is at most (\d+) bytes$`, func(limit int) error {
+		size := len(w.stdout) + len(w.stderr)
+		if size > limit {
+			return fmt.Errorf("policy output is %d bytes, exceeds %d", size, limit)
+		}
+		return nil
+	})
 	sc.Step(`^the policy file has representation depth (\d+) using "([^"]*)"$`, func(depth int, shape string) error {
 		var data string
 		switch shape {

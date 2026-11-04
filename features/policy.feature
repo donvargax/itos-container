@@ -101,7 +101,7 @@ Feature: Strict offline sandbox policy
   # policy.empty                no document content, including comments only
   # policy.syntax               malformed YAML/invalid tagged scalar/directive line
   # policy.multiple_documents   more than one document, even an empty trailing one
-  # policy.complexity           representation exceeds depth or node budget
+  # policy.complexity           representation exceeds depth, node or path budget
   # policy.duplicate_key        repeated decoded string key
   # policy.non_string_key       mapping key is not a string
   # policy.anchor               an anchor declaration, even unused
@@ -120,8 +120,16 @@ Feature: Strict offline sandbox policy
   # structural validation, preflight the decoded representation with no per-node
   # allocation: at most 32 levels and 2048 nodes, counting the root at depth 1,
   # every mapping key/value and sequence element, and each alias reference once.
-  # Do not count the document wrapper or follow alias targets. Refuse either
-  # excess with exactly one policy.complexity problem at root, before allocating
+  # Do not count the document wrapper or follow alias targets. Also limit the sum
+  # of representation path lengths to 65536 bytes, after RFC 6901 escaping.
+  # The root path is empty. Each scalar mapping key adds its decoded spelling
+  # (regardless of type) to both its key and value paths; a complex key adds no
+  # component to either. Sequence elements add their decimal index. Count each
+  # node's full path, including ancestors and slash separators, without building
+  # path strings. This conservative budget bounds repeated diagnostic locations,
+  # including aliases below long keys; scalar values do not extend paths.
+  # Standard-library byte lengths and counters suffice; no dependency is needed.
+  # Refuse any excess with exactly one policy.complexity problem at root, before allocating
   # diagnostic paths or converting values (including scalar validation).
   # Within those budgets, collect structural problems before schema validation.
   # Recognize merge keys before generic key/tag checks, reporting only merge_key
@@ -916,6 +924,53 @@ Feature: Strict offline sandbox policy
       | %TAG !e! tag:example:              |
       | %TAG !! tag:yaml.org,2002:         |
       | %TAG ! tag:yaml.org,2002:          |
+
+  # This is the review's 65147-byte, 2048-node shallow self-alias reproduction.
+  # Check output length before comparing diagnostics so a regression reports a
+  # small assertion failure instead of copying its amplified output into logs.
+  @wip @slice-1 @ID-POLICY-41
+  Scenario Outline: shallow aliases cannot amplify long diagnostic paths
+    Given the policy file has 2045 self-aliases below a key of 59000 slashes
+    When itos-container runs with "doctor --policy-only <format>" and a 5 second deadline
+    Then its combined policy output is at most 4096 bytes
+    And it finishes before the deadline
+    And it exits with code 2
+    And its error output is exactly:
+      """
+      itos-container: itos-container.yaml: Policy representation is too complex; reduce the policy to at most 32 levels, 2048 nodes and 65536 aggregate path bytes
+      """
+    And the engine recorder has no connections
+
+    Examples:
+      | format |
+      |        |
+      | --json |
+
+  @wip @slice-1 @ID-POLICY-42
+  Scenario Outline: aggregate path limits count escaped bytes and accept the boundary
+    Given the policy file has an explicit key repeating "<text>" <count> times with suffix "xx"
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then its combined policy output is at most 4096 bytes
+    And it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule              | path | exit |
+      | policy.complexity |      | 2    |
+    And it exits with code 2
+    Given the policy file has an explicit key repeating "<text>" <count> times with suffix "x"
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule            | path     | exit |
+      | policy.required | /version | 2    |
+    And it exits with code 2
+    And the engine recorder has no connections
+
+    Examples:
+      | text | count |
+      | a    | 32766 |
+      | /    | 16383 |
+      | ~    | 16383 |
+      | ñ    | 16383 |
 
   # New Given: create only harness-owned helper executables on the child PATH for
   # git, docker, devcontainer, sh, bash and npm. Each records execution and exits;
