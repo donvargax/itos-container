@@ -55,13 +55,9 @@ items:
     title: Establish a fresh foundation mutation baseline
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The offline owned-run milestone needs trustworthy code proof. After T-4 upgrades itos-cc,
-      generate fresh foundation mutation results so skipped legacy records and an empty sample
-      cannot masquerade as proof.
   - id: p1-track-shell-pinned-tools
     title: Track shell-pinned tools in update automation
     phase: 1
