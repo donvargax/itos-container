@@ -457,3 +457,18 @@
     No scenarios have failing steps to report. The drafter commits only this ledger entry;
     the implementer supplies tests and evidence, and the loop alone pushes and closes T-8
     after the actual pushed head is green and its required proof passes.
+- id: T-9
+  type: docs
+  title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
+  why: >
+    The milestone needs accurate coordinator guidance. Replace template branch assumptions and stale
+    CLI, godog and proof coverage claims with instructions matching the charter and current
+    configuration. Include this distinction in the planned coordinator guidance refresh: use itos
+    work show and tasks/phase-1.yaml for inspection. itos task executes checks, including T-8's full
+    mutation measurement, so drafting guidance must not present it as read-only inspection. Include
+    task-specific implementer briefs in the coordinator-guidance refresh: resolve placeholders,
+    derive instructions from the ledger's task type and checks, and reserve lifecycle actions for
+    the loop. T-8 needs test-task checks without new behavior scenarios. This prevents conflicting
+    guidance during the offline owned-run milestone.
+  done_when:
+    - run: sh -eu -c 'f=docs/ORCHESTRATING.md; for text in charter.md container-pilot.md "offline owned-run" "itos work show" tasks/phase-1.yaml "itos task" "cmd/" "internal/" all-tests fail-uncovered no-annotate; do grep -Fq "$text" "$f"; done; ! grep -Eq "specific to this template|no public CLI|stacks and features remain real projects|add .* with the public CLI" "$f"'

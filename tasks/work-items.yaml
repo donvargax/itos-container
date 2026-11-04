@@ -124,26 +124,13 @@ items:
       bounded timeouts, signal forwarding, cancellation, workload exit preservation, cleanup
       failures and recovery, and interactive JSON refusal before implementing diagnostics and exit
       mappings for the offline owned-run milestone.
-  - id: p1-refresh-orchestrating-guide
+  - id: T-9
     title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      The milestone needs accurate coordinator guidance. Replace template branch assumptions and
-      stale CLI, godog and proof coverage claims with instructions matching the charter and current
-      configuration.
-
-      Include this distinction in the planned coordinator guidance refresh: use itos work show and
-      tasks/phase-1.yaml for inspection. itos task executes checks, including T-8's full mutation
-      measurement, so drafting guidance must not present it as read-only inspection.
-
-      Include task-specific implementer briefs in the coordinator-guidance refresh: resolve
-      placeholders, derive instructions from the ledger's task type and checks, and reserve
-      lifecycle actions for the loop. T-8 needs test-task checks without new behavior scenarios.
-      This prevents conflicting guidance during the offline owned-run milestone.
+    kind: task
   - id: p1-track-gherkin-mutation-freshness
     title: Review Gherkin inputs in mutation freshness tracking
     phase: 1
