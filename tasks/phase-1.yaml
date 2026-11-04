@@ -1550,3 +1550,28 @@
     under push.pr.review_stall. So the driver's ask_security and nudge_security can go. Set
     review_stall 900 here, as the second request needs it and the default ci.watch.timeout of 1800
     is judged first. Move the workflows' itos action pins with it.
+- id: T-19
+  type: docs
+  title: Bring arc42 up to date with what landed and what the person decided
+  why: >
+    The person reviewed docs/architecture/arc42.md on 2026-11-04 and accepts it; the charter makes
+    it the current design, a hypothesis. Status: current design, not draft. Mark policy and doctor
+    implemented, add slice-5 and its parser. Scope 'numeric limits remain person decisions' to
+    lifecycle budgets, as slices 1 and 5 fixed 65536 bytes, 32 levels and 2048 nodes. Engine tier:
+    past tense, citing features/README.md. Most important: add the third test tier, as the proof
+    runs engine-disabled, so Docker adapter lines need slice-3's HTTP Engine API fixture. Note
+    itos-cc.yaml's porttest exclude. Drift is an 'Architecture drift' idea, per the charter. Risks:
+    owner is the spec, and the person under the charter's stop rule. Open choices: no persistent
+    state this milestone, init deferred, no lifecycle hooks. Record the person's answers: A1
+    scriptable --fingerprint, and what that allows; A2 no persistent state; A3 the worker stays
+    isolated until stop, and list or status shows sessions that lost their controller as candidates
+    to stop; A4 pids 4096, no quota claim. Record the loop's settled answers, each with its reason:
+    host user is the effective UID, root refused; worker UID is the host UID/GID overriding the
+    image, manifest values must equal it, no chown; the person pulls the manifest digest and
+    approval binds it; offline by NetworkMode none, inspected before start, proven by probes; an
+    fsynced intent record before create, reconciling by record plus random name; waits 10 s call,
+    120 s startup, 30 s teardown; signals forward once, 10 s grace, then SIGKILL, observed exit
+    wins; recovery records beside approvals, random hex IDs, a per-session lock, revalidating daemon
+    and resource before mutating. Later-milestone questions stay open. Docs only.
+  done_when:
+    - run: grep -q 'Engine API fixture' docs/architecture/arc42.md && grep -q 'NetworkMode' docs/architecture/arc42.md && ! grep -qi 'numeric limits remain person decisions' docs/architecture/arc42.md
