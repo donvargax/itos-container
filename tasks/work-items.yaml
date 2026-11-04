@@ -113,7 +113,7 @@ items:
     title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-track-gherkin-mutation-freshness
@@ -170,6 +170,10 @@ items:
       Already covered. Include features/README.md and comments in itos.yaml and
       .github/workflows/release.yml, preserving existing gates, provenance and limits on
       container-support claims.
+
+      Include README hook registration and verification instructions in the existing guidance
+      refresh so contributors enable local lint and vulnerability checks. This foundation follow-up
+      can wait unless it blocks the charter’s configuration, doctor and approval step.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -180,8 +184,8 @@ items:
   - id: slice-1
     title: Validate the strict offline sandbox policy
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
