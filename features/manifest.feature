@@ -100,8 +100,10 @@ Feature: Inspect the restricted single-worker manifest
   #
   # On manifest refusal, schema=1, ok=false, manifest.valid=false and no manifest.effective.
   # Each problem has rule, exit, nonempty message/fix, and path (a decoded-key JSON pointer;
-  # the root is ""). File problems have file=<relative candidate>; discovery problems have
-  # file="". Image-label problems instead have image=<policy image> and
+  # the root is ""). Build each pointer from decoded key segments, escaping ~ as ~0 and
+  # / as ~1 within each segment, including duplicate keys and image-label problems.
+  # A slash in a key is not a nesting boundary. File problems have file=<relative candidate>;
+  # discovery problems have file="". Image-label problems instead have image=<policy image> and
   # label="devcontainer.metadata". No raw input values/lines/commands appear in diagnostics.
   # Configuration refusals below all have exit=2; together they return 2. Do not stop at
   # the first independent semantic problem. No problem order is a second public API.
@@ -133,6 +135,11 @@ Feature: Inspect the restricted single-worker manifest
   # "manifest text is" preserves the exact doc string, including duplicate keys and escapes.
   # The unsafe-path fixture supplies valid bytes behind links, and a dangling-link case;
   # outside targets remain inside the test's temporary parent, never a real host secret.
+  # Candidate layouts modify the sole selected manifest location, not always the nested
+  # default. A workspace entry can name several components: an intermediate-symlink
+  # layout links its first component to a directory containing the remaining path.
+  # All symlink targets other than explicit dangling cases exist and contain valid data,
+  # so accepting an in-checkout link or checking only the final component is detectable.
   # "host execution sentinels" installs harmless recording scripts/traps and snapshots
   # state AFTER setup, without running any checkout script. It also seeds .git/hooks and
   # editor tasks with those scripts, so an accidental helper call is observable.
@@ -215,7 +222,8 @@ Feature: Inspect the restricted single-worker manifest
   # bounded command timeout so an incorrect implementation fails instead of hanging CI.
   @wip @slice-2 @ID-MANIFEST-04
   Scenario Outline: Refuse unsafe manifest candidates without following or executing them
-    Given the manifest candidate has the layout "<layout>"
+    Given the manifest is located only at "<file>"
+    And the manifest candidate has the layout "<layout>"
     And host execution sentinels are installed
     When itos-container runs with "doctor --json"
     Then its JSON output reports "manifest.path" at "" with exit 2
@@ -223,13 +231,19 @@ Feature: Inspect the restricted single-worker manifest
     And inspection has no host side effects
 
     Examples:
-      | layout                                      |
-      | file symlink to an in-checkout file           |
-      | file symlink outside the checkout            |
-      | dangling file symlink                        |
-      | .devcontainer directory symlink              |
-      | directory at .devcontainer/devcontainer.json  |
-      | FIFO at .devcontainer/devcontainer.json       |
+      | file                           | layout                                     |
+      | .devcontainer/devcontainer.json | file symlink to an in-checkout file        |
+      | .devcontainer/devcontainer.json | file symlink outside the checkout         |
+      | .devcontainer/devcontainer.json | dangling file symlink                     |
+      | .devcontainer/devcontainer.json | .devcontainer directory symlink           |
+      | .devcontainer/devcontainer.json | dangling .devcontainer directory symlink  |
+      | .devcontainer/devcontainer.json | directory at the selected candidate       |
+      | .devcontainer/devcontainer.json | FIFO at the selected candidate            |
+      | .devcontainer.json              | file symlink to an in-checkout file        |
+      | .devcontainer.json              | file symlink outside the checkout         |
+      | .devcontainer.json              | dangling file symlink                     |
+      | .devcontainer.json              | directory at the selected candidate       |
+      | .devcontainer.json              | FIFO at the selected candidate            |
 
   @wip @slice-2 @ID-MANIFEST-05
   Scenario Outline: Reject malformed JSON and JSON5 extensions before interpreting fields
@@ -275,15 +289,18 @@ Feature: Inspect the restricted single-worker manifest
       | {"image":"one","\u0069mage":"two"}                                      | /image                                    |
       | {"containerEnv":{"MODE":"one","M\u004fDE":"two"}}                        | /containerEnv/MODE                        |
       | {"customizations":{"vscode":{"settings":{"a":[{"x":1,"x":2}]}}}}         | /customizations/vscode/settings/a/0/x      |
+      | {"customizations":{"vscode":{"settings":{"a/b~c":1,"a\\u002fb~c":2}}}}  | /customizations/vscode/settings/a~1b~0c    |
 
   # A recognized unsafe field is not made acceptable by false, [] or {}. Unknown fields
   # fail too, including misspellings and fields from the unrestricted devcontainer spec.
   @wip @slice-2 @ID-MANIFEST-07
   Scenario Outline: Refuse unsupported execution and permission fields
     Given the manifest member "<field>" has JSON value <value>
+    And host execution sentinels are installed
     When itos-container runs with "doctor --json"
     Then its JSON output reports "manifest.unsupported" at "/<field>" with exit 2
     And it exits with code 2
+    And inspection has no host side effects
 
     Examples:
       | field               | value                                      |
@@ -370,9 +387,11 @@ Feature: Inspect the restricted single-worker manifest
   @wip @slice-2 @ID-MANIFEST-11
   Scenario Outline: Refuse workspace locations outside the fixed checkout layout
     Given the manifest member "workspaceFolder" has JSON value <folder>
+    And host execution sentinels are installed
     When itos-container runs with "doctor --json"
     Then its JSON output reports "manifest.workspace" at "/workspaceFolder" with exit 2
     And it exits with code 2
+    And inspection has no host side effects
 
     Examples:
       | folder                      |
@@ -392,8 +411,8 @@ Feature: Inspect the restricted single-worker manifest
 
   @wip @slice-2 @ID-MANIFEST-12
   Scenario Outline: Refuse a workspace directory reached through a symlink or a file
-    Given the checkout workspace entry "src" has layout "<layout>"
-    And the manifest member "workspaceFolder" has JSON value "/workspace/src"
+    Given the checkout workspace entry "<entry>" has layout "<layout>"
+    And the manifest member "workspaceFolder" has JSON value "/workspace/<entry>"
     And host execution sentinels are installed
     When itos-container runs with "doctor --json"
     Then its JSON output reports "manifest.workspace" at "/workspaceFolder" with exit 2
@@ -401,10 +420,13 @@ Feature: Inspect the restricted single-worker manifest
     And inspection has no host side effects
 
     Examples:
-      | layout                          |
-      | symlink to an in-checkout directory |
-      | symlink outside the checkout     |
-      | regular file                    |
+      | entry      | layout                                                |
+      | src        | symlink to an in-checkout directory                    |
+      | src        | symlink outside the checkout                          |
+      | src        | dangling symlink                                      |
+      | src        | regular file                                          |
+      | src/nested | intermediate symlink to an in-checkout directory       |
+      | src/nested | intermediate symlink outside the checkout             |
 
   @wip @slice-2 @ID-MANIFEST-13
   Scenario Outline: Neither manifest user can change the policy's non-root identity
@@ -429,23 +451,29 @@ Feature: Inspect the restricted single-worker manifest
   # These are literal, synthetic data, not credentials. A host marker is deliberately
   # different from the written dollar expression and must never enter effective settings.
   @wip @slice-2 @ID-MANIFEST-14
-  Scenario: Preserve literal environment values and resolve an existing checkout subdirectory
-    Given a checkout directory "src" exists
+  Scenario Outline: Preserve literal environment values and resolve an existing checkout subdirectory
+    Given the policy selects worker identity "<identity>"
+    And a checkout directory "src" exists
     And the manifest member "name" has JSON value "worker display"
     And the manifest member "workspaceFolder" has JSON value "/workspace/src"
-    And the manifest member "containerUser" has JSON value "1000"
-    And the manifest member "remoteUser" has JSON value "1000"
+    And the manifest member "containerUser" has JSON value "<uid>"
+    And the manifest member "remoteUser" has JSON value "<uid>"
     And the manifest member "containerEnv" has JSON value {"APP_MODE":"offline","EMPTY":"","TEXT":"$SLICE_2_HOST $(touch slice-2-ran) `touch slice-2-ran` // literal /* literal */","LINES":"first\nsecond"}
     And host execution sentinels are installed
     When itos-container runs with "doctor --json" and the environment "SLICE_2_HOST=host-only-marker"
     Then its JSON output reports a valid manifest at ".devcontainer/devcontainer.json"
     And its JSON value at "/manifest/effective" is:
       """
-      {"name":"worker display","image":"registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111","workspaceFolder":"/workspace/src","containerEnv":{"APP_MODE":"offline","EMPTY":"","TEXT":"$SLICE_2_HOST $(touch slice-2-ran) `touch slice-2-ran` // literal /* literal */","LINES":"first\nsecond"},"containerUser":"1000","remoteUser":"1000"}
+      {"name":"worker display","image":"registry.example/worker@sha256:1111111111111111111111111111111111111111111111111111111111111111","workspaceFolder":"/workspace/src","containerEnv":{"APP_MODE":"offline","EMPTY":"","TEXT":"$SLICE_2_HOST $(touch slice-2-ran) `touch slice-2-ran` // literal /* literal */","LINES":"first\nsecond"},"containerUser":"<uid>","remoteUser":"<uid>"}
       """
     And its standard output does not say "host-only-marker"
     And its error output does not say "host-only-marker"
     And inspection has no host side effects
+
+    Examples:
+      | identity  | uid  |
+      | 1000:1000 | 1000 |
+      | 1234:2345 | 1234 |
 
   @wip @slice-2 @ID-MANIFEST-15
   Scenario Outline: Reject reserved environment namespaces regardless of case or empty values
@@ -638,6 +666,7 @@ Feature: Inspect the restricted single-worker manifest
       | [{"name":"one","name":"two"}]                          | /0/name               |
       | [{"name":"one","n\u0061me":"two"}]                     | /0/name               |
       | [{"customizations":{"vscode":{"settings":{"x":1,"x":2}}}}] | /0/customizations/vscode/settings/x |
+      | [{"customizations":{"vscode":{"settings":{"a/b~c":1,"a\\u002fb~c":2}}}}] | /0/customizations/vscode/settings/a~1b~0c |
       | [{"name":42}]                                           | /0/name               |
       | [{"customizations":{"otherEditor":{}}}]                 | /0/customizations/otherEditor |
       | [{"image":"other"}]                                     | /0/image              |
@@ -666,6 +695,21 @@ Feature: Inspect the restricted single-worker manifest
     And its JSON output reports "manifest.identity" at "/remoteUser" with exit 2
     And its JSON output gives each problem a rule, a message and a fix
     And it exits with code 2
+
+  # A key can contain a slash or tilde without naming a child field. Escaped pointer
+  # segments keep the refusal's subject unambiguous for scripts and remediation tools.
+  @wip @slice-2 @ID-MANIFEST-25
+  Scenario Outline: Keep diagnostic paths distinct from literal slashes and tildes in keys
+    Given the manifest member "<field>" has JSON value <value>
+    When itos-container runs with "doctor --json"
+    Then its JSON output reports "manifest.unsupported" at "<path>" with exit 2
+    And it exits with code 2
+
+    Examples:
+      | field                  | value                 | path                                |
+      | customizations/vscode  | {}                    | /customizations~1vscode              |
+      | customizations~1vscode | {}                    | /customizations~01vscode             |
+      | customizations         | {"vs/code~1":{}}       | /customizations/vs~1code~01          |
 
   # Synthetic marker only. Parser errors must not echo a source line, and semantic
   # errors must not dump the rejected command, environment or label value.
