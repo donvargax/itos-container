@@ -321,6 +321,8 @@ items:
       The output of that failure was lost, so the cause is not known: suspect a timeout or a
       contended build in the matrix. itos.yaml being an enforcement input runs it on every such
       commit. Capture a failure first.
+
+      From arc42's review: go.mod is an enforcement input, so slices 2 and 3 hit this.
   - id: slice-5
     title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
     phase: 1
