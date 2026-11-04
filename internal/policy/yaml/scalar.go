@@ -12,8 +12,9 @@ import (
 
 // YAML v3 also resolves YAML 1.1 numbers and timestamps. These YAML 1.2 core
 // scalar patterns supplement its parser; nodes still own all YAML syntax.
+// Core signs apply only to decimal integers: yaml.org/spec/1.2.2/#1032-tag-resolution.
 var (
-	integer   = regexp.MustCompile(`^[+-]?(?:[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+)$`)
+	integer   = regexp.MustCompile(`^(?:[+-]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+)$`)
 	decimal   = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
 	nonfinite = regexp.MustCompile(`^(?:[+-]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$`)
 )

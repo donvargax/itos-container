@@ -30,7 +30,7 @@ func TestCoreScalarMeanings(t *testing.T) {
 		{"2026-11-04", port.String, "", "2026-11-04"}, {"1_000", port.String, "", "1_000"},
 		{"0b10", port.String, "", "0b10"}, {"0XFF", port.String, "", "0XFF"},
 		{"1", port.Number, "1", ""}, {"077", port.Number, "77", ""}, {"0o77", port.Number, "63", ""},
-		{"0xFF", port.Number, "255", ""}, {"+0x1", port.Number, "1", ""}, {"-0o7", port.Number, "-7", ""},
+		{"0xFF", port.Number, "255", ""}, {"+0x1", port.String, "", "+0x1"}, {"-0o7", port.String, "", "-0o7"},
 		{"1e0", port.Number, "1", ""}, {".5", port.Number, "1/2", ""},
 		{"1.00000000000000000001", port.Number, "100000000000000000001/100000000000000000000", ""},
 		{"!!float 2", port.Number, "2", ""}, {"!!float 2.5", port.Number, "5/2", ""},
@@ -64,7 +64,7 @@ func TestCoreScalarMeanings(t *testing.T) {
 func TestMalformedAndTaggedData(t *testing.T) {
 	for _, text := range []string{
 		"\xff", "{", "!!int no", "!!bool yes", "!!null no", "!!int .inf",
-		"!!map one", "!!seq one", "!!str [one]", "!!int {}", "!!float 0x1",
+		"!!map one", "!!seq one", "!!map []", "!!seq {}", "!!str [one]", "!!int {}", "!!float 0x1",
 		"!!float word", "1e999999999999999999999", "!!str {a: b}",
 		"version: 1\n---\n[", "{extra: [!!bool wrong], version: &a 1}",
 	} {
