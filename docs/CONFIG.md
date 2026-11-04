@@ -98,6 +98,14 @@ if it grows. Symbolic links (including dangling links), non-regular files and
 oversized input report `policy.unreadable` with exit 3 before parsing. This does
 not establish checkout identity or approval-time substitution protection.
 
+After YAML syntax and single-document checks, a preflight limits the decoded
+representation to 32 levels and 2048 nodes. The root is depth 1; mapping keys,
+mapping values and sequence elements each count as nodes one level below their
+parent. Alias references count once without following their targets; the document
+wrapper does not count. Either excess reports one `policy.complexity` problem at
+the root with exit 2, before diagnostic collection or value conversion. This
+bounds validation of hostile data, including custom tags below unknown fields.
+
 Successful human output escapes manifest controls, quotes and Unicode line
 separators using Go string escapes without outer quotes. Printable Unicode stays
 readable; JSON retains the original decoded manifest value. The

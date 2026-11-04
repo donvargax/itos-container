@@ -42,6 +42,7 @@ const (
 	Empty
 	Syntax
 	MultipleDocuments
+	Complexity
 	DuplicateKey
 	NonStringKey
 	Anchor

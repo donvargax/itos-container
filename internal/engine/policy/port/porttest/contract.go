@@ -3,6 +3,7 @@ package porttest
 import (
 	"bytes"
 	"reflect"
+	"strings"
 
 	"github.com/donvargax/itos-container/internal/engine/policy/port"
 )
@@ -72,6 +73,8 @@ func SourceContract(t Reporter, open func(SourceFixture) port.Source) {
 		{Data: "{", Issues: []port.Issue{{Kind: port.Syntax}}},
 		{Data: "a: one\na: two", Issues: []port.Issue{{Kind: port.DuplicateKey, Path: []string{"a"}}}},
 		{Data: "null\n---\nnull", Issues: []port.Issue{{Kind: port.MultipleDocuments}}},
+		{Data: strings.Repeat("!x [", 32) + "0" + strings.Repeat("]", 32), Issues: []port.Issue{{Kind: port.Complexity}}},
+		{Data: "[" + strings.Repeat("0,", 2048) + "]", Issues: []port.Issue{{Kind: port.Complexity}}},
 		{Data: "sensitive", Failure: port.Missing, Issues: []port.Issue{{Kind: port.Missing}}},
 		{Data: "sensitive", Failure: port.Unreadable, Issues: []port.Issue{{Kind: port.Unreadable}}},
 	}

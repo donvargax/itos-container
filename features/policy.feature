@@ -795,13 +795,13 @@ Feature: Strict offline sandbox policy
   # collection exposes retained ancestor paths on these small hostile inputs.
   # The 64 MiB threshold is a regression fixture, not a new policy/runtime limit.
   @slice-1 @bug-4 @ID-POLICY-35
-  Scenario Outline: deeply nested unknown policy data cannot retain quadratic traversal paths
+  Scenario Outline: deeply nested unknown policy data is refused before traversal
     Given the policy file contains <depth> nested sequences below an unknown field
     When itos-container runs with "doctor --policy-only --json" and the environment "GODEBUG=gctrace=1;GOGC=10;GOMEMLIMIT=off"
     Then its GC trace reports less than 64 MiB of heap
     And its policy JSON reports exactly these problems:
-      | rule               | path   | exit |
-      | policy.unknown_key | /extra | 2    |
+      | rule              | path | exit |
+      | policy.complexity |      | 2    |
     And it exits with code 2
     And the engine recorder has no connections
 
@@ -810,7 +810,7 @@ Feature: Strict offline sandbox policy
       | 6000  |
       | 8000  |
 
-  @wip @slice-1 @ID-POLICY-36
+  @slice-1 @ID-POLICY-36
   Scenario Outline: representation depth is bounded before structural validation
     Given the policy file has representation depth 33 using "<shape>"
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
@@ -827,7 +827,7 @@ Feature: Strict offline sandbox policy
       | mappings     |
       | complex keys |
 
-  @wip @slice-1 @ID-POLICY-37
+  @slice-1 @ID-POLICY-37
   Scenario Outline: representation node count is bounded including mapping keys
     Given the policy file has 2049 representation nodes using "<shape>"
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
@@ -843,7 +843,7 @@ Feature: Strict offline sandbox policy
       | sequences |
       | mappings  |
 
-  @wip @slice-1 @ID-POLICY-38
+  @slice-1 @ID-POLICY-38
   Scenario: custom tags at every depth cannot amplify retained diagnostic paths
     Given the policy file contains 6000 nested tagged sequences below an unknown field
     When itos-container runs with "doctor --policy-only --json" and the environment "GODEBUG=gctrace=1;GOGC=10;GOMEMLIMIT=off" and a 5 second deadline

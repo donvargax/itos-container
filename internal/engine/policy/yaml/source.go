@@ -17,6 +17,11 @@ import (
 // Source reads the policy through a files port.
 type Source struct{ Files port.Files }
 
+const (
+	maxDepth = 32
+	maxNodes = 2048
+)
+
 // Read checks the whole representation before exposing any policy fields.
 func (s Source) Read() (port.Value, []port.Issue) {
 	data, failure := s.Files.Read()
@@ -47,6 +52,10 @@ func (s Source) Read() (port.Value, []port.Issue) {
 	if root.Kind == yaml.ScalarNode && root.Tag == "!!null" && root.Value == "" && root.Style == 0 {
 		return rejected(port.Empty)
 	}
+	remaining := maxNodes
+	if !withinLimits(root, 1, &remaining) {
+		return rejected(port.Complexity)
+	}
 	reader := tree{}
 	value := reader.visit(root)
 	if reader.syntax {
@@ -56,6 +65,22 @@ func (s Source) Read() (port.Value, []port.Issue) {
 		return port.Value{}, reader.issues
 	}
 	return value, nil
+}
+
+// Preflight uses only a depth-limited call stack and one node counter, before
+// value conversion or diagnostic allocation. Content includes mapping keys;
+// alias targets are separate pointers and are deliberately never followed.
+func withinLimits(node *yaml.Node, depth int, remaining *int) bool {
+	if depth > maxDepth || *remaining == 0 {
+		return false
+	}
+	*remaining--
+	for _, child := range node.Content {
+		if !withinLimits(child, depth+1, remaining) {
+			return false
+		}
+	}
+	return true
 }
 
 func rejected(kind port.Failure) (port.Value, []port.Issue) {
