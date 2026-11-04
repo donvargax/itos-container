@@ -69,7 +69,11 @@ const (
 )
 
 func TestFeatures(t *testing.T) {
-	filter, err := tagFilter(*scenarios, ".")
+	selection, err := selectScenarios(*scenarios, ".", featureEnvironment{
+		engine: os.Getenv("ITOS_CONTAINER_ENGINE_TESTS"),
+		ci:     os.Getenv("CI"), actions: os.Getenv("GITHUB_ACTIONS"),
+		os: runtime.GOOS, arch: runtime.GOARCH,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,20 +86,36 @@ func TestFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	suite := godog.TestSuite{
-		Name:                "itos-container",
-		ScenarioInitializer: func(sc *godog.ScenarioContext) { initializeScenario(sc, root, bin) },
-		Options: &godog.Options{
-			Format:   "pretty",
-			Paths:    []string{"."},
-			Tags:     filter,
-			Strict:   true,
-			TestingT: t,
-		},
-	}
-	if suite.Run() != 0 {
+	if runScenarios(selection, godog.Options{
+		Format:   "pretty",
+		Paths:    []string{"."},
+		Strict:   true,
+		TestingT: t,
+	}, func(sc *godog.ScenarioContext) { initializeScenario(sc, root, bin) }) != 0 {
 		t.Fatal("a scenario failed")
 	}
+}
+
+// These seams let memory-only fixtures exercise the same selection and runner
+// as TestFeatures. The red-first extraction retains the existing tag policy.
+type featureEnvironment struct{ engine, ci, actions, os, arch string }
+
+type scenarioSelection struct {
+	filter   string
+	count    int
+	skip     string
+	excluded []string
+}
+
+func selectScenarios(pattern, dir string, _ featureEnvironment) (scenarioSelection, error) {
+	filter, err := tagFilter(pattern, dir)
+	return scenarioSelection{filter: filter}, err
+}
+
+func runScenarios(selection scenarioSelection, options godog.Options, initialize func(*godog.ScenarioContext)) int {
+	options.Tags = selection.filter
+	suite := godog.TestSuite{Name: "itos-container", Options: &options, ScenarioInitializer: initialize}
+	return suite.Run()
 }
 
 // build builds cmd/itos-container from the module at root into dir,
