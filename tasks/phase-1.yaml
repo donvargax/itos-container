@@ -1554,27 +1554,149 @@
   type: docs
   title: Bring arc42 up to date with what landed and what the person decided
   why: >
-    The person reviewed docs/architecture/arc42.md on 2026-11-04 and accepts it; the charter makes
-    it the current design, a hypothesis. Status: current design, not draft. Mark policy and doctor
-    implemented, add slice-5 and its parser. Scope 'numeric limits remain person decisions' to
-    lifecycle budgets, as slices 1 and 5 fixed 65536 bytes, 32 levels and 2048 nodes. Engine tier:
-    past tense, citing features/README.md. Most important: add the third test tier, as the proof
-    runs engine-disabled, so Docker adapter lines need slice-3's HTTP Engine API fixture. Note
-    itos-cc.yaml's porttest exclude. Drift is an 'Architecture drift' idea, per the charter. Risks:
-    owner is the spec, and the person under the charter's stop rule. Open choices: no persistent
-    state this milestone, init deferred, no lifecycle hooks. Record the person's answers: A1
-    scriptable --fingerprint, and what that allows; A2 no persistent state; A3 the worker stays
-    isolated until stop, and list or status shows sessions that lost their controller as candidates
-    to stop; A4 pids 4096, no quota claim. Record the loop's settled answers, each with its reason:
-    host user is the effective UID, root refused; worker UID is the host UID/GID overriding the
-    image, manifest values must equal it, no chown; the person pulls the manifest digest and
-    approval binds it; offline by NetworkMode none, inspected before start, proven by probes; an
-    fsynced intent record before create, reconciling by record plus random name; waits 10 s call,
-    120 s startup, 30 s teardown; signals forward once, 10 s grace, then SIGKILL, observed exit
-    wins; recovery records beside approvals, random hex IDs, a per-session lock, revalidating daemon
-    and resource before mutating. Later-milestone questions stay open. Docs only.
+    The person accepted docs/architecture/arc42.md on 2026-11-04. Under docs/charter.md it is the
+    current design and a hypothesis, not a draft awaiting review or evidence of runtime isolation.
+    It still calls implemented policy validation and the engine-test tier future work, leaves
+    settled choices open and omits adapter evidence without Docker needed by changed-code proof.
+    This is a documentation task, with no scenarios or step definitions. The drafter changes only
+    this ledger entry and its checks; the implementer changes only docs/architecture/arc42.md.
+    Both commit as docs with Item T-19. Leave registry ownership/status and other specs alone.
+
+    Read the charter first, then PLAN.md, docs/plans/container-pilot.md, docs/architecture.md,
+    docs/plans/offline-run-lifecycle.md and the existing arc42 document. Check current evidence in
+    features/policy.feature, features/parsing.feature, features/README.md, internal/engine/policy,
+    internal/slices/doctor, go.mod, itos-cc.yaml and the CI workflow. Read tasks/asks.yaml for A1
+    and this entry for the person's A2-A4 and the loop's settled choices. Consult the registry
+    and sibling specs for current status; a queued item or accepted design is not implementation.
+    Preserve the twelve arc42 headings, authority links, T-14 package boundaries, threat model,
+    attribution and Linux amd64/native Docker target contingent on runtime evidence. This task
+    adds no dependency, service, command, fixture, probe or gate configuration.
+
+    Update status consistently in prose, tables and diagrams. Mark internal/engine/policy and
+    internal/slices/doctor implemented for policy validation only, including doctor --policy-only
+    and its explicit policy scope; full manifest/readiness/approval inspection is not implemented
+    by that success. Preserve count, version and completion. Add completed slice-5 beside slice-1
+    in the work-item view. The policy adapter now uses go.yaml.in/yaml/v4 v4.0.0 and its
+    LoaderLimitsPlugin depth hook, selected by slice-5 to stop excessive nesting during parsing;
+    the independent tooling go.yaml.in/yaml/v3 pin remains. Do not describe either as a parser
+    choice still to be made or generalize policy limits to the manifest, whose budget is slice-6.
+    Record the 65536-byte whole-source cap, 32 flow/block parser-stack and representation levels,
+    2048 representation nodes and 65536 aggregate escaped path bytes. These are structural bounds,
+    not RSS/CPU quotas or worker timeouts. Scope residual numeric-budget questions to lifecycle
+    details not settled below; no blanket claim that all numeric limits remain person decisions.
+
+    Describe T-16's engine tier in past tense and link features/README.md as its operational
+    authority. It already excludes @engine from ordinary, smoke, coverage and mutation runs,
+    enables the dedicated Linux amd64 CI job only through its guarded switch and requires that
+    job's result. No live engine cases at drafting means infrastructure readiness, not isolation
+    proof. T-20 owns runtime image preparation; neither this edit nor the tier proves a fixture
+    image is available. Refresh the work-item table from the registry, including slice-3's T-20
+    prerequisite and the planned run/recovery increments, without inventing new work items.
+
+    Add three distinct test evidence tiers to the quality and building-block views. First,
+    domain decisions and shared port contracts use I/O-free in-memory fakes. Second, slice-3
+    must provide an HTTP Engine API fixture for real Docker-client adapter code to exercise
+    request/response mapping, error handling and transport failures without a Docker daemon.
+    This is test support with controlled responses, not another domain fake, product endpoint,
+    real-engine isolation evidence or permission to put I/O in porttest fakes. Adapter tests
+    stay with adapters; shared contracts run against fakes and adapters wherever applicable.
+    Third, @engine scenarios in CI prove actual enforcement and lifecycle with independent
+    controls and prepared images. Ordinary CI proof is engine-disabled, so future Docker adapter
+    lines need the HTTP fixture's coverage/mutation evidence; never enable Docker in proof or
+    exclude product adapters to cover the gap. Note itos-cc.yaml's **/porttest/** exclusion is
+    for test support only: its tests still run and it does not excuse uncovered product code.
+    Retain CI-only changed-code proof and the ban on local mutation/generated evidence commits.
+
+    Record the person's settled answers with their limitations. A1 permits scriptable
+    --fingerprint approval bound to the exact reviewed fingerprint, canonical JSON SHA-256 and
+    host-owned state under $XDG_STATE_HOME/itos-container with mode 0700, as tasks/asks.yaml says.
+    Anything able to execute approve on the host, including a host agent, can approve its own
+    sandbox; this is an explicit act, not proof of human presence. Worker-inaccessible host state
+    does not enforce a human-only consent ceremony. Carry that caveat into the architecture;
+    slice-4 owns the corresponding help/security wording and executable approval contract.
+    A2 excludes persistent worker project state this milestone: preserve checkout edits and use
+    ephemeral tmpfs, without persistent volumes/caches/profiles. Host approval, frozen settings
+    and recovery records still exist outside the checkout; they are not worker persistent state.
+    Init is deferred and no lifecycle hooks run in this milestone, so remove active init/setup
+    promises throughout goals, flows, deployment, quality requirements and glossary. Broader
+    pilot state/hooks remain later scope, not new work authorized by this document.
+    A3 leaves a worker isolated after controller loss until stop; status shows sessions that
+    lost their controller as candidates to stop. Use the existing planned status command here,
+    not a new list command. Do not promise a watchdog, immediate cleanup, restart or known child
+    exit after observation is lost. A4 selects a pids limit of 4096 and makes no memory or CPU
+    quota claim; preserve the distinction from parser structural bounds and CI job timeouts.
+
+    Record each settled loop choice and its rationale, without portraying it as proven code.
+    The host user is the effective UID and root is refused, avoiding an environment-derived or
+    privileged identity. The worker uses host UID/GID overriding the image; manifest user values
+    must equal it, with no chown, so checkout writes retain host ownership without elevation.
+    The person pulls the manifest's digest and approval binds that content; control commands
+    inspect cached images and never pull/build/substitute, keeping acquisition a deliberate
+    host operation. Offline uses NetworkMode none, inspected before start and proven by network
+    and DNS probes, because the boundary must hold from the first instruction independently of
+    client proxy settings and remain closed after controller loss. An inspected flag alone is
+    not runtime proof, and no guard/proxy/session network is added to this offline design.
+
+    Persist an fsynced intent record before create, create unstarted and reconcile a lost response
+    by the trusted record plus a random name before launch or cleanup. This closes the otherwise
+    untracked create window; names/labels alone never authorize adoption or deletion. Retain
+    concrete resource identity recording before execution, bounded cleanup on record-write
+    failure and explicit uncertainty instead of blind duplicate creation. Calls have a 10 s
+    budget, startup 120 s and teardown 30 s; retries/progress do not reset totals, so a stalled
+    daemon cannot keep a transition pending indefinitely. These are lifecycle budgets, not a
+    maximum workload lifetime. Forward a signal once, allow 10 s grace, then SIGKILL; observed
+    exit wins, preserving the T-11 nonzero-child/cleanup-failure precedence and keeping unknown
+    outcomes unknown. The grace bounds cooperative shutdown before forced termination; delivery
+    alone is not termination evidence. Do not invent additional signal mappings or recovery
+    budgets; remaining details belong to the owning behaviour spec under the charter stop rule.
+
+    Put recovery records beside approvals, with random hex session IDs and a per-session lock;
+    revalidate daemon and resource identity before mutation. Protected placement separates
+    authority from checkout requests, IDs support safe recovery references, and serialization
+    plus revalidation avoids concurrent or stale deletion. Retain wrong-user/foreign/ambiguous
+    refusal, repeated stop, independent-project safety, safe diagnostics and exact stop retry.
+    Status/stop must exist before run promises actionable recovery. Do not select a lock API,
+    record schema, random-ID length or new ownership algorithm in this documentation task.
+
+    Move these settled choices out of the risks table's unresolved category, while leaving their
+    implementation/evidence gaps visible. Name each remaining owning behaviour spec; the person
+    decides only where the charter's stop rule requires it. Keep later proxy/TLS, accounts,
+    downloads, platform/LAN, Compose and runtime-research questions open and deferred. Preserve
+    the charter rule that a departure from an arc42 section requires a decision naming that
+    section and an update in the same PR; drift found elsewhere is reported to the coordinator
+    as an idea titled Architecture drift: followed by the subject and why it matters. Accepting
+    arc42 did not accept every previously open security mechanism or supersede the charter.
+
+    The checks below are cheap documentation-presence checks at the existing task/CI tier, not
+    runtime tests or a substitute for semantic review. Retain the original check. At drafting,
+    its Engine API fixture and NetworkMode terms are missing; the later checks also fail on
+    draft status, proposed policy/doctor rows, missing parser limits/pin, proof exclusion and
+    settled decision terms. The original negative numeric-phrase check already passes and is
+    only preservation evidence. Review every affected section for contradictory old claims,
+    verify links against the checkout, and compare all decisions/reasons above, especially
+    approval's host-agent caveat, state scope, controller loss and budget/result precedence.
+    Do not require prose to match whole paragraphs merely to pass a check. The drafter leaves
+    implementation checks incomplete intentionally; let configured hooks and CI run the gates.
+    Report the spec commit and authoring choices, with no scenario red/green or mutation claim.
+    Agents commit and stop; only the coordinating loop pushes, watches CI and closes the item.
   done_when:
     - run: grep -q 'Engine API fixture' docs/architecture/arc42.md && grep -q 'NetworkMode' docs/architecture/arc42.md && ! grep -qi 'numeric limits remain person decisions' docs/architecture/arc42.md
+    - run: >-
+        grep -qi 'current design' docs/architecture/arc42.md &&
+        ! grep -qi 'Draft for the person' docs/architecture/arc42.md &&
+        grep -Eiq 'internal/engine/policy.*implemented' docs/architecture/arc42.md &&
+        grep -Eiq 'internal/slices/doctor.*implemented' docs/architecture/arc42.md
+    - run: >-
+        for term in 'slice-5' 'go.yaml.in/yaml/v4' 'v4.0.0' '65536' '32' '2048'; do
+        grep -Fq -- "$term" docs/architecture/arc42.md || exit 1; done
+    - run: >-
+        for term in 'features/README.md' 'HTTP Engine API fixture' 'engine-disabled'
+        'itos-cc.yaml' '**/porttest/**'; do
+        grep -Fq -- "$term" docs/architecture/arc42.md || exit 1; done
+    - run: >-
+        for term in '--fingerprint' 'SHA-256' '$XDG_STATE_HOME/itos-container' '0700'
+        '4096' 'fsync' 'SIGKILL' '120' '30' 'Architecture drift'; do
+        grep -Fq -- "$term" docs/architecture/arc42.md || exit 1; done
 - id: T-20
   type: ci
   title: An engine fixture image the real-engine scenarios can use
