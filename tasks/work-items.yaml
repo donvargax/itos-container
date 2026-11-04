@@ -246,8 +246,8 @@ items:
   - id: T-15
     title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-14]
     kind: task
   - id: T-12
