@@ -235,3 +235,14 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p1-allow-gherkin-specification-commits
+    title: Allow docs commits for Gherkin specifications
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Unblocks the charter’s Configuration, doctor and approval step: slice-1 needs scenario
+      specifications committed before implementation. Permit .feature files while preserving
+      live-scenario protection and PR routing.
