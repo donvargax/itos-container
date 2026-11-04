@@ -70,6 +70,7 @@ func TestCompleteUsesKongCommandAndFlagModel(t *testing.T) {
 		{name: "first positional argument uses files", words: []string{"search", ""}, want: []string{":files"}},
 		{name: "end of options leaves a positional to files", words: []string{"search", "--", ""}, want: []string{":files"}},
 		{name: "end of options keeps a dash-prefixed word positional", words: []string{"search", "--", "--mode"}, want: []string{":files"}},
+		{name: "consumed words after end of options exhaust positionals", words: []string{"search", "--", "--mode", "target", ""}, want: []string{":none"}},
 		{name: "end of options after positionals has no fallback", words: []string{"search", "src", "dst", "--", ""}, want: []string{":none"}},
 		{name: "positional enum values", words: []string{"shell", "p"}, want: []string{"powershell", ":none"}},
 		{name: "command aliases follow the model", words: []string{"i", ""}, want: []string{":files"}},
