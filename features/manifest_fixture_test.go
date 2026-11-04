@@ -217,7 +217,11 @@ func (w *world) runManifestContract(mode string) error {
 	w.manifest.metadata = true
 	bin := w.bin + ".slice-2-contract.exe"
 	if _, err := os.Stat(bin); os.IsNotExist(err) {
-		cmd := exec.Command("go", "test", "-c", "-o", bin, "./cmd/itos-container")
+		args := []string{"test", "-c", "-o", bin}
+		if os.Getenv("GOCOVERDIR") != "" {
+			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
+		}
+		cmd := exec.Command("go", append(args, "./cmd/itos-container")...)
 		cmd.Dir = w.root
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("build manifest contract assembly: %w: %s", err, output)

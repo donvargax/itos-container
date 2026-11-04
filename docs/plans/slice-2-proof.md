@@ -71,3 +71,28 @@ must obtain image metadata and distinguish lookup failure from confirmed absence
 slice-4 owns image/UID approval comparisons. Slice-5 already records the outstanding
 aggregate resource budget, including the manifest parser. This item invents no
 resource limit or host-support claim.
+
+## Per-ID coverage preparation repair
+
+The first CI proof stopped before judging a mutant because `ID-MANIFEST-29`
+exported no per-ID coverage. The metadata scenarios' separate `go test -c`
+assembly lacked the coverage flags already used by the product binary. It now
+uses `-cover -covermode=atomic -coverpkg=./...` when `GOCOVERDIR` is set. Go's
+exit hooks export the counters on both successful and refused metadata inputs;
+the ordinary build and presenter output are unchanged.
+
+`TestManifestContractCoverage` runs each of the four metadata IDs separately,
+converts its exported counters with `go tool covdata textfmt`, and requires
+executed product blocks in the metadata domain, JSON parser, reference validator
+and doctor presenter. Before the repair, all four IDs passed their scenarios but
+failed every coverage assertion. Afterward, the regression passed, including
+JSON/plain output and refusal exits. Its temporary coverage files are not committed.
+Filtered scenario invocations skip this whole-suite regression so unrelated
+scenarios cannot contribute to a selected ID's mutation result.
+
+The focused regression and `go test ./features ./cmd/itos-container -count=1`
+passed locally. A separate filtered `ID-MANIFEST-29` run with `GOCOVERDIR` set
+also exported executed blocks in all four product components. This is a
+test-harness repair for slice-2, with no changed product
+behavior or scenario expectations. No local mutation run was made; the coordinator
+must rerun the full changed-code proof in CI at the new pushed head.

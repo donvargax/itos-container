@@ -38,6 +38,11 @@ with in-memory file data and the real parser, reference adapter, domain and doct
 presenter. The runner sends raw input and asserts actual output; it imports no
 production packages and supplies no engine fake or product injection flag. File
 scenarios still run the product binary. Slice-3 owns binary-to-engine evidence.
+When `GOCOVERDIR` is set, the test assembly also builds with atomic coverage across
+the module. Go's exit hooks export counters for both success and refusal exits.
+`TestManifestContractCoverage` checks each metadata ID's exported product coverage
+in a separate directory. It runs in the unfiltered suite; filtered scenario runs
+retain only their selected IDs for measurement and mutation attribution.
 
 ## Running them
 
