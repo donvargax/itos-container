@@ -1222,3 +1222,13 @@
     slice-4’s approval integration and implementation order.
   done_when:
     - run: sh -eu -c 'f=docs/architecture/arc42.md; test -s "$f"; for section in "## Goals" "## Constraints" "## Context and scope" "## Solution strategy" "## Building-block view" "## Runtime view" "## Deployment view" "## Cross-cutting concepts" "## Decisions" "## Quality requirements" "## Risks and open questions" "## Glossary"; do grep -Fqx "$section" "$f"; done'
+- id: T-16
+  type: ci
+  title: Scenarios that need a real engine have a tag, a switch and one Linux job
+  why: >
+    The charter wants every isolation property proven by a scenario, and no test can reach a real
+    engine: no tag, switch or job exists. Blocks the charter's step 3, the offline owned run. An
+    @engine tag behind an environment variable, skipped elsewhere, and one required Linux job with
+    native Docker. Specify it with or just after T-11.
+  done_when:
+    - run: go test ./features -count=1
