@@ -402,3 +402,16 @@ items:
       start; non-root; read-only root; the checkout as sole mount; literal argv; exit precedence;
       teardown. No persistent state this milestone, by the person's A2: checkout and tmpfs. Pids
       limit 4096, no memory or CPU quota claim, by A4.
+  - id: slice-11
+    title: Status and stop
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-10]
+    kind: slice
+    why: >
+      Run's printed retry must work. Foreign, repeated and two-project cases; marker exclusion. By
+      the person's A3 the worker stays isolated if the controller dies, so itos container status or
+      list shows which sessions lost their controller, as candidates to stop. Records beside
+      approvals, random hex IDs, a per-session lock, revalidating daemon and resource before
+      mutating.
