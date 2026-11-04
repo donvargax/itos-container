@@ -153,3 +153,13 @@ items:
       The offline owned-run milestone needs trustworthy foundation proof. Compare local compiler and
       experiment settings with CI before expensive measurement to prevent unusable evidence and
       repeated landing attempts, preserving all proof gates.
+  - id: p1-reconcile-foundation-status
+    title: Reconcile foundation guidance after T-8
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Keep the offline owned-run milestone's plan accurate by recording T-8's completed baseline,
+      preventing redundant measurement and clarifying remaining foundation work.
