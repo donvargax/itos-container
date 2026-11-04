@@ -45,28 +45,39 @@ The tests for +0x1 and -0o7 failed as numbers before the correction and passed a
 strings afterward. Two mismatched collection-tag cases killed the only new survivors
 from the initial mutation run. No new exceptions were added.
 
-## Changed-code proof
+## T-14 integration
 
-Use f21767fae205d4a0ceed4ad70873a9f062eb1e1f, the parent of the item's actual first
-commit 8f6fd61 (promotion), as the base. This includes the scenario specification
-bcf219b and all subsequent implementation; no take commit is assumed.
+The saved layout amendment landed as 58a39ded899554390be4b96b0229946543b8e728.
+Merge 26a34c54300fe4de35e63f54734a1376ba4b269e moved doctor to
+`internal/slices/doctor` and reusable policy validation to `internal/engine/policy`.
+It also moved policy presentation beside doctor, kept concrete assembly in `cmd`,
+and added shared Files, Source and Policies contracts against their fakes and adapters.
+The merge records policy scenarios passing before and after the move.
+
+The implementer rechecked the integrated tree at
+66417f09248746ca2d0295d1999a3addbc2f5d43 on 2026-11-04. These commands passed:
 
 ```sh
-tools/bin/pinned itos-cc mutation run \
-  --since f21767fae205d4a0ceed4ad70873a9f062eb1e1f \
-  --all-tests --fail-uncovered --no-annotate --workers 4 --json cmd internal
+go test ./features -count=1 -scenarios='^@ID-POLICY-'
+go test ./internal/engine/policy/... ./internal/slices/doctor/... -count=1
+go test ./features -count=1
 ```
 
-The pinned tool is itos-cc 0.47.2. The final run exited 0 with ok true: 154 mutants
-ran freshly (zero reused), 153 were killed, one was excepted, zero survived and zero
-were uncovered. No uncovered executable code or other problems were reported. The
-full-suite coverage and baseline runs passed, including all live policy scenarios and
-the inherited counting, CLI and completion scenarios.
+All 28 policy scenarios remain live with unchanged assertions and examples. The full
+feature run also preserves count, CLI and completion behavior. The package run includes
+the shared port contracts. This is preservation evidence, not a new red-first claim.
+The policy stays closed, with no image or identity keys, using T-14's YAML v3.0.5 pin.
 
-The one exception predates this item: main replaces empty argv with --help before
-checking len(args) > 0, making >= 0 equivalent there. The tool renewed only its function
-hash after adding doctor; it retains the same reason in itos-cc.yaml for human review.
+## Changed-code proof belongs to CI
 
-Generated project-local evidence is committed under .metrics/mutate/ by explicit path.
-No evidence was hand-edited or copied from another project. No source annotations were
-written. CI and the final push remain the coordinator's responsibility.
+Earlier commits recorded a local itos-cc 0.47.2 run with 154 mutants: 153 killed and
+one pre-existing equivalent exception. Those results predate T-14 integration and the
+current proof policy; they do not establish proof for the integrated head. The old
+generated caches were removed during integration and must not be restored into CI.
+
+The binding workflow is now `AGENTS.md` and `itos.yaml`'s `proof.code`: CI runs the
+pinned tool with core itos supplying the same judged base to `--since` and `--seed`,
+sampling up to ten changed-function mutation sites and measuring changed-line coverage.
+Agents make no local mutation run and commit no generated mutation or coverage evidence.
+The evidence-document correction changes no `proof.code` path. The coordinator still
+owns push, CI verification of the actual pushed head and item closure.
