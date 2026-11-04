@@ -3,6 +3,7 @@ phases:
   1: null
 queue:
   - p1-slice-layout-lint
+  - p2-specify-policy-manifest-approval
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
