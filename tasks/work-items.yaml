@@ -235,7 +235,7 @@ items:
     title: Specify the offline owned-run lifecycle contract
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-allow-gherkin-specification-commits
@@ -269,8 +269,8 @@ items:
   - id: T-14
     title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-12]
     kind: task
   - id: p1-engine-scenario-tier

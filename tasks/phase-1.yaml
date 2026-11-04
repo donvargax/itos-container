@@ -575,14 +575,197 @@
   type: docs
   title: Specify the offline owned-run lifecycle contract
   why: >
-    Record the later run slice's contract in docs/plans/offline-run-lifecycle.md: literal argv,
-    interactive JSON refusal, ownership before execution, hardened offline startup, bounded waits,
-    signals, cancellation, workload exits and safe cleanup with recovery. Include black-box
-    acceptance cases and identify security choices requiring the person's decision. This PR
-    specifies behavior without implementing runtime commands. Broken down from
-    p2-specify-policy-manifest-approval.
-  done_when:
-    - run: sh -eu -c 'f=docs/plans/offline-run-lifecycle.md; test -s "$f"; for section in "## Arguments and JSON" "## Ownership and startup" "## Timeouts and cancellation" "## Workload exits" "## Cleanup and recovery" "## Acceptance scenarios" "## Security decisions"; do grep -Fqx "$section" "$f"; done'
+    The pilot names an offline owned run but leaves lifecycle details scattered among its command,
+    approval, runtime and acceptance sections. Record the later run slice's contract in
+    docs/plans/offline-run-lifecycle.md so implementation cannot mistake a planning gap for permission.
+    This is a documentation task broken down from p2-specify-policy-manifest-approval. The drafter
+    changes only this ledger entry and its checks; the implementer creates only that document in a
+    docs commit tied to Item T-11. Neither role implements runtime commands or step definitions.
+    Black-box acceptance cases belong in the document as planning cases, not new features/ scenarios
+    for this docs task. No scenario IDs are minted here. Leave registry ownership and status alone.
+
+    Read docs/charter.md first, then PLAN.md, docs/plans/container-pilot.md, docs/architecture.md,
+    docs/CLI.md and docs/CONFIG.md. Link those authorities from the new document using relative paths.
+    State that container commands and isolation are not implemented; the existing count, version and
+    completion entry point supplies no runtime proof. The charter selects Linux amd64 with native
+    Docker as the first target, contingent on passing runtime evidence. The contract covers one
+    approved foreground worker, with no network, credentials or ingress, and the checkout as its
+    only host mount. Egress/proxy work, accounts, network Git, LAN publishing, Compose, other hosts,
+    remote engines and linked worktrees are outside this milestone. Do not change the charter or
+    pilot, add runnable configuration, or claim those deferred features through recovery examples.
+
+    Keep the seven level-two headings checked below. Distinguish binding pilot requirements,
+    ordinary interface choices recorded by this spec, and open security decisions reserved for the
+    person. A blocked detail must be identified where it affects a section as well as in Security
+    decisions; do not bury it in a concluding disclaimer. Completing this document is not approval
+    of its open questions and does not make a runtime implementation ready to start.
+
+    Arguments and JSON must describe itos container run -- <argv...> through the extension seam.
+    Require a nonempty executable argument after the separator; preserve every subsequent argument,
+    including empty strings, whitespace, Unicode, quotes, glob characters, dollar signs, semicolons,
+    redirection-looking text, --help, --json and another --. Never join argv into a shell string,
+    evaluate it on the host, infer a shell or add agent permission-skipping flags. A shell explicitly
+    named by the user is itself a worker command under the same boundary. Wrapper options stop at
+    the separator. Missing argv is usage failure 2 before resource creation; require a diagnostic
+    about the required command, so today's unknown-command failure cannot satisfy its future test.
+
+    Record the ordinary interface choice that run remains a streaming foreground interface even
+    when redirected. Refuse a wrapper --json or inherited ITOS_JSON=1 before resources or workload
+    output, without a redirected-output exception that silently enables batch JSON execution.
+    For this refusal choose one schema: 1, ok: false object on stdout with the typed problem
+    run.json-unsupported, exit 2, a message and a fix to remove the wrapper JSON request; diagnostic
+    prose belongs on stderr. This refusal object is not a JSON-wrapped workload stream. A --json
+    argument after -- belongs to the workload and does not request this refusal. Explain host
+    dispatch variables as controller inputs, never permission to inherit host environment in the
+    worker. No new flags, product environment variables or TTY modes are introduced by this task.
+
+    Ownership and startup must describe the ordering and failure transitions, not just a list of
+    engine options. Validate the strict policy, restricted manifest, selected local engine, cached
+    digest-pinned compatible image and current host-owned approval before creating resources.
+    Missing, mismatched or superseded approval refuses startup. Freeze the effective configuration;
+    edits to policy/manifest or a later approval cannot widen an existing session. Images must be
+    prepared by the person through the separately specified acquisition process; no automatic pull,
+    build, host hook, checkout helper or fallback session is permitted. Policy/manifest validation,
+    identity and approval formats are dependencies on slice-1 through slice-4, not duplicated loaders
+    or new schemas to invent here.
+
+    Describe preparing, ready, running, stopping, stopped and failed, including partial startup.
+    Concrete engine resource IDs and ownership must be durably recorded in host-owned state outside
+    the writable checkout before any worker process, including an image entrypoint or setup hook,
+    can execute. Record the create-response-loss/crash window as requiring reconciliation design;
+    a resource name or matching label alone cannot authorize deletion. State must not claim ready
+    until every required boundary is verified. A failed ownership write or unverifiable boundary
+    blocks execution and enters bounded cleanup or explicit recovery, never an unrecorded run.
+
+    Require the offline boundary from the first worker instruction: no external network path or
+    published port, no host namespaces, administrative capabilities, sudo, engine/SSH-agent sockets
+    or host environment/credential forwarding. Require no-new-privileges, a read-only image root,
+    the approved non-root UID/GID and explicit writable checkout, isolated project state and
+    container-owned temporary storage. The checkout is the only host filesystem mount. Do not use
+    a host temporary directory or host-wide chown as a shortcut. Supported setup hooks, if selected
+    by the manifest specification, execute only inside that boundary under frozen settings; their
+    failure prevents later setup and the foreground command. Hidden image metadata cannot widen
+    permissions. Keep the exact network mechanism, identity/storage mapping, image trust and hook
+    semantics in their security dependencies, not implicit choices made by this documentation task.
+
+    Timeouts and cancellation must inventory every controller wait: preflight/engine operations,
+    creation, startup/readiness, setup, attach, signal delivery, stop, removal and recovery. Require
+    finite startup and teardown budgets covering retries and individual calls, so retry loops or
+    a stalled engine cannot reset the total bound. Separate these from the intentional foreground
+    wait while a workload runs; do not invent a maximum workload duration. Describe cancellation
+    before creation, during partial startup, after launch and during cleanup. Once cancellation is
+    observed, do not start subsequent setup/workload phases; reconcile already in-flight operations.
+    Specify the required observations for SIGINT, SIGTERM, repeated cancellation, a workload that
+    handles or ignores a signal, and uncatchable controller loss. Normal cancellation must attempt
+    owned cleanup; interrupted/unavailable cleanup leaves recovery information. Signal targets,
+    forwarding/escalation policy, grace values, numeric budgets and platform cancellation outcomes
+    remain explicit person decisions under the pilot, not arbitrary constants or new exit codes.
+
+    Workload exits must separate wrapper refusal, observed workload termination and unknown outcome
+    after controller/engine loss. Preserve the workload's observed nonzero exit status even when
+    cleanup also fails; return zero only when the workload succeeds and required cleanup succeeds.
+    A successful workload followed by required-cleanup failure returns nonzero, with a separate
+    cleanup diagnostic and recovery reference. Show a result-precedence table covering those cases,
+    launch failure, timeout, cancellation and an unavailable workload result. Do not invent a child
+    status when none was observed or convert signal delivery alone into proof of termination. Keep
+    itos's wrapper meanings from docs/CLI.md (0, 1, 2, 3, 70 and 75); classify cleanup failures by
+    their cause within those meanings, rather than importing itos-cc's codes. Mark mappings that
+    depend on the person's signal/timeout decision as blocked. Codes, JSON and presentation stay
+    outside the domain. No signal number or timeout exit is implicitly approved by this document.
+
+    Cleanup and recovery must define completion as removal of the session's owned ephemeral
+    resources, including a partially created or already stopped worker and temporary storage,
+    while preserving checkout edits and persistent project state. Do not create proxy/guard or
+    session-network resources merely to match the later online pilot's cleanup list. Never prune
+    foreign resources, delete profiles, remove a shared image or discard evidence as a shortcut.
+    Labels alone are insufficient: an ambiguous, mismatched or foreign identity is refused, not
+    adopted. Repeated cleanup is safe when a recorded resource is already absent and preserves
+    another project's/session's resources. Keep a recovery record until required cleanup is
+    confirmed; report the session ID and the exact retry form itos container stop <session> with
+    that ID substituted. Preserve enough trusted ownership data to finish cleanup after controller
+    loss. Diagnostics and recovery metadata must not dump workload argv, inherited host environment,
+    workload output or synthetic secret markers. Distinguish that metadata from the approved frozen
+    configuration, whose storage is slice-4's contract; do not forbid storing the effective settings
+    the pilot requires. Deliberately streamed workload output is separate from controller logging
+    and is not a promise to redact arbitrary workload text.
+
+    Status/stop are recovery interfaces the later run implementation needs to have specified before
+    it can promise an actionable retry; this task adds neither command. Status inspects owned state;
+    stop cancels or completes only owned cleanup. Neither authorizes an unattended workload restart.
+    There is no detached/keep-alive mode. The foreground command's exit ends the session. Preserve
+    the pilot's future exec invariant (refuse new commands and terminate active ones at primary
+    exit), but do not pull an exec implementation into this milestone. Explain that forced
+    controller death cannot run its cleanup handler: retained isolation and eventual reconciliation
+    need CI evidence, not a promise of instantaneous cleanup. Whether and how the workload must
+    stop on controller loss is a blocking security decision, not an invented watchdog design.
+
+    Acceptance scenarios must contain a table headed Case, Setup, Action, Observable result,
+    Evidence tier and Expected failing assertion, using descriptive case names rather than minted
+    scenario IDs. Each row is a future black-box case with concrete synthetic fixtures, a public
+    action and observable output/status/files or independently observed engine resources. Given
+    setup prepares inputs only; it never invokes the subject behaviour and asserts it as setup.
+    Explain the future failing assertion and why a broken implementation would fail it. The
+    current binary has no run command, so an unknown-command refusal, undefined step or setup
+    failure is not red behaviour evidence. Refusal cases must check their specific diagnostic as
+    well as absence of side effects; absence alone would pass on the current binary.
+
+    Cover at least literal argv and explicit shell boundaries; missing argv; wrapper and inherited
+    JSON refusal versus a workload --json; invalid/missing/superseded approval and frozen policy;
+    missing or incompatible cached images without acquisition; failed ownership persistence and
+    interrupted creation before execution; non-root/read-only/mount/temp restrictions for UID 1000
+    and a different approved UID/GID; direct IPv4/IPv6, host-gateway and DNS denial from the first
+    worker instruction; setup failure preventing workload launch; stalled startup/engine calls and
+    bounded retries; cancellation at each phase, repeated signals and an ignoring workload; zero
+    and nonzero exits with both successful and failed cleanup; controller loss, unavailable engine
+    and interrupted cleanup recovery; repeated stop, absent resources and foreign/ambiguous labels;
+    two independent projects' resources and edits/state surviving another session's cleanup; and
+    synthetic sensitive markers excluded from controller diagnostics and recovery records. Distinguish
+    permission denial from a broken probe using positive controls; engine settings alone cannot
+    prove isolation. Mark cases needing open security decisions as blocked on the named question.
+
+    Trace those cases to the applicable pilot acceptance labels, including AC-01/AC-02/AC-03,
+    AC-05/AC-06/AC-07, AC-21/AC-22/AC-23/AC-25, AC-38/AC-40/AC-41 and the offline portions of
+    AC-10, AC-11, AC-28, AC-36, AC-37 and AC-42. Explicitly defer
+    AC-24 exec and AC-26/AC-27 ingress rather than claiming the offline contract covers them. Run
+    pure CLI refusals locally without engine access; domain sequencing/failure tests use the
+    engine and state-port fakes. Mark all actual isolation, engine resource, signal and interruption
+    probes CI-only on Linux amd64/native Docker. The pending p1-engine-scenario-tier work must
+    provide explicit selection before these become executable; an @wip tag alone is not an engine
+    access boundary. Later behaviour specs mint IDs through itos tests next-id and commit scenarios
+    as test with the implementing item; their implementer commits step definitions red first,
+    proves assertion failures with @wip removed only at the permitted tier, then implements.
+    T-11 creates no steps and claims neither red/green runtime evidence nor sandbox support.
+
+    Security decisions must contain a table headed Question, Required decision and Blocks. Name
+    at least approval canonicalization/storage and checkout/engine identity (slice-3/slice-4);
+    manifest hooks, image metadata and non-root/writable-state mapping (slice-2 and readiness);
+    image digests/provenance/acquisition (readiness); offline enforcement and verification before
+    the first process; crash-safe ownership/reconciliation of an uncertain create; resource and
+    timeout limits, signal forwarding/escalation and controller-loss policy; and recovery record
+    safety/concurrent cleanup. For each, state what the person must settle and which startup,
+    cleanup or acceptance case cannot proceed without it. Existing sibling items are dependencies,
+    not evidence that a decision is already settled. No dependency on a network service, security
+    exception or stronger support claim is authorized by finishing this task. Record no invented
+    decision number, default timeout, resource limit or selected library. Engine library selection
+    belongs to slice-3; this docs task needs no dependency and must not implement its own client.
+
+    Describe later code by the current docs/architecture.md Slices rules: each command owns its
+    vertical slice, shared behavior lives in an engine package, thin handlers delegate to domains,
+    domains use ports and fakes, and adapters do the I/O. T-14 owns the layout migration; do not
+    freeze conflicting paths here or edit its rules. Do not grow count into the run command or
+    import another slice's domain. Leave code, features, pins, CI, gates, other docs and mutation
+    evidence untouched. This spec and the document touch no proof.code path and need no mutation
+    results. The loop alone pushes, watches CI and closes the item after the actual head is green.
+
+    Preserve the original section check and add the link and acceptance/decision-table checks below
+    at the existing task/CI tier, using ordinary shell tools with no RTK or network requirement.
+    Before implementation the document does not exist: the section check fails at test -s, the
+    link check at its first grep, and the table check at its first header grep. These are static
+    documentation checks, not runtime proof; no behavioural failing step exists for this docs task.
+    Review the completed prose against this entry because keyword presence cannot establish safe
+    lifecycle semantics or distinguish a proposed choice from consent. Let configured hooks and CI
+    run their wider gates. The drafter commits this ledger specification with completion checks
+    still red; the implementer supplies the document and reports checks and unresolved decisions.
 - id: T-12
   type: ci
   title: CI runs on Linux, each pull request once; other platforms by hand
