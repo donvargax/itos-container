@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - T-14
   - T-15
 items:
   - id: T-1
