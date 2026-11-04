@@ -18,3 +18,21 @@
     and behavior, and retain the existing formatting gate.
   done_when:
     - run: test -z "$(gofmt -l internal/release/releasetest/releasetest.go)"
+- id: T-3
+  type: ci
+  title: "Finish the move to itos 8: the by-hand steps of itos upgrade 7.0.0-rc.1 to 8.45.3"
+  why: >
+    itos upgrade moved the pin and itos.yaml to 8.45.3 and rewrote AGENTS.md's itos block
+    (2026-11-03), and itos config check passes. Left by hand, from its report: the itos action in
+    .github/workflows/ci.yml and release.yml still pins v7.0.0-rc.1's commit; the CI plan's code
+    proof moved from work done into ci run (proof.code, record its results before pushing); numbered
+    work add, task add and work promote mint their IDs; a plain itos push no longer pushes tags (use
+    --tag; check the release workflow); itos refuses --no-verify, commit -a and git add -A; check
+    every step itos config check and ci plan name. Run itos upgrade 8.45.3 again to reprint the
+    list; it is idempotent. From Copilot's review of PR #2 (2026-11-04):
+    .github/workflows/ci.yml:36-38 and release.yml:81-83 still pin the v7.0.0-rc.1 itos action and
+    install the 6.0.0 launcher through their version overrides; docs/upgrading.md asks for the
+    repository pin and the action to move together. Move both action references to 8.45.3's commit
+    and update or drop the overrides.
+  done_when:
+    - run: "rtk proxy sh -ec 'itos config check; itos ci plan --whole; for f in .github/workflows/ci.yml .github/workflows/release.yml; do grep -Eq \"uses: donvargax/itos@[0-9a-f]{40} # v8[.]45[.]3$\" \"$f\"; done; ! grep -Eq \"version:[[:space:]]+6[.]0[.]0\" .github/workflows/ci.yml .github/workflows/release.yml'"
