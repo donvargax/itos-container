@@ -59,6 +59,35 @@ func TestExplicitWorkspaceRoot(t *testing.T) {
 	}
 }
 
+func TestEnvironmentNameBoundaries(t *testing.T) {
+	for _, name := range []string{"A", "Z", "a", "z", "_", "APP0", "APP9", "APP9_MODE"} {
+		t.Run(name, func(t *testing.T) {
+			got, _, _, _ := inspect(map[string]port.Value{
+				"image":        str("literal-image"),
+				"containerEnv": obj(map[string]port.Value{name: str("literal")}),
+			})
+			if len(got.Issues) != 0 || got.Effective == nil {
+				t.Fatalf("valid environment name %q rejected: %#v", name, got)
+			}
+			if want := (map[string]string{name: "literal"}); !reflect.DeepEqual(got.Effective.ContainerEnv, want) {
+				t.Fatalf("environment = %v; want %v", got.Effective.ContainerEnv, want)
+			}
+		})
+	}
+	for _, name := range []string{"0APP", "9APP", "@APP", "[APP", "`APP", "{APP", "APP/", "APP:"} {
+		t.Run(name, func(t *testing.T) {
+			got, _, _, _ := inspect(map[string]port.Value{
+				"image":        str("literal-image"),
+				"containerEnv": obj(map[string]port.Value{name: str("literal")}),
+			})
+			want := []port.Issue{{Kind: port.InvalidValue, Path: []string{"containerEnv", name}}}
+			if got.Effective != nil || !reflect.DeepEqual(got.Issues, want) {
+				t.Fatalf("invalid environment name %q: got %#v; want %v", name, got, want)
+			}
+		})
+	}
+}
+
 func TestRepresentationAndReadFailuresShortCircuit(t *testing.T) {
 	for _, failure := range []port.Failure{port.Missing, port.Path} {
 		files := &porttest.Files{Failures: map[string]port.Failure{"selected": failure}}
