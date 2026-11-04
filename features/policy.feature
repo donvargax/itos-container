@@ -99,7 +99,7 @@ Feature: Strict offline sandbox policy
   # policy.missing              required policy file absent
   # policy.unreadable           unreadable, linked, non-regular or oversized policy file
   # policy.empty                no document content, including comments only
-  # policy.syntax               malformed YAML/invalid tagged scalar
+  # policy.syntax               malformed YAML/invalid tagged scalar/directive line
   # policy.multiple_documents   more than one document, even an empty trailing one
   # policy.complexity           representation exceeds depth or node budget
   # policy.duplicate_key        repeated decoded string key
@@ -878,7 +878,7 @@ Feature: Strict offline sandbox policy
     And it exits with code 2
     And the engine recorder has no connections
 
-  @wip @slice-1 @ID-POLICY-39
+  @slice-1 @ID-POLICY-39
   Scenario Outline: tag directives cannot amplify node construction before policy limits
     Given the policy file reuses a 32768 byte tag prefix on <count> scalars in "<position>"
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
@@ -895,7 +895,7 @@ Feature: Strict offline sandbox policy
       | 4678  | after initial BOM |
       | 4677  | second document   |
 
-  @wip @slice-1 @ID-POLICY-40
+  @slice-1 @ID-POLICY-40
   Scenario Outline: directive lines are refused even without tag expansion
     Given the policy file contains:
       """

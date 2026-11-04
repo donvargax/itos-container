@@ -18,6 +18,9 @@ func FuzzSourceRead(f *testing.F) {
 		strings.Repeat("[", 31) + "0" + strings.Repeat("]", 31),
 		"[" + strings.Repeat("0,", 2047) + "]",
 		"[" + strings.Repeat("0,", 2048) + "]",
+		"%TAG !e! " + strings.Repeat("x", 32768) + "\n---\n[" + strings.Repeat("!e!s 0,", 4678) + "]\n",
+		"0\n...\n%TAG !e! " + strings.Repeat("x", 32768) + "\n---\n[" + strings.Repeat("!e!s 0,", 4677) + "]\n",
+		"\ufeff# comment\u0085%TAG !e! tag:example:\n---\n!e!value 0",
 	} {
 		f.Add(seed)
 	}

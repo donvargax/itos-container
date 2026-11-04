@@ -98,6 +98,15 @@ if it grows. Symbolic links (including dangling links), non-regular files and
 oversized input report `policy.unreadable` with exit 3 before parsing. This does
 not establish checkout identity or approval-time substitution protection.
 
+Before YAML decoding, source lines beginning with `%`, optionally after a
+byte-order mark, are refused with one root `policy.syntax` problem and exit 2.
+This reserves directive lines, including `%TAG` and `%YAML`, so a tag prefix
+cannot be expanded into every node before the representation limits run. The
+check covers the entire input, including later documents and all YAML line
+breaks (LF, CR, CRLF, NEL, LS and PS). The restriction also applies to multiline
+quoted scalars: indent a continuation line containing literal percent text.
+Inline and indented percent text and permitted built-in tags remain supported.
+
 After YAML syntax and single-document checks, a preflight limits the decoded
 representation to 32 levels and 2048 nodes. The root is depth 1; mapping keys,
 mapping values and sequence elements each count as nodes one level below their

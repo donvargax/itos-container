@@ -78,7 +78,7 @@ func policyDiagnostic(issue port.Issue) policyProblem {
 	case port.Empty:
 		p.Rule, p.Message, p.Fix = "empty", "Policy contains no data", "provide a version and manifest"
 	case port.Syntax:
-		p.Rule, p.Message, p.Fix = "syntax", "Policy syntax is invalid", "use one UTF-8 YAML document with valid core scalar values"
+		p.Rule, p.Message, p.Fix = "syntax", "Policy syntax is invalid", "use one UTF-8 YAML document with valid core scalar values and no directive lines"
 	case port.MultipleDocuments:
 		p.Rule, p.Message, p.Fix = "multiple_documents", "Policy has more than one document", "keep exactly one YAML document"
 	case port.Complexity:

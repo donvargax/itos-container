@@ -28,7 +28,7 @@ func (s Source) Read() (port.Value, []port.Issue) {
 	if failure != port.None {
 		return rejected(failure)
 	}
-	if !utf8.Valid(data) {
+	if !utf8.Valid(data) || hasDirectiveLine(data) {
 		return rejected(port.Syntax)
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
@@ -65,6 +65,29 @@ func (s Source) Read() (port.Value, []port.Issue) {
 		return port.Value{}, reader.issues
 	}
 	return value, nil
+}
+
+// Reserve column-zero percent lines before constructing any YAML nodes: %TAG
+// prefixes otherwise get copied into each node before withinLimits can run.
+// Scan the entire source, including later documents, using every YAML line
+// break. Treat BOMs conservatively as transparent. Quoted continuation lines
+// containing literal percent text must be indented, as the policy spec requires.
+func hasDirectiveLine(data []byte) bool {
+	lineStart := true
+	for _, r := range string(data) {
+		if lineStart && r == '%' {
+			return true
+		}
+		switch r {
+		case '\n', '\r', '\u0085', '\u2028', '\u2029':
+			lineStart = true
+		case '\ufeff':
+			// A BOM must not hide a following directive marker.
+		default:
+			lineStart = false
+		}
+	}
+	return false
 }
 
 // Preflight uses only a depth-limited call stack and one node counter, before
