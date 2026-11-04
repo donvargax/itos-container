@@ -163,6 +163,10 @@ items:
     why: >
       Keep the offline owned-run milestone's plan accurate by recording T-8's completed baseline,
       preventing redundant measurement and clarifying remaining foundation work.
+
+      Already covers preventing redundant measurement after T-8, which the source registry marks
+      done. Have the coordinator reconcile the stale p1-foundation-mutation-baseline entry without
+      repeating the completed measurement.
   - id: p1-refresh-remaining-template-guidance
     title: Refresh remaining template guidance
     phase: 1
