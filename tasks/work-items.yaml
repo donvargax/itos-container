@@ -257,7 +257,7 @@ items:
     title: CI runs on Linux, each pull request once; other platforms by hand
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-13
