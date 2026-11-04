@@ -1541,3 +1541,14 @@
     The person, 2026-11-04: no Bugbot reviews for the rest of the day only. It is not in review_by,
     so nothing waits on it; removing it from push.pr.reviewers stops the loop's review request
     asking for it. Restored by a following task on 2026-11-05.
+- id: T-18
+  type: build
+  title: Move to itos 8.45.7, and turn on push.pr.review_stall
+  why: >
+    itos 8.45.7 asks Codex for each lagging review in the form that starts it (a security request
+    alone in its comment, then its marker), and asks once more for a review that has not started,
+    under push.pr.review_stall. So the driver's ask_security and nudge_security can go. Set
+    review_stall 900 here, as the second request needs it and the default ci.watch.timeout of 1800
+    is judged first. Move the workflows' itos action pins with it.
+  done_when:
+    - run: "grep -q 'version: \"8.45.7\"' itos.yaml && grep -q 'review_stall: 900' itos.yaml"
