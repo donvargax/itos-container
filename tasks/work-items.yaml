@@ -105,3 +105,7 @@ items:
 
       Already covers generating fresh foundation mutation evidence after T-4: zero eligible cached
       mutants means passing checks do not establish the milestone's baseline.
+
+      This existing item already requires fresh project-local mutation evidence after T-4. Zero
+      eligible cached mutants and passing compatibility checks do not establish the foundation proof
+      needed for the charter’s offline owned-run milestone.
