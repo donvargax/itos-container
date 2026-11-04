@@ -786,7 +786,7 @@ Feature: Strict offline sandbox policy
   # GC tracing observes the CLI process without importing product code. Frequent
   # collection exposes retained ancestor paths on these small hostile inputs.
   # The 64 MiB threshold is a regression fixture, not a new policy/runtime limit.
-  @wip @slice-1 @bug-4 @ID-POLICY-35
+  @slice-1 @bug-4 @ID-POLICY-35
   Scenario Outline: deeply nested unknown policy data cannot retain quadratic traversal paths
     Given the policy file contains <depth> nested sequences below an unknown field
     When itos-container runs with "doctor --policy-only --json" and the environment "GODEBUG=gctrace=1;GOGC=10;GOMEMLIMIT=off"

@@ -5,6 +5,7 @@ package yaml
 import (
 	"bytes"
 	"io"
+	"slices"
 	"strconv"
 	"unicode/utf8"
 
@@ -47,7 +48,7 @@ func (s Source) Read() (port.Value, []port.Issue) {
 		return rejected(port.Empty)
 	}
 	reader := tree{}
-	value := reader.visit(root, nil)
+	value := reader.visit(root)
 	if reader.syntax {
 		return rejected(port.Syntax)
 	}
@@ -64,21 +65,20 @@ func rejected(kind port.Failure) (port.Value, []port.Issue) {
 type tree struct {
 	issues []port.Issue
 	syntax bool
+	path   []string // Shared traversal stack; only retained issues copy it.
 }
 
-func (t *tree) issue(kind port.Failure, path []string) {
-	t.issues = append(t.issues, port.Issue{Kind: kind, Path: path})
+func (t *tree) issue(kind port.Failure) {
+	t.issues = append(t.issues, port.Issue{Kind: kind, Path: slices.Clone(t.path)})
 }
 
-func child(path []string, key string) []string { return append(append([]string{}, path...), key) }
-
-func (t *tree) visit(node *yaml.Node, path []string) port.Value {
+func (t *tree) visit(node *yaml.Node) port.Value {
 	if node.Kind == yaml.AliasNode {
-		t.issue(port.Alias, path)
+		t.issue(port.Alias)
 		return port.Value{}
 	}
 	if node.Anchor != "" {
-		t.issue(port.Anchor, path)
+		t.issue(port.Anchor)
 	}
 	tag := node.Tag
 	if node.Style&yaml.TaggedStyle != 0 {
@@ -96,7 +96,7 @@ func (t *tree) visit(node *yaml.Node, path []string) port.Value {
 				t.syntax = true
 			}
 		default:
-			t.issue(port.Tag, path)
+			t.issue(port.Tag)
 		}
 	}
 	switch node.Kind {
@@ -105,27 +105,31 @@ func (t *tree) visit(node *yaml.Node, path []string) port.Value {
 		for i := 0; i < len(node.Content); i += 2 {
 			key, value := node.Content[i], node.Content[i+1]
 			if key.Kind == yaml.ScalarNode && key.Value == "<<" {
-				at := child(path, "<<")
-				t.issue(port.MergeKey, at)
-				t.visit(value, at)
+				t.path = append(t.path, "<<")
+				t.issue(port.MergeKey)
+				t.visit(value)
+				t.path = t.path[:len(t.path)-1]
 				continue
 			}
-			k := t.visit(key, path)
+			k := t.visit(key)
 			if k.Kind != port.String {
-				t.issue(port.NonStringKey, path)
-				t.visit(value, path)
+				t.issue(port.NonStringKey)
+				t.visit(value)
 				continue
 			}
-			at := child(path, k.Text)
+			t.path = append(t.path, k.Text)
 			if _, exists := fields[k.Text]; exists {
-				t.issue(port.DuplicateKey, at)
+				t.issue(port.DuplicateKey)
 			}
-			fields[k.Text] = t.visit(value, at)
+			fields[k.Text] = t.visit(value)
+			t.path = t.path[:len(t.path)-1]
 		}
 		return port.Value{Kind: port.Object, Fields: fields}
 	case yaml.SequenceNode:
 		for i, value := range node.Content {
-			t.visit(value, child(path, strconv.Itoa(i)))
+			t.path = append(t.path, strconv.Itoa(i))
+			t.visit(value)
+			t.path = t.path[:len(t.path)-1]
 		}
 		return port.Value{Kind: port.Array}
 	default:
@@ -134,7 +138,7 @@ func (t *tree) visit(node *yaml.Node, path []string) port.Value {
 		case port.Syntax:
 			t.syntax = true
 		case port.NonFinite:
-			t.issue(failure, path)
+			t.issue(failure)
 		}
 		return value
 	}
