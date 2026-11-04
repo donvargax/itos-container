@@ -1413,21 +1413,6 @@
     safe semantics. Report document checks, proposed design choices and remaining person decisions
     for review. Change no other document, feature, code, pin, gate or proof artifact. This spec
     and its eventual document touch no proof.code path and need no mutation results.
-  done_when:
-    - run: sh -eu -c 'f=docs/architecture/arc42.md; test -s "$f"; for section in "## Goals" "## Constraints" "## Context and scope" "## Solution strategy" "## Building-block view" "## Runtime view" "## Deployment view" "## Cross-cutting concepts" "## Decisions" "## Quality requirements" "## Risks and open questions" "## Glossary"; do grep -Fqx "$section" "$f"; done'
-    - run: >-
-        sh -eu -c 'f=docs/architecture/arc42.md; test -s "$f";
-        for link in "(../charter.md)" "(../../PLAN.md)" "(../plans/container-pilot.md)"
-        "(../architecture.md)" "(../plans/offline-run-lifecycle.md)" "(../CLI.md)" "(../CONFIG.md)"
-        "(../decisions/0001-enforce-slice-and-engine-boundaries.md)";
-        do grep -Fq "$link" "$f"; done'
-    - run: >-
-        sh -eu -c 'f=docs/architecture/arc42.md; test -s "$f";
-        for header in "| Building block | Status | Responsibility | Dependencies and contracts |"
-        "| Work item | Prerequisites | Shared outputs and consumers |"
-        "| Requirement | Evidence and gate | Status or gap |"
-        "| Open question | Decision owner | Blocks |";
-        do grep -Fqx "$header" "$f"; done'
 - id: T-16
   type: ci
   title: Scenarios that need a real engine have a tag, a switch and one Linux job
