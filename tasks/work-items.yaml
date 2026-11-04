@@ -296,3 +296,19 @@ items:
       assumes a public repository, so attestation would fail here. internal/release has no importers
       and accounted for 71 of T-8's 225 mutants and T-8's Windows failure. Delete both until a
       release is wanted, amending AGENTS.md's preserve clause. Waits: nothing is blocked by it.
+  - id: p2-architecture-stdlib-on-go-list
+    title: The architecture check holds stdlib allowlists on go list arrows, which no comment can evade
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Probes of T-14's gate, 2026-11-04: a domain or handler with os/exec passes under a '// Code
+      generated … DO NOT EDIT.' header, as golangci-lint skips generated files; five more nolint
+      spellings pass (///nolint:depguard, // //nolint:depguard, a trailing comma, nolint:allx,
+      gosec,,depguard); a handler or porttest can import crypto/tls, log/syslog or database/sql; a
+      build-tagged handler file with os/exec passes. No agent has been seen doing these, so nothing
+      blocks. One check closes most: tools/bin/architecture-check reads each role's stdlib imports
+      from go list, with an allowlist per role, including IgnoredGoFiles. Details at the
+      coordinator.
