@@ -16,7 +16,7 @@ resolves that SHA to its release without a version input; the repository pin cho
 that runs. Keep the existing pin checksum, CI steps, and `itos verify` / `itos ci run` calls.
 
 Preserve verified checksums when upgrading tools fetched by `tools/bin/pinned`; never update only
-a version beside stale hashes. The pinned itos-cc upgrade is separate work under T-4.
+a version beside stale hashes. The itos-cc migration under T-4 is recorded below.
 
 Go dependencies are locked in go.mod/go.sum. Use the project's gates to check module
 verification and tidy-diff, and review code and vulnerability results before an update lands.
@@ -47,3 +47,63 @@ the nonempty-version condition; this migration neither enables releases nor adds
 
 This branch has no CLI binary release yet. Template releases and the generator's adoption/update
 workflow are separate from made-project binary release tooling and are not claimed here.
+
+## itos-cc 0.5.0 to 0.47.2
+
+T-4 pins the launcher to [0.47.2](https://github.com/donvargax/itos-cc/releases/tag/v0.47.2).
+Its five archive hashes were verified on 2026-11-04 against the
+[release manifest](https://github.com/donvargax/itos-cc/releases/download/v0.47.2/checksums.txt),
+whose SHA-256 is `7ebfae6b1f2193b79425289af3a436e4ee25efe27e6ee11b04f49ac984f9ef30`,
+and the release API's asset digests. Keep Linux and macOS amd64/arm64 and Windows amd64;
+these tool downloads do not expand supported container hosts. The launcher still verifies an
+archive before extraction and supports `--path`; on Linux its cache miss installs
+`.tools/itos-cc-0.47.2/itos-cc`. Other tools keep their existing pins.
+
+The [0.47.2 README](https://github.com/donvargax/itos-cc/blob/v0.47.2/README.md) and
+[intervening releases](https://github.com/donvargax/itos-cc/releases) preserve our commands:
+
+```sh
+tools/bin/pinned itos-cc mutation sample --count 10
+tools/bin/pinned itos-cc mutation check --since <base> --fail-uncovered --json cmd internal
+```
+
+Keep the cached check, its scope and thresholds. A counted mutation run is a different operation;
+`--fail-uncovered=lines` would narrow the existing whole-function requirement. The task checks
+use the runner's shell tools directly; RTK is not a CI dependency.
+
+`itos-cc.yaml` remains valid unchanged: `mutation.exceptions: []`, with the omitted format
+version meaning version 1. The stricter parser rejects unknown keys, anchors, aliases, merge
+keys, non-JSON tags, non-string keys and extra documents. This file uses none of them. No
+exclusion, exception, `mutation.tests` or `mutation.copy` setting is needed for this upgrade.
+
+[0.7.0](https://github.com/donvargax/itos-cc/releases/tag/v0.7.0) introduced strict Go coverage
+evidence and whole-suite freshness. Strict `--fail-uncovered` needs fresh evidence for every
+judged Go function, even one with no mutation sites, and fails uncovered executable blocks as
+well as uncovered mutants. Whole-suite outcomes depend on the suite and configured support
+files. [0.18.0](https://github.com/donvargax/itos-cc/releases/tag/v0.18.0) changed function
+hashes to ignore comments; [0.47.0](https://github.com/donvargax/itos-cc/releases/tag/v0.47.0)
+invalidates earlier strict coverage evidence. Old results can therefore become stale without a
+source edit. Our empty exception list needs no `mutation except --rehash` migration.
+
+When a changed-code check requires stale evidence, remeasure it with the repository launcher:
+
+```sh
+tools/bin/pinned itos-cc mutation run --since <base> --all-tests --fail-uncovered --no-annotate cmd internal
+```
+
+Commit only the resulting project-local `.metrics/mutate/` records. Kill survivors with tests;
+uncovered code needs tests, never an exception. Do not hand-edit evidence or import another
+project's cache. T-4's base is `ebd187e7f0722f65d9aadda7a13d27048e4e03f6`, the parent of its first
+specification commit, `786ea2f2cb1f75351e30c4b75c37d98437b3f418`. Its launcher/docs changes touch
+no `proof.code` path: the range check passes with no source files, proving compatibility rather
+than any Go function. They require no new mutation records.
+
+Sampling reruns at most ten fresh recorded outcomes, skipping stale or missing results, with a
+seed derived from HEAD. The inherited snapshot contains three `Example` mutants in
+`internal/release/releasetest/releasetest.go`; after this upgrade the sample reports no cached
+mutant, so **zero mutants were sampled**. Passing that check does not refresh the baseline or
+prove the whole codebase. A full foundation baseline remains separate work.
+
+The intervening releases also changed mutation's plain output and several nonzero exit codes
+([0.16.0](https://github.com/donvargax/itos-cc/releases/tag/v0.16.0)). Our callers neither parse
+the plain output nor distinguish those error codes; exit status remains the verdict.

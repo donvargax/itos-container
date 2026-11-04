@@ -66,10 +66,99 @@
   type: build
   title: tools/bin/pinned runs the current itos-cc, not 0.5.0
   why: >
-    tools/bin/pinned pins itos-cc 0.5.0 (2026-11-03); the latest release is 0.47.2. CI's mutation
-    sample and proof.code's mutation check run through it, so the project's code proof runs a tool
-    forty-odd releases behind, without its narrower test runs and fixes. Move the pin and its five
-    checksums to the current release, read itos-cc's release notes for changed flags or config
-    (itos-cc.yaml), and keep the proof green.
+    tools/bin/pinned still runs itos-cc 0.5.0. The current release, verified on 2026-11-04 at
+    https://api.github.com/repos/donvargax/itos-cc/releases/latest, is v0.47.2, published on
+    2026-11-02 from eb7d910ab864b890a9033f5c8acc2311f56efe25. Fix this task's target at 0.47.2
+    rather than resolving latest at runtime. This is the charter's foundation tool upgrade,
+    a build task with checks, not container behaviour: no scenarios or step definitions.
+
+    Update only the itos-cc version and its five archive SHA-256 values in tools/bin/pinned.
+    The expected values below come from
+    https://github.com/donvargax/itos-cc/releases/download/v0.47.2/checksums.txt, whose SHA-256 is
+    7ebfae6b1f2193b79425289af3a436e4ee25efe27e6ee11b04f49ac984f9ef30; the release API's asset
+    digests agree. Keep Linux and macOS amd64/arm64 and Windows amd64, the archive names and
+    member names, versioned cache directory, --path interface and checksum-before-extraction
+    behaviour. Leave the other tools' pins alone and do not add Windows arm64. These are tool
+    distribution platforms, not additional supported container hosts. No new library or service
+    is needed. Verify the release checksum manifest before copying any value; a version bump
+    beside old hashes is incomplete. The Linux runtime check must use the repository launcher,
+    not an unrelated itos-cc on PATH, and resolve .tools/itos-cc-0.47.2/itos-cc on a cache miss.
+
+    Record the applicable migration in docs/upgrading.md, using the releases from 0.5.0 through
+    0.47.2 and https://github.com/donvargax/itos-cc/blob/v0.47.2/README.md. The existing
+    mutation sample --count 10 and mutation check --since <base> --fail-uncovered --json cmd
+    internal remain supported. Keep those CI/proof commands, their scope and thresholds intact;
+    do not replace cached checking with a counted run or change to --fail-uncovered=lines.
+    itos-cc.yaml's mutation.exceptions: [] is already valid. Its omitted version means version
+    1; strict validation now rejects unknown keys, anchors, aliases, merge keys, non-JSON tags,
+    non-string keys and multiple documents, none of which this file uses. Preserve that file;
+    do not add exclusions, exceptions, mutation.tests or mutation.copy for this pin move.
+    The 0.18.0 comment-insensitive hashes and later whole-suite evidence can stale old results;
+    0.47.0 also invalidates older strict coverage evidence. Exception rehashing is unnecessary
+    here because the exception list is empty. No consumer here parses mutation's plain output
+    or distinguishes its nonzero error codes; keep exit status as the verdict.
+
+    Strict --fail-uncovered now requires fresh coverage evidence for every judged Go function,
+    including functions without mutation sites, and rejects uncovered executable blocks as well
+    as uncovered mutants. Re-measure required stale evidence with the pinned release, all-tests,
+    fail-uncovered and no-annotate; commit only the resulting project-local .metrics/mutate/
+    paths. Kill survivors with tests and never excuse uncovered code, hand-edit evidence, copy
+    another project's cache or relax a gate. Use the parent of T-4's actual first commit,
+    786ea2f2cb1f75351e30c4b75c37d98437b3f418, as the range base:
+    ebd187e7f0722f65d9aadda7a13d27048e4e03f6. Reconfirm this against itos work show T-4 if history
+    changes. The planned launcher/docs edits touch no proof.code path; the range check below
+    then validates command/config compatibility but proves no Go function. Do not manufacture
+    changed-code records or expand this task into a repository-wide proof refresh.
+
+    The only existing snapshot records three Example mutants in
+    internal/release/releasetest/releasetest.go. A sample draws only fresh recorded outcomes,
+    at most ten, and skips stale or missing results: success with zero candidates is not a
+    refreshed baseline. Report the actual sampled count and any stale-evidence limitation in
+    the implementation handoff. A full foundation baseline is separate work, not a reason to
+    lower this task's gates or claim all code is proven.
+
+    Keep the checks at the existing task/CI tiers, with shell tools already on the runner;
+    remove the task check's RTK wrapper rather than requiring RTK in CI. The checksum-map and
+    executed-version checks fail before implementation on all five old hashes and 0.5.0.
+    Shell syntax, configuration and the range check are preservation checks. The existing
+    mutation sample already passes with 0.5.0 (three of three cached mutants), so it is only
+    a compatibility check, never the upgrade assertion. Its HEAD-derived seed is deterministic
+    for a given commit. Leave the existing wider CI plan and hooks in control of their gates.
   done_when:
-    - run: rtk proxy tools/bin/pinned itos-cc mutation sample --count 10
+    - run: sh -n tools/bin/pinned
+    - run: |
+        awk '
+          BEGIN {
+            expected["linux-amd64"] = "5e05856d4ed7ec245c8c94de3fd90dbf8868ccfd5bba16f395efbfb2717f8a4c"
+            expected["linux-arm64"] = "4077632ceb1838414c5f4de1b6d6f7807e59b3250b71346e454caf0ff4015bdd"
+            expected["darwin-amd64"] = "456adc7c5b9808aff34c19ab9d513c3c2858b7a68385aa78fc679e31536f9dcb"
+            expected["darwin-arm64"] = "bd7969e2c5e7121ccef24fb7fede28eb719e61e07eed79ce2df8ac63272d0fb4"
+            expected["windows-amd64"] = "2cb032aab757e387ada20d1eb900a2478a36d7661d0dca42071410a74b240bc1"
+          }
+          /^itos-cc\)$/ { active = 1; blocks++; next }
+          active && $1 == "esac" { active = 0 }
+          active && $2 ~ /^sum=/ {
+            platform = $1; sub(/\)$/, "", platform)
+            checksum = $2; sub(/^sum=/, "", checksum)
+            if (!(platform in expected) || checksum != expected[platform]) {
+              print "wrong itos-cc 0.47.2 checksum for " platform; bad = 1
+            }
+            seen[platform]++
+          }
+          END {
+            if (blocks != 1) { print "expected one itos-cc launcher case"; bad = 1 }
+            for (platform in expected) {
+              if (seen[platform] != 1) {
+                print "missing or duplicate itos-cc checksum for " platform; bad = 1
+              }
+            }
+            exit bad
+          }
+        ' tools/bin/pinned
+    - run: test "$(tools/bin/pinned itos-cc --version)" = "itos-cc 0.47.2"
+    - run: itos config check
+    - run: >-
+        tools/bin/pinned itos-cc mutation check
+        --since ebd187e7f0722f65d9aadda7a13d27048e4e03f6
+        --fail-uncovered --json cmd internal
+    - run: tools/bin/pinned itos-cc mutation sample --count 10
