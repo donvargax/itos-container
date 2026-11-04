@@ -208,11 +208,141 @@
   type: docs
   title: docs/CLI.md and docs/CONFIG.md describe itos container's commands and itos-container.yaml, from the newest of itos's and itos-cc's guidelines
   why: >
-    Both files came from itos-template's guidelines (2026-11-03) and still name itos-template, its
-    manifest and its decisions. The same guidelines also live in itos (docs/CLI.md) and itos-cc, and
-    it is not known which copy is newest: compare the three, take the newest rules, and retarget
-    them to this project's commands (init, doctor, approve, run, exec, status, stop) and its policy
-    file. The reading rules in CONFIG.md matter most here: itos-container.yaml lives in an untrusted
-    checkout.
+    Both files still describe itos-template, its manifest and its decisions. Replace that guidance
+    with this project's planned interface and strict policy rules. This is documentation-only
+    foundation work under docs/charter.md and docs/plans/container-pilot.md, not implementation of
+    container behaviour. Edit only docs/CLI.md and docs/CONFIG.md; add no scenarios, step definitions,
+    code, dependencies, configuration files or gates. Preserve the counting example and existing
+    checks. No proof.code path changes, so do not manufacture mutation evidence.
+
+    The upstream comparison was verified on 2026-11-04 using main's commit and each file's last
+    modifying commit, not the date a copy arrived here. Pin source links in both documents to the
+    inspected revisions below, retain their attribution and external guideline sources, and explain
+    which newer rules apply. Do not present another project's implementation gaps or numbered
+    decisions as this project's. itos-cc has the newest edits to these guidelines, but its own
+    compatibility exceptions and command-specific behaviours are not universal rules. The charter
+    and pilot contract remain authoritative over every upstream example.
+
+    itos was inspected at 772cef549d90b9cca7170a2252ad85fc09bd880a. Its docs/CLI.md last changed at
+    50dfa0bcc8c0632aaa0d0041206e2c97cf9ae24f on 2026-10-27 at 03:01:23 UTC; there is no docs/CONFIG.md
+    at that revision. Its extension protocol is docs/extensions.md at the same inspected revision:
+    https://github.com/donvargax/itos/blob/772cef549d90b9cca7170a2252ad85fc09bd880a/docs/extensions.md.
+    itos-cc was inspected at 9361616f7204a236e809417726ad107ca4f9b805. Its docs/CLI.md last changed at
+    8a3f31cd899be858fa7eaea02ce9f05572d54346 on 2026-10-27 at 10:10:36 UTC; docs/CONFIG.md last changed
+    at 405b36205f8a38a27260f69afe554412015077ec on 2026-10-27 at 06:39:05 UTC. itos-template was
+    inspected at 1533aee2ea3331816e793faaeaabd3f55f83bcaa. Its docs/CLI.md last changed at
+    79301eba51b9768a27906c720e39c49b08491e67 on 2026-10-12; docs/CONFIG.md last changed at
+    2d8bc3da85fd0aa8b6cc86f2b40b526c9726ffd3 on 2026-10-07. Link each available guideline using
+    https://github.com/donvargax/<project>/blob/<inspected-revision>/docs/<file>. The inherited
+    CONFIG.md matches that template copy; its CLI.md lacks the template's later pre-v1 guidance
+    and still has render/merge examples. A new repository HEAD date alone does not date a rule.
+
+    Both documents must link to the charter and pilot, state that container commands and policy
+    loading are not implemented, and distinguish design rules from current behaviour. The existing
+    cmd/itos-container/main.go exposes count, version and completion, not a sandbox. Describe the
+    offline owned-run milestone and Linux amd64 with native Docker as a target requiring runtime
+    proof, not a support claim. Network egress, credentials/accounts, LAN ingress, Compose and other
+    platforms remain deferred. Describing the pilot's later commands does not authorize those
+    slices or any open security decision. Do not claim previous-release checks or other upstream
+    compliance machinery run here merely because a source describes them.
+
+    CLI.md must describe itos container as dispatch to itos-container through the existing extension
+    seam, with a planned command table for init, doctor, approve, run, exec, status and stop. init
+    prepares non-runnable examples without overwriting files; doctor only inspects; approve shows
+    effective permissions and differences and records explicit host-user consent outside the
+    checkout. None executes checkout code, installs hooks, logs in, pulls/builds images or starts
+    a session. Distinguish doctor --probe as the pilot's explicit bounded disposable probes using
+    trusted material without agents or real credentials; real-engine scenarios run only in CI.
+    run -- <argv...> requires an explicit command and preserves argument boundaries, with no
+    implicit shell or injected agent permission flags. exec <session> -- <argv...> uses only a live
+    owned session's frozen restrictions and never extends its foreground lifetime. Primary exit
+    refuses new exec and tears down active commands. status reports owned state/recovery without
+    secrets; stop <session> removes only owned resources, preserving checkout edits and project
+    state. No detached mode, foreign-resource pruning or unattended recovery restart is implied.
+
+    Preserve applicable naming, help, flag, output, compatibility and completion principles. Retarget
+    the executable's version/error prefix to itos-container and proposed product-specific variables
+    to ITOS_CONTAINER_; this naming rule creates no new variable or flag. Explain the host protocol's
+    ITOS_ROOT, ITOS_CONFIG, ITOS_JSON, ITOS_BIN and ITOS_VERSION separately. ITOS_CONFIG names core
+    itos configuration, never itos-container.yaml, and no container keys belong in itos.yaml. Flags
+    before container belong to itos; arguments after it belong to the extension, and words after
+    run/exec's -- belong to the workload without further wrapper parsing. Proposed flag/environment/
+    file precedence cannot grant permissions, bypass approval or import the host environment into
+    the worker. NO_COLOR is a presentation convention, not permission to forward host variables.
+
+    For planned noninteractive control commands, --json or inherited ITOS_JSON=1 requests one stdout
+    object with schema 1, ok and typed problems even on failure; diagnostics go to stderr. Carry
+    forward the newer guidance on stable rule IDs, each problem's exit and flat subject fields,
+    reserving rule, exit, message and fix. Scripts rely on codes, structured data and written file
+    data, not prose or comments. The pilot proposes refusing JSON mode for interactive run/exec;
+    document that exception, including inherited JSON mode, rather than mixing workload output
+    into an object. Do not invent exact problem IDs before the behaviour specifications.
+
+    Record the exit-code source disagreement explicitly. itos and its extension contract still use
+    0 success, 1 policy/check refusal, 2 usage/config/unknown command, 3 missing environment, 70 internal
+    and 75 temporary failure. itos-cc's newer 80/81/82/100 and interrupt 130 are its own decisions.
+    Retain the pilot's binding itos wrapper conventions, not an undocumented migration to itos-cc's
+    numbers. Once a workload starts, preserve its exit status; report cleanup errors separately,
+    returning nonzero when a successful workload has required-cleanup failure. Do not apply the
+    inherited rule against child-code passthrough to workload exits or invent a cleanup/signal code.
+    Exact timeout, signal and cancellation details still need scenarios. Keep codes, JSON and their
+    mapping in the UI, never in the domain. No current counting behaviour changes with this task.
+
+    CONFIG.md must use itos-cc's newer separation of format policy from implemented loader behaviour
+    for the planned itos-container.yaml. Other tools' files keep their own formats: itos.yaml is core
+    workflow configuration, and the restricted devcontainer.json is JSON-with-comments, not YAML.
+    The checkout policy and manifest request permissions; neither authorizes itself. Require shared
+    validation by doctor, approve and run, explicit host-owned approval outside the writable checkout,
+    and a frozen effective session configuration. Missing/malformed policy, unsupported options,
+    invalid values or absent/mismatched approval must not fall back to unrestricted startup. Editing
+    checkout files or recording a new approval cannot widen a live session.
+
+    Retain the JSON data model with YAML syntax, explicit visible defaults and no embedded language
+    or host-side evaluation. Require rejection of duplicate and unknown keys, non-string keys,
+    multiple documents, anchors, aliases, merge keys and non-JSON/custom tags, including inside
+    nested values, before using configuration or starting resources. Quotes, comments, block/flow
+    styles and the non-specific ! tag are data spellings, not execution. Keep actionable problems
+    keyed by their path from the top, validation of all values before use, integer versioning and
+    rejection of unsupported versions. Explain that itos-cc's ignored x- keys, absent/empty-file
+    defaults, missing-version compatibility and pre-1.0 version-1 additions are project-specific
+    exceptions, not adopted sandbox policy. Do not select a parser or claim these checks already
+    exist; later behaviour specs must choose maintained libraries and pin them before implementation.
+
+    Keep the remaining format principles: snake_case keys, ordered lists of named objects, values
+    kept whole (argv lists rather than shell strings), file-relative slash-separated paths, no
+    secrets, documented types/requirements/defaults/examples, reviewable effective defaults, a
+    versioned JSON Schema and stable deterministic writes. Distinguish desired documentation/schema
+    capabilities from commands or artifacts that exist. General path guidance does not settle safe
+    checkout identity, manifest discovery or state storage. No runnable policy example, key catalog,
+    schema version, discovery/output path, approval fingerprint, lifecycle-hook semantics or
+    resource limit is invented here; those pilot questions remain open. No host credential sourcing
+    is authorized by general environment-variable guidance. Remove template-specific examples,
+    docs/manifest.md links, bare inherited decision numbers and unowned gap IDs such as
+    config-key-paths; link the actual authorities and name remaining specification needs instead.
+
+    The checks below are cheap documentation checks at the existing task/CI tier, using existing
+    shell tools without RTK or network access. Before implementation, the command check fails at
+    the absent itos container reference; the source/status check fails at the absent pinned itos
+    revision; the boundary check fails at the absent ITOS_ROOT; and the retired-claims check finds
+    template commands, variables and manifest links. Existing parsing terms are preservation
+    checks. Keyword checks do not prove correct prose or isolation: review both documents against
+    this entry, especially source differences, current versus planned behaviour, workload exits
+    and the approval boundary. Let configured hooks and CI run the wider gates unchanged.
   done_when:
-    - run: rtk proxy sh -eu -c 'git diff --check; grep -Fq "itos container" docs/CLI.md; for command in init doctor approve run exec status stop; do grep -wq "$command" docs/CLI.md; done; grep -Fq "itos-container.yaml" docs/CONFIG.md; for file in docs/CLI.md docs/CONFIG.md; do grep -Fq "itos-cc" "$file"; done; ! grep -nE "ITOS_TEMPLATE_|itos template|itos-template reads|itos-template writes|itos-template runs|docs/manifest\.md" docs/CLI.md docs/CONFIG.md'
+    - run: >-
+        sh -eu -c 'git diff --check; grep -Fq "itos container" docs/CLI.md;
+        for command in init doctor approve run exec status stop; do grep -wq "$command" docs/CLI.md; done;
+        grep -Fq "itos-container.yaml" docs/CONFIG.md'
+    - run: >-
+        sh -eu -c 'for file in docs/CLI.md docs/CONFIG.md; do
+        for term in 772cef549d90b9cca7170a2252ad85fc09bd880a 9361616f7204a236e809417726ad107ca4f9b805
+        1533aee2ea3331816e793faaeaabd3f55f83bcaa 2026-11-04 itos-cc charter.md container-pilot.md "not implemented";
+        do grep -Fq "$term" "$file"; done; done'
+    - run: >-
+        sh -eu -c 'for term in ITOS_ROOT ITOS_CONFIG ITOS_JSON ITOS_BIN ITOS_VERSION ITOS_CONTAINER_;
+        do grep -Fq "$term" docs/CLI.md; done;
+        for term in untrusted host-owned frozen duplicate unknown anchors aliases "merge keys" tags
+        version devcontainer.json; do grep -Fq "$term" docs/CONFIG.md; done'
+    - run: >-
+        sh -eu -c '! grep -nE "ITOS_TEMPLATE_|itos template|itos-template reads|itos-template writes|itos-template runs|docs/manifest\.md|config-key-paths|config-print-defaults|case_forms"
+        docs/CLI.md docs/CONFIG.md'
