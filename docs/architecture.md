@@ -29,14 +29,22 @@ Each command lives in `internal/slices/<command>/`: `command` is the thin handle
 `internal/engine/<name>/{domain,port,<adapter>}` with the same boundaries. Nested
 packages inherit their role; an owner needs no empty domain or port directory.
 
-Domains and ports allow only `bytes`, `errors` and `strings` from the standard
-library in production. A domain imports its own domain/port and engine domain/port
+Domains and ports have an exact production standard-library allowlist: `bytes`,
+`context`, `errors`, `fmt`, `maps`, `slices`, `sort`, `strconv`, `strings`, `time`
+(for contract types) and `unicode`. Use their pure APIs; I/O belongs behind ports.
+A domain imports its own domain/port and engine domain/port
 APIs; a port imports only its own port subpackages and engine ports. Ports own
 contract values, keeping dependencies acyclic. A command imports its domain,
 ports, engine APIs and `internal/cli`. An adapter may import its own domain, port
 and helper subpackages, plus engine APIs. No slice imports another slice; no
 engine imports a slice. No command or domain imports an adapter. Only `cmd`
 binds concrete adapters, including input's disk port.
+
+Commands and port/porttest production code refuse process, network and filesystem
+imports (`os`, `net`, `syscall`, `golang.org/x/sys`, `io/ioutil`, `path/filepath`
+and `plugin`). The separate `command-io` and itos-derived `store-ports-io` rules
+hold these restrictions even where a role allows standard-library helpers.
+Test files may read fixtures; production fakes keep their state in memory.
 
 The shared UI imports no other project package. It owns rendering, joined-error
 traversal and the unknown-error fallback; `cmd` supplies count's failure classifier
@@ -57,6 +65,15 @@ imports, test imports, role coverage and binary dependencies. Its composable
 CI. Import-free unclassified packages, production test support and Go comments
 suppressing depguard fail; targeted `nolint:gosec` remains permitted. Usage/load
 errors exit 2, named architecture violations exit 1.
+
+The only top-level Go roots are `cmd`, `internal`, `features` and `tools`; every
+other root fails even when cmd imports it. Imports with `testdata`, underscore-
+or dot-prefixed path elements fail because `go list ./...` skips those packages.
+Domains and ports refuse `IgnoredGoFiles`, including build-tagged and OS-specific
+files; source-directory discovery also catches wholly excluded domain/port packages.
+Suppression checks trim names in every comma-separated list position,
+ignore case and recognize an adjacent `//` explanation. They inspect comments,
+so directive text in strings and targeted suppressions remain valid.
 
 `--fixtures` runs the compile-first negative/positive matrix against the actual
 pinned linter and policy. The hook's `--fixtures-if-staged` and CI's

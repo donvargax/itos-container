@@ -37,14 +37,16 @@ does not take an item. Report gaps and follow-up ideas with why they matter to t
   `internal/slices/count`: command, domain, port and named adapter siblings. Shared behaviour
   lives under `internal/engine/<name>/` with domain, port and adapter siblings, never a slice
   importing another. Read `docs/architecture.md`, "Slices", before adding a package.
-- Keep handlers thin and behaviour behind ports. Domains/ports allow only bytes, errors and
-  strings from the standard library; additions need a reviewed rule and fixture. Adapters may
+- Keep handlers thin and I/O behind ports, including process/network/filesystem access. Domains
+  and ports use the reviewed exact-package allowlist in `.golangci.yml` (time for contract types);
+  additions need a reviewed rule and fixture. Porttest fakes do no I/O. Adapters may
   import their own domain and port. Only cmd assembles adapters. The generic UI imports no
   project package; cmd supplies each slice's classifier. Import arrows apply to tests too.
 - Use port/porttest fakes, never mocks; run the shared contract against each fake and adapter.
   Test support never enters production. Static depguard and the go-list architecture checker
   hold new names by default deny. Never suppress depguard. Enforcement-input changes run the
   compile-first fixtures; ordinary code changes run only the cheap structural check.
+  Import no testdata, underscore- or dot-prefixed package; domains/ports have no ignored Go files.
 - Look for a maintained library before building what one likely solves; settle the choice and
   reason in the spec and pin its version. The count example uses Go's standard-library
   whitespace tokenization, not a custom word parser; preserve its Files port and in-memory fake.

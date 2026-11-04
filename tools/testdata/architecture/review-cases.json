@@ -1006,7 +1006,7 @@
   {
     "Name": "review-lib-wired",
     "File": "lib/probe.go",
-    "Import": "os/exec",
+    "Import": "",
     "Kind": "graph",
     "Rule": "unclassified package",
     "Flags": [
@@ -1014,7 +1014,8 @@
     ],
     "Files": {
       "cmd/control/main.go": "package main\nimport _ \"github.com/donvargax/itos-container/lib\"\nfunc main() {}\n"
-    }
+    },
+    "Source": "package lib\nimport _ \"os/exec\"\n"
   },
   {
     "Name": "review-lib-unlinked",
@@ -1039,5 +1040,71 @@
     "Import": "os/exec",
     "Kind": "allow",
     "Rule": ""
+  },
+  {
+    "Name": "review-slices/review-domain-ignored-only",
+    "File": "internal/slices/review/domain/nested/probe.go",
+    "Import": "",
+    "Kind": "graph",
+    "Rule": "ignored Go file probe.go",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "//go:build architecture_review_never\n\npackage nested\nimport _ \"os/exec\"\n",
+    "CompileFiles": [
+      "internal/slices/review/domain/nested/probe.go"
+    ]
+  },
+  {
+    "Name": "review-slices/review-port-ignored-only",
+    "File": "internal/slices/review/port/nested/probe.go",
+    "Import": "",
+    "Kind": "graph",
+    "Rule": "ignored Go file probe.go",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "//go:build architecture_review_never\n\npackage nested\nimport _ \"os/exec\"\n",
+    "CompileFiles": [
+      "internal/slices/review/port/nested/probe.go"
+    ]
+  },
+  {
+    "Name": "review-engine/review-domain-ignored-only",
+    "File": "internal/engine/review/domain/nested/probe.go",
+    "Import": "",
+    "Kind": "graph",
+    "Rule": "ignored Go file probe.go",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "//go:build architecture_review_never\n\npackage nested\nimport _ \"os/exec\"\n",
+    "CompileFiles": [
+      "internal/engine/review/domain/nested/probe.go"
+    ]
+  },
+  {
+    "Name": "review-engine/review-port-ignored-only",
+    "File": "internal/engine/review/port/nested/probe.go",
+    "Import": "",
+    "Kind": "graph",
+    "Rule": "ignored Go file probe.go",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "//go:build architecture_review_never\n\npackage nested\nimport _ \"os/exec\"\n",
+    "CompileFiles": [
+      "internal/engine/review/port/nested/probe.go"
+    ]
+  },
+  {
+    "Name": "review-ignored-adapter-control",
+    "File": "internal/engine/group/docker/domain/probe.go",
+    "Import": "",
+    "Kind": "allow",
+    "Source": "//go:build architecture_review_never\n\npackage domain\nimport _ \"os/exec\"\n",
+    "CompileFiles": [
+      "internal/engine/group/docker/domain/probe.go"
+    ]
   }
 ]

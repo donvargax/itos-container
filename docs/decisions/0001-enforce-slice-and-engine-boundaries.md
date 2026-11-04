@@ -61,11 +61,30 @@ scenarios remain preservation checks, unchanged. The full compile-first matrix
 and task acceptance checks run through the configured hooks; mutation proof uses
 the item's first-spec parent, not the take or implementation commit.
 
-The final matrix contains 132 import/layout controls, plus coverage, deny-prefix,
+The initial matrix contains 132 import/layout controls, plus coverage, deny-prefix,
 inspection, linked-support and disposable Git-selection tests. Follow-up red
 probes caught two external-test self imports, three misplaced nested support
 packages and two unresolved test dependencies that ordinary `go list` accepted.
 The checker now validates test dependency loading as well as its import arrows.
+
+Review added 125 compile-first controls. Before enforcement, 97 assertions failed
+without infrastructure errors: command and porttest I/O, hidden import path
+elements, ignored domain/port files, suppression spelling variants, unknown
+top-level packages, and the coordinator-approved pure imports. The remaining
+controls preserved existing allowances and refusals. Ignored files also compile
+by explicit filename before inspection. Both data files now run in the normal
+fixture matrix. Production command/porttest I/O uses the itos ADR-0053
+`store-ports-io` pattern, extended to syscall, x/sys, ioutil, filepath and plugin.
+The coordinator approved context, fmt, strconv, sort, slices, maps, unicode and
+time contract types in domains/ports; their pure APIs complement bytes, errors
+and strings. This supersedes the earlier three-package-only starting allowlist.
+
+Four follow-up assertions reproduced wholly excluded domain/port packages, which
+`go list ./...` omits entirely. A source-directory check now catches those as well
+as reported `IgnoredGoFiles`. An excluded adapter helper remains permitted,
+including `internal/engine/group/docker/domain`, which inherits the adapter role.
+The lib fixture retains its os/exec import and cmd wiring; its assertion requires
+the layout path/reason, not an unrelated import-rule diagnostic.
 
 T-13 supersedes the local snapshot proof. The merge from main removes all
 `.metrics/mutate` snapshots, including those moved or added by T-14. Main's

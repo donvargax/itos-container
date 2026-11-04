@@ -26,6 +26,11 @@ func Inspect(ctx context.Context, dir string, checks Checks) ([]string, error) {
 		if checks.Toplevel && from.kind == "" {
 			violations = append(violations, fmt.Sprintf("toplevel: %s: unclassified package", p.ImportPath))
 		}
+		if checks.Toplevel && (from.kind == "domain" || from.layer == "port") {
+			for _, file := range p.IgnoredGoFiles {
+				violations = append(violations, fmt.Sprintf("toplevel: %s: ignored Go file %s; domains and ports must be inspected on every build", p.ImportPath, file))
+			}
+		}
 		groups := [][]string{p.Imports, p.TestImports, p.XTestImports}
 		for n, imports := range groups {
 			for _, imp := range imports {
@@ -39,6 +44,9 @@ func Inspect(ctx context.Context, dir string, checks Checks) ([]string, error) {
 				arrow := fmt.Sprintf("%s imports %s", p.ImportPath, imp)
 				if test {
 					arrow += " from tests"
+				}
+				if checks.Toplevel && ignoredImport(imp) {
+					violations = append(violations, "toplevel: "+arrow+"; ignored import path element")
 				}
 				if checks.Toplevel && !test && from.kind != "support" && support(imp) {
 					violations = append(violations, "toplevel: "+arrow+"; production imports test support")
@@ -59,6 +67,11 @@ func Inspect(ctx context.Context, dir string, checks Checks) ([]string, error) {
 		}
 	}
 	if checks.Toplevel {
+		excluded, err := excludedPureFiles(dir, module, pkgs)
+		if err != nil {
+			return nil, err
+		}
+		violations = append(violations, excluded...)
 		refusals, err := Suppressions(dir)
 		if err != nil {
 			return nil, err

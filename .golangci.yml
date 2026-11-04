@@ -30,8 +30,16 @@ linters:
             - "!$test"
           allow:
             - "bytes$"
+            - "context$"
             - "errors$"
+            - "fmt$"
+            - "maps$"
+            - "slices$"
+            - "sort$"
+            - "strconv$"
             - "strings$"
+            - "time$"
+            - "unicode$"
             - "github.com/donvargax/itos-container/internal/slices/"
             - "github.com/donvargax/itos-container/internal/engine/"
         domain-tests:
@@ -56,10 +64,40 @@ linters:
             - "!**/internal/engine/*/port/porttest/**"
           allow:
             - "bytes$"
+            - "context$"
             - "errors$"
+            - "fmt$"
+            - "maps$"
+            - "slices$"
+            - "sort$"
+            - "strconv$"
             - "strings$"
+            - "time$"
+            - "unicode$"
             - "github.com/donvargax/itos-container/internal/slices/"
             - "github.com/donvargax/itos-container/internal/engine/"
+        store-ports-io:
+          # Adapted from itos ADR-0053 store-ports-io; tests may read fixtures.
+          list-mode: lax
+          files:
+            - "**/internal/slices/*/port/**"
+            - "**/internal/engine/*/port/**"
+            - "!$test"
+          deny:
+            - pkg: "os"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "net"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "syscall"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "golang.org/x/sys/"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "io/ioutil$"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "path/filepath$"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "plugin$"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
         port-tests:
           list-mode: strict
           files:
@@ -80,6 +118,27 @@ linters:
             - "github.com/donvargax/itos-container/internal/cli$"
             - "github.com/donvargax/itos-container/internal/slices/"
             - "github.com/donvargax/itos-container/internal/engine/"
+        command-io:
+          # Adapted from itos ADR-0053 store-ports-io; tests may read fixtures.
+          list-mode: lax
+          files:
+            - "**/internal/slices/*/command/**"
+            - "!$test"
+          deny:
+            - pkg: "os"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "net"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "syscall"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "golang.org/x/sys/"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "io/ioutil$"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "path/filepath$"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
+            - pkg: "plugin$"
+              desc: "I/O belongs in an adapter behind a port; fakes keep their state in memory"
         adapter:
           list-mode: lax
           files:

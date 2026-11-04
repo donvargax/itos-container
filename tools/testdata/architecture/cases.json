@@ -74,7 +74,7 @@
     "File": "internal/slices/newname/port/probe.go",
     "Import": "os/exec",
     "Kind": "lint",
-    "Rule": "port"
+    "Rule": "port,store-ports-io"
   },
   {
     "Name": "slices/newname-port-domain",
@@ -102,7 +102,7 @@
     "File": "internal/engine/shared/port/probe.go",
     "Import": "os/exec",
     "Kind": "lint",
-    "Rule": "port"
+    "Rule": "port,store-ports-io"
   },
   {
     "Name": "engine/shared-port-domain",

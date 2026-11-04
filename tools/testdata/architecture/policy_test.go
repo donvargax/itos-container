@@ -114,8 +114,12 @@ func TestPolicy(t *testing.T) {
 	r := root(t)
 	linter := strings.TrimSpace(must(t, r, filepath.Join(r, "tools/bin/pinned"), "--path", "golangci-lint"))
 	var probes []probe
-	if err := json.Unmarshal([]byte(read(t, filepath.Join(r, "tools/testdata/architecture/cases.json"))), &probes); err != nil {
-		t.Fatal(err)
+	for _, file := range []string{"cases.json", "review-cases.json"} {
+		var cases []probe
+		if err := json.Unmarshal([]byte(read(t, filepath.Join(r, "tools/testdata/architecture", file))), &cases); err != nil {
+			t.Fatal(err)
+		}
+		probes = append(probes, cases...)
 	}
 	baseline := os.Getenv("T14_BASELINE") == "1"
 	checker := os.Getenv("ARCHITECTURE_CHECKER")

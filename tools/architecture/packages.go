@@ -14,6 +14,7 @@ import (
 type Package struct {
 	ImportPath, Name, Dir              string
 	Imports, TestImports, XTestImports []string
+	IgnoredGoFiles                     []string
 	Module                             *struct {
 		Path string
 		Main bool
@@ -130,11 +131,22 @@ func classify(path string) role {
 	if under(path, "cmd") {
 		return role{kind: "cmd"}
 	}
-	if under(path, "internal") || under(path, "pkg") {
-		return role{}
+	if under(path, "features") || under(path, "tools") {
+		return role{kind: "outside"}
 	}
-	return role{kind: "outside"}
+	return role{}
 }
+
+// ignoredImport names paths that go list ./... does not inspect as packages.
+func ignoredImport(path string) bool {
+	for _, part := range strings.Split(path, "/") {
+		if part == "testdata" || strings.HasPrefix(part, "_") || strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
+}
+
 func isSlice(r role) bool  { return strings.HasPrefix(r.owner, "internal/slices/") }
 func isEngine(r role) bool { return strings.HasPrefix(r.owner, "internal/engine/") }
 func support(path string) bool {

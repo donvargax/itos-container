@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-var nolint = regexp.MustCompile(`^nolint(?::([^\s]+))?(?:\s|$)`)
+var nolint = regexp.MustCompile(`(?i)^nolint(?:\s*:\s*([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*))?(?:\s|//|$)`)
 
 // Suppressions examines Go comments (never string literals), including generated files.
 func Suppressions(dir string) ([]string, error) {
@@ -43,7 +43,8 @@ func Suppressions(dir string) ([]string, error) {
 				}
 				denied := m[1] == ""
 				for _, name := range strings.Split(m[1], ",") {
-					if name == "depguard" || name == "all" {
+					name = strings.TrimSpace(name)
+					if strings.EqualFold(name, "depguard") || strings.EqualFold(name, "all") {
 						denied = true
 					}
 				}
