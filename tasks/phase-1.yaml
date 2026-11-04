@@ -1208,17 +1208,223 @@
   type: docs
   title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
   why: >
-    The loop builds better from a detailed plan: steering overnight mostly supplied what the
-    documents left unsaid (what blocks what, the slice layout, how specs commit). An arc42 document
-    gives every step a shared reference: goals and quality goals (charter), context and scope,
-    solution strategy, a building-block view that names each slice and engine and their dependencies
-    (the breakdown step's input), runtime views for the main commands, cross-cutting concepts
-    (ports, fakes, strict config reading), decisions (docs/decisions/), quality requirements mapped
-    to gates, and risks. Source it from docs/plans/container-pilot.md, docs/charter.md, PLAN.md and
-    docs/architecture.md; mark every open choice the contract leaves to the person as open, never
-    decided. A docs task; the person reviews it. The queued architecture draft already covers slice
-    dependencies, command composition and shared contracts. Include doctor’s shared schemas,
-    diagnostics and fixtures across slices 1–4, slice-3’s prerequisites from slices 1–2, and
-    slice-4’s approval integration and implementation order.
+    The loop needs one architectural reference for breaking down the offline owned-run milestone:
+    which commands compose which shared contracts, what blocks their implementation, and what
+    evidence each boundary needs. Draft docs/architecture/arc42.md for the person's review from
+    the existing authorities, without turning their open questions into implementation decisions.
+    This is a documentation task dependent on completed T-14, not container behaviour. The drafter
+    changes only this T-15 ledger entry and its checks in a docs commit with Item T-15. The
+    implementer creates only docs/architecture/arc42.md in a docs commit with Item T-15. Neither
+    role adds scenarios, step definitions, code, configuration, dependencies or runtime probes.
+    Leave registry ownership and status to the coordinating loop.
+
+    Read docs/charter.md first, then PLAN.md, docs/plans/container-pilot.md and docs/architecture.md,
+    especially Slices. Also read docs/plans/offline-run-lifecycle.md, docs/CLI.md, docs/CONFIG.md,
+    docs/decisions/0001-enforce-slice-and-engine-boundaries.md, AGENTS.md, itos.yaml,
+    .github/workflows/ci.yml, tools/hooks/pre-commit and the current slice-1 through slice-4 specs
+    and registry entries. Link the authorities with paths relative to docs/architecture/arc42.md.
+    The charter selects the scope of the binding pilot; the architecture draft cannot change
+    either. Distinguish implemented foundation, specified requirements, proposed building blocks
+    and open person decisions throughout, including diagrams and tables. A queued item is not an
+    implemented contract or consent. If sibling specs advance, cite their settled decisions rather
+    than duplicating a contradictory schema; report a conflict with an authority instead of
+    silently resolving it. No external guideline update or new dependency is needed for this task.
+
+    Keep the twelve level-two headings in the first check, in that order. Start with the document's
+    review status and authority links. Goals must describe one coding workload whose tools remain
+    inside an approved offline worker, prioritizing isolation, explicit approval, safe owned
+    cleanup and testable boundaries. Preserve the current count, version and completion foundation;
+    container commands and isolation are not implemented at drafting. Neither that foundation nor
+    a passing Go suite is runtime sandbox proof. Constraints must retain hostile checkout code and
+    arbitrary tool execution as the threat model; the trusted host user, controller, approved image
+    and local engine; and the limits concerning host administrators, kernel escapes and destructive
+    checkout edits. Hooks and agent instructions are workflow safeguards, not isolation. Preserve
+    attribution and licenses when referencing reused infrastructure.
+
+    Context and scope must show the person, core itos dispatch, extension controller, untrusted
+    checkout policy/manifest, host-owned approval/session state, local engine and worker. Label
+    data/control flows and trust boundaries. Core itos retains routing, commit rules and CI proof;
+    the extension owns preparation, approval and lifecycle. Linux amd64 with native Docker is the
+    target, contingent on runtime evidence. No network, credentials, ingress, extra host mounts,
+    remote engine or linked worktree is permitted in this milestone. Proxy egress, accounts,
+    network Git, LAN publishing, Compose and other platforms stay deferred, as do isolates, WASM,
+    restricted-shell and broker research. Do not introduce a guard, proxy or session network merely
+    to match the online pilot's diagram. Later pilot components must be visibly deferred.
+
+    Solution strategy and Building-block view must explain composition through ports. Include a
+    table headed Building block, Status, Responsibility and Dependencies and contracts. Inventory
+    cmd/itos-container as the assembly root; internal/cli as the generic renderer; internal/version
+    as a leaf; internal/slices/count with command/domain/port/disk/input and port/porttest; and the
+    separate inherited release machinery. Do not turn version/completion infrastructure into new
+    container slices. Name planned internal/slices/init, doctor, approve, run, status and stop;
+    mark internal/slices/exec as deferred. Status/stop are required recovery interfaces for the
+    later run contract, not commands implemented by T-15. Describe doctor --probe separately from
+    ordinary read-only inspection; its description authorizes no local engine access for agents.
+
+    Use internal/engine/policy, manifest, readiness, approval and session as proposed responsibility
+    names for the breakdown, not existing packages or settled security/storage designs. Policy
+    owns strict policy values and validation; manifest owns the restricted worker description;
+    readiness owns read-only checkout/local-engine/cached-image observations; approval owns
+    effective review, matching and trusted frozen configuration; session owns lifecycle, ownership
+    and recovery shared by run/status/stop. Show the dependency direction from manifest to policy,
+    readiness to policy/manifest, approval to policy/manifest/readiness, and session to those
+    prerequisite engines. Readiness does not depend on approval; doctor composes both inspections
+    without creating a cycle. Init uses specified example-generation contracts; doctor composes
+    inspection; approve composes review/consent; run composes validated approval and lifecycle;
+    status/stop use session contracts. Mark this decomposition as a hypothesis for review, without
+    inventing Go signatures, fields, algorithms or security choices.
+
+    Follow internal/slices/<command>/{command,domain,port,<adapter>} and
+    internal/engine/<name>/{domain,port,<adapter>}, with named adapter siblings, no generic adapters
+    directory and no empty placeholder packages. Domains/ports use the reviewed exact pure-package
+    allowlist and perform no I/O. Domains use their own ports and engine APIs; ports own contract
+    values and import only permitted ports, never domains. Commands are thin and do no process,
+    network or filesystem I/O. Adapters may use their own domain/port and engine APIs; only cmd
+    binds concrete adapters. No slice imports another slice, no engine imports a slice and generic
+    UI imports no project package. Cmd supplies slice failure classifiers. Apply arrows to tests
+    too. Keep typed failures with their owning contracts; JSON, rule IDs, exit codes and rendering
+    stay outside domains/ports. Link T-14's rules and fixtures instead of copying a stale allowlist,
+    inventing a shared package outside these roles or proposing enforcement changes.
+
+    Include an implementation-order table headed Work item, Prerequisites and Shared outputs and
+    consumers. Distinguish registry slice-1 through slice-4 from the pilot's numbered milestone
+    stages and from command slices: the first three items extend doctor, not three CLI commands.
+    Preserve T-14 -> slice-1 -> slice-2 -> slice-3 and slice-4's explicit prerequisites slice-1,
+    slice-2 and slice-3. Show the contracts causing each dependency. Slice-1 supplies the strict
+    offline policy schema/default/value validation and typed failures for doctor and later users.
+    Slice-2 adds manifest syntax/field validation and effective worker settings using that policy.
+    Slice-3 consumes both before inspecting safe checkout/engine identity, cached image digest,
+    architecture/compatibility and metadata; it selects the maintained engine library in its own
+    spec. A bare engine ping or a second permissive loader cannot satisfy readiness. Slice-4
+    composes the same validated settings and identity for review/differences, explicit host-user
+    consent, matching/supersession and protected approval/snapshot storage. It integrates approval
+    inspection into doctor and supplies later run's prerequisite without making approve call
+    doctor or run call approve. Do not change the registry or imply these contracts already exist.
+
+    Identify shared policy/manifest schemas, normalized contract values, typed diagnostic data and
+    synthetic fixtures across slices 1-4. Each owning engine supplies reusable validation and port
+    contracts; command classifiers adapt those failures to the public presentation. Doctor, approve
+    and run must agree on accepted/rejected inputs and effective values, not maintain separate
+    schema/default/canonicalization implementations. Explain which item introduces each fixture
+    and contract and which later consumers reuse it. Contract suites under the owning port/porttest
+    run against in-memory fakes and every adapter, with real-engine adapter runs only in CI. Test
+    support never enters production or imports a sibling slice. Keep adapter-specific tests with
+    their adapter and wiring tests at cmd. The exact policy, manifest, identity and approval
+    semantics remain for their own approved specs; this table selects no keys or fingerprints.
+
+    Runtime view must cover init's non-overwriting non-runnable examples; doctor's read-only
+    validation/inspection; approval review, deliberate consent and host-owned recording; and run's
+    preflight, snapshot, ownership, readiness, setup, foreground execution and cleanup. Show refusal
+    and partial-failure paths beside success. Init/doctor/approve execute no checkout code, install
+    no hooks, log in to no account and pull/build/start no images or sessions. Run preserves
+    explicit argv without an implicit shell, refuses missing/mismatched/superseded approval before
+    resource creation and uses frozen settings. Record ownership before any entrypoint, setup or
+    workload instruction; unverifiable isolation or failed setup blocks later execution. Use
+    T-11's preparing/ready/running/stopping/stopped/failed meanings and result precedence, including
+    a nonzero workload exit surviving cleanup failure and separate recovery diagnostics. Cover
+    status/stop after partial startup, create-response loss, cancellation and controller/engine
+    loss; refuse foreign/ambiguous resources and preserve edits/project state. No unattended
+    restart or detached lifetime is implied. Retain the future exec invariant at primary exit
+    while deferring its implementation. Link T-11 rather than re-deciding its interface choices,
+    and mark unresolved security steps as blocked at their point of use.
+
+    Deployment view must locate the trusted host controller, host-owned approval/recovery records,
+    cached approved image, untrusted checkout and worker on the target host/engine. The checkout
+    is the worker's only host filesystem mount. Require approved non-root identity, read-only image
+    root, no-new-privileges, no administrative capabilities/host namespaces/sockets, container-owned
+    temporary storage and isolated persistent project state. The worker cannot access host approval
+    records or credentials. No external network or published port exists from its first instruction;
+    enforcement remains a security decision requiring runtime proof, not an engine flag chosen here.
+    Images are explicitly prepared by the person; commands inspect cached content, never auto-pull,
+    build or substitute images. Show CI's disposable real-engine environment separately from
+    socket-free agent work.
+
+    Cross-cutting concepts must cover strict data-only parsing, shared effective resolution,
+    visible defaults, denial before side effects, frozen approval, ownership, redacted diagnostics,
+    bounded controller waits and recovery. Link CONFIG.md's recursive duplicate/unknown-key and
+    unsupported-syntax refusals, without weakening them into permissive decoding. Keep approval,
+    storage, identity, hook and metadata choices open until their specs and person decisions settle
+    them. Maintained libraries are chosen with reasons and pinned versions in the behaviour specs;
+    this task selects none. T-14's tooling YAML dependency is not selection of the sandbox policy
+    parser. Keep OS-dependent logic supplied with the OS as a value, fakes free of I/O and real-engine
+    scenarios CI-only.
+
+    Decisions must link the accepted T-14 record, charter/contract and T-11's recorded interface
+    choices, keeping their authority distinct from this proposed decomposition. State the charter's
+    drift rule: implementation departing from an arc42 section records a decision naming that
+    section and why, and updates it in the same pull request. Do not rewrite Slices or create an
+    accepted ADR for unresolved security choices. The person reviews the draft; passing its static
+    checks is neither that review nor approval to implement blocked designs.
+
+    Quality requirements must contain a table headed Requirement, Evidence and gate, and Status or
+    gap. Map strict configuration/manifest/approval to future black-box cases and shared contracts;
+    isolation/mounts/identity/ownership/cleanup to applicable pilot AC labels and T-11 cases;
+    dependency boundaries to depguard and structural/compile-first architecture checks; domain
+    correctness to contracts, unit/property tests and per-domain 80% coverage; and changed code to
+    fresh CI proof. Identify existing gates and absent behaviour evidence. Cite actual itos.yaml,
+    tools/hooks/pre-commit and .github/workflows/ci.yml, including prose selection, fixtures only
+    for enforcement-input changes, Linux automatic tests and manual macOS/Windows portability
+    checks. Neither portability tests nor architecture fixtures prove sandbox isolation.
+
+    State the current T-13 proof rule accurately: CI alone runs pinned itos-cc over the judged
+    range, up to ten mutation sites with the same {base} for --since and --seed, plus measured
+    added/changed-line coverage including functions without mutation sites. No local mutation run
+    or generated evidence is committed; tests kill survivors and cover uncovered lines. The same
+    base and eligible sites give the same draw; changing the candidate set can change it. Never
+    redraw to escape failure; only truly equivalent mutants may have reasoned exceptions for the
+    person to review, never uncovered code. Preserve existing gates and their actual tiers without
+    claiming a credential scan, full baseline or runtime capability they do not supply.
+    Future behaviour scenarios precede code; specifications
+    in features/ use test commits with their item, never docs commits. Implementers commit steps
+    red first while scenarios remain @wip, observe each behaviour assertion fail with @wip removed
+    for the run, then implement and prove green. Non-engine evidence is local; real-engine evidence
+    is CI-only. Undefined steps, setup failures and today's unknown-command error are not proof.
+    The existing p1-engine-scenario-tier gap must be resolved before engine scenarios become
+    executable; @wip alone is not an engine-access boundary. Agents commit and stop; only the loop
+    pushes, verifies the actual head and closes work.
+
+    Risks and open questions must contain a table headed Open question, Decision owner and Blocks.
+    Carry every category from the pilot's Decisions still open, marking deferred categories as
+    deferred rather than dropping or settling them. For the milestone include exact policy schema,
+    defaults and paths; manifest discovery/JSON-with-comments/fields/reserved environment/metadata/
+    hooks; safe checkout/user/engine identity; approval canonicalization/fingerprint/storage/
+    supersession; image digests/provenance/acquisition; offline enforcement before the first process;
+    non-root/writable-state mapping; crash-safe ownership and uncertain create; resource/timeout
+    budgets, cancellation/signals/controller loss; and safe concurrent recovery/redaction. Identify
+    the responsible sibling spec and person decision and the blocked building block or transition.
+    Carry T-11's questions forward, including unknown workload outcomes and a dead controller's
+    inability to run cleanup. Keep later proxy/TLS, credential lifecycle, download/redirect,
+    performance and platform/LAN questions outside this milestone. Invent no numeric limits,
+    fingerprints, storage paths, guard topology or consent. These decisions block dependent runtime
+    work, not writing this architecture draft.
+
+    Glossary must distinguish work-item slice from command slice and pilot milestone stage, shared
+    engine package from container engine, request from approval, frozen configuration from recovery
+    metadata, checkout/project/session identity, persistent from ephemeral state, and fake/contract
+    evidence from real-engine proof. Use these terms consistently across the views.
+
+    Preserve the original heading check and add the source-link and table checks below at the
+    existing task/CI tier, using ordinary shell tools with no network, RTK or parser dependency.
+    Before implementation docs/architecture/arc42.md does not exist; each check will fail at
+    test -s. This is an expected documentation gap, not a behaviour assertion failure. The drafter
+    does not run completion gates by hand or create a placeholder to make them pass. Let configured
+    hooks and CI run their checks. The implementer must also review prose, diagrams, dependencies
+    and links against this entry: headings and table presence cannot prove correct architecture or
+    safe semantics. Report document checks, proposed design choices and remaining person decisions
+    for review. Change no other document, feature, code, pin, gate or proof artifact. This spec
+    and its eventual document touch no proof.code path and need no mutation results.
   done_when:
     - run: sh -eu -c 'f=docs/architecture/arc42.md; test -s "$f"; for section in "## Goals" "## Constraints" "## Context and scope" "## Solution strategy" "## Building-block view" "## Runtime view" "## Deployment view" "## Cross-cutting concepts" "## Decisions" "## Quality requirements" "## Risks and open questions" "## Glossary"; do grep -Fqx "$section" "$f"; done'
+    - run: >-
+        sh -eu -c 'f=docs/architecture/arc42.md; test -s "$f";
+        for link in "(../charter.md)" "(../../PLAN.md)" "(../plans/container-pilot.md)"
+        "(../architecture.md)" "(../plans/offline-run-lifecycle.md)" "(../CLI.md)" "(../CONFIG.md)"
+        "(../decisions/0001-enforce-slice-and-engine-boundaries.md)";
+        do grep -Fq "$link" "$f"; done'
+    - run: >-
+        sh -eu -c 'f=docs/architecture/arc42.md; test -s "$f";
+        for header in "| Building block | Status | Responsibility | Dependencies and contracts |"
+        "| Work item | Prerequisites | Shared outputs and consumers |"
+        "| Requirement | Evidence and gate | Status or gap |"
+        "| Open question | Decision owner | Blocks |";
+        do grep -Fqx "$header" "$f"; done'
