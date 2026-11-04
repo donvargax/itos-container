@@ -32,7 +32,7 @@ Feature: Run invocation refusals
   # and missing-policy errors. A later nonempty argument cannot replace an empty
   # executable, even when it looks like a wrapper flag or another separator.
   # NEW assertion: "its standard output is empty" checks zero bytes.
-  @ID-RUN-01 @wip @slice-7
+  @ID-RUN-01 @slice-7
   Scenario Outline: Run requires a nonempty executable after the separator
     When itos-container runs with "<arguments>"
     Then its error output says "run requires a nonempty command after --"
@@ -56,7 +56,7 @@ Feature: Run invocation refusals
 
   # T-11 requires the separator, not merely a positional command. Do not infer
   # a shell or silently move arguments across the missing separator.
-  @ID-RUN-02 @wip @slice-7
+  @ID-RUN-02 @slice-7
   Scenario: Run refuses a command supplied without the separator
     When itos-container runs with "run git status"
     Then its error output says "run requires a nonempty command after --"
@@ -77,7 +77,7 @@ Feature: Run invocation refusals
   # refusal and fix directs removal of both --json and ITOS_JSON=1. Allow additive
   # fields per CLI.md, but no other stdout or second document. Wording is human
   # guidance, not byte-for-byte JSON serialization. Stderr stays separate.
-  @ID-RUN-03 @wip @slice-7
+  @ID-RUN-03 @slice-7
   Scenario Outline: Run refuses wrapper and inherited JSON with redirected streams
     When itos-container runs with "<arguments>" and the environment "ITOS_JSON=<inherited>"
     Then its run JSON reports exactly one refusal with rule "run.json-unsupported" and exit 2
@@ -112,7 +112,7 @@ Feature: Run invocation refusals
   # Source: https://github.com/creack/pty/releases/tag/v1.1.24 . Existing pinned
   # golang.org/x/term v0.46.0 can verify terminal descriptors. This selection
   # adds no runtime dependency, engine access, or additional host support claim.
-  @ID-RUN-04 @wip @slice-7
+  @ID-RUN-04 @slice-7
   Scenario Outline: Run refuses JSON at a terminal as it does with redirected streams
     When itos-container runs at a terminal with "<arguments>" and the environment "ITOS_JSON=<inherited>"
     Then its run JSON reports exactly one refusal with rule "run.json-unsupported" and exit 2
@@ -133,7 +133,7 @@ Feature: Run invocation refusals
   # Interface choice for competing invocation failures: the requested JSON
   # refusal wins over missing argv/separator. Emit the single T-11 refusal,
   # never a usage object, combined problem list, or a plain-text-only error.
-  @ID-RUN-05 @wip @slice-7
+  @ID-RUN-05 @slice-7
   Scenario Outline: A JSON request is refused even when the command is missing
     When itos-container runs with "<arguments>" and the environment "ITOS_JSON=<inherited>"
     Then its run JSON reports exactly one refusal with rule "run.json-unsupported" and exit 2
@@ -162,7 +162,7 @@ Feature: Run invocation refusals
   # This interim refusal precedes policy/manifest/approval access. Later startup
   # slices must explicitly supersede this interim contract in their specs and
   # behaviour commits; invocation refusals above remain required.
-  @ID-RUN-06 @wip @slice-7
+  @ID-RUN-06 @slice-7
   Scenario: A valid command refuses while offline startup is not implemented
     When itos-container runs with "run -- git status"
     Then its error output says "offline startup is not implemented"
@@ -182,7 +182,7 @@ Feature: Run invocation refusals
   # The first word after the first separator is the executable, even when it is
   # --json, --help or --. It is nonempty syntax; do not resolve it on the host.
   # Later separators remain workload arguments and never restart wrapper parsing.
-  @ID-RUN-07 @wip @slice-7
+  @ID-RUN-07 @slice-7
   Scenario Outline: Arguments after the separator belong only to the workload
     When itos-container runs with "<arguments>"
     Then its error output says "offline startup is not implemented"

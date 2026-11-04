@@ -3,8 +3,9 @@
 These rules describe the planned `itos container` extension. The [charter](charter.md)
 selects the milestone from the binding [pilot contract](plans/container-pilot.md); both
 take precedence over upstream examples. The current [entry point](../cmd/itos-container/main.go)
-exposes strict policy validation through `doctor --policy-only`, alongside the inherited
-count, version and completion commands. Runtime isolation is not implemented.
+exposes strict policy validation through `doctor --policy-only` and invocation refusals
+through `run`, alongside the inherited count, version and completion commands. Runtime
+isolation is not implemented.
 
 The first milestone is an offline owned run: explicit argv in an approved, hardened
 container with no network, the checkout as its only host mount, a non-root identity
@@ -80,6 +81,7 @@ approval or widen a running session. See [configuration boundaries](CONFIG.md).
 
 The full commands in this table remain planned. Doctor currently validates only policy,
 including when called without `--policy-only`; its output names that limited scope.
+Run currently validates the invocation and refuses startup as described below.
 The charter determines which slices may be built next.
 
 | Command after `itos container` | Required behaviour |
@@ -124,6 +126,27 @@ Rule IDs are specified in [policy.feature](../features/policy.feature). Exit 0 m
 policy, 2 means invalid policy/usage, and 3 means unreadable policy. Multiple problems
 use the highest exit. Diagnostics never include source lines, raw parser errors or
 rejected values. Valid policy is neither host readiness nor approval.
+
+## Implemented run refusals
+
+`itos container run -- <command> [arguments...]` requires a nonempty executable after
+the first separator. Missing or empty commands and commands supplied without `--`
+exit 2 with invocation guidance on stderr and no stdout. Words after the separator
+belong only to the workload, including `--json`, `--help`, empty strings and further
+separators; they cannot enable or cancel wrapper JSON.
+
+A wrapper `--json` before or after `run`, or inherited `ITOS_JSON=1`, takes precedence
+over missing-command errors. Run emits exactly one schema-1 object with `ok: false`
+and one `run.json-unsupported` problem containing `exit: 2`, a message and guidance
+to remove both requests. The diagnostic also goes to stderr. Terminal and redirected
+streams receive the same refusal.
+
+A valid invocation currently exits 3 with no stdout, explaining that offline startup
+is not implemented. `doctor --policy-only` is suggested only for policy inspection.
+These refusals read no policy, manifest or approval state, contact no engine, and
+execute no helper or workload. They prove invocation handling, not isolation or
+successful argv delivery to a worker. Later startup slices must supersede this interim
+refusal explicitly while preserving the invocation rules.
 
 ## Names, help and arguments
 
