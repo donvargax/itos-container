@@ -96,7 +96,7 @@ ci:
     - { run: go mod verify, cost: static }
     - { run: go mod tidy -diff, cost: static }
     - { run: itos tests smoke check scenario, cost: static }
-    - { run: tools/bin/pinned golangci-lint run ./..., cost: static }
+    - { run: tools/bin/check-slice-layout, cost: static }
     - { run: go tool govulncheck -test ./..., cost: late }
     - { run: "RAPID_CHECKS=1 go test ./cmd/... ./internal/...", cost: late }
     - { run: tools/bin/domain-coverage, cost: late }

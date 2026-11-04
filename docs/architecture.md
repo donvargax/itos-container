@@ -30,5 +30,17 @@ interfaces the domain reaches the world through) and one package per adapter (`d
 for the container commands, for example, an engine adapter over the Docker API). Each adapter
 imports only the port it implements, never the domain; a fake of each port lives beside the
 domain's tests. Code two slices share is an engine package of its own with the same rules,
-never one slice importing another's domain. The `depguard` rules in `.golangci.yml` hold this
-for every slice, so a slice that breaks it fails the lint, not only a review.
+never one slice importing another's domain.
+
+`tools/bin/check-slice-layout` discovers slices by their `domain` or `port` directory and
+generates concrete depguard rules in a disposable effective configuration. `.golangci.yml`
+remains the base for the full lint suite, with paths resolved from the checkout. Every
+adapter name and nested package is protected; an external adapter test may import only its
+exact subject and its slice's port subtree within the module. Rapid is available only to
+domain tests. The checker then runs compilable import and coverage fixtures through the same
+discovery and pinned linter. These import boundaries do not prove runtime isolation.
+
+`tools/bin/domain-coverage` uses that same discovery to hold each concrete domain package,
+including nested domains, to 80% statement coverage separately. Ports, adapters, command
+handlers, fixtures and caches do not enter those denominators. Empty discovery and packages
+without measurable statements fail explicitly.

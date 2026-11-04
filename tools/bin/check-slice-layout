@@ -1,0 +1,12 @@
+#!/bin/sh
+# Full checkout lint, then isolated import-boundary and coverage fixtures.
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+cd -- "$root"
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/T-10-slice-layout.XXXXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 1' HUP INT TERM
+go build -o "$tmp/slice-layout" ./tools/slice-layout
+"$tmp/slice-layout" config "$root" "$tmp/effective.yml"
+tools/bin/pinned golangci-lint run --config "$tmp/effective.yml" ./...
+go run ./tools/testdata/slice-layout "$root" "$tmp/slice-layout"
