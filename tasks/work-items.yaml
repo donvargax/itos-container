@@ -2,6 +2,10 @@
 phases:
   1: null
 queue:
+  - T-12
+  - T-14
+  - T-13
+  - p1-arc42-draft
   - T-10
 items:
   - id: T-1
@@ -113,7 +117,7 @@ items:
     title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-track-gherkin-mutation-freshness
@@ -170,6 +174,10 @@ items:
       Already covered. Include features/README.md and comments in itos.yaml and
       .github/workflows/release.yml, preserving existing gates, provenance and limits on
       container-support claims.
+
+      Include README hook registration and verification instructions in the existing guidance
+      refresh so contributors enable local lint and vulnerability checks. This foundation follow-up
+      can wait unless it blocks the charter’s configuration, doctor and approval step.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -180,8 +188,8 @@ items:
   - id: slice-1
     title: Validate the strict offline sandbox policy
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
@@ -195,7 +203,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: []
+    depends_on: [slice-1]
     kind: slice
     why: >
       Was p2-restricted-worker-manifest.
@@ -209,7 +217,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: []
+    depends_on: [slice-2]
     kind: slice
     why: >
       Was p2-doctor-host-readiness.
@@ -246,3 +254,70 @@ items:
     status: dropped
     depends_on: []
     kind: idea
+  - id: p1-arc42-draft
+    title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-14]
+    kind: idea
+    why: >
+      The loop builds better from a detailed plan: steering overnight mostly supplied what the
+      documents left unsaid (what blocks what, the slice layout, how specs commit). An arc42
+      document gives every step a shared reference: goals and quality goals (charter), context and
+      scope, solution strategy, a building-block view that names each slice and engine and their
+      dependencies (the breakdown step's input), runtime views for the main commands, cross-cutting
+      concepts (ports, fakes, strict config reading), decisions (docs/decisions/), quality
+      requirements mapped to gates, and risks. Source it from docs/plans/container-pilot.md,
+      docs/charter.md, PLAN.md and docs/architecture.md; mark every open choice the contract leaves
+      to the person as open, never decided. A docs task; the person reviews it.
+
+      The queued architecture draft already covers slice dependencies, command composition and
+      shared contracts. Include doctor’s shared schemas, diagnostics and fixtures across slices 1–4,
+      slice-3’s prerequisites from slices 1–2, and slice-4’s approval integration and implementation
+      order.
+  - id: T-12
+    title: CI runs on Linux, each pull request once; other platforms by hand
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: T-13
+    title: The code proof is a fresh seeded mutation run in CI, with no committed evidence
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-12]
+    kind: task
+  - id: T-14
+    title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-12]
+    kind: task
+  - id: p1-engine-scenario-tier
+    title: Scenarios that need a real engine have a tag, a switch and one Linux job
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The charter wants every isolation property proven by a scenario, and no test can reach a real
+      engine: no tag, switch or job exists. Blocks the charter's step 3, the offline owned run. An
+      @engine tag behind an environment variable, skipped elsewhere, and one required Linux job with
+      native Docker. Specify it with or just after T-11.
+  - id: p2-remove-dead-release
+    title: Delete the release machinery until a release is wanted
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      release.yml has no caller and runs tools that are absent (lines 75 and 123), and line 34
+      assumes a public repository, so attestation would fail here. internal/release has no importers
+      and accounted for 71 of T-8's 225 mutants and T-8's Windows failure. Delete both until a
+      release is wanted, amending AGENTS.md's preserve clause. Waits: nothing is blocked by it.

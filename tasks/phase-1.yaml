@@ -461,17 +461,104 @@
   type: docs
   title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
   why: >
-    The milestone needs accurate coordinator guidance. Replace template branch assumptions and stale
-    CLI, godog and proof coverage claims with instructions matching the charter and current
-    configuration. Include this distinction in the planned coordinator guidance refresh: use itos
-    work show and tasks/phase-1.yaml for inspection. itos task executes checks, including T-8's full
-    mutation measurement, so drafting guidance must not present it as read-only inspection. Include
-    task-specific implementer briefs in the coordinator-guidance refresh: resolve placeholders,
-    derive instructions from the ledger's task type and checks, and reserve lifecycle actions for
-    the loop. T-8 needs test-task checks without new behavior scenarios. This prevents conflicting
-    guidance during the offline owned-run milestone.
-  done_when:
-    - run: sh -eu -c 'f=docs/ORCHESTRATING.md; for text in charter.md container-pilot.md "offline owned-run" "itos work show" tasks/phase-1.yaml "itos task" "cmd/" "internal/" all-tests fail-uncovered no-annotate; do grep -Fq "$text" "$f"; done; ! grep -Eq "specific to this template|no public CLI|stacks and features remain real projects|add .* with the public CLI" "$f"'
+    docs/ORCHESTRATING.md still calls this repository a template with stack branches, denies the
+    existing public CLI and godog runner, and describes proof as internal-only. Replace these
+    claims with coordinator guidance for the offline owned-run milestone. This is documentation
+    foundation work under docs/charter.md, not container behaviour: no new scenarios, step
+    definitions, runtime code, dependency or service. Implementation edits only
+    docs/ORCHESTRATING.md in a docs commit tied to Item T-9. The drafter edits only this ledger
+    entry; leave registry ownership and status to the coordinating loop.
+
+    Keep these as project-local notes printed after the coordinator guide by itos go. Begin
+    with reading docs/charter.md first, then PLAN.md and its milestone limits, the binding
+    docs/plans/container-pilot.md, AGENTS.md and the actual itos.yaml. Link those files using
+    paths relative to docs/ORCHESTRATING.md. The charter selects foundation, configuration,
+    doctor and approval, then the offline owned run; the broader pilot authorizes no later slice
+    here. Linux amd64 with native Docker remains a target requiring runtime evidence. Egress,
+    credentials, network Git, LAN ingress, Compose and other container hosts stay deferred.
+    Open security decisions go to the person rather than being settled in a brief. Preserve
+    the distinction between workflow safeguards and isolation against hostile checkout code.
+
+    Describe the current foundation accurately. cmd/itos-container/main.go exposes count,
+    version and completion, and features/README.md documents the existing godog runner. The
+    planned itos container commands and isolation are not implemented. Reference the actual
+    .github/workflows/ci.yml: pushes and pull requests run without stack/feature branch filters,
+    and the Linux/macOS/Windows matrix covers the inherited Go tests, not container-host support.
+    .github/workflows/release.yml exists as a reusable binary-release workflow but ci.yml does
+    not call it. Do not claim either that release machinery is absent or that releases run.
+    Remove stack inheritance, generated-project and template-tag instructions; this is one
+    project on main and work branches. Do not enable releases or change workflows in this task.
+
+    For inspection use itos work, itos work show <id> and tasks/phase-1.yaml. Explain explicitly
+    that itos task executes checks: it is not a read-only task viewer and can run expensive or
+    state-writing measurements. T-8's completion checks included a full mutation measurement;
+    do not run that command just to draft a brief. T-8 is now done and its completion checks
+    were removed on closure. Read its ledger why, commit history and
+    docs/proof/T-8-foundation-baseline.md for the original checks, results and reproduction
+    environment instead of inferring commands from an empty done_when or reopening the task.
+
+    Require task-specific briefs with all placeholders resolved before handing them off. Name
+    the actual item, drafter or implementer role, ledger type, spec path, allowed edit paths,
+    exact checks and neighbouring checks, required proof and commit type/footer. Read itos
+    guide work and itos guide commit, and use itos guide brief when preparing the handoff.
+    For non-behaviour tasks use the ledger's why and done_when, not generic instructions to
+    invent scenarios or step definitions. T-8 is the test task example: tests and generated
+    proof with its specified checks, no new behaviour scenarios. T-9 is a docs task with cheap
+    documentation checks and no mutation measurement. Behaviour briefs require specified
+    black-box scenarios and red-first step commits while scenarios remain @wip. Each scenario
+    must fail at its behaviour assertion with @wip removed for the run, then pass after the
+    implementation; undefined steps are not evidence. Run non-engine cases locally and keep
+    real-engine scenarios CI-only. Domain tests use the engine fake; agents never receive the
+    Docker socket. Preserve smoke coverage and never weaken a scenario or gate to obtain green.
+
+    Override the generic guides' lifecycle instructions in every brief with this project's
+    division of responsibility. A drafter specifies only and does not take an item; an
+    implementer follows the assigned spec. Agents inspect git status, stage only their own
+    explicit file paths, commit through itos commit with a message file, then stop. The loop
+    owns taking items, pushing, marking pull requests ready, watching CI and closing items
+    only after the actual pushed head is green and required proof passes. Never hand-edit
+    owners/statuses, bypass hooks, force-push or rewrite published history. Agents report gaps
+    and ideas with why they matter; the coordinator owns registry changes and upstream reports.
+
+    State that proof.code already selects Go changes under both cmd/ and internal/ in
+    itos.yaml. Use tools/bin/pinned itos-cc with all-tests, fail-uncovered and
+    no-annotate to refresh required changed-code evidence after the last source/test change.
+    The range base is the parent of the item's actual first commit, specs included, found
+    through itos work show and history, never an assumed take commit. Commit project-local
+    .metrics/mutate/ evidence by explicit path; never copy another project's cache or hand-edit
+    results. Kill non-equivalent survivors with tests and exercise uncovered executable code,
+    including functions without mutation sites. Only genuinely equivalent mutants may have
+    reasoned exceptions for the person to review; never except uncovered code or remove sites
+    to avoid proof. Documentation-only changes touch no proof.code path and fabricate no
+    mutation results. Leave configured hooks and CI in control of their gates.
+
+    Link docs/proof/T-8-foundation-baseline.md instead of duplicating its counts or commands.
+    Distinguish its completed full foundation baseline from the earlier T-4 sample with zero
+    eligible records. A sample or empty changed-code range is not a fresh baseline, and later
+    test/toolchain changes can stale evidence. The T-8 report records the Go environment needed
+    to reproduce proof; it does not establish other-platform or container-isolation support.
+    Do not make the full measurement a new recurring gate or run it for this documentation task.
+
+    Retain the counting example's standard-library Unicode whitespace and logical lines, with
+    newline-terminated pieces for its additive property. Preserve attribution to donvargax and
+    infrastructure provenance from itos and itos-template without global handle substitutions.
+    Keep the warning that Renovate configuration alone proves neither App installation nor bot
+    activity. Keep at most ten lessons, each with recorded date, last-seen date and exit item
+    or permanent status; no invented lesson or upstream issue is required. Keep the whole file
+    within its existing 6144-byte cap by linking detailed rules rather than duplicating them.
+    Change no other document, generated rules, configuration, gate, pin, code or proof artifact.
+
+    Retain the original check below and add the brief and current-evidence checks at the existing
+    task/CI tier, using ordinary shell tools without RTK or network access. Before implementation,
+    the original check fails on the absent charter.md reference and finds the retired template
+    claims; the brief check fails on the absent itos guide work instruction; the current-evidence
+    check fails on the absent cmd/itos-container/main.go reference. These are static documentation
+    checks, not behaviour or isolation proof. Review the prose against this entry as well:
+    keywords alone cannot prove correct task-vs-behaviour instructions, lifecycle ownership,
+    inspection-vs-execution guidance or truthful current status. Let configured hooks and CI
+    run the wider checks unchanged. The drafter commits this spec with completion checks still
+    failing; the implementer supplies the document and reports their results to the loop.
+
 - id: T-10
   type: ci
   title: The depguard rules hold every slice to internal/count's layout, not only count
@@ -496,3 +583,79 @@
     p2-specify-policy-manifest-approval.
   done_when:
     - run: sh -eu -c 'f=docs/plans/offline-run-lifecycle.md; test -s "$f"; for section in "## Arguments and JSON" "## Ownership and startup" "## Timeouts and cancellation" "## Workload exits" "## Cleanup and recovery" "## Acceptance scenarios" "## Security decisions"; do grep -Fqx "$section" "$f"; done'
+- id: T-12
+  type: ci
+  title: CI runs on Linux, each pull request once; other platforms by hand
+  why: >
+    CI on main has had no green run since 14:37 UTC on 2026-11-04: every failure is Tests
+    (macos-latest) never acquiring a runner and being cancelled after 15 minutes (41856642827), and
+    later runs queue behind it. The charter's "Not yet" excludes every platform but Linux amd64 with
+    native Docker, so this project pays for a matrix it does not need. Settled: the push and
+    pull-request matrix is ubuntu-latest alone; Windows and macOS stay runnable by hand through
+    workflow_dispatch. Triggers follow donvargax/itos/.github/workflows/ci.yml
+    lines 3-7, 17-19 and 32: push on main only, pull_request with ready_for_review, drafts judged by
+    nothing, cancel-in-progress on a pull request's own runs, never on main. Today every branch push
+    runs twice (41863302515, 41863312223). Keep item branches' CI through the pull request, which is
+    what T-7 wanted. Read itos's file; do not invent. Touch no other workflow.
+  done_when:
+    - run: "! grep -Eq 'os:.*(macos|windows)-latest' .github/workflows/ci.yml && grep -q ready_for_review .github/workflows/ci.yml && grep -q workflow_dispatch .github/workflows/ci.yml"
+- id: T-13
+  type: ci
+  title: The code proof is a fresh seeded mutation run in CI, with no committed evidence
+  why: >
+    The code proof reads agent-committed evidence: itos.yaml proof.code.check is mutation check over
+    a committed .metrics/mutate, and AGENTS.md requires a local run. It already failed T-8 with
+    mutation.coverage-stale because the host's Go differs from CI's (41832816369). itos ADR-0057 and
+    itos-cc ADR-0059 removed this approach for the same reason; read them. Settled: proof.code.check
+    becomes tools/bin/pinned itos-cc mutation run --count 10 --since {base} --seed {base}
+    --fail-uncovered=lines --json cmd internal, judged fresh in CI: deterministic per range, since a
+    gate must be (itos ADR-0051), and ten sites rather than itos's one because the tree is small.
+    The committed .metrics/mutate go, with AGENTS.md's local-run requirement and whatever else names
+    them. The unseeded mutation sample step in ci goes: its seed defaults to HEAD, so each push
+    draws anew, the random-survivor failure itos's nightly suffered, moved into the required job.
+    Read itos-cc.yaml's mutation.tests in donvargax/itos for how scenarios
+    count, and make the coverage the proof reads real: ci.yml's GOCOVERDIR feeds a merge step that
+    does not exist here, so finish it or remove it. itos-cc.yaml's exceptions stay. No nightly:
+    nothing slow or random remains once this lands.
+  done_when:
+    - run: "! git ls-files .metrics/mutate | grep -q . && grep -q 'mutation run --count 10 --since {base} --seed {base}' itos.yaml && ! grep -q 'mutation sample' itos.yaml"
+- id: T-14
+  type: ci
+  title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade
+  why: >
+    Replaces T-10, whose generator refuses the shared engine package docs/architecture.md prescribes
+    and leaves any directory without a domain or port child unruled (probes: internal/flat with
+    os/exec and a foreign adapter passes; a domain importing syscall, encoding/json, flag and kong
+    passes; a port with os/exec passes; a handler importing a foreign adapter passes;
+    //nolint:depguard passes). Two mature repositories hold the answer; copy from them rather than
+    the template, which is behind: donvargax/itos-cc (.golangci.yml,
+    tools/bin/architecture-check, docs/decisions ADR-0047, ADR-0051,
+    internal/coverage/port/porttest/contract.go) and donvargax/itos
+    (.golangci.yml, docs/ARCHITECTURE.md, ADR-0053). origin/T-10 holds fixtures worth reusing: they
+    compile first, so a type error cannot pass as a refusal. Settled: (1) Layout:
+    internal/slices/<cmd>/{command,domain,port,<adapter>} and
+    internal/engine/<name>/{domain,port,<adapter>}; the path says what a package is, so depguard's
+    globs are static in .golangci.yml and tools/slice-layout's generator does not land. Move
+    internal/count to internal/slices/count. (2) Default deny: every package under internal/ is held
+    by a rule; one no rule names fails, including internal/engine nested packages and pkg/.
+    internal/cli, internal/version and internal/release are named. (3) A domain imports the standard
+    library's pure packages by allowlist plus its own port and an engine's domain or port, nothing
+    else: no os, os/exec, net, net/http, syscall, golang.org/x/sys, encoding/json, flag, kong. (4) A
+    port imports only ports and does no I/O. (5) A slice imports no other slice and no adapter, its
+    own neither; cmd/ is the assembly that binds adapters. (6) An adapter may import its own domain
+    and port, as itos-cc ADR-0047 decided after finding the ban forced mappers;
+    docs/architecture.md's contrary sentence goes. (7) internal/cli imports nothing of ours: a
+    slice's failure classifier sits beside the slice and cmd hands it over (itos-cc's ui rule);
+    today cli.go:20 and codes.go:3 import count's port, so every new slice would edit the shared UI.
+    (8) A fake cannot reach production: porttest and fakes are refused outside tests, and
+    tools/bin/architecture-check --siblings --outside --linked --toplevel, on go list arrows no
+    nolint can suppress, runs in ci. (9) A //nolint:depguard in the tree fails the gate. (10)
+    Contract suites: a port's <port>/porttest suite runs against both its fake and its real adapter;
+    count's disk adapter gets one as the example, since agents test only against fakes and drift is
+    this project's core risk. (11) Each rule is proven by a fixture that breaks it, and
+    TestNoDenyEntryPrefixesAnother is carried over, as depguard hides a deny that prefixes another.
+    Fixtures run only when the rules change, not on every commit. docs/architecture.md and AGENTS.md
+    describe the result, and a record in docs/decisions says why. Behaviour does not change: every
+    scenario passes before and after.
+  done_when:
+    - run: test -d internal/slices/count && ! test -e internal/count && ! test -e tools/slice-layout && tools/bin/architecture-check --siblings --outside --linked --toplevel
