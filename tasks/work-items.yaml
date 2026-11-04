@@ -199,7 +199,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-2]
+    depends_on: [slice-2, T-20]
     kind: slice
     why: >
       Was p2-doctor-host-readiness.
