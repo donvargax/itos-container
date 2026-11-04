@@ -6,6 +6,7 @@ toolchain go1.27.2
 
 require (
 	github.com/alecthomas/kong v1.16.1
+	github.com/creack/pty v1.1.24
 	github.com/cucumber/godog v0.16.0
 	go.yaml.in/yaml/v3 v3.0.5
 	go.yaml.in/yaml/v4 v4.0.0
