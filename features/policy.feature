@@ -47,9 +47,24 @@ Feature: Strict offline sandbox policy
   # YAML parser; its permissive decoding is not our validation contract. Pin it in
   # go.mod/go.sum during implementation and preserve its MIT/Apache-2.0 notices.
   #
-  # doctor is a new vertical slice, following internal/count's command/domain/port/
-  # adapter layout. Reusable policy validation belongs in its own shared engine
-  # package with domain-owned ports and fakes, outside doctor/approve/run domains.
+  # T-14 lands before slice-1 continues: use its layout and import boundaries from
+  # tasks/phase-1.yaml. These settled changes concern layout only; the closed
+  # version 1 policy above stays unchanged, with no image or identity keys.
+  # doctor lives in internal/slices/doctor/{command,domain,port,<adapter>}.
+  # Reusable policy validation lives in internal/engine/policy/{domain,port,<adapter>},
+  # shared by doctor/approve/run without one slice importing another's domain.
+  # Move this branch's existing doctor and policy code and tests to those paths
+  # when integrating T-14; do not leave a parallel implementation at the old paths.
+  #
+  # A slice imports no other slice and no adapter, including its own; cmd/ binds
+  # adapters to ports. An adapter may import its own domain and port. Ports do no
+  # I/O and import only ports. Domains use T-14's pure standard-library allowlist,
+  # their own ports and shared engine domains/ports, never adapters or UI packages.
+  # Each port has a port/porttest contract suite run against its fake and its
+  # adapter; fakes and porttest packages are test-only, never production imports.
+  # Doctor's failure classifier and policy presentation live beside the doctor
+  # slice. cmd/ supplies the classifier to internal/cli, which imports no packages
+  # from this repository. Apply this to the policy code already in internal/cli.
   # YAML nodes, file access, JSON, rule IDs and exit codes stay outside the domain.
   # No Docker library, socket, real engine or runtime isolation test is needed here.
   # Safe checkout identity, symlink/substitution defenses and engine identity belong
@@ -100,14 +115,15 @@ Feature: Strict offline sandbox policy
   # Never include source lines, offending scalar values or raw parser errors in
   # diagnostics/logs. Synthetic markers below are not credentials.
   #
-  # Implementer handoff: existing steps cover process runs (with environment),
-  # exits, output containment, one/two-line files and empty folders. New steps here
-  # are plainly new: policy docstrings/empty bytes, inspection-host fixtures,
-  # working-directory/core-config selection, effective-policy/problem assertions, snapshots
-  # and execution/engine recorder assertions. Write those steps in a test commit
-  # while all scenarios remain @wip, then remove @wip only for the local red run.
-  # The current CLI refuses doctor with usage/exit 2; the first policy assertion
-  # or expected successful exit must fail, not setup or an undefined step.
+  # Layout handoff: features/steps_test.go and features/policy_steps_test.go now
+  # define every step below, and all 28 scenarios are live. Preserve their IDs,
+  # examples, assertions and live tags through the move; no new behaviour or step
+  # definitions are needed for this layout correction. Verify the same scenarios
+  # before and after moving code, with T-14's checks enforcing package boundaries
+  # and the shared porttest suites checking fake/adapter agreement.
+  # The original red-first baseline was the CLI refusing doctor with usage/exit 2;
+  # failures belonged at the first policy assertion or expected successful exit,
+  # never at setup or an undefined step. That is history, not the current CLI.
 
   Background:
     # New Given: create private host-state directories outside the scenario tree
