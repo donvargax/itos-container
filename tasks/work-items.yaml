@@ -390,3 +390,15 @@ items:
       Creates internal/engine/session. An fsynced intent record before create; create unstarted,
       remove, confirm absence; a write failure and a lost create response. Reconcile by record plus
       random name.
+  - id: slice-10
+    title: Hardened offline foreground run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-9]
+    kind: slice
+    why: >
+      @engine proof: first-instruction network and DNS denial by NetworkMode none, inspected before
+      start; non-root; read-only root; the checkout as sole mount; literal argv; exit precedence;
+      teardown. No persistent state this milestone, by the person's A2: checkout and tmpfs. Pids
+      limit 4096, no memory or CPU quota claim, by A4.
