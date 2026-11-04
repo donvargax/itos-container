@@ -1559,7 +1559,8 @@
     It still calls implemented policy validation and the engine-test tier future work, leaves
     settled choices open and omits adapter evidence without Docker needed by changed-code proof.
     This is a documentation task, with no scenarios or step definitions. The drafter changes only
-    this ledger entry and its checks; the implementer changes only docs/architecture/arc42.md.
+    this ledger entry and its checks; the implementer updates docs/architecture/arc42.md and
+    records the person's revised A1 answer as q-2 in tasks/asks.yaml, aligning this entry with it.
     Both commit as docs with Item T-19. Leave registry ownership/status and other specs alone.
 
     Read the charter first, then PLAN.md, docs/plans/container-pilot.md, docs/architecture.md,
@@ -1607,13 +1608,17 @@
     for test support only: its tests still run and it does not excuse uncovered product code.
     Retain CI-only changed-code proof and the ban on local mutation/generated evidence commits.
 
-    Record the person's settled answers with their limitations. A1 permits scriptable
-    --fingerprint approval bound to the exact reviewed fingerprint, canonical JSON SHA-256 and
-    host-owned state under $XDG_STATE_HOME/itos-container with mode 0700, as tasks/asks.yaml says.
-    Anything able to execute approve on the host, including a host agent, can approve its own
-    sandbox; this is an explicit act, not proof of human presence. Worker-inaccessible host state
-    does not enforce a human-only consent ceremony. Carry that caveat into the architecture;
-    slice-4 owns the corresponding help/security wording and executable approval contract.
+    Record the person's settled answers with their limitations. The revised A1 (q-2) supersedes
+    q-1's scriptable-only interaction. Approval follows the direnv model: bare approve at a
+    terminal prints the effective settings and what changed since the last approval, then asks
+    y/N. Nothing asks again until settings change; a person never types a hash. With no terminal,
+    bare approve refuses and names --fingerprint <value>, the optional non-interactive route for
+    those exact settings. Canonical JSON SHA-256 and host-owned state under
+    $XDG_STATE_HOME/itos-container with mode 0700 remain selected. An agent on the host can still
+    approve through that flag or a faked terminal; approval records what, not who. This is an
+    explicit act, not proof of human presence, and worker-inaccessible state does not enforce a
+    human-only consent ceremony. Slice-4 builds this and owns the corresponding help/security
+    wording and executable approval contract. Revisit before the egress and credentials stages.
     A2 excludes persistent worker project state this milestone: preserve checkout edits and use
     ephemeral tmpfs, without persistent volumes/caches/profiles. Host approval, frozen settings
     and recovery records still exist outside the checkout; they are not worker persistent state.
