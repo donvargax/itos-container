@@ -285,7 +285,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: []
+    depends_on: [T-12]
     kind: task
   - id: T-14
     title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade
