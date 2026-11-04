@@ -30,7 +30,8 @@ Feature: Run invocation refusals
 
   # Required-command guidance must beat the old generic unknown-command error
   # and missing-policy errors. A later nonempty argument cannot replace an empty
-  # executable. NEW assertion: "its standard output is empty" checks zero bytes.
+  # executable, even when it looks like a wrapper flag or another separator.
+  # NEW assertion: "its standard output is empty" checks zero bytes.
   @ID-RUN-01 @wip @slice-7
   Scenario Outline: Run requires a nonempty executable after the separator
     When itos-container runs with "<arguments>"
@@ -44,11 +45,14 @@ Feature: Run invocation refusals
     And the policy inspection files are unchanged
 
     Examples:
-      | arguments     |
-      | run           |
-      | run --        |
-      | run -- ''     |
-      | run -- '' git |
+      | arguments           |
+      | run                 |
+      | run --              |
+      | run -- ''           |
+      | run -- '' git       |
+      | run -- '' --json    |
+      | run -- '' --help    |
+      | run -- '' -- git    |
 
   # T-11 requires the separator, not merely a positional command. Do not infer
   # a shell or silently move arguments across the missing separator.
@@ -94,6 +98,7 @@ Feature: Run invocation refusals
       | run --json -- git --no-json | 0         |
       | run -- git --json           | 1         |
       | run -- git --no-json        | 1         |
+      | run -- --no-json            | 1         |
       | --json run -- git --no-json | 1         |
 
   # NEW When step: the same literal argv/environment as runWith, but stdin and
@@ -174,6 +179,9 @@ Feature: Run invocation refusals
   # clean harness environment. This proves option ownership only; actual argv
   # preservation (including empty arguments) and worker execution belong to the
   # later CI real-engine run slice, not to this refusal-only increment.
+  # The first word after the first separator is the executable, even when it is
+  # --json, --help or --. It is nonempty syntax; do not resolve it on the host.
+  # Later separators remain workload arguments and never restart wrapper parsing.
   @ID-RUN-07 @wip @slice-7
   Scenario Outline: Arguments after the separator belong only to the workload
     When itos-container runs with "<arguments>"
@@ -194,3 +202,7 @@ Feature: Run invocation refusals
       | run -- git --version           |
       | run -- git --bogus             |
       | run -- git -- '' 'two words' - |
+      | run -- --json                 |
+      | run -- --help                 |
+      | run -- --                     |
+      | run -- git -- --help          |
