@@ -274,8 +274,8 @@ items:
   - id: T-16
     title: Scenarios that need a real engine have a tag, a switch and one Linux job
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-remove-dead-release
