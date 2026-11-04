@@ -1,0 +1,302 @@
+#!/usr/bin/env bash
+# T-20 CI scaffolding only; never invoke against an engine from an agent host.
+# Sources/licenses and the evidence protocol are in features/README.md.
+set -euo pipefail
+umask 077
+
+fail() { printf 'engine-fixture: %s\n' "$*" >&2; exit 1; }
+
+[[ $# == 1 && ( $1 == prepare || $1 == cleanup ) ]] || fail 'usage: engine-fixture prepare|cleanup'
+[[ ${CI:-} == true && ${GITHUB_ACTIONS:-} == true ]] || fail 'requires GitHub Actions'
+[[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || fail 'requires an actual Linux amd64 host'
+for tool in timeout docker curl jq sha256sum readlink id mkdir cat; do
+  command -v "$tool" >/dev/null || fail "missing tool: $tool"
+done
+[[ ${GITHUB_RUN_ID:-} =~ ^[0-9]+$ && ${GITHUB_RUN_ATTEMPT:-} =~ ^[0-9]+$ ]] || fail 'missing run/attempt identity'
+[[ ${RUNNER_TEMP:-} == /* && ${GITHUB_WORKSPACE:-} == /* ]] || fail 'missing absolute runner directories'
+
+registry_image='docker.io/library/registry@sha256:5b12b22f21522fe69443079df04c0f3f42cb9977857f3c20404386652a6c6d8e'
+base_image='docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835'
+workspace=$(readlink -e -- "$GITHUB_WORKSPACE")
+runner_temp=$(readlink -e -- "$RUNNER_TEMP")
+owner="T-20-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+state="$runner_temp/$owner-engine-fixture"
+[[ $state != "$workspace" && $state != "$workspace/"* && ! -L $state ]] || fail 'state must be outside the checkout'
+recipe="$workspace/features/testdata/engine-fixture/Dockerfile"
+registry_name="itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-registry"
+smoke_name="itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-smoke"
+export registry_image base_image workspace state owner recipe registry_name smoke_name
+
+# Every engine call has the same local endpoint and override clearing as the
+# unchanged preflight. A private empty config avoids host logins/helpers/proxies.
+d() {
+  env -u DOCKER_CONTEXT -u DOCKER_HOST -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH -u DOCKER_API_VERSION \
+    -u DOCKER_TLS -u DOCKER_CUSTOM_HEADERS -u DOCKER_AUTH_CONFIG \
+    DOCKER_CONFIG="$state/docker" DOCKER_BUILDKIT=0 \
+    docker --config "$state/docker" --host unix:///var/run/docker.sock "$@"
+}
+
+digest_valid() { [[ $1 =~ ^sha256:[0-9a-f]{64}$ ]]; }
+
+# An inspection transport/permission failure is never evidence of absence.
+# Return 0 for present, 1 only for the daemon's specific missing-object error.
+inspect_image() {
+  local ref=$1 output=$2
+  if d image inspect "$ref" >"$output" 2>"$state/inspect.err"; then
+    return 0
+  fi
+  case "$(cat "$state/inspect.err")" in
+    "Error response from daemon: No such image: $ref"|"Error: No such image: $ref") return 1 ;;
+    *) cat "$state/inspect.err" >&2; printf 'image inspection did not establish absence\n' >&2; return 2 ;;
+  esac
+}
+
+remove_image_ref() {
+  local record=$1 ref built observed status
+  [[ -f $state/$record ]] || return 0
+  ref=$(cat "$state/$record")
+  # The reference must belong to the exact repository allocated in this attempt.
+  [[ -f $state/repository ]] || return 1
+  case "$record" in
+    tag) [[ $ref == "$(cat "$state/repository"):fixture" ]] || return 1 ;;
+    reference) [[ $ref == "$(cat "$state/repository")@sha256:"* ]] && digest_valid "${ref##*@}" || return 1 ;;
+    *) return 1 ;;
+  esac
+  if inspect_image "$ref" "$state/removing-image.json"; then
+    [[ -s $state/build.iid ]] || { printf 'missing built identity for %s\n' "$ref" >&2; return 1; }
+    built=$(cat "$state/build.iid")
+    digest_valid "$built" || return 1
+    observed=$(jq -er '.[0].Id' "$state/removing-image.json") || return 1
+    [[ $observed == "$built" ]] || { printf 'refuse changed image %s\n' "$ref" >&2; return 1; }
+    # Never delete a pinned input, even if an invalid recipe somehow produced it.
+    [[ $built != "$(cat "$state/base.iid")" && $built != "$(cat "$state/registry.iid")" ]] || return 1
+    d image rm "$ref" || return 1
+  else
+    status=$?
+    [[ $status == 1 ]] || return 1
+  fi
+  if inspect_image "$ref" "$state/removed-image.json"; then
+    printf 'image reference still present: %s\n' "$ref" >&2
+    return 1
+  else
+    status=$?
+    [[ $status == 1 ]] || return 1
+  fi
+}
+
+remove_container() {
+  local kind=$1 name expected cid observed
+  [[ -f $state/$kind.intent ]] || return 0
+  name=$(cat "$state/$kind.intent")
+  case "$kind" in
+    registry) [[ $name == "$registry_name" ]] || return 1; expected=$(cat "$state/registry.iid") || return 1 ;;
+    smoke) [[ $name == "$smoke_name" ]] || return 1; expected=$(cat "$state/build.iid") || return 1 ;;
+    *) return 1 ;;
+  esac
+  digest_valid "$expected" || return 1
+  # A create interrupted before --cidfile was written is recovered only through
+  # the recorded unique name, immutable image ID and attempt label together.
+  cid=$name
+  if [[ -s $state/$kind.cid ]]; then
+    cid=$(cat "$state/$kind.cid")
+    [[ $cid =~ ^[0-9a-f]{64}$ ]] || return 1
+  fi
+  if ! d container inspect "$cid" >"$state/removing-container.json" 2>"$state/container.err"; then
+    case "$(cat "$state/container.err")" in
+      "Error: No such container: $cid"|"Error response from daemon: No such container: $cid"|"Error: No such object: $cid") return 0 ;;
+      *) cat "$state/container.err" >&2; return 1 ;;
+    esac
+  fi
+  jq -e --arg name "/$name" --arg image "$expected" --arg owner "$owner" \
+    'length == 1 and .[0].Name == $name and .[0].Image == $image and
+     .[0].Config.Labels["io.itos.engine-fixture"] == $owner and
+     all(.[0].Mounts[]?; .Type == "tmpfs")' "$state/removing-container.json" >/dev/null || return 1
+  observed=$(jq -er '.[0].Id' "$state/removing-container.json") || return 1
+  [[ $observed =~ ^[0-9a-f]{64}$ && ( $cid == "$name" || $cid == "$observed" ) ]] || return 1
+  printf '%s\n' "$observed" >"$state/$kind.cid"
+  d container rm --force --volumes "$observed" || return 1
+  # A successful rm is not a verdict until the exact ID is absent.
+  if d container inspect "$observed" >"$state/removed-container.json" 2>"$state/container.err"; then
+    return 1
+  fi
+  case "$(cat "$state/container.err")" in
+    "Error: No such container: $observed"|"Error response from daemon: No such container: $observed"|"Error: No such object: $observed") return 0 ;;
+    *) cat "$state/container.err" >&2; return 1 ;;
+  esac
+}
+
+cleanup() {
+  [[ -d $state ]] || { printf 'engine-fixture cleanup: no ownership record, no resources acquired\n'; return 0; }
+  [[ ! -L $state/owner && $(cat "$state/owner") == "$owner" ]] || fail 'refuse foreign ownership record'
+  local failed=0
+  remove_container smoke || failed=1
+  remove_container registry || failed=1
+  remove_image_ref tag || failed=1
+  remove_image_ref reference || failed=1
+  if (( failed )); then
+    printf 'engine-fixture cleanup: FAILED; retained ownership record %s\n' "$state" >&2
+    return 1
+  fi
+  printf 'engine-fixture cleanup: PASS; containers, tmpfs storage and derived references absent\n'
+  # Retain the tiny record for idempotent cleanup and runner diagnostics. Never
+  # delete checkout files, prune the engine or remove the shared pinned inputs.
+}
+
+cached_fixture() {
+  local reference=$1 built=$2 fixture_uid=$3 fixture_gid=$4
+  d image inspect "$reference" >"$state/cached-image.json"
+  jq -e --arg ref "$reference" --arg id "$built" --arg user "$fixture_uid:$fixture_gid" \
+    '.[0] as $i | length == 1 and
+     $i.Id == $id and ($i.RepoDigests | index($ref)) != null and
+     $i.Os == "linux" and $i.Architecture == "amd64" and $i.Config.User == $user and
+     (($i.Config.Entrypoint // []) | length) == 0 and
+     (($i.Config.Volumes // {}) | length) == 0 and
+     (($i.Config.Labels // {}) | has("devcontainer.metadata") | not)' "$state/cached-image.json" >/dev/null
+}
+
+registry_ready() {
+  until curl --fail --silent --show-error --noproxy '*' --proto '=http' \
+    --connect-timeout 1 --max-time 1 "$registry_url/v2/" >/dev/null 2>&1; do
+    sleep 0.2
+  done
+}
+
+prepare() {
+  [[ -S /var/run/docker.sock ]] || fail 'missing native Docker socket'
+  [[ -n ${GITHUB_OUTPUT:-} && -f $GITHUB_OUTPUT ]] || fail 'missing step output file'
+  local fixture_uid fixture_gid
+  fixture_uid=$(id -u)
+  fixture_gid=$(id -g)
+  [[ $fixture_uid =~ ^[1-9][0-9]*$ && $fixture_gid =~ ^[0-9]+$ ]] || fail 'require numeric non-root effective UID and numeric GID'
+  # mkdir refuses reusing another preparation's record, including a retry.
+  mkdir -- "$state"
+  printf '%s\n' "$owner" >"$state/owner"
+  mkdir -- "$state/docker"
+  printf '{}\n' >"$state/docker/config.json"
+  d version --format '{{json .Server}}' >"$state/server.json"
+  jq -e '.Os == "linux" and .Arch == "amd64"' "$state/server.json" >/dev/null
+  jq -c --arg commit "${TO:?}" '{commit: $commit, version: .Version, apiVersion: .ApiVersion, os: .Os, architecture: .Arch}' "$state/server.json"
+  printf 'fixture source pins: registry=%s base=%s\n' "$registry_image" "$base_image"
+  d image pull --platform linux/amd64 "$registry_image"
+  d image pull --platform linux/amd64 "$base_image"
+  d image inspect --format '{{.Id}}' "$registry_image" >"$state/registry.iid"
+  d image inspect --format '{{.Id}}' "$base_image" >"$state/base.iid"
+  digest_valid "$(cat "$state/registry.iid")"
+  digest_valid "$(cat "$state/base.iid")"
+
+  printf '%s\n' "$registry_name" >"$state/registry.intent"
+  d container create --name "$registry_name" --cidfile "$state/registry.cid" \
+    --label "io.itos.engine-fixture=$owner" --publish 127.0.0.1::5000 \
+    --tmpfs /var/lib/registry:rw,nosuid,nodev --restart no \
+    --env OTEL_TRACES_EXPORTER=none "$registry_image"
+  local registry_id port registry_url repository tag built digest reference
+  registry_id=$(cat "$state/registry.cid")
+  d container start "$registry_id"
+  d container inspect "$registry_id" >"$state/registry.json"
+  port=$(jq -er '.[0].NetworkSettings.Ports["5000/tcp"] |
+    if length == 1 and .[0].HostIp == "127.0.0.1" then .[0].HostPort else error("non-loopback publication") end' "$state/registry.json")
+  [[ $port =~ ^[0-9]+$ && $port -gt 0 && $port -le 65535 ]] || fail 'invalid allocated registry port'
+  registry_url="http://127.0.0.1:$port"
+  export registry_url
+  timeout --signal=TERM --kill-after=1s 19s bash -euo pipefail -c "$(declare -f registry_ready); registry_ready"
+  repository="127.0.0.1:$port/itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+  tag="$repository:fixture"
+  printf '%s\n' "$repository" >"$state/repository"
+  printf '%s\n' "$tag" >"$state/tag"
+  # Stdin is a Dockerfile with an empty context. BuildKit is disabled in d so
+  # no external builder, attestations/index or checkout helpers are involved.
+  d image build --platform linux/amd64 --pull=false --iidfile "$state/build.iid" \
+    --build-arg "FIXTURE_UID=$fixture_uid" --build-arg "FIXTURE_GID=$fixture_gid" \
+    --tag "$tag" - <"$recipe"
+  built=$(cat "$state/build.iid")
+  digest_valid "$built"
+  d image push "$tag"
+  curl --fail --silent --show-error --noproxy '*' --proto '=http' --max-time 10 \
+    --header 'Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json' \
+    --dump-header "$state/manifest.headers" --output "$state/manifest.json" \
+    "$registry_url/v2/${repository#*/}/manifests/fixture"
+  local line header_count=0 actual
+  digest=''
+  while IFS= read -r line; do
+    line=${line%$'\r'}
+    if [[ ${line,,} == docker-content-digest:* ]]; then
+      digest=${line#*: }
+      header_count=$((header_count + 1))
+    fi
+  done <"$state/manifest.headers"
+  [[ $header_count == 1 ]] && digest_valid "$digest" || fail 'missing or ambiguous manifest digest header'
+  read -r actual _ < <(sha256sum "$state/manifest.json")
+  [[ sha256:$actual == "$digest" ]] || fail 'manifest bytes do not match Docker-Content-Digest'
+  jq -e --arg id "$built" '.schemaVersion == 2 and
+    (.mediaType == "application/vnd.docker.distribution.manifest.v2+json" or
+     .mediaType == "application/vnd.oci.image.manifest.v1+json") and
+    (has("manifests") | not) and .config.digest == $id' "$state/manifest.json" >/dev/null
+  [[ $digest != "$built" ]] || fail 'manifest digest must be distinct from image config ID'
+  reference="$repository@$digest"
+  printf '%s\n' "$reference" >"$state/reference"
+  printf 'manifest verification: PASS bytes=%s config=%s\n' "$digest" "$built"
+
+  remove_image_ref tag
+  remove_image_ref reference
+  if inspect_image "$reference" "$state/cold-image.json"; then
+    fail 'digest reference was not cold'
+  else
+    [[ $? == 1 ]] || fail 'cold digest inspection failed'
+  fi
+  printf 'cold digest inspection: expected absent; observed absent\n'
+  d image pull --platform linux/amd64 "$reference"
+  cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid"
+  printf 'cached exact-reference inspection: PASS image=%s image_id=%s uid=%s gid=%s\n' "$reference" "$built" "$fixture_uid" "$fixture_gid"
+
+  printf '%s\n' "$smoke_name" >"$state/smoke.intent"
+  d container create --name "$smoke_name" --cidfile "$state/smoke.cid" \
+    --label "io.itos.engine-fixture=$owner" --pull never --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --user "$fixture_uid:$fixture_gid" "$reference" \
+    /bin/sh -c 'printf "uid=%s gid=%s\n" "$(id -u)" "$(id -g)"; printf "T-20-engine-fixture-ok\n"'
+  local smoke_id observed expected
+  smoke_id=$(cat "$state/smoke.cid")
+  timeout --signal=TERM --kill-after=1s 9s bash -euo pipefail -c "$(declare -f d); d container start --attach \"\$1\"" _ "$smoke_id" >"$state/smoke.out"
+  d container inspect "$smoke_id" >"$state/smoke.json"
+  jq -e '.[0].State | .Status == "exited" and .ExitCode == 0 and .OOMKilled == false and .Error == ""' "$state/smoke.json" >/dev/null
+  observed=$(cat "$state/smoke.out")
+  expected=$(printf 'uid=%s gid=%s\nT-20-engine-fixture-ok' "$fixture_uid" "$fixture_gid")
+  [[ $observed == "$expected" ]] || fail 'smoke output or effective identity mismatch'
+  printf 'fixture smoke: expected uid=%s gid=%s marker=T-20-engine-fixture-ok exit=0; observed %s exit=0\n' "$fixture_uid" "$fixture_gid" "$observed"
+  remove_container smoke
+  remove_container registry
+  printf 'pre-scenario cleanup: PASS smoke/registry absent; registry tmpfs discarded\n'
+  cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid"
+  printf 'registry offline; cached fixture remains inspectable: PASS\n'
+  # Publish atomically as one append, only after the entire protocol succeeded.
+  printf 'image=%s\nimage_id=%s\nuid=%s\ngid=%s\n' "$reference" "$built" "$fixture_uid" "$fixture_gid" >>"$GITHUB_OUTPUT"
+}
+
+bounded_cleanup() {
+  local result
+  set +e
+  timeout --signal=TERM --kill-after=1s 29s bash -euo pipefail -c "$(declare -f); cleanup"
+  result=$?
+  set -e
+  if (( result != 0 )); then printf 'engine-fixture cleanup: failed or incomplete (status %s)\n' "$result" >&2; fi
+  return "$result"
+}
+
+finish_preparation() {
+  local result=$?
+  trap - EXIT INT TERM
+  if (( result != 0 )); then
+    printf 'engine-fixture preparation: failed or incomplete (status %s)\n' "$result" >&2
+    # Cleanup failure never replaces the original preparation failure.
+    bounded_cleanup || printf 'engine-fixture: final always() step must retry cleanup\n' >&2
+  fi
+  exit "$result"
+}
+
+if [[ $1 == prepare ]]; then
+  trap finish_preparation EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  timeout --signal=TERM --kill-after=1s 179s bash -euo pipefail -c "$(declare -f); prepare"
+else
+  bounded_cleanup
+fi
