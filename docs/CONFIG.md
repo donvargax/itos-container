@@ -84,11 +84,12 @@ remain open. No Dev Containers CLI fallback is authorized.
 
 ## Format policy
 
-The requirements below guide behaviour specifications. Slice-1 selects the maintained
-`go.yaml.in/yaml/v3 v3.0.5` node parser, pinned in go.mod/go.sum, for structural validation
-before projection. Its YAML 1.1 scalar extensions are constrained to YAML 1.2 core
-meanings. Its MIT/Apache notices are preserved in THIRD_PARTY_NOTICES.md and releases.
-Manifest parsing uses the separately pinned HuJSON parser described below.
+The requirements below guide behaviour specifications. Slice-5 selects the maintained
+`go.yaml.in/yaml/v4 v4.0.0` node parser, pinned in go.mod/go.sum, for its scanner depth
+hook. This supersedes slice-1's runtime v3 selection; tooling retains its independent
+v3 pin. The adapter still constrains scalar meanings to YAML 1.2 core and validates
+structure before projection. Upstream MIT/Apache notices are preserved in
+THIRD_PARTY_NOTICES.md and releases. Manifest parsing uses the separately pinned HuJSON parser described below.
 
 ### Implemented version 1
 
@@ -109,9 +110,18 @@ breaks (LF, CR, CRLF, NEL, LS and PS). The restriction also applies to multiline
 quoted scalars: indent a continuation line containing literal percent text.
 Inline and indented percent text and permitted built-in tags remain supported.
 
-After YAML syntax and single-document checks, a preflight limits the decoded
-representation to 32 levels and 2048 nodes. The root is depth 1; mapping keys,
-mapping values and sequence elements each count as nodes one level below their
+During scanning, at most 32 flow collections may be open and at most 32 block
+collection indentation levels may be active. Both limits apply independently,
+including collections used as keys; literal punctuation in quoted text, block
+scalars and comments consumes neither. The parser stops on the first excess,
+even in an unfinished document, with one root `policy.complexity` problem and
+exit 2. Syntax encountered first remains `policy.syntax`; the whole-source UTF-8
+and directive checks precede parsing. These are structural bounds, not RSS/CPU
+quotas or worker timeouts.
+
+After the first document completes, before requesting a second document, a
+preflight limits its representation to 32 levels and 2048 nodes. The root is depth 1;
+mapping keys, mapping values and sequence elements each count as nodes one level below their
 parent. Alias references count once without following their targets; the document
 wrapper does not count. The sum of representation path lengths is also limited
 to 65536 bytes after JSON Pointer escaping. The root path is empty; scalar mapping
@@ -123,12 +133,17 @@ diagnostic locations, including shallow aliases below long keys, without
 constructing path strings. Any excess reports one `policy.complexity` problem at
 the root with exit 2, before diagnostic collection or value conversion.
 
+Only a first document within budget permits checking for another document, using
+the same bounded parser. A complete second document reports
+`policy.multiple_documents`; a stack excess while reading it reports
+`policy.complexity`. No policy values are constructed from the second document.
+
 Successful human output escapes manifest controls, quotes and Unicode line
 separators using Go string escapes without outer quotes. Printable Unicode stays
 readable; JSON retains the original decoded manifest value. The
 [versioned schema](schemas/itos-container-v1.schema.json) describes the closed data
 contract; the YAML restrictions below also apply. The complete behaviour is specified
-in [policy.feature](../features/policy.feature).
+in [policy.feature](../features/policy.feature) and [parsing.feature](../features/parsing.feature).
 
 | Key | Type and requirement | Default |
 | --- | --- | --- |

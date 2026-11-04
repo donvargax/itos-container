@@ -10,6 +10,7 @@ require (
 	github.com/distribution/reference v0.6.0
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
 	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v4 v4.0.0
 	golang.org/x/term v0.46.0
 	pgregory.net/rapid v1.3.0
 )

@@ -4,8 +4,8 @@ version: 1
 
 # The source project's pin and checksum, copied with its workflow action.
 pin:
-  version: "8.45.3"
-  checksums: "d91adcab38594aabbaabc828a6a82b027580374d3e55ea3968d7dee75e8dfaea" # SHA-256 of checksums.txt
+  version: "8.45.7"
+  checksums: "b7e76271264cc0feb4da163e9da38ae58443dd19a19848365c7905949096b358" # SHA-256 of checksums.txt
 
 ledger:
   files: "tasks/phase-{group}.yaml"
@@ -132,6 +132,7 @@ push:
   pr:
     draft: true
     update: merge
+    review_stall: 900
     review_by: [chatgpt-codex-connector]
     reviewers:
       - { login: chatgpt-codex-connector, kind: codex }

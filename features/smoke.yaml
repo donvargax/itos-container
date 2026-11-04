@@ -40,3 +40,7 @@
   scenarios:
     - id: "@ID-MANIFEST-01"
       why: selected manifest parsing resolves literal defaults without engine inspection
+- file: parsing.feature
+  scenarios:
+    - id: "@ID-PARSING-04"
+      why: doctor refuses unfinished excessive nesting without effects and still accepts literal YAML data

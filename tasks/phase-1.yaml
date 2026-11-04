@@ -1550,5 +1550,3 @@
     under push.pr.review_stall. So the driver's ask_security and nudge_security can go. Set
     review_stall 900 here, as the second request needs it and the default ci.watch.timeout of 1800
     is judged first. Move the workflows' itos action pins with it.
-  done_when:
-    - run: "grep -q 'version: \"8.45.7\"' itos.yaml && grep -q 'review_stall: 900' itos.yaml"
