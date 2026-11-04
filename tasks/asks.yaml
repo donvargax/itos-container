@@ -3,3 +3,4 @@ questions:
   - id: q-1
     item: "slice-4"
     question: "A1: is approval given at a terminal with a typed fingerprint, or by a scriptable --fingerprint?"
+    answer: "Scriptable --fingerprint (the person, 2026-11-04). Anything that can run the command can approve, so docs/security.md and the help say an agent on the host could approve its own sandbox; approval is an explicit act bound to the exact fingerprint. Stored as canonical JSON SHA-256 under $XDG_STATE_HOME/itos-container, 0700."
