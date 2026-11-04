@@ -325,3 +325,19 @@ items:
       The output of that failure was lost, so the cause is not known: suspect a timeout or a
       contended build in the matrix. itos.yaml being an enforcement input runs it on every such
       commit. Capture a failure first.
+  - id: slice-5
+    title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-1]
+    kind: slice
+    why: >
+      Was p2-policy-parser-resource-budget.
+      slice-1's security reviews, 2026-11-04: seven findings on memory amplification from a policy
+      under 64 KiB: nesting, custom tags, %TAG prefixes, self-aliases under a long key. Each was
+      real, and each fix earned a review finding the next variant. The worst outcome is doctor
+      running out of memory on a hostile checkout, not an escape. Slice-1 adds a budget on
+      diagnostics; this item takes what remains, such as a parser with no aliases or tag directives,
+      or rejecting those before decoding. The contract lists resource limits as an open decision.
+      slice-2's manifest parser wants the same.
