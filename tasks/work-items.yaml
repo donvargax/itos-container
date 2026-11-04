@@ -127,8 +127,8 @@ items:
   - id: T-9
     title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p1-track-gherkin-mutation-freshness
@@ -153,3 +153,23 @@ items:
       The offline owned-run milestone needs trustworthy foundation proof. Compare local compiler and
       experiment settings with CI before expensive measurement to prevent unusable evidence and
       repeated landing attempts, preserving all proof gates.
+  - id: p1-reconcile-foundation-status
+    title: Reconcile foundation guidance after T-8
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Keep the offline owned-run milestone's plan accurate by recording T-8's completed baseline,
+      preventing redundant measurement and clarifying remaining foundation work.
+  - id: p1-refresh-remaining-template-guidance
+    title: Refresh remaining template guidance
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The offline owned-run milestone needs accurate scenario, configuration and release guidance
+      that preserves existing gates, provenance and limits on support claims.
