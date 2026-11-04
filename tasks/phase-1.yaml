@@ -380,3 +380,28 @@
     The coordinating loop must check the actual pushed head's CI and platform results before
     closing the item; the drafter commits only this ledger specification, leaving the task
     check failing until implementation and leaving ownership/status to the loop.
+- id: T-8
+  type: test
+  title: Record a fresh foundation mutation baseline with pinned itos-cc
+  why: >
+    T-4 upgrades the launcher to 0.47.2, whose sample finds zero eligible cached mutants from the
+    inherited three-Example snapshot. Its changed-code check judges no Go sources, so passing it
+    does not establish a foundation baseline. Specify separate first-milestone work to measure
+    project-local evidence with the pinned tool, all-tests, fail-uncovered and no-annotate; kill
+    survivors and cover untested code without weakening gates, then commit the resulting evidence.
+    Already covers generating fresh foundation mutation evidence after T-4: zero eligible cached
+    mutants means passing checks do not establish the milestone's baseline. This existing item
+    already requires fresh project-local mutation evidence after T-4. Zero eligible cached mutants
+    and passing compatibility checks do not establish the foundation proof needed for the charter’s
+    offline owned-run milestone. Already covers fresh project-local mutation evidence after T-4.
+    Zero eligible sampling candidates under 0.47.2 means passing compatibility checks cannot
+    establish the foundation proof required for the charter’s offline owned-run milestone. Already
+    covers fresh project-local mutation evidence after T-4. The reported zero eligible cached
+    mutants reinforces that passing upgrade checks does not establish the foundation baseline
+    required for the offline owned-run milestone. CLI/config guidance and CI alignment remain
+    covered by p1-adapt-cli-config-guidelines and p1-align-ci-branch-conditions. Consolidate
+    p1-foundation-mutation-baseline into this item, retaining its T-4 dependency and proof
+    requirements. T-4's zero eligible records establish no foundation baseline; fresh project-local
+    evidence is still required.
+  done_when:
+    - run: rtk proxy tools/bin/pinned itos-cc mutation run --all-tests --mutate-all --no-coverage-cache --fail-uncovered --no-annotate cmd internal

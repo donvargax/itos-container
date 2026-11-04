@@ -75,39 +75,13 @@ items:
 
       Already covers updating launcher versions together with verified archive checksums to maintain
       the milestone's proof tooling.
-  - id: p1-fresh-mutation-baseline
+  - id: T-8
     title: Record a fresh foundation mutation baseline with pinned itos-cc
     phase: 1
     owner: null
     status: todo
     depends_on: [T-4]
-    kind: idea
-    why: >
-      T-4 upgrades the launcher to 0.47.2, whose sample finds zero eligible cached mutants from the
-      inherited three-Example snapshot. Its changed-code check judges no Go sources, so passing it
-      does not establish a foundation baseline. Specify separate first-milestone work to measure
-      project-local evidence with the pinned tool, all-tests, fail-uncovered and no-annotate; kill
-      survivors and cover untested code without weakening gates, then commit the resulting evidence.
-
-      Already covers generating fresh foundation mutation evidence after T-4: zero eligible cached
-      mutants means passing checks do not establish the milestone's baseline.
-
-      This existing item already requires fresh project-local mutation evidence after T-4. Zero
-      eligible cached mutants and passing compatibility checks do not establish the foundation proof
-      needed for the charter’s offline owned-run milestone.
-
-      Already covers fresh project-local mutation evidence after T-4. Zero eligible sampling
-      candidates under 0.47.2 means passing compatibility checks cannot establish the foundation
-      proof required for the charter’s offline owned-run milestone.
-
-      Already covers fresh project-local mutation evidence after T-4. The reported zero eligible
-      cached mutants reinforces that passing upgrade checks does not establish the foundation
-      baseline required for the offline owned-run milestone.
-
-      CLI/config guidance and CI alignment remain covered by p1-adapt-cli-config-guidelines and
-      p1-align-ci-branch-conditions. Consolidate p1-foundation-mutation-baseline into this item,
-      retaining its T-4 dependency and proof requirements. T-4's zero eligible records establish no
-      foundation baseline; fresh project-local evidence is still required.
+    kind: task
   - id: p1-bound-pinned-tool-downloads
     title: Bound pinned-tool download time
     phase: 1
