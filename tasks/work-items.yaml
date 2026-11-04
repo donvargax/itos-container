@@ -312,3 +312,16 @@ items:
     status: doing
     depends_on: []
     kind: task
+  - id: p2-architecture-fixtures-load
+    title: The architecture fixture matrix can fail under load, stopping a commit
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      2026-11-04: a one-line itos.yaml commit failed in pre-commit at tools/testdata/architecture
+      after 548 s while the machine ran several builds, and passed in 84 and 105 s when it did not.
+      The output of that failure was lost, so the cause is not known: suspect a timeout or a
+      contended build in the matrix. itos.yaml being an enforcement input runs it on every such
+      commit. Capture a failure first.
