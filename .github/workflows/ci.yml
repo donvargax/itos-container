@@ -73,11 +73,25 @@ jobs:
           jq -e '.Os == "linux" and .Arch == "amd64"' <<<"$server" >/dev/null
           jq -c --arg commit "$TO" '{version: .Version, apiVersion: .ApiVersion, os: .Os, architecture: .Arch, commit: $commit}' <<<"$server"
           PREFLIGHT
+      - name: Prepare engine fixture registry
+        id: fixture
+        shell: bash
+        timeout-minutes: 4
+        run: tools/bin/engine-fixture prepare
       - name: Engine scenarios
         timeout-minutes: 5
         env:
           ITOS_CONTAINER_ENGINE_TESTS: "1"
+          ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE: ${{ steps.fixture.outputs.image }}
+          ITOS_CONTAINER_ENGINE_FIXTURE_ID: ${{ steps.fixture.outputs.image_id }}
+          ITOS_CONTAINER_ENGINE_FIXTURE_UID: ${{ steps.fixture.outputs.uid }}
+          ITOS_CONTAINER_ENGINE_FIXTURE_GID: ${{ steps.fixture.outputs.gid }}
         run: go test ./features -count=1 -v -timeout=5m -run '^TestFeatures$'
+      - name: Clean up engine fixture
+        if: ${{ always() }}
+        shell: bash
+        timeout-minutes: 1
+        run: tools/bin/engine-fixture cleanup
 
   # Unit tests and the non-engine godog tier run automatically on Linux for
   # main pushes and non-draft pull requests. Manual dispatch also runs this Linux suite.

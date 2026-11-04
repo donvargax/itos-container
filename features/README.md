@@ -69,7 +69,8 @@ switch, stripped from child commands by the existing `ITOS_` environment filteri
 These checks prevent accidental execution; they do not isolate hostile code. Agents never
 receive a Docker socket and never run the engine tier locally or spoof the CI context.
 `TestEngineSelection` simulates context values with memory-only steps and hook counters;
-`TestEngineWorkflow` parses the workflow and rejects broken fixtures without executing Docker.
+`TestEngineWorkflow` and `TestEngineFixtureWorkflow` parse the workflow and reject broken
+fixtures without executing Docker. The latter also checks the pinned recipe and helper guards.
 
 The sole engine job in `.github/workflows/ci.yml` has the stable check name
 **`Engine scenarios (Linux amd64)`** for the coordinator's repository settings. It runs on main
@@ -82,8 +83,9 @@ A read-only server preflight targets `unix:///var/run/docker.sock`, clearing cal
 Docker host/context and TLS/API overrides. Missing CLI/socket, denied access, daemon failure,
 wrong server platform or timeout fails the job. It records only server version, API version,
 OS, architecture and the tested commit. Its 29-second deadline plus a 1-second kill grace
-bounds it to 30 seconds. No install/start, image pull/build, container creation or fallback
-is attempted. The subsequent step alone enables the switch and runs this **CI-only** command:
+bounds it to 30 seconds. The preflight attempts no install/start, image pull/build, container
+creation or fallback. A separate preparation step supplies the cached fixture described below.
+The Engine scenarios step alone enables the switch and runs this **CI-only** command:
 
 ```sh
 ITOS_CONTAINER_ENGINE_TESTS=1 go test ./features -count=1 -v -timeout=5m -run '^TestFeatures$'
@@ -94,15 +96,151 @@ budgets, not product startup/resource limits. The step always selects every live
 independent of smoke selections, changed IDs or a green baseline. Pending, undefined, failed
 or skipped runtime steps fail; losing selected engine cases also fails.
 
-There are currently no live engine scenarios. The preflight still runs, and the harness
+There are currently no live engine scenarios. Preflight and fixture preparation still run,
+followed by unconditional cleanup, and the harness
 explicitly skips with `no live @engine scenarios (count 0)`, including an all-`@wip` engine set.
-This is infrastructure readiness, not sandbox or supported-host proof. Later behaviour specs
-must settle runtime fixtures and image acquisition before adding native probes.
+This is infrastructure readiness, not sandbox or supported-host proof.
 
 Mutation, own-test and scenario-coverage runs in `ci` remain engine-disabled, including
 individual-test fallback and whole-suite collection. An excluded engine ID provides no
 runtime or coverage evidence. Later behaviours require domain/port fake tests alongside
 separate runtime evidence; uncovered code cannot be satisfied by enabling Docker in proof.
+
+### Cached fixture protocol
+
+T-20's [helper](../tools/bin/engine-fixture) runs only in the existing engine job, after
+preflight. Both `prepare` and `cleanup` refuse outside GitHub Actions on an actual Linux amd64
+host, before engine access. Agents never invoke these modes against an engine or spoof CI.
+The helper uses the existing Docker CLI, shell/coreutils, curl and jq; it installs nothing.
+Every engine call clears Docker host/context/TLS/API overrides, uses
+`unix:///var/run/docker.sock` explicitly and supplies a disposable empty Docker configuration,
+without logins or credential helpers. It never changes the daemon or its registry trust.
+
+Preparation pulls two fixed Linux amd64 manifests. The T-20 specification records their
+Docker Hub metadata provenance, inspected on 2026-11-04:
+
+| Input | Exact reference | Provenance |
+| --- | --- | --- |
+| Docker Official registry 3.0.0 (CNCF Distribution) | `docker.io/library/registry@sha256:5b12b22f21522fe69443079df04c0f3f42cb9977857f3c20404386652a6c6d8e` | [Tag metadata](https://hub.docker.com/v2/repositories/library/registry/tags/3.0.0) |
+| Docker Official BusyBox 1.37.0-musl | `docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835` | [Tag metadata](https://hub.docker.com/v2/repositories/library/busybox/tags/1.37.0-musl) |
+
+Tags identify the provenance only; CI never resolves them. The maintained
+[Distribution registry](https://distribution.github.io/distribution/about/deploying/) provides
+the push/pull round trip, and [BusyBox](https://hub.docker.com/_/busybox) supplies a small shell
+and basic probes. No image or archive is published outside the disposable runner-local registry.
+This acquisition is CI scaffolding: it adds no product acquisition, registry dependency or
+permission for worker egress.
+
+The reviewed [Dockerfile](testdata/engine-fixture/Dockerfile) takes the runner's numeric
+effective UID/GID, refusing UID zero before build, sets `USER`, clears `ENTRYPOINT` and uses
+`CMD ["/bin/true"]`. It has no `RUN`, `ADD`, `COPY`, bootstrap, extra environment, declared
+volume or devcontainer metadata. The Dockerfile is supplied on stdin with an
+[empty build context](https://docs.docker.com/build/concepts/context/#empty-context); no consumer
+checkout recipe or helper is run. The helper uses the daemon's classic builder explicitly,
+so no external builder or provenance index is introduced. An unavailable builder fails the job.
+BusyBox is a fixture, not the pilot's full agent toolchain; additional contents need their
+own behaviour specification.
+
+The preparation protocol is bounded to 180 seconds, including pulls, build, push, pull and
+smoke, with a separate 30-second cleanup attempt on failure. It performs these checks:
+
+1. Create one uniquely named registry, recording its ID and attempt identity outside the
+   checkout under `RUNNER_TEMP`. Publish container port 5000 on an allocated **127.0.0.1** port,
+   discovered from that exact container. Registry storage is container-managed tmpfs; there
+   are no host mounts, host networking, extra capabilities, privileged mode or restart policy.
+   `OTEL_TRACES_EXPORTER=none` disables trace export. Readiness has a 20-second limit.
+2. Build the reviewed recipe for `linux/amd64`, record the config ID and push to the attempt's
+   unique loopback repository. Read the single-platform manifest through the registry API,
+   hash its exact bytes, compare with `Docker-Content-Digest` and match its config digest to
+   the built ID. Reject an index or a mismatch.
+3. Remove only the recorded derived tag/digest references, confirm the exact requested
+   `repository@sha256` reference is absent, then
+   [pull that digest](https://docs.docker.com/reference/cli/docker/image/pull/). Inspect that
+   exact reference and require its complete `RepoDigests` entry, matching config ID,
+   Linux amd64 platform, numeric non-root user, empty entrypoint, no declared volumes and no
+   `devcontainer.metadata`. Build/push results alone are not cached-image proof. The measured
+   manifest digest and distinct config ID are retained together; neither is assumed stable.
+4. Execute a ten-second bounded benign smoke command from the cached digest with pull disabled,
+   network none, read-only root, all capabilities dropped, no-new-privileges, the recorded
+   UID/GID and no host mounts. Require the actual UID/GID, fixed marker and exit zero.
+5. Remove the smoke container and registry, discarding registry tmpfs, then inspect the cached
+   digest again. Only then publish `image`, `image_id`, `uid` and `gid` as step outputs.
+
+The Engine scenarios step receives just these harness inputs beside its tier switch:
+
+| Variable | Meaning |
+| --- | --- |
+| `ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE` | Exact loopback repository and measured manifest digest |
+| `ITOS_CONTAINER_ENGINE_FIXTURE_ID` | Distinct image config digest |
+| `ITOS_CONTAINER_ENGINE_FIXTURE_UID` | Runner's non-root effective UID |
+| `ITOS_CONTAINER_ENGINE_FIXTURE_GID` | Runner's effective GID |
+
+Future engine Given steps must reject absent/malformed inputs and independently inspect cached
+content; they must not acquire a substitute. Ordinary selection must not read the inputs or
+initialize fixture hooks. Existing `ITOS_` filtering strips them from product children, which
+receive the image reference through their disposable, normally validated manifest. Do not
+create approval state or bypass policy/manifest or metadata validation. For an absent-image
+case, derive a different well-formed digest in the same repository and verify its absence by
+read-only inspection; never remove the shared positive fixture. The registry is already gone
+when scenarios start. Product request-journal assertions still have to prove zero acquisition;
+an unavailable registry is not that proof. Those steps and journals belong to the behaviour
+items, including slice-3's doctor cases, not T-20.
+
+Preparation attempts cleanup on failure. The engine job's final `always()` step retries cleanup
+after failures/cancellation and removes the remaining derived image references on success.
+Each attempt has a 30-second bound. Cleanup verifies recorded container IDs, names, image IDs
+and attempt labels before removal; interrupted creates can be recovered by their recorded
+unique names plus image and label. Image removal requires the recorded config identity.
+Cleanup is idempotent, preserves an earlier failure and fails an otherwise successful job
+when incomplete. It never prunes, removes shared pinned inputs, or deletes checkout files.
+A killed runner cannot promise cleanup: that run is incomplete, not evidence.
+
+CI logs record the tested commit, server version/API/platform, source pins, measured image
+reference and config ID, expected/observed cold-pull and smoke results, and cleanup verdicts.
+The coordinator must inspect the actual pushed head's run for these results even with zero
+live engine scenarios. Static workflow checks and shell syntax are not RepoDigest proof;
+fixture success is not a passed doctor/runtime scenario. Images, temporary ownership records
+and generated test evidence are never committed.
+
+#### Fixture sources and notices
+
+These inputs retain their upstream licenses and notices; the project's AGPL-3.0 license does not
+relicense them. The recipe changes only image configuration and removes no upstream files.
+
+- Distribution 3.0.0 is [Apache-2.0](https://github.com/distribution/distribution/blob/v3.0.0/LICENSE).
+  Retain its [source and notices](https://github.com/distribution/distribution/tree/v3.0.0),
+  [official image build sources](https://github.com/distribution/distribution-library-image) and
+  [bundled dependency inventory/notices](https://github.com/docker-library/repo-info/tree/master/repos/registry).
+- BusyBox 1.37.0 is [GPL-2.0](https://busybox.net/license.html). Corresponding upstream source
+  is [BusyBox 1.37.0](https://busybox.net/downloads/busybox-1.37.0.tar.bz2), including `LICENSE`;
+  [official image sources](https://github.com/docker-library/busybox) retain its build provenance.
+  Keep [musl's copyright and license notices](https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT)
+  and the [bundled component inventory](https://github.com/docker-library/repo-info/tree/master/repos/busybox).
+  These source references do not authorize publishing the fixture as a product image.
+
+### Real-engine red-first evidence
+
+Draft PRs skip automatic CI, so the coordinator uses the existing manual-dispatch workflow
+for assertion-level red proof. No new event, input, workflow or draft-guard exception is needed.
+[GitHub permits selecting a branch for manual dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
+when the workflow exists on the default branch, as this one already does.
+
+1. The behaviour implementer commits complete step definitions in a `test` commit while the
+   cases remain `@wip` and carry `@engine`. The agent commits and stops.
+2. The loop creates a separate disposable evidence branch from that **exact step commit**.
+   One `test` commit removes `@wip` only from the named cases, retains `@engine` and adds a valid
+   smoke entry if needed. The item branch retains its original tags.
+3. The loop publishes the evidence branch and manually dispatches the existing CI workflow
+   on it, independently of the draft PR. The workflow checks out the selected commit and runs
+   every live engine case. There is no uncommitted tag rewrite, harness bypass or conversion
+   of expected failure to success.
+4. The coordinator records the run URL, evidence commit, parent step commit, exact scenario
+   ID/outline row and failed **Then** assertion. Setup, infrastructure, undefined-step failures
+   and empty selections are not red proof. The expected-red run stays failed and is never merged.
+5. After implementation, remove the cases' `@wip` tags on the item branch and require green CI
+   at the actual implemented head. The loop alone publishes, dispatches, observes and closes.
+
+This procedure creates no evidence branch itself and claims no later scenario has run.
 
 ## Tags
 
