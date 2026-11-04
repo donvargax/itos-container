@@ -1,0 +1,551 @@
+{
+  "Packages": [
+    "internal/count/domain",
+    "internal/count/domain/nested",
+    "internal/count/port",
+    "internal/count/port/porttest",
+    "internal/count/port/nested",
+    "internal/count/disk",
+    "internal/count/input",
+    "internal/count/input/nested",
+    "internal/count/command",
+    "internal/inspect/domain",
+    "internal/inspect/domain/nested",
+    "internal/inspect/port",
+    "internal/inspect/port/porttest",
+    "internal/inspect/socket",
+    "internal/inspect/socket/nested",
+    "internal/inspect/command",
+    "internal/inspect/command/nested",
+    "internal/countother/domain",
+    "internal/countother/port",
+    "internal/count/portother",
+    "internal/engine/domain",
+    "internal/engine/port",
+    "internal/engine/client",
+    "internal/solo/domain",
+    "internal/bridge/port",
+    "internal/bridge/wire",
+    "internal/cli",
+    "internal/release"
+  ],
+  "Probes": [
+    {
+      "Name": "domain-os",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "os"
+      ],
+      "Denied": "os"
+    },
+    {
+      "Name": "domain-os-exec",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "os/exec"
+      ],
+      "Denied": "os/exec"
+    },
+    {
+      "Name": "domain-net",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "net"
+      ],
+      "Denied": "net"
+    },
+    {
+      "Name": "domain-net-http",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "net/http"
+      ],
+      "Denied": "net/http"
+    },
+    {
+      "Name": "domain-os-user",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "os/user"
+      ],
+      "Denied": "os/user"
+    },
+    {
+      "Name": "domain-net-url",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "net/url"
+      ],
+      "Denied": "net/url"
+    },
+    {
+      "Name": "preserve-count-os",
+      "File": "internal/count/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "os"
+      ],
+      "Denied": "os"
+    },
+    {
+      "Name": "preserve-count-net",
+      "File": "internal/count/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "net"
+      ],
+      "Denied": "net"
+    },
+    {
+      "Name": "preserve-disk-domain",
+      "File": "internal/count/disk/probe.go",
+      "Package": "disk",
+      "Imports": [
+        "$module/internal/count/domain"
+      ],
+      "Denied": "$module/internal/count/domain"
+    },
+    {
+      "Name": "domain-own-adapter",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "$module/internal/inspect/socket"
+      ],
+      "Denied": "$module/internal/inspect/socket"
+    },
+    {
+      "Name": "domain-other-adapter",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "$module/internal/count/input"
+      ],
+      "Denied": "$module/internal/count/input"
+    },
+    {
+      "Name": "domain-own-command",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "$module/internal/inspect/command"
+      ],
+      "Denied": "$module/internal/inspect/command"
+    },
+    {
+      "Name": "domain-cli",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "$module/internal/cli"
+      ],
+      "Denied": "$module/internal/cli"
+    },
+    {
+      "Name": "domain-adapter-descendant",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "$module/internal/inspect/socket/nested"
+      ],
+      "Denied": "$module/internal/inspect/socket/nested"
+    },
+    {
+      "Name": "domain-command-descendant",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "$module/internal/inspect/command/nested"
+      ],
+      "Denied": "$module/internal/inspect/command/nested"
+    },
+    {
+      "Name": "domain-foreign-domain",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "$module/internal/count/domain/nested"
+      ],
+      "Denied": "$module/internal/count/domain/nested"
+    },
+    {
+      "Name": "domain-port-lookalike",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "$module/internal/count/portother"
+      ],
+      "Denied": "$module/internal/count/portother"
+    },
+    {
+      "Name": "nested-domain-io",
+      "File": "internal/inspect/domain/nested/probe.go",
+      "Package": "nested",
+      "Imports": [
+        "os/exec"
+      ],
+      "Denied": "os/exec"
+    },
+    {
+      "Name": "domain-test-io",
+      "File": "internal/inspect/domain/probe_test.go",
+      "Package": "domain_test",
+      "Imports": [
+        "net"
+      ],
+      "Denied": "net"
+    },
+    {
+      "Name": "domain-internal-test-adapter",
+      "File": "internal/inspect/domain/probe_test.go",
+      "Package": "domain",
+      "Imports": [
+        "$module/internal/inspect/socket"
+      ],
+      "Denied": "$module/internal/inspect/socket"
+    },
+    {
+      "Name": "adapter-own-domain",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/count/domain"
+      ],
+      "Denied": "$module/internal/count/domain"
+    },
+    {
+      "Name": "adapter-own-command",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/count/command"
+      ],
+      "Denied": "$module/internal/count/command"
+    },
+    {
+      "Name": "adapter-sibling",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/count/disk"
+      ],
+      "Denied": "$module/internal/count/disk"
+    },
+    {
+      "Name": "adapter-foreign-port",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/inspect/port"
+      ],
+      "Denied": "$module/internal/inspect/port"
+    },
+    {
+      "Name": "adapter-cli",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/cli"
+      ],
+      "Denied": "$module/internal/cli"
+    },
+    {
+      "Name": "adapter-helper",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/release"
+      ],
+      "Denied": "$module/internal/release"
+    },
+    {
+      "Name": "adapter-domain-descendant",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/count/domain/nested"
+      ],
+      "Denied": "$module/internal/count/domain/nested"
+    },
+    {
+      "Name": "adapter-slice-lookalike",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/countother/port"
+      ],
+      "Denied": "$module/internal/countother/port"
+    },
+    {
+      "Name": "adapter-port-lookalike",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/count/portother"
+      ],
+      "Denied": "$module/internal/count/portother"
+    },
+    {
+      "Name": "adapter-test-domain",
+      "File": "internal/count/input/probe_test.go",
+      "Package": "input_test",
+      "Imports": [
+        "$module/internal/count/domain"
+      ],
+      "Denied": "$module/internal/count/domain"
+    },
+    {
+      "Name": "adapter-test-sibling",
+      "File": "internal/count/input/probe_test.go",
+      "Package": "input_test",
+      "Imports": [
+        "$module/internal/count/disk"
+      ],
+      "Denied": "$module/internal/count/disk"
+    },
+    {
+      "Name": "adapter-test-descendant",
+      "File": "internal/count/input/probe_test.go",
+      "Package": "input_test",
+      "Imports": [
+        "$module/internal/count/input/nested"
+      ],
+      "Denied": "$module/internal/count/input/nested"
+    },
+    {
+      "Name": "adapter-internal-test-descendant",
+      "File": "internal/count/input/probe_test.go",
+      "Package": "input",
+      "Imports": [
+        "$module/internal/count/input/nested"
+      ],
+      "Denied": "$module/internal/count/input/nested"
+    },
+    {
+      "Name": "nested-adapter-foreign-port",
+      "File": "internal/inspect/socket/nested/probe.go",
+      "Package": "nested",
+      "Imports": [
+        "$module/internal/count/port/porttest"
+      ],
+      "Denied": "$module/internal/count/port/porttest"
+    },
+    {
+      "Name": "handler-foreign-domain",
+      "File": "internal/inspect/command/probe.go",
+      "Package": "command",
+      "Imports": [
+        "$module/internal/count/domain"
+      ],
+      "Denied": "$module/internal/count/domain"
+    },
+    {
+      "Name": "handler-test-foreign-descendant",
+      "File": "internal/inspect/command/probe_test.go",
+      "Package": "command_test",
+      "Imports": [
+        "$module/internal/count/domain/nested"
+      ],
+      "Denied": "$module/internal/count/domain/nested"
+    },
+    {
+      "Name": "port-foreign-domain",
+      "File": "internal/inspect/port/probe.go",
+      "Package": "port",
+      "Imports": [
+        "$module/internal/count/domain"
+      ],
+      "Denied": "$module/internal/count/domain"
+    },
+    {
+      "Name": "shared-engine-io",
+      "File": "internal/engine/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "net/http"
+      ],
+      "Denied": "net/http"
+    },
+    {
+      "Name": "domain-only-io",
+      "File": "internal/solo/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "os"
+      ],
+      "Denied": "os"
+    },
+    {
+      "Name": "port-only-adapter-domain",
+      "File": "internal/bridge/wire/probe.go",
+      "Package": "wire",
+      "Imports": [
+        "$module/internal/count/domain"
+      ],
+      "Denied": "$module/internal/count/domain"
+    },
+    {
+      "Name": "rapid-production",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "pgregory.net/rapid"
+      ],
+      "Denied": "pgregory.net/rapid"
+    },
+    {
+      "Name": "rapid-adapter-test",
+      "File": "internal/count/input/probe_test.go",
+      "Package": "input_test",
+      "Imports": [
+        "pgregory.net/rapid"
+      ],
+      "Denied": "pgregory.net/rapid"
+    },
+    {
+      "Name": "rapid-handler-test",
+      "File": "internal/inspect/command/probe_test.go",
+      "Package": "command_test",
+      "Imports": [
+        "pgregory.net/rapid"
+      ],
+      "Denied": "pgregory.net/rapid"
+    },
+    {
+      "Name": "pure-domain",
+      "File": "internal/inspect/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "strings",
+        "unicode",
+        "$module/internal/inspect/port",
+        "$module/internal/inspect/port/porttest"
+      ]
+    },
+    {
+      "Name": "external-domain-test",
+      "File": "internal/inspect/domain/probe_test.go",
+      "Package": "domain_test",
+      "Imports": [
+        "$module/internal/inspect/domain",
+        "$module/internal/inspect/port/porttest"
+      ]
+    },
+    {
+      "Name": "adapter-os-own-port",
+      "File": "internal/count/input/probe.go",
+      "Package": "input",
+      "Imports": [
+        "os",
+        "os/exec",
+        "net/http",
+        "$module/internal/count/port",
+        "$module/internal/count/port/nested"
+      ]
+    },
+    {
+      "Name": "adapter-external-test",
+      "File": "internal/count/input/probe_test.go",
+      "Package": "input_test",
+      "Imports": [
+        "$module/internal/count/input",
+        "$module/internal/count/port/porttest"
+      ]
+    },
+    {
+      "Name": "nested-adapter-external-test",
+      "File": "internal/inspect/socket/nested/probe_test.go",
+      "Package": "nested_test",
+      "Imports": [
+        "$module/internal/inspect/socket/nested",
+        "$module/internal/inspect/port/porttest"
+      ]
+    },
+    {
+      "Name": "own-handler",
+      "File": "internal/inspect/command/probe.go",
+      "Package": "command",
+      "Imports": [
+        "$module/internal/inspect/domain",
+        "$module/internal/inspect/domain/nested"
+      ]
+    },
+    {
+      "Name": "rapid-domain-test",
+      "File": "internal/inspect/domain/probe_test.go",
+      "Package": "domain_test",
+      "Imports": [
+        "pgregory.net/rapid"
+      ],
+      "Source": "package domain_test\nimport (\"testing\"; \"pgregory.net/rapid\")\nfunc TestProperty(t *testing.T) { rapid.Check(t, func(t *rapid.T) { _ = rapid.Int().Draw(t, \"value\") }) }\n"
+    },
+    {
+      "Name": "rapid-nested-domain-test",
+      "File": "internal/inspect/domain/nested/probe_test.go",
+      "Package": "nested_test",
+      "Imports": [
+        "pgregory.net/rapid"
+      ]
+    },
+    {
+      "Name": "cli-not-adapter",
+      "File": "internal/cli/probe.go",
+      "Package": "cli",
+      "Imports": [
+        "os",
+        "$module/internal/count/domain"
+      ]
+    },
+    {
+      "Name": "release-not-adapter",
+      "File": "internal/release/probe.go",
+      "Package": "release",
+      "Imports": [
+        "os",
+        "$module/internal/inspect/domain"
+      ]
+    },
+    {
+      "Name": "automatic-new-domain",
+      "File": "internal/future/domain/probe.go",
+      "Package": "domain",
+      "Imports": [
+        "os"
+      ],
+      "Denied": "os",
+      "Add": [
+        "internal/future/domain",
+        "internal/future/transport"
+      ]
+    },
+    {
+      "Name": "automatic-new-adapter",
+      "File": "internal/future/transport/probe.go",
+      "Package": "transport",
+      "Imports": [
+        "$module/internal/count/port"
+      ],
+      "Denied": "$module/internal/count/port",
+      "Add": [
+        "internal/future/domain",
+        "internal/future/transport"
+      ]
+    },
+    {
+      "Name": "derived-module",
+      "File": "internal/inspect/socket/probe.go",
+      "Package": "socket",
+      "Imports": [
+        "$module/internal/inspect/domain"
+      ],
+      "Denied": "$module/internal/inspect/domain",
+      "Module": "example.org/alternate"
+    }
+  ]
+}

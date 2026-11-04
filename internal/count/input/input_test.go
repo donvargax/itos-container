@@ -5,19 +5,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/donvargax/itos-container/internal/count/domain"
 	"github.com/donvargax/itos-container/internal/count/input"
 	"github.com/donvargax/itos-container/internal/count/port"
 	"github.com/donvargax/itos-container/internal/count/port/porttest"
 )
 
-// Standard input is read whole, as a file is: the counts are the domain's,
-// whichever the path came from.
+// Standard input is returned whole, with its bytes unchanged.
 func TestFilesReadStandardInputForTheDash(t *testing.T) {
 	files := input.Files{Disk: porttest.Files{}, In: strings.NewReader("one two\nthree")}
-	got, err := domain.File(files, "-")
-	if err != nil || got != (domain.Result{Lines: 2, Words: 3}) {
-		t.Fatalf("File(-, …) = %+v, %v; want 2 lines and 3 words", got, err)
+	got, err := files.Read("-")
+	if err != nil || string(got) != "one two\nthree" {
+		t.Fatalf("Read(-) = %q, %v; want original standard-input bytes", got, err)
 	}
 }
 
@@ -27,9 +25,9 @@ func TestFilesReadANamedPathThroughTheDisk(t *testing.T) {
 		Disk: porttest.Files{Data: map[string][]byte{"notes": []byte("one two")}},
 		In:   strings.NewReader("ignored"),
 	}
-	got, err := domain.File(files, "notes")
-	if err != nil || got != (domain.Result{Lines: 1, Words: 2}) {
-		t.Fatalf("File(notes, …) = %+v, %v; want 1 line and 2 words", got, err)
+	got, err := files.Read("notes")
+	if err != nil || string(got) != "one two" {
+		t.Fatalf("Read(notes) = %q, %v; want disk bytes", got, err)
 	}
 }
 
@@ -37,10 +35,10 @@ func TestFilesReadANamedPathThroughTheDisk(t *testing.T) {
 // for: the argument named a file, so it is a missing file.
 func TestFilesNameAMissingFileThroughTheDisk(t *testing.T) {
 	files := input.Files{Disk: porttest.Files{}, In: strings.NewReader("data")}
-	_, err := domain.File(files, "absent")
+	_, err := files.Read("absent")
 	var missing *port.Missing
 	if !errors.As(err, &missing) {
-		t.Fatalf("File(absent, …) = %T %v, want typed Missing", err, err)
+		t.Fatalf("Read(absent) = %T %v, want typed Missing", err, err)
 	}
 }
 
@@ -49,10 +47,10 @@ func TestFilesNameAMissingFileThroughTheDisk(t *testing.T) {
 // the reader fails.
 func TestFilesReportAFailingReaderAsUnreadable(t *testing.T) {
 	files := input.Files{Disk: porttest.Files{}, In: failingReader{}}
-	_, err := domain.File(files, "-")
+	_, err := files.Read("-")
 	var unreadable *port.Unreadable
 	if !errors.As(err, &unreadable) || unreadable.Path != "-" {
-		t.Fatalf("File(-, failing reader) = %T %v, want typed Unreadable for -", err, err)
+		t.Fatalf("Read(-, failing reader) = %T %v, want typed Unreadable for -", err, err)
 	}
 }
 

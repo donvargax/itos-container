@@ -1,0 +1,6 @@
+func Value(full bool) int {
+	if full {
+		return 1
+	}
+	return 2
+}

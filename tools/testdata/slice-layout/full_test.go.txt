@@ -1,0 +1,7 @@
+import "testing"
+
+func TestValue(t *testing.T) {
+	if Value(true) != 1 || Value(false) != 2 {
+		t.Fatal("wrong value")
+	}
+}
