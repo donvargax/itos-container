@@ -190,7 +190,7 @@ items:
     phase: 1
     owner: donvargax
     status: todo
-    depends_on: []
+    depends_on: [T-14]
     kind: slice
     why: >
       Was p2-strict-offline-policy.
