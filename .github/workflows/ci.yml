@@ -2,9 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, "stack/**", "go/**", "renovate/**"]
   push:
-    branches: [main, "stack/**", "go/**", "renovate/**"]
 
 permissions:
   contents: read
@@ -25,11 +23,6 @@ jobs:
         with:
           fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        if: >-
-          startsWith(github.base_ref, 'stack/') || startsWith(github.base_ref, 'go/') ||
-          startsWith(github.head_ref, 'stack/') || startsWith(github.head_ref, 'go/') ||
-          startsWith(github.head_ref, 'renovate/') || startsWith(github.ref, 'refs/heads/stack/') ||
-          startsWith(github.ref, 'refs/heads/go/') || startsWith(github.ref, 'refs/heads/renovate/')
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -50,11 +43,6 @@ jobs:
   # platform's paths, shell and line endings: what touches paths and CRLF breaks on Windows first.
   platform:
     name: Tests (${{ matrix.os }})
-    if: >-
-      startsWith(github.base_ref, 'stack/') || startsWith(github.base_ref, 'go/') ||
-      startsWith(github.head_ref, 'stack/') || startsWith(github.head_ref, 'go/') ||
-      startsWith(github.head_ref, 'renovate/') || startsWith(github.ref, 'refs/heads/stack/') ||
-      startsWith(github.ref, 'refs/heads/go/') || startsWith(github.ref, 'refs/heads/renovate/')
     strategy:
       fail-fast: false
       matrix:
