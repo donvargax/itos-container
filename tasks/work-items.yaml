@@ -322,8 +322,8 @@ items:
   - id: slice-5
     title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-1]
     kind: slice
     why: >
@@ -335,3 +335,10 @@ items:
       diagnostics; this item takes what remains, such as a parser with no aliases or tag directives,
       or rejecting those before decoding. The contract lists resource limits as an open decision.
       slice-2's manifest parser wants the same.
+  - id: T-18
+    title: Move to itos 8.45.7, and turn on push.pr.review_stall
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: []
+    kind: task
