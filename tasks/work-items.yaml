@@ -199,3 +199,16 @@ items:
       pinned version. Add black-box scenarios for valid policy and malformed, duplicate, unknown or
       unsupported values. Expose validation through doctor and keep reusable policy logic outside
       command domains. Broken down from p2-specify-policy-manifest-approval.
+  - id: p2-restricted-worker-manifest
+    title: Validate the restricted single-worker manifest
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Specify discovery, JSON-with-comments parsing, supported fields, reserved environment names,
+      image metadata and lifecycle hooks. Select and pin a maintained parser. Cover observable
+      acceptance and refusal through doctor without executing checkout code, expanding host
+      variables or allowing unsupported permissions. Broken down from
+      p2-specify-policy-manifest-approval.
