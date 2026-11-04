@@ -204,3 +204,15 @@
     These are cheap documentation checks, not runtime isolation proof. Review the prose against
     the decisions above as well: keyword presence alone cannot establish truthful status,
     correct loop ownership, milestone limits or preserved provenance.
+- id: T-6
+  type: docs
+  title: docs/CLI.md and docs/CONFIG.md describe itos container's commands and itos-container.yaml, from the newest of itos's and itos-cc's guidelines
+  why: >
+    Both files came from itos-template's guidelines (2026-11-03) and still name itos-template, its
+    manifest and its decisions. The same guidelines also live in itos (docs/CLI.md) and itos-cc, and
+    it is not known which copy is newest: compare the three, take the newest rules, and retarget
+    them to this project's commands (init, doctor, approve, run, exec, status, stop) and its policy
+    file. The reading rules in CONFIG.md matter most here: itos-container.yaml lives in an untrusted
+    checkout.
+  done_when:
+    - run: rtk proxy sh -eu -c 'git diff --check; grep -Fq "itos container" docs/CLI.md; for command in init doctor approve run exec status stop; do grep -wq "$command" docs/CLI.md; done; grep -Fq "itos-container.yaml" docs/CONFIG.md; for file in docs/CLI.md docs/CONFIG.md; do grep -Fq "itos-cc" "$file"; done; ! grep -nE "ITOS_TEMPLATE_|itos template|itos-template reads|itos-template writes|itos-template runs|docs/manifest\.md" docs/CLI.md docs/CONFIG.md'

@@ -23,20 +23,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p1-adapt-cli-config-guidelines
+  - id: T-6
     title: docs/CLI.md and docs/CONFIG.md describe itos container's commands and itos-container.yaml, from the newest of itos's and itos-cc's guidelines
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Both files came from itos-template's guidelines (2026-11-03) and still name itos-template, its
-      manifest and its decisions. The same guidelines also live in itos (docs/CLI.md) and itos-cc,
-      and it is not known which copy is newest: compare the three, take the newest rules, and
-      retarget them to this project's commands (init, doctor, approve, run, exec, status, stop) and
-      its policy file. The reading rules in CONFIG.md matter most here: itos-container.yaml lives in
-      an untrusted checkout.
+    kind: task
   - id: T-4
     title: tools/bin/pinned runs the current itos-cc, not 0.5.0
     phase: 1
