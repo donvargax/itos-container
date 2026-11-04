@@ -4,7 +4,7 @@
 // (github.com/donvargax/itos, features/features_test.go) and the owner's
 // itos-template's, without either one's generator behaviour.
 //
-//	go test ./features -count=1                        every live scenario
+//	go test ./features -count=1                        every live non-engine scenario
 //	go test ./features -count=1 -scenarios=<regexp>    the live scenarios with a
 //	                                                   tag the expression matches
 //	GOCOVERDIR=<dir> go test ./features -count=1       either, itos-container
@@ -14,7 +14,8 @@
 // godog's own tag filter takes exact tags joined by commas; itos's run
 // templates join the IDs they select with |, as a regular expression
 // (itos.yaml's tests.scenario.run), so -scenarios takes that expression and
-// is turned here into godog's filter. A scenario tagged @wip never runs.
+// is intersected with the live set and selected engine tier using godog.
+// A scenario tagged @wip never runs; @engine is CI-only (see README.md).
 //
 // The scenarios run itos-container as another process, where Go records
 // coverage only for a binary built with -cover and run with GOCOVERDIR naming
@@ -34,7 +35,7 @@
 package features
 
 import (
-	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -42,7 +43,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -77,6 +78,12 @@ func TestFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(selection.excluded) > 0 {
+		t.Logf("excluded %d scenario(s): %s", len(selection.excluded), strings.Join(selection.excluded, "; "))
+	}
+	if selection.skip != "" {
+		t.Skip(selection.skip)
+	}
 	t.Cleanup(removeCallerPath)
 	root, err := moduleRoot()
 	if err != nil {
@@ -88,6 +95,7 @@ func TestFeatures(t *testing.T) {
 	}
 	if runScenarios(selection, godog.Options{
 		Format:   "pretty",
+		Output:   os.Stdout,
 		Paths:    []string{"."},
 		Strict:   true,
 		TestingT: t,
@@ -96,26 +104,167 @@ func TestFeatures(t *testing.T) {
 	}
 }
 
-// These seams let memory-only fixtures exercise the same selection and runner
-// as TestFeatures. The red-first extraction retains the existing tag policy.
+// Environment and platform values enter the policy as data. Only TestFeatures
+// reads the real process context; regression fixtures never enable engine access.
 type featureEnvironment struct{ engine, ci, actions, os, arch string }
 
 type scenarioSelection struct {
 	filter   string
+	engine   bool
 	count    int
 	skip     string
 	excluded []string
 }
 
-func selectScenarios(pattern, dir string, _ featureEnvironment) (scenarioSelection, error) {
-	filter, err := tagFilter(pattern, dir)
-	return scenarioSelection{filter: filter}, err
+func (env featureEnvironment) engineEnabled() (bool, error) {
+	switch env.engine {
+	case "", "0":
+		return false, nil
+	case "1":
+		if env.ci != "true" || env.actions != "true" || env.os != "linux" || env.arch != "amd64" {
+			return false, fmt.Errorf("ITOS_CONTAINER_ENGINE_TESTS=1 requires CI=true, GITHUB_ACTIONS=true and a Linux amd64 test process")
+		}
+		return true, nil
+	default:
+		return false, fmt.Errorf("ITOS_CONTAINER_ENGINE_TESTS must be empty, 0 or 1")
+	}
+}
+
+// RetrieveFeatures compiles Gherkin pickles, including inherited Feature, Rule,
+// Outline and Examples tags. Selection runs before any binary build or hooks.
+func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSelection, error) {
+	var result scenarioSelection
+	engine, err := env.engineEnabled()
+	if err != nil {
+		return result, err
+	}
+	result.engine = engine
+	pattern, err := regexp.Compile(selection)
+	if err != nil {
+		return result, err
+	}
+	suite := godog.TestSuite{Options: &godog.Options{Paths: []string{dir}}}
+	features, err := suite.RetrieveFeatures()
+	if err != nil {
+		return result, err
+	}
+	matchedTags := map[string]bool{}
+	expected := map[string]bool{}
+	matched, liveEngine := 0, 0
+	for _, feature := range features {
+		for _, scenario := range feature.Pickles {
+			wip, needsEngine, matches := false, false, selection == ""
+			var ids []string
+			for _, tag := range scenario.Tags {
+				wip = wip || tag.Name == "@wip"
+				needsEngine = needsEngine || tag.Name == "@engine"
+				if strings.HasPrefix(tag.Name, "@ID-") {
+					ids = append(ids, tag.Name)
+				}
+				if selection != "" && pattern.MatchString(tag.Name) {
+					matches = true
+					matchedTags[tag.Name] = true
+				}
+			}
+			if needsEngine && !wip {
+				liveEngine++
+			}
+			if !matches {
+				continue
+			}
+			matched++
+			if wip || needsEngine != engine {
+				reason := "other tier"
+				if wip {
+					reason = "@wip"
+				} else if needsEngine {
+					reason = "@engine disabled"
+				}
+				result.excluded = append(result.excluded, fmt.Sprintf("%s %q (%s)", strings.Join(ids, ","), scenario.Name, reason))
+				continue
+			}
+			expected[scenario.Uri+":"+scenario.Id] = true
+			result.count++
+		}
+	}
+	if selection != "" && matched == 0 {
+		return result, &noMatch{selection}
+	}
+	if result.count == 0 {
+		result.skip = "no live scenarios in selected tier (count 0)"
+		if engine && liveEngine == 0 {
+			result.skip = "no live @engine scenarios (count 0)"
+		}
+		return result, nil
+	}
+
+	tier := "~@wip&&~@engine"
+	if engine {
+		tier = "~@wip&&@engine"
+	}
+	result.filter = tier
+	if selection != "" {
+		var branches []string
+		for tag := range matchedTags {
+			// godog uses comma for OR and && for AND. Every OR branch must
+			// carry both exclusions, including expressions matching @wip.
+			branches = append(branches, tag+"&&"+tier)
+		}
+		slices.Sort(branches)
+		result.filter = strings.Join(branches, ",")
+	}
+	// Check godog's actual filtered pickles before hooks. This also refuses a
+	// tag containing filter operators if it would broaden or lose the selection.
+	suite.Options.Tags = result.filter
+	filtered, err := suite.RetrieveFeatures()
+	if err != nil {
+		return result, err
+	}
+	for _, feature := range filtered {
+		for _, scenario := range feature.Pickles {
+			key := scenario.Uri + ":" + scenario.Id
+			if !expected[key] {
+				return result, fmt.Errorf("godog tag filter selected an excluded scenario %q", scenario.Name)
+			}
+			delete(expected, key)
+		}
+	}
+	if len(expected) != 0 {
+		return result, fmt.Errorf("godog tag filter lost %d selected scenario(s)", len(expected))
+	}
+	return result, nil
 }
 
 func runScenarios(selection scenarioSelection, options godog.Options, initialize func(*godog.ScenarioContext)) int {
+	if selection.skip != "" {
+		return 0 // TestFeatures reports the explicit testing.T skip before calling us.
+	}
 	options.Tags = selection.filter
-	suite := godog.TestSuite{Name: "itos-container", Options: &options, ScenarioInitializer: initialize}
-	return suite.Run()
+	options.Strict = true
+	options.Concurrency = 1
+	completed, unsuccessful := 0, false
+	suite := godog.TestSuite{Name: "itos-container", Options: &options, ScenarioInitializer: func(sc *godog.ScenarioContext) {
+		initialize(sc)
+		if selection.engine {
+			sc.StepContext().After(func(ctx context.Context, _ *godog.Step, status godog.StepResultStatus, err error) (context.Context, error) {
+				unsuccessful = unsuccessful || status != godog.StepPassed || err != nil
+				return ctx, nil
+			})
+			sc.After(func(ctx context.Context, _ *godog.Scenario, err error) (context.Context, error) {
+				completed++
+				unsuccessful = unsuccessful || err != nil
+				return ctx, nil
+			})
+		}
+	}}
+	code := suite.Run()
+	if selection.engine && (unsuccessful || completed != selection.count) {
+		if options.Output != nil {
+			_, _ = fmt.Fprintf(options.Output, "engine execution incomplete or unsuccessful: completed %d of %d scenario(s)\n", completed, selection.count)
+		}
+		return 1
+	}
+	return code
 }
 
 // build builds cmd/itos-container from the module at root into dir,
@@ -143,75 +292,8 @@ func build(root, dir string) (string, error) {
 	return bin, nil
 }
 
-// godog's tag filter for a selection: every live scenario without one, else
-// the live scenarios carrying a tag the expression matches. An expression
-// that matches no tag is an error, so a selection never runs nothing.
-func tagFilter(selection, dir string) (string, error) {
-	if selection == "" {
-		return "~@wip", nil
-	}
-	pattern, err := regexp.Compile(selection)
-	if err != nil {
-		return "", err
-	}
-	tags, err := featureTags(dir)
-	if err != nil {
-		return "", err
-	}
-	var each []string
-	for _, tag := range tags {
-		if pattern.MatchString(tag) {
-			each = append(each, tag+"&&~@wip")
-		}
-	}
-	if len(each) == 0 {
-		return "", &noMatch{selection}
-	}
-	return strings.Join(each, ","), nil
-}
-
 type noMatch struct{ selection string }
 
 func (e *noMatch) Error() string {
 	return "no scenario has a tag that " + e.selection + " matches"
-}
-
-// Every tag written in the feature files under dir, once each, sorted.
-func featureTags(dir string) ([]string, error) {
-	files, err := filepath.Glob(filepath.Join(dir, "*.feature"))
-	if err != nil {
-		return nil, err
-	}
-	seen := map[string]bool{}
-	for _, file := range files {
-		f, err := os.Open(file)
-		if err != nil {
-			return nil, err
-		}
-		lines := bufio.NewScanner(f)
-		for lines.Scan() {
-			line := strings.TrimSpace(lines.Text())
-			if !strings.HasPrefix(line, "@") {
-				continue
-			}
-			for _, word := range strings.Fields(line) {
-				if strings.HasPrefix(word, "#") {
-					break
-				}
-				if strings.HasPrefix(word, "@") {
-					seen[word] = true
-				}
-			}
-		}
-		_ = f.Close()
-		if err := lines.Err(); err != nil {
-			return nil, err
-		}
-	}
-	tags := make([]string, 0, len(seen))
-	for tag := range seen {
-		tags = append(tags, tag)
-	}
-	sort.Strings(tags)
-	return tags, nil
 }
