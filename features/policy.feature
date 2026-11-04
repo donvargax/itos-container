@@ -928,7 +928,7 @@ Feature: Strict offline sandbox policy
   # This is the review's 65147-byte, 2048-node shallow self-alias reproduction.
   # Check output length before comparing diagnostics so a regression reports a
   # small assertion failure instead of copying its amplified output into logs.
-  @wip @slice-1 @ID-POLICY-41
+  @slice-1 @ID-POLICY-41
   Scenario Outline: shallow aliases cannot amplify long diagnostic paths
     Given the policy file has 2045 self-aliases below a key of 59000 slashes
     When itos-container runs with "doctor --policy-only <format>" and a 5 second deadline
@@ -946,7 +946,7 @@ Feature: Strict offline sandbox policy
       |        |
       | --json |
 
-  @wip @slice-1 @ID-POLICY-42
+  @slice-1 @ID-POLICY-42
   Scenario Outline: aggregate path limits count escaped bytes and accept the boundary
     Given the policy file has an explicit key repeating "<text>" <count> times with suffix "xx"
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline

@@ -111,9 +111,15 @@ After YAML syntax and single-document checks, a preflight limits the decoded
 representation to 32 levels and 2048 nodes. The root is depth 1; mapping keys,
 mapping values and sequence elements each count as nodes one level below their
 parent. Alias references count once without following their targets; the document
-wrapper does not count. Either excess reports one `policy.complexity` problem at
-the root with exit 2, before diagnostic collection or value conversion. This
-bounds validation of hostile data, including custom tags below unknown fields.
+wrapper does not count. The sum of representation path lengths is also limited
+to 65536 bytes after JSON Pointer escaping. The root path is empty; scalar mapping
+keys extend both their key and value paths with their decoded spelling regardless
+of type, while complex keys add no component. Sequence elements append their
+decimal index. Count each full path, including ancestors and slash separators;
+scalar values do not extend paths. This conservative budget bounds repeated
+diagnostic locations, including shallow aliases below long keys, without
+constructing path strings. Any excess reports one `policy.complexity` problem at
+the root with exit 2, before diagnostic collection or value conversion.
 
 Successful human output escapes manifest controls, quotes and Unicode line
 separators using Go string escapes without outer quotes. Printable Unicode stays

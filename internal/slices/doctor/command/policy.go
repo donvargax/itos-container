@@ -82,7 +82,7 @@ func policyDiagnostic(issue port.Issue) policyProblem {
 	case port.MultipleDocuments:
 		p.Rule, p.Message, p.Fix = "multiple_documents", "Policy has more than one document", "keep exactly one YAML document"
 	case port.Complexity:
-		p.Rule, p.Message, p.Fix = "complexity", "Policy representation is too complex", "reduce the policy to at most 32 levels and 2048 nodes, including mapping keys"
+		p.Rule, p.Message, p.Fix = "complexity", "Policy representation is too complex", "reduce the policy to at most 32 levels, 2048 nodes and 65536 aggregate path bytes"
 	case port.DuplicateKey:
 		p.Rule, p.Message, p.Fix = "duplicate_key", "Mapping key is repeated", "keep each decoded key only once"
 	case port.NonStringKey:

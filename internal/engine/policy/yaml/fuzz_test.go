@@ -21,6 +21,9 @@ func FuzzSourceRead(f *testing.F) {
 		"%TAG !e! " + strings.Repeat("x", 32768) + "\n---\n[" + strings.Repeat("!e!s 0,", 4678) + "]\n",
 		"0\n...\n%TAG !e! " + strings.Repeat("x", 32768) + "\n---\n[" + strings.Repeat("!e!s 0,", 4677) + "]\n",
 		"\ufeff# comment\u0085%TAG !e! tag:example:\n---\n!e!value 0",
+		"? " + strings.Repeat("/", 59000) + "\n: &a [" + strings.Repeat("*a,", 2045) + "]\n",
+		"? " + strings.Repeat("/", 250) + "\n: &a [" + strings.Repeat("*a,", 128) + "]\n",
+		"? " + strings.Repeat("/", 250) + "\n: &a [" + strings.Repeat("*a,", 129) + "]\n",
 	} {
 		f.Add(seed)
 	}
@@ -34,17 +37,25 @@ func FuzzSourceRead(f *testing.F) {
 			t.Fatal("failure returned a partial value")
 		}
 		// A node can report only a fixed number of structural failures. The
-		// depth limit bounds retained paths even when every node has a tag.
+		// preflight also bounds their aggregate escaped path bytes, regardless
+		// of whether paths share a long key or every node carries custom tags.
 		if len(issues) > 4*2048 {
 			t.Fatalf("unbounded diagnostic count: %d", len(issues))
 		}
+		pathBytes := 0
 		for _, issue := range issues {
+			for _, component := range issue.Path {
+				pathBytes += 1 + len(component) + strings.Count(component, "~") + strings.Count(component, "/")
+			}
 			if len(issue.Path) > 31 {
 				t.Fatalf("unbounded diagnostic path: %d", len(issue.Path))
 			}
 			if issue.Kind == port.Complexity && (len(issues) != 1 || len(issue.Path) != 0) {
 				t.Fatal("complexity refusal must be a single root issue")
 			}
+		}
+		if pathBytes > 4*65536 {
+			t.Fatalf("unbounded diagnostic path bytes: %d", pathBytes)
 		}
 	})
 }

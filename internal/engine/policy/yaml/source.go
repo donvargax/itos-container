@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"go.yaml.in/yaml/v3"
@@ -18,8 +19,9 @@ import (
 type Source struct{ Files port.Files }
 
 const (
-	maxDepth = 32
-	maxNodes = 2048
+	maxDepth     = 32
+	maxNodes     = 2048
+	maxPathBytes = 65536
 )
 
 // Read checks the whole representation before exposing any policy fields.
@@ -52,8 +54,8 @@ func (s Source) Read() (port.Value, []port.Issue) {
 	if root.Kind == yaml.ScalarNode && root.Tag == "!!null" && root.Value == "" && root.Style == 0 {
 		return rejected(port.Empty)
 	}
-	remaining := maxNodes
-	if !withinLimits(root, 1, &remaining) {
+	remaining := representationBudget{nodes: maxNodes, pathBytes: maxPathBytes}
+	if !remaining.withinLimits(root, 1, 0) {
 		return rejected(port.Complexity)
 	}
 	reader := tree{}
@@ -90,16 +92,36 @@ func hasDirectiveLine(data []byte) bool {
 	return false
 }
 
-// Preflight uses only a depth-limited call stack and one node counter, before
+type representationBudget struct {
+	nodes, pathBytes int
+}
+
+// Preflight uses only a depth-limited call stack and counters, before
 // value conversion or diagnostic allocation. Content includes mapping keys;
 // alias targets are separate pointers and are deliberately never followed.
-func withinLimits(node *yaml.Node, depth int, remaining *int) bool {
-	if depth > maxDepth || *remaining == 0 {
+// Charge both key and value paths for every scalar key, even a non-string key,
+// conservatively bounding diagnostic expansion without resolving scalar types.
+func (remaining *representationBudget) withinLimits(node *yaml.Node, depth, pathBytes int) bool {
+	if depth > maxDepth || remaining.nodes == 0 || pathBytes > remaining.pathBytes {
 		return false
 	}
-	*remaining--
-	for _, child := range node.Content {
-		if !withinLimits(child, depth+1, remaining) {
+	remaining.nodes--
+	remaining.pathBytes -= pathBytes
+	for i, child := range node.Content {
+		childPathBytes := pathBytes
+		switch node.Kind {
+		case yaml.MappingNode:
+			key := node.Content[i-i%2]
+			if key.Kind == yaml.ScalarNode {
+				childPathBytes += 1 + len(key.Value) + strings.Count(key.Value, "~") + strings.Count(key.Value, "/")
+			}
+		case yaml.SequenceNode:
+			childPathBytes += 2 // Slash and the first decimal index digit.
+			for index := i; index >= 10; index /= 10 {
+				childPathBytes++
+			}
+		}
+		if !remaining.withinLimits(child, depth+1, childPathBytes) {
 			return false
 		}
 	}
