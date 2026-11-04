@@ -143,6 +143,8 @@ items:
       Already covers preventing redundant measurement after T-8, which the source registry marks
       done. Have the coordinator reconcile the stale p1-foundation-mutation-baseline entry without
       repeating the completed measurement.
+
+      From arc42's review: its stale-entry clause is moot, and PLAN still denies doctor.
   - id: p1-refresh-remaining-template-guidance
     title: Refresh remaining template guidance
     phase: 1
@@ -199,7 +201,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-2]
+    depends_on: [slice-2, T-20]
     kind: slice
     why: >
       Was p2-doctor-host-readiness.
@@ -319,6 +321,8 @@ items:
       The output of that failure was lost, so the cause is not known: suspect a timeout or a
       contended build in the matrix. itos.yaml being an enforcement input runs it on every such
       commit. Capture a failure first.
+
+      From arc42's review: go.mod is an enforcement input, so slices 2 and 3 hit this.
   - id: slice-5
     title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
     phase: 1
@@ -333,3 +337,96 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: T-19
+    title: Bring arc42 up to date with what landed and what the person decided
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: T-20
+    title: An engine fixture image the real-engine scenarios can use
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-16]
+    kind: task
+  - id: slice-6
+    title: Bound manifest and metadata parsing
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-2]
+    kind: slice
+    why: >
+      Slice-2 sets no size or depth budget; slice-5's budget covers only the policy. A hostile
+      manifest or image label gets the same bound by behaviour: input past a limit is refused with
+      its rule. Reuse slice-5's approach; no assertion on heap or GC traces.
+  - id: slice-7
+    title: Run refuses bad invocations
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-1]
+    kind: slice
+    why: >
+      T-11's missing-argv and JSON refusals, on the local tier; a valid argv refuses until later
+      slices. Creates internal/slices/run.
+  - id: slice-8
+    title: Run preflight and frozen settings
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-4, slice-7]
+    kind: slice
+    why: >
+      Refuse invalid input, approval, identity and image with an empty Engine API journal, and write
+      the frozen snapshot. Host user is the effective UID, root refused. Host UID/GID overrides the
+      image; manifest values must equal it; no chown.
+  - id: slice-9
+    title: Owned create and cleanup
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-8, T-20]
+    kind: slice
+    why: >
+      Creates internal/engine/session. An fsynced intent record before create; create unstarted,
+      remove, confirm absence; a write failure and a lost create response. Reconcile by record plus
+      random name.
+  - id: slice-10
+    title: Hardened offline foreground run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-9]
+    kind: slice
+    why: >
+      @engine proof: first-instruction network and DNS denial by NetworkMode none, inspected before
+      start; non-root; read-only root; the checkout as sole mount; literal argv; exit precedence;
+      teardown. No persistent state this milestone, by the person's A2: checkout and tmpfs. Pids
+      limit 4096, no memory or CPU quota claim, by A4.
+  - id: slice-11
+    title: Status and stop
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-10]
+    kind: slice
+    why: >
+      Run's printed retry must work. Foreign, repeated and two-project cases; marker exclusion. By
+      the person's A3 the worker stays isolated if the controller dies, so itos container status or
+      list shows which sessions lost their controller, as candidates to stop. Records beside
+      approvals, random hex IDs, a per-session lock, revalidating daemon and resource before
+      mutating.
+  - id: slice-12
+    title: Budgets, cancellation and loss
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-10]
+    kind: slice
+    why: >
+      T-11's stall, signal, engine-loss and controller-kill cases. Waits: 10 s call, 120 s startup,
+      30 s teardown. Signals: forward once, 10 s grace, then SIGKILL; observed exit wins. Controller
+      loss leaves the worker isolated until stop.
