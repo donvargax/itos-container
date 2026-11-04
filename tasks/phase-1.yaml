@@ -846,3 +846,21 @@
     scenario passes before and after.
   done_when:
     - run: test -d internal/slices/count && ! test -e internal/count && ! test -e tools/slice-layout && tools/bin/architecture-check --siblings --outside --linked --toplevel
+- id: T-15
+  type: docs
+  title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
+  why: >
+    The loop builds better from a detailed plan: steering overnight mostly supplied what the
+    documents left unsaid (what blocks what, the slice layout, how specs commit). An arc42 document
+    gives every step a shared reference: goals and quality goals (charter), context and scope,
+    solution strategy, a building-block view that names each slice and engine and their dependencies
+    (the breakdown step's input), runtime views for the main commands, cross-cutting concepts
+    (ports, fakes, strict config reading), decisions (docs/decisions/), quality requirements mapped
+    to gates, and risks. Source it from docs/plans/container-pilot.md, docs/charter.md, PLAN.md and
+    docs/architecture.md; mark every open choice the contract leaves to the person as open, never
+    decided. A docs task; the person reviews it. The queued architecture draft already covers slice
+    dependencies, command composition and shared contracts. Include doctor’s shared schemas,
+    diagnostics and fixtures across slices 1–4, slice-3’s prerequisites from slices 1–2, and
+    slice-4’s approval integration and implementation order.
+  done_when:
+    - run: sh -eu -c 'f=docs/architecture/arc42.md; test -s "$f"; for section in "## Goals" "## Constraints" "## Context and scope" "## Solution strategy" "## Building-block view" "## Runtime view" "## Deployment view" "## Cross-cutting concepts" "## Decisions" "## Quality requirements" "## Risks and open questions" "## Glossary"; do grep -Fqx "$section" "$f"; done'
