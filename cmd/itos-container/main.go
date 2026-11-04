@@ -54,7 +54,7 @@ func main() {
 // kong's own exit is taken over and becomes run's return: --help and
 // --version print and ask kong to stop, and a run that returns the code is
 // what main exits with, so a test can read what a run printed.
-func run(args []string, in io.Reader, stdout, stderr io.Writer) int {
+func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.Option) int {
 	slog.SetDefault(logger(stderr))
 	ui := &cli.UI{In: in, Stdout: stdout, Stderr: stderr}
 	if len(args) == 0 {
@@ -62,13 +62,14 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer) int {
 	}
 	stopped := -1
 	var c commandLine
-	parser, err := kong.New(&c, append(cli.Flags(),
+	defaults := append(cli.Flags(),
 		kong.Name("itos-container"),
 		kong.Description("Count the lines and words of a file, or of standard input."),
 		kong.Writers(stdout, stderr),
 		kong.Exit(func(code int) { stopped = code }),
 		kong.Vars{"version": version.Text("itos-container")},
-	)...)
+	)
+	parser, err := kong.New(&c, append(defaults, options...)...)
 	if err != nil {
 		// A model kong refuses is a bug, reported as one.
 		return ui.Fail(err, wantsJSON(args))
@@ -145,9 +146,15 @@ func wantsJSON(args []string) bool {
 // logger writes structured logs to w: JSON when w is not a terminal, text
 // when it is, warnings and errors only, so a run is quiet by default.
 func logger(w io.Writer) *slog.Logger {
+	return loggerFor(w, term.IsTerminal)
+}
+
+// loggerFor takes terminal detection separately so redirected test runs can
+// exercise the same text output as an interactive run.
+func loggerFor(w io.Writer, isTerminal func(int) bool) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: slog.LevelWarn}
 	if f, ok := w.(*os.File); ok {
-		if term.IsTerminal(int(f.Fd())) {
+		if isTerminal(int(f.Fd())) {
 			return slog.New(slog.NewTextHandler(w, opts))
 		}
 	}
