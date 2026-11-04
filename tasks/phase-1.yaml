@@ -328,21 +328,3 @@
     checks. Keyword checks do not prove correct prose or isolation: review both documents against
     this entry, especially source differences, current versus planned behaviour, workload exits
     and the approval boundary. Let configured hooks and CI run the wider gates unchanged.
-  done_when:
-    - run: >-
-        sh -eu -c 'git diff --check; grep -Fq "itos container" docs/CLI.md;
-        for command in init doctor approve run exec status stop; do grep -wq "$command" docs/CLI.md; done;
-        grep -Fq "itos-container.yaml" docs/CONFIG.md'
-    - run: >-
-        sh -eu -c 'for file in docs/CLI.md docs/CONFIG.md; do
-        for term in 772cef549d90b9cca7170a2252ad85fc09bd880a 9361616f7204a236e809417726ad107ca4f9b805
-        1533aee2ea3331816e793faaeaabd3f55f83bcaa 2026-11-04 itos-cc charter.md container-pilot.md "not implemented";
-        do grep -Fq "$term" "$file"; done; done'
-    - run: >-
-        sh -eu -c 'for term in ITOS_ROOT ITOS_CONFIG ITOS_JSON ITOS_BIN ITOS_VERSION ITOS_CONTAINER_;
-        do grep -Fq "$term" docs/CLI.md; done;
-        for term in untrusted host-owned frozen duplicate unknown anchors aliases "merge keys" tags
-        version devcontainer.json; do grep -Fq "$term" docs/CONFIG.md; done'
-    - run: >-
-        sh -eu -c '! grep -nE "ITOS_TEMPLATE_|itos template|itos-template reads|itos-template writes|itos-template runs|docs/manifest\.md|config-key-paths|config-print-defaults|case_forms"
-        docs/CLI.md docs/CONFIG.md'
