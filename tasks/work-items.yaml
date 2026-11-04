@@ -109,3 +109,7 @@ items:
       This existing item already requires fresh project-local mutation evidence after T-4. Zero
       eligible cached mutants and passing compatibility checks do not establish the foundation proof
       needed for the charter’s offline owned-run milestone.
+
+      Already covers fresh project-local mutation evidence after T-4. Zero eligible sampling
+      candidates under 0.47.2 means passing compatibility checks cannot establish the foundation
+      proof required for the charter’s offline owned-run milestone.
