@@ -104,7 +104,7 @@ Feature: Bounded policy parsing
   # For "second document", prepend "version: 1\nmanifest: a.json\n---\n".
   # For "first document", prepend nothing. Never add closing delimiters.
   # Both 33 and 32 openings are malformed: only 33 exhausts the parser stack.
-  @wip @slice-5 @ID-PARSING-01
+  @slice-5 @ID-PARSING-01
   Scenario Outline: unfinished flow collections exhaust the parser before a syntax tail
     Given the policy file has 33 unclosed "<shape>" flow collections in the "<position>"
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
@@ -139,7 +139,7 @@ Feature: Bounded policy parsing
   # Append repeat("  ", count) + "[\n" to leave the final value unclosed.
   # The second-document prefix is the same as above. A scalar's indentation is
   # not an additional block collection, and indentation columns are not levels.
-  @wip @slice-5 @ID-PARSING-02
+  @slice-5 @ID-PARSING-02
   Scenario Outline: unfinished indented collections share the bounded parsing contract
     Given the policy file has 33 "<shape>" block levels with an unfinished value in the "<position>"
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
@@ -173,7 +173,7 @@ Feature: Bounded policy parsing
   # New append Given appends DocString bytes and one LF to itos-container.yaml.
   # At the exact limit, the malformed second document still reports syntax;
   # above it, first-document exhaustion must stop inspection before that tail.
-  @wip @slice-5 @ID-PARSING-03
+  @slice-5 @ID-PARSING-03
   Scenario Outline: exhausted representation budgets stop inspection before another document
     Given the policy file has a complete document using <excess> aggregate "<budget>"
     And the following bytes are appended to the policy file:
@@ -212,7 +212,7 @@ Feature: Bounded policy parsing
   # the comment contains apparent YAML syntax; neither consumes nesting.
   # Existing sentinel/snapshot Givens leave helper executables, a manifest and
   # observations in the scratch checkout/isolated host state, never real tools.
-  @wip @slice-5 @ID-PARSING-04
+  @slice-5 @ID-PARSING-04
   Scenario: early parsing refusal is read-only and leaves literal YAML data usable
     Given the policy file has 33 unclosed "sequences" flow collections in the "first document"
     And inspection helper sentinels are installed

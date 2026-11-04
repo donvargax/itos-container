@@ -4,13 +4,15 @@ package yaml
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
+	"go.yaml.in/yaml/v4/plugin/loaderlimits"
 
 	"github.com/donvargax/itos-container/internal/engine/policy/port"
 )
@@ -33,30 +35,50 @@ func (s Source) Read() (port.Value, []port.Issue) {
 	if !utf8.Valid(data) || hasDirectiveLine(data) {
 		return rejected(port.Syntax)
 	}
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	// These fixed, typed plugin options cannot fail configuration. Load into
+	// nodes only: alias targets and merge keys must never be constructed.
+	exhausted := false
+	loader, _ := yaml.NewLoader(bytes.NewReader(data), yaml.WithPlugin(loaderlimits.New(
+		loaderlimits.DepthFunc(func(depth int, _ *yaml.DepthContext) error {
+			// The scanner reports flow and block stack depths independently.
+			if depth > maxDepth {
+				exhausted = true
+				return errors.New("policy parser depth exhausted")
+			}
+			return nil
+		}),
+	)))
 	var document yaml.Node
-	err := decoder.Decode(&document)
+	err := loader.Load(&document)
+	if exhausted {
+		return rejected(port.Complexity)
+	}
 	if err == io.EOF {
 		return rejected(port.Empty)
 	}
 	if err != nil {
 		return rejected(port.Syntax)
 	}
+	root := document.Content[0]
+	remaining := representationBudget{nodes: maxNodes, pathBytes: maxPathBytes}
+	if !remaining.withinLimits(root, 1, 0) {
+		return rejected(port.Complexity)
+	}
 	var next yaml.Node
-	err = decoder.Decode(&next)
+	err = loader.Load(&next)
+	// The parser can wrap/reformat hook errors; classify our recorded outcome,
+	// never raw parser error text. Use the same bounded loader for both reads.
+	if exhausted {
+		return rejected(port.Complexity)
+	}
 	if err == nil {
 		return rejected(port.MultipleDocuments)
 	}
 	if err != io.EOF {
 		return rejected(port.Syntax)
 	}
-	root := document.Content[0]
 	if root.Kind == yaml.ScalarNode && root.Tag == "!!null" && root.Value == "" && root.Style == 0 {
 		return rejected(port.Empty)
-	}
-	remaining := representationBudget{nodes: maxNodes, pathBytes: maxPathBytes}
-	if !remaining.withinLimits(root, 1, 0) {
-		return rejected(port.Complexity)
 	}
 	reader := tree{}
 	value := reader.visit(root)

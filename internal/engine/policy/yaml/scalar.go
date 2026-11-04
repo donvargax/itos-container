@@ -5,12 +5,12 @@ import (
 	"regexp"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 
 	"github.com/donvargax/itos-container/internal/engine/policy/port"
 )
 
-// YAML v3 also resolves YAML 1.1 numbers and timestamps. These YAML 1.2 core
+// The YAML library also resolves YAML 1.1 numbers and timestamps. These YAML 1.2 core
 // scalar patterns supplement its parser; nodes still own all YAML syntax.
 // Core signs apply only to decimal integers: yaml.org/spec/1.2.2/#1032-tag-resolution.
 var (

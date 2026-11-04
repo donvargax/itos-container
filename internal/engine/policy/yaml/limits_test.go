@@ -34,7 +34,8 @@ func TestRepresentationLimits(t *testing.T) {
 		{"deeper review input", "extra: " + nested("[", "]", 8000), port.Complexity, 1},
 		{"budget before scalar validation", strings.Repeat("[", 32) + "!!bool wrong" + strings.Repeat("]", 32), port.Complexity, 1},
 		{"syntax before budget", nested("[", "]", 32) + "[", port.Syntax, 1},
-		{"documents before budget", nested("[", "]", 32) + "\n---\n0", port.MultipleDocuments, 1},
+		// Slice-5 checks the first representation before requesting another document.
+		{"budget before documents", nested("[", "]", 32) + "\n---\n0", port.Complexity, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			value, issues := read(tc.text)
