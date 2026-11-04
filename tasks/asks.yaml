@@ -1,0 +1,5 @@
+# The questions to the person the work is for, written by itos decision (itos help decision).
+questions:
+  - id: q-1
+    item: "slice-4"
+    question: "A1: is approval given at a terminal with a typed fingerprint, or by a scriptable --fingerprint?"
