@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -32,6 +33,20 @@ func (w *world) policySteps(sc *godog.ScenarioContext) {
 	})
 	sc.Step("^the policy file is empty$", func() error {
 		return os.WriteFile(filepath.Join(w.dir, "itos-container.yaml"), nil, 0o600)
+	})
+	sc.Step(`^the policy file contains (\d+) numeric list values spelled "([^"]*)" below an unknown field$`, func(count int, value string) error {
+		data := "version: 1\nmanifest: a.json\nextra:\n" + strings.Repeat("  - "+value+"\n", count)
+		return os.WriteFile(filepath.Join(w.dir, "itos-container.yaml"), []byte(data), 0o600)
+	})
+	sc.Step(`^itos-container runs with "([^"]*)" and a (\d+) second deadline$`, func(args string, seconds int) error {
+		w.deadline = time.Duration(seconds) * time.Second
+		return w.runWith(w.env(), args)
+	})
+	sc.Step("^it finishes before the deadline$", func() error {
+		if w.timedOut {
+			return fmt.Errorf("policy inspection exceeded %s\n%s", w.deadline, w.report())
+		}
+		return nil
 	})
 	sc.Step(`^the core configuration environment names "([^"]*)"$`, func(name string) {
 		w.policy.env["ITOS_CONFIG"] = filepath.Join(w.dir, name)

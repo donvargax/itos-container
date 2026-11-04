@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -32,6 +33,8 @@ type world struct {
 
 	exit           int
 	stdout, stderr string
+	deadline       time.Duration
+	timedOut       bool
 
 	stdin  string // the text the run reads from its standard input, "" for none
 	policy *policyWorld
@@ -381,7 +384,13 @@ func setEnv(env []string, name, value string) []string {
 // runEnv runs program in the folder dir in the environment env, its exit
 // code and output what the Then steps read.
 func (w *world) runEnv(dir string, env []string, program string, args ...string) error {
-	cmd := exec.Command(program, args...)
+	ctx := context.Background()
+	if w.deadline > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.deadline)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(ctx, program, args...)
 	cmd.Dir = dir
 	cmd.Env = env
 	if w.stdin != "" {
@@ -391,6 +400,7 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
+	w.timedOut = errors.Is(ctx.Err(), context.DeadlineExceeded)
 	w.stdout, w.stderr = stdout.String(), stderr.String()
 	var exit *exec.ExitError
 	switch {

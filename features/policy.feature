@@ -114,6 +114,9 @@ Feature: Strict offline sandbox policy
   # go to stderr with the itos-container: prefix, location and corrective advice.
   # Never include source lines, offending scalar values or raw parser errors in
   # diagnostics/logs. Synthetic markers below are not credentials.
+  # Numeric validation must not expand powers of ten from untrusted exponents,
+  # even below unknown fields. Preserve exact finite-number meanings regardless
+  # of exponent magnitude; no rounding, overflow or new syntax cutoff is allowed.
   # Escape diagnostic locations on stderr with Go string escapes (without outer
   # quotes), including controls, backslashes and quotes. Keep printable Unicode
   # readable and JSON paths lossless after JSON decoding and RFC 6901 escaping.
@@ -671,6 +674,46 @@ Feature: Strict offline sandbox policy
       | format |
       |        |
       | --json |
+
+  @wip @slice-1 @ID-POLICY-30
+  Scenario Outline: extreme finite exponents retain their exact schema classification
+    Given the policy file contains:
+      """
+      <document>
+      """
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule   | path   | exit |
+      | <rule> | <path> | 2    |
+    And it exits with code 2
+
+    Examples:
+      | document                                                                     | rule               | path     |
+      | {version: 1e1000001, manifest: a.json}                                          | policy.version     | /version |
+      | {version: 1e-1000001, manifest: a.json}                                         | policy.type        | /version |
+      | {version: 1e999999999999999999999, manifest: a.json}                            | policy.version     | /version |
+      | {version: 1e-999999999999999999999, manifest: a.json}                           | policy.type        | /version |
+      | {version: 0e999999999999999999999, manifest: a.json}                            | policy.version     | /version |
+      | {version: 1, manifest: a.json, extra: [!!float 1e999999999999999999999]}         | policy.unknown_key | /extra   |
+
+  # This small input used to expand each number into a million-digit integer or
+  # denominator before discarding the unknown list. The deadline bounds the child
+  # process in the harness, so the assertion fails without hanging the test runner.
+  @wip @slice-1 @ID-POLICY-31
+  Scenario Outline: repeated numeric exponents cannot amplify policy inspection work
+    Given the policy file contains 1024 numeric list values spelled "<number>" below an unknown field
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule               | path   | exit |
+      | policy.unknown_key | /extra | 2    |
+    And it exits with code 2
+
+    Examples:
+      | number     |
+      | 1e1000000  |
+      | 1e-1000000 |
 
   # New Given: create only harness-owned helper executables on the child PATH for
   # git, docker, devcontainer, sh, bash and npm. Each records execution and exits;
