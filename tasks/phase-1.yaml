@@ -1861,10 +1861,3 @@
     fixture integration evidence and limitations; closure still belongs to the loop after the
     actual pushed head passes. Product image distribution and supported-host proof remain with
     their owning behaviour specs, not this CI fixture.
-  done_when:
-    - run: git grep -q '@engine' -- features && grep -q 'registry' .github/workflows/ci.yml
-    - run: test -x tools/bin/engine-fixture && test -s features/testdata/engine-fixture/Dockerfile && bash -n tools/bin/engine-fixture
-    - run: >-
-        test -s features/engine_fixture_test.go &&
-        grep -q '^func TestEngineFixtureWorkflow(' features/engine_fixture_test.go &&
-        go test ./features -count=1 -run '^TestEngine(FixtureWorkflow|Workflow|Selection)$'
