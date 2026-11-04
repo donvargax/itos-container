@@ -1534,9 +1534,3 @@
     removed for those runs, never on an agent host. No generated mutation/coverage evidence is
     committed here. Let configured hooks/CI run the gates; agents commit and stop, and the loop
     alone pushes, watches the actual head and closes T-16 after its required checks pass.
-  done_when:
-    - run: >-
-        sh -eu -c 'names=$(go test ./features -list "^TestEngine(Selection|Workflow)$");
-        printf "%s\n" "$names" | grep -Fxq TestEngineSelection;
-        printf "%s\n" "$names" | grep -Fxq TestEngineWorkflow'
-    - run: go test ./features -count=1
