@@ -200,7 +200,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: []
+    depends_on: [slice-1]
     kind: slice
     why: >
       Was p2-restricted-worker-manifest.
