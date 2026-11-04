@@ -51,8 +51,9 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 			Policy   *effectivePolicy `json:"policy,omitempty"`
 		}{1, code == 0, "policy", problems, policy})
 	} else if policy != nil {
+		manifest := strconv.Quote(policy.Manifest)
 		_, _ = fmt.Fprintf(u.Stdout, "Policy only\nversion: %d\nmanifest: %s\nnetwork.mode: %s\nHost readiness and approval were not checked\n",
-			policy.Version, policy.Manifest, policy.Network.Mode)
+			policy.Version, manifest[1:len(manifest)-1], policy.Network.Mode)
 	}
 	for _, problem := range problems {
 		// Keys are untrusted text. Escape the terminal location separately from
@@ -72,7 +73,7 @@ func policyDiagnostic(issue port.Issue) policyProblem {
 	case port.Missing:
 		p.Rule, p.Message, p.Fix = "missing", "Policy file is absent", "create itos-container.yaml with an explicit version and manifest"
 	case port.Unreadable:
-		p.Rule, p.Message, p.Fix = "unreadable", "Policy file cannot be read", "provide a readable policy file"
+		p.Rule, p.Message, p.Fix = "unreadable", "Policy file cannot be read", "provide a readable regular policy file of at most 65536 bytes, not a symbolic link"
 		p.Exit = cli.CodeEnvironment
 	case port.Empty:
 		p.Rule, p.Message, p.Fix = "empty", "Policy contains no data", "provide a version and manifest"

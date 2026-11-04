@@ -91,7 +91,16 @@ Manifest parsing remains a separate specification.
 ### Implemented version 1
 
 `doctor --policy-only` reads exactly `itos-container.yaml` in the effective working
-directory, without searching parents or using `ITOS_CONFIG`. The
+directory, without searching parents or using `ITOS_CONFIG`. The policy must be a
+regular file of at most 65536 bytes (64 KiB). The reader opens without following
+the final symbolic link, checks the opened file, and bounds the actual read even
+if it grows. Symbolic links (including dangling links), non-regular files and
+oversized input report `policy.unreadable` with exit 3 before parsing. This does
+not establish checkout identity or approval-time substitution protection.
+
+Successful human output escapes manifest controls, quotes and Unicode line
+separators using Go string escapes without outer quotes. Printable Unicode stays
+readable; JSON retains the original decoded manifest value. The
 [versioned schema](schemas/itos-container-v1.schema.json) describes the closed data
 contract; the YAML restrictions below also apply. The complete behaviour is specified
 in [policy.feature](../features/policy.feature).

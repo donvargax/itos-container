@@ -725,7 +725,7 @@ Feature: Strict offline sandbox policy
 
   # A normal target and a dangling target demonstrate no-follow without ever
   # exposing the unfixed reader to an unbounded device or a blocking FIFO.
-  @wip @slice-1 @bug-2 @ID-POLICY-32
+  @slice-1 @bug-2 @ID-POLICY-32
   Scenario Outline: policy symbolic links are refused without reading their targets
     Given the file "target.yaml" contains "version: 1", "manifest: a.json"
     And the policy file is a symbolic link to "<target>"
@@ -741,7 +741,7 @@ Feature: Strict offline sandbox policy
       | target.yaml  |
       | missing.yaml |
 
-  @wip @slice-1 @bug-2 @ID-POLICY-33
+  @slice-1 @bug-2 @ID-POLICY-33
   Scenario: oversized policy data is refused before parsing
     Given a valid policy is padded with spaces to 65537 bytes
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
@@ -751,7 +751,7 @@ Feature: Strict offline sandbox policy
       | policy.unreadable |      | 3    |
     And it exits with code 3
 
-  @wip @slice-1 @bug-3 @ID-POLICY-34
+  @slice-1 @bug-3 @ID-POLICY-34
   Scenario Outline: successful policy output escapes terminal controls and preserves JSON data
     Given the policy file contains:
       """
