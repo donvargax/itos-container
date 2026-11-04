@@ -78,8 +78,8 @@ items:
   - id: T-8
     title: Record a fresh foundation mutation baseline with pinned itos-cc
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-4]
     kind: task
   - id: p1-bound-pinned-tool-downloads
@@ -135,3 +135,18 @@ items:
       The milestone needs accurate coordinator guidance. Replace template branch assumptions and
       stale CLI, godog and proof coverage claims with instructions matching the charter and current
       configuration.
+
+      Include this distinction in the planned coordinator guidance refresh: use itos work show and
+      tasks/phase-1.yaml for inspection. itos task executes checks, including T-8's full mutation
+      measurement, so drafting guidance must not present it as read-only inspection.
+  - id: p1-track-gherkin-mutation-freshness
+    title: Review Gherkin inputs in mutation freshness tracking
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The offline owned-run milestone depends on trustworthy scenario-backed proof. Verify and
+      configure support-file tracking so Gherkin-only changes invalidate affected cached mutation
+      evidence.
