@@ -325,14 +325,15 @@ items:
       The output of that failure was lost, so the cause is not known: suspect a timeout or a
       contended build in the matrix. itos.yaml being an enforcement input runs it on every such
       commit. Capture a failure first.
-  - id: p2-policy-parser-resource-budget
+  - id: slice-5
     title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p2-policy-parser-resource-budget.
       slice-1's security reviews, 2026-11-04: seven findings on memory amplification from a policy
       under 64 KiB: nesting, custom tags, %TAG prefixes, self-aliases under a long key. Each was
       real, and each fix earned a review finding the next variant. The worst outcome is doctor
