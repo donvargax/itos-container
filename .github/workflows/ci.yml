@@ -20,9 +20,14 @@ env:
 
 jobs:
   ci:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    needs: [engine]
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     steps:
+      - name: Require engine success
+        env:
+          ENGINE_RESULT: ${{ needs.engine.result }}
+        run: test "$ENGINE_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -43,7 +48,38 @@ jobs:
       - run: itos verify "$FROM" "$TO"
       - run: itos ci run "$FROM" "$TO"
 
-  # Every test, the unit tests and the whole godog suite, runs automatically on Linux for
+  # This is readiness infrastructure until live @engine scenarios are implemented.
+  # The preflight is read-only; it does not acquire images or create containers.
+  engine:
+    name: Engine scenarios (Linux amd64)
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TO }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Docker server preflight
+        shell: bash
+        run: |
+          timeout --signal=TERM --kill-after=1s 29s bash -euo pipefail <<'PREFLIGHT'
+          command -v docker >/dev/null
+          test -S /var/run/docker.sock
+          server=$(env -u DOCKER_CONTEXT -u DOCKER_HOST -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH -u DOCKER_API_VERSION docker --host unix:///var/run/docker.sock version --format '{{json .Server}}')
+          jq -e '.Os == "linux" and .Arch == "amd64"' <<<"$server" >/dev/null
+          jq -c --arg commit "$TO" '{version: .Version, apiVersion: .ApiVersion, os: .Os, architecture: .Arch, commit: $commit}' <<<"$server"
+          PREFLIGHT
+      - name: Engine scenarios
+        timeout-minutes: 5
+        env:
+          ITOS_CONTAINER_ENGINE_TESTS: "1"
+        run: go test ./features -count=1 -v -timeout=5m -run '^TestFeatures$'
+
+  # Unit tests and the non-engine godog tier run automatically on Linux for
   # main pushes and non-draft pull requests. Manual dispatch also runs this Linux suite.
   platform:
     name: Tests (${{ matrix.os }})
