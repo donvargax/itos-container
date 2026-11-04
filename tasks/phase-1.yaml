@@ -619,3 +619,43 @@
     nothing slow or random remains once this lands.
   done_when:
     - run: "! git ls-files .metrics/mutate | grep -q . && grep -q 'mutation run --count 10 --since {base} --seed {base}' itos.yaml && ! grep -q 'mutation sample' itos.yaml"
+- id: T-14
+  type: ci
+  title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade
+  why: >
+    Replaces T-10, whose generator refuses the shared engine package docs/architecture.md prescribes
+    and leaves any directory without a domain or port child unruled (probes: internal/flat with
+    os/exec and a foreign adapter passes; a domain importing syscall, encoding/json, flag and kong
+    passes; a port with os/exec passes; a handler importing a foreign adapter passes;
+    //nolint:depguard passes). Two mature repositories hold the answer; copy from them rather than
+    the template, which is behind: donvargax/itos-cc (.golangci.yml,
+    tools/bin/architecture-check, docs/decisions ADR-0047, ADR-0051,
+    internal/coverage/port/porttest/contract.go) and donvargax/itos
+    (.golangci.yml, docs/ARCHITECTURE.md, ADR-0053). origin/T-10 holds fixtures worth reusing: they
+    compile first, so a type error cannot pass as a refusal. Settled: (1) Layout:
+    internal/slices/<cmd>/{command,domain,port,<adapter>} and
+    internal/engine/<name>/{domain,port,<adapter>}; the path says what a package is, so depguard's
+    globs are static in .golangci.yml and tools/slice-layout's generator does not land. Move
+    internal/count to internal/slices/count. (2) Default deny: every package under internal/ is held
+    by a rule; one no rule names fails, including internal/engine nested packages and pkg/.
+    internal/cli, internal/version and internal/release are named. (3) A domain imports the standard
+    library's pure packages by allowlist plus its own port and an engine's domain or port, nothing
+    else: no os, os/exec, net, net/http, syscall, golang.org/x/sys, encoding/json, flag, kong. (4) A
+    port imports only ports and does no I/O. (5) A slice imports no other slice and no adapter, its
+    own neither; cmd/ is the assembly that binds adapters. (6) An adapter may import its own domain
+    and port, as itos-cc ADR-0047 decided after finding the ban forced mappers;
+    docs/architecture.md's contrary sentence goes. (7) internal/cli imports nothing of ours: a
+    slice's failure classifier sits beside the slice and cmd hands it over (itos-cc's ui rule);
+    today cli.go:20 and codes.go:3 import count's port, so every new slice would edit the shared UI.
+    (8) A fake cannot reach production: porttest and fakes are refused outside tests, and
+    tools/bin/architecture-check --siblings --outside --linked --toplevel, on go list arrows no
+    nolint can suppress, runs in ci. (9) A //nolint:depguard in the tree fails the gate. (10)
+    Contract suites: a port's <port>/porttest suite runs against both its fake and its real adapter;
+    count's disk adapter gets one as the example, since agents test only against fakes and drift is
+    this project's core risk. (11) Each rule is proven by a fixture that breaks it, and
+    TestNoDenyEntryPrefixesAnother is carried over, as depguard hides a deny that prefixes another.
+    Fixtures run only when the rules change, not on every commit. docs/architecture.md and AGENTS.md
+    describe the result, and a record in docs/decisions says why. Behaviour does not change: every
+    scenario passes before and after.
+  done_when:
+    - run: test -d internal/slices/count && ! test -e internal/count && ! test -e tools/slice-layout && tools/bin/architecture-check --siblings --outside --linked --toplevel
