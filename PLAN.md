@@ -1,112 +1,73 @@
 # itos-container: the plan
 
-This is a template that is a real project, not a folder of placeholders. Its code and tooling
-are minimal examples of the rules a made project starts with. The generator is
-[itos-template](https://github.com/donvargax/itos-template); this repository does not copy its
-rendering, manifest-reading or update domain code.
+Read [docs/charter.md](docs/charter.md) first: it selects the scope this project may build
+from the binding [pilot contract](docs/plans/container-pilot.md). Those documents are
+authoritative; this plan describes the selected milestone and the work still needed.
 
-## Shape
+`itos-container` is being built as the `itos container` extension to run a coding agent
+and every tool it executes inside a local container sandbox for one checkout. Core itos
+retains work routing, commit rules and CI proof.
 
-The default/root branch is `main`. `stack/go` branches off it; `go/cli` branches off the stack.
-Common changes merge downward without rebasing published history. The supported combinations
-will be `go` and `go + cli`, proved by rendering both and running their checks.
+## Current state
 
-The manifest's literals are real values: `itos-container` for the project name, with its five
-case forms; `donvargax` for the attribution owner; and
-`github.com/donvargax/itos-container` for the module path. A render substitutes answers after
-merging branches. AGPL-3.0 is this copy's license; owner attribution is an answer, not a secret.
+The repository has an inherited Go counting CLI, its domain-owned Files port, disk and
+standard-input adapters, in-memory fake, unit/property tests and black-box scenarios.
+The entry point exposes count, version and completion. Container commands and isolation
+are not implemented yet; the counting example is no evidence of a sandbox.
+
+T-3 completed the itos 8 workflow migration and T-4 upgraded the pinned itos-cc. These
+are tool migrations, not completion of the foundation or sandbox. The inherited Go
+checks and release tooling cover multiple platforms, not container-host support. T-4's
+cached mutation sample had zero eligible records; it did not establish a fresh baseline.
 
 ## Order of work
 
-1. Root: shared docs, fresh itos data, git conventions, Renovate configuration and root-only CI.
-2. Go stack: a working Go project, its locked dependencies, private counting domain, Files port,
-   read-only disk adapter, in-memory fake, example/property tests and gates applicable to its code.
-   It has no public CLI or scenario runner yet.
-3. CLI feature: Kong UI, a thin handler over the counting domain and black-box scenarios. Joined-
-   pieces properties respect word boundaries; arbitrary concatenation is not promised additive.
-4. Template CI: render and check both combinations, with pinned gitleaks marked as a credential
-   scan. Only after this passes is the template advertised as ready.
+1. **Project foundation:** complete project-specific guidance, adapt `docs/CLI.md` and
+   `docs/CONFIG.md` to the planned extension and `itos-container.yaml`, comparing the
+   current itos and itos-cc guidelines and using whichever is newer. Align CI branch
+   conditions and establish fresh foundation proof in their separately recorded work.
+   Preserve the counting example and its existing gates, pinned tools and release machinery.
+2. **Configuration, doctor and approval:** specify and build the strict policy file,
+   restricted single-worker devcontainer manifest and host-owned approval state without
+   executing checkout code. Select maintained parsing and engine libraries in the specs
+   before adding pinned dependencies; retain domain-owned ports and fakes.
+3. **Offline owned run:** the planned target is `itos container run -- <argv>`, preserving
+   explicit argument boundaries in an approved, hardened container with no network at all.
+   Require the checkout as its only host mount, non-root identity, recorded resource
+   ownership, bounded startup, foreground exit and safe cleanup of owned resources while
+   preserving checkout edits and project state. Each property needs a black-box scenario
+   that fails without it and passes with it before the milestone can be called complete.
 
-Keep the completed Go/CLI project's machinery whole: three-platform CI, itos gates, code proof,
-rapid properties, godog scenarios, pinned tools, Renovate and attested binary releases. Attach
-each part to the branch where its prerequisites exist. Root alone cannot build a binary or
-measure a nonexistent domain; the finished branches must not retain weaker placeholder gates.
+Foundation work has named task checks. Behaviour work starts with scenarios and red step
+commits. Domain tests use an engine fake; scenarios needing a real engine run only in CI.
+Agents never receive the Docker socket. Agents commit their work; the coordinating loop
+pushes, marks pull requests ready and closes items after the pushed head is green and its
+required proof passes.
 
-Template releases and the generator's adoption/update workflow are separate later work. Binary
-release tooling carried by a made CLI project is not a template-release protocol.
+## Milestone limits
 
-## Security and runtime ideas to explore
+The first milestone targets Linux amd64 with native Docker. Even that combination has no
+support claim until passing runtime evidence exists. Proxy egress, credentials/accounts,
+Git over the network, LAN ingress, Compose services and other platforms remain outside
+this milestone. The broader pilot contract does not authorize building them here yet.
 
-These are research directions, not selected dependencies, promised protections or additions to
-the bootstrap sequence above. The aim is to reduce what an agent or model-generated program can
-access, and explore a lighter runtime where the harness supports it. Separate the harness's
-runtime from the sandbox that executes its tools; either can change without moving the other.
+Assume hostile checkout code, arbitrary tool execution, dependency scripts and
+prompt-injected instructions. Hooks and agent instructions are workflow safeguards, not
+the filesystem or network isolation boundary. The checkout is intentionally writable;
+it is not protected from destructive edits. Containers do not protect against host
+administrators or kernel/container escapes.
 
-Start with a threat model for untrusted repository content, generated code and tool calls.
-Filesystem access, network destinations, credentials and resource budgets need explicit limits
-enforced outside guest code. Keep credentials behind a narrow broker where possible, and treat
-each exposed tool as authority that isolation alone cannot make safe.
+## Deferred research
 
-- Explore V8 isolates in a Workers-style runtime for generated JavaScript and possibly the
-  agent loop itself. Compare their security and operating costs with hardened containers or
-  VMs rather than assuming isolates are stronger. Cloudflare's
-  [Workers security model](https://developers.cloudflare.com/workers/reference/security-model/)
-  combines isolates with process sandboxing, mediated APIs and side-channel defenses; embedding
-  V8 alone does not reproduce those protections.
-- Consider WASM for portable tools or harness components, with narrowly granted host imports
-  or WASI capabilities and bounded memory and execution. Compilation does not grant Unix process,
-  filesystem or network compatibility, and permissive host imports can undo the intended limits.
-  JavaScript can run directly in V8; a WASM build is not a prerequisite for that path.
-- Evaluate Vercel's [just-bash](https://justbash.dev/) as a restricted shell tool with a virtual
-  filesystem and network disabled unless explicitly allowed. It may cover inspection and text
-  processing without exposing a real shell. It is not a VM or a replacement for arbitrary native
-  builds; filesystem adapters and custom commands must not quietly restore host authority.
-- Study [OpenCode Code Mode](https://opencode.ai/v2/docs/tools#execute) as a stretch idea for
-  composing tool calls in generated JavaScript through a small catalog. Verify its actual
-  execution boundary before reusing it. Tool orchestration and V8 isolation address different
-  concerns: a Code Mode interface could sit inside an isolate, with authorization still enforced
-  on every host tool call. Compare that combination with a smaller isolate-only interface.
-
-A possible runtime split is to keep closed harnesses such as Claude Code in hardened containers
-and adapt open-source harnesses such as pi or OpenCode to an isolate runtime where feasible.
-Choose by required capabilities, not license alone. OpenCode V2 already documents a
-[workerd SDK](https://opencode.ai/v2/docs/build/sdk/cloudflare) for Durable Objects that replaces
-local filesystem and process services; investigate that route before attempting a WASM port.
-Compatibility for pi and Claude Code is unproven here. Using a Claude model API from an isolate
-is a separate question from running the Claude Code harness there.
-
-### Working hypothesis and first experiment
-
-Favor isolated orchestration plus disposable execution over replacing containers wholesale or
-porting every harness to WASM. Keep a hardened container baseline while testing this split:
-
-```text
-Harness -> permission/capability broker -> restricted tools
-                                       -> disposable native-code runner
-```
-
-The broker must enforce permissions independently of the harness and generated code. An agent
-that can request a build does not thereby need unrestricted machine access. Giving an isolate
-a broadly privileged shell tool would defeat much of the intended restriction.
-
-Start with an OpenCode agent turn in workerd using scoped file tools, restricted network access
-and, if compatible, just-bash. Its virtual filesystem could hold proposed edits for a trusted
-component to validate and apply; it must not be the sole containment boundary. Delegate native
-builds and tests to a disposable container without model-provider credentials. Keep Code Mode
-optional until the smaller tool interface works, and investigate WASM for individual components
-only where it solves a demonstrated need.
-
-Prove session recovery, rejection of forbidden file reads and network requests, and cancellation
-and termination of runaway work. Check resource exhaustion and ensure secrets stay outside
-guest-visible state. Record unsupported plugins, subprocess and terminal needs, escape and
-side-channel risks, and patching responsibilities before selecting a runtime or making security
-claims. The experiment should show whether the hybrid improves containment without requiring
-every harness to use the same runtime.
-Any adopted option belongs on a real runtime branch with its own checks, not a template switch.
+Isolates, WASM, restricted shells and a capability broker remain research ideas outside
+this milestone. No dependency, experiment or runtime branch is selected or authorized
+by this plan. Report findings as ideas for the coordinator; do not implement them here.
 
 ## Provenance
 
-Infrastructure is harvested from the owner's itos and itos-template projects rather than
-rewritten. The owner authorized AGPL-3.0 distribution of their copied work for this template.
-Preserve original provenance and applicable third-party notices. Do not replace real upstream
-tool and preset identities when substituting project identity.
+This project is AGPL-3.0 licensed with attribution to donvargax; see [LICENSE](LICENSE) and
+[CONTRIBUTORS.md](CONTRIBUTORS.md). Infrastructure comes from the owner's
+[itos](https://github.com/donvargax/itos) and
+[itos-template](https://github.com/donvargax/itos-template) projects, with permission to
+distribute that owner's copied work under AGPL-3.0 here. Preserve the original projects' and
+third-party dependencies' licenses and notices; that permission does not relicense them.

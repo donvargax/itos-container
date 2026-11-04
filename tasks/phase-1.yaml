@@ -128,7 +128,95 @@
   type: docs
   title: Replace inherited template guidance in PLAN.md, README.md and AGENTS.md
   why: >
-    The charter explicitly requires project-specific foundation guidance so subsequent work follows
-    the offline owned-run milestone and its boundaries.
+    PLAN.md and AGENTS.md still describe a template and its stack branches; README.md presents
+    this project as a generator input with replaceable attribution. Replace that guidance with
+    this project's purpose and current state. This is documentation-only foundation work under
+    docs/charter.md, not container behaviour: no scenarios, step definitions or runtime changes.
+    Each of the three files must link to docs/charter.md and docs/plans/container-pilot.md, name
+    the planned itos container extension and the offline owned-run milestone, and make the
+    charter's selected scope and the pilot's binding contract authoritative. Read the charter
+    before PLAN.md; do not change either authority to fit inherited guidance.
+
+    PLAN.md must replace template rendering, branch selection and bootstrap sequencing with the
+    charter's order: project foundation, configuration/doctor/approval, then an offline owned
+    run. Describe the milestone's target, itos container run -- <argv>, as planned: an approved,
+    hardened container with no network, the checkout as its only host mount, non-root identity,
+    recorded ownership, bounded startup, foreground exit and safe owned cleanup, each requiring
+    failing-then-passing scenario evidence. Core itos retains work routing, commit rules and CI
+    proof. T-3 and T-4 completed tool migrations, not the entire foundation or the sandbox.
+    Keep runtime alternatives (isolates, WASM, restricted shells and a capability broker) only
+    as deferred research, with no selected dependency, experiment or runtime branch authorized
+    by this edit. They may be shortened to a clearly deferred research note.
+
+    State the first milestone's limits in PLAN.md and README.md and link them from AGENTS.md:
+    Linux amd64 with native Docker is the target, with no support claim before runtime proof.
+    Proxy egress, credentials/accounts, network Git, LAN ingress, Compose and other platforms
+    remain outside this milestone. Distinguish the inherited multi-platform Go checks and release
+    tooling from container-host support. Hooks and agent instructions are workflow safeguards,
+    not the isolation boundary; assume hostile checkout code and tool execution. Do not promise
+    protection against host administrators or kernel/container escapes.
+
+    README.md must distinguish existing code from the planned product. The current entry point
+    in cmd/itos-container/main.go already exposes the inherited itos-container count <file>
+    example (including standard input and JSON), version and completion. Keep a concise, accurate
+    description of that foundation and its Go checks; explicitly say the container commands and
+    isolation are not implemented yet. Do not describe planned container commands as runnable
+    setup instructions or claim the counting CLI proves a sandbox. Retain the counting example,
+    its port/fake architecture, whitespace tokenization and newline-terminated additive property
+    in the guidance where relevant. Do not claim a fresh foundation mutation baseline from a
+    passing cached sample: T-4 reported zero eligible records, and baseline work is separate.
+
+    AGENTS.md must put the charter first and require itos guide work and itos guide commit for
+    the assigned role. Preserve scenario-first behaviour work with red step commits, task checks
+    for foundation work, direct implementation without subagents, itos registry ownership rules,
+    status inspection and explicit own-file staging, and commits only through itos commit.
+    Replace instructions for the implementing agent to push or close an item with the charter's
+    division: agents commit; only the coordinating loop pushes, marks a pull request ready and
+    closes an item after the actual pushed head is green and required proof passes. Respect a
+    brief's role and coordinator-owned lifecycle actions; a drafter does not take the item.
+    Keep hook/CI gates, no bypasses, no force-push or published-history rewrite, and no hand-edited
+    owners/statuses. Keep the pinned itos-cc requirement, all-tests, fail-uncovered, no-annotate,
+    the parent of the item's actual first commit (specs included) as proof base, committed
+    project-local evidence, tests for survivors and uncovered code, and reasoned exceptions only
+    for genuinely equivalent mutants. Documentation-only work touches no proof.code path and
+    must not fabricate mutation results.
+
+    Preserve domain-owned ports, thin entry points, our fakes rather than mocks, OS-as-value
+    logic and the narrow build-tag rule. Add the charter's engine boundary: domain tests use an
+    engine fake, real-engine scenarios run only in CI, and agents never receive the Docker
+    socket. Preserve the bans on credentials in files/logs and on weakening gates. Keep the
+    generated block between the itos markers unchanged. Retain accurate AGPL-3.0 attribution to
+    donvargax and the authorized infrastructure provenance from itos and itos-template, together
+    with the original projects' and dependencies' notices and links to LICENSE/CONTRIBUTORS.md;
+    the owner is not an illustrative answer and this repository is not a template generator.
+
+    Implementation edits only PLAN.md, README.md and AGENTS.md. Do not alter the charter,
+    contract, code, tests, configuration, gates, license files or generated rules. Retargeting
+    docs/CLI.md and docs/CONFIG.md, CI branch conditions and fresh baseline proof are separate
+    recorded work. No new library or service is needed. Keep AGENTS.md within its existing
+    document cap; let the configured hooks and CI run their checks without changing their tiers.
+
+    The checks use existing shell tools, with no RTK or ripgrep requirement in CI. Before the
+    edit, the source/scope check fails on the missing charter link in PLAN.md (all three files
+    lack the required links and milestone); the retired-claims check finds template claims in
+    all three files; the agent-rules check fails on the missing itos guide commit instruction
+    and Docker socket boundary. Its other terms preserve existing proof and commit rules.
+    These are cheap documentation checks, not runtime isolation proof. Review the prose against
+    the decisions above as well: keyword presence alone cannot establish truthful status,
+    correct loop ownership, milestone limits or preserved provenance.
   done_when:
-    - run: rtk proxy sh -c 'for f in PLAN.md README.md AGENTS.md; do rg -Fq "docs/charter.md" "$f" && rg -Fq "itos container" "$f" && rg -qi "offline" "$f" || exit 1; done; ! rg -n "repository is itself the template|real Go project template|This is a template that is a real project|illustrative attribution owner|not the public CLI yet" PLAN.md README.md AGENTS.md'
+    - run: >-
+        for f in PLAN.md README.md AGENTS.md; do
+        grep -Fq 'docs/charter.md' "$f" &&
+        grep -Fq 'docs/plans/container-pilot.md' "$f" &&
+        grep -Fq 'itos container' "$f" && grep -qi 'offline' "$f" || exit 1;
+        done
+    - run: >-
+        test -f PLAN.md && test -f README.md && test -f AGENTS.md &&
+        ! grep -Eni 'repository is itself the template|real Go project template|This is a template that is a real project|illustrative attribution owner|not the public CLI yet|stack/go|go/cli|Select branches before rendering|both planned combinations|This copy is AGPL-3.0 licensed'
+        PLAN.md README.md AGENTS.md
+    - run: >-
+        for term in 'itos guide work' 'itos guide commit' 'itos commit'
+        'all-tests' 'fail-uncovered' 'no-annotate' 'Docker socket'; do
+        grep -Fq "$term" AGENTS.md || exit 1;
+        done
