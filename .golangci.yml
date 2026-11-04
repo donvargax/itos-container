@@ -1,4 +1,6 @@
 version: "2"
+# Role rules follow itos-cc ADR-0047/0051 and itos ADR-0053. The graph check
+# resolves owner/layer arrows that depguard's import prefixes cannot express.
 linters:
   default: standard
   enable:
@@ -8,29 +10,144 @@ linters:
   settings:
     depguard:
       rules:
-        domain:
+        unclassified:
+          list-mode: strict
           files:
-            - "**/internal/count/domain/**"
-          deny:
-            - pkg: os
-              desc: "the domain reaches files through its port"
-            - pkg: net
-              desc: "the domain does no I/O"
-        infra:
+            - "**/internal/**"
+            - "**/pkg/**"
+            - "!**/internal/cli/**"
+            - "!**/internal/version/**"
+            - "!**/internal/release/**"
+            - "!**/internal/slices/*/*/**"
+            - "!**/internal/engine/*/*/**"
+          allow:
+            - "architecture.invalid/unclassified$"
+        domain:
+          list-mode: strict
+          files:
+            - "**/internal/slices/*/domain/**"
+            - "**/internal/engine/*/domain/**"
+            - "!$test"
+          allow:
+            - "bytes$"
+            - "errors$"
+            - "strings$"
+            - "github.com/donvargax/itos-container/internal/slices/"
+            - "github.com/donvargax/itos-container/internal/engine/"
+        domain-tests:
+          list-mode: strict
+          files:
+            - "**/internal/slices/*/domain/*_test.go"
+            - "**/internal/slices/*/domain/**/*_test.go"
+            - "**/internal/engine/*/domain/*_test.go"
+            - "**/internal/engine/*/domain/**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/donvargax/itos-container/internal/slices/"
+            - "github.com/donvargax/itos-container/internal/engine/"
+            - "pgregory.net/rapid$"
+        port:
+          list-mode: strict
+          files:
+            - "**/internal/slices/*/port/**"
+            - "**/internal/engine/*/port/**"
+            - "!$test"
+            - "!**/internal/slices/*/port/porttest/**"
+            - "!**/internal/engine/*/port/porttest/**"
+          allow:
+            - "bytes$"
+            - "errors$"
+            - "strings$"
+            - "github.com/donvargax/itos-container/internal/slices/"
+            - "github.com/donvargax/itos-container/internal/engine/"
+        port-tests:
+          list-mode: strict
+          files:
+            - "**/internal/slices/*/port/*_test.go"
+            - "**/internal/slices/*/port/**/*_test.go"
+            - "**/internal/engine/*/port/*_test.go"
+            - "**/internal/engine/*/port/**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/donvargax/itos-container/internal/slices/"
+            - "github.com/donvargax/itos-container/internal/engine/"
+        command:
+          list-mode: strict
+          files:
+            - "**/internal/slices/*/command/**"
+          allow:
+            - "$gostd"
+            - "github.com/donvargax/itos-container/internal/cli$"
+            - "github.com/donvargax/itos-container/internal/slices/"
+            - "github.com/donvargax/itos-container/internal/engine/"
+        adapter:
           list-mode: lax
           files:
-            - "**/internal/count/disk/**"
+            - "**/internal/slices/*/*/**"
+            - "**/internal/engine/*/*/**"
+            - "!**/internal/slices/*/domain/**"
+            - "!**/internal/slices/*/port/**"
+            - "!**/internal/slices/*/command/**"
+            - "!**/internal/engine/*/domain/**"
+            - "!**/internal/engine/*/port/**"
+            - "!**/internal/engine/*/command/**"
           allow:
-            - github.com/donvargax/itos-container/internal/count/port$
+            - "github.com/donvargax/itos-container/internal/slices/"
+            - "github.com/donvargax/itos-container/internal/engine/"
           deny:
-            - pkg: github.com/donvargax/itos-container/internal/count/domain$
-              desc: "infrastructure imports only the port it implements"
-        rapid:
+            - pkg: "github.com/donvargax/itos-container/"
+              desc: "adapters import only their own domain, port and helpers, or engine APIs"
+        porttest:
+          list-mode: strict
           files:
-            - $all
-            - "!**/internal/count/domain/*_test.go"
+            - "**/internal/slices/*/port/porttest/**"
+            - "**/internal/engine/*/port/porttest/**"
+          allow:
+            - "$gostd"
+            - "github.com/donvargax/itos-container/internal/slices/"
+            - "github.com/donvargax/itos-container/internal/engine/"
+        ui:
+          list-mode: strict
+          files:
+            - "**/internal/cli/**"
+          allow:
+            - "$gostd"
+            - "github.com/alecthomas/kong$"
+        version:
+          list-mode: strict
+          files:
+            - "**/internal/version/**"
+          allow:
+            - "$gostd"
+        release:
+          list-mode: strict
+          files:
+            - "**/internal/release/**"
+            - "!$test"
+            - "!**/internal/release/releasetest/**"
+          allow:
+            - "$gostd"
+            - "github.com/donvargax/itos-container/internal/release$"
+        release-tests:
+          list-mode: strict
+          files:
+            - "**/internal/release/*_test.go"
+            - "**/internal/release/**/*_test.go"
+            - "**/internal/release/releasetest/**"
+          allow:
+            - "$gostd"
+            - "github.com/donvargax/itos-container/internal/release$"
+            - "github.com/donvargax/itos-container/internal/release/releasetest"
+        rapid:
+          list-mode: lax
+          files:
+            - "$all"
+            - "!**/internal/slices/*/domain/*_test.go"
+            - "!**/internal/slices/*/domain/**/*_test.go"
+            - "!**/internal/engine/*/domain/*_test.go"
+            - "!**/internal/engine/*/domain/**/*_test.go"
           deny:
-            - pkg: pgregory.net/rapid
+            - pkg: "pgregory.net/rapid"
               desc: "rapid is used only by domain property tests"
     revive:
       rules:

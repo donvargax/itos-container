@@ -91,6 +91,8 @@ ci:
         test -f .github/renovate.json5 && test -x tools/bin/doc-caps
       cost: static
     - { run: "! gofmt -l cmd internal features | grep .", cost: static } # names each file gofmt would change
+    - { run: "tools/bin/architecture-check --siblings --outside --linked --toplevel", cost: static }
+    - { run: 'tools/bin/architecture-check --fixtures-if-changed "$FROM" "$TO"', cost: static }
     - { run: go build ./..., cost: static }
     - { run: go vet ./..., cost: static }
     - { run: go mod verify, cost: static }

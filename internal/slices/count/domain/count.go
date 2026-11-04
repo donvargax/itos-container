@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"strings"
 
-	"github.com/donvargax/itos-container/internal/count/port"
+	"github.com/donvargax/itos-container/internal/slices/count/port"
 )
 
 // Result is the number of logical lines and whitespace-delimited words.

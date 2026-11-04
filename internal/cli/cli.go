@@ -2,22 +2,15 @@
 // writes, the lines on stderr, the --json object, and the one place an error
 // becomes an exit code.
 //
-// The domain's errors are a sealed set of plain types carrying no exit code,
-// rule ID or wording. Here each kind has one switch giving it its code
-// (docs of count's command, "Exit codes"), its rule ID for --json, its line
-// for people and what to do about it, every kind classified and none with a
-// default: a kind no case classifies is the 70 of an unclassified bug, never
-// a child process's status passed through.
+// Commands supply classifiers for their typed failures. This UI owns output,
+// joined-error traversal and the fallback for an unclassified internal error.
 package cli
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/donvargax/itos-container/internal/count/port"
 )
 
 // The exit codes, as count's command's help states them.
@@ -29,10 +22,14 @@ const (
 
 // UI is a command's ends: what it reads and where it writes. Nothing here
 // asks a question, so there is no terminal to know of.
+// Classifier gives a known failure its code and problems, or zero and nil.
+type Classifier func(error) (int, []Problem)
+
 type UI struct {
-	In     io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Classify Classifier
+	In       io.Reader
+	Stdout   io.Writer
+	Stderr   io.Writer
 }
 
 // Problem is one thing wrong, as --json gives it: its rule ID, its sentence
@@ -47,7 +44,7 @@ type Problem struct {
 // withJSON the failure's object on stdout first, then each problem a line on
 // stderr.
 func (u *UI) Fail(err error, withJSON bool) int {
-	problems, code := report(err)
+	problems, code := report(err, u.Classify)
 	return u.fail(problems, code, withJSON)
 }
 
@@ -98,14 +95,14 @@ func (u *UI) Line(message string) {
 }
 
 // Code is err's exit code.
-func Code(err error) int {
-	_, code := report(err)
+func Code(err error, classify Classifier) int {
+	_, code := report(err, classify)
 	return code
 }
 
 // Message is err as people read it: each problem's sentence, a line each.
-func Message(err error) string {
-	problems, _ := report(err)
+func Message(err error, classify Classifier) string {
+	problems, _ := report(err, classify)
 	lines := make([]string, len(problems))
 	for i, p := range problems {
 		lines[i] = p.Message
@@ -115,11 +112,11 @@ func Message(err error) string {
 
 // report is every problem of err, joined ones each on its own, and the exit
 // code of them all: the highest.
-func report(err error) ([]Problem, int) {
+func report(err error, classifier Classifier) ([]Problem, int) {
 	var problems []Problem
 	code := 0
 	for _, e := range leaves(err) {
-		c, p := classify(e)
+		c, p := classify(e, classifier)
 		problems = append(problems, p...)
 		code = max(code, c)
 	}
@@ -139,26 +136,17 @@ func leaves(err error) []error {
 	return all
 }
 
-// one is a problem of its rule, its sentence and its fix.
-func one(rule, format, fix string, args ...any) []Problem {
-	return []Problem{{Rule: rule, Message: fmt.Sprintf(format, args...), Fix: fix}}
-}
-
 // internal is err as an internal error, a defect of ours.
 func internal(err error) []Problem {
 	return []Problem{{Rule: "internal", Message: err.Error(), Fix: "report this as a bug"}}
 }
 
-// classify is err's exit code and problems, from the sealed set it is of:
-// only an error of none is an internal one, exit 70.
-//
-// The switch below starts from an internal error and names every kind, so a
-// kind added without a case here would still exit 70, as a bug, rather than
-// take another kind's code by accident.
-func classify(err error) (int, []Problem) {
-	var failure port.ReadFailure
-	if errors.As(err, &failure) {
-		return readProblem(failure)
+// classify delegates known failures and keeps the unknown-error fallback here.
+func classify(err error, classifier Classifier) (int, []Problem) {
+	if classifier != nil {
+		if code, problems := classifier(err); code != 0 {
+			return code, problems
+		}
 	}
 	return CodeInternal, internal(err)
 }

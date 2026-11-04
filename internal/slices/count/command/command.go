@@ -12,8 +12,8 @@ import (
 	"fmt"
 
 	"github.com/donvargax/itos-container/internal/cli"
-	"github.com/donvargax/itos-container/internal/count/domain"
-	"github.com/donvargax/itos-container/internal/count/port"
+	"github.com/donvargax/itos-container/internal/slices/count/domain"
+	"github.com/donvargax/itos-container/internal/slices/count/port"
 )
 
 // CLI is the count command: the file it counts, and whether it prints the

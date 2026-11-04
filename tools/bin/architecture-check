@@ -1,0 +1,10 @@
+#!/bin/sh
+# Build with this repository's pinned module, inspect the caller's current module.
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+(cd "$root" && go build -o "$tmp/architecture-check" ./tools/architecture/check) || exit 2
+status=0
+"$tmp/architecture-check" "$@" || status=$?
+exit "$status"

@@ -1,13 +1,7 @@
 #!/bin/sh
 # domain-coverage: holds each domain package to 80% statement coverage.
-# Adapted from github.com/donvargax/itos-template; the package list is read
-# from this branch's .golangci.yml. Run after unit tests in itos.yaml's plan.
-#
-# The domain packages are read from depguard's domain rule in .golangci.yml,
-# its files list, the one list of them: a new domain package is measured
-# once it is added there, never named twice. A package is a glob's folder,
-# **/internal/count/domain/** being ./internal/count/domain, its port and
-# infrastructure subpackages are not measured.
+# Adapted from github.com/donvargax/itos-template. Architecture roles select
+# actual packages; each domain keeps its own denominator, never a pooled score.
 #
 # Measured as go test -cover counts: the statements of a package's blocks
 # its own tests run, over all its statements, with RAPID_CHECKS=1 as the
@@ -21,39 +15,8 @@ cd -- "$(dirname -- "$0")/../.."
 
 floor=80
 
-# The domain rule's files, as ./ paths: under linters.settings.depguard's
-# rules, the key domain, its files list, each "**/<dir>/**" its <dir>.
-# Lines are read by their indentation; a carriage return (a Windows
-# checkout) is dropped.
-packages=$(awk '
-	{ sub(/\r$/, "") }
-	/^[ \t]*(#.*)?$/ { next }
-	{
-		match($0, /^ */); indent = RLENGTH
-		line = substr($0, indent + 1)
-	}
-	infiles && indent <= filesindent && line !~ /^- / { infiles = 0 }
-	indomain && indent <= domainindent { indomain = 0 }
-	inrules && indent <= rulesindent { inrules = 0 }
-	indepguard && indent <= depguardindent { indepguard = 0 }
-	line == "depguard:" { indepguard = 1; depguardindent = indent; next }
-	indepguard && line == "rules:" { inrules = 1; rulesindent = indent; next }
-	inrules && line == "domain:" { indomain = 1; domainindent = indent; next }
-	indomain && line == "files:" { infiles = 1; filesindent = indent; next }
-	infiles && line ~ /^- / {
-		glob = substr(line, 3)
-		gsub(/^["\047]|["\047][ \t]*(#.*)?$/, "", glob)
-		if (glob !~ /^\*\*\/.*\/\*\*$/) {
-			print "domain-coverage: the domain rule names " glob ", not a **/<folder>/** glob" > "/dev/stderr"
-			exit 2
-		}
-		print "./" substr(glob, 4, length(glob) - 6)
-	}
-' .golangci.yml)
-if [ -z "$packages" ]; then
-	echo "domain-coverage: .golangci.yml names no domain packages under depguard's domain rule" >&2
-	exit 2
-fi
+# Use go list's actual packages, including nested slice and engine domains.
+packages=$(tools/bin/architecture-check --domains)
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

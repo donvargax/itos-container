@@ -9,7 +9,7 @@ package input
 import (
 	"io"
 
-	"github.com/donvargax/itos-container/internal/count/port"
+	"github.com/donvargax/itos-container/internal/slices/count/port"
 )
 
 // Stdin is the argument that names standard input.

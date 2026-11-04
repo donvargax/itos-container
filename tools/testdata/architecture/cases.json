@@ -535,7 +535,7 @@
     "File": "internal/slices/fresh/domain/nested/probe.go",
     "Import": "pgregory.net/rapid",
     "Kind": "lint",
-    "Rule": "rapid"
+    "Rule": "domain,rapid"
   },
   {
     "Name": "rapid-slices/fresh-probe_test.go",
@@ -696,7 +696,7 @@
     "File": "internal/engine/fresh/domain/nested/probe.go",
     "Import": "pgregory.net/rapid",
     "Kind": "lint",
-    "Rule": "rapid"
+    "Rule": "domain,rapid"
   },
   {
     "Name": "rapid-engine/fresh-probe_test.go",
@@ -710,14 +710,14 @@
     "File": "internal/slices/fresh/command/probe_test.go",
     "Import": "pgregory.net/rapid",
     "Kind": "lint",
-    "Rule": "rapid"
+    "Rule": "command,rapid"
   },
   {
     "Name": "rapid-port",
     "File": "internal/slices/fresh/port/probe_test.go",
     "Import": "pgregory.net/rapid",
     "Kind": "lint",
-    "Rule": "rapid"
+    "Rule": "port-tests,rapid"
   },
   {
     "Name": "rapid-disk",
@@ -770,5 +770,96 @@
     "Files": {
       "internal/slices/beta/domain/base.go": "package domain\nimport _ \"github.com/donvargax/itos-container/internal/engine/shared/domain\"\n"
     }
+  },
+  {
+    "Name": "rapid-direct-slices/fresh",
+    "File": "internal/slices/fresh/domain/probe_test.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "allow",
+    "Rule": "rapid"
+  },
+  {
+    "Name": "rapid-direct-engine/fresh",
+    "File": "internal/engine/fresh/domain/probe_test.go",
+    "Import": "pgregory.net/rapid",
+    "Kind": "allow",
+    "Rule": "rapid"
+  },
+  {
+    "Name": "standard-library-internal/cli/probe.go",
+    "File": "internal/cli/probe.go",
+    "Import": "encoding/json",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/version/probe.go",
+    "File": "internal/version/probe.go",
+    "Import": "runtime/debug",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/release/probe.go",
+    "File": "internal/release/probe.go",
+    "Import": "os/exec",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/release/probe_test.go",
+    "File": "internal/release/probe_test.go",
+    "Import": "testing",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/release/releasetest/probe.go",
+    "File": "internal/release/releasetest/probe.go",
+    "Import": "os",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/slices/fresh/command/probe.go",
+    "File": "internal/slices/fresh/command/probe.go",
+    "Import": "fmt",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/slices/fresh/domain/probe_test.go",
+    "File": "internal/slices/fresh/domain/probe_test.go",
+    "Import": "testing",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/slices/fresh/domain/nested/probe_test.go",
+    "File": "internal/slices/fresh/domain/nested/probe_test.go",
+    "Import": "os",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/engine/fresh/port/probe_test.go",
+    "File": "internal/engine/fresh/port/probe_test.go",
+    "Import": "testing",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/engine/fresh/port/nested/probe_test.go",
+    "File": "internal/engine/fresh/port/nested/probe_test.go",
+    "Import": "os",
+    "Kind": "allow",
+    "Rule": ""
+  },
+  {
+    "Name": "standard-library-internal/slices/fresh/port/porttest/probe.go",
+    "File": "internal/slices/fresh/port/porttest/probe.go",
+    "Import": "testing",
+    "Kind": "allow",
+    "Rule": ""
   }
 ]

@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/donvargax/itos-container/internal/count/port"
+	"github.com/donvargax/itos-container/internal/slices/count/port"
 )
 
 // Files reads input files from the local filesystem.

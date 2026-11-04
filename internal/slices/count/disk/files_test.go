@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/donvargax/itos-container/internal/count/port"
+	"github.com/donvargax/itos-container/internal/slices/count/port"
 )
 
 func TestFilesReadExistingFile(t *testing.T) {

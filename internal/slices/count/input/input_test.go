@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/donvargax/itos-container/internal/count/domain"
-	"github.com/donvargax/itos-container/internal/count/input"
-	"github.com/donvargax/itos-container/internal/count/port"
-	"github.com/donvargax/itos-container/internal/count/port/porttest"
+	"github.com/donvargax/itos-container/internal/slices/count/domain"
+	"github.com/donvargax/itos-container/internal/slices/count/input"
+	"github.com/donvargax/itos-container/internal/slices/count/port"
+	"github.com/donvargax/itos-container/internal/slices/count/port/porttest"
 )
 
 // Standard input is read whole, as a file is: the counts are the domain's,

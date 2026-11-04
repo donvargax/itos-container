@@ -23,12 +23,48 @@ to itos-template, not to this example's domain.
 
 ## Slices
 
-Each command is a vertical slice under `internal/<command>/`, laid out as `internal/count` is:
-`command` (the handler the CLI calls: flags in, domain data out, no logic of its own), `domain`
-(the behaviour, knowing no flags, JSON, exit codes, files, processes or network), `port` (the
-interfaces the domain reaches the world through) and one package per adapter (`disk` for count;
-for the container commands, for example, an engine adapter over the Docker API). Each adapter
-imports only the port it implements, never the domain; a fake of each port lives beside the
-domain's tests. Code two slices share is an engine package of its own with the same rules,
-never one slice importing another's domain. The `depguard` rules in `.golangci.yml` hold this
-for every slice, so a slice that breaks it fails the lint, not only a review.
+Each command lives in `internal/slices/<command>/`: `command` is the thin handler,
+`domain` owns behaviour, `port` declares its contracts, and named adapter siblings
+(`disk`, `input`) implement them. Shared behaviour lives in
+`internal/engine/<name>/{domain,port,<adapter>}` with the same boundaries. Nested
+packages inherit their role; an owner needs no empty domain or port directory.
+
+Domains and ports allow only `bytes`, `errors` and `strings` from the standard
+library in production. A domain imports its own domain/port and engine domain/port
+APIs; a port imports only its own port subpackages and engine ports. Ports own
+contract values, keeping dependencies acyclic. A command imports its domain,
+ports, engine APIs and `internal/cli`. An adapter may import its own domain, port
+and helper subpackages, plus engine APIs. No slice imports another slice; no
+engine imports a slice. No command or domain imports an adapter. Only `cmd`
+binds concrete adapters, including input's disk port.
+
+The shared UI imports no other project package. It owns rendering, joined-error
+traversal and the unknown-error fallback; `cmd` supplies count's failure classifier
+from `internal/slices/count/command`. `internal/version` is a leaf. Release code
+remains separate; only its tests use `internal/release/releasetest`.
+
+Fakes and shared contracts live in `port/porttest`, reachable only by tests and
+test-support code. `FilesContract` runs unchanged against count's fake, disk and
+named-input route, covering bytes, failures, repeated reads and independent
+returned storage. Adapter-specific I/O tests stay with their adapter; assembly
+tests belong in `cmd`. Project import arrows apply to tests too; external tests
+may import their package under test. Only domain test files may import rapid.
+
+Static depguard globs classify roles for new owner names without generating
+configuration. `tools/bin/architecture-check` supplements them with `go list`
+imports, test imports, role coverage and binary dependencies. Its composable
+`--siblings --outside --linked --toplevel` checks run by default, in the hook and
+CI. Import-free unclassified packages, production test support and Go comments
+suppressing depguard fail; targeted `nolint:gosec` remains permitted. Usage/load
+errors exit 2, named architecture violations exit 1.
+
+`--fixtures` runs the compile-first negative/positive matrix against the actual
+pinned linter and policy. The hook's `--fixtures-if-staged` and CI's
+`--fixtures-if-changed <base> <head>` select it only for changes to enforcement
+inputs, including deletions and both renamed paths. Fixture tests stay under
+`tools/testdata/architecture`, outside ordinary `go test ./...`. Domain coverage
+uses actual slice/engine domain packages, retaining a separate 80% statement
+floor for each nested package and refusing empty or unmeasurable discovery.
+
+The rationale and source attribution are in
+[the T-14 decision](decisions/0001-enforce-slice-and-engine-boundaries.md).

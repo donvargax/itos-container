@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/donvargax/itos-container/internal/count/domain"
-	"github.com/donvargax/itos-container/internal/count/port"
-	"github.com/donvargax/itos-container/internal/count/port/porttest"
+	"github.com/donvargax/itos-container/internal/slices/count/domain"
+	"github.com/donvargax/itos-container/internal/slices/count/port"
+	"github.com/donvargax/itos-container/internal/slices/count/port/porttest"
 	"pgregory.net/rapid"
 )
 

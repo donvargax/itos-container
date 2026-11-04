@@ -1,14 +1,14 @@
-package command_test
+package main
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/cli"
-	"github.com/donvargax/itos-container/internal/count/command"
-	"github.com/donvargax/itos-container/internal/count/input"
-	"github.com/donvargax/itos-container/internal/count/port"
-	"github.com/donvargax/itos-container/internal/count/port/porttest"
+	"github.com/donvargax/itos-container/internal/slices/count/command"
+	"github.com/donvargax/itos-container/internal/slices/count/input"
+	"github.com/donvargax/itos-container/internal/slices/count/port"
+	"github.com/donvargax/itos-container/internal/slices/count/port/porttest"
 )
 
 // A run's ends, so a test reads what the person or the script would.
@@ -18,7 +18,7 @@ type ends struct {
 
 // ui is a UI writing to ends, with stdin held as the run's input.
 func ui(e *ends, stdin string) *cli.UI {
-	return &cli.UI{In: strings.NewReader(stdin), Stdout: &e.stdout, Stderr: &e.stderr}
+	return &cli.UI{Classify: command.Classify, In: strings.NewReader(stdin), Stdout: &e.stdout, Stderr: &e.stderr}
 }
 
 // count runs the command over files named in data, reading stdin for -.
