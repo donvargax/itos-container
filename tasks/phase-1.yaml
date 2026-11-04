@@ -1048,7 +1048,9 @@
     rule refusing imports is not enough to catch an import-free package in the wrong place.
 
     Use strict, exact-package standard-library allowlists for production domains and ports,
-    initially bytes, errors and strings, which suffice for count. No $std wildcard or broad
+    including bytes, context, errors, fmt, maps, slices, sort, strconv, strings, time for contract
+    types, and unicode. The coordinator reviewed these additions for the next slice; fixtures
+    prove them. No $std wildcard or broad
     encoding, net or module-prefix allowance may bypass that policy. Future additions require
     a reviewed rule and fixture. A domain may use its own domain subpackages and port, plus
     engine domains and ports; an engine domain never imports a slice. Among project packages,
@@ -1058,7 +1060,9 @@
     Test files may use standard-library test/fixture helpers and eligible porttest packages;
     rapid remains confined to domain *_test.go files, including nested domain tests.
 
-    A command imports its own domain and ports, engine domains and ports, and internal/cli;
+    Commands do no process, network or filesystem I/O; command-io refuses those imports outside
+    tests. The store-ports-io rule adapted from itos also holds ports and porttest code, whose
+    fakes stay in memory. A command imports its domain and ports, engine APIs and internal/cli;
     it imports no adapter, including its own disk/input adapters. An adapter imports its own
     domain and port, its own helper subpackages, and engine domains/ports, but no command, UI,
     foreign slice, or other adapter. Only cmd binds concrete adapters, including input.Files
@@ -1093,6 +1097,13 @@
     not source-text import guesses, and propagate load errors. Exit 1 for a named violation,
     2 for usage or inspection failure, 0 only after successful inspection. An empty target
     list, malformed config or failed go list must not become a successful check.
+
+    Under --toplevel allow only the existing top-level Go roots cmd, internal, features and tools;
+    reject lib and every other root even when cmd wires it. Refuse import path elements testdata
+    and names beginning with underscore or dot, which go list ./... skips. Refuse IgnoredGoFiles
+    in domains and ports, including build-tagged and OS-specific files. Match nolint directives
+    case-insensitively after trimming each comma-separated name, including whitespace after the
+    colon or comma and a directly adjacent // reason. Preserve targeted gosec suppressions.
 
     Under --toplevel also reject production imports of test support even from a currently
     unlinked package, and lint suppressions that disable depguard. Check Go comments, not

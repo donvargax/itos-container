@@ -21,6 +21,7 @@ type probe struct {
 	Name, File, Import, Rule, Kind, Source string
 	Files                                  map[string]string
 	Flags                                  []string
+	CompileFiles                           []string
 }
 type issue struct {
 	FromLinter, Text string
@@ -145,6 +146,10 @@ func TestPolicy(t *testing.T) {
 			}
 			// A type error (including an external test's imports) is never a refusal.
 			must(t, dir, "go", "test", "-run=^$", "./...")
+			// Explicit filenames also compile probes excluded by build constraints.
+			for _, file := range p.CompileFiles {
+				must(t, dir, "go", "test", "-run=^$", file)
+			}
 			report := filepath.Join(dir, "lint.json")
 			out, code := command(t, dir, linter, "run", "--config", filepath.Join(dir, ".golangci.yml"), "--enable-only", "depguard", "--issues-exit-code", "7", "--max-issues-per-linter", "0", "--max-same-issues", "0", "--uniq-by-line=false", "--output.json.path", report, "--output.text.path", os.DevNull, "--show-stats=false", "./...")
 			if code != 0 && code != 7 {
