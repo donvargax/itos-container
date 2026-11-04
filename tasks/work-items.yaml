@@ -250,3 +250,20 @@ items:
     status: dropped
     depends_on: []
     kind: idea
+  - id: p1-arc42-draft
+    title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The loop builds better from a detailed plan: steering overnight mostly supplied what the
+      documents left unsaid (what blocks what, the slice layout, how specs commit). An arc42
+      document gives every step a shared reference: goals and quality goals (charter), context and
+      scope, solution strategy, a building-block view that names each slice and engine and their
+      dependencies (the breakdown step's input), runtime views for the main commands, cross-cutting
+      concepts (ports, fakes, strict config reading), decisions (docs/decisions/), quality
+      requirements mapped to gates, and risks. Source it from docs/plans/container-pilot.md,
+      docs/charter.md, PLAN.md and docs/architecture.md; mark every open choice the contract leaves
+      to the person as open, never decided. A docs task; the person reviews it.
