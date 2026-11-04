@@ -41,6 +41,9 @@ func TestInspectionBudgetBoundaries(t *testing.T) {
 		{"object depth over", strings.Repeat(`{"k":`, 32) + "0" + strings.Repeat("}", 32), port.Complexity},
 		{"array nodes at", "[" + strings.Repeat("0,", 2046) + "0]", port.None},
 		{"array nodes over", "[" + strings.Repeat("0,", 2047) + "0]", port.Complexity},
+		{"depth over after empty comment", "/**/" + strings.Repeat("[", 33) + strings.Repeat("]", 33), port.Complexity},
+		{"unfinished depth over after empty comment", "/**/" + strings.Repeat("[", 33), port.Complexity},
+		{"nodes over after empty comment", "/**/[" + strings.Repeat("0,", 2047) + "0]", port.Complexity},
 		{"object nodes at", members(1023), port.None},
 		{"object nodes over", members(1024), port.Complexity},
 		{"paths at", `{"` + strings.Repeat("a", 32767) + `":0}`, port.None},
@@ -84,6 +87,8 @@ func TestBudgetIgnoresLiteralAndCommentPunctuation(t *testing.T) {
 		}
 	}
 	for _, data := range []string{
+		"/**/ {}",
+		"/**//**/ {}",
 		"/*" + strings.Repeat("[\"{,", 3000) + "*/ {}",
 		"//" + strings.Repeat("[\"{,", 3000) + "\n {}",
 		"{\r\n\t\"x\" /* [ */ : /* { */ [1, /* } */ 2,],}",

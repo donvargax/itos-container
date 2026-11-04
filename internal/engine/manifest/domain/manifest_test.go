@@ -59,6 +59,36 @@ func TestExplicitWorkspaceRoot(t *testing.T) {
 	}
 }
 
+func TestWorkspaceSyntaxRefusedBeforeDirectoryLookup(t *testing.T) {
+	for _, tc := range []struct {
+		name, folder string
+	}{
+		{"missing prefix", "src/nested"},
+		{"backslash", "/workspace/src\\nested"},
+		{"NUL", "/workspace/src\x00nested"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := &porttest.Files{
+				Data: map[string][]byte{"worker.json": []byte("unmodified")},
+				// Existing directories must not make invalid workspace syntax valid.
+				Directories: map[string]bool{"src/nested": true, "src\\nested": true},
+			}
+			parser := &porttest.Parser{Value: obj(map[string]port.Value{
+				"image": str("literal-image"), "workspaceFolder": str(tc.folder),
+			})}
+			refs := &porttest.References{Images: map[string]bool{"literal-image": true}}
+			got := domain.Inspect("worker.json", files, parser, refs)
+			want := []port.Issue{{Kind: port.Workspace, Path: []string{"workspaceFolder"}}}
+			if got.Effective != nil || !reflect.DeepEqual(got.Issues, want) {
+				t.Fatalf("invalid workspace %q: got %#v; want %v", tc.folder, got, want)
+			}
+			if len(files.DirectoryReads) != 0 {
+				t.Fatalf("invalid workspace reached directory lookup: %q", files.DirectoryReads)
+			}
+		})
+	}
+}
+
 func TestEnvironmentNameBoundaries(t *testing.T) {
 	for _, name := range []string{"A", "Z", "a", "z", "_", "APP0", "APP9", "APP9_MODE"} {
 		t.Run(name, func(t *testing.T) {
