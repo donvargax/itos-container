@@ -461,14 +461,106 @@
   type: docs
   title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
   why: >
-    The milestone needs accurate coordinator guidance. Replace template branch assumptions and stale
-    CLI, godog and proof coverage claims with instructions matching the charter and current
-    configuration. Include this distinction in the planned coordinator guidance refresh: use itos
-    work show and tasks/phase-1.yaml for inspection. itos task executes checks, including T-8's full
-    mutation measurement, so drafting guidance must not present it as read-only inspection. Include
-    task-specific implementer briefs in the coordinator-guidance refresh: resolve placeholders,
-    derive instructions from the ledger's task type and checks, and reserve lifecycle actions for
-    the loop. T-8 needs test-task checks without new behavior scenarios. This prevents conflicting
-    guidance during the offline owned-run milestone.
+    docs/ORCHESTRATING.md still calls this repository a template with stack branches, denies the
+    existing public CLI and godog runner, and describes proof as internal-only. Replace these
+    claims with coordinator guidance for the offline owned-run milestone. This is documentation
+    foundation work under docs/charter.md, not container behaviour: no new scenarios, step
+    definitions, runtime code, dependency or service. Implementation edits only
+    docs/ORCHESTRATING.md in a docs commit tied to Item T-9. The drafter edits only this ledger
+    entry; leave registry ownership and status to the coordinating loop.
+
+    Keep these as project-local notes printed after the coordinator guide by itos go. Begin
+    with reading docs/charter.md first, then PLAN.md and its milestone limits, the binding
+    docs/plans/container-pilot.md, AGENTS.md and the actual itos.yaml. Link those files using
+    paths relative to docs/ORCHESTRATING.md. The charter selects foundation, configuration,
+    doctor and approval, then the offline owned run; the broader pilot authorizes no later slice
+    here. Linux amd64 with native Docker remains a target requiring runtime evidence. Egress,
+    credentials, network Git, LAN ingress, Compose and other container hosts stay deferred.
+    Open security decisions go to the person rather than being settled in a brief. Preserve
+    the distinction between workflow safeguards and isolation against hostile checkout code.
+
+    Describe the current foundation accurately. cmd/itos-container/main.go exposes count,
+    version and completion, and features/README.md documents the existing godog runner. The
+    planned itos container commands and isolation are not implemented. Reference the actual
+    .github/workflows/ci.yml: pushes and pull requests run without stack/feature branch filters,
+    and the Linux/macOS/Windows matrix covers the inherited Go tests, not container-host support.
+    .github/workflows/release.yml exists as a reusable binary-release workflow but ci.yml does
+    not call it. Do not claim either that release machinery is absent or that releases run.
+    Remove stack inheritance, generated-project and template-tag instructions; this is one
+    project on main and work branches. Do not enable releases or change workflows in this task.
+
+    For inspection use itos work, itos work show <id> and tasks/phase-1.yaml. Explain explicitly
+    that itos task executes checks: it is not a read-only task viewer and can run expensive or
+    state-writing measurements. T-8's completion checks included a full mutation measurement;
+    do not run that command just to draft a brief. T-8 is now done and its completion checks
+    were removed on closure. Read its ledger why, commit history and
+    docs/proof/T-8-foundation-baseline.md for the original checks, results and reproduction
+    environment instead of inferring commands from an empty done_when or reopening the task.
+
+    Require task-specific briefs with all placeholders resolved before handing them off. Name
+    the actual item, drafter or implementer role, ledger type, spec path, allowed edit paths,
+    exact checks and neighbouring checks, required proof and commit type/footer. Read itos
+    guide work and itos guide commit, and use itos guide brief when preparing the handoff.
+    For non-behaviour tasks use the ledger's why and done_when, not generic instructions to
+    invent scenarios or step definitions. T-8 is the test task example: tests and generated
+    proof with its specified checks, no new behaviour scenarios. T-9 is a docs task with cheap
+    documentation checks and no mutation measurement. Behaviour briefs require specified
+    black-box scenarios and red-first step commits while scenarios remain @wip. Each scenario
+    must fail at its behaviour assertion with @wip removed for the run, then pass after the
+    implementation; undefined steps are not evidence. Run non-engine cases locally and keep
+    real-engine scenarios CI-only. Domain tests use the engine fake; agents never receive the
+    Docker socket. Preserve smoke coverage and never weaken a scenario or gate to obtain green.
+
+    Override the generic guides' lifecycle instructions in every brief with this project's
+    division of responsibility. A drafter specifies only and does not take an item; an
+    implementer follows the assigned spec. Agents inspect git status, stage only their own
+    explicit file paths, commit through itos commit with a message file, then stop. The loop
+    owns taking items, pushing, marking pull requests ready, watching CI and closing items
+    only after the actual pushed head is green and required proof passes. Never hand-edit
+    owners/statuses, bypass hooks, force-push or rewrite published history. Agents report gaps
+    and ideas with why they matter; the coordinator owns registry changes and upstream reports.
+
+    State that proof.code already selects Go changes under both cmd/ and internal/ in
+    itos.yaml. Use tools/bin/pinned itos-cc with all-tests, fail-uncovered and
+    no-annotate to refresh required changed-code evidence after the last source/test change.
+    The range base is the parent of the item's actual first commit, specs included, found
+    through itos work show and history, never an assumed take commit. Commit project-local
+    .metrics/mutate/ evidence by explicit path; never copy another project's cache or hand-edit
+    results. Kill non-equivalent survivors with tests and exercise uncovered executable code,
+    including functions without mutation sites. Only genuinely equivalent mutants may have
+    reasoned exceptions for the person to review; never except uncovered code or remove sites
+    to avoid proof. Documentation-only changes touch no proof.code path and fabricate no
+    mutation results. Leave configured hooks and CI in control of their gates.
+
+    Link docs/proof/T-8-foundation-baseline.md instead of duplicating its counts or commands.
+    Distinguish its completed full foundation baseline from the earlier T-4 sample with zero
+    eligible records. A sample or empty changed-code range is not a fresh baseline, and later
+    test/toolchain changes can stale evidence. The T-8 report records the Go environment needed
+    to reproduce proof; it does not establish other-platform or container-isolation support.
+    Do not make the full measurement a new recurring gate or run it for this documentation task.
+
+    Retain the counting example's standard-library Unicode whitespace and logical lines, with
+    newline-terminated pieces for its additive property. Preserve attribution to donvargax and
+    infrastructure provenance from itos and itos-template without global handle substitutions.
+    Keep the warning that Renovate configuration alone proves neither App installation nor bot
+    activity. Keep at most ten lessons, each with recorded date, last-seen date and exit item
+    or permanent status; no invented lesson or upstream issue is required. Keep the whole file
+    within its existing 6144-byte cap by linking detailed rules rather than duplicating them.
+    Change no other document, generated rules, configuration, gate, pin, code or proof artifact.
+
+    Retain the original check below and add the brief and current-evidence checks at the existing
+    task/CI tier, using ordinary shell tools without RTK or network access. Before implementation,
+    the original check fails on the absent charter.md reference and finds the retired template
+    claims; the brief check fails on the absent itos guide work instruction; the current-evidence
+    check fails on the absent cmd/itos-container/main.go reference. These are static documentation
+    checks, not behaviour or isolation proof. Review the prose against this entry as well:
+    keywords alone cannot prove correct task-vs-behaviour instructions, lifecycle ownership,
+    inspection-vs-execution guidance or truthful current status. Let configured hooks and CI
+    run the wider checks unchanged. The drafter commits this spec with completion checks still
+    failing; the implementer supplies the document and reports their results to the loop.
   done_when:
     - run: sh -eu -c 'f=docs/ORCHESTRATING.md; for text in charter.md container-pilot.md "offline owned-run" "itos work show" tasks/phase-1.yaml "itos task" "cmd/" "internal/" all-tests fail-uncovered no-annotate; do grep -Fq "$text" "$f"; done; ! grep -Eq "specific to this template|no public CLI|stacks and features remain real projects|add .* with the public CLI" "$f"'
+    - run: >-
+        sh -eu -c 'f=docs/ORCHESTRATING.md; for text in "itos guide work" "itos guide commit" "itos guide brief" "itos commit" "executes checks" placeholders "test task" T-8 T-9 drafter implementer loop "CI-only" "Docker socket"; do grep -Fq "$text" "$f"; done'
+    - run: >-
+        sh -eu -c 'f=docs/ORCHESTRATING.md; for text in cmd/itos-container/main.go features/README.md .github/workflows/ci.yml .github/workflows/release.yml proof/T-8-foundation-baseline.md .metrics/mutate/ proof.code; do grep -Fq "$text" "$f"; done'
