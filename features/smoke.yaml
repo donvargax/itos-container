@@ -36,3 +36,7 @@
   scenarios:
     - id: "@ID-POLICY-01"
       why: policy inspection reads the fixed file, supplies offline defaults and returns the effective policy without engine access
+- file: parsing.feature
+  scenarios:
+    - id: "@ID-PARSING-04"
+      why: doctor refuses unfinished excessive nesting without effects and still accepts literal YAML data
