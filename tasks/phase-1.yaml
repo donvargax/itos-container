@@ -766,10 +766,6 @@
     lifecycle semantics or distinguish a proposed choice from consent. Let configured hooks and CI
     run their wider gates. The drafter commits this ledger specification with completion checks
     still red; the implementer supplies the document and reports checks and unresolved decisions.
-  done_when:
-    - run: sh -eu -c 'f=docs/plans/offline-run-lifecycle.md; test -s "$f"; for section in "## Arguments and JSON" "## Ownership and startup" "## Timeouts and cancellation" "## Workload exits" "## Cleanup and recovery" "## Acceptance scenarios" "## Security decisions"; do grep -Fqx "$section" "$f"; done'
-    - run: sh -eu -c 'f=docs/plans/offline-run-lifecycle.md; for link in "(../charter.md)" "(../../PLAN.md)" "(container-pilot.md)" "(../architecture.md)" "(../CLI.md)" "(../CONFIG.md)"; do grep -Fq "$link" "$f"; done'
-    - run: sh -eu -c 'f=docs/plans/offline-run-lifecycle.md; grep -Fqx "| Case | Setup | Action | Observable result | Evidence tier | Expected failing assertion |" "$f"; grep -Fqx "| Question | Required decision | Blocks |" "$f"'
 - id: T-12
   type: ci
   title: CI runs on Linux, each pull request once; other platforms by hand

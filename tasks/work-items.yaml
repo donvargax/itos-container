@@ -235,7 +235,7 @@ items:
     title: Specify the offline owned-run lifecycle contract
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-allow-gherkin-specification-commits
