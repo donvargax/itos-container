@@ -165,6 +165,11 @@ items:
       Include README hook registration and verification instructions in the existing guidance
       refresh so contributors enable local lint and vulnerability checks. This foundation follow-up
       can wait unless it blocks the charter’s configuration, doctor and approval step.
+
+      Include docs/ORCHESTRATING.md in the existing guidance cleanup after T-12 lands: replace
+      unrestricted-push and automatic three-platform claims with the implemented CI policy. T-9's
+      completed refresh predates this change. Defer unless it blocks the charter's configuration,
+      doctor and approval step.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
