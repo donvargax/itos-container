@@ -169,8 +169,8 @@ items:
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: slice-1
