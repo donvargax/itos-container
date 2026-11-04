@@ -130,17 +130,9 @@ items:
     title: Check proof-toolchain alignment before measurement
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The offline owned-run milestone needs trustworthy foundation proof. Compare local compiler and
-      experiment settings with CI before expensive measurement to prevent unusable evidence and
-      repeated landing attempts, preserving all proof gates.
-
-      Include test-only ranges in the existing proof-toolchain alignment review. Clearly distinguish
-      empty source-function selection and an absent proof summary from fresh evidence for affected
-      code, preserving all proof gates.
   - id: p1-reconcile-foundation-status
     title: Reconcile foundation guidance after T-8
     phase: 1
