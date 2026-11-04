@@ -1,3 +1,7 @@
+# Port contract suites and fakes are test support, never linked into the binary.
+# Keep running their tests; measure product code in the CI proof (itos ADR-0053).
+exclude: ["**/porttest/**"]
+
 # Equivalent mutants need project-local proof and a reviewed reason.
 mutation:
   tests:
