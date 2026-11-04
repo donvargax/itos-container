@@ -1575,3 +1575,12 @@
     and resource before mutating. Later-milestone questions stay open. Docs only.
   done_when:
     - run: grep -q 'Engine API fixture' docs/architecture/arc42.md && grep -q 'NetworkMode' docs/architecture/arc42.md && ! grep -qi 'numeric limits remain person decisions' docs/architecture/arc42.md
+- id: T-20
+  type: ci
+  title: An engine fixture image the real-engine scenarios can use
+  why: >
+    ID-DOCTOR-23 and 24 and the runtime cases need an image with a RepoDigest, which ID-DOCTOR-16
+    demands; docker build gives none, so a runner-local pinned registry may be needed: prove it, as
+    this is unverified. Settle how red runs work, as drafts skip CI. In the engine job only.
+  done_when:
+    - run: git grep -q '@engine' -- features && grep -q 'registry' .github/workflows/ci.yml
