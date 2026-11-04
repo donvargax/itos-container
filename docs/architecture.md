@@ -20,3 +20,15 @@ word segmentation is performed. File data is not executed or changed.
 Root policy and documentation are inherited from `main`. Language-specific gates travel with
 their code; stack and feature branches remain buildable projects. Rendering and updating belong
 to itos-template, not to this example's domain.
+
+## Slices
+
+Each command is a vertical slice under `internal/<command>/`, laid out as `internal/count` is:
+`command` (the handler the CLI calls: flags in, domain data out, no logic of its own), `domain`
+(the behaviour, knowing no flags, JSON, exit codes, files, processes or network), `port` (the
+interfaces the domain reaches the world through) and one package per adapter (`disk` for count;
+for the container commands, for example, an engine adapter over the Docker API). Each adapter
+imports only the port it implements, never the domain; a fake of each port lives beside the
+domain's tests. Code two slices share is an engine package of its own with the same rules,
+never one slice importing another's domain. The `depguard` rules in `.golangci.yml` hold this
+for every slice, so a slice that breaks it fails the lint, not only a review.

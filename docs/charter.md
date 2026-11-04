@@ -32,6 +32,9 @@ without it. In the contract's terms: implementation slices 1 to 3.
 3. **Offline owned run:** explicit argv, hardened mounts and identity, recorded ownership,
    bounded startup, foreground exit, safe cleanup.
 
+Foundation leftovers (docs, tooling, CI polish) are taken only when they block the next
+step above; otherwise the loop moves on to that step and they wait.
+
 ## Not yet
 
 Egress through a proxy, credentials and accounts, Git over the network from inside the

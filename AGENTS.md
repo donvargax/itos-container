@@ -33,6 +33,8 @@ does not take an item. Report gaps and follow-up ideas with why they matter to t
 
 ## Code and isolation boundaries
 
+- Each command is a vertical slice laid out as `internal/count` is (`docs/architecture.md`,
+  "Slices"); a new command starts by creating its slice, never by growing another one.
 - Keep thin entry points over domain-owned behavior through ports. The domain knows no UI,
   filesystem implementation, JSON or exit codes. Use our fakes in its tests, never mocks.
 - Look for a maintained library before building what one likely solves; settle the choice and
