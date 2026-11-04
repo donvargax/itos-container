@@ -139,6 +139,10 @@ Feature: Strict offline sandbox policy
   # inspect arbitrarily deep trees. Keep the shared traversal path within those
   # budgets, preserving diagnostic locations. The tagged 6000-level review input
   # and earlier untagged 6000/8000-level inputs must be refused before that walk.
+  # Prove these limits through the CLI's refusal rule and a bounded completion
+  # deadline, with inputs at each limit still reaching structural/schema checks.
+  # Do not assert heap size, GC traces or measured allocations: those depend on
+  # the Go runtime and its environment, not the policy contract.
   #
   # Layout handoff: features/steps_test.go and features/policy_steps_test.go now
   # define every step below, and all 28 scenarios are live. Preserve their IDs,
@@ -791,14 +795,12 @@ Feature: Strict offline sandbox policy
       |               |
       | --policy-only |
 
-  # GC tracing observes the CLI process without importing product code. Frequent
-  # collection exposes retained ancestor paths on these small hostile inputs.
-  # The 64 MiB threshold is a regression fixture, not a new policy/runtime limit.
+  # Keep the review's hostile inputs, but observe only their bounded refusal.
   @slice-1 @bug-4 @ID-POLICY-35
   Scenario Outline: deeply nested unknown policy data is refused before traversal
     Given the policy file contains <depth> nested sequences below an unknown field
-    When itos-container runs with "doctor --policy-only --json" and the environment "GODEBUG=gctrace=1;GOGC=10;GOMEMLIMIT=off"
-    Then its GC trace reports less than 64 MiB of heap
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
     And its policy JSON reports exactly these problems:
       | rule              | path | exit |
       | policy.complexity |      | 2    |
@@ -819,13 +821,20 @@ Feature: Strict offline sandbox policy
       | rule              | path | exit |
       | policy.complexity |      | 2    |
     And it exits with code 2
+    Given the policy file has representation depth 32 using "<shape>"
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule   | path   | exit |
+      | <rule> | <path> | 2    |
+    And it exits with code 2
     And the engine recorder has no connections
 
     Examples:
-      | shape        |
-      | sequences    |
-      | mappings     |
-      | complex keys |
+      | shape        | rule                  | path   |
+      | sequences    | policy.unknown_key    | /extra |
+      | mappings     | policy.unknown_key    | /extra |
+      | complex keys | policy.non_string_key |        |
 
   @slice-1 @ID-POLICY-37
   Scenario Outline: representation node count is bounded including mapping keys
@@ -836,19 +845,25 @@ Feature: Strict offline sandbox policy
       | rule              | path | exit |
       | policy.complexity |      | 2    |
     And it exits with code 2
+    Given the policy file has 2048 representation nodes using "<shape>"
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule   | path   | exit |
+      | <rule> | <path> | 2    |
+    And it exits with code 2
     And the engine recorder has no connections
 
     Examples:
-      | shape     |
-      | sequences |
-      | mappings  |
+      | shape     | rule               | path   |
+      | sequences | policy.unknown_key | /extra |
+      | mappings  | policy.type        |        |
 
   @slice-1 @ID-POLICY-38
-  Scenario: custom tags at every depth cannot amplify retained diagnostic paths
+  Scenario: custom tags at every depth are refused before collecting diagnostic paths
     Given the policy file contains 6000 nested tagged sequences below an unknown field
-    When itos-container runs with "doctor --policy-only --json" and the environment "GODEBUG=gctrace=1;GOGC=10;GOMEMLIMIT=off" and a 5 second deadline
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
     Then it finishes before the deadline
-    And its GC trace reports less than 64 MiB of heap
     And its policy JSON reports exactly these problems:
       | rule              | path | exit |
       | policy.complexity |      | 2    |

@@ -27,7 +27,6 @@ type policyWorld struct {
 }
 
 func (w *world) policySteps(sc *godog.ScenarioContext) {
-	w.policyMemorySteps(sc)
 	w.policyLimitSteps(sc)
 	sc.Step("^policy inspection has isolated host state and a recording engine endpoint$", w.isolatePolicy)
 	sc.Step("^the policy file contains:$", func(doc *godog.DocString) error {
