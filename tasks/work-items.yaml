@@ -41,7 +41,7 @@ items:
     title: tools/bin/pinned runs the current itos-cc, not 0.5.0
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-replace-template-instructions
