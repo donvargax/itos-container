@@ -135,3 +135,14 @@ items:
       The milestone needs accurate coordinator guidance. Replace template branch assumptions and
       stale CLI, godog and proof coverage claims with instructions matching the charter and current
       configuration.
+  - id: p1-track-gherkin-mutation-freshness
+    title: Review Gherkin inputs in mutation freshness tracking
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The offline owned-run milestone depends on trustworthy scenario-backed proof. Verify and
+      configure support-file tracking so Gherkin-only changes invalidate affected cached mutation
+      evidence.
