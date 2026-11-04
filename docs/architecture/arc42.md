@@ -471,11 +471,12 @@ behaviour assertion fail before implementation; then implement and prove green.
 Undefined steps, setup failures and today's unknown-command diagnostic are not proof.
 Non-engine evidence is local; all real-engine evidence is CI-only.
 
-The existing registry gap `p1-engine-scenario-tier` must supply an explicit tag, switch
-and Linux job before engine cases become executable. `@wip` alone is not an engine-access
-boundary. T-15 adds no cases or runtime evidence and changes no gates. Agents commit
-and stop; only the coordinating loop pushes, verifies the actual pushed head and its
-required proof, and closes the item.
+The engine-test tier is tracked as [T-16](../../tasks/work-items.yaml), promoted from
+`p1-engine-scenario-tier`. It must supply an explicit tag, switch and Linux job before
+engine cases become executable. `@wip` alone is not an engine-access boundary. T-15 adds
+no cases or runtime evidence and changes no gates. Agents commit and stop; only the
+coordinating loop pushes, verifies the actual pushed head and its required proof, and
+closes the item.
 
 ## Risks and open questions
 
