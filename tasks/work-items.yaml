@@ -40,8 +40,8 @@ items:
   - id: T-4
     title: tools/bin/pinned runs the current itos-cc, not 0.5.0
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p1-replace-template-instructions
@@ -65,3 +65,37 @@ items:
       The offline owned-run milestone needs reliable CI proof on main and work branches. Correct
       inherited branch conditions while preserving existing checks and the charter's Linux-only
       runtime scope.
+  - id: p1-foundation-mutation-baseline
+    title: Establish a fresh foundation mutation baseline
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The offline owned-run milestone needs trustworthy code proof. After T-4 upgrades itos-cc,
+      generate fresh foundation mutation results so skipped legacy records and an empty sample
+      cannot masquerade as proof.
+  - id: p1-track-shell-pinned-tools
+    title: Track shell-pinned tools in update automation
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Keep the offline owned-run milestone's proof tooling maintained by extending existing update
+      automation to tools/bin/pinned, preserving verified checksums alongside version updates.
+  - id: p1-fresh-mutation-baseline
+    title: Record a fresh foundation mutation baseline with pinned itos-cc
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-4]
+    kind: idea
+    why: >
+      T-4 upgrades the launcher to 0.47.2, whose sample finds zero eligible cached mutants from the
+      inherited three-Example snapshot. Its changed-code check judges no Go sources, so passing it
+      does not establish a foundation baseline. Specify separate first-milestone work to measure
+      project-local evidence with the pinned tool, all-tests, fail-uncovered and no-annotate; kill
+      survivors and cover untested code without weakening gates, then commit the resulting evidence.
