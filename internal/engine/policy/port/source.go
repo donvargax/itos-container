@@ -14,14 +14,22 @@ const (
 	Boolean
 )
 
+// Decimal represents Coefficient * 10^Exponent without expanding the exponent.
+// Both parts are canonical signed decimal integers without a leading plus or
+// leading zeros. A nonzero coefficient has no trailing zeros; zero is {"0", "0"}.
+// Sources normalize both parts, retaining exactness with storage bounded by input
+// length rather than exponent magnitude. A negative exponent means a fraction.
+type Decimal struct {
+	Coefficient string
+	Exponent    string
+}
+
 // Value retains exact numbers so version checks cannot round a fractional input.
-// Number is a canonical reduced rational: a decimal integer, or numerator/denominator
-// with a positive denominator greater than one. Sources normalize it before returning.
 type Value struct {
 	Kind   Kind
 	Fields map[string]Value
 	Text   string
-	Number string
+	Number Decimal
 }
 
 // Failure identifies a rejected requirement, independently of UI rule names.

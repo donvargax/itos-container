@@ -675,7 +675,7 @@ Feature: Strict offline sandbox policy
       |        |
       | --json |
 
-  @wip @slice-1 @ID-POLICY-30
+  @slice-1 @ID-POLICY-30
   Scenario Outline: extreme finite exponents retain their exact schema classification
     Given the policy file contains:
       """
@@ -700,7 +700,7 @@ Feature: Strict offline sandbox policy
   # This small input used to expand each number into a million-digit integer or
   # denominator before discarding the unknown list. The deadline bounds the child
   # process in the harness, so the assertion fails without hanging the test runner.
-  @wip @slice-1 @ID-POLICY-31
+  @slice-1 @ID-POLICY-31
   Scenario Outline: repeated numeric exponents cannot amplify policy inspection work
     Given the policy file contains 1024 numeric list values spelled "<number>" below an unknown field
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline

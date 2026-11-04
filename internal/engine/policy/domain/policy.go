@@ -21,10 +21,10 @@ func Inspect(source port.Source) port.Result {
 	if !exists {
 		return refused(port.Required, "version")
 	}
-	if version.Kind != port.Number || strings.Contains(version.Number, "/") {
+	if version.Kind != port.Number || strings.HasPrefix(version.Number.Exponent, "-") {
 		return refused(port.Type, "version")
 	}
-	if version.Number != "1" {
+	if version.Number != (port.Decimal{Coefficient: "1", Exponent: "0"}) {
 		return refused(port.Version, "version")
 	}
 

@@ -24,19 +24,31 @@ func TestCoreScalarMeanings(t *testing.T) {
 		{"'|−'", port.String, "", "|−"}, {"on", port.String, "", "on"}, {"yes", port.String, "", "yes"},
 		{"2026-11-04", port.String, "", "2026-11-04"}, {"1_000", port.String, "", "1_000"},
 		{"0b10", port.String, "", "0b10"}, {"0XFF", port.String, "", "0XFF"},
-		{"1", port.Number, "1", ""}, {"077", port.Number, "77", ""}, {"0o77", port.Number, "63", ""},
-		{"0xFF", port.Number, "255", ""}, {"+0x1", port.String, "", "+0x1"}, {"-0o7", port.String, "", "-0o7"},
-		{"1e0", port.Number, "1", ""}, {".5", port.Number, "1/2", ""},
-		{"1.00000000000000000001", port.Number, "100000000000000000001/100000000000000000000", ""},
-		{"!!float 2", port.Number, "2", ""}, {"!!float 2.5", port.Number, "5/2", ""},
-		{"! 1", port.Number, "1", ""}, {"!!int '1'", port.Number, "1", ""},
+		{"1", port.Number, "1e0", ""}, {"077", port.Number, "77e0", ""}, {"0o77", port.Number, "63e0", ""},
+		{"0xFF", port.Number, "255e0", ""}, {"+0x1", port.String, "", "+0x1"}, {"-0o7", port.String, "", "-0o7"},
+		{"1e0", port.Number, "1e0", ""}, {".5", port.Number, "5e-1", ""},
+		{"1.00000000000000000001", port.Number, "100000000000000000001e-20", ""},
+		{"!!float 2", port.Number, "2e0", ""}, {"!!float 2.5", port.Number, "25e-1", ""},
+		{"! 1", port.Number, "1e0", ""}, {"!!int '1'", port.Number, "1e0", ""},
+		{"100", port.Number, "1e2", ""}, {"0x64", port.Number, "1e2", ""},
+		{"10e-1", port.Number, "1e0", ""}, {"0.0100e2", port.Number, "1e0", ""},
+		{"1.00e-2", port.Number, "1e-2", ""}, {"+1.0E+0", port.Number, "1e0", ""},
+		{"-0001.000e+02", port.Number, "-1e2", ""}, {"-.5", port.Number, "-5e-1", ""},
+		{"1.", port.Number, "1e0", ""}, {"+0", port.Number, "0e0", ""},
+		{"1e1000000", port.Number, "1e1000000", ""}, {"1e-1000000", port.Number, "1e-1000000", ""},
+		{"1e999999999999999999999", port.Number, "1e999999999999999999999", ""},
+		{"10e999999999999999999999", port.Number, "1e1000000000000000000000", ""},
+		{".01e-999999999999999999999", port.Number, "1e-1000000000000000000001", ""},
+		{"-0.000e-999999999999999999999", port.Number, "0e0", ""},
+		{"0e999999999999999999999", port.Number, "0e0", ""},
+		{"1e0000000000000000000000000000000000", port.Number, "1e0", ""},
 		{"null", port.Null, "", ""}, {"Null", port.Null, "", ""}, {"NULL", port.Null, "", ""},
 		{"~", port.Null, "", ""}, {"!!null ''", port.Null, "", ""},
 		{"true", port.Boolean, "", ""}, {"True", port.Boolean, "", ""}, {"TRUE", port.Boolean, "", ""},
 		{"false", port.Boolean, "", ""}, {"False", port.Boolean, "", ""}, {"FALSE", port.Boolean, "", ""},
 		{"!!bool true", port.Boolean, "", ""},
 		{"!!seq [one, two]", port.Array, "", ""}, {"!!map {}", port.Object, "", ""},
-		{"!<example:custom> 1", port.Number, "1", ""},
+		{"!<example:custom> 1", port.Number, "1e0", ""},
 	} {
 		t.Run(tc.text, func(t *testing.T) {
 			got, issues := read(tc.text)
@@ -49,8 +61,8 @@ func TestCoreScalarMeanings(t *testing.T) {
 			if len(issues) != 0 || got.Kind != tc.kind || got.Text != tc.literal {
 				t.Fatalf("got %#v, issues %#v", got, issues)
 			}
-			if tc.number != "" && got.Number != tc.number {
-				t.Fatalf("got %s, want %s", got.Number, tc.number)
+			if tc.number != "" && got.Number.Coefficient+"e"+got.Number.Exponent != tc.number {
+				t.Fatalf("got %#v, want %s", got.Number, tc.number)
 			}
 		})
 	}
@@ -60,7 +72,7 @@ func TestMalformedAndTaggedData(t *testing.T) {
 	for _, text := range []string{
 		"\xff", "{", "!!int no", "!!bool yes", "!!null no", "!!int .inf",
 		"!!map one", "!!seq one", "!!map []", "!!seq {}", "!!str [one]", "!!int {}", "!!float 0x1",
-		"!!float word", "1e999999999999999999999", "!!str {a: b}",
+		"!!float word", "!!str {a: b}",
 		"version: 1\n---\n[", "{extra: [!!bool wrong], version: &a 1}",
 	} {
 		t.Run(text, func(t *testing.T) {

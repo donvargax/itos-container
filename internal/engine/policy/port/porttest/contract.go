@@ -60,10 +60,12 @@ func SourceContract(t Reporter, open func(SourceFixture) port.Source) {
 	t.Helper()
 	fixtures := []SourceFixture{
 		{Data: "version: 1.0\nmanifest: a.json", Value: port.Value{Kind: port.Object, Fields: map[string]port.Value{
-			"version": {Kind: port.Number, Number: "1"}, "manifest": {Kind: port.String, Text: "a.json"},
+			"version": {Kind: port.Number, Number: port.Decimal{Coefficient: "1", Exponent: "0"}}, "manifest": {Kind: port.String, Text: "a.json"},
 		}}},
-		{Data: "0xFF", Value: port.Value{Kind: port.Number, Number: "255"}},
-		{Data: "1.00000000000000000001", Value: port.Value{Kind: port.Number, Number: "100000000000000000001/100000000000000000000"}},
+		{Data: "0xFF", Value: port.Value{Kind: port.Number, Number: port.Decimal{Coefficient: "255", Exponent: "0"}}},
+		{Data: "1.00000000000000000001", Value: port.Value{Kind: port.Number, Number: port.Decimal{Coefficient: "100000000000000000001", Exponent: "-20"}}},
+		{Data: "10e999999999999999999999", Value: port.Value{Kind: port.Number, Number: port.Decimal{Coefficient: "1", Exponent: "1000000000000000000000"}}},
+		{Data: "0e-999999999999999999999", Value: port.Value{Kind: port.Number, Number: port.Decimal{Coefficient: "0", Exponent: "0"}}},
 		{Data: "on", Value: port.Value{Kind: port.String, Text: "on"}},
 		{Data: "null", Value: port.Value{Kind: port.Null}},
 		{Data: "", Issues: []port.Issue{{Kind: port.Empty}}},

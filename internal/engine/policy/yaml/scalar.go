@@ -51,14 +51,10 @@ func scalar(node *yaml.Node) (port.Value, port.Failure) {
 			base = 0
 		}
 		n.SetString(text, base)
-		value = port.Value{Kind: port.Number, Number: n.String()}
+		value = port.Value{Kind: port.Number, Number: decimalNumber(n.String())}
 		inferred = "!!int"
 	case decimal.MatchString(text):
-		n, ok := new(big.Rat).SetString(text)
-		if !ok {
-			return port.Value{}, port.Syntax
-		}
-		value = port.Value{Kind: port.Number, Number: n.RatString()}
+		value = port.Value{Kind: port.Number, Number: decimalNumber(text)}
 		inferred = "!!float"
 	}
 	switch tag {

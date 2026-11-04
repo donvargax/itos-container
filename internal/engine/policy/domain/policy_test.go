@@ -1,7 +1,6 @@
 package domain_test
 
 import (
-	"math/big"
 	"reflect"
 	"sort"
 	"strings"
@@ -16,12 +15,11 @@ func object(fields map[string]port.Value) port.Value {
 	return port.Value{Kind: port.Object, Fields: fields}
 }
 func text(s string) port.Value { return port.Value{Kind: port.String, Text: s} }
-func number(s string) port.Value {
-	n, _ := new(big.Rat).SetString(s)
-	return port.Value{Kind: port.Number, Number: n.RatString()}
+func number(coefficient, exponent string) port.Value {
+	return port.Value{Kind: port.Number, Number: port.Decimal{Coefficient: coefficient, Exponent: exponent}}
 }
 func minimal() port.Value {
-	return object(map[string]port.Value{"version": number("1"), "manifest": text("a.json")})
+	return object(map[string]port.Value{"version": number("1", "0"), "manifest": text("a.json")})
 }
 
 func TestEffectivePolicy(t *testing.T) {
@@ -54,9 +52,11 @@ func TestVersionIsRequiredAndExact(t *testing.T) {
 	}{
 		{port.Value{}, port.Type}, {text("1"), port.Type}, {port.Value{Kind: port.Boolean}, port.Type},
 		{object(nil), port.Type}, {port.Value{Kind: port.Array}, port.Type},
-		{number("1.00000000000000000000000000001"), port.Type},
-		{number("-1"), port.Version}, {number("0"), port.Version}, {number("2"), port.Version},
-		{number("100000000000000000000000000000"), port.Version},
+		{number("100000000000000000000000000001", "-29"), port.Type},
+		{number("-1", "0"), port.Version}, {number("0", "0"), port.Version}, {number("2", "0"), port.Version},
+		{number("1", "29"), port.Version},
+		{number("1", "999999999999999999999"), port.Version},
+		{number("1", "-999999999999999999999"), port.Type},
 	}
 	for _, tc := range cases {
 		root := minimal()
