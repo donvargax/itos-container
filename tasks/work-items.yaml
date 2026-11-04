@@ -340,15 +340,15 @@ items:
   - id: T-19
     title: Bring arc42 up to date with what landed and what the person decided
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-20
     title: An engine fixture image the real-engine scenarios can use
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-16]
     kind: task
   - id: slice-6
