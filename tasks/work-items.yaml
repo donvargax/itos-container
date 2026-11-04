@@ -2,7 +2,7 @@
 phases:
   1: null
 queue:
-  - p1-slice-layout-lint
+  - T-10
   - p2-specify-policy-manifest-approval
 items:
   - id: T-1
@@ -180,17 +180,10 @@ items:
       Already covered. Include features/README.md and comments in itos.yaml and
       .github/workflows/release.yml, preserving existing gates, provenance and limits on
       container-support claims.
-  - id: p1-slice-layout-lint
+  - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      docs/architecture.md ("Slices") makes every command a vertical slice before the first
-      container command is written; .golangci.yml's depguard rules name only internal/count's domain
-      and disk packages, so a new slice could import os from its domain or an adapter could import
-      the domain and only a review would notice. Generalise them: a domain package of any slice
-      denies os, os/exec, net, net/http and every adapter, and an adapter imports only its slice's
-      port. Prove each rule with a fixture that breaks it.
+    kind: task

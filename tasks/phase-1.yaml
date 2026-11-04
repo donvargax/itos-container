@@ -472,3 +472,15 @@
     guidance during the offline owned-run milestone.
   done_when:
     - run: sh -eu -c 'f=docs/ORCHESTRATING.md; for text in charter.md container-pilot.md "offline owned-run" "itos work show" tasks/phase-1.yaml "itos task" "cmd/" "internal/" all-tests fail-uncovered no-annotate; do grep -Fq "$text" "$f"; done; ! grep -Eq "specific to this template|no public CLI|stacks and features remain real projects|add .* with the public CLI" "$f"'
+- id: T-10
+  type: ci
+  title: The depguard rules hold every slice to internal/count's layout, not only count
+  why: >
+    docs/architecture.md ("Slices") makes every command a vertical slice before the first container
+    command is written; .golangci.yml's depguard rules name only internal/count's domain and disk
+    packages, so a new slice could import os from its domain or an adapter could import the domain
+    and only a review would notice. Generalise them: a domain package of any slice denies os,
+    os/exec, net, net/http and every adapter, and an adapter imports only its slice's port. Prove
+    each rule with a fixture that breaks it.
+  done_when:
+    - run: tools/bin/check-slice-layout
