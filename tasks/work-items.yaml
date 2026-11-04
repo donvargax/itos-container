@@ -26,8 +26,8 @@ items:
   - id: T-6
     title: docs/CLI.md and docs/CONFIG.md describe itos container's commands and itos-container.yaml, from the newest of itos's and itos-cc's guidelines
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-4
