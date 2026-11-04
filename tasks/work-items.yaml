@@ -86,6 +86,9 @@ items:
     why: >
       Keep the offline owned-run milestone's proof tooling maintained by extending existing update
       automation to tools/bin/pinned, preserving verified checksums alongside version updates.
+
+      Already covers updating launcher versions together with verified archive checksums to maintain
+      the milestone's proof tooling.
   - id: p1-fresh-mutation-baseline
     title: Record a fresh foundation mutation baseline with pinned itos-cc
     phase: 1
