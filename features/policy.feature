@@ -93,6 +93,7 @@ Feature: Strict offline sandbox policy
   # policy.empty                no document content, including comments only
   # policy.syntax               malformed YAML/invalid tagged scalar
   # policy.multiple_documents   more than one document, even an empty trailing one
+  # policy.complexity           representation exceeds depth or node budget
   # policy.duplicate_key        repeated decoded string key
   # policy.non_string_key       mapping key is not a string
   # policy.anchor               an anchor declaration, even unused
@@ -107,8 +108,14 @@ Feature: Strict offline sandbox policy
   # policy.network_mode         string mode other than offline
   # policy.path                 invalid lexical manifest path
   #
-  # Stop at unreadable, empty or malformed input, or multiple documents. Otherwise
-  # collect structural problems throughout the tree before schema validation.
+  # Stop at unreadable, empty or malformed input, or multiple documents. Before
+  # structural validation, preflight the decoded representation with no per-node
+  # allocation: at most 32 levels and 2048 nodes, counting the root at depth 1,
+  # every mapping key/value and sequence element, and each alias reference once.
+  # Do not count the document wrapper or follow alias targets. Refuse either
+  # excess with exactly one policy.complexity problem at root, before allocating
+  # diagnostic paths or converting values (including scalar validation).
+  # Within those budgets, collect structural problems before schema validation.
   # Recognize merge keys before generic key/tag checks, reporting only merge_key
   # for that key; an alias is reported once without visiting its target.
   # Structural errors prevent schema projection. Then require an object and a valid
@@ -128,9 +135,10 @@ Feature: Strict offline sandbox policy
   # readable and JSON paths lossless after JSON decoding and RFC 6901 escaping.
   # Apply the same escaping to the manifest in successful human output, including
   # C1 controls and Unicode line separators. Preserve the decoded manifest in JSON.
-  # Deep nesting below unknown fields must not retain a separate ancestor-path
-  # copy for every node. Inspect the whole tree and preserve diagnostic locations
-  # while using traversal storage proportional to depth, plus retained issues.
+  # The coordinator's parser-wide budgets supersede the previous requirement to
+  # inspect arbitrarily deep trees. Keep the shared traversal path within those
+  # budgets, preserving diagnostic locations. The tagged 6000-level review input
+  # and earlier untagged 6000/8000-level inputs must be refused before that walk.
   #
   # Layout handoff: features/steps_test.go and features/policy_steps_test.go now
   # define every step below, and all 28 scenarios are live. Preserve their IDs,
@@ -801,6 +809,50 @@ Feature: Strict offline sandbox policy
       | depth |
       | 6000  |
       | 8000  |
+
+  @wip @slice-1 @ID-POLICY-36
+  Scenario Outline: representation depth is bounded before structural validation
+    Given the policy file has representation depth 33 using "<shape>"
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule              | path | exit |
+      | policy.complexity |      | 2    |
+    And it exits with code 2
+    And the engine recorder has no connections
+
+    Examples:
+      | shape        |
+      | sequences    |
+      | mappings     |
+      | complex keys |
+
+  @wip @slice-1 @ID-POLICY-37
+  Scenario Outline: representation node count is bounded including mapping keys
+    Given the policy file has 2049 representation nodes using "<shape>"
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule              | path | exit |
+      | policy.complexity |      | 2    |
+    And it exits with code 2
+    And the engine recorder has no connections
+
+    Examples:
+      | shape     |
+      | sequences |
+      | mappings  |
+
+  @wip @slice-1 @ID-POLICY-38
+  Scenario: custom tags at every depth cannot amplify retained diagnostic paths
+    Given the policy file contains 6000 nested tagged sequences below an unknown field
+    When itos-container runs with "doctor --policy-only --json" and the environment "GODEBUG=gctrace=1;GOGC=10;GOMEMLIMIT=off"
+    Then its GC trace reports less than 64 MiB of heap
+    And its policy JSON reports exactly these problems:
+      | rule              | path | exit |
+      | policy.complexity |      | 2    |
+    And it exits with code 2
+    And the engine recorder has no connections
 
   # New Given: create only harness-owned helper executables on the child PATH for
   # git, docker, devcontainer, sh, bash and npm. Each records execution and exits;
