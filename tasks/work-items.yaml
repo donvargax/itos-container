@@ -113,7 +113,7 @@ items:
     title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-track-gherkin-mutation-freshness
@@ -180,8 +180,8 @@ items:
   - id: slice-1
     title: Validate the strict offline sandbox policy
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
