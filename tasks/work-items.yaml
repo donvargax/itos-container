@@ -274,7 +274,7 @@ items:
     title: Scenarios that need a real engine have a tag, a switch and one Linux job
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-remove-dead-release

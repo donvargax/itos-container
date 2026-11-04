@@ -1417,9 +1417,120 @@
   type: ci
   title: Scenarios that need a real engine have a tag, a switch and one Linux job
   why: >
-    The charter wants every isolation property proven by a scenario, and no test can reach a real
-    engine: no tag, switch or job exists. Blocks the charter's step 3, the offline owned run. An
-    @engine tag behind an environment variable, skipped elsewhere, and one required Linux job with
-    native Docker. Specify it with or just after T-11.
-  done_when:
-    - run: go test ./features -count=1
+    The charter requires runtime evidence for the offline owned run, but features/features_test.go
+    excludes only @wip and .github/workflows/ci.yml has no engine tier. A future live runtime
+    scenario would enter ordinary tests, smoke selections and mutation coverage runs. Establish
+    the test infrastructure before those scenarios become live. This is a foundation CI task,
+    not container behaviour; specify it here, with regression checks and no product scenarios,
+    scenario IDs or step definitions. Read docs/charter.md, docs/architecture.md, the T-11 plan
+    docs/plans/offline-run-lifecycle.md, features/README.md, features/features_test.go,
+    features/steps_test.go, itos.yaml, itos-cc.yaml and .github/workflows/ci.yml.
+
+    Reserve @engine for any scenario whose setup, hooks, steps or cleanup need a real container
+    engine. Determine effective tags with Gherkin inheritance, including Feature, Rule, Scenario
+    Outline and Examples tags; neither a line scanner nor a filename convention is sufficient.
+    Use the already pinned github.com/cucumber/godog v0.16.0 parser and tag facilities, including
+    RetrieveFeatures, rather than a new parser or dependency. @wip remains excluded in both tiers,
+    even with an explicit ID or @wip selection. Do not change existing scenario text, IDs, tags,
+    fingerprints, smoke entries or their counting/CLI/completion outcomes.
+
+    The harness-only switch is ITOS_CONTAINER_ENGINE_TESTS. Unset, empty or 0 selects only live
+    non-engine scenarios. Exactly 1 selects only live @engine scenarios, and is accepted only
+    with CI=true, GITHUB_ACTIONS=true and an actual Linux amd64 test process. Any other nonempty
+    value, or an enabled request outside that context, fails before building the tested binary,
+    initializing scenario hooks or touching an engine. Pass OS, architecture and environment
+    values into selection logic so tests can exercise unsupported contexts without runtime.GOOS
+    branches in that logic. These interlocks prevent accidental execution, not hostile code;
+    agents still never receive a socket or run engine tests. The switch is not a product option
+    and remains stripped from child command environments by the existing steps' ITOS_ filtering.
+
+    Keep -scenarios as a regular expression over effective tags, intersected with the chosen
+    tier and the live set. An empty selection runs the whole chosen tier; an OR expression must
+    not let either branch bypass @engine or @wip exclusions. Invalid regexes, unreadable or
+    malformed features, and expressions matching no scenario's effective tags fail. A valid
+    selection matching only the other tier or @wip is an explicit test skip with its reason and
+    excluded IDs/count, not a successful zero-scenario suite. Mixed selections run their eligible
+    scenarios and report the exclusions. Ordinary whole/smoke/ID/coverage runs never initialize
+    engine setup or discovery, even when Docker environment variables or a socket are present.
+    Apply selection before any scenario hooks, Background steps, binary build or engine access.
+
+    Keep itos.yaml's scenario listing, footer validation and smoke coverage rules intact; an
+    engine-only feature still supplies a live smoke ID when its behaviour is implemented. The
+    ordinary job may report that ID skipped because the required engine job runs every live
+    @engine scenario at the same head, independent of smoke, changed IDs or a green baseline.
+    Keep itos-cc.yaml and proof.code unchanged: mutation, own tests and scenario coverage remain
+    engine-disabled in the ci job, including individual-test fallback and whole-suite collection.
+    A skipped engine ID supplies no runtime or coverage evidence. Never satisfy uncovered code
+    by enabling Docker in proof, fabricating counters or weakening the existing proof policy.
+    Later behaviours need the domain/port fake tests as well as their separate runtime evidence.
+
+    Add exactly one job, engine, named Engine scenarios (Linux amd64), in the existing CI
+    workflow. Use the native Linux amd64 ubuntu-latest runner, the existing checkout/setup-go
+    action pins and go.mod toolchain, and checkout ref ${{ env.TO }}. Run on main pushes,
+    non-draft pull requests and workflow_dispatch, matching ci's event/draft condition. Do not
+    add pull_request_target, credentials, services, a job container or another platform. Keep
+    the Linux platform tests and manual macOS/Windows jobs. Only the engine scenario step sets
+    ITOS_CONTAINER_ENGINE_TESTS=1; ordinary jobs, hooks, proof and manual portability runs leave
+    it disabled. The engine step runs go test ./features -count=1 -v -timeout=5m
+    -run '^TestFeatures$' with no scenario-pattern restriction, selecting every live engine case.
+
+    Before that step, require a bounded read-only Docker server preflight against the explicit
+    local unix:///var/run/docker.sock endpoint, ignoring caller-selected contexts/remote hosts.
+    Require a responding Linux amd64 server and record only server version/API version, OS,
+    architecture and tested commit. Missing CLI/socket, access denial, daemon failure, wrong
+    platform or timeout fails the job; no skip, automatic install/start, pull/build or fallback.
+    Bound the preflight to 30 seconds, the Go test run to 5 minutes and the job to 10 minutes;
+    these are CI budgets, not decisions about product startup/resource limits. This task creates
+    no containers, chooses no worker image and runs no isolation probe. Native runtime fixtures
+    and reviewed image acquisition belong to the later behaviour specs, once their open image,
+    approval and resource-limit decisions are settled.
+
+    There are currently no @engine scenarios. The preflight still runs in engine; the harness
+    explicitly skips TestFeatures with 'no live @engine scenarios' and count zero when that set
+    is empty, including an all-@wip engine set. This is infrastructure readiness, not sandbox
+    proof. Once live engine cases exist, each must execute; missing prerequisites, undefined
+    steps and pending/skipped runtime steps fail rather than turn runtime coverage green. Do not
+    invent a passing counting scenario tagged @engine as runtime evidence. Tests must distinguish
+    the empty-set bootstrap from a nonempty set accidentally filtered down to nothing.
+
+    Make engine a dependency of ci and have ci explicitly fail if its result is not success;
+    use always() with the existing event/draft condition so a failed or unexpectedly skipped
+    dependency cannot silently skip the required ci check. Do not use continue-on-error or
+    success fallbacks. Document the stable engine check name for the coordinator's repository
+    settings; changing remote branch protection is not this task's work. Preserve existing
+    permissions, range/verify/proof commands, action pins and all unrelated workflow checks.
+
+    Add TestEngineSelection and TestEngineWorkflow under features as ordinary Go regression
+    tests. TestEngineSelection runs disposable Gherkin fixtures through the real selection and
+    godog execution path with memory-only steps and hook counters, never a real engine. Assert
+    which IDs and outline rows actually execute, zero excluded hooks/steps, explicit skips,
+    malformed/no-match failures, default/0/1/invalid switch values, unsupported CI/OS/architecture
+    contexts, inherited tags, @wip and mixed OR selections, empty bootstrap and a live engine
+    sentinel that cannot disappear. Include engine-step failure propagation. Simulate allowed
+    contexts as values; do not opt the local TestFeatures run into engine mode. TestEngineWorkflow
+    parses the workflow with existing go.yaml.in/yaml/v3 v3.0.5 and checks the sole enabled job,
+    runner/head, event guard, preflight, budgets, complete engine invocation, ci dependency/result
+    propagation and disabled ordinary/proof paths. Exercise broken workflow fixtures as negative
+    controls, including a lost dependency, ignored preflight failure and a leaked switch. Keep
+    fixtures outside features/*.feature so itos never inventories synthetic tests as product
+    scenarios. These checks are cheap and run in the existing full Linux Go suite; no new local
+    engine gate, nightly job, library, product package or slice is needed.
+
+    The implementation first commits these regression tests with test --item T-16 and records
+    failing assertions against the old harness/workflow; compiling but missing new APIs or
+    matching zero Go tests is not red evidence. Today the default selector executes a synthetic
+    live @engine sentinel, enabled selection also executes ordinary cases, and the workflow
+    lacks the engine job and dependency. The corresponding selection/execution and parsed-job
+    assertions must fail before implementation and pass afterward. Existing go test ./features
+    is only a preservation check until these regressions exist. The presence check below fails
+    today because both named tests are absent; it prevents a -run typo from masquerading as proof.
+
+    Implementation may change the harness and its Go test fixtures, .github/workflows/ci.yml
+    and features/README.md only; document the tag, switch, selection/skip rules, CI-only command
+    and red-first runtime workflow there. Keep test support out of product binaries and obey
+    docs/architecture.md's import boundaries. No production implementation or step definitions
+    belong to this spec commit. Later real-engine behaviour steps are committed red with @wip
+    retained; the coordinator obtains assertion-level red and green evidence in CI with @wip
+    removed for those runs, never on an agent host. No generated mutation/coverage evidence is
+    committed here. Let configured hooks/CI run the gates; agents commit and stop, and the loop
+    alone pushes, watches the actual head and closes T-16 after its required checks pass.
