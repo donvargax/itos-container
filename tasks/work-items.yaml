@@ -228,14 +228,15 @@ items:
       missing or incompatible cached images, and typed diagnostics. Select and pin the engine
       library; real-engine scenarios run only in CI. Broken down from
       p2-specify-policy-manifest-approval.
-  - id: p2-explicit-host-approval
+  - id: slice-4
     title: Review and record explicit host-owned approval
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-1, slice-2, slice-3]
-    kind: idea
+    kind: slice
     why: >
+      Was p2-explicit-host-approval.
       Build the approve slice using shared validation and identity code. Specify canonicalization,
       fingerprints and host-owned storage before implementation. Scenarios must cover effective
       permissions and differences, deliberate consent, checkout separation, changed configurations,
