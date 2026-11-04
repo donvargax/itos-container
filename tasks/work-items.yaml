@@ -379,3 +379,14 @@ items:
       Refuse invalid input, approval, identity and image with an empty Engine API journal, and write
       the frozen snapshot. Host user is the effective UID, root refused. Host UID/GID overrides the
       image; manifest values must equal it; no chown.
+  - id: slice-9
+    title: Owned create and cleanup
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-8, T-20]
+    kind: slice
+    why: >
+      Creates internal/engine/session. An fsynced intent record before create; create unstarted,
+      remove, confirm absence; a write failure and a lost create response. Reconcile by record plus
+      random name.
