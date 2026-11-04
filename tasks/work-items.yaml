@@ -99,3 +99,6 @@ items:
       does not establish a foundation baseline. Specify separate first-milestone work to measure
       project-local evidence with the pinned tool, all-tests, fail-uncovered and no-annotate; kill
       survivors and cover untested code without weakening gates, then commit the resulting evidence.
+
+      Already covers generating fresh foundation mutation evidence after T-4: zero eligible cached
+      mutants means passing checks do not establish the milestone's baseline.
