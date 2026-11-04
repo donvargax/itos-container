@@ -235,3 +235,10 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p1-allow-gherkin-specification-commits
+    title: Allow docs commits for Gherkin specifications
+    phase: 1
+    owner: null
+    status: dropped
+    depends_on: []
+    kind: idea
