@@ -273,3 +273,10 @@ items:
       shared contracts. Include doctor’s shared schemas, diagnostics and fixtures across slices 1–4,
       slice-3’s prerequisites from slices 1–2, and slice-4’s approval integration and implementation
       order.
+  - id: T-12
+    title: CI runs on Linux, each pull request once; other platforms by hand
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task

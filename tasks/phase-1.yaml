@@ -583,3 +583,19 @@
     p2-specify-policy-manifest-approval.
   done_when:
     - run: sh -eu -c 'f=docs/plans/offline-run-lifecycle.md; test -s "$f"; for section in "## Arguments and JSON" "## Ownership and startup" "## Timeouts and cancellation" "## Workload exits" "## Cleanup and recovery" "## Acceptance scenarios" "## Security decisions"; do grep -Fqx "$section" "$f"; done'
+- id: T-12
+  type: ci
+  title: CI runs on Linux, each pull request once; other platforms by hand
+  why: >
+    CI on main has had no green run since 14:37 UTC on 2026-11-04: every failure is Tests
+    (macos-latest) never acquiring a runner and being cancelled after 15 minutes (41856642827), and
+    later runs queue behind it. The charter's "Not yet" excludes every platform but Linux amd64 with
+    native Docker, so this project pays for a matrix it does not need. Settled: the push and
+    pull-request matrix is ubuntu-latest alone; Windows and macOS stay runnable by hand through
+    workflow_dispatch. Triggers follow donvargax/itos/.github/workflows/ci.yml
+    lines 3-7, 17-19 and 32: push on main only, pull_request with ready_for_review, drafts judged by
+    nothing, cancel-in-progress on a pull request's own runs, never on main. Today every branch push
+    runs twice (41863302515, 41863312223). Keep item branches' CI through the pull request, which is
+    what T-7 wanted. Read itos's file; do not invent. Touch no other workflow.
+  done_when:
+    - run: "! grep -Eq 'os:.*(macos|windows)-latest' .github/workflows/ci.yml && grep -q ready_for_review .github/workflows/ci.yml && grep -q workflow_dispatch .github/workflows/ci.yml"
