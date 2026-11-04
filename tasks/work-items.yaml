@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - T-14
-  - T-13
   - T-15
 items:
   - id: T-1
@@ -263,7 +262,7 @@ items:
     title: The code proof is a fresh seeded mutation run in CI, with no committed evidence
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-12]
     kind: task
   - id: T-14

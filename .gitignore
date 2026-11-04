@@ -2,3 +2,7 @@
 
 # Pinned tools downloaded for local use.
 /.tools/
+
+# CI judges fresh mutation proof; generated evidence stays out of Git.
+/.metrics/mutate/
+/.metrics/coverage/

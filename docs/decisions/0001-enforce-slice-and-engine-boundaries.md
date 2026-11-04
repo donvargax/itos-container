@@ -67,16 +67,11 @@ probes caught two external-test self imports, three misplaced nested support
 packages and two unresolved test dependencies that ordinary `go list` accepted.
 The checker now validates test dependency loading as well as its import arrows.
 
-Strict proof used `tools/bin/pinned itos-cc mutation run --since
-913e8298f5af56d6273bda9a2cc8c3494b443555 --all-tests --fail-uncovered
---no-annotate --json cmd internal`. This is the parent of T-14's actual first
-spec commit (`a1caf86`), including its later specifications in the range.
-The final run freshly judged 39 sites: 38 killed, one existing equivalent
-exception, zero survivors and zero uncovered sites or executable blocks.
-No cached mutation result was reused. The pinned tool renewed the existing
-main-argument exception after the classifier injection; its reason is unchanged,
-and no new exception was introduced. Generated snapshots follow the count move;
-the tool removed orphaned snapshots, with no hand-edited evidence.
+T-13 supersedes the local snapshot proof. The merge from main removes all
+`.metrics/mutate` snapshots, including those moved or added by T-14. Main's
+`proof.code.check` runs a fresh seeded sample in CI and measures changed-line
+coverage. Agents run no local mutation proof; the coordinating loop verifies
+the actual pushed head. The old snapshots are not acceptance evidence.
 
 The initial proof exposed assertion branches in `FilesContract` that conforming
 adapters never exercised. Faulty port implementations now prove the suite detects
@@ -89,7 +84,7 @@ port's existing promise, not new counting behaviour.
 structural check, explicit fixture matrix, three `TestFilesContract` entry points,
 per-domain coverage (count 100.0%) and the full `RAPID_CHECKS=1` product suite,
 including unchanged black-box scenarios. Commit hooks passed lint and vulnerability
-checks. The configured strict mutation check passed on the generated snapshots.
+checks. The historical snapshot check is superseded by T-13's fresh CI proof.
 Push and verification of the actual pushed head remain the coordinator's work.
 
 <details>

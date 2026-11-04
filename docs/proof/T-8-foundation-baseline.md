@@ -1,5 +1,11 @@
 # T-8 foundation mutation baseline
 
+> Superseded by T-13 on 2026-11-04. The measurements and reproduction commands below
+> describe historical evidence retained in Git history, not today's handoff procedure.
+> CI now judges fresh counted proof; agents commit and stop without local mutation runs
+> or committed mutation/coverage evidence. The two equivalent exceptions remain in
+> `itos-cc.yaml`. See [current proof guidance](../ORCHESTRATING.md#proof).
+
 Measured on Linux amd64 with `tools/bin/pinned itos-cc` 0.47.2. The initial
 measurement used `go version go1.27.3-X:nodwarf5 linux/amd64`; the CI recovery
 below uses standard Go 1.27.2, selected by the workflow from `go.mod`.

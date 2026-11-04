@@ -68,14 +68,18 @@ does not take an item. Report gaps and follow-up ideas with why they matter to t
 
 ## Finishing
 
-Before handing code changes to the loop for its final push, record changed-code proof with the
-pinned itos-cc, all-tests, fail-uncovered and no-annotate; commit project-local `.metrics/mutate/`
-evidence by explicit path. Use the parent of the item's actual first commit, specs included,
-not an assumed take commit. Kill survivors with tests; only truly equivalent mutants may be
-excepted with a reason for the person to review. Uncovered mutants and executable code need
-tests, never exceptions. Never reshape code merely to remove mutation sites, hand-edit evidence
-or copy another project's cache. Documentation-only work touches no `proof.code` path and must
-not fabricate mutation results; a passing cached sample is not a fresh foundation baseline.
+CI alone judges fresh changed-code proof with the pinned itos-cc: up to ten mutation sites
+across changed functions, plus measured coverage of added or changed lines, including functions
+without mutation sites. `proof.code` supplies the command; core itos supplies the judged range's
+`{base}` for both `--since` and `--seed`. The same base and eligible sites give the same draw;
+changing the candidate set can change it. This sampled proof is not a full foundation baseline.
+Agents make no local mutation run and commit no generated mutation or coverage evidence;
+`.metrics/mutate/` and `.metrics/coverage/` are ignored and must not be restored into CI.
+Kill survivors with tests and cover uncovered changed lines; never redraw to escape failure.
+Only truly equivalent mutants may be excepted with a reason for the person to review. Uncovered
+code needs tests, never exceptions. Never reshape code merely to remove mutation sites or
+hand-edit evidence. Documentation-only work touches no `proof.code` path and fabricates no
+mutation results. Scenario red-first runs remain required as described above.
 
 Report commits, checks, behavior scenarios' failing-then-passing evidence when applicable, and
 remaining gaps. Stop after committing: the loop owns push, CI watching and closure. It closes
