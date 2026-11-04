@@ -67,9 +67,15 @@ Feature: Strict offline sandbox policy
   # from this repository. Apply this to the policy code already in internal/cli.
   # YAML nodes, file access, JSON, rule IDs and exit codes stay outside the domain.
   # No Docker library, socket, real engine or runtime isolation test is needed here.
-  # Safe checkout identity, symlink/substitution defenses and engine identity belong
-  # to slice-3; manifest contents/metadata belong to slice-2. These regular-file
-  # fixtures settle lexical paths only, not secure filesystem identity or approval.
+  # Read the policy without following its final symbolic link and require the
+  # opened file to be regular. Never wait for a FIFO writer or read a device.
+  # Limit policy input to 65536 bytes (64 KiB), checking the opened file's size and
+  # bounding the read even if it grows. Refuse links (including dangling links),
+  # non-regular files and larger inputs as policy.unreadable before parsing.
+  # Standard-library file APIs and bounded readers suffice; no new library is needed.
+  # Checkout/engine identity and approval-time substitution defenses still belong
+  # to slice-3; manifest contents/metadata belong to slice-2. This bounded policy
+  # read does not settle secure checkout identity or approval.
   #
   # --json and inherited ITOS_JSON=1 request exactly one stdout object. Explicit
   # --no-json wins over the environment. Success has schema:1, ok:true,
@@ -83,7 +89,7 @@ Feature: Strict offline sandbox policy
   #
   # Stable rules (all exit 2 except policy.unreadable, exit 3):
   # policy.missing              required policy file absent
-  # policy.unreadable           policy exists but cannot be read, including a directory
+  # policy.unreadable           unreadable, linked, non-regular or oversized policy file
   # policy.empty                no document content, including comments only
   # policy.syntax               malformed YAML/invalid tagged scalar
   # policy.multiple_documents   more than one document, even an empty trailing one
@@ -120,6 +126,8 @@ Feature: Strict offline sandbox policy
   # Escape diagnostic locations on stderr with Go string escapes (without outer
   # quotes), including controls, backslashes and quotes. Keep printable Unicode
   # readable and JSON paths lossless after JSON decoding and RFC 6901 escaping.
+  # Apply the same escaping to the manifest in successful human output, including
+  # C1 controls and Unicode line separators. Preserve the decoded manifest in JSON.
   #
   # Layout handoff: features/steps_test.go and features/policy_steps_test.go now
   # define every step below, and all 28 scenarios are live. Preserve their IDs,
@@ -714,6 +722,63 @@ Feature: Strict offline sandbox policy
       | number     |
       | 1e1000000  |
       | 1e-1000000 |
+
+  # A normal target and a dangling target demonstrate no-follow without ever
+  # exposing the unfixed reader to an unbounded device or a blocking FIFO.
+  @wip @slice-1 @bug-2 @ID-POLICY-32
+  Scenario Outline: policy symbolic links are refused without reading their targets
+    Given the file "target.yaml" contains "version: 1", "manifest: a.json"
+    And the policy file is a symbolic link to "<target>"
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule              | path | exit |
+      | policy.unreadable |      | 3    |
+    And it exits with code 3
+
+    Examples:
+      | target       |
+      | target.yaml  |
+      | missing.yaml |
+
+  @wip @slice-1 @bug-2 @ID-POLICY-33
+  Scenario: oversized policy data is refused before parsing
+    Given a valid policy is padded with spaces to 65537 bytes
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule              | path | exit |
+      | policy.unreadable |      | 3    |
+    And it exits with code 3
+
+  @wip @slice-1 @bug-3 @ID-POLICY-34
+  Scenario Outline: successful policy output escapes terminal controls and preserves JSON data
+    Given the policy file contains:
+      """
+      version: 1
+      manifest: "config/ñ\u009b2J\u009dtitle\u009c\u0085\u2028\u2029\".json"
+      """
+    When itos-container runs with "doctor <mode>"
+    Then its standard output is exactly:
+      """
+      Policy only
+      version: 1
+      manifest: config/ñ\u009b2J\u009dtitle\u009c\u0085\u2028\u2029\".json
+      network.mode: offline
+      Host readiness and approval were not checked
+      """
+    And it exits with code 0
+    When itos-container runs with "doctor <mode> --json"
+    Then its policy JSON contains this effective policy:
+      """
+      {"version":1,"manifest":"config/ñ\u009b2J\u009dtitle\u009c\u0085\u2028\u2029\".json","network":{"mode":"offline"}}
+      """
+    And it exits with code 0
+
+    Examples:
+      | mode          |
+      |               |
+      | --policy-only |
 
   # New Given: create only harness-owned helper executables on the child PATH for
   # git, docker, devcontainer, sh, bash and npm. Each records execution and exits;

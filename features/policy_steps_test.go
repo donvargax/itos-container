@@ -34,6 +34,13 @@ func (w *world) policySteps(sc *godog.ScenarioContext) {
 	sc.Step("^the policy file is empty$", func() error {
 		return os.WriteFile(filepath.Join(w.dir, "itos-container.yaml"), nil, 0o600)
 	})
+	sc.Step(`^the policy file is a symbolic link to "([^"]*)"$`, func(target string) error {
+		return os.Symlink(target, filepath.Join(w.dir, "itos-container.yaml"))
+	})
+	sc.Step(`^a valid policy is padded with spaces to (\d+) bytes$`, func(size int) error {
+		data := "version: 1\nmanifest: a.json\n"
+		return os.WriteFile(filepath.Join(w.dir, "itos-container.yaml"), []byte(data+strings.Repeat(" ", size-len(data))), 0o600)
+	})
 	sc.Step(`^the policy file contains (\d+) numeric list values spelled "([^"]*)" below an unknown field$`, func(count int, value string) error {
 		data := "version: 1\nmanifest: a.json\nextra:\n" + strings.Repeat("  - "+value+"\n", count)
 		return os.WriteFile(filepath.Join(w.dir, "itos-container.yaml"), []byte(data), 0o600)
@@ -64,6 +71,12 @@ func (w *world) policySteps(sc *godog.ScenarioContext) {
 	sc.Step("^its error output is exactly:$", func(doc *godog.DocString) error {
 		if w.stderr != doc.Content+"\n" {
 			return fmt.Errorf("error output %q, expected %q", w.stderr, doc.Content+"\n")
+		}
+		return nil
+	})
+	sc.Step("^its standard output is exactly:$", func(doc *godog.DocString) error {
+		if w.stdout != doc.Content+"\n" {
+			return fmt.Errorf("standard output %q, expected %q", w.stdout, doc.Content+"\n")
 		}
 		return nil
 	})
