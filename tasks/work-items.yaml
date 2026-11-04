@@ -306,3 +306,15 @@ items:
       engine: no tag, switch or job exists. Blocks the charter's step 3, the offline owned run. An
       @engine tag behind an environment variable, skipped elsewhere, and one required Linux job with
       native Docker. Specify it with or just after T-11.
+  - id: p2-remove-dead-release
+    title: Delete the release machinery until a release is wanted
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      release.yml has no caller and runs tools that are absent (lines 75 and 123), and line 34
+      assumes a public repository, so attestation would fail here. internal/release has no importers
+      and accounted for 71 of T-8's 225 mutants and T-8's Windows failure. Delete both until a
+      release is wanted, amending AGENTS.md's preserve clause. Waits: nothing is blocked by it.
