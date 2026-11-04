@@ -430,3 +430,15 @@ items:
       T-11's stall, signal, engine-loss and controller-kill cases. Waits: 10 s call, 120 s startup,
       30 s teardown. Signals: forward once, 10 s grace, then SIGKILL; observed exit wins. Controller
       loss leaves the worker isolated until stop.
+  - id: p3-approval-before-egress
+    title: Revisit who may approve a sandbox before it can grant network or credentials
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person's q-2, 2026-11-04: an agent on the host can approve its own sandbox through
+      --fingerprint or a faked terminal. Offline-only permissions make that cheap for now. Before
+      the egress and credentials stages, when an approval grants something worth taking, weigh a
+      host-side confirmation an agent cannot drive, per the stage.
