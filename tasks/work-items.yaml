@@ -246,3 +246,7 @@ items:
       Unblocks the charter’s Configuration, doctor and approval step: slice-1 needs scenario
       specifications committed before implementation. Permit .feature files while preserving
       live-scenario protection and PR routing.
+
+      Already covers allowing Gherkin specifications in docs commits. The same restriction also
+      blocks slice-2 and sibling slices in the charter’s Configuration, doctor and approval step;
+      address them together while preserving live-scenario protection and PR routing.
