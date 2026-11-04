@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -47,16 +48,20 @@ func main() {
 	}
 }
 
-func run(args []string) error {
-	if len(args) < 2 || (args[0] != "domains" && args[0] != "config") ||
-		(args[0] == "domains" && len(args) != 2) || (args[0] == "config" && len(args) != 3) {
-		return fmt.Errorf("usage: slice-layout domains <root> | config <root> <output>")
+func run(args []string) (err error) {
+	if len(args) != 2 || (args[0] != "domains" && args[0] != "config") {
+		return fmt.Errorf("usage: slice-layout domains <root> | config <root>")
 	}
 	root, err := filepath.Abs(args[1])
 	if err != nil {
 		return err
 	}
-	layout, err := discover(root)
+	source, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, source.Close()) }()
+	layout, err := discover(source.FS())
 	if err != nil {
 		return err
 	}
@@ -80,7 +85,7 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	base, err := os.ReadFile(filepath.Join(root, ".golangci.yml"))
+	base, err := source.ReadFile(".golangci.yml")
 	if err != nil {
 		return err
 	}
@@ -95,7 +100,8 @@ func run(args []string) error {
 		return err
 	}
 	config = strings.Replace(config, rulesSlot, "      rules: "+string(rules)+"\n", 1)
-	return os.WriteFile(args[2], []byte(config), 0o600)
+	_, err = fmt.Print(config)
+	return err
 }
 
 func modulePath(root string) (string, error) {
@@ -122,8 +128,8 @@ func visible(name string) bool {
 	return name != "testdata" && name != "vendor" && !strings.HasPrefix(name, ".") && !strings.HasPrefix(name, "_")
 }
 
-func discover(root string) ([]slice, error) {
-	entries, err := os.ReadDir(filepath.Join(root, "internal"))
+func discover(source fs.FS) ([]slice, error) {
+	entries, err := fs.ReadDir(source, "internal")
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -136,7 +142,7 @@ func discover(root string) ([]slice, error) {
 			continue
 		}
 		path := "internal/" + entry.Name()
-		children, err := os.ReadDir(filepath.Join(root, path))
+		children, err := fs.ReadDir(source, path)
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +158,7 @@ func discover(root string) ([]slice, error) {
 			if !child.IsDir() || !visible(child.Name()) || child.Name() == "port" || child.Name() == "command" {
 				continue
 			}
-			packages, err := packageTree(root, path+"/"+child.Name())
+			packages, err := packageTree(source, path+"/"+child.Name())
 			if err != nil {
 				return nil, err
 			}
@@ -167,9 +173,9 @@ func discover(root string) ([]slice, error) {
 	return result, nil
 }
 
-func packageTree(root, path string) ([]sourcePackage, error) {
+func packageTree(source fs.FS, path string) ([]sourcePackage, error) {
 	var result []sourcePackage
-	err := filepath.WalkDir(filepath.Join(root, path), func(dir string, entry fs.DirEntry, walkErr error) error {
+	err := fs.WalkDir(source, path, func(dir string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -179,15 +185,11 @@ func packageTree(root, path string) ([]sourcePackage, error) {
 		if !visible(entry.Name()) {
 			return filepath.SkipDir
 		}
-		files, err := os.ReadDir(dir)
+		files, err := fs.ReadDir(source, dir)
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(root, dir)
-		if err != nil {
-			return err
-		}
-		pkg := sourcePackage{path: filepath.ToSlash(rel)}
+		pkg := sourcePackage{path: dir}
 		found := false
 		sourceNames := make(map[string]bool)
 		testNames := make(map[string]string)
@@ -198,7 +200,12 @@ func packageTree(root, path string) ([]sourcePackage, error) {
 			found = true
 			// Only external tests get the exact subject-package exception. No
 			// imports are parsed here: depguard remains the import checker.
-			parsed, err := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, file.Name()), nil, parser.PackageClauseOnly)
+			filename := dir + "/" + file.Name()
+			data, err := fs.ReadFile(source, filename)
+			if err != nil {
+				return err
+			}
+			parsed, err := parser.ParseFile(token.NewFileSet(), filename, data, parser.PackageClauseOnly)
 			if err != nil {
 				return err
 			}

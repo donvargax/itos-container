@@ -1,7 +1,7 @@
 version: "2"
 run:
   # Effective configs live outside the checkout; resolve paths from its cwd.
-  relative-path-mode: cwd
+  relative-path-mode: wd
 linters:
   default: standard
   enable:
