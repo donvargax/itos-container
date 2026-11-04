@@ -135,7 +135,6 @@ push:
     review_by: [chatgpt-codex-connector]
     reviewers:
       - { login: chatgpt-codex-connector, kind: codex }
-      - { login: "cursor[bot]", kind: bugbot }
     direct:
       types: [docs]
       except: ["features/**"]
