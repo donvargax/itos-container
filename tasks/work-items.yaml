@@ -51,3 +51,16 @@ items:
       retarget them to this project's commands (init, doctor, approve, run, exec, status, stop) and
       its policy file. The reading rules in CONFIG.md matter most here: itos-container.yaml lives in
       an untrusted checkout.
+  - id: p1-itos-cc-upgrade
+    title: tools/bin/pinned runs the current itos-cc, not 0.5.0
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      tools/bin/pinned pins itos-cc 0.5.0 (2026-11-03); the latest release is 0.47.2. CI's mutation
+      sample and proof.code's mutation check run through it, so the project's code proof runs a tool
+      forty-odd releases behind, without its narrower test runs and fixes. Move the pin and its five
+      checksums to the current release, read itos-cc's release notes for changed flags or config
+      (itos-cc.yaml), and keep the proof green.
