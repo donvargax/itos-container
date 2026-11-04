@@ -19,8 +19,8 @@ items:
   - id: T-3
     title: "Finish the move to itos 8: the by-hand steps of itos upgrade 7.0.0-rc.1 to 8.45.3"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p1-adapt-cli-config-guidelines
@@ -44,3 +44,24 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p1-replace-template-instructions
+    title: Replace inherited template guidance in PLAN.md, README.md and AGENTS.md
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The charter explicitly requires project-specific foundation guidance so subsequent work
+      follows the offline owned-run milestone and its boundaries.
+  - id: p1-align-ci-branch-conditions
+    title: Align CI triggers and Go test conditions with main and work branches
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The offline owned-run milestone needs reliable CI proof on main and work branches. Correct
+      inherited branch conditions while preserving existing checks and the charter's Linux-only
+      runtime scope.
