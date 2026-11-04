@@ -415,3 +415,14 @@ items:
       list shows which sessions lost their controller, as candidates to stop. Records beside
       approvals, random hex IDs, a per-session lock, revalidating daemon and resource before
       mutating.
+  - id: slice-12
+    title: Budgets, cancellation and loss
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-10]
+    kind: slice
+    why: >
+      T-11's stall, signal, engine-loss and controller-kill cases. Waits: 10 s call, 120 s startup,
+      30 s teardown. Signals: forward once, 10 s grace, then SIGKILL; observed exit wins. Controller
+      loss leaves the worker isolated until stop.
