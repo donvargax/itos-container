@@ -15,7 +15,7 @@ func checker(t *testing.T) string {
 	return path
 }
 func TestInspectionErrors(t *testing.T) {
-	for _, name := range []string{"config", "empty-rules", "empty-rule", "load", "empty-targets", "no-main", "usage", "range", "missing-range"} {
+	for _, name := range []string{"config", "empty-rules", "empty-rule", "load", "test-load", "external-test-load", "empty-targets", "no-main", "usage", "range", "missing-range"} {
 		t.Run(name, func(t *testing.T) {
 			dir := fixture(t)
 			flags := []string{"--siblings", "--outside", "--linked", "--toplevel"}
@@ -28,6 +28,10 @@ func TestInspectionErrors(t *testing.T) {
 				write(t, dir, ".golangci.yml", "version: '2'\nlinters:\n  settings:\n    depguard:\n      rules:\n        empty: {}\n")
 			case "load":
 				write(t, dir, "cmd/control/main.go", "package main\nimport _ \"does.not.exist/missing\"\nfunc main(){}\n")
+			case "test-load":
+				write(t, dir, "cmd/control/main_test.go", "package main\nimport _ \"does.not.exist/missing\"\n")
+			case "external-test-load":
+				write(t, dir, "cmd/control/main_test.go", "package main_test\nimport _ \"does.not.exist/missing\"\n")
 			case "empty-targets":
 				if err := os.RemoveAll(dir + "/cmd"); err != nil {
 					t.Fatal(err)

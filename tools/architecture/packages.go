@@ -53,6 +53,11 @@ func Load(ctx context.Context, dir string) (string, []Package, error) {
 	if err != nil {
 		return "", nil, err
 	}
+	// Ordinary go list exposes TestImports but does not resolve them. Validate
+	// the test graph as well, without treating synthetic test binaries as roles.
+	if _, err = Run(ctx, dir, "go", "list", "-test", "-deps", "-buildvcs=false", "./..."); err != nil {
+		return "", nil, err
+	}
 	for _, p := range pkgs {
 		if p.Module == nil || !p.Module.Main || p.Module.Path != mod.Path {
 			return "", nil, fmt.Errorf("package %s is not in current module %s", p.ImportPath, mod.Path)
