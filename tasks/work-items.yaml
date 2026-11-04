@@ -127,8 +127,8 @@ items:
   - id: T-9
     title: Refresh docs/ORCHESTRATING.md for the offline owned-run milestone
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p1-track-gherkin-mutation-freshness
