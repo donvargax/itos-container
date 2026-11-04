@@ -365,8 +365,8 @@ items:
   - id: slice-7
     title: Run refuses bad invocations
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-1]
     kind: slice
     why: >
