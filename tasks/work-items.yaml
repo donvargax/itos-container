@@ -438,7 +438,7 @@ items:
   - id: T-22
     title: Move to itos 8.46.4
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
