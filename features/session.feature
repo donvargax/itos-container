@@ -527,6 +527,39 @@ Feature: Owned unstarted worker creation and cleanup
       | created resource has a nonzero PID                |
       | created resource has a set StartedAt              |
 
+  # A recorded ID authorizes inspection, not deletion without fresh evidence.
+  # Seed a complete owned record, its original frozen envelope and a matching
+  # never-started worker independently. Keep host, daemon and socket checks
+  # healthy; fault only product-facing container inspections for the entire
+  # cleanup attempt. The observer still sees the unchanged worker. No product
+  # create or successful cleanup belongs in this Given, and no fault is cleared.
+  # The malformed response is invalid JSON in a successful HTTP response; missing
+  # State omits that whole object from an otherwise matching inspect response.
+  # The memory backend supplies the corresponding unavailable/incomplete facts.
+  # These are missing evidence, not contradictory identity or confirmed absence:
+  # return cleanup-incomplete with the exact surviving safe intent reference.
+  # Never use zero-value state, the record alone or a name lookup as a substitute.
+  # ID-SESSION-01 supplies the healthy inspection control and ID-SESSION-08 the
+  # explicit full-ID not-found control. ID-SESSION-09 faults observations AFTER
+  # removal; this case must refuse to send DELETE in the first place. Today its
+  # first Then fails because no session cleanup or container inspection exists.
+  @wip @slice-9 @ID-SESSION-19 @linux
+  Scenario Outline: Incomplete inspection of an owned ID cannot authorize removal
+    Given a session recovery fixture with pre-removal container inspection "<inspection>"
+    When a new session controller attempts cleanup through each local backend
+    Then each backend reports cleanup-incomplete after attempting to inspect the recorded full container ID
+    And each cleanup returns the exact surviving intent reference without a successful ownership handoff
+    And all container inspection requests target the recorded full ID without a name lookup
+    And no container create or later mutation was attempted
+    And the ownership record and every candidate resource are retained unchanged
+    And session operations preserve unrelated resources, checkout edits, approval and frozen settings
+
+    Examples:
+      | inspection         |
+      | unavailable        |
+      | malformed response |
+      | missing State      |
+
   # Recovery is not a new run: revalidating mutable startup inputs would strand
   # an owned resource after edits or reapproval. Today no cleanup boundary exists,
   # so the first Then must fail even though fixture ownership is complete.
