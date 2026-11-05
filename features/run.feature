@@ -171,6 +171,9 @@ Feature: Run invocation refusals
   # canonical fields with that record before engine access; this is a preliminary
   # refusal check, never enough to establish matching approval. Missing, corrupt,
   # unsafe or locally changed approval must not need a reachable daemon.
+  # Compare validated effective values, never raw policy/manifest bytes. Equivalent
+  # spelling must reach fresh engine inspection and publish the SAME approved
+  # canonical snapshot; ID-RUN-13 supplies this positive control for local matching.
   # In particular, a changed manifest image reference is locally known: refuse
   # before inspecting either image. A missing cached image or changed inspected
   # image config digest with the SAME requested reference needs engine inspection.
@@ -306,6 +309,19 @@ Feature: Run invocation refusals
   # unchanged; no replacement image is prepared or acquired. This is a local
   # approval mismatch even though inspecting the replacement would fail readiness.
   # No Given calls the product or asserts it.
+  # ID-RUN-13's NEW input-spelling Given runs AFTER seeding approval A. "unchanged"
+  # leaves both files alone; other values reuse slice-4's approvalEdit fixture
+  # transformations: reorder policy keys and add comments/whitespace, spell out
+  # default workspaceFolder and empty containerEnv, omit the explicit matching
+  # manifest users, or replace a character in manifest.image with its equivalent
+  # JSON Unicode escape. These edits touch only the temporary request files.
+  # Retain the original seed's expected settings/fingerprint/generation; do not
+  # reseed approval or recalculate the expected snapshot from the edited files.
+  # Each baseline uses the default workspace and empty environment, so those
+  # explicit defaults are equivalent. The omitted-user row starts with BOTH
+  # explicit host-UID fields. The image's decoded reference must stay unchanged,
+  # including in the API fixture; string escaping cannot select another image.
+  # Checkpoint after the edit so snapshot-only effects exclude fixture writes.
   # Engine-defect Givens modify only the synthetic API responses after seeding
   # approval: blank info.ID; version product Podman; version/info architecture
   # arm64; image 404; RepoDigests containing only a different digest; image arm64;
@@ -508,6 +524,8 @@ Feature: Run invocation refusals
 
   # Current run discards Frozen and writes nothing; the snapshot assertion fails.
   # Image user is excluded from canonical settings; changing it cannot choose UID.
+  # Equivalent request edits after approval exercise local comparison without
+  # weakening changed-input refusals or allowing cached engine observations.
   @wip @slice-8 @ID-RUN-13 @local-engine-fixture
   Scenario Outline: Approved preflight publishes exact settings with host identity
     Given an approval checkout and isolated host state
@@ -516,6 +534,7 @@ Feature: Run invocation refusals
     And the inspected image Config.User is "<image-user>"
     And misleading USER, LOGNAME, UID, GID, SUDO_UID and SUDO_GID fixture values
     And a seeded matching approval at generation "1"
+    And the run input spelling is "<spelling>"
     And the run child has umask "<umask>"
     And the run preflight files are snapshotted
     When itos-container runs with "run -- fixture-workload '' 'two words' --json"
@@ -531,15 +550,19 @@ Feature: Run invocation refusals
     And no executable marker was created
 
     Examples:
-      | users                | image-user | umask |
-      | omitted              |            | 0000  |
-      | omitted              | 0:0        | 0000  |
-      | effective host UID   | root       | 0000  |
-      | effective host UID   | 9999:8888  | 0000  |
-      | omitted              |            | 0777  |
-      | omitted              | 0:0        | 0777  |
-      | effective host UID   | root       | 0777  |
-      | effective host UID   | 9999:8888  | 0777  |
+      | users              | image-user | umask | spelling                                         |
+      | omitted            |            | 0000  | unchanged                                        |
+      | omitted            | 0:0        | 0000  | unchanged                                        |
+      | effective host UID | root       | 0000  | unchanged                                        |
+      | effective host UID | 9999:8888  | 0000  | unchanged                                        |
+      | omitted            |            | 0777  | unchanged                                        |
+      | omitted            | 0:0        | 0777  | unchanged                                        |
+      | effective host UID | root       | 0777  | unchanged                                        |
+      | effective host UID | 9999:8888  | 0777  | unchanged                                        |
+      | omitted            | root       | 0000  | reordered keys with comments and whitespace       |
+      | omitted            | 0:0        | 0000  | explicit default workspace and empty environment  |
+      | effective host UID | 9999:8888  | 0000  | omitted manifest users                           |
+      | effective host UID | root       | 0000  | equivalent JSON string escaping                  |
 
   # A cached snapshot must never become an alternate approval/readiness source.
   # Capture the first run's snapshot before editing; today it is absent.
