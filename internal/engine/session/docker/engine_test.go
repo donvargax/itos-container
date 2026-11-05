@@ -14,6 +14,7 @@ import (
 	"github.com/moby/moby/client"
 
 	rp "github.com/donvargax/itos-container/internal/engine/readiness/port"
+	rf "github.com/donvargax/itos-container/internal/engine/readiness/port/porttest"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	st "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
@@ -129,6 +130,60 @@ func TestOpenRetainsPinUntilConnectionClose(t *testing.T) {
 	conn.Close()
 	if !pin.Closed {
 		t.Fatal("connection close retained the engine pin")
+	}
+}
+
+func TestOpenReleasesPinWhenEngineSetupFails(t *testing.T) {
+	for _, tc := range []struct {
+		fault     string
+		want      sp.Outcome
+		infoReads int
+	}{
+		{"healthy", "", 1},
+		{"version unavailable", sp.Incomplete, 0},
+		{"info unavailable", sp.Incomplete, 1},
+		{"invalid client endpoint", sp.Incomplete, 1},
+	} {
+		t.Run(tc.fault, func(t *testing.T) {
+			b, _, _ := st.Fixture()
+			pin := rf.HealthySession()
+			pin.Address = b.Endpoint
+			pin.InfoData.ID = b.EngineID
+			switch tc.fault {
+			case "version unavailable":
+				pin.VersionFailure = rp.EngineInspect
+			case "info unavailable":
+				pin.InfoFailure = rp.EngineInspect
+			case "invalid client endpoint":
+				// Keep the binding and pin equal so this reaches SDK client
+				// construction, which must reject a Unix endpoint with no path.
+				b.Endpoint, pin.Address = "unix://", "unix://"
+			}
+			ready := &rf.Engine{Session: pin}
+			engine := Engine{Readiness: ready, Selection: b.Endpoint}
+			conn, failure := engine.Open(context.Background(), b)
+			if conn != nil {
+				t.Cleanup(conn.Close)
+			}
+			if failure != tc.want || (conn == nil) != (tc.want != "") {
+				t.Fatalf("open = %v, %s; want %s", conn, failure, tc.want)
+			}
+			if ready.Opens != 1 || ready.Selection != b.Endpoint || ready.Root != b.Checkout.Root || ready.Budget <= 0 || ready.Budget > 10*time.Second {
+				t.Fatal("engine setup lost its selected endpoint or bounded acquisition")
+			}
+			if pin.InfoReads != tc.infoReads {
+				t.Fatalf("engine info reads = %d, want %d", pin.InfoReads, tc.infoReads)
+			}
+			if pin.Closed != (tc.want != "") {
+				t.Fatal("engine setup released a successful pin or retained a failed pin")
+			}
+			if conn != nil {
+				conn.Close()
+				if !pin.Closed {
+					t.Fatal("connection close retained the pin")
+				}
+			}
+		})
 	}
 }
 

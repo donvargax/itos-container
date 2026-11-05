@@ -28,12 +28,15 @@ func TestStoreAcquisitionRefusesUnusableEvidence(t *testing.T) {
 		{"new", "record read failure", sp.IntentWrite},
 		{"new", "checkout identity differs", sp.Refused},
 		{"new", "snapshot locked", sp.Incomplete},
+		{"new", "snapshot directory missing", sp.Invalid},
 		{"open", "valid", ""},
 		{"open", "invalid reference", sp.Invalid},
 		{"open", "unsupported host", sp.Refused},
 		{"open", "checkout pin failure", sp.Refused},
 		{"open", "malformed record", sp.Invalid},
+		{"open", "record missing", sp.Refused},
 		{"open", "snapshot locked", sp.Incomplete},
+		{"open", "snapshot directory missing", sp.Invalid},
 	} {
 		t.Run(tc.operation+"/"+tc.fault, func(t *testing.T) {
 			b, _, _ := sf.Fixture()
@@ -75,6 +78,10 @@ func TestStoreAcquisitionRefusesUnusableEvidence(t *testing.T) {
 				checkout.Identity.Inode = "replaced"
 			case "snapshot locked":
 				snapshots.Locked = true
+			case "snapshot directory missing":
+				delete(storage.Directories, "snapshots/"+b.Frozen.Project)
+			case "record missing":
+				delete(directory.Files, token+".json")
 			case "invalid reference":
 				reference = "../escape"
 			case "malformed record":
@@ -118,6 +125,102 @@ func TestStoreAcquisitionRefusesUnusableEvidence(t *testing.T) {
 			}
 			if len(snapshots.Files) != 1 || string(snapshots.Files["1.json"]) != "snapshot" {
 				t.Fatal("acquisition changed the original frozen snapshot")
+			}
+		})
+	}
+}
+
+func TestStoreContractWithProtectedStorageFake(t *testing.T) {
+	sf.StoreContract(t, func() (sp.Store, ap.Durable) {
+		b, _, _ := sf.Fixture()
+		storage := &af.Storage{Directories: map[string]*af.Directory{
+			"snapshots/" + b.Frozen.Project: {Files: map[string][]byte{"1.json": []byte("snapshot")}},
+		}}
+		store := Store{Storage: storage, Codec: &sf.Codec{Value: b}, Host: &af.Host{UID: b.UID, GID: b.GID}, Checkout: &rf.Checkout{Identity: b.Checkout}, Input: rp.Input{Root: b.Checkout.Root, OS: "linux", Architecture: "amd64"}}
+		return store, ap.Durable{Frozen: b.Frozen}
+	})
+}
+
+func TestIntentRevalidatesEvidenceBeforeSave(t *testing.T) {
+	for _, tc := range []struct {
+		fault string
+		want  sp.Outcome
+	}{
+		{"record unreadable", sp.Incomplete},
+		{"record unsafe", sp.Unsafe},
+		{"record missing", sp.Refused},
+		{"record replaced", sp.Refused},
+		{"snapshot binding replaced", sp.Invalid},
+	} {
+		t.Run(tc.fault, func(t *testing.T) {
+			b, _, _ := sf.Fixture()
+			codec := &sf.Codec{Value: b}
+			token := strings.Repeat("1", 64)
+			record := b.Intent(token)
+			record.Stage, record.ContainerID = "owned", strings.Repeat("2", 64)
+			data := codec.Encode(record)
+			name := token + ".json"
+			directory := &af.Directory{Files: map[string][]byte{name: data}}
+			snapshots := &af.Directory{Files: map[string][]byte{"1.json": []byte("snapshot")}}
+			storage := &af.Storage{Directories: map[string]*af.Directory{
+				"intents/" + b.Frozen.Project:   directory,
+				"snapshots/" + b.Frozen.Project: snapshots,
+			}}
+			checkout := &rf.Checkout{Identity: b.Checkout}
+			store := Store{Storage: storage, Codec: codec, Host: &af.Host{UID: b.UID, GID: b.GID}, Checkout: checkout, Input: rp.Input{Root: b.Checkout.Root, OS: "linux", Architecture: "amd64"}}
+			intent, failure := store.Open(context.Background(), sp.Reference(b.Frozen.Project, token))
+			if failure != "" || intent == nil {
+				t.Fatalf("open = %v, %s", intent, failure)
+			}
+			defer intent.Close()
+			if failure = intent.Validate(); failure != "" {
+				t.Fatal("healthy evidence refused", failure)
+			}
+			switch tc.fault {
+			case "record unreadable":
+				directory.ReadFailure = "state.unavailable"
+			case "record unsafe":
+				directory.ReadFailure = "state.unsafe"
+			case "record missing":
+				delete(directory.Files, name)
+			case "record replaced":
+				replacement := record
+				replacement.ContainerID = strings.Repeat("3", 64)
+				directory.Files[name] = codec.Encode(replacement)
+			case "snapshot binding replaced":
+				// The codec fake now resolves the snapshot to another valid
+				// binding while the open intent retains its original binding.
+				codec.Value.ImageID = "sha256:" + strings.Repeat("e", 64)
+			}
+			expected := append([]byte(nil), directory.Files[name]...)
+			if failure = intent.Validate(); failure != tc.want {
+				t.Fatalf("changed evidence validation = %s, want %s", failure, tc.want)
+			}
+			next := record
+			next.Stage = "absent"
+			if failure = intent.Save(next); failure != tc.want {
+				t.Fatalf("save with changed evidence = %s, want %s", failure, tc.want)
+			}
+			if intent.Record() != record || intent.Binding() != b || !reflect.DeepEqual(directory.Files[name], expected) {
+				t.Fatal("refused save changed the pinned identity or stored evidence")
+			}
+			if len(snapshots.Files) != 1 || string(snapshots.Files["1.json"]) != "snapshot" || snapshots.Locked {
+				t.Fatal("refused save changed the frozen snapshot or retained its lock")
+			}
+			// Restore only the fixture fault; the same open intent must still
+			// be able to advance its original identity once evidence is valid.
+			directory.ReadFailure = ""
+			directory.Files[name] = data
+			codec.Value = b
+			if failure = intent.Save(next); failure != "" {
+				t.Fatal("recovered save refused", failure)
+			}
+			if intent.Record() != next || string(directory.Files[name]) != string(codec.Encode(next)) {
+				t.Fatal("recovered save lost the original container identity")
+			}
+			intent.Close()
+			if directory.Locked || checkout.Opened {
+				t.Fatal("close retained the ownership lock or checkout pin")
 			}
 		})
 	}
