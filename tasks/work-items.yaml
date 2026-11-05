@@ -354,8 +354,8 @@ items:
   - id: slice-9
     title: Owned create and cleanup
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-8, T-20]
     kind: slice
     why: >
