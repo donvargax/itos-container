@@ -4,12 +4,55 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 )
+
+func TestRecordSafetyRequiresRegularFile(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("protected storage target is Linux")
+	}
+	// Keep the real Unix socket pathname within the kernel's length limit.
+	dir, err := os.MkdirTemp("/tmp", "slice-4-record-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	regular := filepath.Join(dir, "regular")
+	if err := os.WriteFile(regular, []byte("record"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(dir, "socket")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	for _, tc := range []struct {
+		path string
+		want port.Failure
+	}{{regular, ""}, {socket, "state.unsafe"}} {
+		if err := os.Chmod(tc.path, 0600); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Lstat(tc.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		uid, links, ok := ownership(info)
+		if !ok || uid != uint64(os.Geteuid()) || links != 1 || info.Mode().Perm() != 0600 {
+			t.Fatalf("fixture must have safe ownership, links and permissions: %v", info)
+		}
+		if got := recordSafety(info, uid); got != tc.want {
+			t.Fatalf("record safety for %s = %q; want %q", info.Mode(), got, tc.want)
+		}
+	}
+}
 
 func TestPinRevalidationFailures(t *testing.T) {
 	for _, kind := range []string{"root open", "child open", "child stat"} {
