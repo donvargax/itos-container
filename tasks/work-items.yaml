@@ -199,8 +199,8 @@ items:
   - id: slice-4
     title: Review and record explicit host-owned approval
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-1, slice-2, slice-3]
     kind: slice
     why: >
