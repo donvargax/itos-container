@@ -239,6 +239,26 @@ func TestAPIRangeIncludesNegotiatedVersion(t *testing.T) {
 	}
 }
 
+func TestRecoveryEngineValidationRequiresCompatibleAPI(t *testing.T) {
+	healthy := porttest.HealthySession()
+	if failure := ValidateEngine(healthy.VersionData, healthy.InfoData); failure != port.None {
+		t.Fatal("healthy recovery engine refused", failure)
+	}
+	tooNew, tooOld := healthy.VersionData, healthy.VersionData
+	tooNew.Minimum = "1.57"
+	tooOld.Negotiated = "1.39"
+	for _, version := range []port.Version{{}, tooNew, tooOld} {
+		if failure := ValidateEngine(version, healthy.InfoData); failure != port.EngineAPI {
+			t.Fatalf("recovery API validation = %v, want %v", failure, port.EngineAPI)
+		}
+	}
+	foreign := healthy.InfoData
+	foreign.OperatingSystem = "Docker Desktop"
+	if failure := ValidateEngine(healthy.VersionData, foreign); failure != port.EngineUnsupported {
+		t.Fatal("compatible API bypassed native engine validation", failure)
+	}
+}
+
 func TestLocalCheckpointRetainsPinAndCanRefuseEngine(t *testing.T) {
 	for _, accept := range []bool{false, true} {
 		inspector, input, engine, checkout := fixture()

@@ -49,6 +49,21 @@ func TestFrozenEnvelopeRetainsValidation(t *testing.T) {
 	}
 }
 
+func TestFrozenRecordsContract(t *testing.T) {
+	codec := JSON{}
+	candidate := codec.Candidate(porttest.Ready(), "1000", "2000")
+	record := port.Record{Candidate: candidate, Generation: "1"}
+	frozen := port.Frozen{Project: candidate.Project, Generation: "1", Fingerprint: candidate.Fingerprint, Settings: candidate.Canonical}
+	encoded := codec.Encode(record)
+	t.Run("canonical", func(t *testing.T) {
+		porttest.FrozenRecordsContract(t, codec, frozen, record, encoded)
+	})
+	t.Run("memory", func(t *testing.T) {
+		fake := porttest.FrozenRecords{Values: map[port.Frozen]port.Record{frozen: record}, Bytes: map[port.Record]string{record: string(encoded)}}
+		porttest.FrozenRecordsContract(t, fake, frozen, record, encoded)
+	})
+}
+
 func TestFrozenRecordBoundsTheCompleteEnvelope(t *testing.T) {
 	const limit = 1024 * 1024
 	codec := JSON{}

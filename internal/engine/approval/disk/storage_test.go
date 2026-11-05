@@ -278,3 +278,150 @@ func TestStorageRejectsScopeAndBadBytes(t *testing.T) {
 		t.Fatal(f)
 	}
 }
+
+func TestProtectedPublicationRevalidatesBeforeAndAfterPublication(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		want    port.Failure
+		visible string
+	}{
+		{"path replaced after file sync", "state.path", "before"},
+		{"record lookup fails after file sync", "state.unavailable", "before"},
+		{"record changes after file sync", "state.conflict", "competing"},
+		{"empty record appears after file sync", "state.conflict", ""},
+		{"exclusive publication fails", "state.write", ""},
+		{"temporary link disappears", "state.write", "after"},
+		{"path replaced after parent sync", "state.path", "after"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, c, _ := diskFixture(t)
+			opened, failure := (Storage{Store: s}).Open(context.Background(), c, "intents", true)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			d := opened.(*directoryStore)
+			defer d.Close()
+			previous := []byte("before")
+			if tc.name == "empty record appears after file sync" || tc.name == "exclusive publication fails" || tc.name == "temporary link disappears" {
+				previous = nil
+			} else if failure = d.Publish("1.json", nil, previous); failure != "" {
+				t.Fatal(failure)
+			}
+			state := filepath.Join(s.StateHome, "itos-container")
+			moved := state + "-old"
+			reached := false
+			replace := func() {
+				if err := os.Rename(state, moved); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(state, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			switch tc.name {
+			case "exclusive publication fails", "temporary link disappears":
+				d.exclusive = func(root *os.Root, temporary, name string) error {
+					reached = true
+					if tc.name == "exclusive publication fails" {
+						return os.ErrPermission
+					}
+					if err := root.Link(temporary, name); err != nil {
+						t.Fatal(err)
+					}
+					// The complete final record survives, but the temporary name
+					// disappears before the publisher can confirm its removal.
+					return root.Remove(temporary)
+				}
+			case "path replaced after parent sync":
+				d.pin.ops.syncParent = func(file *os.File) error {
+					if err := file.Sync(); err != nil {
+						return err
+					}
+					reached = true
+					replace()
+					return nil
+				}
+			default:
+				d.pin.ops.syncFile = func(file *os.File) error {
+					if err := file.Sync(); err != nil {
+						return err
+					}
+					reached = true
+					switch tc.name {
+					case "path replaced after file sync":
+						replace()
+					case "record lookup fails after file sync":
+						lstat := d.pin.ops.lstat
+						d.pin.ops.lstat = func(root *os.Root, name string) (os.FileInfo, error) {
+							if name == "1.json" {
+								return nil, os.ErrPermission
+							}
+							return lstat(root, name)
+						}
+					default:
+						if err := os.WriteFile(filepath.Join(d.pin.root().Name(), "1.json"), []byte(tc.visible), 0600); err != nil {
+							t.Fatal(err)
+						}
+					}
+					return nil
+				}
+			}
+			if failure = d.Publish("1.json", previous, []byte("after")); failure != tc.want || !reached {
+				t.Fatalf("publication = %s, want %s (fault reached %v)", failure, tc.want, reached)
+			}
+			recordRoot := state
+			if strings.HasPrefix(tc.name, "path replaced") {
+				recordRoot = moved
+				entries, err := os.ReadDir(state)
+				if err != nil || len(entries) != 0 {
+					t.Fatal("publication changed the replacement directory", entries, err)
+				}
+			}
+			dir := filepath.Join(recordRoot, "intents", c.Project)
+			data, err := os.ReadFile(filepath.Join(dir, "1.json"))
+			wantEntries := 1
+			if tc.name == "exclusive publication fails" {
+				wantEntries = 0
+				if !errors.Is(err, os.ErrNotExist) {
+					t.Fatal("failed publication left a final record", err)
+				}
+			} else if err != nil || string(data) != tc.visible {
+				t.Fatalf("visible record = %q, %v; want %q", data, err, tc.visible)
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil || len(entries) != wantEntries {
+				t.Fatal("publication leaked temporary evidence", entries, err)
+			}
+		})
+	}
+}
+
+func TestProtectedSyncRetainsRecordWhenReadFails(t *testing.T) {
+	s, c, _ := diskFixture(t)
+	opened, failure := (Storage{Store: s}).Open(context.Background(), c, "intents", true)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	d := opened.(*directoryStore)
+	defer d.Close()
+	data := []byte("complete ownership")
+	if failure = d.Publish("1.json", nil, data); failure != "" {
+		t.Fatal(failure)
+	}
+	readReached := false
+	d.pin.ops.readAll = func(io.Reader) ([]byte, error) {
+		readReached = true
+		return nil, os.ErrPermission
+	}
+	d.pin.ops.syncFile = func(*os.File) error {
+		t.Fatal("unreadable ownership reached durability confirmation")
+		return nil
+	}
+	if failure = d.Sync("1.json", data); failure != "state.unavailable" || !readReached {
+		t.Fatalf("sync = %s (read reached %v)", failure, readReached)
+	}
+	visible, err := os.ReadFile(filepath.Join(d.pin.root().Name(), "1.json"))
+	if err != nil || string(visible) != string(data) {
+		t.Fatal("failed sync changed the complete ownership record", err)
+	}
+}
