@@ -16,7 +16,7 @@ mutation:
   exceptions:
     - file: cmd/itos-container/main.go
       function: github.com/donvargax/itos-container/cmd/itos-container#run
-      hash: b2da766ccecc42c2
+      hash: 1492c7ae5eac39b9
       line_in_function: 21
       column: 15
       original: '>'
