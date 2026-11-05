@@ -450,6 +450,6 @@ items:
     title: Settle the survivors of the first full-range proof on main
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
