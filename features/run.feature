@@ -171,16 +171,24 @@ Feature: Run invocation refusals
   # canonical fields with that record before engine access; this is a preliminary
   # refusal check, never enough to establish matching approval. Missing, corrupt,
   # unsafe or locally changed approval must not need a reachable daemon.
+  # In particular, a changed manifest image reference is locally known: refuse
+  # before inspecting either image. A missing cached image or changed inspected
+  # image config digest with the SAME requested reference needs engine inspection.
+  # Never fill unobserved engine/image fields from approval to claim a match.
   # Checks needing daemon/image observations MAY inspect. Permit only HEAD/GET
   # ping, GET version/info and GET inspection of the exact requested image, with
   # the existing SDK negotiation. No mutation, pull, build, alternate image or
   # helper execution is permitted, even on a failed/redirected request. Revalidate
-  # checkout/socket/daemon identities as readiness already requires. Refusals
-  # publish no snapshot and never prompt, write consent or repair unsafe state.
+  # checkout/socket/daemon identities as readiness already requires. Preflight
+  # refusals before publication publish no snapshot and never prompt, write consent
+  # or repair unsafe state. The later unimplemented-startup refusal follows a
+  # successful preflight and DOES retain its durable snapshot (ID-RUN-13/19).
   # ID-RUN-08/09/10 require an empty journal; ID-RUN-11/12 require a nonempty
   # inspection-only journal. ID-RUN-14 names the required class for each change.
   # An empty journal cannot satisfy an inspection-only expectation. Check each
   # invocation's own journal, not the combined requests of a multi-run scenario.
+  # Empty-journal process cases also assert zero connections to the selected
+  # Unix API fixture, so connecting without sending a request cannot pass.
   #
   # Effective UID identifies the host user; root is refused. Effective UID/GID
   # override all image Config.User values. Both manifest users must equal that
@@ -286,7 +294,12 @@ Feature: Run invocation refusals
   # Local-defect Givens change one named fixture field/file only. Local approval
   # conditions below mean absent state, a copy only inside checkout, malformed
   # current.json, a different literal APP environment, historical A plus active B,
-  # or 0644 current.json respectively. No Given calls the product or asserts it.
+  # or 0644 current.json as named. For "manifest image differs from A", seed A
+  # first, then change only manifest.image to the same repository with a different
+  # valid sha256 digest. Keep current.json and the API fixture's cached image A
+  # unchanged; no replacement image is prepared or acquired. This is a local
+  # approval mismatch even though inspecting the replacement would fail readiness.
+  # No Given calls the product or asserts it.
   # Engine-defect Givens modify only the synthetic API responses after seeding
   # approval: blank info.ID; version product Podman; version/info architecture
   # arm64; image 404; RepoDigests containing only a different digest; image arm64;
@@ -314,8 +327,14 @@ Feature: Run invocation refusals
   # ID-RUN-14 deletes or truncates only current.json for its approval-state edits;
   # it leaves the first snapshot intact. Capture the edited state before run two,
   # so an unchanged-approval assertion never attributes the fixture edit to run.
+  # Its "manifest requests another digest" edit changes only manifest.image as
+  # above. "cached image config digest" instead changes only the API's image Id
+  # to another valid sha256 digest, retaining the manifest reference and attested
+  # RepoDigests. The latter therefore requires inspection to find the mismatch.
   # Partition API requests by invocation; run one's inspections cannot hide a
   # forbidden call or supply a missing observation in run two's journal.
+  # The second-run assertion's "empty" class also requires zero connections in
+  # that invocation; run one's connection count is excluded, not reset globally.
   #
   # Contract scenarios use a test-only cmd assembly of the REAL run preflight and
   # shared approval/snapshot contracts, like the existing slice-4 contract probe.
@@ -358,6 +377,7 @@ Feature: Run invocation refusals
     When itos-container runs with "run -- fixture-workload"
     Then run reports preflight problem "<rule>" with exit <exit> and subject "<subject>"
     And the Engine API journal is empty
+    And no endpoint connection was attempted
     And run preflight has changed no checkout or host state
     And no inspection helper sentinel was executed
 
@@ -381,6 +401,7 @@ Feature: Run invocation refusals
     And the run preflight files are snapshotted
     When itos-container runs with "run -- fixture-workload"
     Then the Engine API journal is empty
+    And no endpoint connection was attempted
     And run refuses approval "<reason>" with exit 1 and names "itos container approve"
     And its error output says "run.approval-<reason>"
     And its standard output is empty
@@ -393,6 +414,7 @@ Feature: Run invocation refusals
       | approval only inside the checkout      | missing |
       | truncated active approval              | invalid |
       | manifest environment differs from A    | changed |
+      | manifest image differs from A          | changed |
       | historical A with active B             | changed |
       | active approval has mode 0644          | invalid |
 
@@ -505,13 +527,14 @@ Feature: Run invocation refusals
     And neither run attempted engine mutation, image acquisition or helper execution
 
     Examples:
-      | change                          | rule                 | exit | journal         |
-      | active approval is removed      | run.approval-missing | 1    | empty           |
-      | active approval is truncated    | run.approval-invalid | 1    | empty           |
-      | literal manifest environment    | run.approval-changed | 1    | empty           |
-      | daemon ID at the same endpoint  | run.approval-changed | 1    | inspection only |
-      | cached image config digest      | run.approval-changed | 1    | inspection only |
-      | requested image becomes absent  | doctor.image.missing | 3    | inspection only |
+      | change                           | rule                 | exit | journal         |
+      | active approval is removed       | run.approval-missing | 1    | empty           |
+      | active approval is truncated     | run.approval-invalid | 1    | empty           |
+      | literal manifest environment     | run.approval-changed | 1    | empty           |
+      | manifest requests another digest | run.approval-changed | 1    | empty           |
+      | daemon ID at the same endpoint   | run.approval-changed | 1    | inspection only |
+      | cached image config digest       | run.approval-changed | 1    | inspection only |
+      | requested image becomes absent   | doctor.image.missing | 3    | inspection only |
 
   # Exercise run's actual selection-to-publication ordering, not just slice-4's
   # already-proven Select refusal. A fresh B result must publish as a control.
