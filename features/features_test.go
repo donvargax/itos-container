@@ -142,6 +142,7 @@ func (env featureEnvironment) redIDs() ([]string, error) {
 
 type scenarioSelection struct {
 	filter   string
+	ids      []string
 	engine   bool
 	red      bool
 	count    int
@@ -161,6 +162,19 @@ func (env featureEnvironment) engineEnabled() (bool, error) {
 	default:
 		return false, fmt.Errorf("ITOS_CONTAINER_ENGINE_TESTS must be empty, 0 or 1")
 	}
+}
+
+// These tags select native binaries before any scenario hook or fixture runs.
+// The repository's macOS/Windows jobs are manual; Linux proof never runs them.
+func (env featureEnvironment) excludedPlatforms() []string {
+	var tags []string
+	if env.os != "linux" || env.arch != "amd64" {
+		tags = append(tags, "@local-engine-fixture")
+	}
+	if env.os != "darwin" && env.os != "windows" {
+		tags = append(tags, "@manual-platform", "@unsupported-host")
+	}
+	return tags
 }
 
 // RetrieveFeatures compiles Gherkin pickles, including inherited Feature, Rule,
@@ -199,8 +213,10 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	for _, feature := range features {
 		for _, scenario := range feature.Pickles {
 			wip, needsEngine, needsLinux, matches := false, false, false, selection == ""
+			wrongPlatform := false
 			var ids []string
 			for _, tag := range scenario.Tags {
+				wrongPlatform = wrongPlatform || slices.Contains(env.excludedPlatforms(), tag.Name)
 				wip = wip || tag.Name == "@wip"
 				needsEngine = needsEngine || tag.Name == "@engine"
 				needsLinux = needsLinux || tag.Name == "@linux"
@@ -219,8 +235,11 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 				continue
 			}
 			matched++
-			if (wip && !result.red) || needsEngine != engine || (needsLinux && env.os != "linux") {
+			if (wip && !result.red) || needsEngine != engine || wrongPlatform || (needsLinux && env.os != "linux") {
 				reason := "other tier"
+				if wrongPlatform {
+					reason = "other platform"
+				}
 				if wip && !result.red {
 					reason = "@wip"
 				} else if needsEngine {
@@ -232,6 +251,7 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 				continue
 			}
 			expected[scenario.Uri+":"+scenario.Id] = true
+			result.ids = append(result.ids, ids...)
 			result.count++
 		}
 	}
@@ -243,6 +263,8 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	if selection != "" && matched == 0 {
 		return result, &noMatch{selection}
 	}
+	slices.Sort(result.ids)
+	result.ids = slices.Compact(result.ids)
 	if result.count == 0 {
 		result.skip = "no live scenarios in selected tier and platform (count 0)"
 		if result.red {
@@ -262,6 +284,9 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	}
 	if env.os != "linux" {
 		tier += "&&~@linux"
+	}
+	for _, tag := range env.excludedPlatforms() {
+		tier += "&&~" + tag
 	}
 	result.filter = tier
 	if selection != "" {

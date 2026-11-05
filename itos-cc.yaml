@@ -5,7 +5,7 @@ exclude: ["**/porttest/**"]
 # Equivalent mutants need project-local proof and a reviewed reason.
 mutation:
   tests:
-    list: itos tests list scenario --tsv
+    list: tools/bin/scenario-list
     run: "go test ./features -count=1 -scenarios='{pattern}'"
     ids_pattern: "^@(?:{ids})$"
     join: { each: "{id}", sep: "|" }
@@ -13,16 +13,8 @@ mutation:
     support:
       - features/*_test.go
       - features/testdata/**
+      - tools/bin/scenario-list
   exceptions:
-    - file: cmd/itos-container/main.go
-      function: github.com/donvargax/itos-container/cmd/itos-container#run
-      hash: 1492c7ae5eac39b9
-      line_in_function: 21
-      column: 15
-      original: '>'
-      replacement: '>='
-      reason: run replaces empty args with the single --help argument before this condition. len(args) is therefore at least one here, so > 0 and >= 0 are both true and evaluate the same command comparison.
-      line_text: if len(args) > 0 && args[0] == "__complete" {
     - file: internal/release/release.go
       function: github.com/donvargax/itos-container/internal/release#Newest
       hash: 169323ab8c351ad2

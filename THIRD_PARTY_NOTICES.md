@@ -559,3 +559,70 @@ Apache License
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+
+## Docker SDK and inspection dependencies
+
+Slice-3 uses the unmodified Docker Go SDK `github.com/moby/moby/client v0.6.2`
+and `github.com/moby/moby/api v1.56.1`, selected in `features/doctor.feature`.
+Their Apache-2.0 license is reproduced above. This project's AGPL-3.0 license does
+not relicense the SDK or its dependencies. The SDK is used only for explicit
+local Engine API inspection, without Docker configuration or registry clients.
+
+The following pinned SDK dependencies also retain that Apache-2.0 license:
+
+- `github.com/containerd/errdefs v1.0.0` and `github.com/containerd/errdefs/pkg v0.3.0`
+- `github.com/docker/go-connections v0.8.2` and `github.com/docker/go-units v0.5.0`
+- `github.com/moby/docker-image-spec v1.3.1`
+- `github.com/opencontainers/image-spec v1.1.1`
+- `github.com/go-logr/logr v1.4.2` and `github.com/go-logr/stdr v1.2.2`
+- `go.opentelemetry.io/auto/sdk v1.1.0`
+- `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0`
+- `go.opentelemetry.io/otel v1.35.0`, including its `metric` and `trace` modules
+
+### github.com/Microsoft/go-winio v0.6.2
+
+The MIT License (MIT)
+
+Copyright (c) 2015 Microsoft
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+### github.com/felixge/httpsnoop v1.0.4
+
+Copyright (c) 2016 Felix Geisendörfer (felix@debuggable.com)
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.

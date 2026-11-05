@@ -45,14 +45,8 @@ type manifestReport struct {
 // PresentManifest presents both file-only and explicitly supplied metadata
 // validation through one boundary. It never prints raw rejected values.
 func PresentManifest(u *cli.UI, result port.Result, withJSON bool) int {
-	valid := result.Effective != nil && len(result.Issues) == 0
-	report := manifestReport{Valid: valid, Path: result.Path, Unused: append([]string{}, result.Unused...), Metadata: manifestMetadata{
-		Checked: result.Metadata.Checked, Present: result.Metadata.Present, Unused: append([]string{}, result.Metadata.Unused...),
-	}}
-	if valid {
-		s := result.Effective
-		report.Effective = &manifestSettings{s.Name, s.Image, s.WorkspaceFolder, s.ContainerEnv, s.ContainerUser, s.RemoteUser}
-	}
+	report := manifestView(result)
+	valid := report.Valid
 	problems := make([]manifestProblem, 0, len(result.Issues))
 	code := 0
 	for _, issue := range result.Issues {
@@ -89,6 +83,18 @@ func PresentManifest(u *cli.UI, result port.Result, withJSON bool) int {
 		u.Line(fmt.Sprintf("%s: %s; %s", printable(subject+problem.Path), problem.Message, problem.Fix))
 	}
 	return code
+}
+
+func manifestView(result port.Result) manifestReport {
+	valid := result.Effective != nil && len(result.Issues) == 0
+	report := manifestReport{Valid: valid, Path: result.Path, Unused: append([]string{}, result.Unused...), Metadata: manifestMetadata{
+		Checked: result.Metadata.Checked, Present: result.Metadata.Present, Unused: append([]string{}, result.Metadata.Unused...),
+	}}
+	if valid {
+		s := result.Effective
+		report.Effective = &manifestSettings{s.Name, s.Image, s.WorkspaceFolder, s.ContainerEnv, s.ContainerUser, s.RemoteUser}
+	}
+	return report
 }
 
 func printable(text string) string { quoted := strconv.Quote(text); return quoted[1 : len(quoted)-1] }
