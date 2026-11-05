@@ -449,7 +449,7 @@ items:
   - id: T-24
     title: Settle the survivors of the first full-range proof on main
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
