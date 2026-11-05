@@ -106,6 +106,7 @@ type Observation struct {
 	Running                     bool
 	PID                         int
 	Started                     bool
+	Mounts, Volumes             bool // Any materialized mount or declared volume.
 }
 type Inspection uint8
 
@@ -123,6 +124,8 @@ type Engine interface {
 }
 type Connection interface {
 	Check(context.Context) Outcome
+	// Create inspects the frozen image ID and excludes image-declared volumes
+	// before mutation. Refused means no create was sent; Uncertain is not absence.
 	Create(context.Context, Record) (string, Outcome)
 	Inspect(context.Context, string) (Observation, Inspection)
 	Remove(context.Context, string)

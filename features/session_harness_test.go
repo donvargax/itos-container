@@ -136,7 +136,7 @@ func TestSessionRecorderCountsForbiddenRequests(t *testing.T) {
 func TestSessionLostReplyHappensAfterObservedCreation(t *testing.T) {
 	w := newSessionHarnessWorld(t)
 	w.session.fault = "lost create response"
-	body := map[string]any{"Image": w.doctor.image, "User": w.approval.uid + ":" + w.approval.gid,
+	body := map[string]any{"Image": w.doctor.imageID, "User": w.approval.uid + ":" + w.approval.gid,
 		"Cmd": []any{"/bin/true"}, "Entrypoint": []any{}, "Labels": w.sessionLabels(),
 		"HostConfig": map[string]any{"NetworkMode": "none", "ReadonlyRootfs": true, "PidsLimit": float64(4096),
 			"CapDrop": []any{"ALL"}, "SecurityOpt": []any{"no-new-privileges"}, "RestartPolicy": map[string]any{"Name": "no"}}}
@@ -182,6 +182,8 @@ func TestSessionObserverRejectsWrongIdentityAndState(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mutate := range []func(map[string]any){
+		func(c map[string]any) { sessionMutateInspection(c, "mounted volume") },
+		func(c map[string]any) { sessionMutateInspection(c, "configured volume") },
 		func(c map[string]any) { delete(c, "State") },
 		func(c map[string]any) { object(c["State"])["Status"] = "exited" },
 		func(c map[string]any) { object(c["State"])["Running"] = true },

@@ -86,6 +86,9 @@ func (w *world) sessionNoForbidden() error {
 		if doctorAllowedRequest(doctorRequest{Method: request.Method, Path: request.Path, Query: request.Query}, w.doctor.image, true) {
 			continue
 		}
+		if request.Method == "GET" && request.Path == "/images/"+w.doctor.imageID+"/json" && request.Query == "" {
+			continue
+		}
 		if request.Method == "POST" && request.Path == "/containers/create" {
 			if err := w.sessionRequestProblem(request.Body); err != nil {
 				return err

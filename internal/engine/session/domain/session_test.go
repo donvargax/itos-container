@@ -61,7 +61,7 @@ func TestEntropyAndStorageFailuresPrecedeEngine(t *testing.T) {
 	}
 }
 func TestCreateNeedsMatchingCompleteInspection(t *testing.T) {
-	for _, condition := range []string{"unavailable", "explicit not-found", "malformed response", "missing State", "different full container ID", "different name", "different image config ID", "different intent label", "different project label", "different fingerprint label", "running state", "exited state after starting", "created state with nonzero PID", "created state with StartedAt"} {
+	for _, condition := range []string{"unavailable", "explicit not-found", "malformed response", "missing State", "different full container ID", "different name", "different image config ID", "different intent label", "different project label", "different fingerprint label", "running state", "exited state after starting", "created state with nonzero PID", "created state with StartedAt", "mounted volume", "configured volume"} {
 		t.Run(condition, func(t *testing.T) {
 			s, d, _, e := serviceFixture()
 			e.Inspection = condition

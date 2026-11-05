@@ -17,6 +17,7 @@ type sessionMemoryInput struct {
 	UnsafeRecord, UnsafeSnapshot                                        bool
 	Endpoint, DaemonID, CreateID, Inspection, Following, Removal, Fault string
 	Unavailable, DisagreeName, Removed                                  bool
+	ImageInspection                                                     string
 }
 type sessionMemoryOutput struct {
 	Store  *fake.Store
@@ -36,7 +37,7 @@ func assembleMemorySession(t *testing.T, request sessionContractRequest, control
 	original := controller.Store.(sessiondisk.Store)
 	uid, gid := original.Host.Identity()
 	store := &fake.Store{Codec: original.Codec, Records: seed.Records, Snapshots: seed.Snapshots, UID: uid, GID: gid, Root: original.Input.Root, UnsafeRecord: seed.UnsafeRecord, UnsafeSnapshot: seed.UnsafeSnapshot, Fault: request.Fault}
-	engine := &fake.Engine{Store: store, Resources: seed.Resources, Endpoint: seed.Endpoint, DaemonID: seed.DaemonID, CreateID: seed.CreateID, Inspection: seed.Inspection, Following: seed.Following, Removal: seed.Removal, Fault: request.Fault, DisagreeName: seed.DisagreeName, Removed: seed.Removed, Unavailable: seed.Unavailable}
+	engine := &fake.Engine{ImageInspection: seed.ImageInspection, Store: store, Resources: seed.Resources, Endpoint: seed.Endpoint, DaemonID: seed.DaemonID, CreateID: seed.CreateID, Inspection: seed.Inspection, Following: seed.Following, Removal: seed.Removal, Fault: request.Fault, DisagreeName: seed.DisagreeName, Removed: seed.Removed, Unavailable: seed.Unavailable}
 	controller.Store, controller.Engine = store, engine
 	return controller, &sessionMemoryOutput{Store: store, Engine: engine}
 }

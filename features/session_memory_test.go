@@ -208,7 +208,7 @@ func (w *world) observeMemory(observed *sessionMemoryOutput) error {
 func memoryCreateRequest(r map[string]any) map[string]any {
 	// The fake's Create capability means the same minimal unstarted configuration
 	// as the adapter contract. Its recorded record supplies every variable binding.
-	return map[string]any{"Image": r["image_reference"], "User": fmt.Sprint(r["uid"]) + ":" + fmt.Sprint(r["gid"]), "Cmd": []any{"/bin/true"}, "Entrypoint": []any{},
+	return map[string]any{"Image": r["image_id"], "User": fmt.Sprint(r["uid"]) + ":" + fmt.Sprint(r["gid"]), "Cmd": []any{"/bin/true"}, "Entrypoint": []any{},
 		"Labels":     map[string]any{"io.itos-container.intent": strings.TrimPrefix(fmt.Sprint(r["name"]), "itos-container-"), "io.itos-container.project": r["project"], "io.itos-container.fingerprint": r["fingerprint"]},
 		"HostConfig": map[string]any{"NetworkMode": "none", "ReadonlyRootfs": true, "PidsLimit": float64(4096), "CapDrop": []any{"ALL"}, "SecurityOpt": []any{"no-new-privileges"}, "RestartPolicy": map[string]any{"Name": "no"}}}
 }

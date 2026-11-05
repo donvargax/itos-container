@@ -45,6 +45,10 @@ func (s Service) Create(ctx context.Context, frozen approval.Durable) port.Resul
 	}
 	record := intent.Record()
 	id, failure := connection.Create(ctx, record)
+	if failure == port.Refused {
+		result.Outcome = port.Refused
+		return result
+	}
 	if failure != "" || !port.HexID(id) {
 		result.Outcome = port.Uncertain
 		return result
@@ -168,5 +172,6 @@ func complete(intent port.Intent, record port.Record, id string) port.Outcome {
 func matches(record port.Record, observed port.Observation) bool {
 	return port.HexID(observed.ID) && observed.Name == record.Name && observed.ImageID == record.ImageID &&
 		observed.Token == record.Name[len("itos-container-"):] && observed.Project == record.Project && observed.Fingerprint == record.Fingerprint &&
-		observed.StatePresent && observed.Status == "created" && !observed.Running && observed.PID == 0 && !observed.Started
+		observed.StatePresent && observed.Status == "created" && !observed.Running && observed.PID == 0 && !observed.Started &&
+		!observed.Mounts && !observed.Volumes
 }

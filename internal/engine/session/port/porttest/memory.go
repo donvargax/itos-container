@@ -207,6 +207,7 @@ type Engine struct {
 	Store                                 *Store
 	Inspection, Following, Removal, Fault string
 	DisagreeName                          bool
+	ImageInspection                       string
 	Replaced, Removed                     bool
 }
 type memoryConnection struct {
@@ -249,6 +250,13 @@ func (c *memoryConnection) Check(ctx context.Context) port.Outcome {
 func (c *memoryConnection) Create(ctx context.Context, r port.Record) (string, port.Outcome) {
 	e := c.engine
 	if ctx.Err() != nil {
+		return "", port.Uncertain
+	}
+	e.Events = append(e.Events, EngineEvent{Method: "IMAGE", Target: r.ImageID})
+	switch e.ImageInspection {
+	case "declared volume", "different image config ID":
+		return "", port.Refused
+	case "missing Config", "unavailable", "malformed response":
 		return "", port.Uncertain
 	}
 	o := port.Observation{ID: e.CreateID, Name: r.Name, ImageID: r.ImageID, Token: r.NameToken(), Project: r.Project, Fingerprint: r.Fingerprint, StatePresent: true, Status: "created"}
@@ -310,6 +318,10 @@ func (c *memoryConnection) inspect(ctx context.Context, target string) (port.Obs
 }
 func mutateObservation(o port.Observation, condition string) port.Observation {
 	switch condition {
+	case "mounted volume":
+		o.Mounts = true
+	case "configured volume":
+		o.Volumes = true
 	case "different full container ID":
 		o.ID = strings.Repeat("e", 64)
 	case "different name":

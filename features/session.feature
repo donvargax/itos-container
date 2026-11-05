@@ -718,7 +718,7 @@ Feature: Owned unstarted worker creation and cleanup
   # Supply these responses only for inspection by frozen config ID; slice-8's
   # reference-based preflight remains valid. No real daemon or image is needed.
   # ID-SESSION-01 is the empty-volume image's successful-create control.
-  @slice-9 @ID-SESSION-22 @linux @wip
+  @slice-9 @ID-SESSION-22 @linux
   Scenario Outline: Frozen image inspection must exclude implicit volumes before create
     Given an approved session contract fixture with frozen image inspection "<inspection>"
     When the session contract attempts creation through each local backend
@@ -738,7 +738,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # Only the product-facing inspect reply is changed, after an acknowledged
   # create. A truthful create reply does not override contradictory storage facts.
-  @slice-9 @ID-SESSION-23 @linux @wip
+  @slice-9 @ID-SESSION-23 @linux
   Scenario Outline: Unexpected container storage prevents ownership handoff
     Given an approved session contract fixture with post-create inspection "<inspection>"
     When the session contract attempts creation through each local backend
@@ -755,7 +755,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # Seed complete ownership and the worker independently. Storage is outside the
   # unstarted-only contract even when the name, labels, image and state match.
-  @slice-9 @ID-SESSION-24 @linux @wip
+  @slice-9 @ID-SESSION-24 @linux
   Scenario Outline: Unexpected container storage prevents recovery removal
     Given a session recovery fixture with "<storage>" and stage "<stage>"
     When a new session controller attempts cleanup through each local backend

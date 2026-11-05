@@ -108,7 +108,7 @@ func EngineContract(t Reporter, open func() (port.Engine, port.Binding)) {
 		return
 	}
 	observed, status := connection.Inspect(ctx, id)
-	if status != port.Observed || observed.ID != id || observed.Name != record.Name || observed.ImageID != record.ImageID || observed.Token != record.NameToken() || observed.Project != record.Project || observed.Fingerprint != record.Fingerprint || !observed.StatePresent || observed.Status != "created" || observed.Running || observed.PID != 0 || observed.Started {
+	if status != port.Observed || observed.ID != id || observed.Name != record.Name || observed.ImageID != record.ImageID || observed.Token != record.NameToken() || observed.Project != record.Project || observed.Fingerprint != record.Fingerprint || !observed.StatePresent || observed.Status != "created" || observed.Running || observed.PID != 0 || observed.Started || observed.Mounts || observed.Volumes {
 		t.Errorf("create not independently unstarted: %#v %v", observed, status)
 	}
 	byName, status := connection.Inspect(ctx, record.Name)
@@ -169,3 +169,30 @@ type Entropy struct {
 }
 
 func (e Entropy) Token() (string, port.Outcome) { return e.Value, e.Failure }
+
+// EngineImageContract requires image evidence before any create can succeed.
+func EngineImageContract(t Reporter, open func(string) (port.Engine, port.Binding)) {
+	t.Helper()
+	for _, condition := range []string{"declared volume", "different image config ID", "missing Config", "unavailable", "malformed response"} {
+		engine, b := open(condition)
+		ctx := context.Background()
+		connection, failure := engine.Open(ctx, b)
+		if failure != "" {
+			t.Errorf("%s engine open: %s", condition, failure)
+			continue
+		}
+		record := b.Intent(strings.Repeat("1", 64))
+		id, failure := connection.Create(ctx, record)
+		want := port.Uncertain
+		if condition == "declared volume" || condition == "different image config ID" {
+			want = port.Refused
+		}
+		if id != "" || failure != want {
+			t.Errorf("%s permitted create: %q %s", condition, id, failure)
+		}
+		if _, status := connection.Inspect(ctx, record.Name); status != port.NotFound {
+			t.Errorf("%s created a resource without safe image evidence", condition)
+		}
+		connection.Close()
+	}
+}

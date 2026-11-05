@@ -11,12 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/moby/client"
+
 	rp "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	st "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
 
-func sdkFixture(t *testing.T) (Engine, sp.Binding, *st.Readiness) {
+func sdkFixture(t *testing.T, imageCondition ...string) (Engine, sp.Binding, *st.Readiness) {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "slice-9-sdk-")
 	if err != nil {
@@ -38,7 +40,29 @@ func sdkFixture(t *testing.T) (Engine, sp.Binding, *st.Readiness) {
 		switch {
 		case path == "/info":
 			_ = json.NewEncoder(w).Encode(map[string]string{"ID": b.EngineID})
+		case path == "/images/"+b.ImageID+"/json":
+			image := map[string]any{"Id": b.ImageID, "Config": map[string]any{}}
+			if len(imageCondition) != 0 {
+				switch imageCondition[0] {
+				case "declared volume":
+					image["Config"] = map[string]any{"Volumes": map[string]any{"/data": map[string]any{}}}
+				case "different image config ID":
+					image["Id"] = "sha256:" + strings.Repeat("e", 64)
+				case "missing Config":
+					delete(image, "Config")
+				case "unavailable":
+					w.WriteHeader(503)
+					return
+				case "malformed response":
+					_, _ = w.Write([]byte(`{"broken"`))
+					return
+				}
+			}
+			_ = json.NewEncoder(w).Encode(image)
 		case path == "/containers/create":
+			if len(imageCondition) != 0 {
+				t.Error("create attempted without safe image evidence")
+			}
 			var body struct {
 				Image, User     string
 				Cmd, Entrypoint []string
@@ -52,7 +76,7 @@ func sdkFixture(t *testing.T) (Engine, sp.Binding, *st.Readiness) {
 					Binds                  []string
 				}
 			}
-			if json.NewDecoder(r.Body).Decode(&body) != nil || body.Image != b.ImageReference || body.User != b.UID+":"+b.GID || len(body.Cmd) != 1 || body.Cmd[0] != "/bin/true" || body.Entrypoint == nil || len(body.Entrypoint) != 0 || body.HostConfig.NetworkMode != "none" || !body.HostConfig.ReadonlyRootfs || body.HostConfig.PidsLimit != 4096 || len(body.HostConfig.CapDrop) != 1 || body.HostConfig.CapDrop[0] != "ALL" || len(body.HostConfig.SecurityOpt) != 1 || body.HostConfig.SecurityOpt[0] != "no-new-privileges" || body.HostConfig.AutoRemove || body.HostConfig.Privileged || len(body.HostConfig.Binds) != 0 {
+			if json.NewDecoder(r.Body).Decode(&body) != nil || body.Image != b.ImageID || body.User != b.UID+":"+b.GID || len(body.Cmd) != 1 || body.Cmd[0] != "/bin/true" || body.Entrypoint == nil || len(body.Entrypoint) != 0 || body.HostConfig.NetworkMode != "none" || !body.HostConfig.ReadonlyRootfs || body.HostConfig.PidsLimit != 4096 || len(body.HostConfig.CapDrop) != 1 || body.HostConfig.CapDrop[0] != "ALL" || len(body.HostConfig.SecurityOpt) != 1 || body.HostConfig.SecurityOpt[0] != "no-new-privileges" || body.HostConfig.AutoRemove || body.HostConfig.Privileged || len(body.HostConfig.Binds) != 0 {
 				t.Error("invalid minimal create request")
 				w.WriteHeader(400)
 				return
@@ -88,6 +112,55 @@ func TestEngineContracts(t *testing.T) {
 		st.EngineContract(t, func() (sp.Engine, sp.Binding) { b, _, engine := st.Fixture(); return engine, b })
 	})
 }
+func TestEngineImageContracts(t *testing.T) {
+	t.Run("SDK", func(t *testing.T) {
+		st.EngineImageContract(t, func(condition string) (sp.Engine, sp.Binding) {
+			engine, b, _ := sdkFixture(t, condition)
+			return engine, b
+		})
+	})
+	t.Run("memory", func(t *testing.T) {
+		st.EngineImageContract(t, func(condition string) (sp.Engine, sp.Binding) {
+			b, _, engine := st.Fixture()
+			engine.ImageInspection = condition
+			return engine, b
+		})
+	})
+}
+
+// The fixture changes its pinned identity once the image reply is received,
+// on the caller's goroutine, before any subsequent request can be dispatched.
+type replacedImageTransport struct {
+	base http.RoundTripper
+	pin  *st.Readiness
+}
+
+func (r replacedImageTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := r.base.RoundTrip(request)
+	r.pin.Current = false
+	return response, err
+}
+
+func TestImageInspectionRevalidatesPinnedSocket(t *testing.T) {
+	engine, b, pin := sdkFixture(t, "socket replacement")
+	conn, failure := engine.Open(context.Background(), b)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	c := conn.(*connection)
+	_ = c.api.Close()
+	api, err := client.New(client.WithHost(b.Endpoint), client.WithAPIVersion("1.56"),
+		client.WithHTTPClient(&http.Client{Transport: replacedImageTransport{base: c.transport, pin: pin}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.api = api
+	defer c.Close()
+	if id, result := c.Create(context.Background(), b.Intent(strings.Repeat("1", 64))); id != "" || result != sp.Refused {
+		t.Fatalf("image inspection lost socket identity: %q %s", id, result)
+	}
+}
+
 func TestSocketAndDeadlineRefusals(t *testing.T) {
 	engine, b, pin := sdkFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())

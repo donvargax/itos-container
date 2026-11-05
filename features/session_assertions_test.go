@@ -14,7 +14,7 @@ func (w *world) sessionLabels() map[string]any {
 }
 
 func (w *world) sessionRequestProblem(body map[string]any) error {
-	if body == nil || body["Image"] != w.doctor.image || body["User"] != w.approval.uid+":"+w.approval.gid || !reflect.DeepEqual(body["Labels"], w.sessionLabels()) {
+	if body == nil || body["Image"] != w.doctor.imageID || body["User"] != w.approval.uid+":"+w.approval.gid || !reflect.DeepEqual(body["Labels"], w.sessionLabels()) {
 		return fmt.Errorf("create request lacks exact frozen identity")
 	}
 	if !reflect.DeepEqual(body["Cmd"], []any{"/bin/true"}) || !reflect.DeepEqual(body["Entrypoint"], []any{}) {
@@ -62,6 +62,10 @@ func (w *world) sessionIdentityProblem(container map[string]any, id string) erro
 	decoded, err := hex.DecodeString(id)
 	if err != nil || len(decoded) != 32 || strings.ToLower(id) != id || container["Id"] != id || container["Name"] != "/itos-container-"+w.session.token || container["Image"] != w.doctor.imageID || !reflect.DeepEqual(object(container["Config"])["Labels"], w.sessionLabels()) {
 		return fmt.Errorf("independent container identity differs from frozen intent")
+	}
+	mounts, _ := container["Mounts"].([]any)
+	if len(mounts) != 0 || len(object(object(container["Config"])["Volumes"])) != 0 {
+		return fmt.Errorf("independent container observation contains unexpected storage")
 	}
 	state := object(container["State"])
 	if state == nil || state["Status"] != "created" || state["Running"] != false || state["Pid"] != float64(0) || (state["StartedAt"] != "0001-01-01T00:00:00Z" && state["StartedAt"] != "") {

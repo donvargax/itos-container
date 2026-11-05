@@ -115,9 +115,21 @@ func (c *connection) Create(ctx context.Context, r port.Record) (string, port.Ou
 	}
 	call, cancel := c.call(ctx)
 	defer cancel()
+	// Docker inherits image VOLUME declarations even when the create request
+	// has no volumes. Inspect and create the same immutable config identity.
+	image, err := c.api.ImageInspect(call, r.ImageID)
+	if !c.pin.Unchanged() {
+		return "", port.Refused
+	}
+	if err != nil || image.Config == nil {
+		return "", port.Uncertain
+	}
+	if image.ID != r.ImageID || len(image.Config.Volumes) != 0 {
+		return "", port.Refused
+	}
 	pids := int64(4096)
 	result, err := c.api.ContainerCreate(call, client.ContainerCreateOptions{Name: r.Name,
-		Config:     &container.Config{Image: r.ImageReference, User: r.UID + ":" + r.GID, Cmd: []string{"/bin/true"}, Entrypoint: []string{}, Labels: map[string]string{"io.itos-container.intent": r.NameToken(), "io.itos-container.project": r.Project, "io.itos-container.fingerprint": r.Fingerprint}},
+		Config:     &container.Config{Image: r.ImageID, User: r.UID + ":" + r.GID, Cmd: []string{"/bin/true"}, Entrypoint: []string{}, Labels: map[string]string{"io.itos-container.intent": r.NameToken(), "io.itos-container.project": r.Project, "io.itos-container.fingerprint": r.Fingerprint}},
 		HostConfig: &container.HostConfig{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges"}, Resources: container.Resources{PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: "no"}},
 	})
 	if err != nil || !c.pin.Unchanged() || !port.HexID(result.ID) {
@@ -146,6 +158,7 @@ func (c *connection) Inspect(ctx context.Context, id string) (port.Observation, 
 		return port.Observation{}, port.Unavailable
 	}
 	observed := port.Observation{ID: r.ID, Name: strings.TrimPrefix(r.Name, "/"), ImageID: r.Image, Token: r.Config.Labels["io.itos-container.intent"], Project: r.Config.Labels["io.itos-container.project"], Fingerprint: r.Config.Labels["io.itos-container.fingerprint"], StatePresent: r.State != nil}
+	observed.Mounts, observed.Volumes = len(r.Mounts) != 0, len(r.Config.Volumes) != 0
 	if r.State != nil {
 		observed.Status = string(r.State.Status)
 		observed.Running = r.State.Running
