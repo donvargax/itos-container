@@ -222,6 +222,7 @@ func engineWorkflowIssues(data []byte) []string {
 	}
 	require(enabledPath != "", "complete invocation missing")
 	issues = append(issues, engineFixtureWorkflowIssues(data)...)
+	issues = append(issues, engineRedWorkflowIssues(data)...)
 	for _, name := range []string{"platform", "platform-macos", "platform-windows"} {
 		job, ok := workflow.Jobs[name]
 		require(ok, "preserve "+name)

@@ -70,6 +70,6 @@ func TestManifestContractCoverage(t *testing.T) {
 	}
 }
 
-func filteredFeatureRun(pattern string, _ featureEnvironment) bool {
-	return pattern != ""
+func filteredFeatureRun(pattern string, env featureEnvironment) bool {
+	return pattern != "" || env.redRequested()
 }

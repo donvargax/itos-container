@@ -41,8 +41,9 @@ scenarios still run the product binary. Slice-3 owns binary-to-engine evidence.
 When `GOCOVERDIR` is set, the test assembly also builds with atomic coverage across
 the module. Go's exit hooks export counters for both success and refusal exits.
 `TestManifestContractCoverage` checks each metadata ID's exported product coverage
-in a separate directory. It runs in the unfiltered suite; filtered scenario runs
-retain only their selected IDs for measurement and mutation attribution.
+in a separate directory. It runs in the unfiltered suite; `-scenarios` and active manual red
+selections skip these independent reruns so only selected product IDs execute. Empty or ignored red input
+retains ordinary coverage; memory-only harness regressions still run.
 
 ## Running them
 
@@ -58,6 +59,8 @@ pinned Gherkin parser supplies inheritance from Feature, Rule, Scenario Outline 
 each outline row is selected independently. The expression is intersected with the selected
 tier, platform and the live set. An empty expression selects the whole eligible tier. Every OR
 branch retains these restrictions, so explicit IDs, `@wip` and `@linux` cannot bypass them.
+The separate [manual red selector](#manual-red-first-evidence) admits named `@wip` cases
+only in guarded CI dispatch; empty input preserves the ordinary selection described here.
 
 `@linux` marks scenarios whose fixtures require a Linux test process. The run terminal
 examples use it for their real PTY fixture; portable invocation and redirected-stream
@@ -109,12 +112,14 @@ ITOS_CONTAINER_ENGINE_TESTS=1 go test ./features -count=1 -v -timeout=5m -run '^
 ```
 
 The step has a five-minute budget and the job a ten-minute budget. These are test-infrastructure
-budgets, not product startup/resource limits. The step always selects every live engine case,
-independent of smoke selections, changed IDs or a green baseline. Pending, undefined, failed
-or skipped runtime steps fail; losing selected engine cases also fails.
+budgets, not product startup/resource limits. With no red input the step selects every live
+engine case, independent of smoke selections, changed IDs or a green baseline. A manual red
+list narrows it to the named eligible IDs, live or `@wip`. Pending, undefined, failed or skipped
+runtime steps fail; losing selected engine cases also fails. Manual non-engine red runs
+apply the same completion checks.
 
-There are currently no live engine scenarios. Preflight and fixture preparation still run,
-followed by unconditional cleanup, and the harness
+There are currently no live engine scenarios. With no red input, preflight and fixture
+preparation still run, followed by unconditional cleanup, and the harness
 explicitly skips with `no live @engine scenarios (count 0)`, including an all-`@wip` engine set.
 This is infrastructure readiness, not sandbox or supported-host proof.
 
@@ -183,7 +188,8 @@ smoke, with a separate 30-second cleanup attempt on failure. It performs these c
 5. Remove the smoke container and registry, discarding registry tmpfs, then inspect the cached
    digest again. Only then publish `image`, `image_id`, `uid` and `gid` as step outputs.
 
-The Engine scenarios step receives just these harness inputs beside its tier switch:
+The Engine scenarios step receives these fixture inputs beside its tier switch and the
+optional `ITOS_CONTAINER_RED_SCENARIOS` selector described below:
 
 | Variable | Meaning |
 | --- | --- |
@@ -235,29 +241,56 @@ relicense them. The recipe changes only image configuration and removes no upstr
   and the [bundled component inventory](https://github.com/docker-library/repo-info/tree/master/repos/busybox).
   These source references do not authorize publishing the fixture as a product image.
 
-### Real-engine red-first evidence
+### Manual red-first evidence
 
-Draft PRs skip automatic CI, so the coordinator uses the existing manual-dispatch workflow
-for assertion-level red proof. No new event, input, workflow or draft-guard exception is needed.
-[GitHub permits selecting a branch for manual dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)
-when the workflow exists on the default branch, as this one already does.
+The optional `workflow_dispatch` string input `red_scenarios` supplies expected-red evidence
+without changing feature files or smoke entries. It accepts whitespace-separated **complete**
+scenario tags matching `^@ID-[A-Z]+-[0-9]+$`, for example `@ID-DOCTOR-01 @ID-DOCTOR-02`.
+Standard-library Unicode whitespace separates tokens; repeated IDs execute only once per
+eligible scenario/outline row. Bare IDs, arbitrary tags, lowercase areas, commas, regexes,
+godog operators and shell-looking text fail. Every ID must exist in the parsed inventory,
+even if other IDs match. Combining a nonempty list with `-scenarios` fails before build/setup.
 
-1. The behaviour implementer commits complete step definitions in a `test` commit while the
-   cases remain `@wip` and carry `@engine`. The agent commits and stops.
-2. The loop creates a separate disposable evidence branch from that **exact step commit**.
-   One `test` commit removes `@wip` only from the named cases, retains `@engine` and adds a valid
-   smoke entry if needed. The item branch retains its original tags.
-3. The loop publishes the evidence branch and manually dispatches the existing CI workflow
-   on it, independently of the draft PR. The workflow checks out the selected commit and runs
-   every live engine case. There is no uncommitted tag rewrite, harness bypass or conversion
-   of expected failure to success.
-4. The coordinator records the run URL, evidence commit, parent step commit, exact scenario
-   ID/outline row and failed **Then** assertion. Setup, infrastructure, undefined-step failures
-   and empty selections are not red proof. The expected-red run stays failed and is never merged.
-5. After implementation, remove the cases' `@wip` tags on the item branch and require green CI
-   at the actual implemented head. The loop alone publishes, dispatches, observes and closes.
+The workflow passes the input only to **Engine scenarios** and the existing macOS/Windows
+**Tests** steps, as step-local `ITOS_CONTAINER_RED_SCENARIOS` data. It is never a shell
+expression. The harness reads it only after `CI=true`, `GITHUB_ACTIONS=true` and
+`GITHUB_EVENT_NAME=workflow_dispatch` are established. Local, PR, push and other contexts
+do not read it, even if present and malformed. Unset, empty or whitespace-only input keeps
+today's live-only selection in both tiers. Agents never spoof this context or access an engine.
 
-This procedure creates no evidence branch itself and claims no later scenario has run.
+A nonempty list selects only its exact IDs, live or `@wip`, while retaining every tier and
+platform restriction. Inherited Feature, Rule, Outline and Examples tags apply; an outline ID
+selects all eligible rows. The input never enables the engine. The same list may reach all
+three jobs: engine IDs skip on manual platforms, non-engine IDs skip in the engine job, and
+`@linux` cases remain excluded on macOS/Windows. A wholly excluded selection reports its IDs,
+reasons and count, runs no scenario setup and supplies no red evidence. Eligible selections must finish
+all expected cases successfully for the test command to pass; actual failures stay failed.
+
+Draft PRs skip automatic CI. The coordinator dispatches on the item branch after it contains
+the complete step commit and T-21's workflow/harness changes. The existing workflow must also
+be available on the default branch for GitHub manual dispatch.
+
+1. The behaviour implementer commits complete step definitions in a `test` commit while cases
+   remain `@wip`, retaining `@engine` wherever setup, steps or cleanup need it. The agent stops.
+2. The loop publishes the item branch and invokes the coordinator-only command:
+
+   ```sh
+   gh workflow run ci.yml --ref <item> -f 'red_scenarios=<ids>'
+   ```
+
+   Substitute whitespace-separated complete tags for `<ids>`. No tag-removal commit, evidence
+   branch, smoke edit or draft-guard exception is needed. Ordinary Linux and proof jobs retain
+   their normal inputs; only the engine and manual macOS/Windows jobs receive this selector.
+3. The coordinator records the **resolved tested SHA**, input IDs, run URL, runner/tier,
+   scenario ID/outline row and failing **Then** assertion. Infrastructure, setup, undefined-step
+   failures and empty/excluded selections are not red proof. A passing run is not red proof
+   either; no forced failure or ignored test failure is permitted. Keep the failed run visible.
+4. Implement, remove `@wip` in the behaviour commit and require green CI at the actual pushed
+   head **with no red input**. Expected-red dispatches are never merge/closure prerequisites or
+   substitutes for that green run. The loop alone publishes, dispatches, reads results and closes.
+
+Non-engine cases that can run locally retain the ordinary local red-first procedure. This
+manual route adds no product scenarios, supported-host claim or runtime evidence by itself.
 
 ## Tags
 
@@ -267,7 +300,7 @@ This procedure creates no evidence branch itself and claims no later scenario ha
 | `@<item>`         | The work item that turns it green (`@count-cli`).                                     |
 | `@ID-<AREA>-<nn>` | Stable scenario ID. Commits reference these. Never reuse or renumber them.           |
 | `@bug-<n>`        | Reproduces a fixed bug. Added by `fix:` commits.                                     |
-| `@wip`            | Written, not yet implemented. Excluded from both tiers, and a `feat` may not name it. |
+| `@wip`            | Written, not yet implemented. Excluded by default; only named CI red selections admit it. A `feat` may not name it. |
 | `@engine`         | Setup, hooks, steps or cleanup need a real engine. Runs only in the CI engine tier. |
 | `@linux`          | Fixture requires Linux. Excluded before setup on other test platforms.             |
 
@@ -285,8 +318,9 @@ area gets a new word and a new file.
 - The commit-msg hook checks that the referenced IDs exist and are live at the commit.
 - Red first: a slice's steps go alone in a `test` commit, its scenarios still `@wip`
   (`itos commit --item count-cli`). For real-engine behaviour, retain `@wip` in the step
-  commit. The coordinator obtains assertion-level red evidence in CI with `@wip` removed
-  for that run, then green evidence after implementation at the same permitted tier.
+  commit. The coordinator obtains assertion-level red evidence through the scoped manual
+  selector above, retaining the tags on disk, then green evidence after implementation with
+  `@wip` removed and no red input. Ordinary no-input runs still exclude `@wip`.
   Undefined steps, setup failures and local engine runs are not acceptable evidence.
 
 ## The smoke set

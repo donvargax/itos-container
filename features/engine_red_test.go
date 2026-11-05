@@ -19,6 +19,8 @@ func testRedEnvironmentBoundary(t *testing.T) {
 		{"local", "", "", "", false},
 		{"missing CI", "", "true", "workflow_dispatch", false},
 		{"missing Actions", "true", "", "workflow_dispatch", false},
+		{"inexact CI", "1", "true", "workflow_dispatch", false},
+		{"inexact Actions", "true", "True", "workflow_dispatch", false},
 		{"PR", "true", "true", "pull_request", false},
 		{"push", "true", "true", "push", false},
 		{"other event", "true", "true", "schedule", false},
@@ -32,6 +34,16 @@ func testRedEnvironmentBoundary(t *testing.T) {
 				env := readFeatureEnvironment(func(key string) string { reads = append(reads, key); return values[key] }, "darwin", "amd64")
 				if slices.Contains(reads, redVariable) != tc.allowed {
 					t.Errorf("red lookup allowed=%v, reads=%v", tc.allowed, reads)
+				}
+				if tc.allowed {
+					if env.red != value {
+						t.Errorf("boundary changed red input %q to %q", value, env.red)
+					}
+					for _, key := range []string{"CI", "GITHUB_ACTIONS", "GITHUB_EVENT_NAME"} {
+						if slices.Index(reads, key) >= slices.Index(reads, redVariable) {
+							t.Errorf("red lookup preceded %s: %v", key, reads)
+						}
+					}
 				}
 				want := tc.allowed && strings.TrimSpace(value) != ""
 				if filteredFeatureRun("", env) != want {

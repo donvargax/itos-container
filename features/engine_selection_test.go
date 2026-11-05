@@ -433,7 +433,7 @@ func cleanHarnessEnvironment() []string {
 	var env []string
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if key != "ITOS_CONTAINER_ENGINE_TESTS" && key != "DOCKER_HOST" && key != "DOCKER_CONTEXT" && key != "GOCOVERDIR" {
+		if key != "ITOS_CONTAINER_ENGINE_TESTS" && key != "ITOS_CONTAINER_RED_SCENARIOS" && key != "DOCKER_HOST" && key != "DOCKER_CONTEXT" && key != "GOCOVERDIR" {
 			env = append(env, entry)
 		}
 	}
@@ -451,6 +451,8 @@ func TestEngineRedSelection(t *testing.T) {
 		name, engine, hostOS, ids string
 		want, steps               []string
 	}{
+		{"ordinary named live", "", "darwin", "@ID-MEMORY-01", []string{"@ID-MEMORY-01"}, []string{"ordinary"}},
+		{"engine named live", "1", "linux", "@ID-MEMORY-02", []string{"@ID-MEMORY-02"}, []string{"engine"}},
 		{"ordinary future", "", "darwin", "@ID-MEMORY-03", []string{"@ID-MEMORY-03"}, []string{"wip"}},
 		{"engine future", "1", "linux", "@ID-MEMORY-04", []string{"@ID-MEMORY-04"}, []string{"engine-wip"}},
 		{"mixed live future duplicates", "0", "windows", " @ID-MEMORY-03\t@ID-MEMORY-01\n@ID-MEMORY-03\u2003", []string{"@ID-MEMORY-01", "@ID-MEMORY-03"}, []string{"ordinary", "wip"}},
@@ -459,7 +461,9 @@ func TestEngineRedSelection(t *testing.T) {
 		{"shared list engine", "1", "linux", "@ID-MEMORY-03 @ID-MEMORY-04", []string{"@ID-MEMORY-04"}, []string{"engine-wip"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := writeFeatureFixture(t, tierFixture)
+			fixture := tierFixture + "\n  @ID-MEMORY-05\n  Scenario: unrelated live\n    Then record \"unrequested\"\n" +
+				"\n  @engine @ID-MEMORY-06\n  Scenario: unrelated engine\n    Then record \"unrequested-engine\"\n"
+			dir := writeFeatureFixture(t, fixture)
 			selected, err := selectScenarios("", dir, redEnvironment(tc.engine, tc.hostOS, tc.ids))
 			if err != nil {
 				t.Fatal(err)
@@ -472,7 +476,7 @@ func TestEngineRedSelection(t *testing.T) {
 				t.Errorf("unrequested or missing initializer/hook/background: selection %+v, execution %+v", selected, seen)
 			}
 			data, err := os.ReadFile(filepath.Join(dir, "memory.feature"))
-			if err != nil || string(data) != tierFixture {
+			if err != nil || string(data) != fixture {
 				t.Fatalf("selection rewrote feature: %v", err)
 			}
 		})
