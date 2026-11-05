@@ -47,6 +47,9 @@ func (w *world) sessionLocalFixture(mode, condition string) error {
 		case "absent":
 			s.mode = "recovery"
 			s.fault = "absent-record " + condition
+		case "reconcile-absent", "reconcile-owned":
+			s.mode = "recovery"
+			s.fault = strings.TrimPrefix(mode, "reconcile-") + "-record " + condition
 		case "token":
 			s.fault = condition
 		case "inspect":
@@ -113,6 +116,9 @@ func (w *world) sessionSeedRecovery(mode, condition string) error {
 	s.api.local[s.seedID] = container
 	s.api.observed[s.seedID] = approvalClone(container)
 	record := w.sessionExpectedRecord("owned", s.seedID)
+	if mode == "reconcile-absent" || mode == "reconcile-owned" {
+		record["stage"], record["container_id"] = "intent", ""
+	}
 	if mode == "identity" {
 		switch condition {
 		case "selected daemon ID differs":
@@ -346,7 +352,7 @@ func (w *world) sessionLocalAction(action string) error {
 			s.firstResources[id] = approvalClone(c)
 		}
 		s.fault, s.following = "", ""
-		if s.mode == "recovery" {
+		if s.mode == "recovery" && s.api.local[s.seedID] == nil {
 			w.sessionReplacement()
 		}
 		s.cleanupStart = len(s.api.requests)

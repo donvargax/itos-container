@@ -343,7 +343,9 @@ func (c *memoryConnection) Remove(ctx context.Context, id string) {
 	}
 	e := c.engine
 	e.Removed = true
-	e.Events = append(e.Events, EngineEvent{Method: "REMOVE", Target: id})
+	resource := e.Resources[id]
+	ref := port.Reference(resource.Project, resource.Token)
+	e.Events = append(e.Events, EngineEvent{Method: "REMOVE", Target: id, Intent: string(e.Store.Records[ref]), Writes: append([]WriteEvent{}, e.Store.Events...)})
 	if e.Following != "still present" {
 		delete(e.Resources, id)
 	}

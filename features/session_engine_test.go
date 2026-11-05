@@ -72,7 +72,7 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.problem = errors.New("session request body is not an object")
 		}
 	}
-	if entry.Method == "POST" && entry.Path == "/containers/create" {
+	if (entry.Method == "POST" && entry.Path == "/containers/create") || entry.Method == "DELETE" {
 		entry.Record, err = sessionReadRecord(a.w.sessionRecordPath())
 		if err != nil {
 			a.problem = err

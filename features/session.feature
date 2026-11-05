@@ -630,6 +630,45 @@ Feature: Owned unstarted worker creation and cleanup
       | atomic publication |
       | parent fsync       |
 
+  # Review regression: recover only from independently seeded intent and frozen
+  # input. Capture the complete record and successful durability events at DELETE,
+  # before the absent update is attempted. Clear the absent fault only after the
+  # first cleanup returns, then reconstruct without passing the observer's ID.
+  @slice-9 @ID-SESSION-20 @linux @wip
+  Scenario Outline: Reconciled identity survives removal when completion persistence fails
+    Given an intent-only session recovery fixture with absent-record fault "<fault>"
+    When cleanup is attempted, the fault is cleared and a new controller retries through each local backend
+    Then each removal follows durable publication of the independently reconciled full ID
+    And each first cleanup reports completion-write-failed despite independently confirmed engine absence
+    And the first attempt retains a complete owned or absent record without claiming durable completion
+    And each retry confirms the same ID absent and completes only after successful record durability
+    And neither retry creates a container nor deletes a same-named replacement
+
+    Examples:
+      | fault              |
+      | short write        |
+      | file fsync         |
+      | atomic publication |
+      | parent fsync       |
+
+  # Persisting reconciled ownership is a prerequisite to removal, including when
+  # a prior publication was visible but its parent fsync failed. The first cleanup
+  # keeps the fault active. Only the explicit later retry clears it.
+  @slice-9 @ID-SESSION-21 @linux @wip
+  Scenario Outline: Failed reconciled identity persistence keeps the worker recoverable
+    Given an intent-only session recovery fixture with owned-record fault "<fault>"
+    When cleanup is attempted, the fault is cleared and a new controller retries through each local backend
+    Then each first cleanup reports ownership-write-failed and retains the independently observed worker without removal
+    And each cleanup completes only after ID absence and durable absent recording on the later attempt
+    And no replacement create, worker start or foreign removal was attempted
+
+    Examples:
+      | fault              |
+      | short write        |
+      | file fsync         |
+      | atomic publication |
+      | parent fsync       |
+
   # This CI observation is required in addition to local ordering/fault contracts.
   # Today the positive observed-create assertion fails; an empty audit cannot pass.
   @slice-9 @ID-SESSION-11 @engine

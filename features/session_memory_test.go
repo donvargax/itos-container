@@ -169,6 +169,8 @@ func (w *world) observeMemory(observed *sessionMemoryOutput) error {
 			}
 		case "REMOVE":
 			r.Method, r.Path, r.Status = "DELETE", "/containers/"+e.Target, 204
+			r.Record = sessionRecord{Bytes: e.Intent, Mode: 0600, UID: fmt.Sprint(os.Geteuid())}
+			r.Events = e.Writes
 		default:
 			return fmt.Errorf("unexpected memory engine operation %s", e.Method)
 		}
