@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -38,8 +39,148 @@ func TestStorageLockRespectsCallerDeadline(t *testing.T) {
 		t.Fatal(second, f)
 	}
 }
+
+func TestStorageCancellationBeforeLockAcquisition(t *testing.T) {
+	s, c, _ := diskFixture(t)
+	storage := Storage{Store: s}
+	d, failure := storage.Open(context.Background(), c, "intents", true)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	d.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ops := s.operations()
+	openDir := ops.openDir
+	var lockFile *os.File
+	ops.openDir = func(root *os.Root, name string) (*os.File, error) {
+		file, err := openDir(root, name)
+		if err == nil {
+			lockFile = file
+			cancel()
+		}
+		return file, err
+	}
+	s.ops = &ops
+	if opened, f := (Storage{Store: s}).Open(ctx, c, "intents", false); opened != nil || f != "state.unavailable" {
+		t.Fatalf("canceled lock acquisition = %v, %s", opened, f)
+	}
+	if lockFile == nil {
+		t.Fatal("cancellation did not reach lock acquisition")
+	}
+	if _, err := lockFile.Stat(); !errors.Is(err, os.ErrClosed) {
+		t.Fatal("canceled lock acquisition leaked its directory handle", err)
+	}
+	// A later caller can still acquire the same protected directory.
+	retry, stop := context.WithTimeout(context.Background(), time.Second)
+	defer stop()
+	d, failure = storage.Open(retry, c, "intents", false)
+	if failure != "" || d == nil {
+		t.Fatalf("open after canceled acquisition = %v, %s", d, failure)
+	}
+	d.Close()
+}
+
+func TestProtectedReadRejectsChangedEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		want port.Failure
+	}{
+		{"canceled context", "state.path"},
+		{"lookup failure", "state.unavailable"},
+		{"unsafe descriptor", "state.unsafe"},
+		{"replaced descriptor", "state.path"},
+		{"lookup failure after read", "state.path"},
+		{"replacement after read", "state.path"},
+		{"unsafe metadata after read", "state.path"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, c, _ := diskFixture(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var descriptor os.FileInfo
+			descriptorReached := false
+			storage := Storage{Store: s, Stat: func(file *os.File) (os.FileInfo, error) {
+				if filepath.Base(file.Name()) == "1.json" && descriptor != nil {
+					descriptorReached = true
+					return descriptor, nil
+				}
+				return file.Stat()
+			}}
+			opened, failure := storage.Open(ctx, c, "intents", true)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			d := opened.(*directoryStore)
+			defer d.Close()
+			if failure = d.Publish("1.json", nil, []byte("original")); failure != "" {
+				t.Fatal(failure)
+			}
+			// Independent metadata represents either a safe replacement inode or
+			// an unsafe file; the original protected record remains untouched.
+			other := filepath.Join(t.TempDir(), "other")
+			if err := os.WriteFile(other, []byte("outside"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			replacement, err := os.Stat(other)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Chmod(other, 0644); err != nil {
+				t.Fatal(err)
+			}
+			unsafe, err := os.Stat(other)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch tc.name {
+			case "canceled context":
+				cancel()
+			case "unsafe descriptor":
+				descriptor = unsafe
+			case "replaced descriptor":
+				descriptor = replacement
+			}
+			lstat := d.pin.ops.lstat
+			lookups := 0
+			d.pin.ops.lstat = func(root *os.Root, name string) (os.FileInfo, error) {
+				if name == "1.json" {
+					lookups++
+					if tc.name == "lookup failure" || lookups == 2 && tc.name == "lookup failure after read" {
+						return nil, os.ErrPermission
+					}
+					if lookups == 2 && tc.name == "replacement after read" {
+						return replacement, nil
+					}
+					if lookups == 2 && tc.name == "unsafe metadata after read" {
+						// Keep the inode unchanged so the final ownership/mode
+						// validation, not the replacement check, must refuse it.
+						if err := root.Chmod(name, 0644); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				return lstat(root, name)
+			}
+			if data, f := d.Read("1.json"); data != nil || f != tc.want {
+				t.Fatalf("unsafe read = %q, %s; want no data, %s", data, f, tc.want)
+			}
+			if descriptor != nil && !descriptorReached {
+				t.Fatal("read did not validate opened record metadata")
+			}
+			if strings.HasSuffix(tc.name, "after read") && lookups != 2 {
+				t.Fatal("read did not reach final record validation", lookups)
+			}
+			data, err := os.ReadFile(filepath.Join(d.pin.root().Name(), "1.json"))
+			if err != nil || string(data) != "original" {
+				t.Fatal("failed read changed the protected record", err)
+			}
+		})
+	}
+}
+
 func TestProtectedReadAndPublicationFailures(t *testing.T) {
-	for _, fault := range []string{"read", "record stat", "open record", "oversize", "nonce", "create", "chmod", "write", "short write", "file sync", "close", "rename", "parent sync", "ancestor sync", "exclusive conflict"} {
+	for _, fault := range []string{"read", "record stat", "open record", "oversize", "nonce", "create", "chmod", "write", "short write", "file sync", "close", "rename", "parent sync", "ancestor open", "ancestor sync", "exclusive conflict"} {
 		t.Run(fault, func(t *testing.T) {
 			s, c, _ := diskFixture(t)
 			storage := Storage{Store: s}
@@ -82,6 +223,8 @@ func TestProtectedReadAndPublicationFailures(t *testing.T) {
 				ops.rename = func(*os.Root, string, string) error { return broken }
 			case "parent sync":
 				ops.syncParent = func(*os.File) error { return broken }
+			case "ancestor open":
+				ops.openDir = func(*os.Root, string) (*os.File, error) { return nil, broken }
 			case "ancestor sync":
 				ops.syncDir = func(*os.File) error { return broken }
 			case "exclusive conflict":
@@ -93,6 +236,15 @@ func TestProtectedReadAndPublicationFailures(t *testing.T) {
 			}
 			if f = d.Publish(name, previous, []byte("after")); f == "" {
 				t.Fatal("failed operation reported successful publication")
+			}
+			if fault == "ancestor open" {
+				if f != "state.write" {
+					t.Fatal("ancestor open failure was not a write failure", f)
+				}
+				data, failure := d.Read("1.json")
+				if failure != "" || string(data) != "before" {
+					t.Fatal("failed ancestor open changed the preceding record", failure)
+				}
 			}
 		})
 	}

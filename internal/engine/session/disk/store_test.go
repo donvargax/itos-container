@@ -61,6 +61,41 @@ func TestSyncPreservesIndependentlyEncodedOwnership(t *testing.T) {
 	}
 }
 
+func TestSnapshotReadFailurePreservesRecovery(t *testing.T) {
+	b, _, _ := sf.Fixture()
+	token := strings.Repeat("1", 64)
+	record := b.Intent(token)
+	record.Stage, record.ContainerID = "owned", strings.Repeat("2", 64)
+	codec := &sf.Codec{Value: b}
+	data := codec.Encode(record)
+	directory := &af.Directory{Files: map[string][]byte{token + ".json": data}}
+	snapshots := &af.Directory{Files: map[string][]byte{"1.json": []byte("snapshot")}, ReadFailure: "state.unavailable"}
+	storage := &af.Storage{Directories: map[string]*af.Directory{
+		"intents/" + b.Frozen.Project:   directory,
+		"snapshots/" + b.Frozen.Project: snapshots,
+	}}
+	store := Store{Storage: storage, Codec: codec, Host: &af.Host{UID: b.UID, GID: b.GID}, Checkout: &sf.Checkout{Identity: b.Checkout}, Input: rp.Input{Root: b.Checkout.Root, OS: "linux", Architecture: "amd64"}}
+	ref := sp.Reference(b.Frozen.Project, token)
+	if intent, failure := store.Open(context.Background(), ref); intent != nil || failure != sp.Incomplete {
+		t.Fatalf("unavailable snapshot read = %v, %s; want no intent and cleanup-incomplete", intent, failure)
+	}
+	if directory.Locked || snapshots.Locked {
+		t.Fatal("failed snapshot read retained storage locks")
+	}
+	if string(directory.Files[token+".json"]) != string(data) {
+		t.Fatal("failed snapshot read changed the ownership record")
+	}
+	snapshots.ReadFailure = ""
+	intent, failure := store.Open(context.Background(), ref)
+	if failure != "" || intent == nil {
+		t.Fatalf("recovery after snapshot read becomes available = %v, %s", intent, failure)
+	}
+	defer intent.Close()
+	if intent.Record() != record || intent.Binding() != b {
+		t.Fatal("recovery lost the original ownership binding")
+	}
+}
+
 func TestHostAndStorageFailureClassification(t *testing.T) {
 	for _, tc := range []struct{ uid, gid, os, arch string }{{"0", "1000", "linux", "amd64"}, {"-1", "1000", "linux", "amd64"}, {"01", "1000", "linux", "amd64"}, {"1000", "bad", "linux", "amd64"}, {"1000", "1000", "darwin", "amd64"}, {"1000", "1000", "linux", "arm64"}} {
 		store := Store{Host: &af.Host{UID: tc.uid, GID: tc.gid}, Input: rp.Input{OS: tc.os, Architecture: tc.arch}}

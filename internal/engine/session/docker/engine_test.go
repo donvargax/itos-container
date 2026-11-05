@@ -112,6 +112,26 @@ func TestEngineContracts(t *testing.T) {
 		st.EngineContract(t, func() (sp.Engine, sp.Binding) { b, _, engine := st.Fixture(); return engine, b })
 	})
 }
+
+func TestOpenRetainsPinUntilConnectionClose(t *testing.T) {
+	engine, b, pin := sdkFixture(t)
+	conn, failure := engine.Open(context.Background(), b)
+	if failure != "" || conn == nil {
+		t.Fatalf("open = %v, %s", conn, failure)
+	}
+	t.Cleanup(conn.Close)
+	if pin.Closed {
+		t.Fatal("successful open released the pinned engine identity")
+	}
+	if failure = conn.Check(context.Background()); failure != "" {
+		t.Fatal("returned connection cannot verify its engine", failure)
+	}
+	conn.Close()
+	if !pin.Closed {
+		t.Fatal("connection close retained the engine pin")
+	}
+}
+
 func TestEngineImageContracts(t *testing.T) {
 	t.Run("SDK", func(t *testing.T) {
 		st.EngineImageContract(t, func(condition string) (sp.Engine, sp.Binding) {
