@@ -2007,9 +2007,81 @@
   type: test
   title: Settle the survivors of the first full-range proof on main
   why: >
-    This repository's move left main with no green run, so its CI range starts at the root commit
-    and the code proof judges the whole project. Three survivors no earlier push reached now keep
-    main red. Kill them, or except one that changes no behaviour, so main goes green and later
-    ranges start from there.
+    The coordinator settled this diagnosis on 2026-11-05. This public repository started with
+    no green run on main, so itos ci range uses commits.since, the root commit
+    23b8ce15410ec9431f5a1fe39a973d9cf0a3d8de. The code proof judges the whole project with that
+    fixed seed. It found three survivors no earlier push reached, and every push to main fails
+    on them until they are settled. Add tests that kill behaviour-changing mutants; except a
+    mutant only with a reason demonstrating that it changes no behaviour. This is a test task
+    for existing behaviour, not a new product feature; no scenarios or IDs are needed.
+
+    The reported sites are internal/engine/approval/canonical/json.go:181:149 and :182:74,
+    both && to || in valid, and internal/engine/manifest/disk/open_unix.go:11:80, 0 to 1 in
+    openCandidate. Keep production functions unchanged. Do not regroup valid, move the Unix
+    call or change source merely to remove a mutation site. Do not change proof.code's count
+    10, its base-derived seed or range, commits.since, excludes, tool pins, thresholds, workflow
+    or what the workflow measures. CI alone runs the existing fresh proof; agents make no
+    local mutation run and commit no generated mutation or coverage evidence. After this lands,
+    main must actually turn green before later ranges can start there. If further survivors
+    appear at the new head, settle them with tests or demonstrated equivalence under these same
+    rules, never by redrawing the sample or relaxing a gate. Uncovered changed lines need tests.
+
+    Add TestDecodeRejectsSelfConsistentInvalidProfile and
+    TestDecodeRejectsSelfConsistentInvalidEngineOS in
+    internal/engine/approval/canonical/json_test.go. Start each from porttest.Ready and a valid
+    non-root UID/GID candidate with generation 1. Include a valid round-trip control. Change
+    only settings.profile to other in the first case and settings.engine.os to windows in the
+    second, leaving every other setting valid. Rebuild canonical settings and their SHA-256
+    fingerprint for each changed record, using the existing candidate/encoding helpers; retain
+    the unchanged checkout, UID, project and valid generation. Pass the original valid current
+    candidate and the self-consistent changed envelope to JSON.Decode. Assert an empty
+    port.Record and state.invalid. Apply the same rejection assertions to JSON.FrozenRecord
+    with the changed settings and matching fingerprint/project, and retain its valid control.
+    The tests exercise returned results, not a private valid call or source text. They use
+    in-memory fixtures, never an approval command or real state folder.
+
+    Matching fingerprints are essential. Existing malformed-profile coverage changes settings
+    without recomputing the fingerprint, so Decode still rejects the mutant at the later digest
+    check. At :181:149, || lets the valid engine/policy/manifest/image suffix accept an invalid
+    profile. At :182:74, || lets the valid architecture/policy/manifest/image suffix accept a
+    non-Linux engine. In both new cases all envelope checks otherwise succeed, so accepting
+    the record instead of returning state.invalid is the failing assertion under the reported
+    mutants. Neither logical mutant is equivalent and neither may receive an exception.
+
+    The openCandidate permission mutant is equivalent. Its unchanged flags are
+    os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, with no creation flag. The installed Go
+    toolchain's os.OpenFile contract uses perm only for creation, and os.Root.OpenFile's source
+    rejects only permission bits outside 0777; both 0 and 1 pass that validation. Both values
+    therefore open the same existing file read-only or return the same error for a missing,
+    unsafe or inaccessible path. Neither creates a file, changes contents or permissions, nor
+    alters no-follow, nonblocking or subsequent identity checks. Register only this exact
+    equivalent site in itos-cc.yaml, with that reason for the person's review. Use the real
+    reported function/hash/site metadata, not a fabricated hash or a function-wide exclusion.
+    Existing TestFilesContract, TestNoFollowAndPathFailures and TestCandidateChangesAfterInspection
+    exercise reads, absent paths and unsafe replacements. They remain preservation checks;
+    they cannot kill an equivalent permission mutant. Do not add an injected-argument assertion
+    or claim these tests distinguish 0 from 1. Preserve all other exception entries.
+
+    The test-list checks below fail before implementation because both named regressions are
+    absent; capture the go test exit status before checking its output so a build failure cannot
+    pass as test discovery. The existing two-package test command is a preservation check and
+    is not expected to fail on the unmutated code. New regressions should also pass that code;
+    do not invent a product failure or alter it to manufacture red evidence. The coordinator's
+    reported CI survivors are the pre-work proof failure. Let configured hooks and CI run the
+    gates; this drafter does not run completion checks or mutation experiments. The unchanged
+    CI proof must confirm the two logical mutants are killed and the exact equivalent exception
+    is valid. Discovery checks alone prove neither outcome, and green package tests alone do
+    not settle this task. Report actual checks and CI results without claiming unrun evidence.
+
+    Implementation uses test --item T-24 for the regression tests and exact exception entry;
+    this spec uses docs --item T-24 and touches only this ledger entry. No dependency, runtime,
+    architecture or security-policy change is needed. Agents commit and stop; the coordinator
+    owns push, CI watching and closure after the actual pushed head is green.
   done_when:
+    - run: >-
+        tests=$(go test ./internal/engine/approval/canonical -list '^TestDecodeRejectsSelfConsistentInvalidProfile$') &&
+        printf '%s\n' "$tests" | grep -Fx TestDecodeRejectsSelfConsistentInvalidProfile
+    - run: >-
+        tests=$(go test ./internal/engine/approval/canonical -list '^TestDecodeRejectsSelfConsistentInvalidEngineOS$') &&
+        printf '%s\n' "$tests" | grep -Fx TestDecodeRejectsSelfConsistentInvalidEngineOS
     - run: go test ./internal/engine/approval/canonical ./internal/engine/manifest/disk
