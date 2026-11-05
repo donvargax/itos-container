@@ -216,6 +216,9 @@ func (t *intent) Save(next port.Record) port.Outcome {
 	data := t.store.Codec.Encode(next)
 	var f approval.Failure
 	if next == t.record {
+		// Sync preserves the existing representation, which need not match a
+		// fresh encoding of an independently written, otherwise valid record.
+		data = t.bytes
 		f = t.directory.Sync(t.name, t.bytes)
 	} else {
 		f = t.directory.Publish(t.name, t.bytes, data)

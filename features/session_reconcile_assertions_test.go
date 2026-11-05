@@ -22,7 +22,7 @@ func (w *world) sessionReconciledBeforeRemoval() error {
 func (w *world) sessionReconciledWriteFailed() error {
 	s := w.session
 	if s.firstResult.Outcome != "ownership-write-failed" || s.firstResult.Reference != s.reference || s.firstResult.Handoff || s.firstResult.ID != "" {
-		return fmt.Errorf("expected ownership-write-failed without handoff, got %+v", s.firstResult)
+		return fmt.Errorf("expected ownership-write-failed without handoff, got %s", s.firstResult.Outcome)
 	}
 	if err := w.sessionFirstNoRemoval(); err != nil {
 		return err

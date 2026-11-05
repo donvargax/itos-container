@@ -108,14 +108,64 @@ func TestLostCreateRemainsRecoverableAndNeverRetries(t *testing.T) {
 	}
 }
 func TestWriteErrorDoesNotBecomeAUsableID(t *testing.T) {
-	s, d, store, e := serviceFixture()
-	store.Fault = "owned-record file fsync"
-	created := s.Create(context.Background(), d)
-	if created.Outcome != port.OwnershipWrite || created.ID != "" || len(e.Resources) != 1 {
-		t.Fatal(created)
+	for _, fault := range []string{"short write", "file fsync", "atomic publication", "parent fsync"} {
+		t.Run(fault, func(t *testing.T) {
+			s, d, store, e := serviceFixture()
+			store.Fault = "owned-record " + fault
+			ctx := context.Background()
+			created := s.Create(ctx, d)
+			if created.Outcome != port.OwnershipWrite || created.ID != "" || len(e.Resources) != 1 {
+				t.Fatal(created)
+			}
+			if result := s.Cleanup(ctx, created.Reference); result.Outcome != port.OwnershipWrite || result.ID != "" {
+				t.Fatal(result)
+			}
+			if len(e.Resources) != 1 {
+				t.Fatal("failed ownership persistence removed the worker")
+			}
+			for _, event := range e.Events {
+				if event.Method == "REMOVE" {
+					t.Fatal("attempted removal without durable ownership")
+				}
+			}
+			store.Fault = ""
+			if result := (Service{Store: store, Engine: e}).Cleanup(ctx, created.Reference); result.Outcome != port.Complete {
+				t.Fatal(result)
+			}
+		})
 	}
-	if result := s.Cleanup(context.Background(), created.Reference); result.Outcome != port.Complete {
-		t.Fatal(result)
+}
+
+func TestReconciledIDSurvivesFailedCompletion(t *testing.T) {
+	for _, fault := range []string{"short write", "file fsync", "atomic publication", "parent fsync"} {
+		t.Run(fault, func(t *testing.T) {
+			s, d, store, e := serviceFixture()
+			e.Fault = "lost create response"
+			ctx := context.Background()
+			created := s.Create(ctx, d)
+			if created.Outcome != port.Uncertain {
+				t.Fatal(created)
+			}
+			store.Fault = "absent-record " + fault
+			first := (Service{Store: store, Engine: e}).Cleanup(ctx, created.Reference)
+			if first.Outcome != port.CompletionWrite || len(e.Resources) != 0 {
+				t.Fatal(first)
+			}
+			record, failure := store.Codec.Decode(store.Records[created.Reference])
+			if failure != "" || record.ContainerID != e.CreateID {
+				t.Fatal("lost concrete recovery identity", record, failure)
+			}
+			store.Fault = ""
+			before := len(e.Events)
+			if next := (Service{Store: store, Engine: e}).Cleanup(ctx, created.Reference); next.Outcome != port.Complete {
+				t.Fatal(next)
+			}
+			for _, event := range e.Events[before:] {
+				if event.Method == "REMOVE" || event.Method == "CREATE" || (event.Method == "INSPECT" && event.Target != e.CreateID) {
+					t.Fatal("retry must only inspect the persisted full ID", event)
+				}
+			}
+		})
 	}
 }
 func TestCleanupRefusesBadAuthorityAndHonorsDeadline(t *testing.T) {

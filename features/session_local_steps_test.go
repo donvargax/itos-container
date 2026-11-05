@@ -39,6 +39,7 @@ func (w *world) sessionLocalSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the session contract attempts creation through each local backend$`, func() error { return w.sessionLocalRun("create") })
 	sc.Step(`^creation is attempted and a new controller cleans the surviving intent through each local backend$`, func() error { return w.sessionLocalRun("reconstruct") })
 	sc.Step(`^creation and cleanup finish with both faults active, then a new controller retries cleanup after both faults are cleared through each local backend$`, func() error { return w.sessionLocalRun("retry") })
+	sc.Step(`^creation and cleanup finish with the write fault active, then a new controller retries cleanup after the fault is cleared through each local backend$`, func() error { return w.sessionLocalRun("retry") })
 	sc.Step(`^creation and first cleanup finish before the delayed worker appears and a new controller then retries cleanup$`, func() error { return w.sessionLocalRun("retry") })
 	sc.Step(`^cleanup is attempted, the fault is cleared and a new controller retries through each local backend$`, func() error { return w.sessionLocalRun("retry") })
 	sc.Step(`^two new controllers successively clean the recorded ID through each local backend$`, func() error { return w.sessionLocalRun("repeat") })

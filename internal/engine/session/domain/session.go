@@ -133,6 +133,13 @@ func (s Service) cleanup(ctx context.Context, intent port.Intent, connection por
 	if observed.ID != id || !matches(record, observed) || record.Stage == "absent" {
 		return port.Refused
 	}
+	// Preserve the independently verified ID before destruction, so a later
+	// controller can prove absence even if completion publication never happens.
+	// Saving an already visible owned record also repairs uncertain durability.
+	record.ContainerID, record.Stage = id, "owned"
+	if failure := intent.Save(record); failure != "" {
+		return port.OwnershipWrite
+	}
 	// Revalidate both authorities at the destructive boundary, even after a
 	// matching inspect. Labels and the create response never authorize deletion.
 	if failure := intent.Validate(); failure != "" {

@@ -59,9 +59,9 @@ Feature: Owned unstarted worker creation and cleanup
   # identities must agree with the independently validated frozen envelope.
   # Name binds the filename token. container_id is empty for stage "intent";
   # stage "owned" requires the full inspected container ID. Stage "absent" retains
-  # that same ID after confirmed removal, or records the freshly reconciled ID
-  # when an owned update failed. These are ownership progress markers,
-  # not ready/running/stopped lifecycle claims. No argv, environment, output,
+  # that same ID after confirmed removal. Recovery durably advances intent to
+  # owned before removal of a freshly reconciled ID. These are ownership progress
+  # markers, not ready/running/stopped lifecycle claims. No argv, environment, output,
   # engine response body or duplicated settings are stored in this record.
   # Decode exactly one object, bounded to 65536 bytes and depth 16; reject unknown,
   # duplicate, missing or wrongly typed fields, trailing data, unsupported schema,
@@ -115,9 +115,12 @@ Feature: Owned unstarted worker creation and cleanup
   # image before deletion; never fall back to deleting a same-named replacement.
   # With only intent after a lost create response, inspect the exact random name,
   # then re-inspect the returned full ID and require the same identity tuple.
-  # A single matching, never-started resource can be reconciled and removed by
-  # that ID. No record, mismatch, conflicting observations or unexpected running
-  # resource refuses mutation. Never adopt a known pre-existing foreign resource.
+  # A single matching, never-started resource can be reconciled. Durably record
+  # its full ID as owned before removing it; a failed save returns
+  # ownership-write-failed and permits no removal or absent update. Re-sync an
+  # already visible owned record before removal in case its prior publication
+  # was not durable. No record, mismatch, conflicting observations or an unexpected
+  # running resource refuses mutation. Never adopt a known pre-existing foreign resource.
   # For this unstarted-only increment, Running=false alone is insufficient:
   # require created status, PID zero and unset StartedAt during cleanup too.
   # A worker that previously ran and exited needs the later run/stop contract.
@@ -126,10 +129,11 @@ Feature: Owned unstarted worker creation and cleanup
   #
   # Successful owned-ID persistence is required before returning owned-unstarted.
   # If that update fails, bounded cleanup may still use the durable pre-create
-  # intent plus fresh matching inspections to remove by concrete ID; failed
-  # persistence never authorizes starting. Keep the original write failure even
-  # when removal succeeds. A persistent storage failure leaves the last complete
-  # record for a later cleanup attempt, rather than pretending its update succeeded.
+  # intent plus fresh matching inspections to retry owned-ID persistence, then
+  # remove by concrete ID only once that succeeds. Failed persistence never
+  # authorizes starting or removal. Keep the original create write failure even
+  # when later cleanup succeeds. A persistent storage failure retains both the
+  # worker and last complete record for an explicit later cleanup attempt.
   #
   # Remove only the verified full ID, without force and without volume deletion.
   # A successful DELETE is not absence proof: inspect that ID again. An explicit
@@ -213,8 +217,8 @@ Feature: Owned unstarted worker creation and cleanup
   # as product authority. Lost responses happen after a successful server-side
   # create/delete and drop the reply before the SDK receives it.
   # Persistent owned-update faults affect every attempt to publish that update;
-  # preserve the intent while allowing independent absence observation. Clear a
-  # fault only where When explicitly says so; do not suppress a real write error.
+  # preserve recovery evidence and the worker until owned durability succeeds.
+  # Clear a fault only where When explicitly says so; do not suppress a real write error.
   #
   # @engine cases run ONLY in the existing guarded Linux amd64 CI tier, using
   # T-20's cached fixture reference/config ID/UID/GID and read-only independent
@@ -424,9 +428,10 @@ Feature: Owned unstarted worker creation and cleanup
   @slice-9 @ID-SESSION-04 @linux
   Scenario Outline: Failure to record a created ID prevents handoff but retains cleanup authority
     Given an approved session contract fixture with persistent owned-record fault "<fault>"
-    When the session contract attempts creation and bounded cleanup through each local backend
+    When creation and cleanup finish with the write fault active, then a new controller retries cleanup after the fault is cleared through each local backend
     Then each backend reports ownership-write-failed after exactly one observed unstarted create
     And no successful ownership handoff or worker start was returned or attempted
+    And each first cleanup reports ownership-write-failed and retains the independently observed worker without removal
     And cleanup uses the durable intent and fresh matching inspections before removal by full ID
     And the last complete ownership record remains until confirmed absence can be durably recorded
     And session operations preserve unrelated resources, checkout edits, approval and frozen settings
@@ -634,7 +639,7 @@ Feature: Owned unstarted worker creation and cleanup
   # input. Capture the complete record and successful durability events at DELETE,
   # before the absent update is attempted. Clear the absent fault only after the
   # first cleanup returns, then reconstruct without passing the observer's ID.
-  @slice-9 @ID-SESSION-20 @linux @wip
+  @slice-9 @ID-SESSION-20 @linux
   Scenario Outline: Reconciled identity survives removal when completion persistence fails
     Given an intent-only session recovery fixture with absent-record fault "<fault>"
     When cleanup is attempted, the fault is cleared and a new controller retries through each local backend
@@ -654,7 +659,7 @@ Feature: Owned unstarted worker creation and cleanup
   # Persisting reconciled ownership is a prerequisite to removal, including when
   # a prior publication was visible but its parent fsync failed. The first cleanup
   # keeps the fault active. Only the explicit later retry clears it.
-  @slice-9 @ID-SESSION-21 @linux @wip
+  @slice-9 @ID-SESSION-21 @linux
   Scenario Outline: Failed reconciled identity persistence keeps the worker recoverable
     Given an intent-only session recovery fixture with owned-record fault "<fault>"
     When cleanup is attempted, the fault is cleared and a new controller retries through each local backend
