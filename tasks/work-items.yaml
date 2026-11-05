@@ -440,3 +440,10 @@ items:
       and diagrams still call internal/engine/manifest and readiness proposed, and name T-20 as
       planned. Update the status words from what the code holds; nothing else in the document
       changes.
+  - id: T-23
+    title: Request Bugbot's review again
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
