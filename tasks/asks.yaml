@@ -15,3 +15,6 @@ questions:
     question: "slice-3's implementer stopped for the CI-only red evidence of ID-DOCTOR-22 to 24, which features/README.md gives the coordinator. Is it in?"
     answer: "Yes: run 41944060291 at 212c08b, by red_scenarios: each fails at its assertion. Go on with the implementation."
     decision: none
+  - id: q-4
+    item: "slice-9"
+    question: "slice-9: is the engine-tier red evidence for ID-SESSION-11 and ID-SESSION-12 in, so implementation can go on?"
