@@ -196,8 +196,9 @@ Feature: Run invocation refusals
   # identity, look up image usernames, inherit supplementary groups or chown.
   #
   # Presentation choice: preserve shared prerequisite rule IDs, subjects, exits,
-  # messages and fixes (decision 0004), including doctor.* names; do not flatten
-  # them into run.approval-invalid. Plain run stderr, prefixed itos-container:,
+  # messages and fixes (docs/decisions/0004-share-inspection-diagnostic-contracts.md),
+  # including doctor.* names; do not flatten them into run.approval-invalid.
+  # Plain run stderr, prefixed itos-container:,
   # identifies the rule, safe field/path/image subject and actionable guidance.
   # No new JSON mode. Empty stdout holds before any workload exists. Missing,
   # locally changed, invalid and superseded approval retain exit 1 and explicit
@@ -274,6 +275,11 @@ Feature: Run invocation refusals
   # generic CLI, refusal, journal and sentinel steps are reused unchanged. All
   # run-preflight/snapshot-specific phrases below are NEW. The Background's TCP
   # trap is separate from the Unix HTTP Engine API journal, never a substitute.
+  # The approval checkout also replaces PATH, so the Background's helper tools
+  # are no longer selected. Install the existing executable marker fixtures in
+  # that checkout and its selected PATH before seeding approval/checkpointing;
+  # check both recorders. Marker Givens write harmless tools/hooks/build inputs,
+  # never run them. The new multi-run assertions check this active recorder too.
   # @local-engine-fixture selects Linux amd64 before setup; no real Docker or
   # operator state is used. Seed canonical approvals directly from the independent
   # fixture oracle, never by invoking approve, and snapshot only AFTER all edits.
@@ -306,6 +312,8 @@ Feature: Run invocation refusals
   # missing Config; or devcontainer.metadata [{"containerUser":"1000"}].
   # Read-only journal assertions require at least one inspection request
   # where stated, and reject EVERY other request, even one answered with failure.
+  # Validate method, version-normalized path and an empty query string for every
+  # request, reusing the existing journal allowlist rather than counting verbs.
   # Require version/info observations for daemon refusals and the exact pinned
   # image inspection for image refusals; do not require image access after an
   # earlier daemon refusal or fix the number of SDK negotiation/recheck calls.
@@ -335,6 +343,16 @@ Feature: Run invocation refusals
   # forbidden call or supply a missing observation in run two's journal.
   # The second-run assertion's "empty" class also requires zero connections in
   # that invocation; run one's connection count is excluded, not reset globally.
+  # ID-RUN-19 requires ping, version, info and the exact requested image inspection
+  # in EACH run's own journal, including the third run reusing an existing record.
+  # All other requests fail. For concurrent children sharing the same approved
+  # endpoint, the Linux Unix-socket fixture records connections by peer PID and
+  # associates requests with the child process; do not infer ownership from timing
+  # or split a combined journal arbitrarily. This is test-only observation, with
+  # no product flag/header or different endpoint that would change approval.
+  # Hold each child's first image response until both children reach that barrier
+  # or exit, then release them; use a bounded harness deadline and retain early
+  # exits for Then. Start the third child only after both previous children exit.
   #
   # Contract scenarios use a test-only cmd assembly of the REAL run preflight and
   # shared approval/snapshot contracts, like the existing slice-4 contract probe.
@@ -371,6 +389,7 @@ Feature: Run invocation refusals
   @wip @slice-8 @ID-RUN-08 @local-engine-fixture
   Scenario Outline: Run preserves local validation refusals before engine inspection
     Given an approval checkout and isolated host state
+    And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And a seeded matching approval at generation "1"
     And run preflight has local defect "<defect>"
     And the run preflight files are snapshotted
@@ -380,6 +399,7 @@ Feature: Run invocation refusals
     And no endpoint connection was attempted
     And run preflight has changed no checkout or host state
     And no inspection helper sentinel was executed
+    And no executable marker was created
 
     Examples:
       | defect                                      | rule                       | exit | subject                     |
@@ -397,6 +417,7 @@ Feature: Run invocation refusals
   @wip @slice-8 @ID-RUN-09 @local-engine-fixture
   Scenario Outline: Locally decidable approval failures need no daemon
     Given an approval checkout and isolated host state
+    And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And run preflight has local approval condition "<condition>"
     And the run preflight files are snapshotted
     When itos-container runs with "run -- fixture-workload"
@@ -407,6 +428,7 @@ Feature: Run invocation refusals
     And its standard output is empty
     And run preflight has changed no checkout or host state
     And no inspection helper sentinel was executed
+    And no executable marker was created
 
     Examples:
       | condition                              | reason  |
@@ -438,6 +460,7 @@ Feature: Run invocation refusals
   @wip @slice-8 @ID-RUN-11 @local-engine-fixture
   Scenario Outline: Engine and cached image refusals preserve their cause without acquisition
     Given an approval checkout and isolated host state
+    And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And a seeded matching approval at generation "1"
     And run preflight has engine observation "<observation>"
     And the run preflight files are snapshotted
@@ -447,6 +470,7 @@ Feature: Run invocation refusals
     And no engine mutation or image acquisition was attempted
     And run preflight has changed no checkout or host state
     And no inspection helper sentinel was executed
+    And no executable marker was created
 
     Examples:
       | observation                       | rule                   | exit | subject                  |
@@ -463,6 +487,7 @@ Feature: Run invocation refusals
   @wip @slice-8 @ID-RUN-12 @local-engine-fixture
   Scenario Outline: Run refuses identity substitution during inspection before freezing
     Given an approval checkout and isolated host state
+    And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And a seeded matching approval at generation "1"
     And run preflight pauses the Engine API before its image response
     And the run preflight files are snapshotted
@@ -471,6 +496,8 @@ Feature: Run invocation refusals
     And the run Engine API journal contains inspection requests only
     And run preflight has changed no checkout or host state apart from the fixture replacement
     And no engine mutation or image acquisition was attempted
+    And no inspection helper sentinel was executed
+    And no executable marker was created
 
     Examples:
       | identity            | rule                    | subject       |
@@ -484,6 +511,7 @@ Feature: Run invocation refusals
   @wip @slice-8 @ID-RUN-13 @local-engine-fixture
   Scenario Outline: Approved preflight publishes exact settings with host identity
     Given an approval checkout and isolated host state
+    And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And the run manifest users are "<users>"
     And the inspected image Config.User is "<image-user>"
     And misleading USER, LOGNAME, UID, GID, SUDO_UID and SUDO_GID fixture values
@@ -500,6 +528,7 @@ Feature: Run invocation refusals
     And only the protected run snapshot subtree was added without chown or checkout changes
     And the Engine API journal contains only ping, version, info and the requested image inspection
     And no inspection helper sentinel was executed
+    And no executable marker was created
 
     Examples:
       | users                | image-user | umask |
@@ -517,6 +546,7 @@ Feature: Run invocation refusals
   @wip @slice-8 @ID-RUN-14 @local-engine-fixture
   Scenario Outline: A later run revalidates even when a frozen snapshot exists
     Given an approval checkout and isolated host state
+    And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And a seeded matching approval at generation "1"
     And the run preflight files are snapshotted
     When run is invoked, the fixture changes "<change>", and run is invoked again
@@ -525,6 +555,8 @@ Feature: Run invocation refusals
     And the first snapshot and active approval were not rewritten by either run
     And the second run published no snapshot and made no startup handoff
     And neither run attempted engine mutation, image acquisition or helper execution
+    And no inspection helper sentinel was executed
+    And no executable marker was created
 
     Examples:
       | change                           | rule                 | exit | journal         |
@@ -571,6 +603,7 @@ Feature: Run invocation refusals
   @wip @slice-8 @ID-RUN-17 @local-engine-fixture
   Scenario Outline: Snapshot publication refuses unsafe or conflicting existing state
     Given an approval checkout and isolated host state
+    And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And a seeded matching approval at generation "1"
     And the run snapshot path has "<defect>"
     And the run preflight files are snapshotted
@@ -579,6 +612,7 @@ Feature: Run invocation refusals
     And run preflight has changed no checkout or host state
     And no engine mutation or image acquisition was attempted
     And no inspection helper sentinel was executed
+    And no executable marker was created
 
     Examples:
       | defect                               | rule                 |
@@ -620,16 +654,19 @@ Feature: Run invocation refusals
   @wip @slice-8 @ID-RUN-19 @local-engine-fixture
   Scenario Outline: Repeated and concurrent preflights reuse one complete immutable snapshot
     Given an approval checkout and isolated host state
+    And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And a seeded matching approval at generation "1"
     And the run preflight files are snapshotted
     When two runs for the same approval execute "<schedule>" and a third run follows
     Then all three runs observe the same exact protected snapshot for generation "1"
     And all three reach only the unimplemented-startup refusal with exit 3 and empty stdout
+    And each run's Engine API journal contains ping, version, info and only the requested image inspection
     And the final snapshot is never partial and its inode and mtime remain unchanged after publication
     And the active approval bytes and generation are unchanged
     And only the protected run snapshot subtree was added without chown or checkout changes
     And no engine mutation or image acquisition was attempted
     And no inspection helper sentinel was executed
+    And no executable marker was created
 
     Examples:
       | schedule     |
