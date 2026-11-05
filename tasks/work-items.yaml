@@ -200,16 +200,9 @@ items:
     title: Review and record explicit host-owned approval
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-1, slice-2, slice-3]
     kind: slice
-    why: >
-      Was p2-explicit-host-approval.
-      Build the approve slice using shared validation and identity code. Specify canonicalization,
-      fingerprints and host-owned storage before implementation. Scenarios must cover effective
-      permissions and differences, deliberate consent, checkout separation, changed configurations,
-      superseded records and approval material inaccessible to the worker. Broken down from
-      p2-specify-policy-manifest-approval.
   - id: T-11
     title: Specify the offline owned-run lifecycle contract
     phase: 1
