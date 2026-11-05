@@ -288,6 +288,10 @@ Feature: Owned unstarted worker creation and cleanup
   # Wrong-owner fixture supplies a different current UID through the host-identity
   # port; the real adapter must reject the actual record's owner. Never chown or
   # elevate a test. Other rows run real filesystem faults.
+  # Stage/ID rows change only stage and container_id in an otherwise valid,
+  # independently seeded record. Each has a matching never-started resource, so
+  # accepting the contradictory record could authorize deletion. The unsupported
+  # stage is the literal "running", not malformed JSON or a running worker.
   @wip @slice-9 @ID-SESSION-03 @linux
   Scenario Outline: Unsafe or invalid ownership evidence authorizes no mutation
     Given a session recovery fixture whose ownership evidence has "<defect>"
@@ -308,6 +312,10 @@ Feature: Owned unstarted worker creation and cleanup
       | truncated record                      | ownership-invalid |
       | duplicate container_id field          | ownership-invalid |
       | unsupported schema                    | ownership-invalid |
+      | intent stage with a container ID       | ownership-invalid |
+      | owned stage without a container ID     | ownership-invalid |
+      | absent stage without a container ID    | ownership-invalid |
+      | unsupported stage                     | ownership-invalid |
       | snapshot fingerprint differs          | ownership-invalid |
       | name differs from filename token      | ownership-invalid |
 
