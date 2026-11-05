@@ -1,0 +1,150 @@
+package features
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+func (w *world) sessionProbe(action, reference string, checkpoint func() error) (sessionResult, error) {
+	var result sessionResult
+	binary, err := w.sessionProbeBinary()
+	if err != nil {
+		return result, err
+	}
+	s := w.session
+	prefix := filepath.Join(w.dir, "slice-9-"+action)
+	output, selected := prefix+"-result.json", prefix+"-selected.json"
+	for _, path := range []string{output, selected} {
+		if err := os.WriteFile(path, nil, 0600); err != nil {
+			return result, err
+		}
+	}
+	input := prefix + "-input.json"
+	request := map[string]string{"Action": action, "Backend": s.backend, "Reference": reference, "Token": s.token, "Fault": s.fault, "Umask": s.umask, "Output": output, "Checkpoint": selected, "Journal": s.journal}
+	if action == "cleanup" {
+		delete(request, "Token")
+	}
+	if err := os.WriteFile(input, approvalJSON(request), 0600); err != nil {
+		return result, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	defer cancel()
+	args := []string{"-test.run=^TestSessionContractProbe$", "-test.count=1"}
+	if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+		args = append(args, "-test.gocoverdir="+cover)
+	}
+	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.Dir = w.doctor.checkout
+	cmd.Env = sessionChildEnvironment(os.Environ())
+	for key, value := range w.doctor.env {
+		cmd.Env = setEnv(cmd.Env, key, value)
+	}
+	cmd.Env = setEnv(cmd.Env, "ITOS_ROOT", w.doctor.checkout)
+	cmd.Env = setEnv(cmd.Env, "SLICE_9_PROBE_INPUT", input)
+	cmd.Env = setEnv(cmd.Env, "SLICE_9_SYNTHETIC_PRIVATE", doctorCanary)
+	var transcript bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &transcript, &transcript
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return result, err
+	}
+	defer func() { _ = stdin.Close() }()
+	if err := cmd.Start(); err != nil {
+		return result, err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	if action == "create" {
+		// Wait for either the observed checkpoint OR process exit. An unavailable
+		// or refused product cannot turn a missing call into a hung fixture.
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		waiting := true
+		for waiting {
+			select {
+			case err = <-done:
+				done <- err
+				waiting = false
+			case <-ctx.Done():
+				err = <-done
+				done <- err
+				waiting = false
+			case <-ticker.C:
+				data, readErr := os.ReadFile(selected)
+				if readErr != nil || !json.Valid(data) {
+					continue
+				}
+				if checkpoint != nil {
+					if err = checkpoint(); err != nil {
+						cancel()
+						<-done
+						return result, err
+					}
+				}
+				if err = json.NewEncoder(stdin).Encode("continue"); err != nil {
+					cancel()
+					<-done
+					return result, err
+				}
+				waiting = false
+			}
+		}
+	}
+	err = <-done
+	// Synchronize with the recorder after the controller has exited, including
+	// the final handler whose response let that controller finish.
+	s.api.mu.Lock()
+	observerErr := s.api.problem
+	s.api.mu.Unlock()
+	s.transcript += transcript.String()
+	if observerErr != nil {
+		return result, observerErr
+	}
+	if err != nil {
+		return result, fmt.Errorf("session contract subprocess failed: %w", err)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		return result, err
+	}
+	err = json.Unmarshal(data, &result)
+	return result, err
+}
+
+func (w *world) sessionProbeBinary() (string, error) {
+	path := filepath.Join(w.dir, "slice-9-contract-probe")
+	if _, err := os.Stat(path); err == nil {
+		return path, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	args := []string{"test", "-c", "./cmd/itos-container", "-o", path}
+	if os.Getenv("GOCOVERDIR") != "" {
+		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
+	}
+	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd.Dir, cmd.Env = w.root, sessionChildEnvironment(os.Environ())
+	data, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("build session test assembly: %w\n%s", err, data)
+	}
+	return path, nil
+}
+
+func sessionChildEnvironment(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, value := range env {
+		if strings.HasPrefix(value, "ITOS_CONTAINER_RED_SCENARIOS=") || strings.HasPrefix(value, "ITOS_CONTAINER_ENGINE_") || strings.HasPrefix(value, "DOCKER_") {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}

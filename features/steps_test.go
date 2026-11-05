@@ -42,6 +42,7 @@ type world struct {
 	doctor   *doctorWorld
 	approval *approvalWorld
 	run      *runWorld
+	session  *sessionWorld
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -52,10 +53,11 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+		sessionErr := w.closeSession()
 		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
-		return ctx, nil
+		return ctx, sessionErr
 	})
 
 	// Split before anything else is expanded, so a word with a space in it
@@ -146,6 +148,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.doctorSteps(sc)
 	w.runSteps(sc)
 	w.approvalSteps(sc)
+	w.sessionSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.
