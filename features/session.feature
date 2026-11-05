@@ -103,13 +103,22 @@ Feature: Owned unstarted worker creation and cleanup
   # Cleanup needs a safely loaded intent plus the matching current user, selected
   # endpoint/daemon identity and validated frozen binding. Re-pin/check the socket
   # using slice-3's identity rules; do not trust a replacement because its URL is
-  # unchanged. With an owned ID, inspect that full ID and compare name, labels and
+  # unchanged. Recovery validates the ORIGINAL referenced frozen envelope, using
+  # approval's strict codec without rerunning startup preflight. Changed, missing
+  # or corrupt current approval and checkout settings do not revoke cleanup
+  # authority or replace that envelope. A missing, unsafe or invalid original
+  # snapshot refuses cleanup; a matching active approval is never a substitute.
+  # This permits removal only, never another create, handoff or worker launch.
+  # With an owned ID, inspect that full ID and compare name, labels and
   # image before deletion; never fall back to deleting a same-named replacement.
   # With only intent after a lost create response, inspect the exact random name,
   # then re-inspect the returned full ID and require the same identity tuple.
   # A single matching, never-started resource can be reconciled and removed by
   # that ID. No record, mismatch, conflicting observations or unexpected running
   # resource refuses mutation. Never adopt a known pre-existing foreign resource.
+  # For this unstarted-only increment, Running=false alone is insufficient:
+  # require created status, PID zero and unset StartedAt during cleanup too.
+  # A worker that previously ran and exited needs the later run/stop contract.
   # Never issue a second create for this intent, including after reconstructing
   # the controller. Malformed successful create replies count as uncertain.
   #
@@ -161,6 +170,13 @@ Feature: Owned unstarted worker creation and cleanup
   # name-only reconciliation rows instead seed stage intent with an empty ID.
   # The absent-ID fixture seeds stage owned with a concrete ID no longer present,
   # plus a separate same-named resource; it does not seed a completed tombstone.
+  # For changed-input recovery, seed the original owned record, frozen envelope
+  # and unstarted engine resource independently; then edit ONLY the specified
+  # current input before the checkpoint. Approval replacement is an independently
+  # encoded generation B, never an approve invocation. Keep checkout identity,
+  # current host identity, engine and original snapshot unchanged. The missing
+  # or unsafe snapshot rows keep a matching active approval to catch fallback;
+  # a snapshot symlink points to a separately checkpointed outside sentinel.
   # For payload UID mismatch, keep actual file ownership valid and seed a mutually
   # consistent record/snapshot for another UID, so the host-identity comparison
   # (not corrupt JSON or file permissions) refuses. The socket-replacement Given
@@ -318,6 +334,8 @@ Feature: Owned unstarted worker creation and cleanup
       | unsupported stage                     | ownership-invalid |
       | snapshot fingerprint differs          | ownership-invalid |
       | name differs from filename token      | ownership-invalid |
+      | referenced frozen snapshot missing    | ownership-invalid |
+      | referenced frozen snapshot symlink    | ownership-unsafe  |
 
   # First Then fails today: no create/owned-ID publication exists.
   @wip @slice-9 @ID-SESSION-04 @linux
@@ -393,6 +411,29 @@ Feature: Owned unstarted worker creation and cleanup
       | matching name has a different intent label        |
       | name inspection and ID inspection disagree        |
       | matching resource is already running              |
+      | matching resource has exited after starting       |
+      | created resource has a nonzero PID                |
+      | created resource has a set StartedAt              |
+
+  # Recovery is not a new run: revalidating mutable startup inputs would strand
+  # an owned resource after edits or reapproval. Today no cleanup boundary exists,
+  # so the first Then must fail even though fixture ownership is complete.
+  @wip @slice-9 @ID-SESSION-15 @linux
+  Scenario Outline: Cleanup retains frozen ownership when current startup inputs change
+    Given a session recovery fixture with current input change "<change>"
+    When a new session controller attempts cleanup through each local backend
+    Then each backend returns cleanup-complete after removing only the original recorded worker and confirming its ID absent
+    And the intent advances to durable absent with its original snapshot binding and full container ID
+    And the original snapshot and changed current inputs remain unchanged by cleanup
+    And no replacement create, worker start or foreign removal was attempted
+
+    Examples:
+      | change                                  |
+      | checkout policy is now invalid          |
+      | checkout manifest is now invalid        |
+      | current approval is missing             |
+      | current approval is corrupt             |
+      | current approval is replaced by B        |
 
   # Here concrete identity was independently recorded before absence. A resource
   # reusing its name must survive; unlike ID-SESSION-06, the old ID is sufficient.
