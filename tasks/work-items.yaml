@@ -193,16 +193,9 @@ items:
     title: Inspect checkout, local engine and cached-image readiness
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-2, T-20]
     kind: slice
-    why: >
-      Was p2-doctor-host-readiness.
-      Specify safe checkout and engine identity, then implement read-only inspection in the doctor
-      slice using reusable inspection ports and fakes. Cover unsupported layouts, remote engines,
-      missing or incompatible cached images, and typed diagnostics. Select and pin the engine
-      library; real-engine scenarios run only in CI. Broken down from
-      p2-specify-policy-manifest-approval.
   - id: slice-4
     title: Review and record explicit host-owned approval
     phase: 1
