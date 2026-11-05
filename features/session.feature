@@ -256,6 +256,45 @@ Feature: Owned unstarted worker creation and cleanup
       | 0000  |
       | 0777  |
 
+  # Slice-8 proves the handoff is frozen; session must also consume that exact
+  # handoff. This is the SAME in-flight operation, not a new run permitted to
+  # bypass fresh preflight. The Given prepares approved A and a mutation barrier;
+  # it performs no preflight/create. A and B have distinct cached digest references
+  # and image config IDs in the local fixture, with the same host and daemon.
+  # B's approval envelope is independently encoded, never obtained by approving.
+  # The When runs real preflight for A, captures its durable handoff, changes ONLY
+  # the named current input, checkpoints the edited fixtures, then passes that
+  # same handoff to production create and cleanup. Do not replace the handoff,
+  # mutate A's snapshot or resolve B through another preflight in the harness.
+  # Keep current host, checkout and socket identity unchanged; their revalidation
+  # and safe loading of A's protected snapshot remain required and permitted.
+  # Record policy/manifest/current-approval reads after handoff independently of
+  # product outcomes. Compare the fake request and captured SDK request against
+  # independent fixture values and EVERY minimal create setting listed above,
+  # including the inert command, empty entrypoint, hardening and absent mounts.
+  # Inspect the created worker's image config ID before cleanup; an unchanged
+  # record alone cannot prove A's image was used. Checkpointed current inputs and
+  # A's snapshot must survive cleanup. This is local request/ownership evidence,
+  # not runtime isolation proof. Today the first Then fails because the session
+  # boundary cannot create a worker or return owned-unstarted from A's handoff.
+  @wip @slice-9 @ID-SESSION-17 @linux
+  Scenario Outline: Creation consumes the frozen handoff after current startup inputs change
+    Given an approved session contract fixture with a post-handoff change "<change>"
+    When the session contract completes A's preflight, applies the fixture change, then creates and cleans through each local backend
+    Then each backend returns owned-unstarted after exactly one independently observed create using A's frozen image identity
+    And each captured create request uses A's host UID:GID and the specified minimal unstarted configuration
+    And the intent, owned and absent records retain exactly A's generation, fingerprint and snapshot binding
+    And no policy, manifest or current approval is read again after A's durable handoff
+    And each cleanup completes only after ID absence and durable absent recording
+    And session operations preserve unrelated resources, checkout edits, approval and frozen settings
+    And no session operation starts work, acquires images or leaks sensitive fixture values
+
+    Examples:
+      | change                                            |
+      | policy now requests forbidden online networking    |
+      | manifest now selects B's cached image              |
+      | current approval is replaced by B                  |
+
   # Exercise the check BEFORE owned publication, separately from recovery's
   # identity checks. The Given only configures the approved fixture and a fault
   # on every container inspection after create; preflight remains valid. The
