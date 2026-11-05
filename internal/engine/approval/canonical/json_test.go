@@ -85,3 +85,46 @@ func TestDecodeRejectsInvalidJSONTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeRejectsSelfConsistentInvalidProfile(t *testing.T) {
+	testRejectsSelfConsistentInvalidSettings(t, func(s *settings) { s.Profile = "other" })
+}
+
+func TestDecodeRejectsSelfConsistentInvalidEngineOS(t *testing.T) {
+	testRejectsSelfConsistentInvalidSettings(t, func(s *settings) { s.Engine.OS = "windows" })
+}
+
+func testRejectsSelfConsistentInvalidSettings(t *testing.T, change func(*settings)) {
+	t.Helper()
+	codec := JSON{}
+	current := codec.Candidate(porttest.Ready(), "2000", "3000")
+	record := port.Record{Candidate: current, Generation: "1"}
+	if got, failure := codec.Decode(current, codec.Encode(record)); failure != "" || got != record {
+		t.Fatalf("valid record decoded as %#v, failure %q", got, failure)
+	}
+	frozen := port.Frozen{
+		Settings: current.Canonical, Fingerprint: current.Fingerprint,
+		Project: current.Project, Generation: record.Generation,
+	}
+	if got, failure := codec.FrozenRecord(frozen); failure != "" || got != record {
+		t.Fatalf("valid frozen record decoded as %#v, failure %q", got, failure)
+	}
+
+	var s settings
+	if err := json.Unmarshal([]byte(current.Canonical), &s); err != nil {
+		t.Fatal(err)
+	}
+	change(&s)
+	// Recompute the fingerprint so a digest mismatch cannot mask invalid settings.
+	changed := port.Record{Candidate: candidate(s), Generation: record.Generation}
+	if changed.UID != current.UID || changed.GID != current.GID || changed.Root != current.Root || changed.Project != current.Project {
+		t.Fatal("invalid-settings fixture changed the host or project identity")
+	}
+	if got, failure := codec.Decode(current, codec.Encode(changed)); failure != "state.invalid" || got != (port.Record{}) {
+		t.Errorf("invalid settings decoded as %#v, failure %q; want empty record and state.invalid", got, failure)
+	}
+	frozen.Settings, frozen.Fingerprint = changed.Canonical, changed.Fingerprint
+	if got, failure := codec.FrozenRecord(frozen); failure != "state.invalid" || got != (port.Record{}) {
+		t.Errorf("invalid frozen settings decoded as %#v, failure %q; want empty record and state.invalid", got, failure)
+	}
+}
