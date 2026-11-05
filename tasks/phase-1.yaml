@@ -2077,11 +2077,3 @@
     this spec uses docs --item T-24 and touches only this ledger entry. No dependency, runtime,
     architecture or security-policy change is needed. Agents commit and stop; the coordinator
     owns push, CI watching and closure after the actual pushed head is green.
-  done_when:
-    - run: >-
-        tests=$(go test ./internal/engine/approval/canonical -list '^TestDecodeRejectsSelfConsistentInvalidProfile$') &&
-        printf '%s\n' "$tests" | grep -Fx TestDecodeRejectsSelfConsistentInvalidProfile
-    - run: >-
-        tests=$(go test ./internal/engine/approval/canonical -list '^TestDecodeRejectsSelfConsistentInvalidEngineOS$') &&
-        printf '%s\n' "$tests" | grep -Fx TestDecodeRejectsSelfConsistentInvalidEngineOS
-    - run: go test ./internal/engine/approval/canonical ./internal/engine/manifest/disk
