@@ -45,6 +45,14 @@ in a separate directory. It runs in the unfiltered suite; `-scenarios` and activ
 selections skip these independent reruns so only selected product IDs execute. Empty or ignored red input
 retains ordinary coverage; memory-only harness regressions still run.
 
+Slice-4's identity, publication and frozen-input contract IDs use a test-only
+`cmd/itos-container` assembly too. Their nested `go test` enables atomic coverage
+across the module when `GOCOVERDIR` is set and passes that directory explicitly
+through `-test.gocoverdir`, since `go test` supplies its own temporary directory.
+`TestApprovalContractCoverage` requires executed approval-domain counters for each
+of the five IDs in separate directories. Like the manifest regression, it skips
+filtered and active manual red selections so they execute only the requested IDs.
+
 ## Running them
 
 ```sh
