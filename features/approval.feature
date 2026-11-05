@@ -729,7 +729,7 @@ Feature: Review and record approval of exact offline settings
       | C1            |
       | bidirectional |
 
-  @wip @slice-4 @ID-APPROVAL-35 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-35 @local-engine-fixture
   Scenario Outline: Doctor escapes Unicode controls only for plain approval display
     Given an approval checkout and isolated host state
     And the approval candidate contains "<controls>" controls in "<field>"

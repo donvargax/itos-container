@@ -59,6 +59,7 @@ func terminalText(text string) string {
 // Report computes sorted leaf differences, comparing containerEnv as one map.
 func (u UI) Report(v port.View) port.Report {
 	report := port.Report{Status: v.Status, Fingerprint: v.Candidate.Fingerprint, Effective: object(v.Candidate.Canonical), Differences: []port.Change{}}
+	report.EffectiveText = jsonText(report.Effective)
 	if v.Record.Generation != "" {
 		g := v.Record.Generation
 		report.Generation = &g

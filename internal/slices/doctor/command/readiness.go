@@ -123,7 +123,7 @@ func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *appro
 		}
 		if approvalReport != nil {
 			_, _ = fmt.Fprintf(u.Stdout, "approval %s\nfingerprint: %s\n", approvalReport.Status, approvalReport.Fingerprint)
-			u.JSON(approvalReport.Effective)
+			_, _ = fmt.Fprintln(u.Stdout, approvalReport.EffectiveText)
 		}
 		_, _ = fmt.Fprintln(u.Stdout, "runtime isolation is not established")
 		u.Line("for scripts, use --json")

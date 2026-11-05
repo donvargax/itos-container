@@ -91,6 +91,8 @@ type Report struct {
 	Effective   any      `json:"effective"`
 	Generation  *string  `json:"generation"`
 	Differences []Change `json:"differences"`
+	// EffectiveText is terminal-safe JSON for plain display only.
+	EffectiveText string `json:"-"`
 }
 
 // Presentation owns terminal I/O and structured rendering behind a port.

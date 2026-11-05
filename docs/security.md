@@ -33,10 +33,11 @@ a hash. Without a terminal, bare approve refuses and names the optional
 `--fingerprint <value>` route. `doctor` prints the fingerprint; the option approves
 only those exact settings and refuses a mismatch.
 
-Approval's plain review, differences and status render non-printing Unicode,
-including C1 and bidirectional controls, as visible JSON escapes. Printable
-Unicode stays readable. This display escaping does not change the canonical
-settings, stored approval, fingerprint or structured JSON values.
+Approval's plain review, differences and status, including the effective settings
+printed by ordinary `doctor`, render non-printing Unicode as visible JSON escapes.
+This includes C1 and bidirectional controls in environment values and manifest
+names. Printable Unicode stays readable. This display escaping does not change
+the canonical settings, stored approval, fingerprint or structured JSON values.
 
 An agent on the host can approve its own sandbox through `--fingerprint` or a
 faked terminal. Approval records **what was approved, not who**. Neither route

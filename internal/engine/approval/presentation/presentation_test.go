@@ -80,10 +80,14 @@ func TestPlainEscapesAndJSONPreservesCanonicalSettings(t *testing.T) {
 	v := port.View{Inspection: porttest.Ready(), Status: "matching", Candidate: port.Candidate{Canonical: canonical, Fingerprint: "sha256:fixture"}}
 	var stdout bytes.Buffer
 	ui := UI{Out: &stdout, Err: io.Discard}
+	display := `{"manifest":{"containerEnv":{"APP":"café\u009b\u202e\udb40\udc01"}}}`
+	if report := ui.Report(v); report.EffectiveText != display {
+		t.Errorf("plain report settings %q, want %q", report.EffectiveText, display)
+	}
 	if code := ui.Print(v, false); code != 0 {
 		t.Fatalf("plain status exit %d", code)
 	}
-	want := "approval matching\nfingerprint: sha256:fixture\n" + `{"manifest":{"containerEnv":{"APP":"café\u009b\u202e\udb40\udc01"}}}` + "\n"
+	want := "approval matching\nfingerprint: sha256:fixture\n" + display + "\n"
 	if stdout.String() != want {
 		t.Errorf("plain status %q, want %q", stdout.String(), want)
 	}
@@ -92,15 +96,16 @@ func TestPlainEscapesAndJSONPreservesCanonicalSettings(t *testing.T) {
 		t.Fatalf("JSON status exit %d", code)
 	}
 	var report struct {
-		Approval struct {
-			Effective json.RawMessage `json:"effective"`
-		} `json:"approval"`
+		Approval map[string]json.RawMessage `json:"approval"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if string(report.Approval.Effective) != canonical || v.Candidate.Canonical != canonical {
+	if string(report.Approval["effective"]) != canonical || v.Candidate.Canonical != canonical {
 		t.Fatal("display escaping changed JSON or canonical approval bytes")
+	}
+	if len(report.Approval) != 5 {
+		t.Fatal("display-only settings leaked into the structured approval report")
 	}
 }
 func TestReportsAndFailureRules(t *testing.T) {
