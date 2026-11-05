@@ -192,8 +192,8 @@ items:
   - id: slice-3
     title: Inspect checkout, local engine and cached-image readiness
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-2, T-20]
     kind: slice
     why: >
