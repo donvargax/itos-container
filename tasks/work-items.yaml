@@ -355,12 +355,9 @@ items:
     title: Run refuses bad invocations
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-1]
     kind: slice
-    why: >
-      T-11's missing-argv and JSON refusals, on the local tier; a valid argv refuses until later
-      slices. Creates internal/slices/run.
   - id: slice-8
     title: Run preflight and frozen settings
     phase: 1
