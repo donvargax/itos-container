@@ -3,7 +3,10 @@ package command
 
 import (
 	"errors"
+	approvalport "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/slices/run/port"
+	"strconv"
+	"strings"
 
 	"github.com/donvargax/itos-container/internal/cli"
 	"github.com/donvargax/itos-container/internal/slices/run/domain"
@@ -11,10 +14,11 @@ import (
 
 // CLI lets Kong retain the first separator and every subsequent literal word.
 type CLI struct {
-	Approval      port.Approval `kong:"-"`
-	JSON          bool          `name:"json" negatable:"" help:"Request JSON (refused by run)."`
-	Args          []string      `arg:"" optional:"" passthrough:"partial" sep:"none" help:"-- followed by a nonempty executable and its arguments."`
-	InheritedJSON bool          `kong:"-"`
+	Snapshots     approvalport.Snapshots `kong:"-"`
+	Approval      port.Approval          `kong:"-"`
+	JSON          bool                   `name:"json" negatable:"" help:"Request JSON (refused by run)."`
+	Args          []string               `arg:"" optional:"" passthrough:"partial" sep:"none" help:"-- followed by a nonempty executable and its arguments."`
+	InheritedJSON bool                   `kong:"-"`
 }
 
 // Help makes the interim refusal explicit without claiming workload execution.
@@ -39,7 +43,7 @@ func (c CLI) Run(ui *cli.UI) int {
 	withJSON := c.JSON || c.InheritedJSON
 	failure := domain.Refuse(domain.Invocation{JSON: withJSON, Separated: separated, Argv: args})
 	if errors.Is(failure, domain.ErrStartupUnavailable) && c.Approval != nil {
-		if err := domain.CheckApproval(c.Approval); err != nil {
+		if _, err := domain.Preflight(c.Approval, c.Snapshots); err != nil {
 			return ui.Fail(err, withJSON)
 		}
 		ui.Line("approval matched")
@@ -51,7 +55,37 @@ func (c CLI) Run(ui *cli.UI) int {
 func Classify(err error) (int, []cli.Problem) {
 	var approval domain.ApprovalRefusal
 	if errors.As(err, &approval) {
-		return 1, []cli.Problem{{Rule: "run.approval-" + approval.Reason, Exit: 1, Message: approval.Error(), Fix: "Review current settings with itos container approve."}}
+		return 1, []cli.Problem{{Rule: "run.approval-" + approval.Reason, Exit: 1, Message: "run.approval-" + approval.Reason + ": " + approval.Error(), Fix: "Review current settings with itos container approve."}}
+	}
+	var prerequisite domain.Prerequisite
+	if errors.As(err, &prerequisite) {
+		problems := []cli.Problem{}
+		code := 0
+		for _, p := range approvalport.Problems(prerequisite.View) {
+			subject := p.File + p.Field + p.Image
+			if p.Path != nil {
+				subject += *p.Path
+			}
+			problems = append(problems, cli.Problem{Rule: p.Rule, Exit: p.Exit, Message: p.Rule + " " + strconv.QuoteToASCII(subject) + ": " + p.Message + "; " + p.Fix, Fix: p.Fix})
+			code = max(code, p.Exit)
+		}
+		return code, problems
+	}
+	var snapshot domain.SnapshotRefusal
+	if errors.As(err, &snapshot) {
+		rule := "run." + string(snapshot.Failure)
+		code := 1
+		message := "Snapshot state is unsafe"
+		fix := "Have the host user inspect protected state outside the checkout; use owned 0700 directories and regular 0600 files without links."
+		if strings.HasSuffix(rule, "invalid") {
+			message = "Snapshot state is invalid or conflicts with selected settings"
+		}
+		if strings.HasSuffix(rule, "write") {
+			code = 75
+			message = "Snapshot publication could not be confirmed durable"
+			fix = "Have the host user inspect protected state before retrying the full run preflight."
+		}
+		return code, []cli.Problem{{Rule: rule, Exit: code, Message: rule + " " + strconv.QuoteToASCII(snapshot.Reference) + ": " + message + "; " + fix, Fix: fix}}
 	}
 	switch {
 	case errors.Is(err, domain.ErrJSONUnsupported):

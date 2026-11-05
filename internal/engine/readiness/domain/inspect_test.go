@@ -238,3 +238,23 @@ func TestAPIRangeIncludesNegotiatedVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestLocalCheckpointRetainsPinAndCanRefuseEngine(t *testing.T) {
+	for _, accept := range []bool{false, true} {
+		inspector, input, engine, checkout := fixture()
+		calls := 0
+		result := inspector.InspectBeforeEngine(input, func(local port.Result) bool {
+			calls++
+			if !checkout.Opened || engine.Selection != "" || local.Checkout == nil || local.Engine != nil || local.Image != nil || local.Ready {
+				t.Fatal("checkpoint was not local and pinned")
+			}
+			return accept
+		})
+		if calls != 1 || result.Ready != accept || checkout.Opened {
+			t.Fatalf("checkpoint lifecycle: %d %#v", calls, result)
+		}
+		if !accept && (engine.Selection != "" || engine.Session.InfoReads != 0) {
+			t.Fatal("refused checkpoint contacted engine")
+		}
+	}
+}

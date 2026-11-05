@@ -13,3 +13,8 @@ type Readiness struct {
 
 // Inspect returns observations without approval or persisted state.
 func (r Readiness) Inspect() port.Result { return r.Inspector.Inspect(r.Input) }
+
+// InspectBeforeEngine exposes the shared pinned local-checkpoint capability.
+func (r Readiness) InspectBeforeEngine(check func(port.Result) bool) port.Result {
+	return r.Inspector.InspectBeforeEngine(r.Input, check)
+}

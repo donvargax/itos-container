@@ -18,13 +18,14 @@ func TestApprovalBeforeStartup(t *testing.T) {
 		case "invalid":
 			fake.View.Failure = "state.invalid"
 		case "prerequisite":
+			fake.View.Status = "matching"
 			fake.View.Inspection.Ready = false
 			want = "invalid"
 		case "superseded":
 			fake.View.Status = "matching"
 			fake.Failure = "superseded"
 		}
-		err := CheckApproval(fake)
+		_, err := Preflight(fake, &enginefake.Snapshots{})
 		var refusal ApprovalRefusal
 		if want == "" {
 			if err != nil {

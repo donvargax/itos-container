@@ -30,6 +30,7 @@ import (
 	approvaldisk "github.com/donvargax/itos-container/internal/engine/approval/disk"
 	approvaldomain "github.com/donvargax/itos-container/internal/engine/approval/domain"
 	approvalhost "github.com/donvargax/itos-container/internal/engine/approval/host"
+	approvalport "github.com/donvargax/itos-container/internal/engine/approval/port"
 	approvalpresentation "github.com/donvargax/itos-container/internal/engine/approval/presentation"
 	manifestdisk "github.com/donvargax/itos-container/internal/engine/manifest/disk"
 	"github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
@@ -130,7 +131,8 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		return c.Approve.Run(ui)
 	case "run":
 		service, _ := approvalServices(in, stdout, stderr)
-		c.Run.Approval = service
+		c.Run.Approval = approvaldomain.Preflight{Service: service, Local: service.Readiness.(approvalport.StagedReadiness), Canonical: approvalcanonical.JSON{}}
+		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}
 		ui.Classify = runcommand.Classify
 		c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
 		return c.Run.Run(ui)

@@ -142,10 +142,19 @@ to remove both requests. The diagnostic also goes to stderr. Terminal and redire
 streams receive the same refusal.
 
 Usage and JSON refusals above precede policy, engine and approval inspection.
-A valid invocation checks the current approval and atomically selects its generation.
+A valid invocation checks local policy, manifest, host identity and approval before
+contacting the engine. Locally decidable refusals make no engine connection; daemon
+and cached-image checks use read-only inspection, never pull/build or mutation.
+Shared prerequisite diagnostics retain their rule, subject, exit and guidance.
+Run atomically selects the current approval generation after fresh inspection.
 Missing, changed, invalid or superseded approval exits 1 and names
 `itos container approve`, without prompting or recording consent. Matching approval
-currently reaches an exit-3 refusal because offline startup is not implemented.
+publishes immutable `snapshots/<project>/<generation>.json` under the same protected
+host-state root as approval. An identical snapshot is reused without rewriting it;
+unsafe or conflicting state refuses, and an uncertain write yields no startup input.
+Every invocation revalidates prerequisites and approval, even if the snapshot exists.
+Successful publication currently reaches an exit-3 refusal because offline startup
+is not implemented; the durable snapshot remains.
 These commands execute no helper or workload and prove no runtime isolation.
 
 ## Implemented approval

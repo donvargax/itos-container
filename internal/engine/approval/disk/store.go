@@ -85,7 +85,7 @@ func (p *pin) close() {
 }
 func (p *pin) root() *os.Root { return p.roots[len(p.roots)-1] }
 
-func (s Store) location(c port.Candidate) (string, port.Failure) {
+func (s Store) locationAt(c port.Candidate, collection string) (string, port.Failure) {
 	state := s.StateHome
 	if state == "" {
 		if !filepath.IsAbs(s.Home) {
@@ -103,11 +103,14 @@ func (s Store) location(c port.Candidate) (string, port.Failure) {
 	if len(c.Project) != 64 || strings.Trim(c.Project, "0123456789abcdef") != "" {
 		return "", "state.invalid"
 	}
-	return filepath.Join(managed, "approvals", c.Project), ""
+	return filepath.Join(managed, collection, c.Project), ""
 }
 
 func (s Store) pin(c port.Candidate, create bool) (*pin, port.Failure) {
-	path, failure := s.location(c)
+	return s.pinAt(c, create, "approvals")
+}
+func (s Store) pinAt(c port.Candidate, create bool, collection string) (*pin, port.Failure) {
+	path, failure := s.locationAt(c, collection)
 	if failure != "" {
 		return nil, failure
 	}
@@ -284,7 +287,10 @@ func (p *pin) unchanged() bool {
 	return true
 }
 func (p *pin) read(c port.Candidate, records port.Records) (port.Record, port.Failure) {
-	info, err := p.ops.lstat(p.root(), "current.json")
+	return p.readNamed(c, records, "current.json")
+}
+func (p *pin) readNamed(c port.Candidate, records port.Records, name string) (port.Record, port.Failure) {
+	info, err := p.ops.lstat(p.root(), name)
 	if errors.Is(err, os.ErrNotExist) {
 		return port.Record{}, ""
 	}
@@ -298,7 +304,7 @@ func (p *pin) read(c port.Candidate, records port.Records) (port.Record, port.Fa
 	if !ok || !info.Mode().IsRegular() || uid != p.uid || links != 1 || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 {
 		return port.Record{}, "state.unsafe"
 	}
-	file, err := p.ops.openRecord(p.root(), "current.json", os.O_RDONLY|noFollow, 0)
+	file, err := p.ops.openRecord(p.root(), name, os.O_RDONLY|noFollow, 0)
 	if err != nil {
 		return port.Record{}, "state.path"
 	}

@@ -182,7 +182,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/slices/init` | Deferred | Non-runnable example generation belongs to later scope. | No init implementation authorized this milestone. |
 | `internal/slices/doctor` | Implemented through slice-4 | File-only validation remains separate; ordinary doctor inspects checkout, engine, image and approval and prints the exact candidate fingerprint. | Shared readiness and approval ports; no state writes or checkout execution. |
 | `internal/slices/approve` | Implemented by slice-4 | Show effective settings/differences and ask y/N at a terminal; offer optional exact-fingerprint non-interactive approval. | Shared policy/manifest/readiness and approval contracts; no prompt again until settings change; never calls the doctor slice. |
-| `internal/slices/run` | Invocation and approval refusals implemented | Refuse JSON before missing argv; valid argv requires current approval and frozen selection, then refuses unimplemented offline startup. | Read-only approval port; never prompts, records consent or creates resources. |
+| `internal/slices/run` | Preflight and frozen publication implemented through slice-8 | Refuse JSON before missing argv, validate local prerequisites before engine access, freshly inspect and select approval, then publish immutable frozen settings before refusing unimplemented startup. | Shared approval/readiness and snapshot ports; never prompts, records consent or creates resources. |
 | `internal/slices/status` | Proposed; required for run recovery | Inspect owned state, policy identity, uncertainty and recovery information. | Session contracts; read-only, bounded inspection with safe diagnostics. |
 | `internal/slices/stop` | Proposed; required for run recovery | Cancel an owned session or finish its cleanup. | Session contracts; identity revalidation and safe repeated removal. |
 | `internal/slices/exec` | Deferred | Additional argv only during a live owned foreground session. | Future session contract; cannot extend lifetime or alter frozen permissions. |
@@ -235,7 +235,7 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | slice-3 — readiness prerequisite | slice-2 and T-20; consumes slice-1 | Safe checkout/local-engine identity and cached digest/architecture/metadata inspection. Effective host UID resolution belongs to slice-4. The pinned engine client and HTTP Engine API fixture allow adapter tests without a daemon; a ping alone is insufficient. |
 | slice-4 — implemented approval | slice-1, slice-2 and slice-3 explicitly | Implements revised A1's review, y/N prompt and optional fingerprint route, host effective UID/GID resolution with root refusal, matching/supersession, protected approval and frozen input. [Scenarios](../../features/approval.feature) specify canonicalization/storage and help/security wording. Doctor inspects approval; run blocks unapproved settings and names approve. |
 | slice-7 — implemented invocation refusals | slice-1 | Local argv/JSON refusals introduce the run command slice; valid argv refuses until later increments. [Run scenarios](../../features/run.feature) cover redirected and real-terminal JSON, separator ownership and absence of effects. |
-| slice-8 — planned preflight and freeze | slice-4 and slice-7 | Revalidate prerequisites before resource effects, consume slice-4's approval/host identity and independent frozen input, and durably publish trusted session settings. No second identity resolver or approval loader. |
+| slice-8 — implemented preflight and freeze | slice-4 and slice-7 | Revalidate prerequisites before resource effects, consume slice-4's approval/host identity and independent frozen input, and durably publish trusted session settings. No second identity resolver or approval loader. |
 | slice-9 — planned owned create/cleanup | slice-8 and T-20 | Introduce session engine, fsynced intent, unstarted create, lost-response reconciliation, removal and absence confirmation. |
 | slice-10 — planned offline foreground run | slice-9 | CI isolation proof, literal argv, result precedence and teardown; checkout plus tmpfs, NetworkMode none and pids limit 4096. |
 | slice-11 — planned status/stop | slice-10 | Actionable recovery, controller-loss candidates, foreign/repeated/two-project cases and safe diagnostics; protected records, random hex IDs, per-session lock and mutation-time revalidation. |
@@ -298,13 +298,21 @@ must state this in help and security guidance; revisit before egress and credent
    omissions and rejection of explicit mismatches; image Config.User grants no
    identity. These choices avoid environment-derived identity and elevation while
    retaining host ownership of checkout writes. [Slice-4's spec](../../features/approval.feature)
-   defines approval binding; slice-8 consumes it before resource effects.
+   defines approval binding; slice-8 consumes it before resource effects. Local
+   approval comparison uses validated effective values before opening the engine;
+   daemon/image-dependent checks permit inspection only. Missing observations are
+   never copied from approval to claim a fresh match.
 2. **Frozen settings, preparing.** Capture validated effective configuration in trusted
    session material beyond worker control. Startup uses that snapshot. Checkout
    edits or later approval cannot widen the session; new permissions require a new
    approved run after stopping the old one. Slice-4 implements protected approval
    publication and atomic selection of independent frozen input; slice-8 durably
-   publishes the session snapshot and passes that input to later startup.
+   publishes `snapshots/<project>/<generation>.json` under the approval state root
+   and returns the exact selected value and durable reference to later startup.
+   This material is not a session ID, recovery record or future run permit. Safe
+   identical records are reused without rewriting; all reuse re-establishes file
+   and directory durability. Uncertain publication returns no usable handoff.
+   Every new invocation still validates current requests, identities and approval.
 3. **Create and own, preparing.** Persist an intent record with `fsync` before create,
    then create unstarted. Reconcile a lost response using the trusted record plus a
    random name before launch or cleanup, closing the untracked-create window. Names
@@ -627,7 +635,7 @@ mechanism. Deferred categories remain outside this milestone.
 | --- | --- | --- |
 | Manifest syntax/library, exact supported fields, reserved environment and metadata treatment; separate parsing budgets | slice-2 and slice-6 | Full manifest validation and approval input. No lifecycle hooks run; hidden metadata must not add commands or permissions. Policy's parser/limits are already settled. |
 | Safe checkout/local-engine identity, symlinks and substitution details | slice-3, consumed by slice-4/8/11 | Readiness, approval binding, mount source and ownership checks. Effective UID with root refusal is settled; basenames or dispatch roots alone cannot identify a project. |
-| Approval implementation and session snapshot publication evidence | slice-4, then slice-8 | Canonical fields, matching/supersession, safe state and atomic frozen-input selection are implemented and covered by the [local scenarios](../../features/approval.feature). Slice-8 owns durable session publication. Approval cannot attest human presence; revisit before egress/credentials. |
+| Approval implementation and session snapshot publication evidence | slice-4, then slice-8 | Canonical fields, matching/supersession, safe state and atomic frozen-input selection are implemented and covered by the [local scenarios](../../features/approval.feature). Slice-8 adds durable immutable publication, refusal ordering, fresh per-invocation inspection and fault/reuse contracts in [run scenarios](../../features/run.feature). Startup remains unavailable. Approval cannot attest human presence; revisit before egress/credentials. |
 | Concrete fixture image digest/provenance and image compatibility/metadata checks | T-20 and slice-3, consumed by slice-4/10 | Prepared images and cached-image preflight. Person-operated digest acquisition, no pull/build/substitution by commands, and approval binding are settled. |
 | Exact temporary-location mapping and independent enforcement probes | slice-10, consuming slice-2/3/8 | Prove host UID/GID, checkout-only host mount, read-only root, tmpfs, pids 4096 and NetworkMode none. No persistent worker state, memory/CPU quota claim, proxy or new network topology. |
 | Intent/resource record schema and uncertain-create protocol details | slice-9 | Implement fsynced pre-create intent, unstarted create and reconciliation by trusted record plus random name. Concrete identity precedes execution; labels/names alone cannot authorize cleanup. |

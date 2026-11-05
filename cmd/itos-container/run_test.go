@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -53,6 +54,15 @@ func TestKongKeepsTheFirstRunSeparatorAndLiteralWords(t *testing.T) {
 }
 
 func TestRunAssemblyAndHelp(t *testing.T) {
+	// The empty checkout fails before approval lookup. Effective host identity
+	// is checked even earlier, including when this test runs as root or on Windows.
+	preflightCode, preflightRule := 2, "policy.missing"
+	switch {
+	case os.Geteuid() < 0 || os.Getegid() < 0:
+		preflightCode, preflightRule = 3, "approval.identity.unavailable"
+	case os.Geteuid() == 0:
+		preflightCode, preflightRule = 1, "approval.identity.root"
+	}
 	for _, tc := range []struct {
 		name, inherited string
 		args            []string
@@ -61,7 +71,7 @@ func TestRunAssemblyAndHelp(t *testing.T) {
 	}{
 		{"wrapper", "0", []string{"--json", "run", "--", "git"}, 2, true},
 		{"inherited", "1", []string{"run", "--", "git", "--no-json"}, 2, true},
-		{"ordinary unapproved", "0", []string{"run", "--", "--json"}, 1, false},
+		{"workload JSON flag", "0", []string{"run", "--", "--json"}, preflightCode, false},
 		{"missing", "", []string{"run"}, 2, false},
 		{"help", "", []string{"run", "--help"}, 0, false},
 	} {
@@ -74,8 +84,8 @@ func TestRunAssemblyAndHelp(t *testing.T) {
 			if code != tc.code {
 				t.Fatalf("code = %d, want %d; stderr %s", code, tc.code, stderr.String())
 			}
-			if tc.name == "ordinary unapproved" && !strings.Contains(stderr.String(), "itos container approve") {
-				t.Fatal(stderr.String())
+			if tc.name == "workload JSON flag" && !strings.Contains(stderr.String(), preflightRule) {
+				t.Fatalf("stderr = %q, want preflight rule %q", stderr.String(), preflightRule)
 			}
 			if tc.json {
 				if !strings.Contains(stdout.String(), `"rule":"run.json-unsupported"`) {

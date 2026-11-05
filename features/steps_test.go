@@ -41,6 +41,7 @@ type world struct {
 	manifest *manifestWorld
 	doctor   *doctorWorld
 	approval *approvalWorld
+	run      *runWorld
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -327,6 +328,9 @@ func (w *world) runWith(env []string, args string) error {
 	fields, err := commandWords(args)
 	if err != nil {
 		return err
+	}
+	if w.run != nil && w.doctor != nil {
+		return w.runPreflightProcess(env, fields...)
 	}
 	if w.doctor != nil {
 		return w.runDoctor(env, fields...)

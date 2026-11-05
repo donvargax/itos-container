@@ -25,7 +25,11 @@ type Inspector struct {
 }
 
 // Inspect stops at unsafe prerequisites and retains only facts actually read.
-func (i Inspector) Inspect(input port.Input) port.Result {
+func (i Inspector) Inspect(input port.Input) port.Result { return i.InspectBeforeEngine(input, nil) }
+
+// InspectBeforeEngine retains the checkout pin across the local checkpoint and
+// every subsequent engine observation. A refusal never opens an engine session.
+func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result) bool) port.Result {
 	result := port.Result{}
 	if failure := i.Checkout.Pin(input.Root); failure != port.None {
 		result.Issues = []port.Issue{{Kind: failure, Subject: input.Root}}
@@ -54,6 +58,9 @@ func (i Inspector) Inspect(input port.Input) port.Result {
 	result.Checkout = &checkout
 	if field := alternateSelection(input); field != "" {
 		result.Issues = []port.Issue{{Kind: port.EngineSelection, Subject: field}}
+		return result
+	}
+	if check != nil && !check(result) {
 		return result
 	}
 	session, failure := i.Engine.Open(input.Host, checkout.Root, 5*time.Second)
