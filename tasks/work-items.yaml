@@ -446,3 +446,10 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: T-24
+    title: Settle the survivors of the first full-range proof on main
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task

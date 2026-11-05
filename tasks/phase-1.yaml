@@ -2003,3 +2003,13 @@
     The person asked for no Bugbot reviews for the rest of 2026-11-04 only (T-17). This puts it back
     in push.pr.reviewers, so the loop's review request asks for it again. It stays out of review_by,
     as before, so no merge waits on it.
+- id: T-24
+  type: test
+  title: Settle the survivors of the first full-range proof on main
+  why: >
+    This repository's move left main with no green run, so its CI range starts at the root commit
+    and the code proof judges the whole project. Three survivors no earlier push reached now keep
+    main red. Kill them, or except one that changes no behaviour, so main goes green and later
+    ranges start from there.
+  done_when:
+    - run: go test ./internal/engine/approval/canonical ./internal/engine/manifest/disk
