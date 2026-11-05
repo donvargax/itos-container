@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      red_scenarios:
+        description: Whitespace-separated complete scenario tags for expected-red evidence
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -82,6 +88,7 @@ jobs:
         timeout-minutes: 5
         env:
           ITOS_CONTAINER_ENGINE_TESTS: "1"
+          ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}
           ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE: ${{ steps.fixture.outputs.image }}
           ITOS_CONTAINER_ENGINE_FIXTURE_ID: ${{ steps.fixture.outputs.image_id }}
           ITOS_CONTAINER_ENGINE_FIXTURE_UID: ${{ steps.fixture.outputs.uid }}
@@ -143,6 +150,7 @@ jobs:
         run: go test ./... -count=1
         env:
           RAPID_CHECKS: 1
+          ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}
 
   platform-windows:
     name: Tests (windows-latest)
@@ -165,3 +173,4 @@ jobs:
         run: go test ./... -count=1
         env:
           RAPID_CHECKS: 1
+          ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}

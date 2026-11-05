@@ -21,6 +21,7 @@ var fixtureEnvironment = map[string]string{
 	"ITOS_CONTAINER_ENGINE_FIXTURE_ID":    "${{ steps.fixture.outputs.image_id }}",
 	"ITOS_CONTAINER_ENGINE_FIXTURE_UID":   "${{ steps.fixture.outputs.uid }}",
 	"ITOS_CONTAINER_ENGINE_FIXTURE_GID":   "${{ steps.fixture.outputs.gid }}",
+	"ITOS_CONTAINER_RED_SCENARIOS":        redDispatchExpression,
 }
 
 func validFixtureEnvironment(env map[string]string) bool {
@@ -49,6 +50,7 @@ func TestEngineFixtureWorkflow(t *testing.T) {
 		workflowStep{Name: "Engine scenarios", Timeout: 5, Env: maps.Clone(fixtureEnvironment), Run: engineInvocation},
 		workflowStep{Name: "Clean up engine fixture", If: "${{ always() }}", Shell: "bash", Timeout: 1, Run: "tools/bin/engine-fixture cleanup"})
 	ready.Jobs["engine"] = j
+	setRedDispatch(t, &ready, redDispatchSchema)
 	baseline, err := yaml.Marshal(ready)
 	if err != nil {
 		t.Fatal(err)
@@ -200,7 +202,7 @@ func engineFixtureWorkflowIssues(data []byte) []string {
 		case "Engine scenarios":
 			run = step
 			for key, value := range fixtureEnvironment {
-				if key != "ITOS_CONTAINER_ENGINE_TESTS" {
+				if strings.HasPrefix(key, "ITOS_CONTAINER_ENGINE_FIXTURE_") {
 					allowed["jobs.engine.steps."+strconv.Itoa(i)+".env."+key] = value
 				}
 			}
@@ -212,7 +214,7 @@ func engineFixtureWorkflowIssues(data []byte) []string {
 	require(validFixtureEnvironment(run.Env), "exact fixture output wiring")
 	require(run.Run == engineInvocation && run.If == "" && run.Timeout == 5 && !run.ContinueOnError, "complete invocation")
 	dispatch := w.On["workflow_dispatch"]
-	require(dispatch.Kind == yaml.ScalarNode && dispatch.Tag == "!!null", "preserve manual dispatch without dispatch inputs")
+	require(validRedDispatch(dispatch), "exact optional red dispatch inputs")
 	var node yaml.Node
 	if err := yaml.Unmarshal(data, &node); err != nil {
 		return append(issues, err.Error())

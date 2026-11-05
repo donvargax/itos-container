@@ -1866,19 +1866,128 @@
   title: CI's manual trigger runs named @wip scenarios, for their red evidence
   why: >
     features/README.md has the coordinator get assertion-level red evidence for scenarios that run
-    only in CI, @engine and @manual-platform, before implementation, and no route exists: every step
-    commit keeps them @wip, the tier skips @wip, drafts skip CI, and a commit making them live is
-    refused outside feat and fix. Slices 3, 9, 10, 11 and 12 all need this. Settled: ci.yml's
-    workflow_dispatch gains one optional input naming scenario IDs, validated as @ID-WORD-number and
-    joined, and the engine and manual platform steps pass it to the harness through an environment
-    variable the harness honours only with its existing CI context checks, selecting those IDs even
-    if @wip, and only those. A dispatched red run is expected to fail, is never required, and
-    changes nothing about pull request or push runs, where the input is absent and @wip stays
-    excluded. Regression tests in the style of TestEngineSelection and TestEngineWorkflow: selecting
-    @wip IDs only under dispatch's context, refusing a malformed value, and a pull request or push
-    run never reading it. README says how the coordinator runs it: gh workflow run ci.yml --ref
-    <item> -f <input>=<ids>, on an item branch holding the step commit, and reads the failing step.
-    Agents still have no GitHub access. No injection: the value reaches a step through env, never
-    through the expression in a run line.
+    only in CI before implementation, but its evidence-branch procedure cannot work. Step commits
+    keep cases @wip, both tiers exclude them, draft PRs skip CI, and a test commit removing @wip
+    is refused by scenario-moves. Slices 3, 9, 10, 11 and 12 need this route. This is CI test
+    infrastructure blocking the offline milestone, not product behaviour; specify task checks,
+    no product scenarios or step definitions. No new library, service or supported host is needed.
+
+    Add exactly one workflow_dispatch input to .github/workflows/ci.yml, red_scenarios, with type
+    string, required false and default empty string. Its description explains that it accepts
+    whitespace-separated complete scenario tags for expected-red evidence. Pass it as the
+    step-local ITOS_CONTAINER_RED_SCENARIOS environment variable to Engine scenarios and to the
+    Tests steps of platform-macos and platform-windows, using the expression
+    ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}.
+    Never interpolate the value into a run script, shell-evaluate it or write it to GITHUB_ENV.
+    Do not wire it into the ordinary Linux platform job, ci, proof, preflight or fixture helpers.
+    The brief's manual-platform route means these existing macOS/Windows jobs; this tree has no
+    implemented @manual-platform tag or tier. Introduce neither here. Their harness stays
+    non-engine and retains the existing platform exclusions, including @linux.
+
+    At the real harness boundary, read the new variable only after CI=true, GITHUB_ACTIONS=true
+    and GITHUB_EVENT_NAME=workflow_dispatch have all been established. Pull request, push, other
+    event and local contexts must not even read it; a present malformed value there has no effect.
+    Keep environment and host values as data in selection policy, with the real process read
+    confined to TestFeatures or its boundary helper. Never enable the engine from this input.
+    ITOS_CONTAINER_ENGINE_TESTS still requires its exact existing switch values and, when enabled,
+    CI=true, GITHUB_ACTIONS=true and an actual Linux amd64 test process. Existing child-environment
+    filtering must strip the new ITOS_ variable too. These context checks prevent accidental
+    execution, not hostile code; agents must never spoof the context or receive an engine socket.
+
+    An unset, empty or whitespace-only input retains today's selection, including @wip exclusion
+    on an ordinary dispatch. Otherwise split with standard-library whitespace rules, validate
+    every complete token against ^@ID-[A-Z]+-[0-9]+$, deduplicate, and join exact anchored matches.
+    Accept one ID or several; reject bare IDs, arbitrary tags, lowercase areas, commas, regex or
+    godog operators and shell-looking values before binary build or scenario initialization.
+    Do not treat the supplied text as a regex or godog expression. Refuse combining a nonempty
+    red list with a nonempty -scenarios expression rather than silently widening either selection.
+    Require each requested ID to occur in the parsed feature inventory, including inherited tags;
+    a well-formed unknown ID fails even when other requested IDs exist. Selection/parser errors
+    name the problem and fail, without falling back to the whole suite.
+
+    With a valid red list, select only those exact IDs, live or @wip, intersected with the existing
+    engine tier and platform. Remove only the @wip restriction for those IDs in memory; never
+    rewrite feature files or their smoke entries. Apply restrictions to every OR branch and keep
+    the existing expected-versus-filtered pickle check. Feature, Rule, Outline and Examples tag
+    inheritance still applies, and selecting an outline ID selects all its eligible rows. A list
+    containing only IDs excluded by this job's tier/platform reports an explicit skip with IDs,
+    reasons and count, never falls back to live cases and is never red evidence. This lets the
+    same list reach engine and manual platform jobs safely. An eligible selection must execute
+    its expected cases; failures, undefined/pending/skipped steps or lost cases cannot become a
+    successful red run. Preserve the existing strict engine completion checks and apply that
+    completion discipline to red selections in the non-engine manual jobs as well.
+
+    The manual jobs still run go test ./..., so TestManifestContractCoverage must also recognize
+    an active red selection and skip its independent whole-suite product-scenario reruns, just
+    as it already skips for -scenarios. Otherwise it executes unrequested manifest IDs. Make
+    this focused change in features/manifest_coverage_test.go using the same guarded context
+    policy; empty input and ignored input outside dispatch must not skip ordinary coverage.
+    Memory-only harness regressions and other unit tests continue to run normally. Isolate
+    synthetic harness subprocesses from the caller's red selection by stripping the new variable
+    in cleanHarnessEnvironment; an actual manual dispatch must not contaminate those fixtures.
+
+    Preserve automatic push and pull-request runs, all event/draft guards, the five jobs and
+    stable engine check name, exact engine TO checkout, native runner, read permissions, action
+    pins, budgets, fixture preparation and unconditional owned cleanup. Keep the existing go test
+    commands unchanged; the environment supplies the red selection. With no input the engine
+    still runs every live engine case and manual platforms their full eligible suites. The ci
+    job must still require engine success. Propagate the actual test outcome, never force a
+    failure or accept a passing run as red proof. Failing red-evidence dispatches stay failed and
+    are never a merge/closure prerequisite or a substitute for green CI at the implemented head;
+    do not add continue-on-error, success fallbacks, tag rewrites or a draft-guard exception.
+
+    Commit compiling ordinary regression tests first with test --item T-21. Add
+    TestEngineRedSelection in features/engine_selection_test.go and TestEngineRedWorkflow in
+    features/engine_workflow_test.go, using the existing memory fixtures, hook counters and YAML
+    parser. Test context values and environment lookups through in-memory data, never by setting
+    a real process to CI engine mode. Prove that only named @wip/live IDs execute in dispatch,
+    including inherited outline rows, duplicates and IDs whose prefixes overlap. Assert no
+    unrelated initializer, Background, hook or step runs. Cover malformed and partially unknown
+    lists, conflicting -scenarios, empty input, cross-tier/platform exclusion, invalid engine
+    context and unsuccessful/incomplete selected execution. Use a recording environment lookup
+    to prove the new variable is not read for local, missing-CI, missing-Actions, PR or push
+    contexts, even if it would return a hostile value. Retain the existing early-exit tests and
+    prove the new harness variable is absent from product child environments. Cover the
+    whole-suite coverage helper's dispatch-only exclusion and synthetic subprocess isolation
+    so a real manual job cannot run unrequested product scenarios or corrupt regression selection.
+
+    Parse the workflow to assert the exact optional input schema and three permitted environment
+    locations, conditional dispatch expression and unchanged run commands. Include broken-workflow
+    negative controls for a missing/required/nonempty-default input, an extra input, missing wiring,
+    run-script interpolation, an unguarded expression, global/job/proof/ordinary-Linux leakage
+    and ignored failures. T-21 explicitly supersedes T-20's no-dispatch-input invariant and its
+    exact five-variable engine environment. Update features/engine_fixture_test.go and the
+    existing workflow checkers to allow only this input and this additional step-local variable;
+    keep their unrelated-input, fixture-wiring, engine-switch and cleanup negative controls.
+    Replace the old null-dispatch assertion with the exact new schema check, not a blanket pass.
+
+    Before implementation, the new executed-ID assertion fails because named @wip cases remain
+    excluded; malformed/unknown red-list assertions fail because no red input is interpreted;
+    workflow assertions fail because dispatch has no inputs or wiring. Empty-input, context and
+    existing isolation checks are preservation checks, not red proof. Report actual compiling
+    regression assertion failures from the test commit and their passing results after the work.
+    No real-engine run is needed for these regressions. The original coarse input check below
+    already fails on the missing inputs key; the added test-presence checks prevent a no-tests
+    success. Let configured hooks and CI run the gates; the drafter does not run completion checks.
+
+    Replace features/README.md's disposable evidence-branch/tag-removal procedure with the
+    coordinator command gh workflow run ci.yml --ref <item> -f 'red_scenarios=<ids>'. The item
+    branch must hold the complete step commit and these workflow/harness changes; cases stay
+    @wip. Record the resolved tested SHA, input IDs, run URL, runner/tier, outline row and failing
+    Then assertion. Infrastructure, setup, undefined-step failures and empty/excluded selections
+    are not red proof. Keep the failing run visible, then implement, remove @wip in the behaviour
+    commit and require green CI at the actual pushed head with no red input. Document the input
+    grammar, CI-only scope and unchanged no-input selection wherever the README describes @wip.
+    The loop alone publishes, dispatches, reads GitHub results and closes; agents commit and stop.
+
+    In the same implementation PR, record an ADR in docs/decisions/ naming the Future behaviour
+    evidence section of docs/architecture/arc42.md and update that section: the scoped dispatch
+    selector replaces removing @wip for the red run, while ordinary selection and engine access
+    remain unchanged. Do not change the charter, pilot, product packages or scenario inventory.
+    Use test --item T-21 for harness/regression files and features/README.md, ci --task T-21 for
+    .github/workflows/ci.yml, and docs --item T-21 for the ADR/architecture update. This drafter
+    changes only this ledger entry in docs --item T-21. No mutation run, generated evidence,
+    GitHub action or approval of a real sandbox belongs to drafting this spec.
   done_when:
     - run: grep -q 'workflow_dispatch:' .github/workflows/ci.yml && grep -q 'inputs:' .github/workflows/ci.yml && go test -count=1 -run 'TestEngine' ./features
+    - run: grep -q '^func TestEngineRedSelection(' features/engine_selection_test.go && grep -q '^func TestEngineRedWorkflow(' features/engine_workflow_test.go
