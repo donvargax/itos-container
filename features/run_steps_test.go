@@ -17,6 +17,7 @@ import (
 )
 
 func (w *world) runSteps(sc *godog.ScenarioContext) {
+	w.runPreflightSteps(sc)
 	sc.Step(`^its standard output is empty$`, func() error {
 		if w.stdout != "" {
 			return fmt.Errorf("expected zero stdout bytes\n%s", w.report())

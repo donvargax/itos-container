@@ -16,7 +16,11 @@ import (
 	"time"
 )
 
-type doctorRequest struct{ Method, Path, Query string }
+type doctorRequest struct {
+	Method, Path, Query string
+	PID                 int
+}
+type runPeerKey struct{}
 
 type doctorListener struct {
 	net.Listener
@@ -48,6 +52,7 @@ type doctorAPI struct {
 	reachedOnce, releaseOnce sync.Once
 	forward                  http.RoundTripper // nil for local fixtures; CI-only recorder uses it
 	expectedImage            string
+	runBarrier               func(int)
 }
 
 func newDoctorAPI(image string) *doctorAPI {
@@ -86,7 +91,9 @@ func (w *world) startDoctorAPI(a *doctorAPI) error {
 		return err
 	}
 	a.listener = &doctorListener{Listener: listener}
-	a.server = &http.Server{Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second}
+	a.server = &http.Server{Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second, ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
+		return context.WithValue(ctx, runPeerKey{}, runPeerPID(conn))
+	}}
 	go func() { _ = a.server.Serve(a.listener) }()
 	return nil
 }
@@ -110,7 +117,8 @@ func doctorAllowedRequest(r doctorRequest, image string, allowImage bool) bool {
 }
 
 func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
-	record := doctorRequest{r.Method, r.URL.Path, r.URL.RawQuery}
+	pid, _ := r.Context().Value(runPeerKey{}).(int)
+	record := doctorRequest{r.Method, r.URL.Path, r.URL.RawQuery, pid}
 	a.mu.Lock()
 	a.journal = append(a.journal, record)
 	a.mu.Unlock()
@@ -170,6 +178,9 @@ func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if strings.HasPrefix(path, "/images/") {
+		if a.runBarrier != nil {
+			a.runBarrier(pid)
+		}
 		if a.paused {
 			a.reachedOnce.Do(func() { close(a.reached) })
 			select {
@@ -407,7 +418,9 @@ func (w *world) doctorEndpoint(selection string) error {
 		}
 		a.socket = path
 		a.listener = &doctorListener{Listener: l}
-		a.server = &http.Server{Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second}
+		a.server = &http.Server{Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second, ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
+			return context.WithValue(ctx, runPeerKey{}, runPeerPID(conn))
+		}}
 		go func() { _ = a.server.Serve(a.listener) }()
 		if selection == "outside alias to checkout socket" {
 			path = filepath.Join(w.dir, "engine-alias.sock")
