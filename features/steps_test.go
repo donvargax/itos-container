@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -32,8 +33,12 @@ type world struct {
 
 	exit           int
 	stdout, stderr string
+	deadline       time.Duration
+	timedOut       bool
 
-	stdin string // the text the run reads from its standard input, "" for none
+	stdin    string // the text the run reads from its standard input, "" for none
+	policy   *policyWorld
+	manifest *manifestWorld
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -44,6 +49,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
 		return ctx, nil
 	})
@@ -131,6 +137,8 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 		return nil
 	})
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
+	w.policySteps(sc)
+	w.manifestSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.
@@ -177,7 +185,7 @@ func (w *world) env() []string {
 		}
 		env = append(env, kv)
 	}
-	return append(env,
+	env = append(env,
 		"GIT_CONFIG_GLOBAL="+os.DevNull,
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_AUTHOR_NAME=itos-container features",
@@ -186,6 +194,7 @@ func (w *world) env() []string {
 		"GIT_COMMITTER_EMAIL=features@localhost",
 		"PATH="+callerPath(),
 	)
+	return w.manifestEnv(w.policyEnv(env))
 }
 
 // withEnv is the scenarios' environment with each NAME=value of vars, a
@@ -313,7 +322,14 @@ func (w *world) runWith(env []string, args string) error {
 	if err != nil {
 		return err
 	}
-	return w.runEnv(w.dir, env, w.bin, fields...)
+	dir := w.dir
+	if w.policy != nil {
+		dir = w.policy.cwd
+	}
+	if w.manifest != nil {
+		dir = w.manifest.checkout
+	}
+	return w.runEnv(dir, env, w.bin, fields...)
 }
 
 // commandWords splits a scenario's command line without involving a shell.
@@ -373,7 +389,13 @@ func setEnv(env []string, name, value string) []string {
 // runEnv runs program in the folder dir in the environment env, its exit
 // code and output what the Then steps read.
 func (w *world) runEnv(dir string, env []string, program string, args ...string) error {
-	cmd := exec.Command(program, args...)
+	ctx := context.Background()
+	if w.deadline > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.deadline)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(ctx, program, args...)
 	cmd.Dir = dir
 	cmd.Env = env
 	if w.stdin != "" {
@@ -383,6 +405,7 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
+	w.timedOut = errors.Is(ctx.Err(), context.DeadlineExceeded)
 	w.stdout, w.stderr = stdout.String(), stderr.String()
 	var exit *exec.ExitError
 	switch {

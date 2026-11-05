@@ -32,3 +32,15 @@
   scenarios:
     - id: "@ID-COMPL-01"
       why: the hidden completion command answers a new word from kong's model and leaves itself out
+- file: policy.feature
+  scenarios:
+    - id: "@ID-POLICY-01"
+      why: policy inspection reads the fixed file, supplies offline defaults and returns the effective policy without engine access
+- file: manifest.feature
+  scenarios:
+    - id: "@ID-MANIFEST-01"
+      why: selected manifest parsing resolves literal defaults without engine inspection
+- file: parsing.feature
+  scenarios:
+    - id: "@ID-PARSING-04"
+      why: doctor refuses unfinished excessive nesting without effects and still accepts literal YAML data

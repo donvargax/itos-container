@@ -1,9 +1,22 @@
+# Port contract suites and fakes are test support, never linked into the binary.
+# Keep running their tests; measure product code in the CI proof (itos ADR-0053).
+exclude: ["**/porttest/**"]
+
 # Equivalent mutants need project-local proof and a reviewed reason.
 mutation:
+  tests:
+    list: itos tests list scenario --tsv
+    run: "go test ./features -count=1 -scenarios='{pattern}'"
+    ids_pattern: "^@(?:{ids})$"
+    join: { each: "{id}", sep: "|" }
+    whole: go test ./features -count=1
+    support:
+      - features/*_test.go
+      - features/testdata/**
   exceptions:
     - file: cmd/itos-container/main.go
       function: github.com/donvargax/itos-container/cmd/itos-container#run
-      hash: 62a146aba98870d1
+      hash: b2da766ccecc42c2
       line_in_function: 21
       column: 15
       original: '>'
@@ -19,3 +32,12 @@ mutation:
       replacement: '>='
       reason: 'compareTags returns zero only for identical tag strings: after numeric and length comparisons it uses strings.Compare. Assigning t to newest again when they are identical cannot change the selected tag or any observable result.'
       line_text: if IsTag(t) && (newest == "" || compareTags(t, newest) > 0) {
+    - file: internal/engine/manifest/jsonc/limits.go
+      function: github.com/donvargax/itos-container/internal/engine/manifest/jsonc#withinTokenBudget
+      hash: 3d8e0a691c896bda
+      line_in_function: 20
+      column: 20
+      original: "1"
+      replacement: "0"
+      reason: The final +1 skips the newline found by bytes.IndexByte. Replacing it with 0 leaves i at that same newline; the next loop iteration takes the whitespace branch, increments i and continues without changing depth or nodes. Both paths resume at the identical byte with identical budget state, or exit at EOF, and neither modifies data. All parser results and resource bounds are therefore unchanged.
+      line_text: i += 2 + end + 1

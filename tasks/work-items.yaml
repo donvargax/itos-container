@@ -1,9 +1,7 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue:
-  - p1-arc42-draft
-  - T-10
+queue: []
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -121,28 +119,16 @@ items:
     title: Review Gherkin inputs in mutation freshness tracking
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The offline owned-run milestone depends on trustworthy scenario-backed proof. Verify and
-      configure support-file tracking so Gherkin-only changes invalidate affected cached mutation
-      evidence.
   - id: p1-check-proof-toolchain-alignment
     title: Check proof-toolchain alignment before measurement
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The offline owned-run milestone needs trustworthy foundation proof. Compare local compiler and
-      experiment settings with CI before expensive measurement to prevent unusable evidence and
-      repeated landing attempts, preserving all proof gates.
-
-      Include test-only ranges in the existing proof-toolchain alignment review. Clearly distinguish
-      empty source-function selection and an absent proof summary from fresh evidence for affected
-      code, preserving all proof gates.
   - id: p1-reconcile-foundation-status
     title: Reconcile foundation guidance after T-8
     phase: 1
@@ -157,6 +143,8 @@ items:
       Already covers preventing redundant measurement after T-8, which the source registry marks
       done. Have the coordinator reconcile the stale p1-foundation-mutation-baseline entry without
       repeating the completed measurement.
+
+      From arc42's review: its stale-entry clause is moot, and PLAN still denies doctor.
   - id: p1-refresh-remaining-template-guidance
     title: Refresh remaining template guidance
     phase: 1
@@ -175,46 +163,38 @@ items:
       Include README hook registration and verification instructions in the existing guidance
       refresh so contributors enable local lint and vulnerability checks. This foundation follow-up
       can wait unless it blocks the charter’s configuration, doctor and approval step.
+
+      Include docs/ORCHESTRATING.md in the existing guidance cleanup after T-12 lands: replace
+      unrestricted-push and automatic three-platform claims with the implemented CI policy. T-9's
+      completed refresh predates this change. Defer unless it blocks the charter's configuration,
+      doctor and approval step.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
     owner: donvargax
-    status: doing
+    status: dropped
     depends_on: []
     kind: task
   - id: slice-1
     title: Validate the strict offline sandbox policy
     phase: 1
     owner: donvargax
-    status: doing
-    depends_on: []
+    status: done
+    depends_on: [T-14]
     kind: slice
-    why: >
-      Was p2-strict-offline-policy.
-      Specify the versioned schema, explicit defaults, path rules and maintained YAML parser with a
-      pinned version. Add black-box scenarios for valid policy and malformed, duplicate, unknown or
-      unsupported values. Expose validation through doctor and keep reusable policy logic outside
-      command domains. Broken down from p2-specify-policy-manifest-approval.
   - id: slice-2
     title: Validate the restricted single-worker manifest
     phase: 1
-    owner: null
-    status: todo
-    depends_on: []
+    owner: donvargax
+    status: done
+    depends_on: [slice-1]
     kind: slice
-    why: >
-      Was p2-restricted-worker-manifest.
-      Specify discovery, JSON-with-comments parsing, supported fields, reserved environment names,
-      image metadata and lifecycle hooks. Select and pin a maintained parser. Cover observable
-      acceptance and refusal through doctor without executing checkout code, expanding host
-      variables or allowing unsupported permissions. Broken down from
-      p2-specify-policy-manifest-approval.
   - id: slice-3
     title: Inspect checkout, local engine and cached-image readiness
     phase: 1
     owner: null
     status: todo
-    depends_on: []
+    depends_on: [slice-2, T-20]
     kind: slice
     why: >
       Was p2-doctor-host-readiness.
@@ -240,8 +220,8 @@ items:
   - id: T-11
     title: Specify the offline owned-run lifecycle contract
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: p1-allow-gherkin-specification-commits
@@ -251,20 +231,207 @@ items:
     status: dropped
     depends_on: []
     kind: idea
-  - id: p1-arc42-draft
+  - id: T-15
     title: Draft docs/architecture/arc42.md from the pilot contract, the charter and the slice layout, for the person's review
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [T-14]
+    kind: task
+  - id: T-12
+    title: CI runs on Linux, each pull request once; other platforms by hand
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-13
+    title: The code proof is a fresh seeded mutation run in CI, with no committed evidence
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [T-12]
+    kind: task
+  - id: T-14
+    title: Slices and engines live at paths the lint holds by default deny, with go list checks a nolint cannot evade
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [T-12]
+    kind: task
+  - id: T-16
+    title: Scenarios that need a real engine have a tag, a switch and one Linux job
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p2-remove-dead-release
+    title: Delete the release machinery until a release is wanted
     phase: 1
     owner: null
     status: todo
     depends_on: []
     kind: idea
     why: >
-      The loop builds better from a detailed plan: steering overnight mostly supplied what the
-      documents left unsaid (what blocks what, the slice layout, how specs commit). An arc42
-      document gives every step a shared reference: goals and quality goals (charter), context and
-      scope, solution strategy, a building-block view that names each slice and engine and their
-      dependencies (the breakdown step's input), runtime views for the main commands, cross-cutting
-      concepts (ports, fakes, strict config reading), decisions (docs/decisions/), quality
-      requirements mapped to gates, and risks. Source it from docs/plans/container-pilot.md,
-      docs/charter.md, PLAN.md and docs/architecture.md; mark every open choice the contract leaves
-      to the person as open, never decided. A docs task; the person reviews it.
+      release.yml has no caller and runs tools that are absent (lines 75 and 123), and line 34
+      assumes a public repository, so attestation would fail here. internal/release has no importers
+      and accounted for 71 of T-8's 225 mutants and T-8's Windows failure. Delete both until a
+      release is wanted, amending AGENTS.md's preserve clause. Waits: nothing is blocked by it.
+  - id: p2-architecture-stdlib-on-go-list
+    title: The architecture check holds stdlib allowlists on go list arrows, which no comment can evade
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Probes of T-14's gate, 2026-11-04: a domain or handler with os/exec passes under a '// Code
+      generated … DO NOT EDIT.' header, as golangci-lint skips generated files; five more nolint
+      spellings pass (///nolint:depguard, // //nolint:depguard, a trailing comma, nolint:allx,
+      gosec,,depguard); a handler or porttest can import crypto/tls, log/syslog or database/sql; a
+      build-tagged handler file with os/exec passes. No agent has been seen doing these, so nothing
+      blocks. One check closes most: tools/bin/architecture-check reads each role's stdlib imports
+      from go list, with an allowlist per role, including IgnoredGoFiles. Details at the
+      coordinator.
+  - id: T-17
+    title: Bugbot is not requested for the rest of 2026-11-04
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p2-architecture-fixtures-load
+    title: The architecture fixture matrix can fail under load, stopping a commit
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      2026-11-04: a one-line itos.yaml commit failed in pre-commit at tools/testdata/architecture
+      after 548 s while the machine ran several builds, and passed in 84 and 105 s when it did not.
+      The output of that failure was lost, so the cause is not known: suspect a timeout or a
+      contended build in the matrix. itos.yaml being an enforcement input runs it on every such
+      commit. Capture a failure first.
+
+      From arc42's review: go.mod is an enforcement input, so slices 2 and 3 hit this.
+  - id: slice-5
+    title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [slice-1]
+    kind: slice
+  - id: T-18
+    title: Move to itos 8.45.7, and turn on push.pr.review_stall
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-19
+    title: Bring arc42 up to date with what landed and what the person decided
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-20
+    title: An engine fixture image the real-engine scenarios can use
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [T-16]
+    kind: task
+  - id: slice-6
+    title: Bound manifest and metadata parsing
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-2]
+    kind: slice
+    why: >
+      Slice-2 sets no size or depth budget; slice-5's budget covers only the policy. A hostile
+      manifest or image label gets the same bound by behaviour: input past a limit is refused with
+      its rule. Reuse slice-5's approach; no assertion on heap or GC traces.
+  - id: slice-7
+    title: Run refuses bad invocations
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: [slice-1]
+    kind: slice
+    why: >
+      T-11's missing-argv and JSON refusals, on the local tier; a valid argv refuses until later
+      slices. Creates internal/slices/run.
+  - id: slice-8
+    title: Run preflight and frozen settings
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-4, slice-7]
+    kind: slice
+    why: >
+      Refuse invalid input, approval, identity and image with an empty Engine API journal, and write
+      the frozen snapshot. Host user is the effective UID, root refused. Host UID/GID overrides the
+      image; manifest values must equal it; no chown.
+  - id: slice-9
+    title: Owned create and cleanup
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-8, T-20]
+    kind: slice
+    why: >
+      Creates internal/engine/session. An fsynced intent record before create; create unstarted,
+      remove, confirm absence; a write failure and a lost create response. Reconcile by record plus
+      random name.
+  - id: slice-10
+    title: Hardened offline foreground run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-9]
+    kind: slice
+    why: >
+      @engine proof: first-instruction network and DNS denial by NetworkMode none, inspected before
+      start; non-root; read-only root; the checkout as sole mount; literal argv; exit precedence;
+      teardown. No persistent state this milestone, by the person's A2: checkout and tmpfs. Pids
+      limit 4096, no memory or CPU quota claim, by A4.
+  - id: slice-11
+    title: Status and stop
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-10]
+    kind: slice
+    why: >
+      Run's printed retry must work. Foreign, repeated and two-project cases; marker exclusion. By
+      the person's A3 the worker stays isolated if the controller dies, so itos container status or
+      list shows which sessions lost their controller, as candidates to stop. Records beside
+      approvals, random hex IDs, a per-session lock, revalidating daemon and resource before
+      mutating.
+  - id: slice-12
+    title: Budgets, cancellation and loss
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-10]
+    kind: slice
+    why: >
+      T-11's stall, signal, engine-loss and controller-kill cases. Waits: 10 s call, 120 s startup,
+      30 s teardown. Signals: forward once, 10 s grace, then SIGKILL; observed exit wins. Controller
+      loss leaves the worker isolated until stop.
+  - id: p3-approval-before-egress
+    title: Revisit who may approve a sandbox before it can grant network or credentials
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person's q-2, 2026-11-04: an agent on the host can approve its own sandbox through
+      --fingerprint or a faked terminal. Offline-only permissions make that cheap for now. Before
+      the egress and credentials stages, when an approval grants something worth taking, weigh a
+      host-side confirmation an agent cannot drive, per the stage.

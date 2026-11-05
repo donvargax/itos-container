@@ -40,8 +40,8 @@
   role, ledger type, spec path, allowed edit paths, exact checks and neighbouring checks,
   required proof and commit type/footer.
 - Non-behaviour tasks follow the ledger's `why` and `done_when`, without inventing scenarios
-  or step definitions. T-8 is the test task example: tests and generated proof under its
-  specified checks, no new behaviour scenarios. T-9 is a docs task: only this file, cheap
+  or step definitions. T-8 is a historical test task example: its generated proof procedure
+  was superseded by T-13. T-9 is a docs task: only this file, cheap
   documentation checks, `docs` with `Item: T-9`, no mutation measurement.
 - Behaviour briefs require specified black-box scenarios. Commit their step definitions
   red first in a `test` commit while scenarios remain `@wip`. With `@wip` removed for the run,
@@ -63,23 +63,21 @@ changes and upstream reports.
 
 ## Proof
 
-`proof.code` in `itos.yaml` already selects Go changes under both `cmd/` and `internal/`.
-After the last source/test change, refresh required changed-code evidence using
-`tools/bin/pinned itos-cc` with `--all-tests`, `--fail-uncovered` and `--no-annotate`.
-Find the range base through `itos work show` and history: the parent of the item's actual
-first commit, specs included, never an assumed take commit. Commit project-local
-`.metrics/mutate/` evidence by explicit path; never copy another project's cache or hand-edit
-results. Kill non-equivalent survivors with tests and exercise uncovered executable code,
-including functions without mutation sites. Only genuinely equivalent mutants may have
-reasoned exceptions for the person to review; never except uncovered code or remove sites
-to avoid proof. Documentation-only changes touch no `proof.code` path and fabricate no
-mutation results. Leave configured hooks and CI in control of their gates.
+CI alone judges `proof.code` under `cmd/` and `internal/`: up to ten fresh sites across changed
+functions and measured coverage of added/changed lines, including functions without sites.
+Core itos supplies the judged range's `{base}` for `--since` and `--seed`. The same base and
+eligible sites give the same draw; changing candidates can change it. The `ci` job measures
+own tests and listed live scenarios, using the harness's individual-test `GOCOVERDIR` fallback.
 
-T-8's [completed full foundation baseline](proof/T-8-foundation-baseline.md) supersedes T-4's
-sample with zero eligible records. A sample or empty changed-code range is not a fresh baseline;
-later test/toolchain changes can stale evidence. Follow the report's Go reproduction environment.
-It proves neither other-platform nor container-isolation support. Do not make the full
-measurement a recurring gate or run it for documentation work.
+Agents commit and stop: no local mutation runs or generated evidence committed or restored
+into CI. `.metrics/mutate/` and `.metrics/coverage/` are ignored. Kill survivors and cover
+uncovered changed lines with tests. Only equivalent mutants may have reasoned exceptions for
+the person's review; never except uncovered code, redraw, remove sites or hand-edit evidence
+to pass.
+
+T-8's [report and reproduction commands](proof/T-8-foundation-baseline.md) are historical,
+not handoff instructions. A sample or empty range proves neither a full baseline nor
+container-host support. Docs-only work fabricates no mutation results.
 
 ## Lessons
 

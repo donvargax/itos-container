@@ -1,0 +1,180 @@
+[
+  {
+    "Name": "thread-suppression-depguard-comma",
+    "File": "internal/slices/review/domain/probe.go",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "package domain\nimport _ \"os\" //nolint:depguard,\n"
+  },
+  {
+    "Name": "thread-suppression-all-comma",
+    "File": "internal/slices/review/domain/probe.go",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "package domain\nimport _ \"os\" //nolint:all,\n"
+  },
+  {
+    "Name": "thread-suppression-list-comma",
+    "File": "internal/slices/review/domain/probe.go",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "package domain\nimport _ \"os\" //nolint:gosec,depguard,\n"
+  },
+  {
+    "Name": "thread-suppression-trimmed-list-comma",
+    "File": "internal/slices/review/domain/probe.go",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "package domain\nimport _ \"os\" //nolint:gosec, DEPGUARD,\n"
+  },
+  {
+    "Name": "thread-suppression-adjacent-reason-comma",
+    "File": "internal/slices/review/domain/probe.go",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "package domain\nimport _ \"os\" //nolint:depguard,// reason\n"
+  },
+  {
+    "Name": "thread-suppression-block-comma",
+    "File": "internal/slices/review/domain/probe.go",
+    "Kind": "suppression",
+    "Rule": "suppresses depguard",
+    "Flags": [
+      "--toplevel"
+    ],
+    "Source": "package domain\nimport _ \"os\" /*nolint:depguard,*/\n"
+  },
+  {
+    "Name": "thread-comment-control-targeted-comma",
+    "File": "internal/slices/review/domain/probe.go",
+    "Kind": "allow",
+    "Source": "package domain\n//nolint:gosec,\nconst X = 1\n"
+  },
+  {
+    "Name": "thread-comment-control-targeted-reason",
+    "File": "internal/slices/review/domain/probe.go",
+    "Kind": "allow",
+    "Source": "package domain\n//nolint:gosec, // depguard stays enforced\nconst X = 1\n"
+  },
+  {
+    "Name": "thread-comment-control-prose-name",
+    "File": "internal/slices/review/domain/probe.go",
+    "Kind": "allow",
+    "Source": "package domain\n//nolint:depguardextra,\nconst X = 1\n"
+  },
+  {
+    "Name": "thread-porttest-slices/review-excluded",
+    "File": "internal/slices/review/port/porttest/probe.go",
+    "Kind": "allow",
+    "Files": {},
+    "Source": "//go:build architecture_thread_never\n\npackage porttest\nconst X = 1\n",
+    "CompileFiles": [
+      "internal/slices/review/port/porttest/probe.go"
+    ]
+  },
+  {
+    "Name": "thread-porttest-slices/review-listed",
+    "File": "internal/slices/review/port/porttest/probe.go",
+    "Kind": "allow",
+    "Files": {
+      "internal/slices/review/port/porttest/base.go": "package porttest\n"
+    },
+    "Source": "//go:build architecture_thread_never\n\npackage porttest\nconst X = 1\n",
+    "CompileFiles": [
+      "internal/slices/review/port/porttest/probe.go"
+    ]
+  },
+  {
+    "Name": "thread-porttest-slices/review-nested-excluded",
+    "File": "internal/slices/review/port/porttest/nested/probe.go",
+    "Kind": "allow",
+    "Files": {},
+    "Source": "//go:build architecture_thread_never\n\npackage nested\nconst X = 1\n",
+    "CompileFiles": [
+      "internal/slices/review/port/porttest/nested/probe.go"
+    ]
+  },
+  {
+    "Name": "thread-porttest-slices/review-nested-listed",
+    "File": "internal/slices/review/port/porttest/nested/probe.go",
+    "Kind": "allow",
+    "Files": {
+      "internal/slices/review/port/porttest/nested/base.go": "package nested\n"
+    },
+    "Source": "//go:build architecture_thread_never\n\npackage nested\nconst X = 1\n",
+    "CompileFiles": [
+      "internal/slices/review/port/porttest/nested/probe.go"
+    ]
+  },
+  {
+    "Name": "thread-porttest-engine/review-excluded",
+    "File": "internal/engine/review/port/porttest/probe.go",
+    "Kind": "allow",
+    "Files": {},
+    "Source": "//go:build architecture_thread_never\n\npackage porttest\nconst X = 1\n",
+    "CompileFiles": [
+      "internal/engine/review/port/porttest/probe.go"
+    ]
+  },
+  {
+    "Name": "thread-porttest-engine/review-listed",
+    "File": "internal/engine/review/port/porttest/probe.go",
+    "Kind": "allow",
+    "Files": {
+      "internal/engine/review/port/porttest/base.go": "package porttest\n"
+    },
+    "Source": "//go:build architecture_thread_never\n\npackage porttest\nconst X = 1\n",
+    "CompileFiles": [
+      "internal/engine/review/port/porttest/probe.go"
+    ]
+  },
+  {
+    "Name": "thread-porttest-engine/review-nested-excluded",
+    "File": "internal/engine/review/port/porttest/nested/probe.go",
+    "Kind": "allow",
+    "Files": {},
+    "Source": "//go:build architecture_thread_never\n\npackage nested\nconst X = 1\n",
+    "CompileFiles": [
+      "internal/engine/review/port/porttest/nested/probe.go"
+    ]
+  },
+  {
+    "Name": "thread-porttest-engine/review-nested-listed",
+    "File": "internal/engine/review/port/porttest/nested/probe.go",
+    "Kind": "allow",
+    "Files": {
+      "internal/engine/review/port/porttest/nested/base.go": "package nested\n"
+    },
+    "Source": "//go:build architecture_thread_never\n\npackage nested\nconst X = 1\n",
+    "CompileFiles": [
+      "internal/engine/review/port/porttest/nested/probe.go"
+    ]
+  },
+  {
+    "Name": "thread-workspace-current-module",
+    "File": "internal/slices/review/domain/probe.go",
+    "Import": "fmt",
+    "Kind": "allow",
+    "Files": {
+      "go.work": "go 1.27.2\n\nuse (\n .\n ./workspace-peer\n)\n",
+      "workspace-peer/go.mod": "module example.com/aaa\n\ngo 1.27\n",
+      "workspace-peer/lib/base.go": "package lib\nimport _ \"os/exec\"\n"
+    },
+    "Workspace": true
+  }
+]

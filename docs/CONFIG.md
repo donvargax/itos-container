@@ -3,9 +3,10 @@
 These are format and validation requirements for the planned `itos-container.yaml`
 sandbox policy. The [charter](charter.md) selects the milestone from the binding
 [pilot contract](plans/container-pilot.md); they take precedence over upstream
-examples. Container commands and policy loading are **not implemented**. These rules
-do not describe an existing loader. The inherited executable exposes count, version
-and completion, and supplies no sandbox or runtime isolation evidence.
+examples. Strict policy validation is implemented through `doctor --policy-only`, and
+policy plus manifest validation through `doctor --manifest-only`. The inherited count,
+version and completion commands remain. Host readiness, approval and runtime isolation
+are not implemented.
 
 The milestone is an offline owned run with no network, an approved hardened container,
 the checkout as its only host mount, a non-root identity and owned cleanup. Linux amd64
@@ -77,14 +78,141 @@ It cannot authorize host commands, builds, Features, Compose services, extra mou
 runtime security flags, host environment interpolation or credential sourcing. It
 cannot configure or replace the trusted guard/proxy or independently publish ports.
 Image metadata must not introduce unreviewed commands, identity or permissions.
-Exact supported fields, JSON-with-comments syntax, metadata treatment and in-container
-lifecycle semantics need specifications; no Dev Containers CLI fallback is authorized.
+The inspection profile below specifies supported fields, JSON-with-comments syntax
+and metadata treatment. No lifecycle hook is accepted while its runtime semantics
+remain open. No Dev Containers CLI fallback is authorized.
 
 ## Format policy
 
-The requirements below guide future behaviour specifications. No YAML parser or
-JSON-with-comments library is selected by this document. Choose maintained libraries,
-record the reason in those specifications and pin versions before implementation.
+The requirements below guide behaviour specifications. Slice-5 selects the maintained
+`go.yaml.in/yaml/v4 v4.0.0` node parser, pinned in go.mod/go.sum, for its scanner depth
+hook. This supersedes slice-1's runtime v3 selection; tooling retains its independent
+v3 pin. The adapter still constrains scalar meanings to YAML 1.2 core and validates
+structure before projection. Upstream MIT/Apache notices are preserved in
+THIRD_PARTY_NOTICES.md and releases. Manifest parsing uses the separately pinned HuJSON parser described below.
+
+### Implemented version 1
+
+`doctor --policy-only` reads exactly `itos-container.yaml` in the effective working
+directory, without searching parents or using `ITOS_CONFIG`. The policy must be a
+regular file of at most 65536 bytes (64 KiB). The reader opens without following
+the final symbolic link, checks the opened file, and bounds the actual read even
+if it grows. Symbolic links (including dangling links), non-regular files and
+oversized input report `policy.unreadable` with exit 3 before parsing. This does
+not establish checkout identity or approval-time substitution protection.
+
+Before YAML decoding, source lines beginning with `%`, optionally after a
+byte-order mark, are refused with one root `policy.syntax` problem and exit 2.
+This reserves directive lines, including `%TAG` and `%YAML`, so a tag prefix
+cannot be expanded into every node before the representation limits run. The
+check covers the entire input, including later documents and all YAML line
+breaks (LF, CR, CRLF, NEL, LS and PS). The restriction also applies to multiline
+quoted scalars: indent a continuation line containing literal percent text.
+Inline and indented percent text and permitted built-in tags remain supported.
+
+During scanning, at most 32 flow collections may be open and at most 32 block
+collection indentation levels may be active. Both limits apply independently,
+including collections used as keys; literal punctuation in quoted text, block
+scalars and comments consumes neither. The parser stops on the first excess,
+even in an unfinished document, with one root `policy.complexity` problem and
+exit 2. Syntax encountered first remains `policy.syntax`; the whole-source UTF-8
+and directive checks precede parsing. These are structural bounds, not RSS/CPU
+quotas or worker timeouts.
+
+After the first document completes, before requesting a second document, a
+preflight limits its representation to 32 levels and 2048 nodes. The root is depth 1;
+mapping keys, mapping values and sequence elements each count as nodes one level below their
+parent. Alias references count once without following their targets; the document
+wrapper does not count. The sum of representation path lengths is also limited
+to 65536 bytes after JSON Pointer escaping. The root path is empty; scalar mapping
+keys extend both their key and value paths with their decoded spelling regardless
+of type, while complex keys add no component. Sequence elements append their
+decimal index. Count each full path, including ancestors and slash separators;
+scalar values do not extend paths. This conservative budget bounds repeated
+diagnostic locations, including shallow aliases below long keys, without
+constructing path strings. Any excess reports one `policy.complexity` problem at
+the root with exit 2, before diagnostic collection or value conversion.
+
+Only a first document within budget permits checking for another document, using
+the same bounded parser. A complete second document reports
+`policy.multiple_documents`; a stack excess while reading it reports
+`policy.complexity`. No policy values are constructed from the second document.
+
+Successful human output escapes manifest controls, quotes and Unicode line
+separators using Go string escapes without outer quotes. Printable Unicode stays
+readable; JSON retains the original decoded manifest value. The
+[versioned schema](schemas/itos-container-v1.schema.json) describes the closed data
+contract; the YAML restrictions below also apply. The complete behaviour is specified
+in [policy.feature](../features/policy.feature) and [parsing.feature](../features/parsing.feature).
+
+| Key | Type and requirement | Default |
+| --- | --- | --- |
+| version | Required integer, exactly 1; integral numeric spellings are equivalent | None |
+| manifest | Required nonempty literal relative path, such as .devcontainer/devcontainer.json | None |
+| network | Optional closed object containing only mode | {mode: offline} |
+| network.mode | Optional string, exactly offline | offline |
+
+Null never means omission. Paths use slash separators and preserve spaces and Unicode.
+Absolute or drive-qualified paths, backslashes, empty/dot/dot-dot components and ASCII
+controls are refused. There is no trimming, expansion or referenced-file read in policy
+inspection. Structural errors prevent schema projection; an invalid version prevents
+interpreting other fields. Independent version 1 errors are collected. No partial
+effective policy is returned. Safe filesystem identity belongs to the later host slice.
+
+### Implemented restricted manifest
+
+The policy has no image or UID. Its `manifest` selects exactly one relative file;
+other conventional files and parent directories are irrelevant. Every component
+below the checkout root must be a real directory and the candidate a readable
+regular file. Symlinks, including in-tree and dangling ones, and special files fail.
+
+Manifest and supplied metadata inputs are each limited to 65536 bytes. The file
+reader limits bytes from the opened descriptor, so growth after its identity check
+cannot bypass the bound. Both JSON modes use a nonrecursive token preflight before
+HuJSON constructs a tree, limiting depth to 32 and nodes to 2048. The root is depth 1;
+object keys, values and array elements count as nodes below their container. Strings
+and comments hide structural punctuation without being stripped or rewritten. The
+reviewed HuJSON parser still decides syntax; byte/token budget excess takes precedence,
+including on unfinished input.
+
+Before conversion or duplicate diagnostics, the sum of full JSON-pointer path lengths
+is limited to 65536 bytes. Count escaped decoded keys for both key and value nodes,
+decimal indices for array elements, and all ancestors; the root path is empty.
+These limits cover opaque editor settings too. Excess produces one root
+`manifest.complexity` problem with exit 2 and no partial settings; supplied labels
+retain `manifest.metadata` with image/label attribution. Oversized labels are refused
+before copying their raw text into parser bytes. These are inspection limits, not
+worker resource quotas or host-support evidence.
+
+`github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f` parses JSON with
+line/block comments and trailing commas. Duplicate decoded keys fail at every depth,
+including unused editor settings. Syntax and duplicates precede semantic checks.
+`github.com/distribution/reference v0.6.0` with `go-digest v1.0.0` validates literal
+named image references carrying a lowercase 64-digit sha256 digest, without lookup
+or normalization. The dependencies' licenses are in THIRD_PARTY_NOTICES.md.
+
+| Field | Request and default |
+| --- | --- |
+| `image` | Required pinned string; no implicit image or approval comparison. |
+| `name` | Nonempty display string without ASCII controls; omitted means null. |
+| `workspaceFolder` | `/workspace`, or an existing real checkout subdirectory below it; default `/workspace`. |
+| `containerEnv` | Literal string values under valid, nonreserved names; default `{}`. |
+| `containerUser`, `remoteUser` | Independent positive decimal UID strings without leading zeros or group suffixes; each defaults to null. |
+| `customizations.vscode` | Optional editor extensions and opaque settings, explicitly unused. |
+
+Effective strings containing `${` fail without expansion. Other shell-looking text
+stays literal. Reserved environment names and prefixes are matched with ASCII case
+folding; the exhaustive list and field constraints are in
+[manifest.feature](../features/manifest.feature). Unknown fields, permissions, hooks
+and editor namespaces fail even when their values are empty or false.
+
+The shared engine accepts a separately supplied `devcontainer.metadata` label. An
+explicitly absent label differs from an image never inspected. Present labels must
+be strict JSON arrays of objects with unique decoded keys; only valid display names
+and editor customizations are allowed and reported as unused. Operational settings
+are refused and nothing is merged into effective settings. Slice-3 owns obtaining
+that label; lookup failure cannot be represented as absence. Slice-4 owns resolving
+omitted identities and comparing image/UID requests with host-owned approval.
 
 ### Data and validation
 
@@ -126,8 +254,8 @@ do not establish sandbox argv or credential rules.
    of guessing their meaning. A new key needs a format version that defines it;
    retained earlier versions must keep their written meaning. Removing or renaming a
    key, or changing a value's meaning, is a breaking change requiring migration
-   guidance and the release treatment in [CLI.md](CLI.md) (K8S, AIP 180). No initial
-   policy/schema version is assigned here.
+   guidance and the release treatment in [CLI.md](CLI.md) (K8S, AIP 180). The initial
+   policy/schema version is assigned by slice-1 above.
 8. Use `snake_case` keys consistently. Represent ordered named collections as lists
    of objects with names rather than maps keyed by name, so order and object shape
    remain explicit (AIP 140, K8S).
@@ -149,12 +277,12 @@ do not establish sandbox argv or credential rules.
 
 13. Document every supported key's type, requirements, default and example before
     implementing it. Examples must reflect specified behaviour; this page provides
-    no runnable policy or invented key catalog (OWNER).
+    the settled version 1 catalog above (OWNER).
 14. Make the effective configuration, including all defaults, reviewable without
     executing checkout code or revealing secrets. This is a required capability for
-    doctor/approval design, not an existing print-defaults command (OWNER, CLIG).
+    doctor/approval design; policy-only inspection shows effective defaults (OWNER, CLIG).
 15. Publish a JSON Schema versioned with the settled format so editors and producers
-    can validate it (SCHEMA). No schema artifact exists as a result of this task.
+    can validate it (SCHEMA). Version 1 is linked above.
     Schema validation alone cannot establish host approval or runtime isolation.
 16. Make generated writes stable and deterministic, in the format's defined key
     order, one key per line, using only the permitted JSON-compatible data. Preserve
@@ -163,13 +291,13 @@ do not establish sandbox argv or credential rules.
 
 ## Remaining specification work
 
-The pilot leaves the exact policy schema, approval canonicalization/fingerprint and
-storage, safe checkout/engine identity, manifest discovery/output paths, reserved
-environment names, image metadata, lifecycle hooks, resource/time limits and
+The pilot leaves approval canonicalization/fingerprint and
+storage, safe checkout/engine identity, generated output paths,
+lifecycle hooks, resource/time limits and
 cancellation details open. Resolve them through the assigned specifications and the
 person's security decisions, not an illustrative configuration here.
 
 Format policy is not loader compliance. Implement each required behaviour with
 black-box scenarios and red-first step definitions; use domain-owned ports and fakes,
-and run real-engine scenarios only in CI. This documentation-only foundation task
-adds no loader, dependency, schema, gate or mutation proof.
+and run real-engine scenarios only in CI. The policy slice
+supplies no runtime isolation evidence.

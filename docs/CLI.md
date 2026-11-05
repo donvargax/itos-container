@@ -2,10 +2,9 @@
 
 These rules describe the planned `itos container` extension. The [charter](charter.md)
 selects the milestone from the binding [pilot contract](plans/container-pilot.md); both
-take precedence over upstream examples. Container commands and policy loading are
-**not implemented**. The current [entry point](../cmd/itos-container/main.go) exposes
-the inherited count, version and completion commands, not a sandbox. This document
-changes none of their behaviour.
+take precedence over upstream examples. The current [entry point](../cmd/itos-container/main.go)
+exposes strict policy and manifest validation through doctor, alongside the inherited
+count, version and completion commands. Runtime isolation is not implemented.
 
 The first milestone is an offline owned run: explicit argv in an approved, hardened
 container with no network, the checkout as its only host mount, a non-root identity
@@ -79,8 +78,9 @@ approval or widen a running session. See [configuration boundaries](CONFIG.md).
 
 ## Planned command contract
 
-All commands in this table are unimplemented. Their scope comes from the pilot; the
-charter determines which slices may be built now.
+The full commands in this table remain planned. Doctor currently validates policy and
+the selected manifest; its output names that limited scope. `--policy-only` stops at policy.
+The charter determines which slices may be built next.
 
 | Command after `itos container` | Required behaviour |
 | --- | --- |
@@ -108,6 +108,44 @@ support inspection and cleanup, never an unattended agent restart. Record owners
 before workload execution; ambiguous or foreign resources cannot be removed merely
 because their labels resemble an owned session. Cleanup preserves checkout edits and
 project state; exact recovery storage and retry details still need specifications.
+
+## Implemented policy inspection
+
+`itos container doctor --policy-only` validates `itos-container.yaml` in the effective
+working directory without executing helpers, contacting an engine, reading the manifest
+or changing checkout/host state. Ordinary doctor applies the same policy validation
+before reading the selected manifest. Host readiness and approval remain for later slices.
+
+`--json` or `ITOS_JSON=1` prints exactly one object; `--no-json` overrides that environment.
+The object contains `schema: 1`, `ok`, `scope: "policy"` and `problems`. Success includes
+`policy` with all effective defaults; failure omits it. Every problem has `rule`, `exit`,
+`message`, `fix`, `file: "itos-container.yaml"` and an RFC 6901 `path` (empty at the root).
+Rule IDs are specified in [policy.feature](../features/policy.feature). Exit 0 means valid
+policy, 2 means invalid policy/usage, and 3 means unreadable policy. Multiple problems
+use the highest exit. Diagnostics never include source lines, raw parser errors or
+rejected values. Valid policy is neither host readiness nor approval.
+
+## Implemented manifest inspection
+
+`doctor --manifest-only` validates policy, the selected manifest and its requested
+workspace directory. Ordinary doctor currently performs these same file checks.
+Both refuse missing manifests rather than searching conventional locations or
+choosing a worker. `--policy-only` and `--manifest-only` cannot be combined.
+
+JSON success has `schema: 1`, `scope: "manifest"`, `ok: true`, `problems: []` and
+`manifest` containing `valid`, `path`, all six `effective` fields, sorted `unused`
+JSON pointers and `image_metadata`. File-only inspection reports metadata as
+`{checked: false, present: null, unused: []}`. It does not contact an engine.
+Manifest refusal returns 2, sets `manifest.valid: false`, omits `effective` and
+reports typed problems with `file` and a decoded-key JSON pointer. Policy failures
+short-circuit these checks and retain the policy rules and exits above.
+
+The shared validator separately accepts inspected `devcontainer.metadata` as data;
+there is no CLI or environment channel for injecting it. Label problems identify
+`image` and `label` instead of `file`. Slice-3 will supply actual inspection data.
+Accepted editor settings and metadata are unused, never executed or merged. See
+[manifest.feature](../features/manifest.feature) for the complete profile and rules.
+Configuration validity supplies neither host readiness nor approval.
 
 ## Names, help and arguments
 
@@ -217,6 +255,7 @@ in the stub. Suggest declared commands, flags and values only; do not inspect or
 checkout policy to generate candidates. This does not claim completion of future
 container commands before their implementation.
 
-Update these rules with a specified interface change. Exact policy schemas, discovery
-paths, approval identities, lifecycle hooks, resource limits and cancellation semantics
-remain open in the pilot; [CONFIG.md](CONFIG.md) records the configuration boundary.
+Update these rules with a specified interface change. The version 1 policy schema is
+specified; safe filesystem discovery, approval identities, lifecycle hooks, resource
+limits and cancellation semantics remain open in the pilot.
+[CONFIG.md](CONFIG.md) records the configuration boundary.

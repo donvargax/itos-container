@@ -6,7 +6,7 @@
 // The main output goes to stdout; logs, structured, and errors go to stderr.
 //
 // main only assembles: the count command is a slice, its kong struct and its
-// handler in a package of its own (internal/count/command), and main parses
+// handler in a package of its own (internal/slices/count/command), and main parses
 // the command line, runs the one it names through the UI the slices share
 // (internal/cli) and exits with the code that slice returns. A usage error,
 // which kong finds before any slice runs, is the one failure main reports
@@ -25,9 +25,16 @@ import (
 	"golang.org/x/term"
 
 	"github.com/donvargax/itos-container/internal/cli"
-	"github.com/donvargax/itos-container/internal/count/command"
-	"github.com/donvargax/itos-container/internal/count/disk"
-	"github.com/donvargax/itos-container/internal/count/input"
+	manifestdisk "github.com/donvargax/itos-container/internal/engine/manifest/disk"
+	"github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
+	"github.com/donvargax/itos-container/internal/engine/manifest/reference"
+	"github.com/donvargax/itos-container/internal/engine/policy/disk"
+	policyyaml "github.com/donvargax/itos-container/internal/engine/policy/yaml"
+	"github.com/donvargax/itos-container/internal/slices/count/command"
+	countdisk "github.com/donvargax/itos-container/internal/slices/count/disk"
+	"github.com/donvargax/itos-container/internal/slices/count/input"
+	doctor "github.com/donvargax/itos-container/internal/slices/doctor/command"
+	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
 	"github.com/donvargax/itos-container/internal/version"
 )
 
@@ -38,6 +45,7 @@ type commandLine struct {
 	ShowVersion kong.VersionFlag `name:"version" help:"Print the version and the commit it was built from, and exit."`
 
 	Count      command.CLI    `cmd:"" help:"Count the lines and words of a file, or of standard input."`
+	Doctor     doctor.CLI     `cmd:"" help:"Inspect the strict offline policy and restricted worker manifest."`
 	Version    struct{}       `cmd:"" help:"Print the version and the commit it was built from."`
 	Completion cli.Completion `cmd:"" help:"Print a shell completion script."`
 	Complete   struct{}       `cmd:"" name:"__complete" hidden:""`
@@ -56,7 +64,7 @@ func main() {
 // what main exits with, so a test can read what a run printed.
 func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.Option) int {
 	slog.SetDefault(logger(stderr))
-	ui := &cli.UI{In: in, Stdout: stdout, Stderr: stderr}
+	ui := &cli.UI{In: in, Stdout: stdout, Stderr: stderr, Classify: command.Classify}
 	if len(args) == 0 {
 		args = []string{"--help"}
 	}
@@ -88,10 +96,14 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		// With --json, the failure's object too.
 		return ui.Usage(commandName(args), err, wantsJSON(args))
 	}
-	c.Count.Files = input.Files{Disk: disk.Files{}, In: in}
+	c.Count.Files = input.Files{Disk: countdisk.Files{}, In: in}
 	switch command, _, _ := strings.Cut(ctx.Command(), " "); command {
 	case "count":
 		return c.Count.Run(ui)
+	case "doctor":
+		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}}
+		c.Doctor.Manifests = inspection.Manifests{Files: manifestdisk.Files{}, Parser: jsonc.Parser{}, References: reference.References{}}
+		return c.Doctor.Run(ui)
 	case "version":
 		// What --version prints, as kong prints it.
 		_, _ = fmt.Fprintln(stdout, parser.Model.Vars()["version"])

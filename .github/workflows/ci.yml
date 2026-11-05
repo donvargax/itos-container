@@ -2,7 +2,10 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,15 +13,21 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   TO: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   ci:
+    needs: [engine]
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     steps:
+      - name: Require engine success
+        env:
+          ENGINE_RESULT: ${{ needs.engine.result }}
+        run: test "$ENGINE_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -26,7 +35,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - uses: donvargax/itos@0a8c1bcfce6ae7b67b39197ee3990a90343f35ac # v8.45.3
+      - uses: donvargax/itos@8962852edb4e95ab78dbded855014a6ceafa1f59 # v8.45.7
       - name: Range
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -39,14 +48,60 @@ jobs:
       - run: itos verify "$FROM" "$TO"
       - run: itos ci run "$FROM" "$TO"
 
-  # Every test, the unit tests and the whole godog suite, on Linux, macOS and Windows, with each
-  # platform's paths, shell and line endings: what touches paths and CRLF breaks on Windows first.
+  # This is readiness infrastructure until live @engine scenarios are implemented.
+  # The preflight is read-only; it does not acquire images or create containers.
+  engine:
+    name: Engine scenarios (Linux amd64)
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TO }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Docker server preflight
+        shell: bash
+        run: |
+          timeout --signal=TERM --kill-after=1s 29s bash -euo pipefail <<'PREFLIGHT'
+          command -v docker >/dev/null
+          test -S /var/run/docker.sock
+          server=$(env -u DOCKER_CONTEXT -u DOCKER_HOST -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH -u DOCKER_API_VERSION docker --host unix:///var/run/docker.sock version --format '{{json .Server}}')
+          jq -e '.Os == "linux" and .Arch == "amd64"' <<<"$server" >/dev/null
+          jq -c --arg commit "$TO" '{version: .Version, apiVersion: .ApiVersion, os: .Os, architecture: .Arch, commit: $commit}' <<<"$server"
+          PREFLIGHT
+      - name: Prepare engine fixture registry
+        id: fixture
+        shell: bash
+        timeout-minutes: 4
+        run: tools/bin/engine-fixture prepare
+      - name: Engine scenarios
+        timeout-minutes: 5
+        env:
+          ITOS_CONTAINER_ENGINE_TESTS: "1"
+          ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE: ${{ steps.fixture.outputs.image }}
+          ITOS_CONTAINER_ENGINE_FIXTURE_ID: ${{ steps.fixture.outputs.image_id }}
+          ITOS_CONTAINER_ENGINE_FIXTURE_UID: ${{ steps.fixture.outputs.uid }}
+          ITOS_CONTAINER_ENGINE_FIXTURE_GID: ${{ steps.fixture.outputs.gid }}
+        run: go test ./features -count=1 -v -timeout=5m -run '^TestFeatures$'
+      - name: Clean up engine fixture
+        if: ${{ always() }}
+        shell: bash
+        timeout-minutes: 1
+        run: tools/bin/engine-fixture cleanup
+
+  # Unit tests and the non-engine godog tier run automatically on Linux for
+  # main pushes and non-draft pull requests. Manual dispatch also runs this Linux suite.
   platform:
     name: Tests (${{ matrix.os }})
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -60,17 +115,53 @@ jobs:
       # go test carries on past a package that fails, so one run shows a platform's every
       # failure. The features build the binary they run themselves, itos-container.exe on
       # windows, stamped with a known version and commit.
-      # GOCOVERDIR makes that binary a -cover build, so the scenarios run cover-enabled code
-      # rather than the same code with the counter left out. A GOCOVERDIR that is not there is
-      # a coverage failure the binary prints on stderr on every run, and stderr is what a
-      # scenario reads, so the folder is made first, in this step and not before it. What the
-      # runs write stays on the runner, for the piece that merges coverage to read.
-      # It is a step's variable, not the job's: the runner context is not there at job level.
       # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
       - name: Tests
-        run: |
-          mkdir -p "$GOCOVERDIR"
-          go test ./... -count=1
+        run: go test ./... -count=1
         env:
           RAPID_CHECKS: 1
-          GOCOVERDIR: ${{ runner.temp }}/cover
+
+  # Manual portability coverage exercises macOS and Windows paths, shells and line endings.
+  platform-macos:
+    name: Tests (macos-latest)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      # go test carries on past a package that fails, so one run shows a platform's every
+      # failure. The features build the binary they run themselves, itos-container.exe on
+      # windows, stamped with a known version and commit.
+      # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
+      - name: Tests
+        run: go test ./... -count=1
+        env:
+          RAPID_CHECKS: 1
+
+  platform-windows:
+    name: Tests (windows-latest)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      # go test carries on past a package that fails, so one run shows a platform's every
+      # failure. The features build the binary they run themselves, itos-container.exe on
+      # windows, stamped with a known version and commit.
+      # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
+      - name: Tests
+        run: go test ./... -count=1
+        env:
+          RAPID_CHECKS: 1

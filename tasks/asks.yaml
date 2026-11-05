@@ -1,0 +1,22 @@
+# The questions to the person the work is for, written by itos decision (itos help decision).
+questions:
+  - id: q-1
+    item: "slice-4"
+    question: "A1: is approval given at a terminal with a typed fingerprint, or by a scriptable --fingerprint?"
+    answer: "Scriptable --fingerprint (the person, 2026-11-04). Anything that can run the command can approve, so docs/security.md and the help say an agent on the host could approve its own sandbox; approval is an explicit act bound to the exact fingerprint. Stored as canonical JSON SHA-256 under $XDG_STATE_HOME/itos-container, 0700."
+    decision: none
+  - id: q-2
+    item: "slice-4"
+    question: "A1 again: q-1 made approval a scriptable --fingerprint, which is bad to use by hand. Follow the direnv model instead?"
+    answer: >-
+      The person changed A1 (2026-11-04); this answer supersedes q-1's interaction choice.
+      Approval follows the direnv model. Bare approve at a terminal prints the effective settings
+      and what changed since the last approval, then asks y/N. Nothing asks again until the
+      settings change; a person never types a hash. With no terminal, bare approve refuses and
+      names --fingerprint <value>, the optional non-interactive route for those exact settings.
+      An agent on the host can still approve through that flag or a faked terminal: approval
+      records what, not who, and is not proof of human presence. Canonical JSON SHA-256 and
+      host-owned state under $XDG_STATE_HOME/itos-container with mode 0700 remain selected.
+      Slice-4 builds this and carries the caveat into help and security wording. Revisit before
+      the egress and credentials stages.
+    decision: none

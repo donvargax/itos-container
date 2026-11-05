@@ -1,5 +1,14 @@
 # Upgrading
 
+## Manifest inspection
+
+Ordinary `doctor` now validates the policy-selected manifest after policy validation.
+Callers that previously used it to check policy alone must use `doctor --policy-only`.
+`doctor --manifest-only` explicitly requests file and workspace validation without
+image metadata, host readiness or approval checks. Neither mode authorizes a run.
+
+## Tooling
+
 Read the current branch's configuration and tool comments before moving a pin. Use
 `itos upgrade <version>` for supported migration: it updates the repository pin and checksum,
 applies published configuration migrations, updates a managed install script when present, and
@@ -27,14 +36,15 @@ The owner's tools can be pinned on release. Other updates normally wait seven da
 security fixes following the existing security-update policy. Renovate's committed configuration
 does not by itself prove its GitHub App is installed or the bot is running.
 
-`itos ci run` enforces changed-code proof through `proof.code`. When code or relevant test imports
-change, record fresh mutation results with the pinned itos-cc using all-tests, fail-uncovered and
-no-annotate, and commit `.metrics/mutate/` before the coordinator pushes. Use the parent of the
-item's actual first commit, specifications included, as the proof base; do not assume its take
-commit is first. Kill survivors with tests; only truly equivalent mutants may be excepted, with
-a reason for review. Uncovered mutants need tests. Keep the proof configuration and thresholds.
-A workflow/docs-only change touches no `proof.code` path and needs no fabricated mutation records.
-The no-start message from `itos ci plan --whole` is not a proof pass.
+`itos ci run` alone judges fresh changed-code proof through `proof.code`, as specified by T-13.
+Agents commit and stop: no local mutation runs, no generated mutation or coverage records in Git,
+and no evidence restored into CI from another machine. The ignored `.metrics/mutate/` and
+`.metrics/coverage/` directories are not handoff artifacts. Kill survivors with tests and cover
+uncovered changed lines; never redraw to escape a failure. Only truly equivalent mutants may
+be excepted with a reason for the person to review; uncovered code needs tests, never exceptions.
+A workflow/docs-only change touches no `proof.code` path and fabricates no mutation results.
+The no-start message from `itos ci plan --whole` is not a proof pass. Scenario red-first
+obligations remain separate and unchanged.
 
 Numbered `itos work add --kind slice|task|bug`, `itos task add`, and `itos work promote` mint their
 IDs; do not prescribe numbered IDs by hand. Stage only explicit paths and commit through
@@ -59,50 +69,40 @@ these tool downloads do not expand supported container hosts. The launcher still
 archive before extraction and supports `--path`; on Linux its cache miss installs
 `.tools/itos-cc-0.47.2/itos-cc`. Other tools keep their existing pins.
 
-The [0.47.2 README](https://github.com/donvargax/itos-cc/blob/v0.47.2/README.md) and
-[intervening releases](https://github.com/donvargax/itos-cc/releases) preserve our commands:
+T-13 replaces T-4's cached checking and sampling with the counted-run contract in the
+[0.47.2 README](https://github.com/donvargax/itos-cc/blob/v0.47.2/README.md). CI executes this
+`proof.code.check` template through the existing launcher:
 
 ```sh
-tools/bin/pinned itos-cc mutation sample --count 10
-tools/bin/pinned itos-cc mutation check --since <base> --fail-uncovered --json cmd internal
+tools/bin/pinned itos-cc mutation run --count 10 --since {base} --seed {base} --fail-uncovered=lines --json cmd internal
 ```
 
-Keep the cached check, its scope and thresholds. A counted mutation run is a different operation;
-`--fail-uncovered=lines` would narrow the existing whole-function requirement. The task checks
-use the runner's shell tools directly; RTK is not a CI dependency.
+Core itos supplies `{base}` from the judged CI range for both `--since` and `--seed`; neither
+HEAD nor an item's take/specification commit replaces it. The maximum is ten sites across
+changed functions, not ten per function or a full baseline. The same base and eligible sites
+give the same draw; changing the candidate set can change it. `--fail-uncovered=lines` requires
+measured coverage of added or changed lines, including functions without sites, superseding
+the earlier whole-function requirement. Counted runs write no snapshot, annotation or coverage
+cache. No all-tests override or cached sample is part of this proof. Task checks use the
+runner's shell tools directly; RTK is not a CI dependency.
 
-`itos-cc.yaml` remains valid unchanged: `mutation.exceptions: []`, with the omitted format
-version meaning version 1. The stricter parser rejects unknown keys, anchors, aliases, merge
-keys, non-JSON tags, non-string keys and extra documents. This file uses none of them. No
-exclusion, exception, `mutation.tests` or `mutation.copy` setting is needed for this upgrade.
+`itos-cc.yaml` now lists live scenarios through `itos tests list scenario --tsv` and preserves
+the two T-8 equivalent-mutant exceptions and their reasons. The omitted format version means
+version 1. The strict parser rejects unknown keys, anchors, aliases, merge keys, non-JSON tags,
+non-string keys and extra documents. The existing harness builds with coverage when itos-cc
+sets `GOCOVERDIR`; its documented individual-test fallback collects each listed scenario's
+counters alongside own-test coverage. A failed or missing collection is not proof. Coverage
+is produced in the `ci` job; platform jobs keep running all tests without unused coverage output.
 
-[0.7.0](https://github.com/donvargax/itos-cc/releases/tag/v0.7.0) introduced strict Go coverage
-evidence and whole-suite freshness. Strict `--fail-uncovered` needs fresh evidence for every
-judged Go function, even one with no mutation sites, and fails uncovered executable blocks as
-well as uncovered mutants. Whole-suite outcomes depend on the suite and configured support
-files. [0.18.0](https://github.com/donvargax/itos-cc/releases/tag/v0.18.0) changed function
-hashes to ignore comments; [0.47.0](https://github.com/donvargax/itos-cc/releases/tag/v0.47.0)
-invalidates earlier strict coverage evidence. Old results can therefore become stale without a
-source edit. Our empty exception list needs no `mutation except --rehash` migration.
-
-When a changed-code check requires stale evidence, remeasure it with the repository launcher:
-
-```sh
-tools/bin/pinned itos-cc mutation run --since <base> --all-tests --fail-uncovered --no-annotate cmd internal
-```
-
-Commit only the resulting project-local `.metrics/mutate/` records. Kill survivors with tests;
-uncovered code needs tests, never an exception. Do not hand-edit evidence or import another
-project's cache. T-4's base is `ebd187e7f0722f65d9aadda7a13d27048e4e03f6`, the parent of its first
-specification commit, `786ea2f2cb1f75351e30c4b75c37d98437b3f418`. Its launcher/docs changes touch
-no `proof.code` path: the range check passes with no source files, proving compatibility rather
-than any Go function. They require no new mutation records.
-
-Sampling reruns at most ten fresh recorded outcomes, skipping stale or missing results, with a
-seed derived from HEAD. The inherited snapshot contains three `Example` mutants in
-`internal/release/releasetest/releasetest.go`; after this upgrade the sample reports no cached
-mutant, so **zero mutants were sampled**. Passing that check does not refresh the baseline or
-prove the whole codebase. A full foundation baseline remains separate work.
+T-4's results are historical. Its launcher/docs range from
+`ebd187e7f0722f65d9aadda7a13d27048e4e03f6` passed with no source files, proving compatibility
+rather than a Go function. Its inherited snapshot held three `Example` mutants in
+`internal/release/releasetest/releasetest.go`, but the upgraded sample found no eligible cache:
+**zero mutants were sampled**. T-8 later recorded a full foundation measurement and two
+equivalent exceptions. Its [report](proof/T-8-foundation-baseline.md) preserves those results,
+the toolchain-freshness failure and recovery. T-13 removes the generated records from the
+current tree; Git history retains them. The historical reproduction recipes are not current
+requirements, and neither the new sampled proof nor an empty range establishes a full baseline.
 
 The intervening releases also changed mutation's plain output and several nonzero exit codes
 ([0.16.0](https://github.com/donvargax/itos-cc/releases/tag/v0.16.0)). Our callers neither parse
