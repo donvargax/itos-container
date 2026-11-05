@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -25,19 +26,31 @@ func TestProtectedStorageContract(t *testing.T) {
 	})
 }
 func TestStorageLockRespectsCallerDeadline(t *testing.T) {
-	s, c, _ := diskFixture(t)
-	storage := Storage{Store: s}
-	ctx := context.Background()
-	first, f := storage.Open(ctx, c, "intents", true)
-	if f != "" {
-		t.Fatal(f)
-	}
-	defer first.Close()
-	timed, cancel := context.WithTimeout(ctx, 30*time.Millisecond)
-	defer cancel()
-	if second, f := storage.Open(timed, c, "intents", false); second != nil || f != "state.unavailable" {
-		t.Fatal(second, f)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		s, c, _ := diskFixture(t)
+		storage := Storage{Store: s}
+		ctx := context.Background()
+		first, f := storage.Open(ctx, c, "intents", true)
+		if f != "" {
+			t.Fatal(f)
+		}
+		defer first.Close()
+		// Virtual time puts cancellation between lock polls, so slow filesystem
+		// setup cannot expire the context before the waiter reaches its select.
+		const budget = 15 * time.Millisecond
+		timed, cancel := context.WithTimeout(ctx, budget)
+		defer cancel()
+		started := time.Now()
+		if second, f := storage.Open(timed, c, "intents", false); second != nil || f != "state.unavailable" {
+			t.Fatal(second, f)
+		}
+		if elapsed := time.Since(started); elapsed != budget || !errors.Is(timed.Err(), context.DeadlineExceeded) {
+			t.Fatalf("lock wait = %v, %v; want the caller's %v deadline", elapsed, timed.Err(), budget)
+		}
+		if !first.Unchanged() {
+			t.Fatal("canceled waiter invalidated the lock holder")
+		}
+	})
 }
 
 func TestStorageCancellationBeforeLockAcquisition(t *testing.T) {
