@@ -44,8 +44,13 @@ itos tests smoke run scenario                      # eligible smoke IDs; engine 
 `-scenarios` takes a regular expression over each effective tag, `@` included. Godog's
 pinned Gherkin parser supplies inheritance from Feature, Rule, Scenario Outline and Examples;
 each outline row is selected independently. The expression is intersected with the selected
-tier and the live set. An empty expression selects the whole tier. Every OR branch retains
-both restrictions, so neither an explicit ID nor `@wip` can bypass them.
+tier, platform and the live set. An empty expression selects the whole eligible tier. Every OR
+branch retains these restrictions, so explicit IDs, `@wip` and `@linux` cannot bypass them.
+
+`@linux` marks scenarios whose fixtures require a Linux test process. The run terminal
+examples use it for their real PTY fixture; portable invocation and redirected-stream
+refusals still run on every platform. Other platforms exclude these cases before setup;
+PTY allocation or verification failures on Linux remain failures, never skips.
 
 Invalid regexes, unreadable/malformed features and expressions matching no scenario's effective
 tags fail. A selection containing only excluded cases explicitly skips `TestFeatures`, with
@@ -252,6 +257,7 @@ This procedure creates no evidence branch itself and claims no later scenario ha
 | `@bug-<n>`        | Reproduces a fixed bug. Added by `fix:` commits.                                     |
 | `@wip`            | Written, not yet implemented. Excluded from both tiers, and a `feat` may not name it. |
 | `@engine`         | Setup, hooks, steps or cleanup need a real engine. Runs only in the CI engine tier. |
+| `@linux`          | Fixture requires Linux. Excluded before setup on other test platforms.             |
 
 **IDs.** `<AREA>` is one word in capitals for the area of behaviour, and one feature file holds
 one area: `COUNT` is `count.feature`, `CLI` is `cli.feature`, `COMPL` is `completion.feature`.
