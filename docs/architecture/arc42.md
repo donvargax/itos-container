@@ -188,7 +188,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/engine/policy` | Implemented by slice-1 and slice-5 | Strict offline schema/default/value validation, bounded parsing and typed failures. | Own domain/port, disk and YAML adapters; reusable policy contracts and I/O-free porttest fakes. |
 | `internal/engine/manifest` | Proposed | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
 | `internal/engine/readiness` | Proposed | Read-only checkout, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
-| `internal/engine/approval` | Proposed; A1 settled | Effective review, differences, approval recording, matching/supersession and trusted frozen configuration. | Policy, manifest and readiness; canonical JSON SHA-256 and protected host state; remaining contract details belong to slice-4. |
+| `internal/engine/approval` | Specified by slice-4; unimplemented | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
 | `internal/engine/session` | Proposed; increments slice-9–12 | Lifecycle, ownership and recovery shared by run/status/stop. | Prerequisite engines and own lifecycle/state ports; settled intent, identity, loss and budget choices below still need implementation and proof. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
@@ -223,10 +223,10 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | slice-6 — planned manifest/metadata bounds | slice-2 | Own manifest and image-label parsing budgets; policy limits do not establish them. |
 | T-16 — completed engine-test tier | None | Guarded CI-only selection and required engine result; operational authority is [features/README.md](../../features/README.md). No live engine cases or isolation proof yet. |
 | T-20 — planned runtime fixture image | T-16 | Own preparation of trusted images for real-engine scenarios; neither T-16 nor this document makes an image available. |
-| slice-3 — planned readiness | slice-2 and T-20; consumes slice-1 | Safe checkout/local-engine identity, effective host UID and cached digest/architecture/metadata inspection. Select and pin the engine library; provide an HTTP Engine API fixture for Docker-client adapter tests without a daemon. A ping alone is insufficient. |
-| slice-4 — planned approval | slice-1, slice-2 and slice-3 explicitly | Build revised A1's review, y/N prompt and optional fingerprint route, matching/supersession and protected approval/snapshots; help/security wording states the host-agent limitation. Doctor inspects approval; run consumes frozen settings. |
+| slice-3 — readiness prerequisite | slice-2 and T-20; consumes slice-1 | Safe checkout/local-engine identity and cached digest/architecture/metadata inspection. Effective host UID resolution belongs to slice-4. The pinned engine client and HTTP Engine API fixture allow adapter tests without a daemon; a ping alone is insufficient. |
+| slice-4 — specified approval | slice-1, slice-2 and slice-3 explicitly | Build revised A1's review, y/N prompt and optional fingerprint route, host effective UID/GID resolution with root refusal, matching/supersession, protected approval and frozen input. [Scenarios](../../features/approval.feature) specify canonicalization/storage and help/security wording. Doctor inspects approval; run blocks unapproved settings and names approve. |
 | slice-7 — implemented invocation refusals | slice-1 | Local argv/JSON refusals introduce the run command slice; valid argv refuses until later increments. [Run scenarios](../../features/run.feature) cover redirected and real-terminal JSON, separator ownership and absence of effects. |
-| slice-8 — planned preflight and freeze | slice-4 and slice-7 | Refuse bad input/approval/identity/image before resource effects and write trusted frozen settings; effective host UID, root refusal and host UID/GID worker mapping. |
+| slice-8 — planned preflight and freeze | slice-4 and slice-7 | Revalidate prerequisites before resource effects, consume slice-4's approval/host identity and independent frozen input, and durably publish trusted session settings. No second identity resolver or approval loader. |
 | slice-9 — planned owned create/cleanup | slice-8 and T-20 | Introduce session engine, fsynced intent, unstarted create, lost-response reconciliation, removal and absence confirmation. |
 | slice-10 — planned offline foreground run | slice-9 | CI isolation proof, literal argv, result precedence and teardown; checkout plus tmpfs, NetworkMode none and pids limit 4096. |
 | slice-11 — planned status/stop | slice-10 | Actionable recovery, controller-loss candidates, foreign/repeated/two-project cases and safe diagnostics; protected records, random hex IDs, per-session lock and mutation-time revalidation. |
@@ -285,14 +285,17 @@ must state this in help and security guidance; revisit before egress and credent
    digest/architecture/metadata and approval inspection. Missing, invalid, mismatched
    or superseded approval refuses before resource creation. Use the effective host
    UID, refuse root, and override the image with host UID/GID; manifest user values
-   must equal them, with no chown. These choices avoid environment-derived identity
-   and elevation while retaining host ownership of checkout writes. Slices 3/4/8
-   still owe exact identity, readiness and approval contracts and implementation.
+   must equal the host UID, with no chown. Slice-4 owns this resolution, including
+   omissions and rejection of explicit mismatches; image Config.User grants no
+   identity. These choices avoid environment-derived identity and elevation while
+   retaining host ownership of checkout writes. [Slice-4's spec](../../features/approval.feature)
+   defines approval binding; slice-8 consumes it before resource effects.
 2. **Frozen settings, preparing.** Capture validated effective configuration in trusted
    session material beyond worker control. Startup uses that snapshot. Checkout
    edits or later approval cannot widen the session; new permissions require a new
-   approved run after stopping the old one. Slice-4 still owns atomic snapshot
-   and protected storage semantics.
+   approved run after stopping the old one. Slice-4 specifies protected approval
+   publication and atomic selection of independent frozen input; slice-8 durably
+   publishes the session snapshot and passes that input to later startup.
 3. **Create and own, preparing.** Persist an intent record with `fsync` before create,
    then create unstarted. Reconcile a lost response using the trusted record plus a
    random name before launch or cleanup, closing the untracked-create window. Names
@@ -386,8 +389,8 @@ settings require independent runtime probes; inspecting a flag cannot prove enfo
 
 | Location | Required contents and access | Status or decision boundary |
 | --- | --- | --- |
-| Trusted host | Person, core itos dispatch and extension controller; local engine control available only to trusted orchestration. | Policy validation is implemented; readiness/approval/lifecycle remain planned. Agents receive no socket. Effective host UID identifies the caller; root is refused by the planned readiness/run contract. |
-| Host-owned state outside checkout | Approval records, trusted frozen configuration and recovery records under `$XDG_STATE_HOME/itos-container`, directory mode `0700`. | Worker cannot access them. A1 selects canonical JSON SHA-256; recovery sits beside approvals. Detailed record/snapshot contracts belong to slices 4/9/11. This state is not a persistent worker volume. |
+| Trusted host | Person, core itos dispatch and extension controller; local engine control available only to trusted orchestration. | Agents receive no socket. Slice-4 specifies effective host UID identity, root refusal and effective UID/GID worker resolution; runtime enforcement remains planned. |
+| Host-owned state outside checkout | Approval records, trusted frozen configuration and recovery records under `$XDG_STATE_HOME/itos-container`, directory mode `0700`. | Worker must not access them. Slice-4 specifies canonical JSON SHA-256, `0600` active records and independent frozen input; slice-8 publishes session snapshots, with recovery in slices 9/11. This state is not a persistent worker volume; inaccessibility still needs runtime proof. |
 | Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host filesystem mount. Safe source/target resolution and substitution handling remain blocked. |
 | Local engine image store | Approved cached manifest digest, checked for architecture, compatibility and metadata. | The person pulls the manifest's digest and approval binds that content. Control commands inspect, never pull/build/substitute, keeping acquisition a deliberate host operation. Slice-3 owns checks; T-20 owns fixture preparation. |
 | Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces, engine/SSH-agent sockets or host credentials. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Slice-10 still owes runtime proof. |
@@ -439,8 +442,13 @@ route, superseding q-1's scriptable-only choice. Protected host storage keeps th
 worker from changing approval, but an agent executing on the host can approve by flag
 or faked terminal. Approval records what, not who. Slice-4 owns canonical fields,
 matching/supersession and atomic snapshot details; it must carry this limitation into
-help/security wording and revisit it before egress and credentials. Record ownership
-before execution, and retain uncertainty when observations are lost.
+help/security wording and revisit it before egress and credentials.
+[Slice-4's specification](../../features/approval.feature) now fixes the canonical
+field set, single active generation, safe host paths and atomic publication, and
+the independently owned frozen input consumed by slice-8. These remain unimplemented;
+the [slice-4 decision](../decisions/0003-approval-identity-and-frozen-input.md) records
+the coordinator's identity/frozen-input allocation and superseded expectations.
+Record ownership before execution, and retain uncertainty when observations are lost.
 
 **Diagnostics and streaming.** Public rule IDs, JSON and exit mapping belong outside
 domains/ports under the [CLI output contract](../CLI.md#output-and-the-contract-with-scripts).
@@ -483,7 +491,7 @@ Fakes perform no I/O and runtime scenarios remain CI-only.
 | A2 | Person's settled milestone state choice | Checkout edits survive; ephemeral tmpfs, no persistent worker volumes/caches/profiles. Host approval/snapshot/recovery state remains separate. Init and lifecycle hooks are deferred. |
 | A3 | Person's settled controller-loss choice | Leave worker isolated until stop; status identifies lost-controller sessions as candidates. No watchdog, immediate cleanup, restart or invented child exit. |
 | A4 | Person's settled resource choice | Pids limit 4096, no memory or CPU quota claim; distinct from parser and CI budgets. |
-| Effective UID and host UID/GID | Settled loop choice; slices 3/8/10 | Refuse root; override image user and require manifest equality without chown. Avoid environment-derived identity and preserve checkout ownership without elevation. |
+| Effective UID and host UID/GID | Settled loop choice; specified in slice-4, consumed by slices 8/10 | Refuse root; resolve omissions to effective host UID, override image user and require manifest equality without chown. [Allocation decision](../decisions/0003-approval-identity-and-frozen-input.md) supersedes slices 3/8 as resolver owners. |
 | Image acquisition and offline boundary | Settled loop choice; T-20 and slices 3/4/10 | Person pulls manifest digest; commands inspect cached content and approval binds it. NetworkMode none is inspected before start and must be proven by network/DNS probes from first instruction through loss, without a guard/proxy/session network. |
 | Durable create intent | Settled loop choice; slice-9 | fsync before unstarted create; reconcile lost response by trusted record plus random name, then record concrete identity before execution. Close the untracked window; names/labels alone confer no authority. |
 | Budgets and signal escalation | Settled loop choice; slice-12 | Calls 10 s, startup 120 s, teardown 30 s without resetting totals; forward once, 10 s grace, SIGKILL, observed exit wins. Bound controller transitions without imposing workload lifetime. |
@@ -607,7 +615,7 @@ mechanism. Deferred categories remain outside this milestone.
 | --- | --- | --- |
 | Manifest syntax/library, exact supported fields, reserved environment and metadata treatment; separate parsing budgets | slice-2 and slice-6 | Full manifest validation and approval input. No lifecycle hooks run; hidden metadata must not add commands or permissions. Policy's parser/limits are already settled. |
 | Safe checkout/local-engine identity, symlinks and substitution details | slice-3, consumed by slice-4/8/11 | Readiness, approval binding, mount source and ownership checks. Effective UID with root refusal is settled; basenames or dispatch roots alone cannot identify a project. |
-| Canonical field set, matching/supersession, safe state operations and atomic frozen snapshots | slice-4 | Build A1's settled interaction, canonical JSON SHA-256 and 0700 host placement, with executable evidence. Approval cannot attest human presence; revisit that limitation before egress/credentials. |
+| Approval implementation and session snapshot publication evidence | slice-4, then slice-8 | Canonical fields, matching/supersession, safe state and atomic frozen-input selection are now [specified](../../features/approval.feature), not implemented. Slice-8 owns durable session publication. Approval cannot attest human presence; revisit before egress/credentials. |
 | Concrete fixture image digest/provenance and image compatibility/metadata checks | T-20 and slice-3, consumed by slice-4/10 | Prepared images and cached-image preflight. Person-operated digest acquisition, no pull/build/substitution by commands, and approval binding are settled. |
 | Exact temporary-location mapping and independent enforcement probes | slice-10, consuming slice-2/3/8 | Prove host UID/GID, checkout-only host mount, read-only root, tmpfs, pids 4096 and NetworkMode none. No persistent worker state, memory/CPU quota claim, proxy or new network topology. |
 | Intent/resource record schema and uncertain-create protocol details | slice-9 | Implement fsynced pre-create intent, unstarted create and reconciliation by trusted record plus random name. Concrete identity precedes execution; labels/names alone cannot authorize cleanup. |
