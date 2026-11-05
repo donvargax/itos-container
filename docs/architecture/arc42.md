@@ -558,10 +558,28 @@ excuses uncovered production code.
 
 Specify behaviour before building it. Scenarios in `features/` use `test` commits with
 their item, never `docs` commits. Implementers commit step definitions red first while
-scenarios remain `@wip`, run with `@wip` removed at the permitted tier, and observe each
-behaviour assertion fail before implementation; then implement and prove green.
-Undefined steps, setup failures and today's unknown-command diagnostic are not proof.
-Non-engine evidence is local; all real-engine evidence is CI-only.
+scenarios remain `@wip` and observe each behaviour assertion fail before implementation;
+then implement and prove green. Non-engine evidence that can run locally temporarily removes
+`@wip` for the run. All real-engine evidence is CI-only; manual macOS/Windows evidence uses
+the existing non-engine platform jobs. Undefined steps, setup failures and today's
+unknown-command diagnostic are not proof.
+
+[T-21's decision](../decisions/0002-dispatch-scoped-red-evidence.md) replaces tag removal
+for manual CI red evidence with the optional `red_scenarios` dispatch selector. It accepts
+only whitespace-separated complete scenario tags, validates every ID against parsed
+features, and selects those exact live/`@wip` IDs in memory under the existing tier and
+platform restrictions. Only the engine and manual macOS/Windows test steps receive it;
+ordinary Linux and proof do not. The harness reads it only in a guarded GitHub Actions
+manual dispatch, never enables the engine from it, and rejects incomplete execution.
+Empty input preserves live-only selection. Excluded cases explicitly skip and provide no
+red proof. Whole-suite manifest coverage reruns skip active red selections; synthetic
+harness subprocesses and product children strip the input.
+
+The coordinator publishes the complete step commit on the item branch, dispatches named
+IDs and records the resolved tested SHA, input IDs, run URL, runner/tier, outline row and
+failing Then assertion. Keep failed red runs visible; a passing run is not red evidence.
+After implementation removes `@wip`, require ordinary green CI at the actual pushed head
+with no red input. The failed dispatch is never a merge/closure prerequisite or substitute.
 
 T-16 implemented the engine-test tier. [features/README.md](../../features/README.md)
 is its operational authority: ordinary, smoke, coverage and mutation runs exclude
