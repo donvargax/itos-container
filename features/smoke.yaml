@@ -44,3 +44,7 @@
   scenarios:
     - id: "@ID-PARSING-04"
       why: doctor refuses unfinished excessive nesting without effects and still accepts literal YAML data
+- file: run.feature
+  scenarios:
+    - id: "@ID-RUN-03"
+      why: run refuses wrapper and inherited JSON before any startup effects and keeps workload flags separate

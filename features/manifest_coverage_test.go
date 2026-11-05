@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 // Each metadata ID must export its own product-code counters, including refusal
 // exits. A passing scenario or coverage of the feature runner is not enough.
 func TestManifestContractCoverage(t *testing.T) {
-	if *scenarios != "" {
+	if filteredFeatureRun(*scenarios, readFeatureEnvironment(os.Getenv, runtime.GOOS, runtime.GOARCH)) {
 		t.Skip("whole-suite harness regression; filtered runs must execute only their selected scenarios")
 	}
 	root, err := moduleRoot()
@@ -67,4 +68,8 @@ func TestManifestContractCoverage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func filteredFeatureRun(pattern string, env featureEnvironment) bool {
+	return pattern != "" || env.redRequested()
 }

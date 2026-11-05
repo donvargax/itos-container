@@ -36,6 +36,7 @@ type UI struct {
 // for people, and what to do about it.
 type Problem struct {
 	Rule    string `json:"rule"`
+	Exit    int    `json:"exit,omitempty"`
 	Message string `json:"message"`
 	Fix     string `json:"fix"`
 }

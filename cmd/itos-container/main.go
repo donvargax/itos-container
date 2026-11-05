@@ -35,6 +35,7 @@ import (
 	"github.com/donvargax/itos-container/internal/slices/count/input"
 	doctor "github.com/donvargax/itos-container/internal/slices/doctor/command"
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
+	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
 	"github.com/donvargax/itos-container/internal/version"
 )
 
@@ -46,6 +47,7 @@ type commandLine struct {
 
 	Count      command.CLI    `cmd:"" help:"Count the lines and words of a file, or of standard input."`
 	Doctor     doctor.CLI     `cmd:"" help:"Inspect the strict offline policy and restricted worker manifest."`
+	Run        runcommand.CLI `cmd:"" help:"Validate a run invocation; offline startup is not implemented."`
 	Version    struct{}       `cmd:"" help:"Print the version and the commit it was built from."`
 	Completion cli.Completion `cmd:"" help:"Print a shell completion script."`
 	Complete   struct{}       `cmd:"" name:"__complete" hidden:""`
@@ -88,7 +90,7 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		}
 		return 0
 	}
-	ctx, err := parser.Parse(args)
+	ctx, err := parser.Parse(runOptions(args))
 	if stopped >= 0 {
 		return stopped
 	}
@@ -104,6 +106,10 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}}
 		c.Doctor.Manifests = inspection.Manifests{Files: manifestdisk.Files{}, Parser: jsonc.Parser{}, References: reference.References{}}
 		return c.Doctor.Run(ui)
+	case "run":
+		ui.Classify = runcommand.Classify
+		c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
+		return c.Run.Run(ui)
 	case "version":
 		// What --version prints, as kong prints it.
 		_, _ = fmt.Fprintln(stdout, parser.Model.Vars()["version"])

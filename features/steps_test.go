@@ -142,6 +142,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.policySteps(sc)
 	w.manifestSteps(sc)
 	w.doctorSteps(sc)
+	w.runSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.

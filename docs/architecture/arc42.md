@@ -42,7 +42,8 @@ lifecycle hooks run in this milestone.
 Count, version and completion are implemented foundation and must remain intact.
 Policy validation in doctor, including `doctor --policy-only`, is implemented by
 slice-1 and bounded by slice-5. Its explicit policy scope does not establish manifest,
-host readiness or approval inspection; offline run and isolation remain unimplemented.
+host readiness or approval inspection. Slice-7 implements run's local invocation
+refusals; offline startup and isolation remain unimplemented.
 Neither policy/counting tests nor a passing Go suite establish a sandbox. Linux amd64
 with native Docker is the target; support requires runtime evidence for that combination.
 
@@ -172,7 +173,7 @@ record schemas. Settled choices constrain them without proving their implementat
 
 | Building block | Status | Responsibility | Dependencies and contracts |
 | --- | --- | --- | --- |
-| `cmd/itos-container` | Implemented assembly root, including policy-only doctor | Assemble commands, ports, concrete adapters and classifiers. Preserve version/completion infrastructure without turning it into container slices. | Existing count, doctor, policy, generic UI and version leaf; remaining wiring only as specified. |
+| `cmd/itos-container` | Implemented assembly root, including policy-only doctor and run refusals | Assemble commands, ports, concrete adapters and classifiers. Preserve version/completion infrastructure without turning it into container slices. | Existing count, doctor, run, policy, generic UI and version leaf; remaining wiring only as specified. |
 | `internal/cli` | Implemented | Generic output/error rendering, flag rules and completion helpers. | No project imports; command model and classifiers supplied by `cmd`. |
 | `internal/version` | Implemented leaf | Build/version information. | No container responsibility. |
 | `internal/slices/count` | Implemented | Preserve counting behaviour and Files contract. | `command`, `domain`, `port`, `disk`, `input` siblings; `port/porttest` fake and shared contract are test support. Input's disk port is wired by `cmd`. |
@@ -180,7 +181,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/slices/init` | Deferred | Non-runnable example generation belongs to later scope. | No init implementation authorized this milestone. |
 | `internal/slices/doctor` | Implemented for policy validation only | `doctor --policy-only` and current ordinary doctor expose explicit policy scope; full manifest/readiness/approval inspection is not implemented. | Shared policy API through the inspection adapter; future readiness and approval composition stays outside readiness itself. |
 | `internal/slices/approve` | Proposed; slice-4 owns implementation | Show effective settings/differences and ask y/N at a terminal; offer optional exact-fingerprint non-interactive approval. | Shared policy/manifest/readiness and approval contracts; no prompt again until settings change; never calls the doctor slice. |
-| `internal/slices/run` | Proposed; T-11 contract required | Compose validated approval with foreground lifecycle. | Prerequisite engine contracts and session APIs; never calls approve to obtain consent. |
+| `internal/slices/run` | Implemented for invocation refusals only | Refuse JSON before missing argv, and valid argv until offline startup exists. Later compose validated approval with foreground lifecycle. | Pure domain and thin command with no I/O capabilities. Later prerequisite engine/session contracts remain unbuilt; never calls approve to obtain consent. |
 | `internal/slices/status` | Proposed; required for run recovery | Inspect owned state, policy identity, uncertainty and recovery information. | Session contracts; read-only, bounded inspection with safe diagnostics. |
 | `internal/slices/stop` | Proposed; required for run recovery | Cancel an owned session or finish its cleanup. | Session contracts; identity revalidation and safe repeated removal. |
 | `internal/slices/exec` | Deferred | Additional argv only during a live owned foreground session. | Future session contract; cannot extend lifetime or alter frozen permissions. |
@@ -224,7 +225,7 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | T-20 — planned runtime fixture image | T-16 | Own preparation of trusted images for real-engine scenarios; neither T-16 nor this document makes an image available. |
 | slice-3 — planned readiness | slice-2 and T-20; consumes slice-1 | Safe checkout/local-engine identity, effective host UID and cached digest/architecture/metadata inspection. Select and pin the engine library; provide an HTTP Engine API fixture for Docker-client adapter tests without a daemon. A ping alone is insufficient. |
 | slice-4 — planned approval | slice-1, slice-2 and slice-3 explicitly | Build revised A1's review, y/N prompt and optional fingerprint route, matching/supersession and protected approval/snapshots; help/security wording states the host-agent limitation. Doctor inspects approval; run consumes frozen settings. |
-| slice-7 — planned invocation refusals | slice-1 | Local argv/JSON refusals introduce the run command slice; valid argv refuses until later increments. |
+| slice-7 — implemented invocation refusals | slice-1 | Local argv/JSON refusals introduce the run command slice; valid argv refuses until later increments. [Run scenarios](../../features/run.feature) cover redirected and real-terminal JSON, separator ownership and absence of effects. |
 | slice-8 — planned preflight and freeze | slice-4 and slice-7 | Refuse bad input/approval/identity/image before resource effects and write trusted frozen settings; effective host UID, root refusal and host UID/GID worker mapping. |
 | slice-9 — planned owned create/cleanup | slice-8 and T-20 | Introduce session engine, fsynced intent, unstarted create, lost-response reconciliation, removal and absence confirmation. |
 | slice-10 — planned offline foreground run | slice-9 | CI isolation proof, literal argv, result precedence and teardown; checkout plus tmpfs, NetworkMode none and pids limit 4096. |
@@ -557,10 +558,28 @@ excuses uncovered production code.
 
 Specify behaviour before building it. Scenarios in `features/` use `test` commits with
 their item, never `docs` commits. Implementers commit step definitions red first while
-scenarios remain `@wip`, run with `@wip` removed at the permitted tier, and observe each
-behaviour assertion fail before implementation; then implement and prove green.
-Undefined steps, setup failures and today's unknown-command diagnostic are not proof.
-Non-engine evidence is local; all real-engine evidence is CI-only.
+scenarios remain `@wip` and observe each behaviour assertion fail before implementation;
+then implement and prove green. Non-engine evidence that can run locally temporarily removes
+`@wip` for the run. All real-engine evidence is CI-only; manual macOS/Windows evidence uses
+the existing non-engine platform jobs. Undefined steps, setup failures and today's
+unknown-command diagnostic are not proof.
+
+[T-21's decision](../decisions/0002-dispatch-scoped-red-evidence.md) replaces tag removal
+for manual CI red evidence with the optional `red_scenarios` dispatch selector. It accepts
+only whitespace-separated complete scenario tags, validates every ID against parsed
+features, and selects those exact live/`@wip` IDs in memory under the existing tier and
+platform restrictions. Only the engine and manual macOS/Windows test steps receive it;
+ordinary Linux and proof do not. The harness reads it only in a guarded GitHub Actions
+manual dispatch, never enables the engine from it, and rejects incomplete execution.
+Empty input preserves live-only selection. Excluded cases explicitly skip and provide no
+red proof. Whole-suite manifest coverage reruns skip active red selections; synthetic
+harness subprocesses and product children strip the input.
+
+The coordinator publishes the complete step commit on the item branch, dispatches named
+IDs and records the resolved tested SHA, input IDs, run URL, runner/tier, outline row and
+failing Then assertion. Keep failed red runs visible; a passing run is not red evidence.
+After implementation removes `@wip`, require ordinary green CI at the actual pushed head
+with no red input. The failed dispatch is never a merge/closure prerequisite or substitute.
 
 T-16 implemented the engine-test tier. [features/README.md](../../features/README.md)
 is its operational authority: ordinary, smoke, coverage and mutation runs exclude

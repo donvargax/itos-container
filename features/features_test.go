@@ -14,8 +14,9 @@
 // godog's own tag filter takes exact tags joined by commas; itos's run
 // templates join the IDs they select with |, as a regular expression
 // (itos.yaml's tests.scenario.run), so -scenarios takes that expression and
-// is intersected with the live set and selected engine tier using godog.
-// A scenario tagged @wip never runs; @engine is CI-only (see README.md).
+// is intersected with the live set, selected engine tier and platform using godog.
+// Ordinary runs exclude @wip. Manual CI can select exact IDs for red evidence;
+// @engine is still CI-only and @linux requires a Linux test process (see README.md).
 //
 // The scenarios run itos-container as another process, where Go records
 // coverage only for a binary built with -cover and run with GOCOVERDIR naming
@@ -70,11 +71,7 @@ const (
 )
 
 func TestFeatures(t *testing.T) {
-	selection, err := selectScenarios(*scenarios, ".", featureEnvironment{
-		engine: os.Getenv("ITOS_CONTAINER_ENGINE_TESTS"),
-		ci:     os.Getenv("CI"), actions: os.Getenv("GITHUB_ACTIONS"),
-		os: runtime.GOOS, arch: runtime.GOARCH,
-	})
+	selection, err := selectScenarios(*scenarios, ".", readFeatureEnvironment(os.Getenv, runtime.GOOS, runtime.GOARCH))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,13 +101,49 @@ func TestFeatures(t *testing.T) {
 	}
 }
 
-// Environment and platform values enter the policy as data. Only TestFeatures
-// reads the real process context; regression fixtures never enable engine access.
-type featureEnvironment struct{ engine, ci, actions, os, arch string }
+// Environment and platform values enter the policy as data. Harness entry points
+// supply the real lookup; regression fixtures never enable engine access.
+type featureEnvironment struct{ engine, ci, actions, event, red, os, arch string }
+
+func readFeatureEnvironment(lookup func(string) string, hostOS, arch string) featureEnvironment {
+	env := featureEnvironment{
+		engine: lookup("ITOS_CONTAINER_ENGINE_TESTS"),
+		ci:     lookup("CI"), actions: lookup("GITHUB_ACTIONS"),
+		event: lookup("GITHUB_EVENT_NAME"), os: hostOS, arch: arch,
+	}
+	if env.manualDispatch() {
+		env.red = lookup("ITOS_CONTAINER_RED_SCENARIOS")
+	}
+	return env
+}
+
+func (env featureEnvironment) manualDispatch() bool {
+	return env.ci == "true" && env.actions == "true" && env.event == "workflow_dispatch"
+}
+
+func (env featureEnvironment) redRequested() bool {
+	return env.manualDispatch() && strings.TrimSpace(env.red) != ""
+}
+
+func (env featureEnvironment) redIDs() ([]string, error) {
+	if !env.redRequested() {
+		return nil, nil
+	}
+	ids := strings.Fields(env.red)
+	valid := regexp.MustCompile(`^@ID-[A-Z]+-[0-9]+$`)
+	for _, id := range ids {
+		if !valid.MatchString(id) {
+			return nil, fmt.Errorf("invalid red scenario tag %q: expected @ID-AREA-number", id)
+		}
+	}
+	slices.Sort(ids)
+	return slices.Compact(ids), nil
+}
 
 type scenarioSelection struct {
 	filter   string
 	engine   bool
+	red      bool
 	count    int
 	skip     string
 	excluded []string
@@ -152,6 +185,18 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 		return result, err
 	}
 	result.engine = engine
+	redIDs, err := env.redIDs()
+	if err != nil {
+		return result, err
+	}
+	result.red = len(redIDs) != 0
+	if result.red {
+		if selection != "" {
+			return result, fmt.Errorf("red scenarios cannot be combined with -scenarios")
+		}
+		// Only validated complete IDs become exact anchored alternatives.
+		selection = "^(?:" + strings.Join(redIDs, "|") + ")$"
+	}
 	pattern, err := regexp.Compile(selection)
 	if err != nil {
 		return result, err
@@ -166,13 +211,14 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	matched, liveEngine := 0, 0
 	for _, feature := range features {
 		for _, scenario := range feature.Pickles {
-			wip, needsEngine, matches := false, false, selection == ""
+			wip, needsEngine, needsLinux, matches := false, false, false, selection == ""
 			wrongPlatform := false
 			var ids []string
 			for _, tag := range scenario.Tags {
 				wrongPlatform = wrongPlatform || slices.Contains(env.excludedPlatforms(), tag.Name)
 				wip = wip || tag.Name == "@wip"
 				needsEngine = needsEngine || tag.Name == "@engine"
+				needsLinux = needsLinux || tag.Name == "@linux"
 				if strings.HasPrefix(tag.Name, "@ID-") {
 					ids = append(ids, tag.Name)
 				}
@@ -188,15 +234,17 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 				continue
 			}
 			matched++
-			if wip || needsEngine != engine || wrongPlatform {
+			if (wip && !result.red) || needsEngine != engine || wrongPlatform || (needsLinux && env.os != "linux") {
 				reason := "other tier"
 				if wrongPlatform {
 					reason = "other platform"
 				}
-				if wip {
+				if wip && !result.red {
 					reason = "@wip"
 				} else if needsEngine {
 					reason = "@engine disabled"
+				} else if needsLinux && env.os != "linux" {
+					reason = "@linux requires Linux"
 				}
 				result.excluded = append(result.excluded, fmt.Sprintf("%s %q (%s)", strings.Join(ids, ","), scenario.Name, reason))
 				continue
@@ -205,20 +253,33 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 			result.count++
 		}
 	}
+	for _, id := range redIDs {
+		if !matchedTags[id] {
+			return result, fmt.Errorf("unknown red scenario tag %q in feature inventory", id)
+		}
+	}
 	if selection != "" && matched == 0 {
 		return result, &noMatch{selection}
 	}
 	if result.count == 0 {
-		result.skip = "no live scenarios in selected tier (count 0)"
-		if engine && liveEngine == 0 {
+		result.skip = "no live scenarios in selected tier and platform (count 0)"
+		if result.red {
+			result.skip = fmt.Sprintf("no eligible red scenarios (count 0); excluded %d scenario(s): %s", len(result.excluded), strings.Join(result.excluded, "; "))
+		} else if engine && liveEngine == 0 {
 			result.skip = "no live @engine scenarios (count 0)"
 		}
 		return result, nil
 	}
 
-	tier := "~@wip&&~@engine"
+	tier := "~@engine"
 	if engine {
-		tier = "~@wip&&@engine"
+		tier = "@engine"
+	}
+	if !result.red {
+		tier = "~@wip&&" + tier
+	}
+	if env.os != "linux" {
+		tier += "&&~@linux"
 	}
 	for _, tag := range env.excludedPlatforms() {
 		tier += "&&~" + tag
@@ -228,7 +289,7 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 		var branches []string
 		for tag := range matchedTags {
 			// godog uses comma for OR and && for AND. Every OR branch must
-			// carry both exclusions, including expressions matching @wip.
+			// carry all restrictions, including expressions matching @wip or @linux.
 			branches = append(branches, tag+"&&"+tier)
 		}
 		slices.Sort(branches)
@@ -266,7 +327,7 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 	completed, unsuccessful := 0, false
 	suite := godog.TestSuite{Name: "itos-container", Options: &options, ScenarioInitializer: func(sc *godog.ScenarioContext) {
 		initialize(sc)
-		if selection.engine {
+		if selection.engine || selection.red {
 			sc.StepContext().After(func(ctx context.Context, _ *godog.Step, status godog.StepResultStatus, err error) (context.Context, error) {
 				unsuccessful = unsuccessful || status != godog.StepPassed || err != nil
 				return ctx, nil
@@ -279,9 +340,9 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 		}
 	}}
 	code := suite.Run()
-	if selection.engine && (unsuccessful || completed != selection.count) {
+	if (selection.engine || selection.red) && (unsuccessful || completed != selection.count) {
 		if options.Output != nil {
-			_, _ = fmt.Fprintf(options.Output, "engine execution incomplete or unsuccessful: completed %d of %d scenario(s)\n", completed, selection.count)
+			_, _ = fmt.Fprintf(options.Output, "selected execution incomplete or unsuccessful: completed %d of %d scenario(s)\n", completed, selection.count)
 		}
 		return 1
 	}
