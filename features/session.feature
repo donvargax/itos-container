@@ -382,9 +382,12 @@ Feature: Owned unstarted worker creation and cleanup
 
   # Seed unsafe intent paths after a safe approval/snapshot; refusal must come
   # from ownership storage, not preflight. Faulted paths are never followed.
-  # Wrong-owner fixture supplies a different current UID through the host-identity
-  # port; the real adapter must reject the actual record's owner. Never chown or
-  # elevate a test. Other rows run real filesystem faults.
+  # Required unit test in the session store's disk adapter: through its injected
+  # file operations, only the record's metadata reports another UID. Keep host
+  # identity, ancestors, snapshot and record payload valid. Assert that record
+  # validation is reached and the store refuses with ownership-unsafe. Never
+  # change the current UID, chown or elevate the test. The filesystem-defect rows
+  # below use real filesystem faults.
   # Stage/ID rows change only stage and container_id in an otherwise valid,
   # independently seeded record. Each has a matching never-started resource, so
   # accepting the contradictory record could authorize deletion. The unsupported
@@ -405,7 +408,6 @@ Feature: Owned unstarted worker creation and cleanup
       | record FIFO                           | ownership-unsafe  |
       | record with another hard link         | ownership-unsafe  |
       | record mode 0644                      | ownership-unsafe  |
-      | record owned by another effective UID | ownership-unsafe  |
       | truncated record                      | ownership-invalid |
       | duplicate container_id field          | ownership-invalid |
       | unsupported schema                    | ownership-invalid |
