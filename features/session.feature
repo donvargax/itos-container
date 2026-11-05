@@ -98,6 +98,8 @@ Feature: Owned unstarted worker creation and cleanup
   # independently of the create reply before durably recording the concrete ID.
   # A container must have the exact name, labels and image config ID and remain
   # in Docker's created state with no start time/PID before owned-unstarted succeeds.
+  # After an acknowledged create, the inspected full ID must also equal the
+  # returned full ID; the create reply alone cannot establish those observations.
   # An image reference alone is not its distinct config identity.
   #
   # Cleanup needs a safely loaded intent plus the matching current user, selected
@@ -253,6 +255,46 @@ Feature: Owned unstarted worker creation and cleanup
       | umask |
       | 0000  |
       | 0777  |
+
+  # Exercise the check BEFORE owned publication, separately from recovery's
+  # identity checks. The Given only configures the approved fixture and a fault
+  # on every container inspection after create; preflight remains valid. The
+  # When performs one real production create, whose reply has the actual full ID.
+  # The independent observer retains the actual never-started resource; only the
+  # product-facing inspection is faulted. No fault is cleared during this action.
+  # Unavailable, not-found or malformed inspection leaves create-uncertain;
+  # a complete contradictory identity/state yields ownership-refused. Both retain
+  # the original durable intent with an empty container_id for later revalidation,
+  # without owned/absent publication or deletion on the strength of the reply.
+  # Missing State is incomplete evidence, not an implicit never-started state.
+  # ID-SESSION-01 is the matching-inspection positive control. Today the first
+  # Then fails because neither acknowledged create nor its inspection exists.
+  @wip @slice-9 @ID-SESSION-16 @linux
+  Scenario Outline: An acknowledged create needs independent inspection before ownership handoff
+    Given an approved session contract fixture with post-create inspection "<inspection>"
+    When the session contract attempts creation through each local backend
+    Then each backend reports "<outcome>" after one acknowledged create and an attempted inspection of its returned full ID
+    And the original durable intent remains unchanged with an empty container ID and no owned or absent update
+    And no successful ownership handoff or worker start was returned or attempted
+    And the post-create session journal contains inspection requests only
+    And session operations preserve unrelated resources, checkout edits, approval and frozen settings
+
+    Examples:
+      | inspection                     | outcome           |
+      | unavailable                    | create-uncertain  |
+      | explicit not-found             | create-uncertain  |
+      | malformed response             | create-uncertain  |
+      | missing State                  | create-uncertain  |
+      | different full container ID    | ownership-refused |
+      | different name                 | ownership-refused |
+      | different image config ID      | ownership-refused |
+      | different intent label         | ownership-refused |
+      | different project label        | ownership-refused |
+      | different fingerprint label    | ownership-refused |
+      | running state                  | ownership-refused |
+      | exited state after starting    | ownership-refused |
+      | created state with nonzero PID  | ownership-refused |
+      | created state with StartedAt    | ownership-refused |
 
   # First Then needs a specific new persistence failure, not today's refusal.
   @wip @slice-9 @ID-SESSION-02 @linux
