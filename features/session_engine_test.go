@@ -173,6 +173,9 @@ func (a *sessionAPI) allowed(r *http.Request, entry sessionRequest) bool {
 	if doctorAllowedRequest(doctorRequest{Method: r.Method, Path: r.URL.Path, Query: r.URL.RawQuery}, w.doctor.image, true) {
 		return true
 	}
+	if entry.Method == "GET" && entry.Path == "/images/"+w.doctor.imageID+"/json" && r.URL.RawQuery == "" {
+		return true
+	}
 	name := "itos-container-" + w.session.token
 	if entry.Path == "/containers/create" && r.Method == "POST" {
 		return len(r.URL.Query()) == 1 && r.URL.Query().Get("name") == name && w.sessionRequestProblem(entry.Body) == nil
@@ -262,6 +265,23 @@ func (a *sessionAPI) respondLocal(r *http.Request) (int, http.Header, []byte, er
 		value = base.info
 	case "/images/" + a.w.doctor.image + "/json":
 		value = base.image
+	case "/images/" + a.w.doctor.imageID + "/json":
+		image := approvalClone(base.image)
+		if s.mode == "image" {
+			switch s.condition {
+			case "declared volume":
+				object(image["Config"])["Volumes"] = map[string]any{"/data": map[string]any{}}
+			case "different image config ID":
+				image["Id"] = "sha256:" + strings.Repeat("e", 64)
+			case "missing Config":
+				delete(image, "Config")
+			case "unavailable":
+				return 503, header, []byte(`{"message":"unavailable"}`), nil
+			case "malformed response":
+				return 200, header, []byte(`{"broken"`), nil
+			}
+		}
+		value = image
 	case "/containers/create":
 		id := approvalHash(map[string]any{"fixture-created": a.w.session.token})
 		labels := a.w.sessionLabels()

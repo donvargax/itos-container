@@ -6,6 +6,32 @@ import (
 )
 
 func (w *world) sessionLocalSteps(sc *godog.ScenarioContext) {
+	sc.Step(`^an approved session contract fixture with frozen image inspection "([^"]*)"$`, func(value string) error { return w.sessionLocalFixture("image", value) })
+	sc.Step(`^each backend inspects the frozen image config ID before any create$`, func() error {
+		return w.sessionEach(func(w *world) error {
+			for _, r := range w.session.api.requests {
+				if r.Method == "POST" {
+					return fmt.Errorf("create preceded frozen image inspection")
+				}
+				if r.Method == "GET" && r.Path == "/images/"+w.doctor.imageID+"/json" {
+					return nil
+				}
+			}
+			return fmt.Errorf("frozen image config ID was never inspected")
+		})
+	})
+	sc.Step(`^a session recovery fixture with "([^"]*)" and stage "([^"]*)"$`, func(storage, stage string) error {
+		if err := w.sessionLocalFixture("storage", storage); err != nil {
+			return err
+		}
+		return w.sessionEach(func(w *world) error {
+			record := w.sessionExpectedRecord(stage, w.session.seedID)
+			if stage == "intent" {
+				record["container_id"] = ""
+			}
+			return writeManifestFixture(w.sessionRecordPath(), approvalJSON(record), 0600)
+		})
+	})
 	sc.Step(`^an approved session contract fixture with child umask "([^"]*)"$`, func(value string) error { return w.sessionLocalFixture("umask", value) })
 	sc.Step(`^an approved session contract fixture with post\-create inspection "([^"]*)"$`, func(value string) error { return w.sessionLocalFixture("inspect", value) })
 	sc.Step(`^an approved session contract fixture with intent fault "([^"]*)"$`, func(value string) error { return w.sessionLocalFixture("intent", value) })

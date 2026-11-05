@@ -87,6 +87,12 @@ Feature: Owned unstarted worker creation and cleanup
   # increment's minimal request has the resolved host UID:GID, NetworkMode none,
   # read-only root, CapDrop ALL, no-new-privileges, pids limit 4096, restart no,
   # auto-remove false, no privileged/host namespaces, ports, mounts or volumes.
+  # Before create, inspect the frozen image config ID, require that exact ID and
+  # a present Config with no Volumes, and create by that immutable ID. A missing,
+  # malformed or unavailable image inspection leaves create-uncertain without a
+  # create request; a different ID or any declared volume is ownership-refused.
+  # Retain the complete intent on either refusal. Inspect observations must also
+  # have no Mounts or Config.Volumes before handoff or cleanup authorization.
   # It has no need for writable worker storage because it NEVER starts. Slice-10
   # will add the approved checkout bind, tmpfs and literal foreground argv.
   # Use an inert /bin/true command with an explicitly empty entrypoint; image
@@ -707,3 +713,60 @@ Feature: Owned unstarted worker creation and cleanup
       | fault                      | outcome                |
       | lost create response       | create-uncertain       |
       | owned-record file fsync     | ownership-write-failed |
+
+  # Docker inherits image VOLUME declarations even when create omits Volumes.
+  # Supply these responses only for inspection by frozen config ID; slice-8's
+  # reference-based preflight remains valid. No real daemon or image is needed.
+  # ID-SESSION-01 is the empty-volume image's successful-create control.
+  @slice-9 @ID-SESSION-22 @linux @wip
+  Scenario Outline: Frozen image inspection must exclude implicit volumes before create
+    Given an approved session contract fixture with frozen image inspection "<inspection>"
+    When the session contract attempts creation through each local backend
+    Then each backend reports "<outcome>" without a successful ownership handoff
+    And each backend inspects the frozen image config ID before any create
+    And no container create or later mutation was attempted
+    And the original durable intent remains unchanged with an empty container ID and no owned or absent update
+    And session operations preserve unrelated resources, checkout edits, approval and frozen settings
+
+    Examples:
+      | inspection                | outcome           |
+      | declared volume           | ownership-refused |
+      | different image config ID | ownership-refused |
+      | missing Config            | create-uncertain  |
+      | unavailable               | create-uncertain  |
+      | malformed response        | create-uncertain  |
+
+  # Only the product-facing inspect reply is changed, after an acknowledged
+  # create. A truthful create reply does not override contradictory storage facts.
+  @slice-9 @ID-SESSION-23 @linux @wip
+  Scenario Outline: Unexpected container storage prevents ownership handoff
+    Given an approved session contract fixture with post-create inspection "<inspection>"
+    When the session contract attempts creation through each local backend
+    Then each backend reports "ownership-refused" after one acknowledged create and an attempted inspection of its returned full ID
+    And the original durable intent remains unchanged with an empty container ID and no owned or absent update
+    And no successful ownership handoff or worker start was returned or attempted
+    And the post-create session journal contains inspection requests only
+    And session operations preserve unrelated resources, checkout edits, approval and frozen settings
+
+    Examples:
+      | inspection         |
+      | mounted volume     |
+      | configured volume  |
+
+  # Seed complete ownership and the worker independently. Storage is outside the
+  # unstarted-only contract even when the name, labels, image and state match.
+  @slice-9 @ID-SESSION-24 @linux @wip
+  Scenario Outline: Unexpected container storage prevents recovery removal
+    Given a session recovery fixture with "<storage>" and stage "<stage>"
+    When a new session controller attempts cleanup through each local backend
+    Then each backend reports ownership-refused without a successful ownership handoff
+    And no container create or later mutation was attempted
+    And the ownership record and every candidate resource are retained unchanged
+    And session operations preserve unrelated resources, checkout edits, approval and frozen settings
+
+    Examples:
+      | storage           | stage  |
+      | mounted volume    | owned  |
+      | configured volume | owned  |
+      | mounted volume    | intent |
+      | configured volume | intent |

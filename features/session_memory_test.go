@@ -18,6 +18,7 @@ type sessionMemoryObservation struct {
 	Running                                        bool
 	PID                                            int
 	Started                                        bool
+	Mounts, Volumes                                bool
 }
 type sessionMemoryEvent struct {
 	Method, Target string
@@ -45,10 +46,17 @@ func memoryObservation(c map[string]any) sessionMemoryObservation {
 	running, _ := state["Running"].(bool)
 	pid, _ := state["Pid"].(float64)
 	started := text(state, "StartedAt")
-	return sessionMemoryObservation{ID: text(c, "Id"), Name: strings.TrimPrefix(text(c, "Name"), "/"), ImageID: text(c, "Image"), Token: text(labels, "io.itos-container.intent"), Project: text(labels, "io.itos-container.project"), Fingerprint: text(labels, "io.itos-container.fingerprint"), StatePresent: state != nil, Status: text(state, "Status"), Running: running, PID: int(pid), Started: started != "" && started != "0001-01-01T00:00:00Z"}
+	mounts, _ := c["Mounts"].([]any)
+	return sessionMemoryObservation{Mounts: len(mounts) != 0, Volumes: len(object(object(c["Config"])["Volumes"])) != 0, ID: text(c, "Id"), Name: strings.TrimPrefix(text(c, "Name"), "/"), ImageID: text(c, "Image"), Token: text(labels, "io.itos-container.intent"), Project: text(labels, "io.itos-container.project"), Fingerprint: text(labels, "io.itos-container.fingerprint"), StatePresent: state != nil, Status: text(state, "Status"), Running: running, PID: int(pid), Started: started != "" && started != "0001-01-01T00:00:00Z"}
 }
 func memoryContainer(o sessionMemoryObservation) map[string]any {
 	c := map[string]any{"Id": o.ID, "Name": "/" + o.Name, "Image": o.ImageID, "Config": map[string]any{"Labels": map[string]any{"io.itos-container.intent": o.Token, "io.itos-container.project": o.Project, "io.itos-container.fingerprint": o.Fingerprint}}}
+	if o.Mounts {
+		sessionMutateInspection(c, "mounted volume")
+	}
+	if o.Volumes {
+		sessionMutateInspection(c, "configured volume")
+	}
 	if o.StatePresent {
 		started := "0001-01-01T00:00:00Z"
 		if o.Started {
@@ -118,6 +126,9 @@ func (w *world) writeMemorySeed(path string) error {
 	seed := map[string]any{"Unavailable": unavailable, "Records": records, "Snapshots": snapshots, "Resources": resources, "UnsafeRecord": unsafeRecord, "UnsafeSnapshot": unsafeSnapshot,
 		"Endpoint": w.doctor.env["DOCKER_HOST"], "DaemonID": w.doctor.engine.info["ID"], "CreateID": approvalHash(map[string]any{"fixture-created": s.token}),
 		"Inspection": s.inspection, "Following": s.following, "Removal": s.removal, "Fault": s.fault, "DisagreeName": s.condition == "name inspection and ID inspection disagree", "Removed": removed}
+	if s.mode == "image" {
+		seed["ImageInspection"] = s.condition
+	}
 	return os.WriteFile(path, approvalJSON(seed), 0600)
 }
 func (w *world) observeMemory(observed *sessionMemoryOutput) error {
@@ -150,6 +161,8 @@ func (w *world) observeMemory(observed *sessionMemoryOutput) error {
 		switch e.Method {
 		case "INFO":
 			r.Method, r.Path, r.Status = "GET", "/info", 200
+		case "IMAGE":
+			r.Method, r.Path, r.Status = "GET", "/images/"+e.Target+"/json", 200
 		case "CREATE":
 			r.Method, r.Path, r.Status = "POST", "/containers/create", 201
 			r.Query = "name=" + e.Target

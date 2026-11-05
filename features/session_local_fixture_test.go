@@ -67,9 +67,9 @@ func (w *world) sessionLocalFixture(mode, condition string) error {
 			s.following = condition
 		case "handoff":
 			s.change = condition
-		case "identity", "evidence", "pre-remove", "changed", "already-absent", "remove":
+		case "identity", "evidence", "pre-remove", "changed", "already-absent", "remove", "storage":
 			s.mode = "recovery"
-		case "twice":
+		case "twice", "image":
 		default:
 			return fmt.Errorf("unknown local fixture mode %q", mode)
 		}
@@ -146,6 +146,9 @@ func (w *world) sessionSeedRecovery(mode, condition string) error {
 		default:
 			return fmt.Errorf("unknown identity fixture %q", condition)
 		}
+	}
+	if mode == "storage" {
+		sessionMutateInspection(container, condition)
 	}
 	if mode == "pre-remove" {
 		s.inspection = condition
@@ -392,6 +395,10 @@ func (w *world) sessionLocalAction(action string) error {
 
 func sessionMutateInspection(c map[string]any, condition string) {
 	switch condition {
+	case "mounted volume":
+		c["Mounts"] = []any{map[string]any{"Type": "volume", "Name": "unexpected", "Destination": "/data"}}
+	case "configured volume":
+		object(c["Config"])["Volumes"] = map[string]any{"/data": map[string]any{}}
 	case "different full container ID":
 		c["Id"] = strings.Repeat("e", 64)
 	case "different name":
