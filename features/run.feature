@@ -112,7 +112,9 @@ Feature: Run invocation refusals
   # Source: https://github.com/creack/pty/releases/tag/v1.1.24 . Existing pinned
   # golang.org/x/term v0.46.0 can verify terminal descriptors. This selection
   # adds no runtime dependency, engine access, or additional host support claim.
-  @ID-RUN-04 @slice-7
+  # @linux excludes this fixture before setup on other platforms; portable
+  # refusal cases still run there. Allocation failures on Linux remain failures.
+  @ID-RUN-04 @slice-7 @linux
   Scenario Outline: Run refuses JSON at a terminal as it does with redirected streams
     When itos-container runs at a terminal with "<arguments>" and the environment "ITOS_JSON=<inherited>"
     Then its run JSON reports exactly one refusal with rule "run.json-unsupported" and exit 2
