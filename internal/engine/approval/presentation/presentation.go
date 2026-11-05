@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf16"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
@@ -34,7 +36,25 @@ func object(text string) any {
 	_ = json.Unmarshal([]byte(text), &value)
 	return value
 }
-func jsonText(value any) string { data, _ := json.Marshal(value); return string(data) }
+func jsonText(value any) string { data, _ := json.Marshal(value); return terminalText(string(data)) }
+
+// terminalText escapes non-printing Unicode for display only. encoding/json
+// already escapes ASCII controls but leaves C1 and bidi controls as literal UTF-8.
+// JSON escapes (including surrogate pairs) preserve the decoded values without
+// changing the canonical bytes used by approval records and fingerprints.
+func terminalText(text string) string {
+	var out strings.Builder
+	for _, r := range text {
+		if unicode.IsPrint(r) {
+			out.WriteRune(r)
+		} else {
+			for _, unit := range utf16.Encode([]rune{r}) {
+				_, _ = fmt.Fprintf(&out, `\u%04x`, unit)
+			}
+		}
+	}
+	return out.String()
+}
 
 // Report computes sorted leaf differences, comparing containerEnv as one map.
 func (u UI) Report(v port.View) port.Report {
@@ -156,7 +176,7 @@ func (u UI) Print(v port.View, withJSON bool) int {
 		}{1, code == 0, problems, report})
 		_, _ = fmt.Fprintln(u.Out, string(data))
 	} else {
-		_, _ = fmt.Fprintf(u.Out, "approval %s\nfingerprint: %s\n%s\n", report.Status, report.Fingerprint, v.Candidate.Canonical)
+		_, _ = fmt.Fprintf(u.Out, "approval %s\nfingerprint: %s\n%s\n", report.Status, report.Fingerprint, terminalText(v.Candidate.Canonical))
 		if report.Status != "matching" {
 			_, _ = fmt.Fprintln(u.Out, "Review with itos container approve")
 		}
@@ -164,10 +184,10 @@ func (u UI) Print(v port.View, withJSON bool) int {
 	return code
 }
 
-// Review shows all data before accepting only a complete yes line. JSON encoding
-// escapes every terminal control without altering stored values.
+// Review shows all data before accepting only a complete yes line. Display-only
+// escaping prevents terminal controls from altering the review or its differences.
 func (u UI) Review(v port.View) bool {
-	_, _ = fmt.Fprintln(u.Out, "Effective offline settings:", v.Candidate.Canonical)
+	_, _ = fmt.Fprintln(u.Out, "Effective offline settings:", terminalText(v.Candidate.Canonical))
 	_, _ = fmt.Fprintln(u.Out, "offline-v1: checkout-only host mount at /workspace; UID:GID override; no supplementary groups; read-only root; dropped capabilities; no-new-privileges; network none; no ports, grants or hooks; ephemeral tmpfs; pids limit 4096")
 	if m := v.Inspection.Manifest; m != nil {
 		for _, unused := range append(append([]string{}, m.Unused...), m.Metadata.Unused...) {
@@ -175,7 +195,7 @@ func (u UI) Review(v port.View) bool {
 		}
 	}
 	for _, change := range u.Report(v).Differences {
-		_, _ = fmt.Fprintf(u.Out, "%s: %s -> %s\n", change.Path, jsonText(change.Before), jsonText(change.After))
+		_, _ = fmt.Fprintf(u.Out, "%s: %s -> %s\n", terminalText(change.Path), jsonText(change.Before), jsonText(change.After))
 	}
 	_, _ = fmt.Fprint(u.Out, "Approve these settings? y/N: ")
 	line, err := bufio.NewReader(io.LimitReader(u.In, 4097)).ReadString('\n')

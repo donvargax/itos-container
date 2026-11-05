@@ -71,7 +71,7 @@ func approvalDisplayedJSON(text string, want any) error {
 func (w *world) approvalUnicodeReview(kind, source string) error {
 	before, _, prompt := strings.Cut(w.approval.beforeReview, "Approve these settings? y/N: ")
 	if !prompt || strings.Count(w.stdout, "y/N") != 1 {
-		return fmt.Errorf("expected one complete review before consent")
+		return fmt.Errorf("expected one complete review before consent; exit %d, review %q, stderr %q", w.exit, w.approval.beforeReview, w.stderr)
 	}
 	if err := approvalUnicodeSafe(w.stdout + w.stderr); err != nil {
 		return err

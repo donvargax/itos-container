@@ -695,7 +695,7 @@ Feature: Review and record approval of exact offline settings
       | inherited ITOS_JSON=1    | no fingerprint      | confirmation-required JSON, no prompt   | 1    |
       | --json                  | exact fingerprint   | one matching JSON object, no prompt     | 0    |
 
-  @wip @slice-4 @ID-APPROVAL-33 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-33 @local-engine-fixture
   Scenario Outline: Terminal approval escapes Unicode controls in current settings and prior differences
     Given an approval checkout and isolated host state
     And approval review contains "<controls>" controls in the "<source>" environment
@@ -712,7 +712,7 @@ Feature: Review and record approval of exact offline settings
       | C1            | prior   | 2          |
       | bidirectional | prior   | 2          |
 
-  @wip @slice-4 @ID-APPROVAL-34 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-34 @local-engine-fixture
   Scenario Outline: Plain approval status escapes Unicode controls without changing approved settings
     Given an approval checkout and isolated host state
     And approval review contains "<controls>" controls in the "current" environment

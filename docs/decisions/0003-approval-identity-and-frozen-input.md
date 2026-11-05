@@ -88,3 +88,15 @@ including the feature harness regressions, passed locally. The run-selection tes
 now supplies the host architecture and checks the Linux-amd64-only approval
 fixtures separately from portable refusals and Linux PTY cases. Module tidying
 only reclassified the already pinned `golang.org/x/sys` as a direct dependency.
+
+PR #28's Unicode-control regression was committed red first as `1192906`.
+With `@wip` removed, all six `ID-APPROVAL-33/34` examples failed at their
+presentation assertions on raw C1 or bidirectional controls. They then passed
+with display-only JSON escaping of non-printing Unicode in approval reviews,
+prior-value differences and plain status. The fixtures independently compare
+decoded displayed settings, stored canonical bytes and fingerprints. Renderer
+tests also cover every C1 code point, notices, difference paths and supplementary
+Unicode escapes while retaining printable Unicode and structured JSON values.
+The affected slice-3/slice-4/slice-7 selection and platform-selection regressions
+passed. Fixtures used disposable state and the synthetic Engine API; CI still
+owns fresh changed-code proof.
