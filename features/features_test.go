@@ -130,6 +130,19 @@ func (env featureEnvironment) engineEnabled() (bool, error) {
 	}
 }
 
+// These tags select native binaries before any scenario hook or fixture runs.
+// The repository's macOS/Windows jobs are manual; Linux proof never runs them.
+func (env featureEnvironment) excludedPlatforms() []string {
+	var tags []string
+	if env.os != "linux" || env.arch != "amd64" {
+		tags = append(tags, "@local-engine-fixture")
+	}
+	if env.os != "darwin" && env.os != "windows" {
+		tags = append(tags, "@manual-platform", "@unsupported-host")
+	}
+	return tags
+}
+
 // RetrieveFeatures compiles Gherkin pickles, including inherited Feature, Rule,
 // Outline and Examples tags. Selection runs before any binary build or hooks.
 func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSelection, error) {
@@ -154,8 +167,10 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	for _, feature := range features {
 		for _, scenario := range feature.Pickles {
 			wip, needsEngine, matches := false, false, selection == ""
+			wrongPlatform := false
 			var ids []string
 			for _, tag := range scenario.Tags {
+				wrongPlatform = wrongPlatform || slices.Contains(env.excludedPlatforms(), tag.Name)
 				wip = wip || tag.Name == "@wip"
 				needsEngine = needsEngine || tag.Name == "@engine"
 				if strings.HasPrefix(tag.Name, "@ID-") {
@@ -173,8 +188,11 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 				continue
 			}
 			matched++
-			if wip || needsEngine != engine {
+			if wip || needsEngine != engine || wrongPlatform {
 				reason := "other tier"
+				if wrongPlatform {
+					reason = "other platform"
+				}
 				if wip {
 					reason = "@wip"
 				} else if needsEngine {
@@ -201,6 +219,9 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	tier := "~@wip&&~@engine"
 	if engine {
 		tier = "~@wip&&@engine"
+	}
+	for _, tag := range env.excludedPlatforms() {
+		tier += "&&~" + tag
 	}
 	result.filter = tier
 	if selection != "" {

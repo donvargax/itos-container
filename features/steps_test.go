@@ -39,6 +39,7 @@ type world struct {
 	stdin    string // the text the run reads from its standard input, "" for none
 	policy   *policyWorld
 	manifest *manifestWorld
+	doctor   *doctorWorld
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -49,6 +50,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
 		return ctx, nil
@@ -139,6 +141,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
 	w.policySteps(sc)
 	w.manifestSteps(sc)
+	w.doctorSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.
@@ -194,7 +197,7 @@ func (w *world) env() []string {
 		"GIT_COMMITTER_EMAIL=features@localhost",
 		"PATH="+callerPath(),
 	)
-	return w.manifestEnv(w.policyEnv(env))
+	return w.doctorEnv(w.manifestEnv(w.policyEnv(env)))
 }
 
 // withEnv is the scenarios' environment with each NAME=value of vars, a
@@ -321,6 +324,9 @@ func (w *world) runWith(env []string, args string) error {
 	fields, err := commandWords(args)
 	if err != nil {
 		return err
+	}
+	if w.doctor != nil {
+		return w.runDoctor(env, fields...)
 	}
 	dir := w.dir
 	if w.policy != nil {
