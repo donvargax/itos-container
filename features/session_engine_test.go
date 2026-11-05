@@ -72,9 +72,11 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.problem = errors.New("session request body is not an object")
 		}
 	}
-	entry.Record, err = sessionReadRecord(a.w.sessionRecordPath())
-	if err != nil {
-		a.problem = err
+	if entry.Method == "POST" && entry.Path == "/containers/create" {
+		entry.Record, err = sessionReadRecord(a.w.sessionRecordPath())
+		if err != nil {
+			a.problem = err
+		}
 	}
 	entry.Events, err = sessionReadEvents(a.w.session.journal)
 	if err != nil {
@@ -109,7 +111,10 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 				a.observed[created.ID] = observed
 			}
 		}
-		if a.w.session.fault == "lost create response" {
+		if a.w.session.fault == "empty create ID" {
+			response = []byte(`{"Id":"","Warnings":[]}`)
+		}
+		if a.w.session.fault == "lost create response" || a.w.session.fault == "delayed create" {
 			conn, _, err := out.(http.Hijacker).Hijack()
 			if err != nil {
 				a.problem = err
@@ -129,6 +134,29 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 			}
 		} else {
 			a.absent[id] = a.local[id] == nil
+		}
+	}
+	if entry.Method == "DELETE" && a.w.session.removal == "response lost" {
+		conn, _, hijackErr := out.(http.Hijacker).Hijack()
+		if hijackErr != nil {
+			a.problem = hijackErr
+		} else {
+			_ = conn.Close()
+		}
+		return
+	}
+	if entry.Method == "GET" && strings.HasPrefix(entry.Path, "/containers/") && a.w.session.inspection == "replace socket" {
+		a.w.session.inspection = ""
+		path := strings.TrimPrefix(a.w.doctor.env["DOCKER_HOST"], "unix://")
+		if e := os.Rename(path, path+".old"); e != nil {
+			a.problem = e
+		} else {
+			listener, e := net.Listen("unix", path)
+			if e != nil {
+				a.problem = e
+			} else {
+				go func() { _ = a.server.Serve(listener) }()
+			}
 		}
 	}
 	for _, name := range []string{"Content-Type", "API-Version", "Docker-Experimental", "OSType"} {
@@ -155,15 +183,18 @@ func (a *sessionAPI) allowed(r *http.Request, entry sessionRequest) bool {
 	id := strings.TrimPrefix(entry.Path, "/containers/")
 	if r.Method == "GET" && strings.HasSuffix(id, "/json") && r.URL.RawQuery == "" {
 		id = strings.TrimSuffix(id, "/json")
-		return id == name || containsSessionID(a.created, id)
+		return id == name || containsSessionID(a.created, id) || (w.doctor.real == nil && id == w.session.seedID)
 	}
-	if r.Method != "DELETE" || !containsSessionID(a.created, id) {
+	if r.Method != "DELETE" || (!containsSessionID(a.created, id) && (w.doctor.real != nil || id != w.session.seedID)) {
 		return false
 	}
 	for key, values := range r.URL.Query() {
 		if (key != "force" && key != "v") || len(values) != 1 || (values[0] != "false" && values[0] != "0") {
 			return false
 		}
+	}
+	if w.doctor.real == nil {
+		return true
 	}
 	// Independently re-inspect immediately before forwarding removal. This is a
 	// harness safety check; only product requests count toward behavior evidence.
@@ -209,6 +240,19 @@ func (a *sessionAPI) respondLocal(r *http.Request) (int, http.Header, []byte, er
 	header := http.Header{"Content-Type": []string{"application/json"}, "API-Version": []string{"1.56"}, "OSType": []string{"linux"}}
 	base := a.w.doctor.engine
 	var value any
+	s := a.w.session
+	compound := false
+	if s.fault == "owned-record file fsync then unavailable" {
+		events, _ := sessionReadEvents(s.journal)
+		for _, e := range events {
+			if e.Stage == "owned" && e.Operation == "file fsync" && e.Failed {
+				compound = true
+			}
+		}
+	}
+	if compound {
+		return 503, header, []byte(`{"message":"unavailable"}`), nil
+	}
 	switch path {
 	case "/_ping":
 		return 200, header, []byte("OK"), nil
@@ -227,8 +271,31 @@ func (a *sessionAPI) respondLocal(r *http.Request) (int, http.Header, []byte, er
 	default:
 		id := strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/json")
 		if r.Method == "DELETE" {
-			delete(a.local, id)
+			if s.following != "still present" {
+				delete(a.local, id)
+			}
 			return 204, header, nil, nil
+		}
+		condition := s.inspection
+		removed := false
+		for _, q := range a.requests {
+			if q.Method == "DELETE" {
+				removed = true
+			}
+		}
+		if removed {
+			condition = s.following
+		}
+		if s.fault == "delayed create" {
+			condition = s.following
+		}
+		switch condition {
+		case "unavailable":
+			return 503, header, []byte(`{"message":"unavailable"}`), nil
+		case "explicit not-found":
+			return 404, header, []byte(`{"message":"absent"}`), nil
+		case "malformed response":
+			return 200, header, []byte(`{"broken"`), nil
 		}
 		value = a.local[id]
 		if id == "itos-container-"+a.w.session.token {
@@ -237,6 +304,14 @@ func (a *sessionAPI) respondLocal(r *http.Request) (int, http.Header, []byte, er
 					value = candidate
 				}
 			}
+		}
+		if value != nil && !reflect.ValueOf(value).IsNil() {
+			c := approvalClone(value.(map[string]any))
+			// Name lookup stays matching in the contradictory-observations case.
+			if s.condition != "name inspection and ID inspection disagree" || id != "itos-container-"+s.token {
+				sessionMutateInspection(c, condition)
+			}
+			value = c
 		}
 		if value == nil || reflect.ValueOf(value).IsNil() {
 			return 404, header, []byte(`{"message":"No such container"}`), nil

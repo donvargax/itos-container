@@ -9,6 +9,7 @@ import (
 )
 
 func (w *world) sessionSteps(sc *godog.ScenarioContext) {
+	w.sessionLocalSteps(sc)
 	sc.Step(`^a CI-only session fixture using the independently inspected T-20 cached image$`, func() error { return w.sessionFixture(true, "0022") })
 	sc.Step(`^the CI session fixture injects "([^"]*)" after native Docker accepts create$`, func(fault string) error {
 		if fault != "lost create response" && fault != "owned-record file fsync" {
@@ -25,7 +26,7 @@ func (w *world) sessionSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^native Docker independently confirms that exact ID absent after product cleanup$`, w.sessionAbsent)
 	sc.Step(`^the protected record durably records that ID absent without a workload result$`, w.sessionDurableAbsent)
 	sc.Step(`^the CI audit preserves unrelated engine resources, checkout edits, approvals and snapshots$`, w.sessionUnrelated)
-	sc.Step(`^no session operation starts work, acquires images or leaks sensitive fixture values$`, w.sessionNoForbidden)
+	sc.Step(`^no session operation starts work, acquires images or leaks sensitive fixture values$`, func() error { return w.sessionEach((*world).sessionNoForbidden) })
 	sc.Step(`^the CI creation result is "([^"]*)" after exactly one independently observed unstarted create$`, func(outcome string) error {
 		if err := w.sessionObservedCreate(); err != nil {
 			return err
@@ -36,17 +37,23 @@ func (w *world) sessionSteps(sc *godog.ScenarioContext) {
 		return w.sessionIntentBeforeCreate()
 	})
 	sc.Step(`^no successful ownership handoff or worker start was returned or attempted$`, func() error {
-		if w.session.create.Handoff || w.session.create.ID != "" || w.session.create.Workload != nil {
-			return fmt.Errorf("failed creation supplied a usable handoff or workload result")
-		}
-		return w.sessionNoForbidden()
+		return w.sessionEach(func(w *world) error {
+			if w.session.create.Handoff || w.session.create.ID != "" || w.session.create.Workload != nil {
+				return fmt.Errorf("failed creation supplied a usable handoff or workload result")
+			}
+			return w.sessionNoForbidden()
+		})
 	})
 	sc.Step(`^the fresh controller revalidates the intent, daemon, random name and concrete ID before product removal$`, w.sessionRecoveryInspection)
 	sc.Step(`^no replacement create, worker start or foreign removal was attempted$`, func() error {
-		if err := w.sessionObservedCreate(); err != nil {
-			return err
-		}
-		return w.sessionNoForbidden()
+		return w.sessionEach(func(w *world) error {
+			if w.session.mode != "recovery" {
+				if err := w.sessionObservedCreate(); err != nil {
+					return err
+				}
+			}
+			return w.sessionNoForbidden()
+		})
 	})
 }
 
@@ -82,11 +89,11 @@ func (w *world) sessionNoForbidden() error {
 		id := strings.TrimPrefix(request.Path, "/containers/")
 		if request.Method == "GET" && strings.HasSuffix(id, "/json") && request.Query == "" {
 			id = strings.TrimSuffix(id, "/json")
-			if id == "itos-container-"+s.token || containsSessionID(s.api.created, id) {
+			if id == "itos-container-"+s.token || (containsSessionID(s.api.created, id) || (w.doctor.real == nil && id == s.seedID)) {
 				continue
 			}
 		}
-		if request.Method == "DELETE" && containsSessionID(s.api.created, id) && request.Status == 204 {
+		if request.Method == "DELETE" && (containsSessionID(s.api.created, id) || (w.doctor.real == nil && id == s.seedID)) && request.Status == 204 {
 			continue
 		}
 		return fmt.Errorf("session attempted an unexpected engine request")

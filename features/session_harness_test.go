@@ -15,9 +15,8 @@ import (
 	"github.com/cucumber/godog"
 )
 
-// Check every expanded CI row without invoking any fixture or engine. The
-// remaining local fault scenarios intentionally await their own step commit.
-func TestSessionCIStepDefinitions(t *testing.T) {
+// Check every expanded row without invoking any fixture or engine.
+func TestSessionStepDefinitions(t *testing.T) {
 	var output strings.Builder
 	suite := godog.TestSuite{Options: &godog.Options{Paths: []string{"session.feature"}, Format: "progress", Output: &output, ShowStepDefinitions: true}, ScenarioInitializer: func(sc *godog.ScenarioContext) { initializeScenario(sc, "unused", "unused") }}
 	if code := suite.Run(); code != 2 {
@@ -38,13 +37,6 @@ func TestSessionCIStepDefinitions(t *testing.T) {
 	rows := 0
 	for _, feature := range features {
 		for _, scenario := range feature.Pickles {
-			engine := false
-			for _, tag := range scenario.Tags {
-				engine = engine || tag.Name == "@engine"
-			}
-			if !engine {
-				continue
-			}
 			rows++
 			for _, step := range scenario.Steps {
 				matches := 0
@@ -59,8 +51,8 @@ func TestSessionCIStepDefinitions(t *testing.T) {
 			}
 		}
 	}
-	if rows != 3 {
-		t.Fatalf("checked %d CI rows, expected positive plus two recovery rows", rows)
+	if rows < 70 {
+		t.Fatalf("checked only %d session rows", rows)
 	}
 }
 

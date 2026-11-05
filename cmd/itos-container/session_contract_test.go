@@ -78,7 +78,7 @@ func TestSessionContractProbe(t *testing.T) {
 	}
 	restore := sessionContractUmask(int(mask))
 	defer restore()
-	ops := &sessionContractIO{fault: request.Fault, journal: request.Journal}
+	ops := &sessionContractIO{fault: request.Fault, journal: request.Journal, stage: "intent"}
 	controller := unavailableSessionContract{operations: ops}
 	var result sessionContractResult
 	switch request.Action {

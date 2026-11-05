@@ -33,16 +33,25 @@ type sessionRecord struct {
 }
 
 type sessionWorld struct {
-	api                             *sessionAPI
-	token, reference, fault         string
-	journal, umask, backend         string
-	create, cleanup                 sessionResult
-	owned, final                    sessionRecord
-	before, after                   map[string]string
-	resourcesBefore, resourcesAfter map[string]string
-	transcript                      string
-	fixtureError                    error
-	cleanupStart                    int
+	api                                                     *sessionAPI
+	token, reference, fault                                 string
+	journal, umask, backend                                 string
+	create, cleanup                                         sessionResult
+	owned, final                                            sessionRecord
+	before, after                                           map[string]string
+	resourcesBefore, resourcesAfter                         map[string]string
+	transcript                                              string
+	fixtureError                                            error
+	cleanupStart                                            int
+	cases                                                   []*world
+	mode, condition, inspection, removal, following, change string
+	seedID                                                  string
+	initial, firstRecord                                    sessionRecord
+	firstResult                                             sessionResult
+	firstRequests                                           []sessionRequest
+	firstResources                                          map[string]map[string]any
+	second                                                  *sessionWorld
+	selectedReads                                           []string
 }
 
 func (w *world) sessionFixture(real bool, umask string) error {
@@ -191,6 +200,14 @@ func (w *world) sessionRun(recovering bool) error {
 }
 
 func (w *world) closeSession() error {
+	if w.session != nil && len(w.session.cases) > 0 {
+		var result error
+		for _, child := range w.session.cases {
+			result = errors.Join(result, child.closeSession())
+			child.closeDoctor()
+		}
+		return result
+	}
 	if w.session == nil || w.session.api == nil {
 		return nil
 	}
