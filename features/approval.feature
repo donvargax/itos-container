@@ -145,7 +145,10 @@ Feature: Review and record approval of exact offline settings
   # canonical settings, fixed offline restrictions, unused-field notices, and on
   # re-approval sorted JSON-pointer differences with old/new values, before "y/N".
   # Escape terminal controls in every untrusted value without changing stored/JSON
-  # values. Only a complete line y or yes (ASCII case-insensitive, trimmed) consents;
+  # values. This includes Unicode C1 and bidirectional controls in current settings,
+  # prior values and plain approval status. Render non-printing Unicode as JSON
+  # escapes, preserving printable Unicode and the exact canonical bytes for hashing.
+  # Only a complete line y or yes (ASCII case-insensitive, trimmed) consents;
   # blank, n, EOF and every other response decline (exit 1), without a write.
   # An unchanged matching approval returns 0 without prompting or rewriting.
   # Bare approve without both terminals refuses even if already approved; piped y
@@ -691,3 +694,35 @@ Feature: Review and record approval of exact offline settings
       | --json                  | no fingerprint      | confirmation-required JSON, no prompt   | 1    |
       | inherited ITOS_JSON=1    | no fingerprint      | confirmation-required JSON, no prompt   | 1    |
       | --json                  | exact fingerprint   | one matching JSON object, no prompt     | 0    |
+
+  @wip @slice-4 @ID-APPROVAL-33 @local-engine-fixture
+  Scenario Outline: Terminal approval escapes Unicode controls in current settings and prior differences
+    Given an approval checkout and isolated host state
+    And approval review contains "<controls>" controls in the "<source>" environment
+    When bare approve runs at a terminal and receives "y" after the review
+    Then the terminal review escapes "<controls>" controls from the "<source>" environment before consent
+    And it exits with code 0
+    And the sole active approval is the exact candidate at generation "<generation>" in protected host state
+    And any stored or JSON settings preserve the exact literal environment value
+
+    Examples:
+      | controls      | source  | generation |
+      | C1            | current | 1          |
+      | bidirectional | current | 1          |
+      | C1            | prior   | 2          |
+      | bidirectional | prior   | 2          |
+
+  @wip @slice-4 @ID-APPROVAL-34 @local-engine-fixture
+  Scenario Outline: Plain approval status escapes Unicode controls without changing approved settings
+    Given an approval checkout and isolated host state
+    And approval review contains "<controls>" controls in the "current" environment
+    When approve runs without a terminal with the independently calculated exact fingerprint and ""
+    Then the plain approval status escapes "<controls>" controls and preserves the effective settings
+    And it exits with code 0
+    And the sole active approval is the exact candidate at generation "1" in protected host state
+    And any stored or JSON settings preserve the exact literal environment value
+
+    Examples:
+      | controls      |
+      | C1            |
+      | bidirectional |
