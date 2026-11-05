@@ -1988,3 +1988,11 @@
     .github/workflows/ci.yml, and docs --item T-21 for the ADR/architecture update. This drafter
     changes only this ledger entry in docs --item T-21. No mutation run, generated evidence,
     GitHub action or approval of a real sandbox belongs to drafting this spec.
+- id: T-22
+  type: ci
+  title: Move to itos 8.46.4
+  why: >
+    itos 8.46.4 has a review thread's whole text in push threads, briefs that name the commit type a
+    spec may take and a task's own steps, and --ready waiting for its own push's run before marking,
+    so it no longer races its draft run. The driver's open_threads and its commit-type prompt line
+    can go. Move the workflows' itos action pins with it.
