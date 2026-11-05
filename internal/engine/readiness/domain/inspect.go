@@ -20,6 +20,7 @@ type Inspector struct {
 	Files      manifestport.Files
 	Parser     manifestport.Parser
 	References manifestport.References
+	Digests    port.Digests
 	Engine     port.Engine
 }
 
@@ -114,7 +115,7 @@ func (i Inspector) inspectEngine(result *port.Result, session port.Session) {
 		return
 	}
 	result.Image = &port.ImageIdentity{Reference: request.Image, ID: image.ID, OS: image.OS, Architecture: image.Architecture}
-	result.Issues = append(result.Issues, imageIssues(image, *request)...)
+	result.Issues = append(result.Issues, i.imageIssues(image, *request)...)
 	validated := manifest.WithMetadata(*result.Manifest, image.Label, i.Parser)
 	result.Manifest = &validated
 	if !session.Unchanged() {

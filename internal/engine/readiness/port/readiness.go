@@ -96,6 +96,11 @@ type Image struct {
 	Label                      manifest.Label
 }
 
+// Digests maps a named sha256 reference to its Docker-normalized repository and
+// digest, omitting any tag. Invalid or undigested references return an empty
+// string. It performs no lookup and never changes the request used for reports.
+type Digests interface{ Canonical(reference string) string }
+
 // EngineIdentity and ImageIdentity are the observations safe to report.
 type EngineIdentity struct{ Endpoint, ID, APIVersion, OS, Architecture string }
 type ImageIdentity struct{ Reference, ID, OS, Architecture string }

@@ -421,7 +421,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # normalized names and omission of an optional tag do not change the digest.
   # Keep the manifest's original reference in inspection requests and reports.
   # These steps append the fixture's @sha256:<64 a characters> to each name.
-  @slice-3 @ID-DOCTOR-30 @local-engine-fixture @wip
+  @slice-3 @ID-DOCTOR-30 @local-engine-fixture
   Scenario Outline: Recognize the canonical repository digest and retain the requested reference
     Given a doctor checkout
     And the doctor manifest pins the image name "<requested>"

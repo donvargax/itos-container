@@ -31,6 +31,7 @@ func fixture() (Inspector, port.Input, *porttest.Engine, *porttest.Checkout) {
 			"image": {Kind: manifest.String, Text: porttest.Reference}, "containerUser": {Kind: manifest.String, Text: "1000"}, "remoteUser": {Kind: manifest.String, Text: "1000"},
 		}}},
 		References: &manifestfake.References{Images: map[string]bool{porttest.Reference: true}},
+		Digests:    porttest.Digests{porttest.Reference: porttest.Reference},
 	}
 	return i, port.Input{OS: "linux", Architecture: "amd64", Root: "/checkout", Host: s.Address}, e, c
 }
@@ -43,6 +44,35 @@ func TestInspectSnapshot(t *testing.T) {
 	}
 	if c.Opened || !e.Session.Closed || e.Budget != 5*time.Second || e.Selection != input.Host || e.Root != input.Root || e.Session.InfoReads != 2 || !reflect.DeepEqual(e.Session.ImageReads, []string{porttest.Reference}) {
 		t.Fatalf("capability lifecycle = %#v, %#v, %#v", c, e, e.Session)
+	}
+}
+
+func TestRepositoryDigestIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		requested  string
+		candidates []string
+		ready      bool
+	}{
+		{"normalized", "canonical", []string{"other", "normalized"}, true},
+		{"different repository", "canonical", []string{"other"}, false},
+		{"invalid observation", "canonical", []string{"invalid"}, false},
+		{"invalid request", "", []string{"invalid"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			i, input, engine, _ := fixture()
+			i.Digests = porttest.Digests{porttest.Reference: tc.requested, "normalized": "canonical", "other": "different"}
+			image := engine.Session.Images[porttest.Reference]
+			image.RepoDigests = tc.candidates
+			engine.Session.Images[porttest.Reference] = image
+			result := i.Inspect(input)
+			if result.Ready != tc.ready || result.Image.Reference != porttest.Reference || !reflect.DeepEqual(engine.Session.ImageReads, []string{porttest.Reference}) {
+				t.Fatalf("digest identity or original reference lost: %#v", result)
+			}
+			if !tc.ready && !reflect.DeepEqual(result.Issues, []port.Issue{{Kind: port.ImageDigest, Subject: porttest.Reference}}) {
+				t.Fatalf("digest refusal = %#v", result.Issues)
+			}
+		})
 	}
 }
 

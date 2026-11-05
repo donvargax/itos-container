@@ -32,9 +32,12 @@ func validImageID(id string) bool {
 	return ok && len(digest) == 64 && strings.Trim(digest, "0123456789abcdef") == ""
 }
 
-func imageIssues(image port.Image, request manifest.Settings) []port.Issue {
+func (i Inspector) imageIssues(image port.Image, request manifest.Settings) []port.Issue {
 	var issues []port.Issue
-	if !slices.Contains(image.RepoDigests, request.Image) {
+	wanted := i.Digests.Canonical(request.Image)
+	if wanted == "" || !slices.ContainsFunc(image.RepoDigests, func(value string) bool {
+		return i.Digests.Canonical(value) == wanted
+	}) {
 		issues = append(issues, port.Issue{Kind: port.ImageDigest, Subject: request.Image})
 	}
 	if image.OS != "linux" || image.Architecture != "amd64" {

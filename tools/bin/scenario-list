@@ -1,0 +1,10 @@
+#!/bin/sh
+# List precisely the live scenarios executable in this tier and native platform.
+# The harness selects IDs; itos supplies the unchanged TSV files/fingerprints.
+set -eu
+cd -- "$(dirname -- "$0")/../.."
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+go test ./features -count=1 -run '^TestScenarioList$' \
+  -scenario-list-output="$scratch/list.tsv" >&2
+cat "$scratch/list.tsv"

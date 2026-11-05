@@ -118,15 +118,23 @@ list narrows it to the named eligible IDs, live or `@wip`. Pending, undefined, f
 runtime steps fail; losing selected engine cases also fails. Manual non-engine red runs
 apply the same completion checks.
 
-There are currently no live engine scenarios. With no red input, preflight and fixture
-preparation still run, followed by unconditional cleanup, and the harness
-explicitly skips with `no live @engine scenarios (count 0)`, including an all-`@wip` engine set.
-This is infrastructure readiness, not sandbox or supported-host proof.
+Doctor's ID-DOCTOR-23 and ID-DOCTOR-24 are live engine scenarios for cached-image
+inspection and a missing digest. They run after preflight and fixture preparation,
+followed by unconditional cleanup. If a selected tree has no live engine scenarios,
+the harness explicitly skips with `no live @engine scenarios (count 0)`, including
+an all-`@wip` engine set. Inspection evidence does not prove sandbox isolation.
 
 Mutation, own-test and scenario-coverage runs in `ci` remain engine-disabled, including
 individual-test fallback and whole-suite collection. An excluded engine ID provides no
 runtime or coverage evidence. Later behaviours require domain/port fake tests alongside
 separate runtime evidence; uncovered code cannot be satisfied by enabling Docker in proof.
+
+Code proof obtains its listed tests through `tools/bin/scenario-list`. It uses the same
+Gherkin tier/platform selector as execution, before any fixture setup, and preserves
+core itos's TSV files and fingerprints. Thus ordinary Linux proof lists local Engine API
+fixtures but excludes the native non-Linux ID-DOCTOR-22 and real-engine IDs. The manual
+platform jobs and engine job still execute their eligible scenarios. Listing never
+substitutes for per-ID coverage: every listed ID must emit real product counters.
 
 ### Cached fixture protocol
 

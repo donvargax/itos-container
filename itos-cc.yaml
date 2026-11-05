@@ -5,7 +5,7 @@ exclude: ["**/porttest/**"]
 # Equivalent mutants need project-local proof and a reviewed reason.
 mutation:
   tests:
-    list: itos tests list scenario --tsv
+    list: tools/bin/scenario-list
     run: "go test ./features -count=1 -scenarios='{pattern}'"
     ids_pattern: "^@(?:{ids})$"
     join: { each: "{id}", sep: "|" }
@@ -13,6 +13,7 @@ mutation:
     support:
       - features/*_test.go
       - features/testdata/**
+      - tools/bin/scenario-list
   exceptions:
     - file: cmd/itos-container/main.go
       function: github.com/donvargax/itos-container/cmd/itos-container#run

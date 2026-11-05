@@ -142,6 +142,7 @@ func (env featureEnvironment) redIDs() ([]string, error) {
 
 type scenarioSelection struct {
 	filter   string
+	ids      []string
 	engine   bool
 	red      bool
 	count    int
@@ -250,6 +251,7 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 				continue
 			}
 			expected[scenario.Uri+":"+scenario.Id] = true
+			result.ids = append(result.ids, ids...)
 			result.count++
 		}
 	}
@@ -261,6 +263,8 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	if selection != "" && matched == 0 {
 		return result, &noMatch{selection}
 	}
+	slices.Sort(result.ids)
+	result.ids = slices.Compact(result.ids)
 	if result.count == 0 {
 		result.skip = "no live scenarios in selected tier and platform (count 0)"
 		if result.red {
