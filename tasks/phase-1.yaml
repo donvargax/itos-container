@@ -1861,3 +1861,24 @@
     fixture integration evidence and limitations; closure still belongs to the loop after the
     actual pushed head passes. Product image distribution and supported-host proof remain with
     their owning behaviour specs, not this CI fixture.
+- id: T-21
+  type: ci
+  title: CI's manual trigger runs named @wip scenarios, for their red evidence
+  why: >
+    features/README.md has the coordinator get assertion-level red evidence for scenarios that run
+    only in CI, @engine and @manual-platform, before implementation, and no route exists: every step
+    commit keeps them @wip, the tier skips @wip, drafts skip CI, and a commit making them live is
+    refused outside feat and fix. Slices 3, 9, 10, 11 and 12 all need this. Settled: ci.yml's
+    workflow_dispatch gains one optional input naming scenario IDs, validated as @ID-WORD-number and
+    joined, and the engine and manual platform steps pass it to the harness through an environment
+    variable the harness honours only with its existing CI context checks, selecting those IDs even
+    if @wip, and only those. A dispatched red run is expected to fail, is never required, and
+    changes nothing about pull request or push runs, where the input is absent and @wip stays
+    excluded. Regression tests in the style of TestEngineSelection and TestEngineWorkflow: selecting
+    @wip IDs only under dispatch's context, refusing a malformed value, and a pull request or push
+    run never reading it. README says how the coordinator runs it: gh workflow run ci.yml --ref
+    <item> -f <input>=<ids>, on an item branch holding the step commit, and reads the failing step.
+    Agents still have no GitHub access. No injection: the value reaches a step through env, never
+    through the expression in a run line.
+  done_when:
+    - run: grep -q 'workflow_dispatch:' .github/workflows/ci.yml && grep -q 'inputs:' .github/workflows/ci.yml && go test -count=1 -run 'TestEngine' ./features

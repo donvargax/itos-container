@@ -428,3 +428,10 @@ items:
       --fingerprint or a faked terminal. Offline-only permissions make that cheap for now. Before
       the egress and credentials stages, when an approval grants something worth taking, weigh a
       host-side confirmation an agent cannot drive, per the stage.
+  - id: T-21
+    title: CI's manual trigger runs named @wip scenarios, for their red evidence
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
