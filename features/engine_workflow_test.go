@@ -302,3 +302,207 @@ func inspectEngineSwitch(node *yaml.Node, path string, found func(string, string
 		inspectEngineSwitch(node.Alias, path, found)
 	}
 }
+
+const redDispatchExpression = "${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}"
+const redDispatchSchema = `inputs:
+  red_scenarios:
+    description: Whitespace-separated complete scenario tags for expected-red evidence
+    type: string
+    required: false
+    default: ''
+`
+
+func TestEngineRedWorkflow(t *testing.T) {
+	data, err := os.ReadFile("../.github/workflows/ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("scoped manual input", func(t *testing.T) {
+		for _, issue := range engineRedWorkflowIssues(data) {
+			t.Error(issue)
+		}
+	})
+	// A valid in-memory baseline lets every negative control run even at the red commit.
+	var ready engineWorkflow
+	if err := yaml.Unmarshal(data, &ready); err != nil {
+		t.Fatal(err)
+	}
+	setRedDispatch(t, &ready, redDispatchSchema)
+	for job, step := range map[string]string{"engine": "Engine scenarios", "platform-macos": "Tests", "platform-windows": "Tests"} {
+		changeStep(&ready, job, step, func(s *workflowStep) { s.Env[redVariable] = redDispatchExpression })
+	}
+	baseline, err := yaml.Marshal(ready)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issues := engineRedWorkflowIssues(baseline); len(issues) != 0 {
+		t.Fatalf("invalid baseline: %v", issues)
+	}
+	for _, tc := range []struct {
+		name, issue string
+		breakIt     func(*engineWorkflow)
+	}{
+		{"missing input", "dispatch inputs", func(w *engineWorkflow) { setRedDispatch(t, w, "null") }},
+		{"required input", "dispatch inputs", func(w *engineWorkflow) {
+			setRedDispatch(t, w, strings.ReplaceAll(redDispatchSchema, "required: false", "required: true"))
+		}},
+		{"nonempty default", "dispatch inputs", func(w *engineWorkflow) {
+			setRedDispatch(t, w, strings.ReplaceAll(redDispatchSchema, "default: ''", "default: '@ID-MEMORY-03'"))
+		}},
+		{"missing default", "dispatch inputs", func(w *engineWorkflow) {
+			setRedDispatch(t, w, strings.ReplaceAll(redDispatchSchema, "    default: ''\n", ""))
+		}},
+		{"wrong input type", "dispatch inputs", func(w *engineWorkflow) {
+			setRedDispatch(t, w, strings.ReplaceAll(redDispatchSchema, "type: string", "type: boolean"))
+		}},
+		{"missing description", "dispatch inputs", func(w *engineWorkflow) {
+			setRedDispatch(t, w, strings.ReplaceAll(redDispatchSchema, "    description: Whitespace-separated complete scenario tags for expected-red evidence\n", ""))
+		}},
+		{"extra input", "dispatch inputs", func(w *engineWorkflow) { setRedDispatch(t, w, redDispatchSchema+"  other: {type: string}\n") }},
+		{"missing engine wiring", "step-local red selection", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { delete(s.Env, redVariable) })
+		}},
+		{"missing macOS wiring", "step-local red selection", func(w *engineWorkflow) {
+			changeStep(w, "platform-macos", "Tests", func(s *workflowStep) { delete(s.Env, redVariable) })
+		}},
+		{"missing Windows wiring", "step-local red selection", func(w *engineWorkflow) {
+			changeStep(w, "platform-windows", "Tests", func(s *workflowStep) { delete(s.Env, redVariable) })
+		}},
+		{"script interpolation", "leaked red selection", func(w *engineWorkflow) {
+			changeStep(w, "platform-macos", "Tests", func(s *workflowStep) { s.Run += " ${{ inputs.red_scenarios }}" })
+		}},
+		{"shell evaluation", "leaked red selection", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Run += "\neval \"$ITOS_CONTAINER_RED_SCENARIOS\"" })
+		}},
+		{"unguarded expression", "step-local red selection", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Env[redVariable] = "${{ inputs.red_scenarios }}" })
+		}},
+		{"global leakage", "leaked red selection", func(w *engineWorkflow) { w.Env[redVariable] = redDispatchExpression }},
+		{"job leakage", "leaked red selection", func(w *engineWorkflow) {
+			j := w.Jobs["engine"]
+			j.Env = map[string]string{redVariable: redDispatchExpression}
+			w.Jobs["engine"] = j
+		}},
+		{"proof leakage", "leaked red selection", func(w *engineWorkflow) {
+			j := w.Jobs["ci"]
+			j.Steps[len(j.Steps)-1].Env = map[string]string{redVariable: redDispatchExpression}
+			w.Jobs["ci"] = j
+		}},
+		{"ordinary Linux leakage", "leaked red selection", func(w *engineWorkflow) {
+			changeStep(w, "platform", "Tests", func(s *workflowStep) { s.Env[redVariable] = redDispatchExpression })
+		}},
+		{"preflight leakage", "leaked red selection", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Docker server preflight", func(s *workflowStep) { s.Env = map[string]string{redVariable: redDispatchExpression} })
+		}},
+		{"fixture leakage", "leaked red selection", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Prepare engine fixture registry", func(s *workflowStep) { s.Env = map[string]string{redVariable: redDispatchExpression} })
+		}},
+		{"GITHUB_ENV leakage", "leaked red selection", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Run += "\necho ITOS_CONTAINER_RED_SCENARIOS=x >> $GITHUB_ENV" })
+		}},
+		{"ignored step failure", "failure propagation", func(w *engineWorkflow) {
+			changeStep(w, "platform-windows", "Tests", func(s *workflowStep) { s.ContinueOnError = true })
+		}},
+		{"ignored job failure", "failure propagation", func(w *engineWorkflow) {
+			j := w.Jobs["platform-macos"]
+			j.ContinueOnError = true
+			w.Jobs["platform-macos"] = j
+		}},
+		{"success fallback", "unchanged test command", func(w *engineWorkflow) {
+			changeStep(w, "platform-macos", "Tests", func(s *workflowStep) { s.Run += " || true" })
+		}},
+		{"forced red failure", "unchanged test command", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Run += "; exit 1" })
+		}},
+		{"conditional test step", "failure propagation", func(w *engineWorkflow) {
+			changeStep(w, "platform-windows", "Tests", func(s *workflowStep) { s.If = "false" })
+		}},
+	} {
+		t.Run("reject "+tc.name, func(t *testing.T) {
+			var broken engineWorkflow
+			if err := yaml.Unmarshal(baseline, &broken); err != nil {
+				t.Fatal(err)
+			}
+			tc.breakIt(&broken)
+			fixture, err := yaml.Marshal(broken)
+			if err != nil {
+				t.Fatal(err)
+			}
+			issues := strings.Join(engineRedWorkflowIssues(fixture), "; ")
+			if !strings.Contains(issues, tc.issue) {
+				t.Errorf("negative control missed %q: %s", tc.issue, issues)
+			}
+		})
+	}
+}
+
+func setRedDispatch(t *testing.T, w *engineWorkflow, source string) {
+	t.Helper()
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(source), &node); err != nil {
+		t.Fatal(err)
+	}
+	w.On["workflow_dispatch"] = *node.Content[0]
+}
+
+func validRedDispatch(node yaml.Node) bool {
+	var dispatch map[string]map[string]map[string]any
+	if node.Decode(&dispatch) != nil || len(dispatch) != 1 || len(dispatch["inputs"]) != 1 {
+		return false
+	}
+	input := dispatch["inputs"]["red_scenarios"]
+	description, ok := input["description"].(string)
+	description = strings.ToLower(description)
+	return len(input) == 4 && input["type"] == "string" && input["required"] == false && input["default"] == "" && ok && strings.Contains(description, "whitespace-separated") && strings.Contains(description, "complete scenario tags") && strings.Contains(description, "expected-red")
+}
+
+func engineRedWorkflowIssues(data []byte) []string {
+	var w engineWorkflow
+	if err := yaml.Unmarshal(data, &w); err != nil {
+		return []string{err.Error()}
+	}
+	var issues []string
+	require := func(ok bool, issue string) {
+		if !ok {
+			issues = append(issues, issue)
+		}
+	}
+	require(validRedDispatch(w.On["workflow_dispatch"]), "exact optional red dispatch inputs")
+	allowed := map[string]bool{}
+	for job, name := range map[string]string{"engine": "Engine scenarios", "platform-macos": "Tests", "platform-windows": "Tests"} {
+		j := w.Jobs[job]
+		require(!j.ContinueOnError, "job failure propagation for "+job)
+		found := 0
+		for i, step := range j.Steps {
+			if step.Name != name {
+				continue
+			}
+			found++
+			allowed["jobs."+job+".steps."+strconv.Itoa(i)+".env."+redVariable] = true
+			require(step.Env[redVariable] == redDispatchExpression, "step-local red selection for "+job)
+			run := "go test ./... -count=1"
+			if job == "engine" {
+				run = engineInvocation
+			}
+			require(step.Run == run, "unchanged test command for "+job)
+			require(!step.ContinueOnError && step.If == "", "step failure propagation for "+job)
+		}
+		require(found == 1, "exactly one selected test step for "+job)
+	}
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		return append(issues, err.Error())
+	}
+	seen := 0
+	walkFixtureScalars(&node, "", func(path, value string) {
+		if strings.HasPrefix(path, "on.workflow_dispatch.inputs.red_scenarios.") {
+			return
+		}
+		if strings.Contains(path, redVariable) || strings.Contains(value, redVariable) || strings.Contains(value, "red_scenarios") {
+			require(allowed[path] && value == redDispatchExpression, "leaked red selection at "+path)
+			seen++
+		}
+	})
+	require(seen == 3, "exactly three step-local red selection values")
+	return issues
+}

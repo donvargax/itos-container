@@ -71,11 +71,7 @@ const (
 )
 
 func TestFeatures(t *testing.T) {
-	selection, err := selectScenarios(*scenarios, ".", featureEnvironment{
-		engine: os.Getenv("ITOS_CONTAINER_ENGINE_TESTS"),
-		ci:     os.Getenv("CI"), actions: os.Getenv("GITHUB_ACTIONS"),
-		os: runtime.GOOS, arch: runtime.GOARCH,
-	})
+	selection, err := selectScenarios(*scenarios, ".", readFeatureEnvironment(os.Getenv, runtime.GOOS, runtime.GOARCH))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +103,15 @@ func TestFeatures(t *testing.T) {
 
 // Environment and platform values enter the policy as data. Only TestFeatures
 // reads the real process context; regression fixtures never enable engine access.
-type featureEnvironment struct{ engine, ci, actions, os, arch string }
+type featureEnvironment struct{ engine, ci, actions, event, red, os, arch string }
+
+func readFeatureEnvironment(lookup func(string) string, hostOS, arch string) featureEnvironment {
+	return featureEnvironment{
+		engine: lookup("ITOS_CONTAINER_ENGINE_TESTS"),
+		ci:     lookup("CI"), actions: lookup("GITHUB_ACTIONS"),
+		event: lookup("GITHUB_EVENT_NAME"), os: hostOS, arch: arch,
+	}
+}
 
 type scenarioSelection struct {
 	filter   string

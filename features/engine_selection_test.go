@@ -439,3 +439,138 @@ func cleanHarnessEnvironment() []string {
 	}
 	return env
 }
+
+const redVariable = "ITOS_CONTAINER_RED_SCENARIOS"
+
+func redEnvironment(engine, hostOS, ids string) featureEnvironment {
+	return featureEnvironment{engine: engine, ci: "true", actions: "true", event: "workflow_dispatch", red: ids, os: hostOS, arch: "amd64"}
+}
+
+func TestEngineRedSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name, engine, hostOS, ids string
+		want, steps               []string
+	}{
+		{"ordinary future", "", "darwin", "@ID-MEMORY-03", []string{"@ID-MEMORY-03"}, []string{"wip"}},
+		{"engine future", "1", "linux", "@ID-MEMORY-04", []string{"@ID-MEMORY-04"}, []string{"engine-wip"}},
+		{"mixed live future duplicates", "0", "windows", " @ID-MEMORY-03\t@ID-MEMORY-01\n@ID-MEMORY-03\u2003", []string{"@ID-MEMORY-01", "@ID-MEMORY-03"}, []string{"ordinary", "wip"}},
+		{"engine live future", "1", "linux", "@ID-MEMORY-02 @ID-MEMORY-04", []string{"@ID-MEMORY-02", "@ID-MEMORY-04"}, []string{"engine", "engine-wip"}},
+		{"shared list ordinary", "", "darwin", "@ID-MEMORY-03 @ID-MEMORY-04", []string{"@ID-MEMORY-03"}, []string{"wip"}},
+		{"shared list engine", "1", "linux", "@ID-MEMORY-03 @ID-MEMORY-04", []string{"@ID-MEMORY-04"}, []string{"engine-wip"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := writeFeatureFixture(t, tierFixture)
+			selected, err := selectScenarios("", dir, redEnvironment(tc.engine, tc.hostOS, tc.ids))
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := executeMemory(t, dir, selected, nil)
+			if !slices.Equal(seen.ids, tc.want) || !slices.Equal(seen.steps, tc.steps) {
+				t.Errorf("executed IDs %v and steps %v; want %v and %v", seen.ids, seen.steps, tc.want, tc.steps)
+			}
+			if selected.count != len(tc.want) || seen.initialized != len(tc.want) || seen.before != len(tc.want) || seen.after != len(tc.want) || seen.background != len(tc.want) {
+				t.Errorf("unrequested or missing initializer/hook/background: selection %+v, execution %+v", selected, seen)
+			}
+			data, err := os.ReadFile(filepath.Join(dir, "memory.feature"))
+			if err != nil || string(data) != tierFixture {
+				t.Fatalf("selection rewrote feature: %v", err)
+			}
+		})
+	}
+	t.Run("exact IDs do not match prefixes", func(t *testing.T) {
+		dir := writeFeatureFixture(t, tierFixture+"\n  @wip @ID-MEMORY-030\n  Scenario: overlapping ID\n    Then record \"unrequested\"\n")
+		selected, err := selectScenarios("", dir, redEnvironment("", "darwin", "@ID-MEMORY-03"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if seen := executeMemory(t, dir, selected, nil); !slices.Equal(seen.ids, []string{"@ID-MEMORY-03"}) {
+			t.Errorf("executed IDs %v", seen.ids)
+		}
+	})
+	t.Run("inherited tags and all outline rows", testRedInheritance)
+	t.Run("reject invalid lists before initialization", func(t *testing.T) {
+		dir := writeFeatureFixture(t, tierFixture)
+		for _, value := range []string{"ID-MEMORY-03", "@wip", "@ID-memory-03", "@ID-MEMORY-03,@ID-MEMORY-04", "^@ID-MEMORY-03$", "@ID-MEMORY-03|@ID-MEMORY-04", "@ID-MEMORY-03&&@wip", "$(id)", "@ID-MEMORY-03;true", "@ID-MEMORY-03 @ID-MEMORY-99", "@ID-MEMORY-99"} {
+			t.Run(value, func(t *testing.T) {
+				_, err := selectScenarios("", dir, redEnvironment("", "darwin", value))
+				if err == nil || !strings.Contains(err.Error(), "red") {
+					t.Errorf("red list %q should fail with a selection diagnostic, got %v", value, err)
+				}
+			})
+		}
+		if _, err := selectScenarios("^@ID-MEMORY-01$", dir, redEnvironment("", "darwin", "@ID-MEMORY-03")); err == nil || !strings.Contains(err.Error(), "-scenarios") {
+			t.Errorf("conflicting selectors accepted: %v", err)
+		}
+		for _, text := range []string{"Feature: broken\n  Scenario: bad\n    Given text\n      \"\"\"\n      open\n", "@ID-MEMORY-03\nFeature: no pickles\n"} {
+			if _, err := selectScenarios("", writeFeatureFixture(t, text), redEnvironment("", "darwin", "@ID-MEMORY-03")); err == nil {
+				t.Error("malformed or empty inventory accepted")
+			}
+		}
+	})
+	t.Run("empty input preserves live selection", func(t *testing.T) {
+		for _, value := range []string{"", " \t\n\u2003"} {
+			for _, engine := range []string{"", "1"} {
+				dir := writeFeatureFixture(t, tierFixture)
+				selected, err := selectScenarios("", dir, redEnvironment(engine, "linux", value))
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := "@ID-MEMORY-01"
+				if engine == "1" {
+					want = "@ID-MEMORY-02"
+				}
+				if seen := executeMemory(t, dir, selected, nil); !slices.Equal(seen.ids, []string{want}) {
+					t.Errorf("empty red input executed %v", seen.ids)
+				}
+			}
+		}
+	})
+	t.Run("cross tier and platform skips", func(t *testing.T) {
+		for _, tc := range []struct{ engine, hostOS, id, reason string }{
+			{"", "darwin", "@ID-MEMORY-04", "@engine disabled"},
+			{"1", "linux", "@ID-MEMORY-03", "other tier"},
+			{"", "windows", "@ID-MEMORY-05", "@linux requires Linux"},
+		} {
+			dir := writeFeatureFixture(t, tierFixture+"\n  @wip @linux @ID-MEMORY-05\n  Scenario: Linux only\n    Then record \"linux\"\n")
+			selected, err := selectScenarios("", dir, redEnvironment(tc.engine, tc.hostOS, tc.id))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if selected.skip == "" || !strings.Contains(selected.skip, "count 0") || len(selected.excluded) != 1 || !strings.Contains(strings.Join(selected.excluded, ";"), tc.id) || !strings.Contains(strings.Join(selected.excluded, ";"), tc.reason) {
+				t.Errorf("missing exclusion ID/reason/count: %+v", selected)
+			}
+			if seen := executeMemory(t, dir, selected, nil); seen.initialized != 0 {
+				t.Errorf("excluded list ran scenarios: %+v", seen)
+			}
+		}
+	})
+	t.Run("invalid engine contexts remain refused", func(t *testing.T) {
+		base := redEnvironment("1", "linux", "@ID-MEMORY-04")
+		for _, mutate := range []func(*featureEnvironment){
+			func(e *featureEnvironment) { e.ci = "" }, func(e *featureEnvironment) { e.actions = "" },
+			func(e *featureEnvironment) { e.os = "darwin" }, func(e *featureEnvironment) { e.arch = "arm64" },
+			func(e *featureEnvironment) { e.engine = "true" }, func(e *featureEnvironment) { e.engine = " 1" },
+		} {
+			env := base
+			mutate(&env)
+			if _, err := selectScenarios("", writeFeatureFixture(t, tierFixture), env); err == nil {
+				t.Errorf("accepted engine context %+v", env)
+			}
+		}
+	})
+	t.Run("guarded environment boundary and coverage reruns", testRedEnvironmentBoundary)
+	t.Run("incomplete execution cannot pass", testRedCompletion)
+	t.Run("child and synthetic environment isolation", func(t *testing.T) {
+		// This inert input never grants CI or engine context to this process.
+		t.Setenv(redVariable, "@ID-MEMORY-03")
+		t.Cleanup(removeCallerPath)
+		w := world{}
+		for name, env := range map[string][]string{"product": w.env(), "synthetic harness": cleanHarnessEnvironment()} {
+			for _, entry := range env {
+				if strings.HasPrefix(entry, redVariable+"=") {
+					t.Errorf("%s inherited red selector", name)
+				}
+			}
+		}
+	})
+}
