@@ -95,9 +95,11 @@ func Ready() readiness.Result {
 
 // Readiness returns controlled observations and counts inspections.
 type Readiness struct {
-	Result readiness.Result
-	Reads  int
-	Next   *readiness.Result
+	Result      readiness.Result
+	Reads       int
+	Next        *readiness.Result
+	EngineReads int
+	LocalResult *readiness.Result
 }
 
 func (r *Readiness) Inspect() readiness.Result {
@@ -116,8 +118,10 @@ func (h *Host) Socket(string) string       { return h.Stamp }
 
 // Codec selects precomputed fixture values and records resolution inputs.
 type Codec struct {
-	Values   map[string]port.Candidate
-	UID, GID string
+	Values        map[string]port.Candidate
+	UID, GID      string
+	Local         port.Candidate
+	LocalMismatch bool
 }
 
 func (c *Codec) Candidate(_ readiness.Result, uid, gid string) port.Candidate {
@@ -137,4 +141,31 @@ func ReviewContract(t Reporter, open func(string) port.Reviewer) {
 			t.Errorf("review %q = %v", tc.line, got)
 		}
 	}
+}
+
+// InspectBeforeEngine exposes unobserved engine fields at the local checkpoint.
+func (r *Readiness) InspectBeforeEngine(check func(readiness.Result) bool) readiness.Result {
+	r.Reads++
+	local := r.Result
+	if r.LocalResult != nil {
+		local = *r.LocalResult
+	}
+	local.Engine = nil
+	local.Image = nil
+	if len(local.Issues) > 0 || !check(local) {
+		local.Ready = false
+		return local
+	}
+	r.EngineReads++
+	return r.Result
+}
+
+func (c *Codec) LocalCandidate(r readiness.Result, uid, gid string) port.Candidate {
+	if c.Local.Project != "" {
+		return c.Local
+	}
+	return c.Candidate(r, uid, gid)
+}
+func (c *Codec) LocalMatches(candidate port.Candidate, record port.Record) bool {
+	return !c.LocalMismatch && candidate.Canonical == record.Canonical
 }

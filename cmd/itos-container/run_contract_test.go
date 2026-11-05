@@ -9,12 +9,16 @@ import (
 	approval "github.com/donvargax/itos-container/internal/engine/approval/domain"
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
 	af "github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
+	manifest "github.com/donvargax/itos-container/internal/engine/manifest/port"
+	policy "github.com/donvargax/itos-container/internal/engine/policy/port"
 	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	command "github.com/donvargax/itos-container/internal/slices/run/command"
 	rundomain "github.com/donvargax/itos-container/internal/slices/run/domain"
 	rp "github.com/donvargax/itos-container/internal/slices/run/port"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -72,6 +76,7 @@ type runContractResult struct {
 	Exit                    int
 	Message, Fix            string
 	EngineCalls, AfterReads int
+	Published               ap.Frozen
 	Visible                 ap.Frozen
 	Events                  []string
 	Bytes                   string
@@ -107,7 +112,7 @@ func TestRunPreflightContractProbe(t *testing.T) {
 		memory := &af.Store{}
 		snapshot := &af.Snapshots{}
 		service := approval.Service{Readiness: input, Host: &af.Host{UID: uid, GID: gid, Stamp: "socket"}, Codec: canonical.JSON{}, Store: memory}
-		h, err := rundomain.Preflight(approval.Preflight{Service: service, Local: input}, snapshot)
+		h, err := rundomain.Preflight(approval.Preflight{Service: service, Local: input, Canonical: canonical.JSON{}}, snapshot)
 		result := contractResult(h, err, input)
 		out["identity"] = result
 		out["snapshot_count"] = len(snapshot.Values)
@@ -147,7 +152,7 @@ func runContractBackend(t *testing.T, kind, condition, backend string) map[strin
 	}
 	snapshots := &af.Snapshots{Values: map[string]ap.Frozen{}}
 	var events []string
-	diskSnapshots := disk.Snapshots{Store: store}
+	diskSnapshots := disk.Snapshots{Store: store, Records: codec}
 	failed := true
 	fault := errors.New("slice-8 publication fault")
 	// Every non-faulting operation actually executes against pinned file handles.
@@ -201,7 +206,7 @@ func runContractBackend(t *testing.T, kind, condition, backend string) map[strin
 	}
 	input := &runContractInput{result: ready}
 	service := approval.Service{Readiness: input, Host: &af.Host{UID: uid, GID: "1000", Stamp: "socket"}, Codec: codec, Store: active}
-	preflight := approval.Preflight{Service: service, Local: input}
+	preflight := approval.Preflight{Service: service, Local: input, Canonical: codec}
 	wrapped := runContractApproval{Approval: preflight}
 	replace := func() {
 		memory.Records[a.Project] = ap.Record{Candidate: b, Generation: "2"}
@@ -217,9 +222,9 @@ func runContractBackend(t *testing.T, kind, condition, backend string) map[strin
 			input.selected = true
 			switch condition {
 			case "policy now requests forbidden online networking":
-				input.result.Policy = nil
+				input.result.Policy = &policy.Result{Issues: []policy.Issue{{Kind: policy.NetworkMode, Path: []string{"network", "mode"}}}}
 			case "manifest now requests a forbidden extra mount":
-				input.result.Manifest = nil
+				input.result.Manifest = &manifest.Result{Issues: []manifest.Issue{{Kind: manifest.Unsupported, Path: []string{"mounts"}}}}
 			case "active approval is replaced by B":
 				replace()
 			}
@@ -228,13 +233,40 @@ func runContractBackend(t *testing.T, kind, condition, backend string) map[strin
 	if kind == "fault" {
 		snapshots.Failure = condition
 	}
-	before, err := contractProtected(state)
+	outside := filepath.Join(root, "outside-target")
+	if err := os.WriteFile(outside, []byte("preserve outside target"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	prior := filepath.Join(state, "itos-container", "snapshots", strings.Repeat("e", 64), "9.json")
+	if err := os.MkdirAll(filepath.Dir(prior), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(prior, []byte(`{"prior":"preserve independently"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := contractProtected(root, a.Project)
 	if err != nil {
 		t.Fatal(err)
 	}
 	h, e := rundomain.Preflight(wrapped, publisher)
 	first := contractResult(h, e, input)
 	observe := func(result *runContractResult) {
+		generation := result.Handoff.Frozen.Generation
+		if backend == "memory" {
+			result.Published = snapshots.Values[a.Project+"/"+generation]
+		} else if generation != "" {
+			name := filepath.Join(state, "itos-container", "snapshots", a.Project, generation+".json")
+			if data, err := os.ReadFile(name); err == nil {
+				candidate := a
+				if generation == "2" {
+					candidate = b
+				}
+				if record, failure := codec.Decode(candidate, data); failure == "" {
+					result.Published = ap.Frozen{Project: record.Project, Generation: record.Generation, Fingerprint: record.Fingerprint, Settings: record.Canonical}
+				}
+			}
+		}
+
 		if backend == "memory" {
 			result.Visible = snapshots.Values[a.Project+"/1"]
 			result.Events = append([]string{}, snapshots.Events...)
@@ -254,7 +286,7 @@ func runContractBackend(t *testing.T, kind, condition, backend string) map[strin
 		result.Bytes = string(data)
 		info, _ := os.Stat(name)
 		if info != nil {
-			result.Inode = fmt.Sprintf("%v", info.Sys())
+			result.Inode = fmt.Sprintf("%v:%v", reflect.Indirect(reflect.ValueOf(info.Sys())).FieldByName("Dev"), reflect.Indirect(reflect.ValueOf(info.Sys())).FieldByName("Ino"))
 			result.Mtime = info.ModTime().UnixNano()
 		}
 		result.Events = append([]string{}, events...)
@@ -285,7 +317,7 @@ func runContractBackend(t *testing.T, kind, condition, backend string) map[strin
 	if bytes := secondH.Frozen.Bytes(); len(bytes) > 0 {
 		bytes[0] = 'Y'
 	}
-	after, err := contractProtected(state)
+	after, err := contractProtected(root, a.Project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +341,7 @@ func contractSeed(t *testing.T, state string, c ap.Candidate, g string) {
 		t.Fatal(err)
 	}
 }
-func contractProtected(state string) (map[string]string, error) {
+func contractProtected(state, project string) (map[string]string, error) {
 	out := map[string]string{}
 	err := filepath.WalkDir(state, func(path string, e os.DirEntry, err error) error {
 		if os.IsNotExist(err) {
@@ -321,15 +353,45 @@ func contractProtected(state string) (map[string]string, error) {
 		if e.IsDir() {
 			return nil
 		}
-		if strings.Contains(path, string(filepath.Separator)+"snapshots"+string(filepath.Separator)) {
+		if filepath.Dir(path) == filepath.Join(state, "state", "itos-container", "snapshots", project) && (filepath.Base(path) == "1.json" || filepath.Base(path) == "2.json") {
 			return nil
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		out[path] = string(data)
+		info, err := e.Info()
+		if err != nil {
+			return err
+		}
+		stat := reflect.Indirect(reflect.ValueOf(info.Sys()))
+		out[path] = fmt.Sprintf("%s:%v:%v:%v:%v:%v:%d", data, info.Mode(), stat.FieldByName("Uid"), stat.FieldByName("Nlink"), stat.FieldByName("Dev"), stat.FieldByName("Ino"), info.ModTime().UnixNano())
 		return nil
 	})
 	return out, err
+}
+
+func TestRunSnapshotStoreContracts(t *testing.T) {
+	for _, backend := range []string{"memory", "disk"} {
+		t.Run(backend, func(t *testing.T) {
+			if backend == "disk" && runtime.GOOS != "linux" {
+				t.Skip("Linux protected-store target")
+			}
+			af.SnapshotContract(t, func() (ap.Snapshots, ap.Frozen, ap.Frozen) {
+				codec := canonical.JSON{}
+				uid := strconv.Itoa(os.Geteuid())
+				if uid == "-1" {
+					uid = "1000"
+				}
+				a := codec.Candidate(af.Ready(), uid, "1000")
+				b := codec.Candidate(af.Ready(), uid, "2000")
+				frozenA := ap.Frozen{Project: a.Project, Generation: "1", Fingerprint: a.Fingerprint, Settings: a.Canonical}
+				frozenB := ap.Frozen{Project: b.Project, Generation: "2", Fingerprint: b.Fingerprint, Settings: b.Canonical}
+				if backend == "memory" {
+					return &af.Snapshots{}, frozenA, frozenB
+				}
+				return disk.Snapshots{Store: disk.Store{StateHome: t.TempDir(), Records: codec}, Records: codec}, frozenA, frozenB
+			})
+		})
+	}
 }

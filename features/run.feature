@@ -404,7 +404,7 @@ Feature: Run invocation refusals
   # case is added. Expected failures below are a handoff, NOT observed red proof.
 
   # Current run collapses all prerequisite diagnostics into approval invalid.
-  @wip @slice-8 @ID-RUN-08 @local-engine-fixture @linux
+  @slice-8 @ID-RUN-08 @local-engine-fixture @linux
   Scenario Outline: Run preserves local validation refusals before engine inspection
     Given an approval checkout and isolated host state
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
@@ -432,7 +432,7 @@ Feature: Run invocation refusals
 
   # Today even missing/corrupt approval contacts the synthetic daemon; the empty
   # journal is the first failing assertion, paired with the precise refusal.
-  @wip @slice-8 @ID-RUN-09 @local-engine-fixture @linux
+  @slice-8 @ID-RUN-09 @local-engine-fixture @linux
   Scenario Outline: Locally decidable approval failures need no daemon
     Given an approval checkout and isolated host state
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
@@ -460,7 +460,7 @@ Feature: Run invocation refusals
 
   # The real run entry currently flattens these failures, and inspects the engine
   # before resolving host identity. The contract first checks the specific cause.
-  @wip @slice-8 @ID-RUN-10
+  @slice-8 @ID-RUN-10
   Scenario Outline: Run refuses unusable effective host identity before engine access
     Given a run preflight contract fixture with effective UID "<uid>" and GID "<gid>"
     When the run preflight contract receives valid explicit argv
@@ -475,7 +475,7 @@ Feature: Run invocation refusals
 
   # These refusals need inspection; an empty journal would be the wrong oracle.
   # Current run returns generic approval invalid instead of each shared cause.
-  @wip @slice-8 @ID-RUN-11 @local-engine-fixture @linux
+  @slice-8 @ID-RUN-11 @local-engine-fixture @linux
   Scenario Outline: Engine and cached image refusals preserve their cause without acquisition
     Given an approval checkout and isolated host state
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
@@ -502,7 +502,7 @@ Feature: Run invocation refusals
       | metadata requests containerUser   | manifest.metadata      | 2    | /0/containerUser         |
 
   # Existing readiness detects these races, but run loses their diagnostic.
-  @wip @slice-8 @ID-RUN-12 @local-engine-fixture @linux
+  @slice-8 @ID-RUN-12 @local-engine-fixture @linux
   Scenario Outline: Run refuses identity substitution during inspection before freezing
     Given an approval checkout and isolated host state
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
@@ -528,7 +528,7 @@ Feature: Run invocation refusals
   # Image user is excluded from canonical settings; changing it cannot choose UID.
   # Equivalent request edits after approval exercise local comparison without
   # weakening changed-input refusals or allowing cached engine observations.
-  @wip @slice-8 @ID-RUN-13 @local-engine-fixture @linux
+  @slice-8 @ID-RUN-13 @local-engine-fixture @linux
   Scenario Outline: Approved preflight publishes exact settings with host identity
     Given an approval checkout and isolated host state
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
@@ -568,7 +568,7 @@ Feature: Run invocation refusals
 
   # A cached snapshot must never become an alternate approval/readiness source.
   # Capture the first run's snapshot before editing; today it is absent.
-  @wip @slice-8 @ID-RUN-14 @local-engine-fixture @linux
+  @slice-8 @ID-RUN-14 @local-engine-fixture @linux
   Scenario Outline: A later run revalidates even when a frozen snapshot exists
     Given an approval checkout and isolated host state
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
@@ -595,7 +595,7 @@ Feature: Run invocation refusals
 
   # Exercise run's actual selection-to-publication ordering, not just slice-4's
   # already-proven Select refusal. A fresh B result must publish as a control.
-  @wip @slice-8 @ID-RUN-15 @linux
+  @slice-8 @ID-RUN-15 @linux
   Scenario: Superseded selection cannot publish while a fresh selection can
     Given a run preflight contract with independently seeded approvals A and B
     When approval B replaces A after run inspects A but before frozen selection and a fresh run selects B
@@ -607,7 +607,7 @@ Feature: Run invocation refusals
   # After Freeze succeeds, later changes cannot alter snapshot or returned input.
   # The controller's subsequent phase receives the durable value, not file paths
   # from which to reconstruct settings. No real workload is run by this contract.
-  @wip @slice-8 @ID-RUN-16 @linux
+  @slice-8 @ID-RUN-16 @linux
   Scenario Outline: Snapshot and handoff retain selected settings after later edits
     Given a run preflight contract with independently seeded approvals A and B
     When run selects A, the fixture makes "<change>" before publication and handoff, and a fresh run follows with B's approved inputs
@@ -625,7 +625,7 @@ Feature: Run invocation refusals
 
   # Only the snapshots subtree is unsafe; valid approval remains readable.
   # Today run ignores this subtree and reaches exit 3 instead of this refusal.
-  @wip @slice-8 @ID-RUN-17 @local-engine-fixture @linux
+  @slice-8 @ID-RUN-17 @local-engine-fixture @linux
   Scenario Outline: Snapshot publication refuses unsafe or conflicting existing state
     Given an approval checkout and isolated host state
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
@@ -653,7 +653,7 @@ Feature: Run invocation refusals
 
   # Same contract runs against memory and disk, with real run error translation.
   # Current run has no publication stage, so cannot report a publication failure.
-  @wip @slice-8 @ID-RUN-18 @linux
+  @slice-8 @ID-RUN-18 @linux
   Scenario Outline: Failed durable publication never yields a usable startup input
     Given a run snapshot contract with publication failure "<failure>"
     When approved run preflight attempts publication through each store implementation and fresh preflight retries after the fault is cleared
@@ -676,7 +676,7 @@ Feature: Run invocation refusals
 
   # This positive control prevents a publisher from satisfying all fault cases
   # by always refusing. Compare each process's result and independently read file.
-  @wip @slice-8 @ID-RUN-19 @local-engine-fixture @linux
+  @slice-8 @ID-RUN-19 @local-engine-fixture @linux
   Scenario Outline: Repeated and concurrent preflights reuse one complete immutable snapshot
     Given an approval checkout and isolated host state
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
@@ -710,6 +710,7 @@ Feature: Run invocation refusals
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
     And the policy inspection files are snapshotted
+    And the run preflight files are snapshotted
     When itos-container runs with "run -- git status"
     Then its error output says "offline startup is not implemented"
     And its error output says "doctor --policy-only"
@@ -717,10 +718,11 @@ Feature: Run invocation refusals
     And it exits with code 3
     And its standard output is empty
     And no engine mutation or image acquisition was attempted
-    And the approval checkout and host state are unchanged
+    And the protected run snapshot is exactly the independently calculated approval at generation "1"
+    And only the protected run snapshot subtree was added without chown or checkout changes
     And the engine recorder has no connections
     And no inspection helper sentinel was executed
-    And the policy inspection files are unchanged
+    And the policy inspection files differ only by the protected run snapshot
 
   # Acceptance of workload flags must reach the same interim refusal, not help,
   # JSON, flag validation or empty-command handling. ITOS_JSON is cleared by the
@@ -735,6 +737,7 @@ Feature: Run invocation refusals
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
     And the policy inspection files are snapshotted
+    And the run preflight files are snapshotted
     When itos-container runs with "<arguments>"
     Then its error output says "offline startup is not implemented"
     And its error output says "doctor --policy-only"
@@ -742,10 +745,11 @@ Feature: Run invocation refusals
     And it exits with code 3
     And its standard output is empty
     And no engine mutation or image acquisition was attempted
-    And the approval checkout and host state are unchanged
+    And the protected run snapshot is exactly the independently calculated approval at generation "1"
+    And only the protected run snapshot subtree was added without chown or checkout changes
     And the engine recorder has no connections
     And no inspection helper sentinel was executed
-    And the policy inspection files are unchanged
+    And the policy inspection files differ only by the protected run snapshot
 
     Examples:
       | arguments                     |

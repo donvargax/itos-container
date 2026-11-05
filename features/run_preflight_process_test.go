@@ -22,6 +22,7 @@ type runEntry struct {
 	Modified                    int64
 }
 type runObservation struct {
+	approvalErr error
 	result      doctorResult
 	journal     []doctorRequest
 	connections int64
@@ -111,8 +112,9 @@ func (w *world) runSameTree(allowSnapshot bool) error {
 			return fmt.Errorf("changed existing entry %s", path)
 		}
 	}
+	allowed := map[string]bool{root: true, filepath.Dir(w.runSnapshotPath()): true, w.runSnapshotPath(): true}
 	for path := range got {
-		if _, ok := before[path]; !ok && (!allowSnapshot || (path != root && !strings.HasPrefix(path, root+string(filepath.Separator)))) {
+		if _, ok := before[path]; !ok && (!allowSnapshot || !allowed[path]) {
 			return fmt.Errorf("unexpected new entry %s", path)
 		}
 	}
@@ -219,6 +221,7 @@ func (w *world) runJournal(journal []doctorRequest, class string, image bool) er
 }
 
 type runProcess struct {
+	approval map[string]runEntry
 	cmd      *exec.Cmd
 	cancel   context.CancelFunc
 	done     chan struct{}
@@ -241,7 +244,12 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 		args = append([]string{"-test.run=^TestRunMaskHelper$", "--", "slice-8-mask", r.mask, bin}, args...)
 		bin = helper
 	}
-	p := &runProcess{cancel: cancel, done: make(chan struct{}), start: time.Now(), count: w.doctor.engine.listener.connections.Load()}
+	approvalBefore, err := runTree(filepath.Dir(w.approval.record))
+	if err != nil && !os.IsNotExist(err) {
+		cancel()
+		return nil, err
+	}
+	p := &runProcess{approval: approvalBefore, cancel: cancel, done: make(chan struct{}), start: time.Now(), count: w.doctor.engine.listener.connections.Load()}
 	if cover := os.Getenv("GOCOVERDIR"); cover != "" && r.mask != "" {
 		dir, err := os.MkdirTemp(cover, "slice-8-mask-")
 		if err != nil {
@@ -272,6 +280,12 @@ func (w *world) finishRun(p *runProcess) (runObservation, error) {
 		if request.PID == r.pid {
 			r.journal = append(r.journal, request)
 		}
+	}
+	after, afterErr := runTree(filepath.Dir(w.approval.record))
+	if afterErr != nil && !os.IsNotExist(afterErr) {
+		r.approvalErr = afterErr
+	} else if !reflect.DeepEqual(after, p.approval) {
+		r.approvalErr = fmt.Errorf("run rewrote approval state")
 	}
 	r.info, r.snapshotErr = os.Lstat(w.runSnapshotPath())
 	if r.snapshotErr == nil && r.info.Mode().IsRegular() {
@@ -379,6 +393,11 @@ func (w *world) runSecondProblem(rule string, exit int, journal string) error {
 	return w.runJournal(o.journal, journal, true)
 }
 func (w *world) runUnchangedRecords() error {
+	for _, r := range w.run.results {
+		if r.approvalErr != nil {
+			return r.approvalErr
+		}
+	}
 	data, err := os.ReadFile(w.runSnapshotPath())
 	if err != nil {
 		return err
@@ -444,6 +463,39 @@ func (w *world) runSnapshotDefect(defect string) error {
 	}
 }
 func (w *world) runThree(schedule string) error {
+	stop, stopped := make(chan struct{}), make(chan struct{})
+	expected := approvalJSON(map[string]any{"schema": 1, "project": w.approval.project, "generation": w.approval.generation, "fingerprint": w.approval.fingerprint, "settings": w.approval.settings})
+	go func() {
+		defer close(stopped)
+		ticker := time.NewTicker(50 * time.Microsecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				info, err := os.Lstat(w.runSnapshotPath())
+				if os.IsNotExist(err) {
+					continue
+				}
+				if err != nil {
+					w.run.partial = err
+					return
+				}
+				if !info.Mode().IsRegular() {
+					w.run.partial = fmt.Errorf("published snapshot not regular")
+					return
+				}
+				data, err := os.ReadFile(w.runSnapshotPath())
+				if err != nil || string(data) != string(expected) {
+					w.run.partial = fmt.Errorf("observed incomplete snapshot: %v", err)
+					return
+				}
+			}
+		}
+	}()
+	defer func() { close(stop); <-stopped }()
+
 	var children []*runProcess
 	var mu sync.Mutex
 	reached := make(chan struct{})
@@ -508,6 +560,9 @@ func (w *world) runThreeRefusals() error {
 		return fmt.Errorf("missing invocations")
 	}
 	for _, o := range w.run.results {
+		if o.approvalErr != nil {
+			return o.approvalErr
+		}
 		if o.result.exit != 3 || o.result.stdout != "" || !strings.Contains(o.result.stderr, "approval matched") || !strings.Contains(o.result.stderr, "offline startup is not implemented") {
 			return fmt.Errorf("wrong run result %+v", o.result)
 		}

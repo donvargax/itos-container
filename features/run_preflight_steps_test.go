@@ -5,6 +5,7 @@ import (
 	"github.com/cucumber/godog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -78,6 +79,22 @@ func (w *world) runPreflightSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^all three reach only the unimplemented-startup refusal with exit 3 and empty stdout$`, w.runThreeRefusals)
 	sc.Step(`^each run's Engine API journal contains ping, version, info and only the requested image inspection$`, w.runThreeJournals)
 	sc.Step(`^the final snapshot is never partial and its inode and mtime remain unchanged after publication$`, w.runSnapshotStable)
+	sc.Step(`^the policy inspection files differ only by the protected run snapshot$`, func() error {
+		got, err := w.policyFiles()
+		if err != nil {
+			return err
+		}
+		prefix := filepath.Dir(filepath.Dir(w.runSnapshotPath()))
+		for path := range got {
+			if path == prefix || strings.HasPrefix(path, prefix+string(filepath.Separator)) {
+				delete(got, path)
+			}
+		}
+		if !reflect.DeepEqual(got, w.policy.snapshot) {
+			return fmt.Errorf("unrelated policy fixture changed")
+		}
+		return nil
+	})
 	w.runContractSteps(sc)
 }
 func (w *world) runLocalDefect(defect string) error {

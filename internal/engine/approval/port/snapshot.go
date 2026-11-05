@@ -17,3 +17,17 @@ type Durable struct {
 type Snapshots interface {
 	Publish(Frozen) (Durable, Failure)
 }
+
+// PreflightCodec compares only locally observed canonical fields. Engine/image
+// facts remain absent until fresh inspection; approval cannot supply them.
+type PreflightCodec interface {
+	Codec
+	LocalCandidate(readiness.Result, string, string) Candidate
+	LocalMatches(Candidate, Record) bool
+}
+
+// FrozenRecords validates the same envelope from independent selected bytes.
+type FrozenRecords interface {
+	Records
+	FrozenRecord(Frozen) (Record, Failure)
+}

@@ -183,7 +183,7 @@ func (w *world) contractHandoff(c map[string]any, result, candidate, generation 
 	if r["Exit"] != float64(0) || h["Reference"] == "" || f["Settings"] != string(approvalJSON(settings)) || f["Fingerprint"] != "sha256:"+approvalHash(settings) || f["Project"] != project || f["Generation"] != generation {
 		return fmt.Errorf("missing exact durable %s handoff: %v", candidate, r)
 	}
-	if generation == "1" && !reflect.DeepEqual(r["Visible"], h["Frozen"]) {
+	if !reflect.DeepEqual(r["Published"], h["Frozen"]) {
 		return fmt.Errorf("snapshot differs from handoff")
 	}
 	return nil

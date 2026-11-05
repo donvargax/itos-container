@@ -10,11 +10,8 @@ import (
 
 // Resolve binds a validated inspection to effective IDs, overriding image users.
 func Resolve(r readiness.Result, uid, gid string, codec port.Codec) (port.Candidate, port.Failure) {
-	if !identity(uid) || !identity(gid) {
-		return port.Candidate{}, "identity.unavailable"
-	}
-	if uid == "0" {
-		return port.Candidate{}, "identity.root"
+	if failure := IdentityFailure(uid, gid); failure != "" {
+		return port.Candidate{}, failure
 	}
 	if !r.Ready {
 		return port.Candidate{}, "prerequisite"
@@ -23,6 +20,17 @@ func Resolve(r readiness.Result, uid, gid string, codec port.Codec) (port.Candid
 		return port.Candidate{}, "identity.mismatch"
 	}
 	return codec.Candidate(r, uid, gid), ""
+}
+
+// IdentityFailure validates effective host IDs without engine or filesystem access.
+func IdentityFailure(uid, gid string) port.Failure {
+	if !identity(uid) || !identity(gid) {
+		return "identity.unavailable"
+	}
+	if uid == "0" {
+		return "identity.root"
+	}
+	return ""
 }
 func identity(id string) bool {
 	n, err := strconv.ParseUint(id, 10, 32)
