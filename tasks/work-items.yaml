@@ -440,6 +440,9 @@ items:
       and diagrams still call internal/engine/manifest and readiness proposed, and name T-20 as
       planned. Update the status words from what the code holds; nothing else in the document
       changes.
+
+      The new repository's first registry push, 2026-11-05: also checks that a push to main starts
+      CI.
   - id: T-23
     title: Request Bugbot's review again
     phase: 1
