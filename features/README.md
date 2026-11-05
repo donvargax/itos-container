@@ -45,6 +45,24 @@ in a separate directory. It runs in the unfiltered suite; `-scenarios` and activ
 selections skip these independent reruns so only selected product IDs execute. Empty or ignored red input
 retains ordinary coverage; memory-only harness regressions still run.
 
+Slice-4's identity, publication and frozen-input contract IDs use a test-only
+`cmd/itos-container` assembly too. Their nested `go test` enables atomic coverage
+across the module when `GOCOVERDIR` is set and passes that directory explicitly
+through `-test.gocoverdir`, since `go test` supplies its own temporary directory.
+`TestApprovalContractCoverage` requires executed approval-domain counters for each
+of the five IDs in separate directories. Like the manifest regression, it skips
+filtered and active manual red selections so they execute only the requested IDs.
+
+The older-kernel approval fixture runs the product with umask `0777` as well as
+`0022`. Go applies that umask to its coverage files too. Each child therefore
+writes coverage to a private temporary subdirectory of the caller's `GOCOVERDIR`.
+After it exits, the harness gives only those metadata/counter files owner access
+and moves them unchanged into the caller's collection directory. The product's
+umask and approval-state permissions remain as tested. Missing metadata or counters
+fails collection. `TestApprovalKernelCoverage` runs both examples and requires
+successful conversion with executed private-directory initialization coverage.
+It preserves the same filtered, platform and engine selection boundaries.
+
 ## Running them
 
 ```sh

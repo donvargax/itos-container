@@ -40,6 +40,7 @@ type world struct {
 	policy   *policyWorld
 	manifest *manifestWorld
 	doctor   *doctorWorld
+	approval *approvalWorld
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -143,6 +144,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.manifestSteps(sc)
 	w.doctorSteps(sc)
 	w.runSteps(sc)
+	w.approvalSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.
@@ -403,6 +405,13 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 		defer cancel()
 	}
 	cmd := exec.CommandContext(ctx, program, args...)
+	if w.approval != nil && w.approval.location != "" {
+		// This trusted test wrapper changes only the child umask. Positional arguments
+		// remain literal, and no checkout shell or helper participates.
+		words := append([]string{"-c", `umask 0000; exec "$@"`, "slice-4-umask", program}, args...)
+		cmd = exec.CommandContext(ctx, "/bin/sh", words...)
+	}
+
 	cmd.Dir = dir
 	cmd.Env = env
 	if w.stdin != "" {

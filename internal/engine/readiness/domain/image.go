@@ -43,23 +43,7 @@ func (i Inspector) imageIssues(image port.Image, request manifest.Settings) []po
 	if image.OS != "linux" || image.Architecture != "amd64" {
 		issues = append(issues, port.Issue{Kind: port.ImagePlatform, Subject: request.Image})
 	}
-	if !matchesUser(image.User, request.ContainerUser, request.RemoteUser) {
-		issues = append(issues, port.Issue{Kind: port.ImageUser, Subject: request.Image})
-	}
 	return issues
-}
-
-func matchesUser(user string, requested ...*string) bool {
-	uid, gid, group := strings.Cut(user, ":")
-	if !decimal(uid) || uid[0] == '0' || (group && !decimal(gid)) {
-		return false
-	}
-	for _, value := range requested {
-		if value != nil && *value != uid {
-			return false
-		}
-	}
-	return true
 }
 
 func decimal(value string) bool { return value != "" && strings.Trim(value, "0123456789") == "" }

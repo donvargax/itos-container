@@ -1,0 +1,15 @@
+//go:build unix
+
+package disk
+
+import (
+	"golang.org/x/sys/unix"
+	"os"
+)
+
+const noFollow = unix.O_NOFOLLOW | unix.O_NONBLOCK
+
+func lock(file *os.File, exclusive bool) error {
+	return unix.Flock(int(file.Fd()), lockMode(exclusive))
+}
+func unlock(file *os.File) error { return unix.Flock(int(file.Fd()), unix.LOCK_UN) }

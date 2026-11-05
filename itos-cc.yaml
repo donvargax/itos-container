@@ -33,3 +33,12 @@ mutation:
       replacement: "0"
       reason: The final +1 skips the newline found by bytes.IndexByte. Replacing it with 0 leaves i at that same newline; the next loop iteration takes the whitespace branch, increments i and continues without changing depth or nodes. Both paths resume at the identical byte with identical budget state, or exit at EOF, and neither modifies data. All parser results and resource bounds are therefore unchanged.
       line_text: i += 2 + end + 1
+    - file: internal/engine/approval/disk/store.go
+      function: github.com/donvargax/itos-container/internal/engine/approval/disk.pin#read
+      hash: 64864094e55d13ad
+      line_in_function: 16
+      column: 80
+      original: "0"
+      replacement: "1"
+      reason: openRecord is os.Root.OpenFile with O_RDONLY|O_NOFOLLOW, without O_CREATE. Its perm argument is used only when creating a file; both 0 and 1 pass the Root nine-bit permission validation. Changing this unused permission value cannot affect an existing record, a missing-path refusal, the returned bytes or filesystem permissions. A test of the injected argument itself would assert an implementation detail rather than behavior.
+      line_text: file, err := p.ops.openRecord(p.root(), "current.json", os.O_RDONLY|noFollow, 0)

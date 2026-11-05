@@ -61,16 +61,21 @@ func TestRunAssemblyAndHelp(t *testing.T) {
 	}{
 		{"wrapper", "0", []string{"--json", "run", "--", "git"}, 2, true},
 		{"inherited", "1", []string{"run", "--", "git", "--no-json"}, 2, true},
-		{"ordinary", "0", []string{"run", "--", "--json"}, 3, false},
+		{"ordinary unapproved", "0", []string{"run", "--", "--json"}, 1, false},
 		{"missing", "", []string{"run"}, 2, false},
 		{"help", "", []string{"run", "--help"}, 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("ITOS_JSON", tc.inherited)
+			t.Setenv("ITOS_ROOT", t.TempDir())
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
 			var stdout, stderr strings.Builder
 			code := run(tc.args, strings.NewReader(""), &stdout, &stderr)
 			if code != tc.code {
 				t.Fatalf("code = %d, want %d; stderr %s", code, tc.code, stderr.String())
+			}
+			if tc.name == "ordinary unapproved" && !strings.Contains(stderr.String(), "itos container approve") {
+				t.Fatal(stderr.String())
 			}
 			if tc.json {
 				if !strings.Contains(stdout.String(), `"rule":"run.json-unsupported"`) {

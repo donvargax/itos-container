@@ -124,6 +124,9 @@ func (w *world) doctorProblem(rule string, exit int) error {
 	return nil
 }
 func (w *world) doctorOutcome(outcome string, exit int) error {
+	if outcome == "approval.identity.mismatch" {
+		return w.approvalProblem(outcome, exit, "")
+	}
 	if outcome == "ready" {
 		if err := w.doctorReady(); err != nil {
 			return err

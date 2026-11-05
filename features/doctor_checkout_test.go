@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -17,7 +18,7 @@ func (w *world) doctorCheckout() error {
 		image: doctorImage, imageID: doctorImageID, engineID: "engine-A", api: "1.56", env: map[string]string{}}
 	w.doctor = d
 	d.cwd = d.checkout
-	d.manifest = map[string]any{"image": d.image, "containerUser": "1000", "remoteUser": "1000"}
+	d.manifest = map[string]any{"image": d.image, "containerUser": strconv.Itoa(os.Geteuid()), "remoteUser": strconv.Itoa(os.Geteuid())}
 	for key, name := range map[string]string{"HOME": "home", "USERPROFILE": "home", "XDG_CONFIG_HOME": "config", "XDG_STATE_HOME": "state", "XDG_CACHE_HOME": "cache", "XDG_DATA_HOME": "data", "DOCKER_CONFIG": "docker", "PATH": "bin"} {
 		dir := filepath.Join(d.host, name)
 		if err := os.MkdirAll(dir, 0700); err != nil {
@@ -65,6 +66,12 @@ func (w *world) doctorImageName(name string) error {
 
 func (w *world) doctorUsers(container, remote string) error {
 	for key, value := range map[string]string{"containerUser": container, "remoteUser": remote} {
+		if value == "host UID" {
+			value = strconv.Itoa(os.Geteuid())
+		}
+		if value == "other UID" {
+			value = strconv.Itoa(os.Geteuid() + 1)
+		}
 		if value == "omitted" {
 			delete(w.doctor.manifest, key)
 		} else {
@@ -300,7 +307,14 @@ func doctorTree(root string) (map[string]string, error) {
 				return err
 			}
 		}
-		files[path] = fmt.Sprintf("%v:%s", info.Mode(), data)
+		owner := "unavailable"
+		stat := reflect.Indirect(reflect.ValueOf(info.Sys()))
+		if stat.IsValid() && stat.Kind() == reflect.Struct {
+			if uid := stat.FieldByName("Uid"); uid.IsValid() {
+				owner = fmt.Sprint(uid.Interface())
+			}
+		}
+		files[path] = fmt.Sprintf("%v:%s:%s", info.Mode(), owner, data)
 		if info.IsDir() && info.Mode().Perm()&0500 == 0 {
 			return filepath.SkipDir
 		}

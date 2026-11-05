@@ -161,17 +161,22 @@ Feature: Run invocation refusals
   # increments. Interface choice: classify unavailable offline startup as a
   # missing requirement (exit 3), explain that it is not implemented, and point
   # to policy-only doctor as inspection, never as permission or a run fallback.
-  # This interim refusal precedes policy/manifest/approval access. Later startup
-  # slices must explicitly supersede this interim contract in their specs and
-  # behaviour commits; invocation refusals above remain required.
-  @ID-RUN-06 @slice-7
+  # Slice-4 supersedes the original pre-prerequisite refusal. Valid argv now
+  # checks a valid approved temporary checkout, preserving the same argument
+  # boundary checks and the refusal to launch an unimplemented worker.
+  @ID-RUN-06 @slice-7 @local-engine-fixture
   Scenario: A valid command refuses while offline startup is not implemented
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "1"
+    And the policy inspection files are snapshotted
     When itos-container runs with "run -- git status"
     Then its error output says "offline startup is not implemented"
     And its error output says "doctor --policy-only"
     And its error output says "itos-container:"
     And it exits with code 3
     And its standard output is empty
+    And no engine mutation or image acquisition was attempted
+    And the approval checkout and host state are unchanged
     And the engine recorder has no connections
     And no inspection helper sentinel was executed
     And the policy inspection files are unchanged
@@ -184,14 +189,19 @@ Feature: Run invocation refusals
   # The first word after the first separator is the executable, even when it is
   # --json, --help or --. It is nonempty syntax; do not resolve it on the host.
   # Later separators remain workload arguments and never restart wrapper parsing.
-  @ID-RUN-07 @slice-7
+  @ID-RUN-07 @slice-7 @local-engine-fixture
   Scenario Outline: Arguments after the separator belong only to the workload
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "1"
+    And the policy inspection files are snapshotted
     When itos-container runs with "<arguments>"
     Then its error output says "offline startup is not implemented"
     And its error output says "doctor --policy-only"
     And its error output says "itos-container:"
     And it exits with code 3
     And its standard output is empty
+    And no engine mutation or image acquisition was attempted
+    And the approval checkout and host state are unchanged
     And the engine recorder has no connections
     And no inspection helper sentinel was executed
     And the policy inspection files are unchanged

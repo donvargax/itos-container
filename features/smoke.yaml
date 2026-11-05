@@ -44,6 +44,10 @@
   scenarios:
     - id: "@ID-DOCTOR-01"
       why: read-only inspection identifies the checkout, local engine and exact cached image without granting approval
+- file: approval.feature
+  scenarios:
+    - id: "@ID-APPROVAL-07"
+      why: terminal review and explicit consent publish the exact candidate in private temporary host state without checkout execution or engine mutation
 - file: parsing.feature
   scenarios:
     - id: "@ID-PARSING-04"
