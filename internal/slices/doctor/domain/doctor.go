@@ -4,11 +4,15 @@ package domain
 import (
 	manifest "github.com/donvargax/itos-container/internal/engine/manifest/port"
 	policy "github.com/donvargax/itos-container/internal/engine/policy/port"
+	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	"github.com/donvargax/itos-container/internal/slices/doctor/port"
 )
 
 // Inspect validates policy without inspecting its requested manifest.
 func Inspect(policies port.Policies) policy.Result { return policies.Inspect() }
+
+// InspectReadiness requests read-only observations, never approval.
+func InspectReadiness(inspector port.Readiness) readiness.Result { return inspector.Inspect() }
 
 // InspectManifest short-circuits on policy refusal, preserving its typed result.
 // Readiness and engine metadata are not dependencies of file validation.

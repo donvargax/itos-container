@@ -19,6 +19,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/alecthomas/kong"
@@ -30,6 +31,10 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/manifest/reference"
 	"github.com/donvargax/itos-container/internal/engine/policy/disk"
 	policyyaml "github.com/donvargax/itos-container/internal/engine/policy/yaml"
+	readinessdisk "github.com/donvargax/itos-container/internal/engine/readiness/disk"
+	"github.com/donvargax/itos-container/internal/engine/readiness/docker"
+	readiness "github.com/donvargax/itos-container/internal/engine/readiness/domain"
+	readinessport "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	"github.com/donvargax/itos-container/internal/slices/count/command"
 	countdisk "github.com/donvargax/itos-container/internal/slices/count/disk"
 	"github.com/donvargax/itos-container/internal/slices/count/input"
@@ -105,6 +110,17 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	case "doctor":
 		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}}
 		c.Doctor.Manifests = inspection.Manifests{Files: manifestdisk.Files{}, Parser: jsonc.Parser{}, References: reference.References{}}
+		checkout := &readinessdisk.Checkout{}
+		root := os.Getenv("ITOS_ROOT")
+		if root == "" {
+			root, _ = os.Getwd()
+		}
+		c.Doctor.Readiness = inspection.Readiness{Inspector: readiness.Inspector{
+			Checkout: checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}},
+			Files: manifestdisk.Files{OpenRoot: checkout.OpenRoot}, Parser: jsonc.Parser{}, References: reference.References{}, Engine: docker.Engine{},
+		}, Input: readinessport.Input{Root: root, OS: runtime.GOOS, Architecture: runtime.GOARCH,
+			Host: os.Getenv("DOCKER_HOST"), Context: os.Getenv("DOCKER_CONTEXT"), TLSVerify: os.Getenv("DOCKER_TLS_VERIFY"), CertPath: os.Getenv("DOCKER_CERT_PATH"), APIVersion: os.Getenv("DOCKER_API_VERSION"),
+		}}
 		return c.Doctor.Run(ui)
 	case "run":
 		ui.Classify = runcommand.Classify

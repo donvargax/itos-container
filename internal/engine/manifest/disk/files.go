@@ -13,7 +13,12 @@ import (
 
 // Files uses the effective checkout root supplied by command assembly. An empty
 // Root means the working directory, matching the extension's existing seam.
-type Files struct{ Root string }
+type Files struct {
+	Root string
+	// OpenRoot duplicates an already pinned checkout root when supplied. The
+	// caller retains its pin; every returned handle is owned by this reader.
+	OpenRoot func() (*os.Root, error)
+}
 
 // Read checks every directory and opens the final regular file without blocking
 // on a FIFO or following a link. No underlying error or source value is exposed.
@@ -94,7 +99,11 @@ func (f Files) walkDirectories(parts []string, open func(*os.Root, string) (*os.
 	if path == "" {
 		path = "."
 	}
-	root, err := os.OpenRoot(path)
+	openRoot := f.OpenRoot
+	if openRoot == nil {
+		openRoot = func() (*os.Root, error) { return os.OpenRoot(path) }
+	}
+	root, err := openRoot()
 	if err != nil {
 		return nil, port.Path
 	}
@@ -109,10 +118,18 @@ func (f Files) walkDirectories(parts []string, open func(*os.Root, string) (*os.
 			return nil, port.Path
 		}
 		next, err := open(root, part)
-		_ = root.Close()
 		if err != nil {
-			return nil, fileFailure(err)
+			// Windows can report a replaced non-directory as ErrNotExist.
+			// Re-observe the entry while the parent is pinned: an existing
+			// replacement is unsafe, not an absent requested directory.
+			failure := fileFailure(err)
+			if _, observed := root.Lstat(part); observed == nil {
+				failure = port.Path
+			}
+			_ = root.Close()
+			return nil, failure
 		}
+		_ = root.Close()
 		opened, err := next.Stat(".")
 		if err != nil || !os.SameFile(info, opened) {
 			_ = next.Close()

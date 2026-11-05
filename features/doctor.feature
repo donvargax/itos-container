@@ -124,7 +124,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # A failed lookup leaves image_metadata checked=false, present=null, unused=[];
   # only a successful image inspection can establish an absent or present label.
 
-  @wip @slice-3 @ID-DOCTOR-01 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-01 @local-engine-fixture
   Scenario: Inspect a standalone checkout and the exact cached worker image
     Given a doctor checkout
     And a local Engine API fixture
@@ -139,7 +139,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     And the Engine API journal contains only ping, version, info and the requested image inspection
     And the checkout and host control state are unchanged
 
-  @wip @slice-3 @ID-DOCTOR-02 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-02 @local-engine-fixture
   Scenario: Explain successful inspection without claiming permission to run
     Given a doctor checkout
     And a local Engine API fixture
@@ -153,7 +153,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Effective root is absolute ITOS_ROOT if set, otherwise cwd. It must name the
   # checkout root itself; no upward search and no PWD/GIT_DIR/GIT_WORK_TREE override.
   # ITOS_CONFIG remains core itos configuration, never the sandbox policy.
-  @wip @slice-3 @ID-DOCTOR-03 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-03 @local-engine-fixture
   Scenario: Honor the extension root and JSON protocol without reading core configuration as policy
     Given a doctor checkout
     And a local Engine API fixture
@@ -164,7 +164,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     And it exits with code 0
     And its error output does not say "for scripts, use --json"
 
-  @wip @slice-3 @ID-DOCTOR-25 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-25 @local-engine-fixture
   Scenario Outline: Diagnose invalid or inaccessible effective roots without engine access
     Given a doctor checkout
     And a local Engine API fixture
@@ -182,7 +182,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Identity is the canonical absolute root plus root and .git device/inode pairs,
   # not a basename, Git origin, branch, HEAD commit or hash of mutable file contents.
   # doctor does not persist or authorize this tuple. Approval/run must re-inspect it.
-  @wip @slice-3 @ID-DOCTOR-04 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-04 @local-engine-fixture
   Scenario: Keep equal-basename checkouts distinct and an unchanged checkout stable
     Given doctor checkouts "one/project" and "two/project"
     And a local Engine API fixture
@@ -195,7 +195,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Do not follow replacement paths after inspection starts. Pin the directories
   # used for reading and compare their identity to the selected paths before
   # reporting success. This detects observed changes, not future immutability.
-  @wip @slice-3 @ID-DOCTOR-05 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-05 @local-engine-fixture
   Scenario Outline: Refuse an observed checkout substitution during inspection
     Given a doctor checkout
     And a local Engine API fixture paused before its image response
@@ -212,7 +212,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # without following .git indirection. A gitfile covers linked worktrees, submodule
   # worktrees and separate git dirs; none becomes supported by naming a local engine.
   # A normal .git needs regular HEAD/config and embedded objects/refs directories.
-  @wip @slice-3 @ID-DOCTOR-06 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-06 @local-engine-fixture
   Scenario Outline: Refuse unsupported checkout layouts before contacting an engine
     Given a doctor checkout changed to the layout "<layout>"
     And a local Engine API fixture
@@ -236,7 +236,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Reject symlinks in the selected root's components or required .git metadata;
   # never canonicalize an untrusted alias into permission to inspect its target.
   # Ordinary symlinks in source files are not traversed or banned by doctor.
-  @wip @slice-3 @ID-DOCTOR-07 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-07 @local-engine-fixture
   Scenario Outline: Refuse symlinked inspection roots and Git metadata
     Given a doctor checkout with "<entry>" replaced by a symlink to an outside fixture
     And a local Engine API fixture
@@ -257,7 +257,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
 
   # Sentinels are fixture programs that would create a marker if invoked; writing
   # them is setup, observing their absence alone is not the positive assertion.
-  @wip @slice-3 @ID-DOCTOR-08 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-08 @local-engine-fixture
   Scenario: Inspect hostile checkout data without running host helpers or modifying state
     Given a doctor checkout
     And a local Engine API fixture
@@ -276,7 +276,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # a socket inside the checkout, including an alias into it. Trust the host user
   # and selected engine as the pilot does; a Unix URI is not remote-host attestation.
   # No contexts, SSH transport, TCP (even loopback), TLS material or registry login.
-  @wip @slice-3 @ID-DOCTOR-09 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-09 @local-engine-fixture
   Scenario Outline: Reject remote or malformed engine selection without dialing it
     Given a doctor checkout
     And a connection-recording endpoint fixture selected as "<selection>"
@@ -300,7 +300,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # A named context is refused even alongside DOCKER_HOST, so inspection cannot
   # silently inspect a different daemon than the host user's Docker selection.
   # DOCKER_API_VERSION is also refused: the supported SDK negotiates the API.
-  @wip @slice-3 @ID-DOCTOR-10 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-10 @local-engine-fixture
   Scenario Outline: Refuse alternate engine configuration without loading host credentials
     Given a doctor checkout
     And a local Engine API fixture
@@ -318,7 +318,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
       | DOCKER_CERT_PATH=/unused    |
       | DOCKER_API_VERSION=1.24     |
 
-  @wip @slice-3 @ID-DOCTOR-11 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-11 @local-engine-fixture
   Scenario Outline: Distinguish an unavailable local socket from a policy refusal
     Given a doctor checkout
     And the selected local socket is "<state>"
@@ -339,7 +339,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # normalized to amd64). Desktop, Rancher, Podman and unknown products are refused.
   # Require a nonempty /info ID and mutually compatible SDK/server API ranges.
   # SDK negotiation must not silently bypass an incompatible server minimum.
-  @wip @slice-3 @ID-DOCTOR-12 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-12 @local-engine-fixture
   Scenario Outline: Refuse engine observations that cannot establish a supported identity
     Given a doctor checkout
     And a local Engine API fixture with "<observation>"
@@ -364,7 +364,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # info and image reads; no automatic retries. Local timing assertions allow up
   # to 7 seconds to observe process exit. These are inspection limits only, not
   # startup/teardown limits for the separately specified owned-run lifecycle.
-  @wip @slice-3 @ID-DOCTOR-13 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-13 @local-engine-fixture
   Scenario Outline: Bound incomplete engine inspection and keep operational failures typed
     Given a doctor checkout
     And a local Engine API fixture that "<failure>"
@@ -385,7 +385,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
 
   # Endpoint alone is insufficient: reinstalling/replacing a daemon at the same
   # socket must be visible to the later approval binding. No host state is written.
-  @wip @slice-3 @ID-DOCTOR-14 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-14 @local-engine-fixture
   Scenario: Report a changed daemon identity at the same local endpoint
     Given a doctor checkout
     And a local Engine API fixture
@@ -398,7 +398,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Re-inspect daemon ID and local socket identity before reporting a successful
   # snapshot. Do not combine one daemon's info with another daemon's image result.
   # An observed replacement is a refusal; run/approval still must revalidate later.
-  @wip @slice-3 @ID-DOCTOR-26 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-26 @local-engine-fixture
   Scenario Outline: Refuse engine substitution observed within one inspection
     Given a doctor checkout
     And a local Engine API fixture paused before its image response
@@ -416,7 +416,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # the requested repository manifest digest. Require the requested RepoDigest
   # AND a nonempty sha256 image ID; retain both for later approval/run binding.
   # No registry/distribution lookup, pull, build, load, create or tag fallback.
-  @wip @slice-3 @ID-DOCTOR-15 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-15 @local-engine-fixture
   Scenario: Report a missing cached image without acquiring it
     Given a doctor checkout
     And a local Engine API fixture returning image-not-found for the requested digest
@@ -430,7 +430,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     And its fix asks the host operator to prepare the exact image outside doctor
     And the Engine API journal contains only ping, version, info and the requested image inspection
 
-  @wip @slice-3 @ID-DOCTOR-16 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-16 @local-engine-fixture
   Scenario Outline: Reject a cached image that does not attest the requested repository digest
     Given a doctor checkout
     And a local Engine API fixture with image RepoDigests "<digests>"
@@ -446,7 +446,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
       | same digest under a different repository only         |
       | image config ID instead of the requested RepoDigest   |
 
-  @wip @slice-3 @ID-DOCTOR-17 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-17 @local-engine-fixture
   Scenario Outline: Reject cached image platforms incompatible with the offline target
     Given a doctor checkout
     And a local Engine API fixture with image platform "<platform>"
@@ -469,7 +469,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # neither fills them from the image/policy nor compares with host approval.
   # Slice-4 resolves omissions and binds the approved identity. The policy stays
   # identical across these cases, including the alternate matching UID control.
-  @wip @slice-3 @ID-DOCTOR-29 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-29 @local-engine-fixture
   Scenario Outline: Compare the cached image user with manifest identity requests
     Given a doctor checkout
     And a local Engine API fixture
@@ -505,7 +505,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # merge hidden settings, execute them or invent a second permission profile.
   # Unlike slice-2's data-contract tests, these exercise the product binary and
   # Engine API adapter, so a missing call to the validator is observable.
-  @wip @slice-3 @ID-DOCTOR-27 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-27 @local-engine-fixture
   Scenario Outline: Validate an inspected image label and report accepted metadata as unused
     Given a doctor checkout
     And a local Engine API fixture
@@ -532,7 +532,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
 
   # A valid first entry cannot hide an operational second entry. All response
   # fields except the label remain valid, isolating the validator wiring failure.
-  @wip @slice-3 @ID-DOCTOR-28 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-28 @local-engine-fixture
   Scenario Outline: Refuse inspected image metadata through the shared manifest validator
     Given a doctor checkout
     And a local Engine API fixture
@@ -555,7 +555,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
       | [{"initializeCommand":"./slice-3-record-execution"}]          | /0/initializeCommand |
       | [{"name":"display"},{"capAdd":["SYS_ADMIN"]}]                 | /1/capAdd            |
 
-  @wip @slice-3 @ID-DOCTOR-18 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-18 @local-engine-fixture
   Scenario Outline: Do not report readiness from an unusable cached image response
     Given a doctor checkout
     And a local Engine API fixture with image response "<response>"
@@ -580,7 +580,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Each problem keeps its own exit; multiple inspection problems use the highest
   # numeric exit, consistent with the inherited wrapper convention. No cascaded
   # "missing image" when the engine could not be contacted.
-  @wip @slice-3 @ID-DOCTOR-19 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-19 @local-engine-fixture
   Scenario: Report both independent cached image defects deterministically
     Given a doctor checkout
     And a local Engine API fixture with the wrong image digest and platform linux/arm64
@@ -593,7 +593,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Synthetic canaries are not credentials. Never copy raw engine response bodies,
   # proxy URLs, image environment, labels, config commands or helper data into
   # diagnostics. Select only the specified identity fields for success output.
-  @wip @slice-3 @ID-DOCTOR-20 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-20 @local-engine-fixture
   Scenario Outline: Keep untrusted engine content out of output and persisted diagnostics
     Given a doctor checkout
     And a local Engine API fixture with synthetic canary text in "<location>"
@@ -611,7 +611,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
 
   # User-selected endpoint text can itself contain credential-looking data. A
   # refusal names the field and transport, never echoes userinfo/query/fragment.
-  @wip @slice-3 @ID-DOCTOR-21 @local-engine-fixture
+  @slice-3 @ID-DOCTOR-21 @local-engine-fixture
   Scenario: Refuse a credential-bearing remote endpoint without echoing its content
     Given a doctor checkout
     And DOCKER_HOST names a remote HTTPS endpoint with synthetic canaries in userinfo and query
@@ -626,7 +626,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Use a portable connection recorder; no Unix socket or real engine is needed.
   # Do not add a production environment variable to fake the host platform. The
   # domain's platform cases also use value inputs and fakes in its unit tests.
-  @wip @slice-3 @ID-DOCTOR-22 @unsupported-host @manual-platform
+  @slice-3 @ID-DOCTOR-22 @unsupported-host @manual-platform
   Scenario: Refuse an unsupported host before opening an engine connection
     Given a doctor checkout on an unsupported host
     And a connection-recording endpoint fixture
@@ -643,7 +643,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # it must see attempted forbidden operations, not merely compare resource counts.
   # Setup failure is a failed required CI case, not a skip. Neither scenario runs
   # a worker or establishes the later run slice's isolation properties.
-  @wip @slice-3 @ID-DOCTOR-23 @engine
+  @slice-3 @ID-DOCTOR-23 @engine
   Scenario: Inspect an operator-cached image on native Docker without changing resources
     Given a CI-only doctor checkout and a preloaded native Docker worker fixture
     And a read-only engine request recorder and a snapshot of engine resources
@@ -653,7 +653,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     And the engine recorder observed only inspection requests
     And engine resources, checkout files and host control state are unchanged
 
-  @wip @slice-3 @ID-DOCTOR-24 @engine
+  @slice-3 @ID-DOCTOR-24 @engine
   Scenario: Missing real cached content never triggers image acquisition
     Given a CI-only doctor checkout requesting a digest absent from native Docker
     And a read-only engine request recorder and a snapshot of engine resources

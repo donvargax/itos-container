@@ -40,6 +40,10 @@
   scenarios:
     - id: "@ID-MANIFEST-01"
       why: selected manifest parsing resolves literal defaults without engine inspection
+- file: doctor.feature
+  scenarios:
+    - id: "@ID-DOCTOR-01"
+      why: read-only inspection identifies the checkout, local engine and exact cached image without granting approval
 - file: parsing.feature
   scenarios:
     - id: "@ID-PARSING-04"

@@ -53,7 +53,7 @@ func TestPolicyOnlyAndPolicyFailureNeverCallManifest(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		policies := &porttest.Policies{Result: tc.result}
 		manifests := &porttest.Manifests{}
-		c := CLI{Policies: policies, Manifests: manifests, PolicyOnly: tc.policyOnly, JSON: true}
+		c := CLI{Policies: policies, Manifests: manifests, PolicyOnly: tc.policyOnly, ManifestOnly: !tc.policyOnly, JSON: true}
 		if code := c.Run(&cli.UI{Stdout: &stdout, Stderr: &stderr}); code != tc.code {
 			t.Fatal(code)
 		}
