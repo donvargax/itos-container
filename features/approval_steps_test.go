@@ -122,6 +122,7 @@ func (w *world) approvalSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^bare approve runs at a terminal with no answer available$`, func() error { return w.approvalTerminal("plain", "unavailable", "", "") })
 	sc.Step(`^bare approve runs with "([^"]*)" and input "y"$`, func(streams string) error { return w.approvalTerminal("plain", "y", "", streams) })
 	sc.Step(`^approve runs without a terminal with the independently calculated exact fingerprint and "([^"]*)"$`, w.approvalExact)
+	sc.Step(`^approve runs with the exact fingerprint without fchmodat2 and with umask "([^"]*)"$`, w.approvalLegacyKernel)
 	sc.Step(`^approve runs without a terminal with fingerprint "([^"]*)" as JSON$`, w.approvalBadFingerprint)
 	sc.Step(`^terminal approve shows its review, the fixture (?:changes|replaces) "([^"]*)", and then answers yes$`, func(edit string) error { return w.approvalTerminal("plain", "yes", edit, "") })
 	sc.Step(`^two terminal approvals review generation "4", the first answers yes, then the second answers yes$`, w.approvalConcurrent)

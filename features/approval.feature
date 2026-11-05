@@ -537,6 +537,26 @@ Feature: Review and record approval of exact offline settings
       | empty XDG_STATE_HOME      | matching                | HOME/.local/state/itos-container           | 0    |
       | relative XDG_STATE_HOME   | approval.state.location | none                                      | 2    |
 
+  # Linux 5.15/6.1 do not provide fchmodat2. A test-only child returns ENOSYS
+  # for that syscall before execing the product; it uses only the temporary
+  # checkout/state and synthetic Engine API. Initialization must still pin and
+  # check the new inode, including when umask removes every directory permission.
+  @slice-4 @ID-APPROVAL-32 @local-engine-fixture @wip
+  Scenario Outline: First approval works without fchmodat2 regardless of umask
+    Given an approval checkout and isolated host state
+    When approve runs with the exact fingerprint without fchmodat2 and with umask "<umask>"
+    Then it reports matching approval for that fingerprint without a prompt and exits with code 0
+    And the sole active approval is the exact candidate at generation "1" in protected host state
+    And all created managed directories are owned by the effective UID with mode 0700
+    And all created records and locks are owned by the effective UID with mode 0600
+    And the checkout is unchanged and only approval state was written
+    And no engine mutation or image acquisition was attempted
+
+    Examples:
+      | umask |
+      | 0022  |
+      | 0777  |
+
   @slice-4 @ID-APPROVAL-21 @local-engine-fixture
   Scenario: Concurrent reviews cannot overwrite an approval recorded after their review began
     Given an approval checkout and isolated host state
