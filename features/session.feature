@@ -436,6 +436,37 @@ Feature: Owned unstarted worker creation and cleanup
       | atomic publication |
       | parent fsync       |
 
+  # Compound failure must not lose either the write error or recovery authority.
+  # The Given only prepares approved inputs and arms two faults. Create and its
+  # first full-ID inspection succeed; the owned-record file fsync then fails
+  # BEFORE publication. From that boundary onward, every product-facing engine
+  # inspection is unavailable, including reconnect/negotiation; the independent
+  # observer still sees the created worker. Keep both faults active until the
+  # first create/cleanup attempt has returned and its state has been captured.
+  # The creation result remains ownership-write-failed, with cleanup uncertainty
+  # reported separately, never success or an erased primary error. The returned
+  # safe relative intent reference must identify the surviving complete intent.
+  # Only then clear both faults and discard every controller handle/in-memory ID.
+  # The new subprocess receives that reference and host context, never the ID
+  # retained by the observer. Its explicit cleanup reconciles by name and full ID;
+  # it is not a new preflight or a create retry. Check the first attempt's unchanged
+  # intent and still-present resource before the successful retry changes them.
+  # Today the first Then fails: there is no session create, owned-record write or
+  # cleanup result. Unavailable scaffolding cannot satisfy the observed-create
+  # assertion; all steps below remain new work for the implementer's red commit.
+  @wip @slice-9 @ID-SESSION-18 @linux
+  Scenario: An ownership write failure remains recoverable when immediate cleanup is unavailable
+    Given an approved session contract fixture with owned-record fsync failure followed by unavailable cleanup inspection
+    When creation and cleanup finish with both faults active, then a new controller retries cleanup after both faults are cleared through each local backend
+    Then each backend retains ownership-write-failed with separate incomplete cleanup after exactly one observed unstarted create
+    And the first attempt returns the exact surviving intent reference without a successful ownership handoff
+    And the first cleanup attempts fresh engine inspection without removal or an absent update
+    And the first attempt leaves the original complete intent unchanged and the created worker independently observable
+    And the new controller reconciles the exact random name and rechecks its full ID against the durable intent
+    And each cleanup completes only after ID absence and durable absent recording on the later attempt
+    And no replacement create, worker start or foreign removal was attempted
+    And session operations preserve unrelated resources, checkout edits, approval and frozen settings
+
   # Lost response and a malformed success both hide the ID from the product.
   # Reopened cleanup must discover it without a second create or memory handoff.
   @wip @slice-9 @ID-SESSION-05 @linux
