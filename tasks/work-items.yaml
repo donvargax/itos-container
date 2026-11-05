@@ -432,6 +432,6 @@ items:
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
