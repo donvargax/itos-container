@@ -190,7 +190,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/engine/manifest` | Proposed | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
 | `internal/engine/readiness` | Implemented prerequisite | Read-only checkout, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
-| `internal/engine/session` | Proposed; increments slice-9–12 | Lifecycle, ownership and recovery shared by run/status/stop. | Prerequisite engines and own lifecycle/state ports; settled intent, identity, loss and budget choices below still need implementation and proof. |
+| `internal/engine/session` | Owned unstarted create/cleanup implemented by slice-9; runtime integration remains slice-10–12 | Durable intent, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK and entropy adapters; approval protected-storage and frozen-codec ports; readiness identity contracts. Test-only cmd assembly exposes this boundary; public run still stops after preflight. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
 or runtime permission. Doctor composes readiness and approval inspection; readiness
@@ -202,6 +202,18 @@ terminal presentation. The disk store locks pinned project directories, so read-
 inspection and frozen selection need no lock-file creation. It validates ancestor and
 record ownership/permissions, compares generations under that lock, and publishes by
 private-file fsync, rename and parent fsync. Consent waits hold no store lock.
+
+Session storage reuses those pinned primitives through approval's `Storage` port.
+An exclusive initial publication cannot replace an existing operation token. Owned
+and absent updates compare the preceding complete record under the same protected
+lock, whose acquisition honors the caller's deadline. Cleanup validates the original
+snapshot without reading current policy, manifest or approval, then checks the selected
+socket/daemon and inspects the full resource ID before removal. Name-only recovery
+requires matching name and full-ID observations; a missing name after uncertain create
+retains the intent. Explicit full-ID absence precedes a durable absent tombstone.
+The local fake/HTTP scenarios establish this contract; CI alone establishes the native
+Docker create/remove evidence. Neither establishes worker execution or isolation.
+
 
 
 ```mermaid

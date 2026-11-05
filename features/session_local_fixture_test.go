@@ -329,6 +329,7 @@ func (w *world) sessionLocalAction(action string) error {
 			}
 			s.cleanupStart = len(s.api.requests)
 			s.cleanup, err = w.sessionProbe("cleanup", s.reference, nil)
+			s.create.Cleanup = s.cleanup.Outcome
 		}
 	}
 	if err != nil {
@@ -359,6 +360,9 @@ func (w *world) sessionLocalAction(action string) error {
 	}
 	if action == "two" {
 		original := *s
+		original.api = &sessionAPI{w: s.api.w, server: s.api.server,
+			requests: append([]sessionRequest{}, s.api.requests...), created: append([]string{}, s.api.created...),
+			observed: s.api.observed, local: s.api.local, absent: s.api.absent, problem: s.api.problem}
 		var token [32]byte
 		if _, err = rand.Read(token[:]); err != nil {
 			return err

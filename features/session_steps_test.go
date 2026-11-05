@@ -51,6 +51,12 @@ func (w *world) sessionSteps(sc *godog.ScenarioContext) {
 				if err := w.sessionObservedCreate(); err != nil {
 					return err
 				}
+			} else {
+				for _, request := range w.session.api.requests {
+					if request.Method == "POST" {
+						return fmt.Errorf("recovery attempted replacement creation")
+					}
+				}
 			}
 			return w.sessionNoForbidden()
 		})

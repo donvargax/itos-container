@@ -80,7 +80,7 @@ func newSessionHarnessWorld(t *testing.T) *world {
 
 // A local HTTP-only control exercises the same subprocess/barrier/observer path.
 // It is harness evidence, not red evidence for either CI-only scenario.
-func TestSessionUnavailableControl(t *testing.T) {
+func TestSessionLocalControl(t *testing.T) {
 	w := newSessionHarnessWorld(t)
 	if err := w.sessionRun(false); err != nil {
 		t.Fatal(err)
@@ -88,14 +88,21 @@ func TestSessionUnavailableControl(t *testing.T) {
 	if w.session.fixtureError != nil {
 		t.Fatal(w.session.fixtureError)
 	}
-	if w.session.create.PreflightFailure != "" || w.session.create.Outcome != "unavailable" || w.session.cleanup.Outcome != "unavailable" || w.session.before == nil {
-		t.Fatalf("unavailable seam did not reach the behavior boundary: create=%s preflight=%s cleanup=%s", w.session.create.Outcome, w.session.create.PreflightFailure, w.session.cleanup.Outcome)
+
+	if err := w.sessionOwned(); err != nil {
+		t.Fatal(err)
 	}
-	if err := w.sessionOwned(); err == nil || !strings.Contains(err.Error(), "expected exactly one observed create") {
-		t.Fatalf("missing create did not fail its behavior assertion: %v", err)
+	if err := w.sessionIntentBeforeCreate(); err != nil {
+		t.Fatal(err)
 	}
-	if w.session.api.problem != nil {
-		t.Fatal(w.session.api.problem)
+	if err := w.sessionDurableAbsent(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.sessionUnrelated(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.sessionNoForbidden(); err != nil {
+		t.Fatal(err)
 	}
 }
 

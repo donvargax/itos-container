@@ -18,6 +18,7 @@ type sessionResult struct {
 	Handoff                                           bool
 	Workload                                          *int
 	Events                                            []sessionEvent
+	Memory                                            *sessionMemoryOutput
 }
 
 type sessionEvent struct {

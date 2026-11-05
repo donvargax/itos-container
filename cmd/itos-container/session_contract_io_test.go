@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"strings"
 )
@@ -50,6 +51,21 @@ func (s *sessionContractIO) write(file *os.File, data []byte) (int, error) {
 }
 
 func (s *sessionContractIO) fileSync(file *os.File) error {
+	if s.stage == "" {
+		data := make([]byte, 65537)
+		n, err := file.ReadAt(data, 0)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return s.observe("file fsync", err)
+		}
+		var record struct {
+			Stage string `json:"stage"`
+		}
+		if err = json.Unmarshal(data[:n], &record); err != nil {
+			return s.observe("file fsync", err)
+		}
+		s.stage, s.bytes = record.Stage, string(data[:n])
+	}
+
 	if s.fails("file fsync") {
 		return s.observe("file fsync", errors.New("session fixture fsync fault"))
 	}
@@ -79,8 +95,18 @@ func (s *sessionContractIO) directorySync(file *os.File) error {
 
 func (s *sessionContractIO) fails(operation string) bool {
 	prefix := s.stage
+	if prefix == "" {
+		prefix = "intent"
+	}
 	if prefix == "owned" || prefix == "absent" {
 		prefix += "-record"
 	}
 	return s.fault == prefix+" "+operation || (s.stage == "owned" && operation == "file fsync" && strings.HasPrefix(s.fault, "owned-record file fsync then "))
+}
+
+func (s *sessionContractIO) exclusive(root *os.Root, before, after string) error {
+	if s.fails("atomic publication") {
+		return s.observe("atomic publication", errors.New("session fixture publication fault"))
+	}
+	return s.observe("atomic publication", root.Link(before, after))
 }

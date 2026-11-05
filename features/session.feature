@@ -240,7 +240,7 @@ Feature: Owned unstarted worker creation and cleanup
   # Expected first failing assertions are called out below; none has run in this spec.
 
   # Positive ownership and cleanup; today the session boundary is unavailable.
-  @wip @slice-9 @ID-SESSION-01 @linux
+  @slice-9 @ID-SESSION-01 @linux
   Scenario Outline: A durable intent owns an unstarted worker through confirmed cleanup
     Given an approved session contract fixture with child umask "<umask>"
     When the session contract creates one worker and cleans it through each local backend
@@ -277,7 +277,7 @@ Feature: Owned unstarted worker creation and cleanup
   # A's snapshot must survive cleanup. This is local request/ownership evidence,
   # not runtime isolation proof. Today the first Then fails because the session
   # boundary cannot create a worker or return owned-unstarted from A's handoff.
-  @wip @slice-9 @ID-SESSION-17 @linux
+  @slice-9 @ID-SESSION-17 @linux
   Scenario Outline: Creation consumes the frozen handoff after current startup inputs change
     Given an approved session contract fixture with a post-handoff change "<change>"
     When the session contract completes A's preflight, applies the fixture change, then creates and cleans through each local backend
@@ -308,7 +308,7 @@ Feature: Owned unstarted worker creation and cleanup
   # Missing State is incomplete evidence, not an implicit never-started state.
   # ID-SESSION-01 is the matching-inspection positive control. Today the first
   # Then fails because neither acknowledged create nor its inspection exists.
-  @wip @slice-9 @ID-SESSION-16 @linux
+  @slice-9 @ID-SESSION-16 @linux
   Scenario Outline: An acknowledged create needs independent inspection before ownership handoff
     Given an approved session contract fixture with post-create inspection "<inspection>"
     When the session contract attempts creation through each local backend
@@ -336,7 +336,7 @@ Feature: Owned unstarted worker creation and cleanup
       | created state with StartedAt    | ownership-refused |
 
   # First Then needs a specific new persistence failure, not today's refusal.
-  @wip @slice-9 @ID-SESSION-02 @linux
+  @slice-9 @ID-SESSION-02 @linux
   Scenario Outline: Intent publication must be durable before any create
     Given an approved session contract fixture with intent fault "<fault>"
     When the session contract attempts creation through each local backend
@@ -356,7 +356,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # Token faults are supplied only through the entropy port. An existing token
   # fixture belongs to another operation and must not be replaced or adopted.
-  @wip @slice-9 @ID-SESSION-13 @linux
+  @slice-9 @ID-SESSION-13 @linux
   Scenario Outline: Failed or colliding intent identity cannot create an untracked worker
     Given an approved session contract fixture with token condition "<condition>"
     When the session contract attempts creation through each local backend
@@ -371,7 +371,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # The positive control prevents snapshot reuse from accidentally reusing an
   # ownership operation. This does not specify concurrent run/stop orchestration.
-  @wip @slice-9 @ID-SESSION-14 @linux
+  @slice-9 @ID-SESSION-14 @linux
   Scenario: Fresh preflights reusing a snapshot allocate independent ownership
     Given an approved session contract fixture with two distinct entropy results
     When two sequential full preflight, create and cleanup cycles reuse the same approved snapshot through each local backend
@@ -392,7 +392,7 @@ Feature: Owned unstarted worker creation and cleanup
   # independently seeded record. Each has a matching never-started resource, so
   # accepting the contradictory record could authorize deletion. The unsupported
   # stage is the literal "running", not malformed JSON or a running worker.
-  @wip @slice-9 @ID-SESSION-03 @linux
+  @slice-9 @ID-SESSION-03 @linux
   Scenario Outline: Unsafe or invalid ownership evidence authorizes no mutation
     Given a session recovery fixture whose ownership evidence has "<defect>"
     When a new session controller attempts cleanup through each local backend
@@ -421,7 +421,7 @@ Feature: Owned unstarted worker creation and cleanup
       | referenced frozen snapshot symlink    | ownership-unsafe  |
 
   # First Then fails today: no create/owned-ID publication exists.
-  @wip @slice-9 @ID-SESSION-04 @linux
+  @slice-9 @ID-SESSION-04 @linux
   Scenario Outline: Failure to record a created ID prevents handoff but retains cleanup authority
     Given an approved session contract fixture with persistent owned-record fault "<fault>"
     When the session contract attempts creation and bounded cleanup through each local backend
@@ -456,7 +456,7 @@ Feature: Owned unstarted worker creation and cleanup
   # Today the first Then fails: there is no session create, owned-record write or
   # cleanup result. Unavailable scaffolding cannot satisfy the observed-create
   # assertion; all steps below remain new work for the implementer's red commit.
-  @wip @slice-9 @ID-SESSION-18 @linux
+  @slice-9 @ID-SESSION-18 @linux
   Scenario: An ownership write failure remains recoverable when immediate cleanup is unavailable
     Given an approved session contract fixture with owned-record fsync failure followed by unavailable cleanup inspection
     When creation and cleanup finish with both faults active, then a new controller retries cleanup after both faults are cleared through each local backend
@@ -471,7 +471,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # Lost response and a malformed success both hide the ID from the product.
   # Reopened cleanup must discover it without a second create or memory handoff.
-  @wip @slice-9 @ID-SESSION-05 @linux
+  @slice-9 @ID-SESSION-05 @linux
   Scenario Outline: A fresh controller reconciles a create whose concrete ID was not received
     Given an approved session contract fixture with create reply "<reply>"
     When creation is attempted and a new controller cleans the surviving intent through each local backend
@@ -488,7 +488,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # A delayed create is allowed to appear only AFTER the first cleanup returns.
   # Early unknown/not-found must not discard the intent or authorize a duplicate.
-  @wip @slice-9 @ID-SESSION-06 @linux
+  @slice-9 @ID-SESSION-06 @linux
   Scenario Outline: An uncertain create is not absent merely because it cannot yet be observed
     Given an approved session contract fixture with a delayed create and lookup "<lookup>"
     When creation and first cleanup finish before the delayed worker appears and a new controller then retries cleanup
@@ -506,7 +506,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # Setup seeds trusted ownership independently, then changes only the named
   # observation. Same labels alone never make another resource removable.
-  @wip @slice-9 @ID-SESSION-07 @linux
+  @slice-9 @ID-SESSION-07 @linux
   Scenario Outline: Cleanup refuses foreign or contradictory resource identity
     Given a session recovery fixture with identity condition "<condition>"
     When a new session controller attempts cleanup through each local backend
@@ -545,7 +545,7 @@ Feature: Owned unstarted worker creation and cleanup
   # explicit full-ID not-found control. ID-SESSION-09 faults observations AFTER
   # removal; this case must refuse to send DELETE in the first place. Today its
   # first Then fails because no session cleanup or container inspection exists.
-  @wip @slice-9 @ID-SESSION-19 @linux
+  @slice-9 @ID-SESSION-19 @linux
   Scenario Outline: Incomplete inspection of an owned ID cannot authorize removal
     Given a session recovery fixture with pre-removal container inspection "<inspection>"
     When a new session controller attempts cleanup through each local backend
@@ -565,7 +565,7 @@ Feature: Owned unstarted worker creation and cleanup
   # Recovery is not a new run: revalidating mutable startup inputs would strand
   # an owned resource after edits or reapproval. Today no cleanup boundary exists,
   # so the first Then must fail even though fixture ownership is complete.
-  @wip @slice-9 @ID-SESSION-15 @linux
+  @slice-9 @ID-SESSION-15 @linux
   Scenario Outline: Cleanup retains frozen ownership when current startup inputs change
     Given a session recovery fixture with current input change "<change>"
     When a new session controller attempts cleanup through each local backend
@@ -584,7 +584,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # Here concrete identity was independently recorded before absence. A resource
   # reusing its name must survive; unlike ID-SESSION-06, the old ID is sufficient.
-  @wip @slice-9 @ID-SESSION-08 @linux
+  @slice-9 @ID-SESSION-08 @linux
   Scenario: Cleanup of a confirmed absent ID is repeatable without touching a name replacement
     Given a session recovery fixture with a recorded absent container and a same-named foreign replacement
     When two new controllers successively clean the recorded ID through each local backend
@@ -595,7 +595,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # The first Then distinguishes absence proof from DELETE acknowledgement.
   # Lost DELETE with independent not-found is a positive control for reconciliation.
-  @wip @slice-9 @ID-SESSION-09 @linux
+  @slice-9 @ID-SESSION-09 @linux
   Scenario Outline: Removal completes only with an independent concrete-ID absence observation
     Given a session recovery fixture with removal result "<remove>" and following ID observation "<inspect>"
     When a new session controller attempts cleanup through each local backend
@@ -614,7 +614,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # A complete visible tombstone is not durable evidence after fsync failure.
   # Clearing the fault permits reconciliation; it does not justify retrying create.
-  @wip @slice-9 @ID-SESSION-10 @linux
+  @slice-9 @ID-SESSION-10 @linux
   Scenario Outline: Failed completion persistence retains recovery and is repaired only after fresh absence proof
     Given a session recovery fixture with absent-record fault "<fault>"
     When cleanup is attempted, the fault is cleared and a new controller retries through each local backend
@@ -632,7 +632,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # This CI observation is required in addition to local ordering/fault contracts.
   # Today the positive observed-create assertion fails; an empty audit cannot pass.
-  @wip @slice-9 @ID-SESSION-11 @engine
+  @slice-9 @ID-SESSION-11 @engine
   Scenario: Native Docker creates an owned worker without starting it and confirms its removal
     Given a CI-only session fixture using the independently inspected T-20 cached image
     When the session contract creates an unstarted worker and cleans it using native Docker
@@ -646,7 +646,7 @@ Feature: Owned unstarted worker creation and cleanup
 
   # Same real-engine boundary, with faults solely in test-only transport/storage.
   # The second controller gets no observer ID. Final harness cleanup is separate.
-  @wip @slice-9 @ID-SESSION-12 @engine
+  @slice-9 @ID-SESSION-12 @engine
   Scenario Outline: Real uncertain creation remains recoverable without launching or duplicating a worker
     Given a CI-only session fixture using the independently inspected T-20 cached image
     And the CI session fixture injects "<fault>" after native Docker accepts create

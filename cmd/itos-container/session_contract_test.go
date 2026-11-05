@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -13,7 +16,18 @@ import (
 	canonical "github.com/donvargax/itos-container/internal/engine/approval/canonical"
 	disk "github.com/donvargax/itos-container/internal/engine/approval/disk"
 	approval "github.com/donvargax/itos-container/internal/engine/approval/domain"
+	approvalhost "github.com/donvargax/itos-container/internal/engine/approval/host"
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
+	manifestjson "github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
+	readinessdisk "github.com/donvargax/itos-container/internal/engine/readiness/disk"
+	readinessdocker "github.com/donvargax/itos-container/internal/engine/readiness/docker"
+	readinessport "github.com/donvargax/itos-container/internal/engine/readiness/port"
+	sessioncodec "github.com/donvargax/itos-container/internal/engine/session/codec"
+	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
+	sessiondocker "github.com/donvargax/itos-container/internal/engine/session/docker"
+	session "github.com/donvargax/itos-container/internal/engine/session/domain"
+	sessionentropy "github.com/donvargax/itos-container/internal/engine/session/entropy"
+	sessionport "github.com/donvargax/itos-container/internal/engine/session/port"
 	rundomain "github.com/donvargax/itos-container/internal/slices/run/domain"
 )
 
@@ -21,7 +35,7 @@ import (
 // reference and host context, never the independent observer's container ID.
 type sessionContractRequest struct {
 	Action, Backend, Reference, Token, Fault, Umask string
-	Output, Checkpoint, Journal                     string
+	Output, Checkpoint, Journal, MemoryFile         string
 }
 
 type sessionContractResult struct {
@@ -29,6 +43,7 @@ type sessionContractResult struct {
 	Handoff                                           bool
 	Workload                                          *int
 	Events                                            []sessionContractEvent
+	Memory                                            *sessionMemoryOutput
 }
 
 type sessionContractEvent struct {
@@ -46,17 +61,25 @@ func (s *sessionContractPreflight) Inspect() ap.View {
 	return s.view
 }
 
-// The red-first seam has no success oracle and performs no session operation.
-// The behavior commit replaces these methods with production session calls,
-// assembling its memory fakes or disk/SDK adapters here, never in feature steps.
-type unavailableSessionContract struct{ operations *sessionContractIO }
-
-func (unavailableSessionContract) create(context.Context, ap.Durable) sessionContractResult {
-	return sessionContractResult{Outcome: "unavailable"}
+func assembleSessionContract(request sessionContractRequest, ops *sessionContractIO) session.Service {
+	root := os.Getenv("ITOS_ROOT")
+	codec := sessioncodec.JSON{Approval: canonical.JSON{}, Parser: manifestjson.Parser{}}
+	storage := disk.Storage{Store: disk.Store{StateHome: os.Getenv("XDG_STATE_HOME"), Home: os.Getenv("HOME")},
+		IO: disk.SnapshotIO{Create: ops.create, Write: ops.write, FileSync: ops.fileSync, Rename: ops.rename, ParentSync: ops.parentSync, DirectorySync: ops.directorySync}, Exclusive: ops.exclusive}
+	return session.Service{
+		Store:  sessiondisk.Store{Storage: storage, Codec: codec, Host: approvalhost.Process{}, Checkout: &readinessdisk.Checkout{}, Input: readinessport.Input{Root: root, OS: runtime.GOOS, Architecture: runtime.GOARCH, Host: os.Getenv("DOCKER_HOST"), Context: os.Getenv("DOCKER_CONTEXT"), TLSVerify: os.Getenv("DOCKER_TLS_VERIFY"), CertPath: os.Getenv("DOCKER_CERT_PATH"), APIVersion: os.Getenv("DOCKER_API_VERSION")}},
+		Engine: sessiondocker.Engine{Readiness: readinessdocker.Engine{}, Selection: os.Getenv("DOCKER_HOST")},
+		Entropy: sessionentropy.Random{Read: func(data []byte) (int, error) {
+			if request.Fault == "entropy source unavailable" {
+				return 0, errors.New("fixture entropy unavailable")
+			}
+			token, err := hex.DecodeString(request.Token)
+			return copy(data, token), err
+		}},
+	}
 }
-
-func (unavailableSessionContract) cleanup(context.Context, string) sessionContractResult {
-	return sessionContractResult{Outcome: "unavailable"}
+func sessionContractOutput(result sessionport.Result) sessionContractResult {
+	return sessionContractResult{Outcome: string(result.Outcome), Reference: result.Reference, ID: result.ID, Cleanup: string(result.Cleanup), Handoff: result.Outcome == sessionport.Owned}
 }
 
 func TestSessionContractProbe(t *testing.T) {
@@ -78,8 +101,15 @@ func TestSessionContractProbe(t *testing.T) {
 	}
 	restore := sessionContractUmask(int(mask))
 	defer restore()
-	ops := &sessionContractIO{fault: request.Fault, journal: request.Journal, stage: "intent"}
-	controller := unavailableSessionContract{operations: ops}
+	ops := &sessionContractIO{fault: request.Fault, journal: request.Journal}
+	var memory *sessionMemoryOutput
+	controllerFor := func() session.Service {
+		controller := assembleSessionContract(request, ops)
+		if request.Backend == "memory" {
+			controller, memory = assembleMemorySession(t, request, controller)
+		}
+		return controller
+	}
 	var result sessionContractResult
 	switch request.Action {
 	case "create":
@@ -99,17 +129,25 @@ func TestSessionContractProbe(t *testing.T) {
 				t.Fatal("session checkpoint was not released")
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-			result = controller.create(ctx, handoff)
+			controller := controllerFor()
+			result = sessionContractOutput(controller.Create(ctx, handoff))
 			cancel()
 		}
 	case "cleanup":
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		result = controller.cleanup(ctx, request.Reference)
+		controller := controllerFor()
+		result = sessionContractOutput(controller.Cleanup(ctx, request.Reference))
 		cancel()
 	default:
 		t.Fatal("unknown session probe action")
 	}
-	result.Events = append([]sessionContractEvent{}, ops.events...)
+	if memory != nil {
+		result.Memory = memory
+		result.Events = memory.events()
+	}
+	if memory == nil {
+		result.Events = append([]sessionContractEvent{}, ops.events...)
+	}
 	writeSessionContract(t, request.Output, result)
 }
 

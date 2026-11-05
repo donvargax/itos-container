@@ -19,6 +19,13 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 		return result, err
 	}
 	s := w.session
+	var watch *sessionReadWatch
+	if action == "cleanup" && s.change != "" {
+		watch, err = w.sessionWatchInputs()
+		if err != nil {
+			return result, err
+		}
+	}
 	prefix := filepath.Join(w.dir, "slice-9-"+action)
 	output, selected := prefix+"-result.json", prefix+"-selected.json"
 	for _, path := range []string{output, selected} {
@@ -28,6 +35,12 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	}
 	input := prefix + "-input.json"
 	request := map[string]string{"Action": action, "Backend": s.backend, "Reference": reference, "Token": s.token, "Fault": s.fault, "Umask": s.umask, "Output": output, "Checkpoint": selected, "Journal": s.journal}
+	request["MemoryFile"] = prefix + "-memory.json"
+	if s.backend == "memory" && action == "cleanup" {
+		if err := w.writeMemorySeed(request["MemoryFile"]); err != nil {
+			return result, err
+		}
+	}
 	if action == "cleanup" {
 		delete(request, "Token")
 	}
@@ -88,6 +101,21 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 						return result, err
 					}
 				}
+				if s.backend == "memory" {
+					if seedErr := w.writeMemorySeed(request["MemoryFile"]); seedErr != nil {
+						cancel()
+						<-done
+						return result, seedErr
+					}
+				}
+				if s.change != "" {
+					watch, err = w.sessionWatchInputs()
+					if err != nil {
+						cancel()
+						<-done
+						return result, err
+					}
+				}
 				if err = json.NewEncoder(stdin).Encode("continue"); err != nil {
 					cancel()
 					<-done
@@ -98,6 +126,13 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 		}
 	}
 	err = <-done
+	if watch != nil {
+		reads, watchErr := watch.finish()
+		s.selectedReads = append(s.selectedReads, reads...)
+		if watchErr != nil {
+			return result, watchErr
+		}
+	}
 	// Synchronize with the recorder after the controller has exited, including
 	// the final handler whose response let that controller finish.
 	s.api.mu.Lock()
@@ -115,6 +150,9 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 		return result, err
 	}
 	err = json.Unmarshal(data, &result)
+	if err == nil && s.backend == "memory" {
+		err = w.observeMemory(result.Memory)
+	}
 	return result, err
 }
 

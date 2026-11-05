@@ -98,6 +98,23 @@ func (w *world) sessionCleanupComplete() error {
 		return fmt.Errorf("no independently confirmed full-ID absence")
 	}
 	if s.firstRecord == s.final && s.firstRecord.Bytes != "" {
+		if s.firstResult.Outcome == "completion-write-failed" {
+			file, parent := false, false
+			for _, e := range s.cleanup.Events {
+				if e.Stage != "absent" || e.Failed {
+					continue
+				}
+				record, err := sessionDecodeRecord(e.Bytes)
+				if err != nil || !reflect.DeepEqual(record, w.sessionExpectedRecord("absent", id)) {
+					return fmt.Errorf("retry synced different ownership bytes")
+				}
+				file = file || e.Operation == "file fsync"
+				parent = parent || e.Operation == "parent fsync"
+			}
+			if !file || !parent {
+				return fmt.Errorf("visible tombstone was not made durable again")
+			}
+		}
 		return nil
 	}
 	return w.sessionDurability(s.cleanup.Events, "absent", id)
@@ -156,6 +173,9 @@ func (w *world) sessionFirstUncertain() error {
 }
 func (w *world) sessionFirstNoRemoval() error {
 	s := w.session
+	if len(s.firstRequests) == 0 {
+		return fmt.Errorf("first cleanup attempted no fresh engine inspection")
+	}
 	for _, r := range s.firstRequests {
 		if r.Method == "DELETE" || r.Method == "POST" {
 			return fmt.Errorf("uncertain first cleanup mutated engine")
@@ -192,6 +212,15 @@ func (w *world) sessionCompletionFailed() error {
 	if s.firstResult.Outcome != "completion-write-failed" || s.firstResult.Reference != s.reference {
 		return fmt.Errorf("expected completion-write-failed, got %+v", s.firstResult)
 	}
+	observedAbsent := false
+	for _, r := range s.firstRequests {
+		if r.Method == "GET" && r.Path == "/containers/"+s.seedID+"/json" && r.Status == 404 {
+			observedAbsent = true
+		}
+	}
+	if !observedAbsent {
+		return fmt.Errorf("completion write failed without prior concrete-ID absence")
+	}
 	if s.firstResources[s.seedID] != nil {
 		return fmt.Errorf("completion failure did not follow observed absence")
 	}
@@ -219,6 +248,20 @@ func (w *world) sessionTwo() error {
 	if s.second == nil {
 		return fmt.Errorf("second operation missing")
 	}
+	for _, cycle := range []*sessionWorld{s, s.second} {
+		copyWorld := *w
+		copyWorld.session = cycle
+		if err := copyWorld.sessionOwned(); err != nil {
+			return err
+		}
+		if err := copyWorld.sessionDurableAbsent(); err != nil {
+			return err
+		}
+		if err := copyWorld.sessionUnrelated(); err != nil {
+			return err
+		}
+	}
+
 	r1, e1 := sessionDecodeRecord(s.final.Bytes)
 	r2, e2 := sessionDecodeRecord(s.second.final.Bytes)
 	if e1 != nil || e2 != nil || r1["stage"] != "absent" || r2["stage"] != "absent" || r1["container_id"] == r2["container_id"] || r1["name"] == r2["name"] || r1["snapshot"] != r2["snapshot"] || r1["fingerprint"] != r2["fingerprint"] {
