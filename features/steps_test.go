@@ -139,6 +139,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
 	w.policySteps(sc)
 	w.manifestSteps(sc)
+	w.runSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.

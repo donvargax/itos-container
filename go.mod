@@ -6,6 +6,7 @@ toolchain go1.27.2
 
 require (
 	github.com/alecthomas/kong v1.16.1
+	github.com/creack/pty v1.1.24
 	github.com/cucumber/godog v0.16.0
 	github.com/distribution/reference v0.6.0
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f

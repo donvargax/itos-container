@@ -14,8 +14,9 @@
 // godog's own tag filter takes exact tags joined by commas; itos's run
 // templates join the IDs they select with |, as a regular expression
 // (itos.yaml's tests.scenario.run), so -scenarios takes that expression and
-// is intersected with the live set and selected engine tier using godog.
-// A scenario tagged @wip never runs; @engine is CI-only (see README.md).
+// is intersected with the live set, selected engine tier and platform using godog.
+// A scenario tagged @wip never runs; @engine is CI-only and @linux requires a
+// Linux test process (see README.md).
 //
 // The scenarios run itos-container as another process, where Go records
 // coverage only for a binary built with -cover and run with GOCOVERDIR naming
@@ -153,11 +154,12 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	matched, liveEngine := 0, 0
 	for _, feature := range features {
 		for _, scenario := range feature.Pickles {
-			wip, needsEngine, matches := false, false, selection == ""
+			wip, needsEngine, needsLinux, matches := false, false, false, selection == ""
 			var ids []string
 			for _, tag := range scenario.Tags {
 				wip = wip || tag.Name == "@wip"
 				needsEngine = needsEngine || tag.Name == "@engine"
+				needsLinux = needsLinux || tag.Name == "@linux"
 				if strings.HasPrefix(tag.Name, "@ID-") {
 					ids = append(ids, tag.Name)
 				}
@@ -173,12 +175,14 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 				continue
 			}
 			matched++
-			if wip || needsEngine != engine {
+			if wip || needsEngine != engine || (needsLinux && env.os != "linux") {
 				reason := "other tier"
 				if wip {
 					reason = "@wip"
 				} else if needsEngine {
 					reason = "@engine disabled"
+				} else if needsLinux && env.os != "linux" {
+					reason = "@linux requires Linux"
 				}
 				result.excluded = append(result.excluded, fmt.Sprintf("%s %q (%s)", strings.Join(ids, ","), scenario.Name, reason))
 				continue
@@ -191,7 +195,7 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 		return result, &noMatch{selection}
 	}
 	if result.count == 0 {
-		result.skip = "no live scenarios in selected tier (count 0)"
+		result.skip = "no live scenarios in selected tier and platform (count 0)"
 		if engine && liveEngine == 0 {
 			result.skip = "no live @engine scenarios (count 0)"
 		}
@@ -202,12 +206,15 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	if engine {
 		tier = "~@wip&&@engine"
 	}
+	if env.os != "linux" {
+		tier += "&&~@linux"
+	}
 	result.filter = tier
 	if selection != "" {
 		var branches []string
 		for tag := range matchedTags {
 			// godog uses comma for OR and && for AND. Every OR branch must
-			// carry both exclusions, including expressions matching @wip.
+			// carry all restrictions, including expressions matching @wip or @linux.
 			branches = append(branches, tag+"&&"+tier)
 		}
 		slices.Sort(branches)
