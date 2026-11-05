@@ -79,7 +79,7 @@ func TestPrivateDirectoryRejectsReplacement(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if info, failure := privateDirectory(root, "new", expected); failure != "state.path" || info != nil {
+			if info, failure := s.operations().privateDirectory(root, "new", expected); failure != "state.path" || info != nil {
 				t.Fatalf("replacement accepted: %v, %s", info, failure)
 			}
 			actual, err := root.Stat("new")
@@ -87,5 +87,29 @@ func TestPrivateDirectoryRejectsReplacement(t *testing.T) {
 				t.Fatalf("replacement changed: %v, %v", actual, err)
 			}
 		})
+	}
+}
+
+func TestPrivateDirectoryRejectsNonDirectory(t *testing.T) {
+	s, _, _ := diskFixture(t)
+	path := filepath.Join(s.StateHome, "file")
+	if err := os.WriteFile(path, []byte("unchanged"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(s.StateHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	expected, err := root.Lstat("file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, failure := s.operations().privateDirectory(root, "file", expected); failure != "state.path" || info != nil {
+		t.Fatalf("non-directory accepted: %v, %s", info, failure)
+	}
+	actual, err := root.Lstat("file")
+	if err != nil || !os.SameFile(expected, actual) || actual.Mode() != expected.Mode() {
+		t.Fatalf("refusal changed file identity or permissions: %v, %v", actual, err)
 	}
 }

@@ -23,6 +23,23 @@ type Store struct {
 	ops             *operations
 }
 type operations struct {
+	// Keep filesystem failures injectable while retaining real pinned handles.
+	openRoot      func(string) (*os.Root, error)
+	lstat         func(*os.Root, string) (os.FileInfo, error)
+	mkdir         func(*os.Root, string, os.FileMode) error
+	openDir       func(*os.Root, string) (*os.File, error)
+	openChild     func(*os.Root, string) (*os.Root, error)
+	statRoot      func(*os.Root, string) (os.FileInfo, error)
+	syncDir       func(*os.File) error
+	lock          func(*os.File, bool) error
+	openPrivate   func(uintptr, string) (int, error)
+	chmodPrivate  func(uintptr) error
+	openRecord    func(*os.Root, string, int, os.FileMode) (*os.File, error)
+	statFile      func(*os.File) (os.FileInfo, error)
+	readAll       func(io.Reader) ([]byte, error)
+	nonce         func([]byte) (int, error)
+	chmod         func(*os.File, os.FileMode) error
+	closeFile     func(*os.File) error
 	create        func(*os.Root, string) (*os.File, error)
 	write         func(*os.File, []byte) (int, error)
 	syncFile      func(*os.File) error
@@ -32,9 +49,15 @@ type operations struct {
 }
 
 func (s Store) operations() operations {
-	ops := operations{create: func(r *os.Root, n string) (*os.File, error) {
-		return r.OpenFile(n, os.O_WRONLY|os.O_CREATE|os.O_EXCL|noFollow, 0600)
-	}, write: (*os.File).Write, syncFile: (*os.File).Sync, rename: (*os.Root).Rename, syncParent: (*os.File).Sync}
+	ops := operations{
+		openRoot: os.OpenRoot, lstat: (*os.Root).Lstat, mkdir: (*os.Root).Mkdir,
+		openDir: (*os.Root).Open, openChild: (*os.Root).OpenRoot, statRoot: (*os.Root).Stat,
+		syncDir: (*os.File).Sync, lock: lock, openPrivate: openPrivate, chmodPrivate: chmodPrivate,
+		openRecord: (*os.Root).OpenFile, statFile: (*os.File).Stat, readAll: io.ReadAll,
+		nonce: rand.Read, chmod: (*os.File).Chmod, closeFile: (*os.File).Close,
+		create: func(r *os.Root, n string) (*os.File, error) {
+			return r.OpenFile(n, os.O_WRONLY|os.O_CREATE|os.O_EXCL|noFollow, 0600)
+		}, write: (*os.File).Write, syncFile: (*os.File).Sync, rename: (*os.Root).Rename, syncParent: (*os.File).Sync}
 	if s.ops != nil {
 		return *s.ops
 	}
@@ -42,6 +65,7 @@ func (s Store) operations() operations {
 }
 
 type pin struct {
+	ops     operations
 	roots   []*os.Root
 	infos   []os.FileInfo
 	path    string
@@ -91,8 +115,9 @@ func (s Store) pin(c port.Candidate, create bool) (*pin, port.Failure) {
 	if err != nil {
 		return nil, "state.unsafe"
 	}
-	p := &pin{path: path, uid: uid}
-	root, err := os.OpenRoot(string(filepath.Separator))
+	ops := s.operations()
+	p := &pin{path: path, uid: uid, ops: ops}
+	root, err := ops.openRoot(string(filepath.Separator))
 	if err != nil {
 		return nil, "state.unavailable"
 	}
@@ -101,27 +126,27 @@ func (s Store) pin(c port.Candidate, create bool) (*pin, port.Failure) {
 	p.managed = len(parts) - 3
 	for index, name := range parts {
 		current := p.root()
-		info, err := current.Lstat(name)
+		info, err := ops.lstat(current, name)
 		created := false
 		if errors.Is(err, os.ErrNotExist) && create {
-			err = current.Mkdir(name, 0700)
+			err = ops.mkdir(current, name, 0700)
 			created = err == nil
 			if err != nil && !errors.Is(err, os.ErrExist) {
 				p.close()
 				return nil, "state.write"
 			}
-			parent, e := current.Open(".")
+			parent, e := ops.openDir(current, ".")
 			if e != nil {
 				p.close()
 				return nil, "state.write"
 			}
-			e = parent.Sync()
+			e = ops.syncDir(parent)
 			_ = parent.Close()
 			if e != nil {
 				p.close()
 				return nil, "state.write"
 			}
-			info, err = current.Lstat(name)
+			info, err = ops.lstat(current, name)
 		}
 		if errors.Is(err, os.ErrNotExist) {
 			p.close()
@@ -133,7 +158,7 @@ func (s Store) pin(c port.Candidate, create bool) (*pin, port.Failure) {
 		}
 		if created {
 			var failure port.Failure
-			info, failure = privateDirectory(current, name, info)
+			info, failure = ops.privateDirectory(current, name, info)
 			if failure != "" {
 				p.close()
 				return nil, failure
@@ -145,32 +170,32 @@ func (s Store) pin(c port.Candidate, create bool) (*pin, port.Failure) {
 				return nil, failure
 			}
 		}
-		next, err := current.OpenRoot(name)
+		next, err := ops.openChild(current, name)
 		if err != nil {
 			p.close()
 			return nil, "state.path"
 		}
-		actual, err := next.Stat(".")
+		actual, err := ops.statRoot(next, ".")
 		if err != nil || !os.SameFile(info, actual) {
 			_ = next.Close()
 			p.close()
 			return nil, "state.path"
 		}
 		if created {
-			directoryFile, e := next.Open(".")
+			directoryFile, e := ops.openDir(next, ".")
 			if e != nil {
 				_ = next.Close()
 				p.close()
 				return nil, "state.write"
 			}
-			e = directoryFile.Sync()
+			e = ops.syncDir(directoryFile)
 			_ = directoryFile.Close()
 			if e != nil {
 				_ = next.Close()
 				p.close()
 				return nil, "state.write"
 			}
-			actual, err = next.Stat(".")
+			actual, err = ops.statRoot(next, ".")
 			if err != nil {
 				_ = next.Close()
 				p.close()
@@ -180,12 +205,12 @@ func (s Store) pin(c port.Candidate, create bool) (*pin, port.Failure) {
 		p.infos = append(p.infos, actual)
 		p.roots = append(p.roots, next)
 	}
-	p.dir, err = p.root().Open(".")
+	p.dir, err = ops.openDir(p.root(), ".")
 	if err != nil {
 		p.close()
 		return nil, "state.unavailable"
 	}
-	if err = lock(p.dir, create); err != nil {
+	if err = ops.lock(p.dir, create); err != nil {
 		p.close()
 		return nil, "state.unavailable"
 	}
@@ -232,23 +257,23 @@ func ownership(info os.FileInfo) (uint64, uint64, bool) {
 	return uid.Uint(), nlink.Uint(), true
 }
 func (p *pin) unchanged() bool {
-	root, err := os.OpenRoot(string(filepath.Separator))
+	root, err := p.ops.openRoot(string(filepath.Separator))
 	if err != nil {
 		return false
 	}
 	parts := strings.Split(strings.TrimPrefix(p.path, string(filepath.Separator)), string(filepath.Separator))
 	for index, name := range parts {
-		info, err := root.Lstat(name)
+		info, err := p.ops.lstat(root, name)
 		if err != nil || directory(info, p.uid, index >= p.managed) != "" || !os.SameFile(info, p.infos[index]) {
 			_ = root.Close()
 			return false
 		}
-		next, err := root.OpenRoot(name)
+		next, err := p.ops.openChild(root, name)
 		_ = root.Close()
 		if err != nil {
 			return false
 		}
-		actual, err := next.Stat(".")
+		actual, err := p.ops.statRoot(next, ".")
 		if err != nil || !os.SameFile(info, actual) {
 			_ = next.Close()
 			return false
@@ -259,7 +284,7 @@ func (p *pin) unchanged() bool {
 	return true
 }
 func (p *pin) read(c port.Candidate, records port.Records) (port.Record, port.Failure) {
-	info, err := p.root().Lstat("current.json")
+	info, err := p.ops.lstat(p.root(), "current.json")
 	if errors.Is(err, os.ErrNotExist) {
 		return port.Record{}, ""
 	}
@@ -273,23 +298,23 @@ func (p *pin) read(c port.Candidate, records port.Records) (port.Record, port.Fa
 	if !ok || !info.Mode().IsRegular() || uid != p.uid || links != 1 || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 {
 		return port.Record{}, "state.unsafe"
 	}
-	file, err := p.root().OpenFile("current.json", os.O_RDONLY|noFollow, 0)
+	file, err := p.ops.openRecord(p.root(), "current.json", os.O_RDONLY|noFollow, 0)
 	if err != nil {
 		return port.Record{}, "state.path"
 	}
 	defer func() { _ = file.Close() }()
-	actual, err := file.Stat()
+	actual, err := p.ops.statFile(file)
 	if err != nil || !os.SameFile(actual, info) || recordSafety(actual, p.uid) != "" {
 		return port.Record{}, "state.path"
 	}
-	data, err := io.ReadAll(io.LimitReader(file, 1024*1024+1))
+	data, err := p.ops.readAll(io.LimitReader(file, 1024*1024+1))
 	if err != nil {
 		return port.Record{}, "state.unavailable"
 	}
 	if !p.unchanged() {
 		return port.Record{}, "state.path"
 	}
-	actual, err = file.Stat()
+	actual, err = p.ops.statFile(file)
 	if err != nil {
 		return port.Record{}, "state.unavailable"
 	}
@@ -348,7 +373,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 		return port.Record{}, "state.path"
 	}
 	var nonce [16]byte
-	if _, err := rand.Read(nonce[:]); err != nil {
+	if _, err := ops.nonce(nonce[:]); err != nil {
 		return port.Record{}, "state.write"
 	}
 	name := ".approval-" + hex.EncodeToString(nonce[:]) + ".tmp"
@@ -357,7 +382,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 		return port.Record{}, "state.write"
 	}
 	defer func() { _ = file.Close(); _ = p.root().Remove(name) }()
-	if file.Chmod(0600) != nil {
+	if ops.chmod(file, 0600) != nil {
 		return port.Record{}, "state.write"
 	}
 	written, err := ops.write(file, data)
@@ -367,7 +392,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 	if ops.syncFile(file) != nil {
 		return port.Record{}, "state.write"
 	}
-	if file.Close() != nil {
+	if ops.closeFile(file) != nil {
 		return port.Record{}, "state.write"
 	}
 	if !p.unchanged() {
@@ -423,29 +448,29 @@ func recordSafety(info os.FileInfo, expected uint64) port.Failure {
 // privateDirectory uses an O_PATH handle to initialize a new directory even if
 // umask removed its search permission. The procfs link targets that exact inode;
 // neither the parent pathname nor a replacement symlink can redirect the change.
-func privateDirectory(parent *os.Root, name string, expected os.FileInfo) (os.FileInfo, port.Failure) {
+func (ops operations) privateDirectory(parent *os.Root, name string, expected os.FileInfo) (os.FileInfo, port.Failure) {
 	if !expected.IsDir() || expected.Mode()&os.ModeSymlink != 0 {
 		return nil, "state.path"
 	}
-	directory, err := parent.Open(".")
+	directory, err := ops.openDir(parent, ".")
 	if err != nil {
 		return nil, "state.write"
 	}
 	defer func() { _ = directory.Close() }()
-	fd, err := openPrivate(directory.Fd(), name)
+	fd, err := ops.openPrivate(directory.Fd(), name)
 	if err != nil {
 		return nil, "state.path"
 	}
 	file := os.NewFile(uintptr(fd), name)
 	defer func() { _ = file.Close() }()
-	actual, err := file.Stat()
+	actual, err := ops.statFile(file)
 	if err != nil || !os.SameFile(expected, actual) {
 		return nil, "state.path"
 	}
-	if chmodPrivate(file.Fd()) != nil {
+	if ops.chmodPrivate(file.Fd()) != nil {
 		return nil, "state.write"
 	}
-	latest, err := parent.Lstat(name)
+	latest, err := ops.lstat(parent, name)
 	if err != nil || !os.SameFile(expected, latest) {
 		return nil, "state.path"
 	}

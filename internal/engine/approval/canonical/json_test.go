@@ -73,3 +73,15 @@ func TestCandidateCopiesInputAndExcludesObservations(t *testing.T) {
 		t.Fatal(c)
 	}
 }
+
+func TestDecodeRejectsInvalidJSONTokens(t *testing.T) {
+	codec := JSON{}
+	candidate := codec.Candidate(porttest.Ready(), "2000", "3000")
+	for _, data := range []string{`{"schema":!}`, `{"schema":"\q"}`, `{"schema":1,]`, `{"schema":1} garbage`} {
+		t.Run(data, func(t *testing.T) {
+			if record, failure := codec.Decode(candidate, []byte(data)); failure != "state.invalid" || record != (port.Record{}) {
+				t.Fatalf("invalid token produced record %#v, failure %q", record, failure)
+			}
+		})
+	}
+}

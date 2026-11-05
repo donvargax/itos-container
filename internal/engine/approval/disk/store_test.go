@@ -43,7 +43,7 @@ func TestDiskStoreContract(t *testing.T) {
 	porttest.StoreContract(t, func() (port.Store, port.Candidate, port.Candidate) { s, a, b := diskFixture(t); return s, a, b })
 }
 func TestPublicationFaults(t *testing.T) {
-	for _, kind := range []string{"create", "short write", "write", "file sync", "rename", "parent sync", "parent replaced", "after sync replaced"} {
+	for _, kind := range []string{"nonce", "create", "chmod", "short write", "write", "file sync", "close", "rename", "parent sync", "parent replaced", "after sync replaced", "after publication replaced"} {
 		t.Run(kind, func(t *testing.T) {
 			store, a, b := diskFixture(t)
 			if _, failure := store.Commit(a, ""); failure != "" {
@@ -62,14 +62,20 @@ func TestPublicationFaults(t *testing.T) {
 				}
 			}
 			switch kind {
+			case "nonce":
+				ops.nonce = func([]byte) (int, error) { return 0, fault }
 			case "create":
 				ops.create = func(*os.Root, string) (*os.File, error) { return nil, fault }
+			case "chmod":
+				ops.chmod = func(*os.File, os.FileMode) error { return fault }
 			case "short write":
 				ops.write = func(_ *os.File, b []byte) (int, error) { return len(b) - 1, nil }
 			case "write":
 				ops.write = func(*os.File, []byte) (int, error) { return 0, fault }
 			case "file sync":
 				ops.syncFile = func(*os.File) error { return fault }
+			case "close":
+				ops.closeFile = func(f *os.File) error { return errors.Join(f.Close(), fault) }
 			case "rename":
 				ops.rename = func(*os.Root, string, string) error { return fault }
 			case "parent sync":
@@ -78,6 +84,8 @@ func TestPublicationFaults(t *testing.T) {
 				ops.beforePublish = replace
 			case "after sync replaced":
 				ops.syncFile = func(f *os.File) error { err := f.Sync(); replace(); return err }
+			case "after publication replaced":
+				ops.syncParent = func(f *os.File) error { err := f.Sync(); replace(); return err }
 			}
 			store.ops = &ops
 			record, failure := store.Commit(b, "1")
@@ -105,7 +113,7 @@ func TestPublicationFaults(t *testing.T) {
 				t.Fatal("partial record")
 			}
 			expected := "A"
-			if kind == "parent sync" {
+			if kind == "parent sync" || kind == "after publication replaced" {
 				expected = "B"
 			}
 			if got.Canonical != expected {
