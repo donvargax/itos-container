@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"testing"
 
 	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
@@ -47,4 +48,40 @@ func (m *sessionMemoryOutput) events() []sessionContractEvent {
 		result = append(result, sessionContractEvent{Operation: e.Operation, Stage: e.Stage, Bytes: e.Bytes, Failed: e.Failed})
 	}
 	return result
+}
+
+func TestSessionMemoryOutputSerializesObservations(t *testing.T) {
+	for _, armed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "nil barriers", true: "armed barriers"}[armed], func(t *testing.T) {
+			store := &fake.Store{
+				Records: map[string][]byte{"intent.json": []byte(`{"stage":"owned"}`)},
+				Events:  []fake.WriteEvent{{Operation: "parent fsync", Stage: "owned"}},
+			}
+			engine := &fake.Engine{
+				Store:     store,
+				Resources: map[string]sp.Observation{"worker": {ID: "worker", Status: "created"}},
+				Events:    []fake.EngineEvent{{Method: "INSPECT", Target: "worker"}},
+			}
+			if armed {
+				barrier := func() { t.Error("serializing observations executed a fixture barrier") }
+				store.AfterSave = barrier
+				engine.AfterOpen, engine.BeforeInspect, engine.AfterInspect = barrier, barrier, barrier
+			}
+			data, err := json.Marshal(sessionMemoryOutput{Store: store, Engine: engine})
+			if err != nil {
+				t.Fatalf("serialize session observations: %v", err)
+			}
+			var observed sessionMemoryOutput
+			if err := json.Unmarshal(data, &observed); err != nil {
+				t.Fatalf("read session observations: %v", err)
+			}
+			if observed.Store == nil || observed.Engine == nil ||
+				!reflect.DeepEqual(observed.Store.Records, store.Records) ||
+				!reflect.DeepEqual(observed.Store.Events, store.Events) ||
+				!reflect.DeepEqual(observed.Engine.Resources, engine.Resources) ||
+				!reflect.DeepEqual(observed.Engine.Events, engine.Events) {
+				t.Fatal("session observation export lost records, resources or ordered events")
+			}
+		})
+	}
 }

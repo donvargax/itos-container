@@ -23,7 +23,8 @@ type Store struct {
 	Events                       []WriteEvent
 	Locked                       bool
 	// AfterSave changes fixture state only after a successful durable update.
-	AfterSave func()
+	// Barriers are test controls, not serializable subprocess observations.
+	AfterSave func() `json:"-"`
 }
 type memoryIntent struct {
 	store   *Store
@@ -218,7 +219,7 @@ type Engine struct {
 	ImageInspection                       string
 	Replaced, Removed                     bool
 	// Barriers change fixture state at acquisition and observation boundaries.
-	AfterOpen, BeforeInspect, AfterInspect func()
+	AfterOpen, BeforeInspect, AfterInspect func() `json:"-"`
 }
 type memoryConnection struct {
 	engine  *Engine
