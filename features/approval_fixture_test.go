@@ -130,8 +130,11 @@ func (w *world) approvalCapture() error {
 	if err != nil {
 		return err
 	}
-	a.recordBefore, _ = os.ReadFile(a.record)
-	a.recordInfo, _ = os.Stat(a.record)
+	a.recordBefore = nil
+	a.recordInfo, _ = os.Lstat(a.record)
+	if a.recordInfo != nil && a.recordInfo.Mode().IsRegular() {
+		a.recordBefore, _ = os.ReadFile(a.record)
+	}
 	return nil
 }
 func (w *world) approvalManifest() error {
