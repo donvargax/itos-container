@@ -439,6 +439,6 @@ items:
     title: Move to itos 8.46.4
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task

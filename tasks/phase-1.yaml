@@ -1996,5 +1996,3 @@
     spec may take and a task's own steps, and --ready waiting for its own push's run before marking,
     so it no longer races its draft run. The driver's open_threads and its commit-type prompt line
     can go. Move the workflows' itos action pins with it.
-  done_when:
-    - run: "grep -q 'version: \"8.46.4\"' itos.yaml"
