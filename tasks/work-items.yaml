@@ -347,8 +347,8 @@ items:
   - id: slice-8
     title: Run preflight and frozen settings
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-4, slice-7]
     kind: slice
     why: >
