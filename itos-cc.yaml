@@ -33,15 +33,6 @@ mutation:
       replacement: "0"
       reason: The final +1 skips the newline found by bytes.IndexByte. Replacing it with 0 leaves i at that same newline; the next loop iteration takes the whitespace branch, increments i and continues without changing depth or nodes. Both paths resume at the identical byte with identical budget state, or exit at EOF, and neither modifies data. All parser results and resource bounds are therefore unchanged.
       line_text: i += 2 + end + 1
-    - file: internal/engine/approval/disk/store.go
-      function: github.com/donvargax/itos-container/internal/engine/approval/disk.pin#read
-      hash: 64864094e55d13ad
-      line_in_function: 16
-      column: 80
-      original: "0"
-      replacement: "1"
-      reason: openRecord is os.Root.OpenFile with O_RDONLY|O_NOFOLLOW, without O_CREATE. Its perm argument is used only when creating a file; both 0 and 1 pass the Root nine-bit permission validation. Changing this unused permission value cannot affect an existing record, a missing-path refusal, the returned bytes or filesystem permissions. A test of the injected argument itself would assert an implementation detail rather than behavior.
-      line_text: file, err := p.ops.openRecord(p.root(), "current.json", os.O_RDONLY|noFollow, 0)
     - file: internal/engine/approval/canonical/preflight.go
       function: github.com/donvargax/itos-container/internal/engine/approval/canonical.JSON#FrozenRecord
       hash: 6103c9cd38b2f630
@@ -69,3 +60,12 @@ mutation:
       replacement: "1"
       reason: The changed predicate differs only for a single argument. Unless that argument is --, both paths set separated false. For the lone --, the original passes separated true and empty argv, while the mutant passes separated false and argv containing --. Refuse returns ErrCommandRequired in both cases, or ErrJSONUnsupported first when JSON is requested. Neither path reaches Preflight or mutates caller arguments, and the UI receives the same failure and JSON flag. Live ID-RUN-01 and ID-RUN-05 exercise these separator-only refusals.
       line_text: separated := len(args) > 0 && args[0] == "--"
+    - file: internal/engine/approval/disk/store.go
+      function: github.com/donvargax/itos-container/internal/engine/approval/disk.pin#readNamed
+      hash: 6703da9607a2dbc1
+      line_in_function: 16
+      column: 70
+      original: "0"
+      replacement: "1"
+      reason: openRecord is os.Root.OpenFile with O_RDONLY|O_NOFOLLOW|O_NONBLOCK and no creation flag. Its perm argument only controls creation; both 0 and 1 pass Root.OpenFile permission validation because they are within 0777. Thus either value opens the same existing record read-only or returns the same missing-path error, without changing bytes, permissions, ownership or link checks. The mode cannot affect approval reads or snapshot reuse. Asserting the injected argument would test an implementation detail, not behavior. This replaces the equivalent exception on the former pin.read implementation.
+      line_text: file, err := p.ops.openRecord(p.root(), name, os.O_RDONLY|noFollow, 0)

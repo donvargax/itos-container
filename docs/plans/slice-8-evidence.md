@@ -48,3 +48,21 @@ engine-dependent refusals. Neither decision was reopened.
 CI alone judges fresh changed-code coverage and mutation proof. There is no local
 mutation result or runtime isolation evidence. The coordinating loop owns push, CI
 watching and closure.
+
+## Read-only open survivor
+
+CI reported `0` to `1` in `disk.pin#readNamed`, at `store.go:307:70`, with function
+hash `6703da9607a2dbc1`. This changes only the permission argument to
+`os.Root.OpenFile`. Its flags are `O_RDONLY|O_NOFOLLOW|O_NONBLOCK`, without file
+creation. The installed Go documentation for `os.OpenFile` limits the permission
+argument's effect to creation; `os.Root.OpenFile` also validates that it contains
+only the nine permission bits. Both values satisfy that validation. Existing-file
+reads, missing-path errors and file permissions therefore remain identical for
+approval reads and snapshot reuse. A test that inspects the injected argument
+would distinguish implementation details without distinguishing behavior.
+
+The pinned tool accepted the exact CI identity through `mutation except`, with
+that equivalence reason for review. Its `--prune` removed only the obsolete
+exception for the former `disk.pin#read` body, whose mutation site is gone after
+extraction into `readNamed`. Neither command ran mutations. Production functions,
+scenarios and the proof command are unchanged; fresh proof remains pending in CI.
