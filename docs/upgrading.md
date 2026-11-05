@@ -1,5 +1,14 @@
 # Upgrading
 
+## Manifest inspection
+
+Ordinary `doctor` now validates the policy-selected manifest after policy validation.
+Callers that previously used it to check policy alone must use `doctor --policy-only`.
+`doctor --manifest-only` explicitly requests file and workspace validation without
+image metadata, host readiness or approval checks. Neither mode authorizes a run.
+
+## Tooling
+
 Read the current branch's configuration and tool comments before moving a pin. Use
 `itos upgrade <version>` for supported migration: it updates the repository pin and checksum,
 applies published configuration migrations, updates a managed install script when present, and

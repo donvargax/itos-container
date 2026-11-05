@@ -12,3 +12,7 @@ func TestPoliciesContract(t *testing.T) {
 		return &porttest.Policies{Result: f.Result}
 	})
 }
+
+func TestManifestsContract(t *testing.T) {
+	porttest.ManifestsContract(t, func(f porttest.ManifestFixture) port.Manifests { return &porttest.Manifests{Result: f.Result} })
+}

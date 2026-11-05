@@ -3,8 +3,8 @@
 These rules describe the planned `itos container` extension. The [charter](charter.md)
 selects the milestone from the binding [pilot contract](plans/container-pilot.md); both
 take precedence over upstream examples. The current [entry point](../cmd/itos-container/main.go)
-exposes strict policy validation through `doctor --policy-only` and invocation refusals
-through `run`, alongside the inherited count, version and completion commands. Runtime
+exposes strict policy and manifest validation through doctor and invocation refusals
+through run, alongside the inherited count, version and completion commands. Runtime
 isolation is not implemented.
 
 The first milestone is an offline owned run: explicit argv in an approved, hardened
@@ -79,8 +79,8 @@ approval or widen a running session. See [configuration boundaries](CONFIG.md).
 
 ## Planned command contract
 
-The full commands in this table remain planned. Doctor currently validates only policy,
-including when called without `--policy-only`; its output names that limited scope.
+The full commands in this table remain planned. Doctor currently validates policy and
+the selected manifest; its output names that limited scope. `--policy-only` stops at policy.
 Run currently validates the invocation and refuses startup as described below.
 The charter determines which slices may be built next.
 
@@ -115,8 +115,8 @@ project state; exact recovery storage and retry details still need specification
 
 `itos container doctor --policy-only` validates `itos-container.yaml` in the effective
 working directory without executing helpers, contacting an engine, reading the manifest
-or changing checkout/host state. Ordinary doctor applies the same policy validation;
-manifest, host readiness and approval checks remain for later slices.
+or changing checkout/host state. Ordinary doctor applies the same policy validation
+before reading the selected manifest. Host readiness and approval remain for later slices.
 
 `--json` or `ITOS_JSON=1` prints exactly one object; `--no-json` overrides that environment.
 The object contains `schema: 1`, `ok`, `scope: "policy"` and `problems`. Success includes
@@ -147,6 +147,28 @@ These refusals read no policy, manifest or approval state, contact no engine, an
 execute no helper or workload. They prove invocation handling, not isolation or
 successful argv delivery to a worker. Later startup slices must supersede this interim
 refusal explicitly while preserving the invocation rules.
+
+## Implemented manifest inspection
+
+`doctor --manifest-only` validates policy, the selected manifest and its requested
+workspace directory. Ordinary doctor currently performs these same file checks.
+Both refuse missing manifests rather than searching conventional locations or
+choosing a worker. `--policy-only` and `--manifest-only` cannot be combined.
+
+JSON success has `schema: 1`, `scope: "manifest"`, `ok: true`, `problems: []` and
+`manifest` containing `valid`, `path`, all six `effective` fields, sorted `unused`
+JSON pointers and `image_metadata`. File-only inspection reports metadata as
+`{checked: false, present: null, unused: []}`. It does not contact an engine.
+Manifest refusal returns 2, sets `manifest.valid: false`, omits `effective` and
+reports typed problems with `file` and a decoded-key JSON pointer. Policy failures
+short-circuit these checks and retain the policy rules and exits above.
+
+The shared validator separately accepts inspected `devcontainer.metadata` as data;
+there is no CLI or environment channel for injecting it. Label problems identify
+`image` and `label` instead of `file`. Slice-3 will supply actual inspection data.
+Accepted editor settings and metadata are unused, never executed or merged. See
+[manifest.feature](../features/manifest.feature) for the complete profile and rules.
+Configuration validity supplies neither host readiness nor approval.
 
 ## Names, help and arguments
 

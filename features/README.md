@@ -32,6 +32,18 @@ Commands run in a clean environment: no `GIT_*`, `ITOS_*`, `ITOS_CONTAINER_*`, `
 of the caller's claude, itos or its extensions on the PATH. A `GOCOVERDIR` that exists builds the
 binary with `-cover` and collects what each run did, for itos-cc to merge with `go test`'s.
 
+Slice-2 also specifies a shared metadata-validator contract. Its four metadata
+scenario IDs use a test-only `cmd/itos-container` assembly, built as a Go test binary,
+with in-memory file data and the real parser, reference adapter, domain and doctor
+presenter. The runner sends raw input and asserts actual output; it imports no
+production packages and supplies no engine fake or product injection flag. File
+scenarios still run the product binary. Slice-3 owns binary-to-engine evidence.
+When `GOCOVERDIR` is set, the test assembly also builds with atomic coverage across
+the module. Go's exit hooks export counters for both success and refusal exits.
+`TestManifestContractCoverage` checks each metadata ID's exported product coverage
+in a separate directory. It runs in the unfiltered suite; filtered scenario runs
+retain only their selected IDs for measurement and mutation attribution.
+
 ## Running them
 
 ```sh

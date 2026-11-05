@@ -36,8 +36,9 @@ type world struct {
 	deadline       time.Duration
 	timedOut       bool
 
-	stdin  string // the text the run reads from its standard input, "" for none
-	policy *policyWorld
+	stdin    string // the text the run reads from its standard input, "" for none
+	policy   *policyWorld
+	manifest *manifestWorld
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -137,6 +138,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	})
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
 	w.policySteps(sc)
+	w.manifestSteps(sc)
 	w.runSteps(sc)
 }
 
@@ -193,7 +195,7 @@ func (w *world) env() []string {
 		"GIT_COMMITTER_EMAIL=features@localhost",
 		"PATH="+callerPath(),
 	)
-	return w.policyEnv(env)
+	return w.manifestEnv(w.policyEnv(env))
 }
 
 // withEnv is the scenarios' environment with each NAME=value of vars, a
@@ -324,6 +326,9 @@ func (w *world) runWith(env []string, args string) error {
 	dir := w.dir
 	if w.policy != nil {
 		dir = w.policy.cwd
+	}
+	if w.manifest != nil {
+		dir = w.manifest.checkout
 	}
 	return w.runEnv(dir, env, w.bin, fields...)
 }

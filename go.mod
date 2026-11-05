@@ -8,6 +8,8 @@ require (
 	github.com/alecthomas/kong v1.16.1
 	github.com/creack/pty v1.1.24
 	github.com/cucumber/godog v0.16.0
+	github.com/distribution/reference v0.6.0
+	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
 	go.yaml.in/yaml/v3 v3.0.5
 	go.yaml.in/yaml/v4 v4.0.0
 	golang.org/x/term v0.46.0
@@ -21,6 +23,7 @@ require (
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-memdb v1.3.5 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
+	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
