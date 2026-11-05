@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -52,5 +53,32 @@ func TestUnknownReadinessFailureCannotSucceed(t *testing.T) {
 	p := readinessDiagnostic(port.Issue{Kind: port.Failure(255), Subject: "inspection"})
 	if p.Exit != 70 || p.Rule != "doctor.internal" || p.Field != "inspection" || p.Message == "" || p.Fix == "" {
 		t.Fatal(p)
+	}
+}
+
+func TestUnsupportedHostReadinessDiagnostic(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	r := &porttest.Readiness{Result: port.Result{
+		Issues: []port.Issue{{Kind: port.HostUnsupported, Subject: "host"}},
+	}}
+	c := CLI{Readiness: r, JSON: true}
+	if code := c.Run(&cli.UI{Stdout: &stdout, Stderr: &stderr}); code != 1 || r.Reads != 1 {
+		t.Fatalf("unsupported host returned exit %d after %d inspections", code, r.Reads)
+	}
+	var body struct {
+		Schema     int
+		OK         *bool
+		Inspection map[string]any
+		Problems   []readinessProblem
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Schema != 1 || body.OK == nil || *body.OK || !reflect.DeepEqual(body.Inspection, map[string]any{"ready": false}) || len(body.Problems) != 1 {
+		t.Fatalf("unsupported host must report refusal without uninspected identities: %s", stdout.String())
+	}
+	p := body.Problems[0]
+	if p.Rule != "doctor.host.unsupported" || p.Exit != 1 || p.Field != "host" || p.Path != nil || p.Image != "" || p.Message == "" || p.Fix == "" {
+		t.Fatalf("incomplete unsupported-host diagnostic: %+v", p)
 	}
 }
