@@ -140,6 +140,8 @@ Feature: Review and record approval of exact offline settings
   # validated candidate retained when available; it never reports matching.
   # File-only modes stay unchanged and never read host identity/state or emit an
   # approval fingerprint.
+  # Plain doctor escapes non-printing Unicode in effective settings just like
+  # approval review; its structured JSON retains the exact decoded values.
   #
   # Bare approve requires terminal stdin AND stdout and plain mode. It shows all
   # canonical settings, fixed offline restrictions, unused-field notices, and on
@@ -726,3 +728,24 @@ Feature: Review and record approval of exact offline settings
       | controls      |
       | C1            |
       | bidirectional |
+
+  @wip @slice-4 @ID-APPROVAL-35 @local-engine-fixture
+  Scenario Outline: Doctor escapes Unicode controls only for plain approval display
+    Given an approval checkout and isolated host state
+    And the approval candidate contains "<controls>" controls in "<field>"
+    When itos-container runs with "doctor"
+    Then the plain approval status escapes "<controls>" controls and preserves the effective settings
+    And doctor reports approval "missing" and names "itos container approve"
+    And it exits with code 0
+    And the approval checkout and host state are unchanged
+    When itos-container runs with "doctor --json"
+    Then doctor reports the independently calculated fingerprint and complete effective settings
+    And it exits with code 0
+    And the approval checkout and host state are unchanged
+
+    Examples:
+      | controls      | field        |
+      | C1            | containerEnv |
+      | bidirectional | containerEnv |
+      | C1            | name         |
+      | bidirectional | name         |

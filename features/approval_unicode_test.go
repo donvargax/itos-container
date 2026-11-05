@@ -48,6 +48,28 @@ func (w *world) approvalUnicodeEnvironment(kind, source string) error {
 	return w.approvalOracle()
 }
 
+func (w *world) approvalUnicodeCandidate(kind, field string) error {
+	literal, _, err := approvalUnicodeVector(kind)
+	if err != nil {
+		return err
+	}
+	switch field {
+	case "containerEnv":
+		w.doctor.manifest[field] = map[string]string{"APP": literal}
+	case "name":
+		w.doctor.manifest[field] = literal
+	default:
+		return fmt.Errorf("unknown Unicode candidate field %q", field)
+	}
+	if err := w.approvalManifest(); err != nil {
+		return err
+	}
+	if err := w.approvalOracle(); err != nil {
+		return err
+	}
+	return w.approvalCapture()
+}
+
 func approvalUnicodeSafe(text string) error {
 	for _, r := range text {
 		if (unicode.IsControl(r) && r != '\r' && r != '\n') || unicode.Is(unicode.Cf, r) {

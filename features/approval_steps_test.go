@@ -217,6 +217,7 @@ func (w *world) approvalSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^no shell-looking text is executed$`, w.doctorNoMarker)
 	sc.Step(`^any stored or JSON settings preserve the exact literal environment value$`, w.approvalLiteral)
 	sc.Step(`^approval review contains "([^"]*)" controls in the "([^"]*)" environment$`, w.approvalUnicodeEnvironment)
+	sc.Step(`^the approval candidate contains "([^"]*)" controls in "([^"]*)"$`, w.approvalUnicodeCandidate)
 	sc.Step(`^the terminal review escapes "([^"]*)" controls from the "([^"]*)" environment before consent$`, w.approvalUnicodeReview)
 	sc.Step(`^the plain approval status escapes "([^"]*)" controls and preserves the effective settings$`, w.approvalUnicodeStatus)
 	w.approvalContractSteps(sc)
