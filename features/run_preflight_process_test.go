@@ -177,9 +177,9 @@ func (w *world) runProblem(rule string, code int, subject string) error {
 	}
 	// Require explanation and actionable guidance beyond just echoing the rule.
 	causes := map[string][]string{
-		"policy.missing": {"policy", "create"}, "policy.network_mode": {"offline", "set"}, "manifest.missing": {"manifest", "create"}, "manifest.unsupported": {"supported", "remove"}, "manifest.duplicate": {"duplicate", "remove"},
-		"approval.identity.mismatch": {"effective host UID", "omit"}, "doctor.checkout.path": {"checkout", "use"}, "doctor.checkout.changed": {"changed", "retry"}, "doctor.engine.changed": {"changed", "retry"},
-		"doctor.engine.identity": {"identity", "engine"}, "doctor.engine.unsupported": {"engine", "Docker"}, "doctor.engine.platform": {"linux", "amd64"}, "doctor.image.missing": {"image", "host"}, "doctor.image.digest": {"digest", "image"}, "doctor.image.platform": {"linux", "amd64"}, "doctor.image.inspect": {"image", "retry"}, "manifest.metadata": {"metadata", "remove"},
+		"policy.missing": {"policy", "create"}, "policy.network_mode": {"offline", "use"}, "manifest.missing": {"manifest", "create"}, "manifest.unsupported": {"supported", "remove"}, "manifest.duplicate": {"repeated", "once"},
+		"approval.identity.mismatch": {"effective host UID", "omit"}, "doctor.checkout.path": {"checkout", "use"}, "doctor.checkout.changed": {"changed", "inspect again"}, "doctor.engine.changed": {"changed", "inspecting again"},
+		"doctor.engine.identity": {"identity", "engine"}, "doctor.engine.unsupported": {"engine", "Docker"}, "doctor.engine.platform": {"linux", "amd64"}, "doctor.image.missing": {"image", "host"}, "doctor.image.digest": {"digest", "image"}, "doctor.image.platform": {"linux", "amd64"}, "doctor.image.inspect": {"image", "host operator"}, "manifest.metadata": {"metadata", "strict JSON"},
 		"run.snapshot.unsafe": {"unsafe", "state"}, "run.snapshot.invalid": {"invalid", "state"},
 	}
 	for _, word := range causes[rule] {
@@ -273,8 +273,12 @@ func (w *world) finishRun(p *runProcess) (runObservation, error) {
 			r.journal = append(r.journal, request)
 		}
 	}
-	r.data, r.snapshotErr = os.ReadFile(w.runSnapshotPath())
-	r.info, _ = os.Lstat(w.runSnapshotPath())
+	r.info, r.snapshotErr = os.Lstat(w.runSnapshotPath())
+	if r.snapshotErr == nil && r.info.Mode().IsRegular() {
+		r.data, r.snapshotErr = os.ReadFile(w.runSnapshotPath())
+	} else if r.snapshotErr == nil {
+		r.snapshotErr = fmt.Errorf("snapshot is not a regular file")
+	}
 	if p.coverage != "" {
 		defer func() { _ = os.RemoveAll(p.coverage) }()
 		if err := exportApprovalKernelCoverage(p.coverage, os.Getenv("GOCOVERDIR")); err != nil {
