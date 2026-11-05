@@ -22,6 +22,8 @@ type Store struct {
 	Fault                        string
 	Events                       []WriteEvent
 	Locked                       bool
+	// AfterSave changes fixture state only after a successful durable update.
+	AfterSave func()
 }
 type memoryIntent struct {
 	store   *Store
@@ -178,6 +180,9 @@ func (i *memoryIntent) Save(next port.Record) port.Outcome {
 				return port.IntentWrite
 			}
 		}
+		if i.store.AfterSave != nil {
+			i.store.AfterSave()
+		}
 		return ""
 	}
 	ok := i.store.publish(i.ref, next)
@@ -187,6 +192,9 @@ func (i *memoryIntent) Save(next port.Record) port.Outcome {
 	}
 	if !ok {
 		return port.IntentWrite
+	}
+	if i.store.AfterSave != nil {
+		i.store.AfterSave()
 	}
 	return ""
 }
@@ -209,6 +217,8 @@ type Engine struct {
 	DisagreeName                          bool
 	ImageInspection                       string
 	Replaced, Removed                     bool
+	// Barriers change fixture state at acquisition and observation boundaries.
+	AfterOpen, BeforeInspect, AfterInspect func()
 }
 type memoryConnection struct {
 	engine  *Engine
@@ -233,6 +243,9 @@ func (e *Engine) Open(ctx context.Context, b port.Binding) (port.Connection, por
 	c := &memoryConnection{engine: e, binding: b}
 	if f := c.Check(ctx); f != "" {
 		return nil, f
+	}
+	if e.AfterOpen != nil {
+		e.AfterOpen()
 	}
 	return c, ""
 }
@@ -273,11 +286,17 @@ func (c *memoryConnection) Create(ctx context.Context, r port.Record) (string, p
 }
 func (c *memoryConnection) Inspect(ctx context.Context, target string) (port.Observation, port.Inspection) {
 	e := c.engine
+	if e.BeforeInspect != nil {
+		e.BeforeInspect()
+	}
 	o, status := c.inspect(ctx, target)
 	e.Events = append(e.Events, EngineEvent{Method: "INSPECT", Target: target, Observation: o, Status: status})
 	if e.Inspection == "replace socket" {
 		e.Replaced = true
 		e.Inspection = ""
+	}
+	if e.AfterInspect != nil {
+		e.AfterInspect()
 	}
 	return o, status
 }

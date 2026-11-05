@@ -60,6 +60,73 @@ func TestEntropyAndStorageFailuresPrecedeEngine(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateRetainsIntentWhenAuthorityRevalidationFails(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		setup      func(*porttest.Store, *porttest.Engine)
+		want       port.Outcome
+		operations string
+		resources  int
+	}{
+		{"engine unavailable at open", func(_ *porttest.Store, e *porttest.Engine) {
+			e.Unavailable = true
+		}, port.Incomplete, "INFO", 0},
+		{"foreign daemon at open", func(_ *porttest.Store, e *porttest.Engine) {
+			e.DaemonID = "foreign"
+		}, port.Refused, "INFO", 0},
+		{"unsafe snapshot after open", func(s *porttest.Store, e *porttest.Engine) {
+			e.AfterOpen = func() { s.UnsafeSnapshot = true }
+		}, port.Unsafe, "INFO", 0},
+		{"engine unavailable after open", func(_ *porttest.Store, e *porttest.Engine) {
+			e.AfterOpen = func() { e.Unavailable = true }
+		}, port.Incomplete, "INFO INFO", 0},
+		{"socket replaced after open", func(_ *porttest.Store, e *porttest.Engine) {
+			e.AfterOpen = func() { e.Replaced = true }
+		}, port.Refused, "INFO INFO", 0},
+		{"image declares a volume", func(_ *porttest.Store, e *porttest.Engine) {
+			e.ImageInspection = "declared volume"
+		}, port.Refused, "INFO INFO IMAGE", 0},
+		{"unsafe record after inspection", func(s *porttest.Store, e *porttest.Engine) {
+			e.AfterInspect = func() { s.UnsafeRecord = true }
+		}, port.Unsafe, "INFO INFO IMAGE CREATE INSPECT", 1},
+		{"host identity changed after inspection", func(s *porttest.Store, e *porttest.Engine) {
+			e.AfterInspect = func() { s.UID = "2000" }
+		}, port.Refused, "INFO INFO IMAGE CREATE INSPECT", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, d, store, engine := serviceFixture()
+			binding, failure := store.Codec.Frozen(d.Frozen)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			token := strings.Repeat("1", 64)
+			ref := port.Reference(d.Frozen.Project, token)
+			original := string(store.Codec.Encode(binding.Intent(token)))
+			tc.setup(store, engine)
+			got := s.Create(context.Background(), d)
+			if got != (port.Result{Outcome: tc.want, Reference: ref}) {
+				t.Fatalf("create = %+v; want %s with the intent reference and no usable ID", got, tc.want)
+			}
+			if len(store.Records) != 1 || string(store.Records[ref]) != original || store.Locked {
+				t.Fatal("failed creation changed the original intent or retained its lock")
+			}
+			for _, event := range store.Events {
+				if event.Stage != "intent" || event.Failed {
+					t.Fatal("failed revalidation attempted to advance ownership", event)
+				}
+			}
+			var operations []string
+			for _, event := range engine.Events {
+				operations = append(operations, event.Method)
+			}
+			if strings.Join(operations, " ") != tc.operations || len(engine.Resources) != tc.resources {
+				t.Fatalf("engine operations = %v, remaining resources = %d", operations, len(engine.Resources))
+			}
+		})
+	}
+}
+
 func TestCreateNeedsMatchingCompleteInspection(t *testing.T) {
 	for _, condition := range []string{"unavailable", "explicit not-found", "malformed response", "missing State", "different full container ID", "different name", "different image config ID", "different intent label", "different project label", "different fingerprint label", "running state", "exited state after starting", "created state with nonzero PID", "created state with StartedAt", "mounted volume", "configured volume"} {
 		t.Run(condition, func(t *testing.T) {
@@ -203,6 +270,111 @@ func TestRemovalAcknowledgementIsNotAbsence(t *testing.T) {
 			result := s.Cleanup(context.Background(), r.Reference)
 			if result.Outcome != port.Incomplete {
 				t.Fatal(result)
+			}
+		})
+	}
+}
+
+func TestCleanupRetainsEvidenceWhenRevalidationFails(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		stage   string
+		setup   func(*porttest.Store, *porttest.Engine)
+		want    port.Outcome
+		removes int
+	}{
+		{"unsafe evidence after open", "owned", func(s *porttest.Store, e *porttest.Engine) {
+			e.AfterOpen = func() { s.UnsafeSnapshot = true }
+		}, port.Unsafe, 0},
+		{"socket replaced after open", "owned", func(_ *porttest.Store, e *porttest.Engine) {
+			e.AfterOpen = func() { e.Replaced = true }
+		}, port.Refused, 0},
+		{"socket replaced before name inspection", "intent", func(_ *porttest.Store, e *porttest.Engine) {
+			e.BeforeInspect = func() { e.Replaced = true }
+		}, port.Refused, 0},
+		{"foreign resource at name", "intent", func(_ *porttest.Store, e *porttest.Engine) {
+			e.Inspection = "different name"
+		}, port.Refused, 0},
+		{"socket replaced before ID inspection", "owned", func(_ *porttest.Store, e *porttest.Engine) {
+			e.BeforeInspect = func() { e.Replaced = true }
+		}, port.Refused, 0},
+		{"ID inspection unavailable", "owned", func(_ *porttest.Store, e *porttest.Engine) {
+			e.Inspection = "unavailable"
+		}, port.Incomplete, 0},
+		{"ID inspection lacks state", "owned", func(_ *porttest.Store, e *porttest.Engine) {
+			e.Inspection = "missing State"
+		}, port.Incomplete, 0},
+		{"name disappears before ID inspection", "intent", func(_ *porttest.Store, e *porttest.Engine) {
+			e.AfterInspect = func() { e.Inspection = "explicit not-found" }
+		}, port.Uncertain, 0},
+		{"foreign resource at ID", "owned", func(_ *porttest.Store, e *porttest.Engine) {
+			e.Inspection = "different intent label"
+		}, port.Refused, 0},
+		{"record unsafe after durable ownership", "owned", func(s *porttest.Store, _ *porttest.Engine) {
+			s.AfterSave = func() { s.UnsafeRecord = true }
+		}, port.Unsafe, 0},
+		{"snapshot unsafe after reconciled ownership", "intent", func(s *porttest.Store, _ *porttest.Engine) {
+			s.AfterSave = func() { s.UnsafeSnapshot = true }
+		}, port.Unsafe, 0},
+		{"socket replaced after inspection", "owned", func(_ *porttest.Store, e *porttest.Engine) {
+			e.Inspection = "replace socket"
+		}, port.Refused, 0},
+		{"socket replaced after removal", "owned", func(_ *porttest.Store, e *porttest.Engine) {
+			e.BeforeInspect = func() {
+				if e.Removed {
+					e.Replaced = true
+				}
+			}
+		}, port.Refused, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b, store, engine := porttest.Fixture()
+			token, id := strings.Repeat("1", 64), engine.CreateID
+			record := b.Intent(token)
+			record.Stage = tc.stage
+			if tc.stage == "owned" {
+				record.ContainerID = id
+			}
+			ref := port.Reference(b.Frozen.Project, token)
+			store.Records[ref] = store.Codec.Encode(record)
+			resource := port.Observation{ID: id, Name: record.Name, ImageID: record.ImageID, Token: token,
+				Project: record.Project, Fingerprint: record.Fingerprint, StatePresent: true, Status: "created"}
+			engine.Resources[id] = resource
+			tc.setup(store, engine)
+			got := (Service{Store: store, Engine: engine}).Cleanup(context.Background(), ref)
+			if got != (port.Result{Outcome: tc.want, Reference: ref}) {
+				t.Fatalf("cleanup = %+v, want %s with the surviving reference", got, tc.want)
+			}
+			// Reconciliation may durably advance intent to owned before a later
+			// revalidation fails, but no refusal may publish an absent tombstone.
+			if tc.name == "snapshot unsafe after reconciled ownership" {
+				record.Stage, record.ContainerID = "owned", id
+			}
+			if len(store.Records) != 1 || string(store.Records[ref]) != string(store.Codec.Encode(record)) || store.Locked {
+				t.Fatal("cleanup lost recovery evidence or retained its lock")
+			}
+			for _, event := range store.Events {
+				if event.Stage != "owned" || event.Failed {
+					t.Fatal("cleanup attempted an unauthorized record update", event)
+				}
+			}
+			removes := 0
+			for _, event := range engine.Events {
+				switch event.Method {
+				case "CREATE", "IMAGE":
+					t.Fatal("cleanup attempted new creation", event)
+				case "REMOVE":
+					removes++
+					if event.Target != id {
+						t.Fatal("cleanup removed a different identity", event)
+					}
+				}
+			}
+			if removes != tc.removes || len(engine.Resources) != 1-tc.removes {
+				t.Fatalf("cleanup removals = %d, surviving resources = %d", removes, len(engine.Resources))
+			}
+			if tc.removes == 0 && engine.Resources[id] != resource {
+				t.Fatal("refused cleanup altered the owned worker")
 			}
 		})
 	}
