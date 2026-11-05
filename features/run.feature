@@ -177,6 +177,10 @@ Feature: Run invocation refusals
   # helper execution is permitted, even on a failed/redirected request. Revalidate
   # checkout/socket/daemon identities as readiness already requires. Refusals
   # publish no snapshot and never prompt, write consent or repair unsafe state.
+  # ID-RUN-08/09/10 require an empty journal; ID-RUN-11/12 require a nonempty
+  # inspection-only journal. ID-RUN-14 names the required class for each change.
+  # An empty journal cannot satisfy an inspection-only expectation. Check each
+  # invocation's own journal, not the combined requests of a multi-run scenario.
   #
   # Effective UID identifies the host user; root is refused. Effective UID/GID
   # override all image Config.User values. Both manifest users must equal that
@@ -270,6 +274,14 @@ Feature: Run invocation refusals
   # Refusal assertions compare the entire before/after tree, including absence
   # of any new snapshot or lock, and absence of all helper markers/chown effects.
   # Positive assertions allow only the specified snapshot subtree/locking entries.
+  # Allow parent-directory mtime changes and link-count increases due to the new
+  # subdirectories only; preserve existing directory modes, owners and inodes.
+  # Preserve every existing regular file's bytes, mode, owner, links, inode and
+  # mtime. Never follow symlinks or open FIFOs while checkpointing; observe them
+  # with lstat/readlink like slice-4.
+  # The NEW child-umask Given records only a launch option. Apply it to the product
+  # child with the existing trusted test-wrapper pattern, preserving literal argv;
+  # do not change the test process's umask or create fixtures under that mask.
   #
   # Local-defect Givens change one named fixture field/file only. Local approval
   # conditions below mean absent state, a copy only inside checkout, malformed
@@ -281,6 +293,9 @@ Feature: Run invocation refusals
   # missing Config; or devcontainer.metadata [{"containerUser":"1000"}].
   # Read-only journal assertions require at least one inspection request
   # where stated, and reject EVERY other request, even one answered with failure.
+  # Require version/info observations for daemon refusals and the exact pinned
+  # image inspection for image refusals; do not require image access after an
+  # earlier daemon refusal or fix the number of SDK negotiation/recheck calls.
   # Paused-response actions wait for the barrier OR process exit with a bounded
   # harness deadline; missing inspection must reach Then, never hang in setup.
   # Replacements are wholly inside the temporary parent and captured before resume.
@@ -296,6 +311,11 @@ Feature: Run invocation refusals
   # file or searching for a substring is insufficient. Check the immutable record
   # after each invocation, not only after the last one. Multi-run When steps
   # capture each result and observation even when the first invocation refuses.
+  # ID-RUN-14 deletes or truncates only current.json for its approval-state edits;
+  # it leaves the first snapshot intact. Capture the edited state before run two,
+  # so an unchanged-approval assertion never attributes the fixture edit to run.
+  # Partition API requests by invocation; run one's inspections cannot hide a
+  # forbidden call or supply a missing observation in run two's journal.
   #
   # Contract scenarios use a test-only cmd assembly of the REAL run preflight and
   # shared approval/snapshot contracts, like the existing slice-4 contract probe.
@@ -314,6 +334,15 @@ Feature: Run invocation refusals
   # "No checkout reads after selection" applies within each invocation, not to
   # the next invocation's required fresh preflight. Contract positive publication
   # and independence controls run against both memory and disk stores as faults do.
+  # ID-RUN-18 captures the first result and visible record BEFORE clearing the
+  # fault, then retries full fresh preflight against the same store/state. The
+  # cleared-fault retry is a positive control, not permission to retry a failed
+  # write inside the first invocation. Record file and required directory fsyncs
+  # on the fake and real adapter; a retry handoff must follow successful durability
+  # operations, even when the first attempt left a complete reusable snapshot.
+  # Compare that record's bytes/inode/mtime across retry; never delete it to force
+  # the fresh-file path. A failure before any first snapshot exists still reaches
+  # Then; it must not become a setup failure in the retry or visibility checks.
   #
   # Commit steps red first with @wip; run each example locally with @wip removed
   # and require assertion-level red, then green after implementation. No @engine
@@ -353,6 +382,7 @@ Feature: Run invocation refusals
     When itos-container runs with "run -- fixture-workload"
     Then the Engine API journal is empty
     And run refuses approval "<reason>" with exit 1 and names "itos container approve"
+    And its error output says "run.approval-<reason>"
     And its standard output is empty
     And run preflight has changed no checkout or host state
     And no inspection helper sentinel was executed
@@ -436,6 +466,7 @@ Feature: Run invocation refusals
     And the inspected image Config.User is "<image-user>"
     And misleading USER, LOGNAME, UID, GID, SUDO_UID and SUDO_GID fixture values
     And a seeded matching approval at generation "1"
+    And the run child has umask "<umask>"
     And the run preflight files are snapshotted
     When itos-container runs with "run -- fixture-workload '' 'two words' --json"
     Then the protected run snapshot is exactly the independently calculated approval at generation "1"
@@ -449,11 +480,15 @@ Feature: Run invocation refusals
     And no inspection helper sentinel was executed
 
     Examples:
-      | users                | image-user |
-      | omitted              |            |
-      | omitted              | 0:0        |
-      | effective host UID   | root       |
-      | effective host UID   | 9999:8888  |
+      | users                | image-user | umask |
+      | omitted              |            | 0000  |
+      | omitted              | 0:0        | 0000  |
+      | effective host UID   | root       | 0000  |
+      | effective host UID   | 9999:8888  | 0000  |
+      | omitted              |            | 0777  |
+      | omitted              | 0:0        | 0777  |
+      | effective host UID   | root       | 0777  |
+      | effective host UID   | 9999:8888  | 0777  |
 
   # A cached snapshot must never become an alternate approval/readiness source.
   # Capture the first run's snapshot before editing; today it is absent.
@@ -471,6 +506,8 @@ Feature: Run invocation refusals
 
     Examples:
       | change                          | rule                 | exit | journal         |
+      | active approval is removed      | run.approval-missing | 1    | empty           |
+      | active approval is truncated    | run.approval-invalid | 1    | empty           |
       | literal manifest environment    | run.approval-changed | 1    | empty           |
       | daemon ID at the same endpoint  | run.approval-changed | 1    | inspection only |
       | cached image config digest      | run.approval-changed | 1    | inspection only |
@@ -537,11 +574,14 @@ Feature: Run invocation refusals
   @wip @slice-8 @ID-RUN-18
   Scenario Outline: Failed durable publication never yields a usable startup input
     Given a run snapshot contract with publication failure "<failure>"
-    When approved run preflight attempts snapshot publication through each store implementation
-    Then each run reports "run.snapshot.write" with exit 75 and returns no durable handoff
-    And each visible final snapshot is "<visible>" and no partial snapshot is accepted
+    When approved run preflight attempts publication through each store implementation and fresh preflight retries after the fault is cleared
+    Then each first run reports "run.snapshot.write" with exit 75 and returns no durable handoff
+    And each first attempt leaves final snapshot "<visible>" and no partial snapshot is accepted
+    And each retry returns exactly A's frozen handoff only after durable snapshot publication
+    And any complete snapshot left by the first attempt is reused without changing its bytes, inode or mtime
     And active approval, prior snapshots and outside targets remain unchanged
-    And no engine mutation, image acquisition or later startup call was attempted
+    And no failed attempt made a later startup call
+    And neither attempt made an engine mutation or image acquisition call
 
     Examples:
       | failure                    | visible                    |
