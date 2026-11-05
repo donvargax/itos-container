@@ -541,7 +541,7 @@ Feature: Review and record approval of exact offline settings
   # for that syscall before execing the product; it uses only the temporary
   # checkout/state and synthetic Engine API. Initialization must still pin and
   # check the new inode, including when umask removes every directory permission.
-  @slice-4 @ID-APPROVAL-32 @local-engine-fixture @wip
+  @slice-4 @ID-APPROVAL-32 @local-engine-fixture
   Scenario Outline: First approval works without fchmodat2 regardless of umask
     Given an approval checkout and isolated host state
     When approve runs with the exact fingerprint without fchmodat2 and with umask "<umask>"

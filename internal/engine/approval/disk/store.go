@@ -421,7 +421,7 @@ func recordSafety(info os.FileInfo, expected uint64) port.Failure {
 }
 
 // privateDirectory uses an O_PATH handle to initialize a new directory even if
-// umask removed its search permission. Empty-path chmod targets that exact inode;
+// umask removed its search permission. The procfs link targets that exact inode;
 // neither the parent pathname nor a replacement symlink can redirect the change.
 func privateDirectory(parent *os.Root, name string, expected os.FileInfo) (os.FileInfo, port.Failure) {
 	if !expected.IsDir() || expected.Mode()&os.ModeSymlink != 0 {

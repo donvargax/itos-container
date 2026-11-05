@@ -5,4 +5,3 @@ package disk
 import "errors"
 
 func openPrivate(uintptr, string) (int, error) { return -1, errors.ErrUnsupported }
-func chmodPrivate(uintptr) error               { return errors.ErrUnsupported }

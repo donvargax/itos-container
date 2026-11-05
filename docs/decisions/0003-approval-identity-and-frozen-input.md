@@ -72,3 +72,19 @@ A restrictive-umask regression additionally checks descriptor-based initializati
 new private directories. Existing unsafe ownership or permissions are never repaired.
 CI still owns fresh changed-code proof; session publication and actual worker access
 restrictions remain the later slices' obligations.
+
+PR #28's older-kernel regression was committed red first as `1b6a600`.
+`ID-APPROVAL-32` runs the real binary in a disposable child whose syscall filter
+returns `ENOSYS` for `fchmodat2`, using only temporary state and the synthetic
+Engine API. Both umask `0022` and `0777` cases failed at the matching-approval
+assertion with `approval.state.write` (exit 75), then passed after initialization
+switched to chmod through the pinned descriptor's `/proc/self/fd` link.
+The no-follow open and inode comparisons remain in place. Disk tests also verify
+that a renamed descriptor cannot chmod a replacement symlink's target and that
+replacement directories/symlinks are refused without changing their permissions.
+This is syscall-compatibility evidence, not a native older-kernel runtime claim.
+The disk package tests and the combined slice-3/slice-4/slice-7 scenario selection,
+including the feature harness regressions, passed locally. The run-selection test
+now supplies the host architecture and checks the Linux-amd64-only approval
+fixtures separately from portable refusals and Linux PTY cases. Module tidying
+only reclassified the already pinned `golang.org/x/sys` as a direct dependency.
