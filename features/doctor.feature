@@ -416,6 +416,31 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # the requested repository manifest digest. Require the requested RepoDigest
   # AND a nonempty sha256 image ID; retain both for later approval/run binding.
   # No registry/distribution lookup, pull, build, load, create or tag fallback.
+  # Compare repository names and sha256 digests with the already-pinned
+  # github.com/distribution/reference v0.6.0 behind a readiness port. Docker's
+  # normalized names and omission of an optional tag do not change the digest.
+  # Keep the manifest's original reference in inspection requests and reports.
+  # These steps append the fixture's @sha256:<64 a characters> to each name.
+  @slice-3 @ID-DOCTOR-30 @local-engine-fixture @wip
+  Scenario Outline: Recognize the canonical repository digest and retain the requested reference
+    Given a doctor checkout
+    And the doctor manifest pins the image name "<requested>"
+    And a local Engine API fixture
+    And the inspected image attests the digest under "<repository>"
+    When itos-container runs with "doctor --json"
+    Then its JSON inspection identifies the checkout, selected engine and requested cached image
+    And its JSON effective manifest matches the checkout request without metadata merging
+    And the Engine API journal contains only ping, version, info and the requested image inspection
+    And the checkout and host control state are unchanged
+
+    Examples:
+      | requested                                 | repository                             |
+      | registry.example:5000/team/worker:release  | registry.example:5000/team/worker       |
+      | worker                                    | docker.io/library/worker               |
+      | team/worker:release                        | docker.io/team/worker                  |
+      | docker.io/worker                          | docker.io/library/worker               |
+      | index.docker.io/worker                     | docker.io/library/worker               |
+
   @slice-3 @ID-DOCTOR-15 @local-engine-fixture
   Scenario: Report a missing cached image without acquiring it
     Given a doctor checkout

@@ -53,6 +53,16 @@ func (w *world) writeDoctorCheckout(root string) error {
 	return writeManifestFixture(filepath.Join(root, ".devcontainer/devcontainer.json"), data, 0600)
 }
 
+func (w *world) doctorImageName(name string) error {
+	w.doctor.image = name + "@sha256:" + strings.Repeat("a", 64)
+	w.doctor.manifest["image"] = w.doctor.image
+	data, err := json.Marshal(w.doctor.manifest)
+	if err != nil {
+		return err
+	}
+	return writeManifestFixture(filepath.Join(w.doctor.checkout, ".devcontainer/devcontainer.json"), data, 0600)
+}
+
 func (w *world) doctorUsers(container, remote string) error {
 	for key, value := range map[string]string{"containerUser": container, "remoteUser": remote} {
 		if value == "omitted" {

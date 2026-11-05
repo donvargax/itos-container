@@ -39,6 +39,10 @@ type doctorWorld struct {
 
 func (w *world) doctorSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^a doctor checkout$`, w.doctorCheckout)
+	sc.Step(`^the doctor manifest pins the image name "([^"]*)"$`, w.doctorImageName)
+	sc.Step(`^the inspected image attests the digest under "([^"]*)"$`, func(name string) {
+		w.doctor.engine.image["RepoDigests"] = []string{name + "@sha256:" + strings.Repeat("a", 64)}
+	})
 	sc.Step(`^a doctor checkout on an unsupported host$`, func() error {
 		if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 			return fmt.Errorf("unsupported-host case needs a native macOS/Windows process")
