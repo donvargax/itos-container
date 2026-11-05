@@ -351,6 +351,9 @@ func (w *world) approvalUnsafe(layout string) error {
 	default:
 		return fmt.Errorf("unknown unsafe fixture %q", layout)
 	}
+	if err := w.approvalOracle(); err != nil {
+		return err
+	}
 	return w.approvalCapture()
 }
 

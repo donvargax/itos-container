@@ -3,8 +3,8 @@
 ## Authority and status
 
 Specified on 2026-11-04 from the coordinator's settled slice-4 assignment and the
-person's q-2 answer. This records a specification, not implementation or runtime
-evidence. [The scenarios](../../features/approval.feature) carry every behavior
+person's q-2 answer. The specification is implemented in slice-4; local fixture evidence is recorded
+below and does not establish runtime isolation. [The scenarios](../../features/approval.feature) carry every behavior
 decision and the implementer's red-first handoff. The charter's offline scope holds.
 
 ## Decision
@@ -14,7 +14,7 @@ input to slice-4. The effective UID identifies the host user; root is refused.
 Both manifest users resolve to that UID and explicit different UIDs are refused.
 The worker uses the effective host UID/GID, overriding image Config.User without
 username lookup or chown. File-only manifest inspection still reports omitted users
-as unspecified. This supersedes ID-DOCTOR-29's image-user comparison when built.
+as unspecified. This supersedes ID-DOCTOR-29's image-user comparison.
 
 Approval follows q-2's terminal settings/difference review and y/N consent. The
 optional exact `--fingerprint` route is available without a terminal; bare approve
@@ -55,3 +55,20 @@ Contract cases cover root/unavailable identities and publication faults without
 privileged processes or production test switches. Shared contracts run against
 fakes and adapters. Frozen-input independence and storage placement do not prove
 worker inaccessibility: slice-10 owes that runtime evidence in CI.
+
+## Implementation evidence
+
+Red steps were committed as `6b899b5`, with the special-file snapshot correction in
+`d3b6c0a`. With `@wip` removed locally, all 120 approval examples failed at their first
+Then assertion, with no undefined or failing setup steps. The implemented approval,
+doctor and run selection subsequently passed all 269 local examples (1944 steps).
+The broader policy/manifest/doctor/approval/run selection also passed 682 examples
+(4599 steps). Real engines and real operator state were never used.
+
+The shared Store contract runs against the memory fake, the filesystem adapter and
+cmd's real canonical-codec/store assembly. Adapter faults cover private-file creation,
+short writes, file fsync, rename, parent fsync and pinned-directory replacement.
+A restrictive-umask regression additionally checks descriptor-based initialization of
+new private directories. Existing unsafe ownership or permissions are never repaired.
+CI still owns fresh changed-code proof; session publication and actual worker access
+restrictions remain the later slices' obligations.

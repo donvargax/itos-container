@@ -3,8 +3,8 @@
 These rules describe the planned `itos container` extension. The [charter](charter.md)
 selects the milestone from the binding [pilot contract](plans/container-pilot.md); both
 take precedence over upstream examples. The current [entry point](../cmd/itos-container/main.go)
-exposes strict policy and manifest validation through doctor and invocation refusals
-through run, alongside the inherited count, version and completion commands. Runtime
+exposes policy, manifest, host readiness and approval inspection through doctor,
+explicit approval through approve, and invocation/approval refusals through run, alongside the inherited count, version and completion commands. Runtime
 isolation is not implemented.
 
 The first milestone is an offline owned run: explicit argv in an approved, hardened
@@ -116,7 +116,7 @@ project state; exact recovery storage and retry details still need specification
 `itos container doctor --policy-only` validates `itos-container.yaml` in the effective
 working directory without executing helpers, contacting an engine, reading the manifest
 or changing checkout/host state. Ordinary doctor applies the same policy validation
-before reading the selected manifest. Host readiness and approval remain for later slices.
+before inspecting the selected manifest, checkout, local engine, image and approval.
 
 `--json` or `ITOS_JSON=1` prints exactly one object; `--no-json` overrides that environment.
 The object contains `schema: 1`, `ok`, `scope: "policy"` and `problems`. Success includes
@@ -141,12 +141,39 @@ and one `run.json-unsupported` problem containing `exit: 2`, a message and guida
 to remove both requests. The diagnostic also goes to stderr. Terminal and redirected
 streams receive the same refusal.
 
-A valid invocation currently exits 3 with no stdout, explaining that offline startup
-is not implemented. `doctor --policy-only` is suggested only for policy inspection.
-These refusals read no policy, manifest or approval state, contact no engine, and
-execute no helper or workload. They prove invocation handling, not isolation or
-successful argv delivery to a worker. Later startup slices must supersede this interim
-refusal explicitly while preserving the invocation rules.
+Usage and JSON refusals above precede policy, engine and approval inspection.
+A valid invocation checks the current approval and atomically selects its generation.
+Missing, changed, invalid or superseded approval exits 1 and names
+`itos container approve`, without prompting or recording consent. Matching approval
+currently reaches an exit-3 refusal because offline startup is not implemented.
+These commands execute no helper or workload and prove no runtime isolation.
+
+## Implemented approval
+
+Ordinary `doctor` prints the canonical SHA-256 fingerprint and complete effective
+settings. Its schema-1 JSON adds `approval` with `status` (`missing`, `matching`,
+`changed` or `invalid`), `fingerprint`, `effective`, `generation` and sorted
+`differences`. Valid unapproved settings remain exit 0 and inspection-ready; unsafe
+or invalid state is a typed refusal. File-only modes do not inspect identity/state
+or emit a fingerprint.
+
+Bare `itos container approve` requires terminal stdin and stdout and plain output.
+It shows all settings, fixed offline restrictions and changes since the last approval,
+then asks y/N. Only a complete y/yes line consents; other input or EOF declines.
+Matching settings need no further prompt. Without both terminals, bare approve
+refuses and names `--fingerprint <value>`; `doctor` provides that optional exact value.
+A person using the terminal flow never types a hash.
+
+`approve --json` or `ITOS_JSON=1` never prompts. `--no-json` overrides inherited JSON.
+JSON approval emits one schema-1 object with `ok`, complete `problems` and `approval`.
+An exact `--fingerprint` works without a terminal; malformed values exit 2 and stale
+values exit 1. Changes during review and concurrent replacement refuse a fresh
+publication. Identity/state refusals exit 1, unavailable observations exit 3, and
+uncertain durable publication exits 75. Detailed rules are in
+[approval.feature](../features/approval.feature).
+
+An agent on the host can approve through `--fingerprint` or a faked terminal:
+approval records what was approved, not who. See [security.md](security.md).
 
 ## Implemented manifest inspection
 
@@ -279,6 +306,6 @@ checkout policy to generate candidates. This does not claim completion of future
 container commands before their implementation.
 
 Update these rules with a specified interface change. The version 1 policy schema is
-specified; safe filesystem discovery, approval identities, lifecycle hooks, resource
-limits and cancellation semantics remain open in the pilot.
+specified. Approval identities and canonical state are specified and implemented by
+slice-4; lifecycle and runtime enforcement remain with the later milestone slices.
 [CONFIG.md](CONFIG.md) records the configuration boundary.

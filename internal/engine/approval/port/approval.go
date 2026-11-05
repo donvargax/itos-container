@@ -40,3 +40,69 @@ type Store interface {
 	Commit(Candidate, string) (Record, Failure)
 	Select(Candidate, string) (Frozen, Failure)
 }
+
+// Readiness inspects only the existing strict file/host/engine prerequisites.
+type Readiness interface{ Inspect() readiness.Result }
+
+// Host supplies effective IDs and a socket identity observation. Neither is
+// taken from environment variables or from image Config.User.
+type Host interface {
+	Identity() (string, string)
+	Socket(string) string
+}
+
+// Difference retains JSON values as canonical text for exact safe presentation.
+type Difference struct{ Path, Before, After string }
+
+// View combines the candidate, readable active record and typed refusal.
+type View struct {
+	Inspection    readiness.Result
+	Candidate     Candidate
+	Record        Record
+	Status        string
+	Failure       Failure
+	Field, Socket string
+	Differences   []Difference
+}
+
+// Inspector is read-only; Approver rechecks a reviewed candidate after consent.
+type Inspector interface{ Inspect() View }
+type Approver interface {
+	Inspector
+	Approve(View) View
+}
+
+// Records encodes and validates the complete canonical storage envelope.
+type Records interface {
+	Encode(Record) []byte
+	Decode(Candidate, []byte) (Record, Failure)
+}
+
+// Problem and Report are presentation values; raw rejected input is never a subject.
+type Problem = readiness.Problem
+type Change struct {
+	Path   string `json:"path"`
+	Before any    `json:"before"`
+	After  any    `json:"after"`
+}
+type Report struct {
+	Status      string   `json:"status"`
+	Fingerprint string   `json:"fingerprint"`
+	Effective   any      `json:"effective"`
+	Generation  *string  `json:"generation"`
+	Differences []Change `json:"differences"`
+}
+
+// Presentation owns terminal I/O and structured rendering behind a port.
+type Reviewer interface {
+	Terminal() bool
+	Review(View) bool
+}
+
+// Presentation also exposes structured and plain rendering.
+type Presentation interface {
+	Reviewer
+	Report(View) Report
+	Problems(View) []Problem
+	Print(View, bool) int
+}

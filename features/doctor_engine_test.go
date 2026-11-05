@@ -136,6 +136,7 @@ func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
 	}
 	body, err := json.Marshal(data)
 	status := a.imageStatus
+	api, _ := a.version["ApiVersion"].(string)
 	a.mu.Unlock()
 	if err != nil {
 		http.Error(out, "fixture encoding failed", 500)
@@ -149,7 +150,7 @@ func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "/_ping" {
-		out.Header().Set("API-Version", "1.56")
+		out.Header().Set("API-Version", api)
 		out.Header().Set("Docker-Experimental", "false")
 		out.Header().Set("OSType", "linux")
 		_, _ = out.Write([]byte("OK"))

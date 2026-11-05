@@ -19,10 +19,10 @@ scanner and proves every supported combination before claiming that protection. 
 check commands can execute programs, so run them only in an environment appropriate to that
 trust. itos's hooks and commit rules are workflow controls, not a security sandbox.
 
-## Specified approval boundary
+## Approval boundary
 
-[Slice-4's approval scenarios](../features/approval.feature) specify the planned
-approval flow; it is not implemented by this documentation. The host identity is
+[Slice-4's approval scenarios](../features/approval.feature) exercise the implemented
+approval flow with temporary host state and a synthetic Engine API. The host identity is
 the effective UID, root is refused, and the worker uses the effective host UID/GID.
 Checkout policy and manifest files remain requests, never approval records.
 
@@ -38,11 +38,11 @@ faked terminal. Approval records **what was approved, not who**. Neither route
 proves human presence or authenticates a separate approver. Revisit this limitation
 before adding egress or credentials, as q-2 requires.
 
-The specified fingerprint is SHA-256 of canonical effective JSON. Approval records
+The fingerprint is SHA-256 of canonical effective JSON. Approval records
 live under `$XDG_STATE_HOME/itos-container` (default `$HOME/.local/state/itos-container`),
 outside the checkout, in effective-UID-owned directories of mode `0700`, with
 records of mode `0600`. A hash detects inconsistent data; it does not prevent a
-trusted host user from forging or restoring a record. Run must refuse unapproved
+trusted host user from forging or restoring a record. Run refuses unapproved
 settings and name `itos container approve`; it never obtains consent itself.
 
 The shared approval contract supplies an independent frozen input for later
@@ -51,3 +51,15 @@ Protected placement and the checkout-only mount contract are requirements, not
 proof that a worker cannot access host state. The later run slices must establish
 that property with CI runtime evidence. All approval scenarios use temporary state;
 agents must never approve against the person's real state folder.
+
+One active canonical record per effective UID and checkout lives at
+`approvals/<project>/current.json`. Changed consent increments its generation;
+reverting to an earlier configuration does not reactivate an older record.
+Read-only inspection creates no state. Publication rechecks settings after consent,
+locks the pinned project directory, compares the reviewed generation, fsyncs a
+private temporary file, renames it and fsyncs the parent. A failure after rename is
+reported as uncertain durability; the next inspection reads the actual record.
+Directory locking requires no lock file or writable operation from doctor or run.
+Symlinks, hard-linked records, foreign ownership and unsafe permissions are refused,
+not repaired. State ancestors must be trusted; root-owned sticky `/tmp` above a
+private fixture parent is allowed.

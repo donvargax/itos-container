@@ -254,6 +254,15 @@ func (w *world) approvalExact(mode string) error {
 }
 func (w *world) approvalMode(mode string) ([]string, []string) {
 	env, args := w.env(), []string{"approve"}
+	if w.approval.location == "unset XDG_STATE_HOME" {
+		var clean []string
+		for _, value := range env {
+			if !strings.HasPrefix(value, "XDG_STATE_HOME=") {
+				clean = append(clean, value)
+			}
+		}
+		env = clean
+	}
 	switch mode {
 	case "--json":
 		args = append(args, "--json")

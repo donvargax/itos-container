@@ -3,6 +3,7 @@ package command
 
 import (
 	"errors"
+	"github.com/donvargax/itos-container/internal/slices/run/port"
 
 	"github.com/donvargax/itos-container/internal/cli"
 	"github.com/donvargax/itos-container/internal/slices/run/domain"
@@ -10,9 +11,10 @@ import (
 
 // CLI lets Kong retain the first separator and every subsequent literal word.
 type CLI struct {
-	JSON          bool     `name:"json" negatable:"" help:"Request JSON (refused by run)."`
-	Args          []string `arg:"" optional:"" passthrough:"partial" sep:"none" help:"-- followed by a nonempty executable and its arguments."`
-	InheritedJSON bool     `kong:"-"`
+	Approval      port.Approval `kong:"-"`
+	JSON          bool          `name:"json" negatable:"" help:"Request JSON (refused by run)."`
+	Args          []string      `arg:"" optional:"" passthrough:"partial" sep:"none" help:"-- followed by a nonempty executable and its arguments."`
+	InheritedJSON bool          `kong:"-"`
 }
 
 // Help makes the interim refusal explicit without claiming workload execution.
@@ -23,6 +25,7 @@ func (CLI) Help() string {
 		"    Offline startup is not implemented; doctor --policy-only inspects policy only.\n" +
 		"    Exit codes:\n" +
 		"      2  missing command/separator or unsupported JSON request\n" +
+		"      1  approval missing, changed, invalid or superseded; use itos container approve\n" +
 		"      3  offline startup is not implemented\n"
 }
 
@@ -35,11 +38,21 @@ func (c CLI) Run(ui *cli.UI) int {
 	}
 	withJSON := c.JSON || c.InheritedJSON
 	failure := domain.Refuse(domain.Invocation{JSON: withJSON, Separated: separated, Argv: args})
+	if errors.Is(failure, domain.ErrStartupUnavailable) && c.Approval != nil {
+		if err := domain.CheckApproval(c.Approval); err != nil {
+			return ui.Fail(err, withJSON)
+		}
+		ui.Line("approval matched")
+	}
 	return ui.Fail(failure, withJSON)
 }
 
 // Classify supplies run's stable rules and human guidance to the generic UI.
 func Classify(err error) (int, []cli.Problem) {
+	var approval domain.ApprovalRefusal
+	if errors.As(err, &approval) {
+		return 1, []cli.Problem{{Rule: "run.approval-" + approval.Reason, Exit: 1, Message: approval.Error(), Fix: "Review current settings with itos container approve."}}
+	}
 	switch {
 	case errors.Is(err, domain.ErrJSONUnsupported):
 		return cli.CodeUsage, []cli.Problem{{

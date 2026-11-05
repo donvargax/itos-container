@@ -218,7 +218,7 @@ Feature: Review and record approval of exact offline settings
   # assertion-level red and green. These expected failures are not evidence yet.
 
   # Fingerprints and host identity.
-  @wip @slice-4 @ID-APPROVAL-01 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-01 @local-engine-fixture
   Scenario Outline: Doctor exposes the exact candidate without granting approval
     Given an approval checkout and isolated host state
     When itos-container runs with "doctor <format>"
@@ -232,7 +232,7 @@ Feature: Review and record approval of exact offline settings
       |        |
       | --json |
 
-  @wip @slice-4 @ID-APPROVAL-02 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-02 @local-engine-fixture
   Scenario Outline: Equivalent requests keep the same canonical fingerprint
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -250,7 +250,7 @@ Feature: Review and record approval of exact offline settings
       | change Git HEAD, origin and an ordinary source file         |
       | negotiate another supported Engine API version              |
 
-  @wip @slice-4 @ID-APPROVAL-03 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-03 @local-engine-fixture
   Scenario Outline: Changed effective settings need a new approval
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -270,7 +270,7 @@ Feature: Review and record approval of exact offline settings
       | observe another daemon at the same endpoint      | /engine/id                 |
       | select another outside socket for the same daemon| /engine/endpoint           |
 
-  @wip @slice-4 @ID-APPROVAL-04 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-04 @local-engine-fixture
   Scenario Outline: Resolve the worker from the effective host identity instead of image or environment
     Given an approval checkout and isolated host state
     And the approval manifest omits both users
@@ -289,7 +289,7 @@ Feature: Review and record approval of exact offline settings
       | 2000:3000 |
       | worker    |
 
-  @wip @slice-4 @ID-APPROVAL-05 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-05 @local-engine-fixture
   Scenario Outline: Refuse a manifest identity different from the effective host UID
     Given an approval checkout and isolated host state
     And "<field>" requests a positive UID different from the process effective UID
@@ -305,7 +305,7 @@ Feature: Review and record approval of exact offline settings
       | approve | containerUser |
       | approve | remoteUser    |
 
-  @wip @slice-4 @ID-APPROVAL-06
+  @slice-4 @ID-APPROVAL-06
   Scenario Outline: Root and unavailable host identities cannot yield an approval candidate
     Given an approval contract fixture with effective UID "<uid>" and GID "<gid>"
     When the approval identity contract resolves the candidate
@@ -317,7 +317,7 @@ Feature: Review and record approval of exact offline settings
       | unavailable | 1000        | identity.unavailable |
       | 1000        | unavailable | identity.unavailable |
 
-  @wip @slice-4 @ID-APPROVAL-31
+  @slice-4 @ID-APPROVAL-31
   Scenario Outline: Bind both host IDs and support a non-default non-root identity
     Given a matching approval contract fixture for UID "1000" and GID "1000"
     When the approval contract resolves UID "<uid>" and GID "<gid>" with omitted manifest users
@@ -331,7 +331,7 @@ Feature: Review and record approval of exact offline settings
       | 1000 | 3000 | changed |
 
   # Deliberate review and optional exact-fingerprint automation.
-  @wip @slice-4 @ID-APPROVAL-07 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-07 @local-engine-fixture
   Scenario: Review all effective settings before a terminal yes stores approval
     Given an approval checkout and isolated host state
     When bare approve runs at a terminal and receives "y" after the review
@@ -341,7 +341,7 @@ Feature: Review and record approval of exact offline settings
     And the checkout is unchanged and only approval state was written
     And no engine mutation or image acquisition was attempted
 
-  @wip @slice-4 @ID-APPROVAL-08 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-08 @local-engine-fixture
   Scenario Outline: Default refusal and declined review leave approval absent
     Given an approval checkout and isolated host state
     When bare approve runs at a terminal and receives "<answer>" after the review
@@ -356,7 +356,7 @@ Feature: Review and record approval of exact offline settings
       | later  |
       | EOF    |
 
-  @wip @slice-4 @ID-APPROVAL-09 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-09 @local-engine-fixture
   Scenario: An unchanged approved checkout needs no second prompt
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "7"
@@ -364,7 +364,7 @@ Feature: Review and record approval of exact offline settings
     Then it reports matching approval without prompting and exits with code 0
     And the active approval bytes and generation are unchanged
 
-  @wip @slice-4 @ID-APPROVAL-10 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-10 @local-engine-fixture
   Scenario: Re-approval reviews old and new values before replacing the active record
     Given an approval checkout and isolated host state
     And a seeded prior approval at generation "7" with a different application environment and workspace
@@ -373,7 +373,7 @@ Feature: Review and record approval of exact offline settings
     And the sole active approval is the exact candidate at generation "8" in protected host state
     And it exits with code 0
 
-  @wip @slice-4 @ID-APPROVAL-11 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-11 @local-engine-fixture
   Scenario Outline: Bare approve without a review terminal refuses and names the optional route
     Given an approval checkout and isolated host state
     And approval state is "<state>"
@@ -390,7 +390,7 @@ Feature: Review and record approval of exact offline settings
       | missing  | terminal stdin, redirected stdout|
       | missing  | redirected stdin, terminal stdout|
 
-  @wip @slice-4 @ID-APPROVAL-12 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-12 @local-engine-fixture
   Scenario Outline: The optional exact fingerprint approves only the inspected candidate
     Given an approval checkout and isolated host state
     When approve runs without a terminal with the independently calculated exact fingerprint and "<mode>"
@@ -406,7 +406,7 @@ Feature: Review and record approval of exact offline settings
       | inherited ITOS_JSON=1      |
       | ITOS_JSON=1 with --no-json  |
 
-  @wip @slice-4 @ID-APPROVAL-13 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-13 @local-engine-fixture
   Scenario Outline: Malformed or stale fingerprints never grant consent
     Given an approval checkout and isolated host state
     When approve runs without a terminal with fingerprint "<value>" as JSON
@@ -422,7 +422,7 @@ Feature: Review and record approval of exact offline settings
       | an empty flag value                         | approve.fingerprint-format | 2    |
       | a short digest                              | approve.fingerprint-format | 2    |
 
-  @wip @slice-4 @ID-APPROVAL-14 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-14 @local-engine-fixture
   Scenario Outline: Consent cannot approve settings changed while the review was visible
     Given an approval checkout and isolated host state
     And a seeded prior approval at generation "2" with a different application environment and workspace
@@ -436,7 +436,7 @@ Feature: Review and record approval of exact offline settings
       | the manifest environment     |
       | the selected image config ID |
 
-  @wip @slice-4 @ID-APPROVAL-15 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-15 @local-engine-fixture
   Scenario Outline: Consent cannot follow substituted checkout or engine identities
     Given an approval checkout and isolated host state
     When terminal approve shows its review, the fixture replaces "<identity>", and then answers yes
@@ -452,7 +452,7 @@ Feature: Review and record approval of exact offline settings
       | socket device/inode  |
 
   # Protected storage, project separation and supersession.
-  @wip @slice-4 @ID-APPROVAL-16 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-16 @local-engine-fixture
   Scenario Outline: A different checkout cannot borrow another project's approval
     Given two approval checkouts named "one/project" and "two/project" in isolated host state
     And a seeded matching approval for the first checkout
@@ -468,7 +468,7 @@ Feature: Review and record approval of exact offline settings
       | a copied approval inside its writable checkout            | missing |
       | the first record copied to the second project's host path | invalid |
 
-  @wip @slice-4 @ID-APPROVAL-17 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-17 @local-engine-fixture
   Scenario: Reverting to superseded settings does not reactivate historical approval
     Given an approval checkout and isolated host state
     And active approval B at generation "2" and a historical approval A at generation "1"
@@ -478,7 +478,7 @@ Feature: Review and record approval of exact offline settings
     And its current approval generation is "2" and its candidate fingerprint is A
     And the active approval bytes and generation are unchanged
 
-  @wip @slice-4 @ID-APPROVAL-18 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-18 @local-engine-fixture
   Scenario Outline: Corrupt or inconsistent active records fail closed
     Given an approval checkout and isolated host state
     And a seeded matching approval with record defect "<defect>"
@@ -499,7 +499,7 @@ Feature: Review and record approval of exact offline settings
       | record larger than 1 MiB                 |
       | record deeper than 32 levels             |
 
-  @wip @slice-4 @ID-APPROVAL-19 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-19 @local-engine-fixture
   Scenario Outline: Approval storage refuses unsafe paths without repairing or following them
     Given an approval checkout and isolated host state
     And approval storage has unsafe layout "<layout>"
@@ -520,7 +520,7 @@ Feature: Review and record approval of exact offline settings
       | managed directory mode is 0777              | unsafe  |
       | current.json mode is 0644                   | unsafe  |
 
-  @wip @slice-4 @ID-APPROVAL-20 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-20 @local-engine-fixture
   Scenario Outline: Store approval under the selected host state root with private permissions
     Given an approval checkout and isolated host state
     And the child state location is "<location>" with umask "0000"
@@ -537,7 +537,7 @@ Feature: Review and record approval of exact offline settings
       | empty XDG_STATE_HOME      | matching                | HOME/.local/state/itos-container           | 0    |
       | relative XDG_STATE_HOME   | approval.state.location | none                                      | 2    |
 
-  @wip @slice-4 @ID-APPROVAL-21 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-21 @local-engine-fixture
   Scenario: Concurrent reviews cannot overwrite an approval recorded after their review began
     Given an approval checkout and isolated host state
     And a seeded prior approval at generation "4" with a different application environment and workspace
@@ -546,7 +546,7 @@ Feature: Review and record approval of exact offline settings
     And the second reports "approve.conflict" with exit 1 without another write
     And the only active record is the first process's complete canonical approval
 
-  @wip @slice-4 @ID-APPROVAL-22
+  @slice-4 @ID-APPROVAL-22
   Scenario Outline: Unsafe ownership and failed publication never yield false approval success
     Given an approval store contract fixture with failure "<failure>"
     When the approval store contract attempts to publish a consented replacement
@@ -566,7 +566,7 @@ Feature: Review and record approval of exact offline settings
       | parent fsync fails after rename           | state.write       | a complete old or new record|
 
   # Frozen-input contracts are tested without implementing or launching run.
-  @wip @slice-4 @ID-APPROVAL-23
+  @slice-4 @ID-APPROVAL-23
   Scenario: Frozen input owns the approved bytes independently of future edits and approvals
     Given a matching approval contract fixture for UID "2000" and GID "3000"
     When frozen input A is selected and the caller mutates its inputs and returned buffers before approval B is recorded
@@ -574,7 +574,7 @@ Feature: Review and record approval of exact offline settings
     And a fresh selection for B returns only B's independently owned canonical bytes
     And neither selection reads checkout data after choosing its approved record
 
-  @wip @slice-4 @ID-APPROVAL-24
+  @slice-4 @ID-APPROVAL-24
   Scenario Outline: Frozen selection rejects missing, changed and superseded approval atomically
     Given an approval contract fixture with selection condition "<condition>"
     When the frozen-input contract selects the requested approval
@@ -589,7 +589,7 @@ Feature: Review and record approval of exact offline settings
       | active record is invalid                   | invalid    |
 
   # Run observes approval; it cannot acquire it or launch in this slice.
-  @wip @slice-4 @ID-APPROVAL-25 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-25 @local-engine-fixture
   Scenario Outline: Run blocks unapproved settings and directs the person to approve
     Given an approval checkout and isolated host state
     And approval state is "<state>"
@@ -607,7 +607,7 @@ Feature: Review and record approval of exact offline settings
       | historical A with active B          | changed |
       | invalid                            | invalid |
 
-  @wip @slice-4 @ID-APPROVAL-26 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-26 @local-engine-fixture
   Scenario: Matching approval reaches the interim startup refusal without asking again
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -618,7 +618,7 @@ Feature: Review and record approval of exact offline settings
     And the approval checkout and host state are unchanged
 
   # Cross-command validation and honest help.
-  @wip @slice-4 @ID-APPROVAL-27 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-27 @local-engine-fixture
   Scenario Outline: Approve reuses strict validation and cannot consent around a failed prerequisite
     Given an approval checkout and isolated host state
     And approval input has prerequisite defect "<defect>"
@@ -635,7 +635,7 @@ Feature: Review and record approval of exact offline settings
       | daemon identity changes during inspection | doctor.engine.changed      | 1    |
       | checkout root changes during inspection   | doctor.checkout.changed    | 1    |
 
-  @wip @slice-4 @ID-APPROVAL-28 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-28 @local-engine-fixture
   Scenario: Successful approval executes no checkout helpers and exposes no host control mount
     Given an approval checkout and isolated host state
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
@@ -646,7 +646,7 @@ Feature: Review and record approval of exact offline settings
     And the approved mount boundary contains only the checkout and excludes host approval and snapshot paths
     And no engine mutation or image acquisition was attempted
 
-  @wip @slice-4 @ID-APPROVAL-29
+  @slice-4 @ID-APPROVAL-29
   Scenario: Approval help explains the human flow and its host-agent limitation
     When itos-container runs with "approve --help"
     Then approval help describes terminal review, changes, y/N, remembered approval and optional exact --fingerprint
@@ -656,7 +656,7 @@ Feature: Review and record approval of exact offline settings
     And its standard output says "doctor"
     And it exits with code 0
 
-  @wip @slice-4 @ID-APPROVAL-30 @local-engine-fixture
+  @slice-4 @ID-APPROVAL-30 @local-engine-fixture
   Scenario Outline: JSON never prompts and terminal review safely renders literal values
     Given an approval checkout and isolated host state
     And a literal application environment value contains terminal controls and shell-looking text

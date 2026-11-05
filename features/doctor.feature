@@ -42,7 +42,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # The policy has only version: 1, manifest: .devcontainer/devcontainer.json and
   # network: {mode: offline}; it contains neither an image nor a UID. The manifest
   # requests worker.test/agent@sha256:<64 lowercase a characters>, containerUser
-  # "1000" and remoteUser "1000"; other fields use slice-2's documented defaults.
+  # the effective host UID in both user fields; other fields use slice-2's documented defaults.
   # These aliases are fixture data, not real release digests or acquisition advice.
   # Image ID is sha256:<64 lowercase b characters>; a different digest uses c's.
   # The fixture must use slice-1's policy and slice-2's manifest specs, never
@@ -112,7 +112,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # ready, which describes ONLY these inspection checks. Device/inode values are
   # decimal strings, not lossy JSON numbers. Never emit run_ready or approved=true.
   # Facts not inspected are omitted, never invented. Plain output names the same
-  # inspected subjects and says approval and runtime isolation are not established.
+  # inspected subjects and says runtime isolation is not established.
   # Problems have dotted lowercase rule, exit, message, fix and a flat subject field
   # (path for checkout, field for selection, image for image); never raw responses.
   # Top-level ok is false and inspection.ready is false on an inspection problem.
@@ -147,7 +147,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     Then its standard output says "inspection ready"
     And it exits with code 0
     And its standard output names the checkout, engine identity and requested image digest
-    And its standard output says "approval and runtime isolation are not established"
+    And its standard output says "runtime isolation is not established"
     And its error output says "for scripts, use --json"
 
   # Effective root is absolute ITOS_ROOT if set, otherwise cwd. It must name the
@@ -495,7 +495,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Slice-4 resolves omissions and binds the approved identity. The policy stays
   # identical across these cases, including the alternate matching UID control.
   @slice-3 @ID-DOCTOR-29 @local-engine-fixture
-  Scenario Outline: Compare the cached image user with manifest identity requests
+  Scenario Outline: Resolve manifest identity from the host and override image Config.User
     Given a doctor checkout
     And a local Engine API fixture
     And the doctor manifest requests containerUser "<containerUser>" and remoteUser "<remoteUser>"
@@ -508,21 +508,21 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
 
     Examples:
       | containerUser | remoteUser | user      | outcome           | exit |
-      | 1000          | 1000       | 1000      | ready             | 0    |
-      | 1000          | 1000       | 1000:1000 | ready             | 0    |
-      | 2000          | 2000       | 2000:2000 | ready             | 0    |
-      | omitted       | 1000       | 1000:1000 | ready             | 0    |
-      | 1000          | omitted    | 1000:1000 | ready             | 0    |
+      | host UID      | host UID   | 1000      | ready             | 0    |
+      | host UID      | host UID   | 1000:1000 | ready             | 0    |
+      | other UID     | other UID  | 2000:2000 | approval.identity.mismatch | 1    |
+      | omitted       | host UID   | 1000:1000 | ready             | 0    |
+      | host UID      | omitted    | 1000:1000 | ready             | 0    |
       | omitted       | omitted    | 1000:1000 | ready             | 0    |
-      | 2000          | 1000       | 1000:1000 | doctor.image.user | 1    |
-      | 1000          | 2000       | 1000:1000 | doctor.image.user | 1    |
-      | 1000          | 1000       | 2000:1000 | doctor.image.user | 1    |
-      | 1000          | 1000       |           | doctor.image.user | 1    |
-      | 1000          | 1000       | 0:1000    | doctor.image.user | 1    |
-      | 1000          | 1000       | root      | doctor.image.user | 1    |
-      | 1000          | 1000       | worker    | doctor.image.user | 1    |
-      | 1000          | 1000       | 1000:     | doctor.image.user | 1    |
-      | 1000          | 1000       | 1000:staff | doctor.image.user | 1    |
+      | other UID     | host UID   | 1000:1000 | approval.identity.mismatch | 1    |
+      | host UID      | other UID  | 1000:1000 | approval.identity.mismatch | 1    |
+      | host UID      | host UID   | 2000:1000 | ready | 0    |
+      | host UID      | host UID   |           | ready | 0    |
+      | host UID      | host UID   | 0:1000    | ready | 0    |
+      | host UID      | host UID   | root      | ready | 0    |
+      | host UID      | host UID   | worker    | ready | 0    |
+      | host UID      | host UID   | 1000:     | ready | 0    |
+      | host UID      | host UID   | 1000:staff | ready | 0    |
 
   # Only after a usable image response, pass Config.Labels[devcontainer.metadata]
   # presence and raw text to slice-2's internal/engine/manifest validator. Retain

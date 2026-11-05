@@ -181,7 +181,7 @@ func TestIndependentImageDefectsAndUnusableImage(t *testing.T) {
 			}
 			switch kind {
 			case "independent":
-				want := []port.Issue{{Kind: port.ImageDigest, Subject: porttest.Reference}, {Kind: port.ImagePlatform, Subject: porttest.Reference}, {Kind: port.ImageUser, Subject: porttest.Reference}}
+				want := []port.Issue{{Kind: port.ImageDigest, Subject: porttest.Reference}, {Kind: port.ImagePlatform, Subject: porttest.Reference}}
 				if !reflect.DeepEqual(result.Issues, want) {
 					t.Fatalf("issues = %#v", result.Issues)
 				}
@@ -198,16 +198,14 @@ func TestIndependentImageDefectsAndUnusableImage(t *testing.T) {
 	}
 }
 
-func TestImageUserGrammarAndOmissions(t *testing.T) {
-	u1000, u2000 := "1000", "2000"
-	for _, user := range []string{"1000", "1000:0", "1000:0100"} {
-		if !matchesUser(user, &u1000, nil) || !matchesUser(user) || matchesUser(user, &u1000, &u2000) {
-			t.Fatal(user)
-		}
-	}
-	for _, user := range []string{"", "0", "01", "+1000", "root", "1000:", "1000:staff", "1000:1:2", "1000\n"} {
-		if matchesUser(user) {
-			t.Fatal(user)
+func TestImageUserDoesNotSelectWorkerIdentity(t *testing.T) {
+	for _, user := range []string{"", "root", "0:0", "2000:3000", "worker"} {
+		inspector, input, engine, _ := fixture()
+		image := engine.Session.Images[porttest.Reference]
+		image.User = user
+		engine.Session.Images[porttest.Reference] = image
+		if result := inspector.Inspect(input); !result.Ready {
+			t.Fatalf("image user %q affected readiness: %#v", user, result)
 		}
 	}
 }

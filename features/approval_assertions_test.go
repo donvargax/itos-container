@@ -86,6 +86,17 @@ func (w *world) approvalProblem(rule string, code int, field string) error {
 	if err := w.exitsWith(code); err != nil {
 		return err
 	}
+	if !strings.HasPrefix(strings.TrimSpace(w.stdout), "{") {
+		for _, line := range strings.Split(w.stderr, "\n") {
+			if strings.HasPrefix(line, rule+": ") {
+				message, fix, ok := strings.Cut(strings.TrimPrefix(line, rule+": "), "; ")
+				if ok && message != "" && fix != "" {
+					return nil
+				}
+			}
+		}
+		return fmt.Errorf("missing complete plain problem %s\n%s", rule, w.report())
+	}
 	obj, err := w.json()
 	if err != nil {
 		return err
@@ -318,16 +329,17 @@ func (w *world) approvalRecordUnchanged() error {
 	return nil
 }
 func (w *world) approvalNoRecord() error {
-	// A seeded invalid or foreign record may exist; no invocation may create or
-	// replace authority, and the primary Then must assert its precise refusal.
-	if w.approval.recordBefore != nil {
-		return w.approvalRecordUnchanged()
+	if _, err := os.Lstat(w.approval.record); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
 	}
-	if _, err := os.Lstat(w.approval.record); !os.IsNotExist(err) {
-		return fmt.Errorf("unexpected approval record or stat failure: %v", err)
+	if w.approval.before != nil {
+		return w.approvalSameTree()
 	}
-	return nil
+	return fmt.Errorf("unexpected approval record")
 }
+
 func (w *world) approvalOnlyState() error {
 	actual, err := doctorTree(w.dir)
 	if err != nil {

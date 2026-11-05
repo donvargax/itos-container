@@ -26,6 +26,11 @@ import (
 	"golang.org/x/term"
 
 	"github.com/donvargax/itos-container/internal/cli"
+	approvalcanonical "github.com/donvargax/itos-container/internal/engine/approval/canonical"
+	approvaldisk "github.com/donvargax/itos-container/internal/engine/approval/disk"
+	approvaldomain "github.com/donvargax/itos-container/internal/engine/approval/domain"
+	approvalhost "github.com/donvargax/itos-container/internal/engine/approval/host"
+	approvalpresentation "github.com/donvargax/itos-container/internal/engine/approval/presentation"
 	manifestdisk "github.com/donvargax/itos-container/internal/engine/manifest/disk"
 	"github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
 	"github.com/donvargax/itos-container/internal/engine/manifest/reference"
@@ -36,6 +41,7 @@ import (
 	readiness "github.com/donvargax/itos-container/internal/engine/readiness/domain"
 	readinessport "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	readinessreference "github.com/donvargax/itos-container/internal/engine/readiness/reference"
+	approve "github.com/donvargax/itos-container/internal/slices/approve/command"
 	"github.com/donvargax/itos-container/internal/slices/count/command"
 	countdisk "github.com/donvargax/itos-container/internal/slices/count/disk"
 	"github.com/donvargax/itos-container/internal/slices/count/input"
@@ -51,6 +57,7 @@ type commandLine struct {
 	// and no environment variable.
 	ShowVersion kong.VersionFlag `name:"version" help:"Print the version and the commit it was built from, and exit."`
 
+	Approve    approve.CLI    `cmd:"" help:"Review and remember exact offline settings."`
 	Count      command.CLI    `cmd:"" help:"Count the lines and words of a file, or of standard input."`
 	Doctor     doctor.CLI     `cmd:"" help:"Inspect the strict offline policy and restricted worker manifest."`
 	Run        runcommand.CLI `cmd:"" help:"Validate a run invocation; offline startup is not implemented."`
@@ -111,20 +118,19 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	case "doctor":
 		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}}
 		c.Doctor.Manifests = inspection.Manifests{Files: manifestdisk.Files{}, Parser: jsonc.Parser{}, References: reference.References{}}
-		checkout := &readinessdisk.Checkout{}
-		root := os.Getenv("ITOS_ROOT")
-		if root == "" {
-			root, _ = os.Getwd()
-		}
-		c.Doctor.Readiness = inspection.Readiness{Inspector: readiness.Inspector{
-			Checkout: checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}},
-			Files: manifestdisk.Files{OpenRoot: checkout.OpenRoot}, Parser: jsonc.Parser{}, References: reference.References{}, Engine: docker.Engine{},
-			Digests: readinessreference.Digests{},
-		}, Input: readinessport.Input{Root: root, OS: runtime.GOOS, Architecture: runtime.GOARCH,
-			Host: os.Getenv("DOCKER_HOST"), Context: os.Getenv("DOCKER_CONTEXT"), TLSVerify: os.Getenv("DOCKER_TLS_VERIFY"), CertPath: os.Getenv("DOCKER_CERT_PATH"), APIVersion: os.Getenv("DOCKER_API_VERSION"),
-		}}
+		service, presentation := approvalServices(in, stdout, stderr)
+		c.Doctor.Readiness = service.Readiness
+		c.Doctor.Approval = service
+		c.Doctor.Presentation = presentation
 		return c.Doctor.Run(ui)
+	case "approve":
+		service, presentation := approvalServices(in, stdout, stderr)
+		c.Approve.Service = service
+		c.Approve.Presentation = presentation
+		return c.Approve.Run(ui)
 	case "run":
+		service, _ := approvalServices(in, stdout, stderr)
+		c.Run.Approval = service
 		ui.Classify = runcommand.Classify
 		c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
 		return c.Run.Run(ui)
@@ -195,4 +201,24 @@ func loggerFor(w io.Writer, isTerminal func(int) bool) *slog.Logger {
 		}
 	}
 	return slog.New(slog.NewJSONHandler(w, opts))
+}
+
+// approvalServices assembles shared inspection and approval adapters. Construction
+// defers policy, engine and approval inspection until the command requests it.
+func approvalServices(in io.Reader, out, errout io.Writer) (approvaldomain.Service, approvalpresentation.UI) {
+	checkout := &readinessdisk.Checkout{}
+	root := os.Getenv("ITOS_ROOT")
+	if root == "" {
+		root, _ = os.Getwd()
+	}
+	source := inspection.Readiness{Inspector: readiness.Inspector{
+		Checkout: checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}},
+		Files: manifestdisk.Files{OpenRoot: checkout.OpenRoot}, Parser: jsonc.Parser{}, References: reference.References{}, Engine: docker.Engine{},
+		Digests: readinessreference.Digests{},
+	}, Input: readinessport.Input{Root: root, OS: runtime.GOOS, Architecture: runtime.GOARCH,
+		Host: os.Getenv("DOCKER_HOST"), Context: os.Getenv("DOCKER_CONTEXT"), TLSVerify: os.Getenv("DOCKER_TLS_VERIFY"), CertPath: os.Getenv("DOCKER_CERT_PATH"), APIVersion: os.Getenv("DOCKER_API_VERSION"),
+	}}
+	codec := approvalcanonical.JSON{}
+	service := approvaldomain.Service{Readiness: source, Host: approvalhost.Process{}, Codec: codec, Store: approvaldisk.Store{StateHome: os.Getenv("XDG_STATE_HOME"), Home: os.Getenv("HOME"), Records: codec}}
+	return service, approvalpresentation.UI{In: in, Out: out, Err: errout}
 }

@@ -5,8 +5,8 @@ sandbox policy. The [charter](charter.md) selects the milestone from the binding
 [pilot contract](plans/container-pilot.md); they take precedence over upstream
 examples. Strict policy validation is implemented through `doctor --policy-only`, and
 policy plus manifest validation through `doctor --manifest-only`. The inherited count,
-version and completion commands remain. Host readiness, approval and runtime isolation
-are not implemented.
+version and completion commands remain. Ordinary doctor inspects host readiness and approval. Explicit approval is implemented;
+runtime isolation remains unimplemented.
 
 The milestone is an offline owned run with no network, an approved hardened container,
 the checkout as its only host mount, a non-root identity and owned cleanup. Linux amd64
@@ -64,6 +64,15 @@ code or repository helpers.
 Host-user approval is explicit, held in host-owned state outside the writable checkout,
 and covers the reviewed effective policy and supported manifest settings. Include
 effective defaults and applicable differences from prior approval in that review.
+Bare terminal approve reviews settings and changes, asks y/N, and remembers approval
+until settings change. The optional `--fingerprint <value>` approves only the exact
+value printed by doctor. State uses canonical JSON SHA-256 under absolute
+`$XDG_STATE_HOME/itos-container`, falling back to `$HOME/.local/state/itos-container`
+when XDG_STATE_HOME is absent or empty. A relative nonempty XDG_STATE_HOME refuses.
+Managed directories are owned mode 0700 and records mode 0600. One active generation
+supersedes the previous approval; an old historical record cannot authorize a run.
+The effective UID supplies host identity, independently of HOME or user environment.
+
 
 `run` must refuse missing or malformed policy, unsupported options, invalid values and
 absent, mismatched or superseded approval before starting resources. Missing policy or
@@ -212,7 +221,8 @@ be strict JSON arrays of objects with unique decoded keys; only valid display na
 and editor customizations are allowed and reported as unused. Operational settings
 are refused and nothing is merged into effective settings. Slice-3 owns obtaining
 that label; lookup failure cannot be represented as absence. Slice-4 owns resolving
-omitted identities and comparing image/UID requests with host-owned approval.
+omitted identities to the effective host UID, refusing root and explicit UID mismatches,
+and binding effective host UID/GID in approval. Image Config.User is overridden.
 
 ### Data and validation
 
@@ -291,10 +301,9 @@ do not establish sandbox argv or credential rules.
 
 ## Remaining specification work
 
-The pilot leaves approval canonicalization/fingerprint and
-storage, safe checkout/engine identity, generated output paths,
-lifecycle hooks, resource/time limits and
-cancellation details open. Resolve them through the assigned specifications and the
+[Approval canonicalization, state and identity](../features/approval.feature) are now
+specified and implemented. Generated output paths, lifecycle hooks and remaining
+resource/time-limit and cancellation details belong to their later slices. Resolve them through the assigned specifications and the
 person's security decisions, not an illustrative configuration here.
 
 Format policy is not loader compliance. Implement each required behaviour with

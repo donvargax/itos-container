@@ -4,18 +4,21 @@ package command
 import (
 	"fmt"
 	"github.com/donvargax/itos-container/internal/cli"
+	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/slices/doctor/domain"
 	"github.com/donvargax/itos-container/internal/slices/doctor/port"
 )
 
 // CLI is the doctor command, with its inspection capability injected by main.
 type CLI struct {
-	Policies     port.Policies  `kong:"-"`
-	Manifests    port.Manifests `kong:"-"`
-	Readiness    port.Readiness `kong:"-"`
-	PolicyOnly   bool           `name:"policy-only" negatable:"" help:"Validate only itos-container.yaml, without manifest, host or approval checks."`
-	ManifestOnly bool           `name:"manifest-only" negatable:"" help:"Validate policy and manifest only; image metadata, host readiness and approval are not checked."`
-	JSON         bool           `name:"json" negatable:"" env:"ITOS_JSON" help:"Print one JSON object."`
+	Approval     approval.Inspector    `kong:"-"`
+	Presentation approval.Presentation `kong:"-"`
+	Policies     port.Policies         `kong:"-"`
+	Manifests    port.Manifests        `kong:"-"`
+	Readiness    port.Readiness        `kong:"-"`
+	PolicyOnly   bool                  `name:"policy-only" negatable:"" help:"Validate only itos-container.yaml, without manifest, host or approval checks."`
+	ManifestOnly bool                  `name:"manifest-only" negatable:"" help:"Validate policy and manifest only; image metadata, host readiness and approval are not checked."`
+	JSON         bool                  `name:"json" negatable:"" env:"ITOS_JSON" help:"Print one JSON object."`
 }
 
 // Help documents the implemented inspection scope and machine contract.
@@ -26,7 +29,7 @@ func (CLI) Help() string {
 		"    Ordinary doctor inspects the checkout, local engine and exact cached image.\n" +
 		"    --json prints schema 1, ok, problems, effective data and inspection facts.\n" +
 		"    File-only modes identify their scope as policy or manifest.\n" +
-		"    Inspection does not establish approval or runtime isolation.\n" +
+		"    Ordinary inspection reports the fingerprint and current approval status; runtime isolation remains unproven.\n" +
 		"    Exit codes:\n" +
 		"      0  policy validation succeeded; other requested inspections also succeeded\n" +
 		"      1  unsupported or changed checkout, host, engine or image\n" +
@@ -44,6 +47,10 @@ func (c CLI) Run(ui *cli.UI) int {
 		return presentPolicy(ui, domain.Inspect(c.Policies), c.JSON)
 	}
 	if !c.ManifestOnly {
+		if c.Approval != nil {
+			view := c.Approval.Inspect()
+			return presentApprovalReadiness(ui, view, c.Presentation, c.JSON)
+		}
 		return presentReadiness(ui, domain.InspectReadiness(c.Readiness), c.JSON)
 	}
 	policy, manifest := domain.InspectManifest(c.Policies, c.Manifests)

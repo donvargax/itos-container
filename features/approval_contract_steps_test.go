@@ -46,7 +46,14 @@ func (w *world) approvalContractSteps(sc *godog.ScenarioContext) {
 	})
 	sc.Step(`^its canonical fingerprint binds both independently supplied host IDs$`, func() error {
 		c, _ := w.approval.contract["candidate"].(map[string]any)
-		expected := map[string]any{"schema": 1, "host": map[string]string{"uid": w.approval.uid, "gid": w.approval.gid}, "manifest": map[string]string{"containerUser": w.approval.uid, "remoteUser": w.approval.uid}}
+		expected := map[string]any{
+			"schema": 1, "profile": "offline-v1", "host": map[string]string{"uid": w.approval.uid, "gid": w.approval.gid},
+			"checkout": map[string]string{"root": "/checkout", "device": "1", "inode": "2", "git_device": "1", "git_inode": "3"},
+			"engine":   map[string]string{"endpoint": "unix:///engine.sock", "id": "engine-A", "os": "linux", "architecture": "amd64"},
+			"policy":   map[string]any{"version": 1, "manifest": "worker.json", "network": map[string]string{"mode": "offline"}},
+			"manifest": map[string]any{"name": nil, "image": doctorImage, "workspaceFolder": "/workspace", "containerEnv": map[string]string{}, "containerUser": w.approval.uid, "remoteUser": w.approval.uid},
+			"image":    map[string]string{"reference": doctorImage, "id": doctorImageID, "os": "linux", "architecture": "amd64"},
+		}
 		if c["Canonical"] != string(approvalJSON(expected)) || c["Fingerprint"] != "sha256:"+approvalHash(expected) {
 			return fmt.Errorf("identity canonicalization differs from independent oracle")
 		}
