@@ -192,8 +192,8 @@ items:
   - id: slice-3
     title: Inspect checkout, local engine and cached-image readiness
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-2, T-20]
     kind: slice
     why: >
@@ -348,13 +348,9 @@ items:
     title: Bound manifest and metadata parsing
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: [slice-2]
     kind: slice
-    why: >
-      Slice-2 sets no size or depth budget; slice-5's budget covers only the policy. A hostile
-      manifest or image label gets the same bound by behaviour: input past a limit is refused with
-      its rule. Reuse slice-5's approach; no assertion on heap or GC traces.
   - id: slice-7
     title: Run refuses bad invocations
     phase: 1
