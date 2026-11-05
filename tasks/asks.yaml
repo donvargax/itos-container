@@ -13,3 +13,4 @@ questions:
   - id: q-3
     item: "slice-3"
     question: "slice-3's implementer stopped for the CI-only red evidence of ID-DOCTOR-22 to 24, which features/README.md gives the coordinator. Is it in?"
+    answer: "Yes: run 41944060291 at 212c08b, by red_scenarios: each fails at its assertion. Go on with the implementation."
