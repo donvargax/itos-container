@@ -3,13 +3,25 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   Ordinary doctor reports observations about the checkout, the selected local engine
   and the requested cached worker image. Success is an inspection result, never host
   approval or proof that a running sandbox is isolated. Policy parsing belongs to
-  slice-1, manifest and inherited devcontainer metadata validation to slice-2, and
-  approval to slice-4. This feature grants no runtime permission or image acquisition.
+  slice-1 and manifest validation to slice-2. This slice reads inherited
+  devcontainer.metadata from the inspected image and passes it as data to slice-2's
+  shared validator. Approval belongs to slice-4. This feature grants no runtime
+  permission or image acquisition.
 
   # Implementation boundary and dependency decision for slice-3:
-  # Create internal/doctor/{command,domain,port,...} like internal/count. Reusable
-  # inspection belongs in an engine package with its own ports/adapters and fakes,
-  # not in count or another command's domain. OS/architecture are input values.
+  # T-14 lands first; extend the existing internal/slices/doctor slice. Reusable
+  # inspection belongs in internal/engine/<name>/{domain,port,<adapter>}; reuse
+  # internal/engine/manifest for manifest and inherited metadata validation.
+  # Follow T-14's why in tasks/phase-1.yaml: a slice imports no other slice or
+  # adapter; cmd/ binds concrete adapters. An adapter may import its own domain
+  # and port. Each engine port gets a port/porttest contract suite run unchanged
+  # against its in-memory fake and the real adapter, so the fake cannot drift.
+  # Exercise the real Engine API adapter against controlled HTTP fixtures locally;
+  # any contract case needing an actual engine runs only in the CI engine tier.
+  # OS/architecture are input values; no runtime.GOOS branch in domain logic.
+  # The dependency order is slice-1, slice-2, slice-3. Doctor and the shared
+  # metadata validator already exist when this slice is implemented. Preserve
+  # --policy-only and --manifest-only, which must not acquire readiness dependencies.
   # Use the maintained Docker Go SDK github.com/moby/moby/client v0.6.2 and its
   # github.com/moby/moby/api v1.56.1 types, pinned when implementation adds them.
   # It provides version negotiation and typed inspection without Docker subprocesses
@@ -27,28 +39,38 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # .git, an unborn HEAD, refs/objects directories, a regular config, and the valid
   # offline policy and restricted manifest defined by slice-1 and slice-2. It writes
   # those files directly; it does not run the product to prepare or approve them.
-  # The manifest requests worker.test/agent@sha256:<64 lowercase a characters>.
+  # The policy has only version: 1, manifest: .devcontainer/devcontainer.json and
+  # network: {mode: offline}; it contains neither an image nor a UID. The manifest
+  # requests worker.test/agent@sha256:<64 lowercase a characters>, containerUser
+  # "1000" and remoteUser "1000"; other fields use slice-2's documented defaults.
   # These aliases are fixture data, not real release digests or acquisition advice.
   # Image ID is sha256:<64 lowercase b characters>; a different digest uses c's.
-  # The fixture must use the owning policy/manifest specs, never invent permissive
-  # test-only configuration or production switches to bypass their validators.
+  # The fixture must use slice-1's policy and slice-2's manifest specs, never
+  # permissive test-only configuration or production switches to bypass validation.
   #
   # "a local Engine API fixture" starts a stateful HTTP fake on a temporary Unix
   # socket OUTSIDE the checkout, with its own request journal. It has no connection
   # to an actual engine. It supplies successful ping/version/info/image inspection,
   # product Docker Engine - Community, Linux amd64, daemon ID engine-A, API 1.56
   # with minimum 1.44, the requested RepoDigest, and the image ID above. Image
-  # Config.User matches the non-root identity in the owning policy/manifest fixture;
-  # Config has no devcontainer.metadata or implicit volumes.
+  # Config.User is "1000:1000": its UID matches the manifest's containerUser and
+  # remoteUser, never a policy value. Config.Labels has no devcontainer.metadata
+  # key and Config has no implicit volumes. Image and user requests come only from
+  # the manifest; comparison with host-approved values belongs to slice-4.
   # It sets DOCKER_HOST for the child only. All caller DOCKER_*, proxy settings and
   # credential locations are cleared or redirected to disposable fixture state.
   # It records every request, including attempted mutations, redirects and failures;
   # forbidden requests must fail assertions even if the fake refuses them itself.
-  # Local scenarios run on Linux amd64; other hosts exercise the unsupported-host
-  # case. No fake result establishes actual engine or isolation support.
+  # @local-engine-fixture scenarios run on Linux amd64. ID-DOCTOR-22 runs with a
+  # native non-Linux binary in the manual macOS/Windows platform jobs. Implement
+  # platform selection before setup when making these cases live: ordinary Linux
+  # and mutation runs exclude ID-DOCTOR-22; manual non-Linux runs exclude the Unix
+  # fixture cases. Tags alone do not implement that selection. No fake result
+  # establishes actual engine or isolation support.
   #
   # Existing steps reused: "itos-container runs with ...", exit-code assertions,
-  # stdout/stderr containment, JSON problem-name and complete-problem assertions.
+  # stdout/stderr containment, JSON problem-name and complete-problem assertions,
+  # and slice-2's "its JSON value at ... is:" assertion over actual stdout.
   # All doctor fixtures, multi-run/controlled-race actions, JSON identity assertions,
   # filesystem snapshots and API-journal assertions below need new definitions.
   # Every Given only writes fixtures, sets child environment, or configures the
@@ -57,18 +79,31 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # Given steps and before invocation; include newly created files in comparisons.
   # Use scratch HOME/XDG state, never the operator's approval or Docker files.
   # Multi-run actions retain every process result even on nonzero exits. A race
-  # action waits for either the expected fake request OR process exit: an absent
-  # doctor must reach its Then with usage output, not fail/hang in synchronization.
+  # action waits for either the expected fake request OR process exit: doctor
+  # without readiness inspection must still reach its Then, not fail/hang in setup.
+  # Metadata Given steps change only Config.Labels in the fake's image response;
+  # no supplied-label contract runner or product injection flag stands in for the
+  # real binary-to-engine path. The effective-manifest assertion compares all six
+  # effective fields with the checkout fixture, including nulls/defaults. An inspected
+  # metadata-problem assertion checks schema 1, ok=false, inspection.ready=false,
+  # manifest.valid=false with no effective settings, checked=true/present=true,
+  # rule manifest.metadata, the expected path, image=<manifest request>,
+  # label=devcontainer.metadata, nonempty message/fix and both problem/process exit 2.
+  # Identity Given steps change only manifest user fields and the fake's Config.User;
+  # "omitted" deletes that field. Sentinels must preserve valid manifest/policy data.
   # Endpoint traps use allocated loopback ports, temporary sockets and PATH marker
   # programs (including ssh); example endpoint addresses are fixture aliases.
   # Never resolve external hosts, connect to real engines or use actual credentials.
   #
   # Black-box red-first handoff: commit those steps in test: while tags stay @wip.
-  # Remove @wip only for the evidence run; every case must fail at its FIRST Then
-  # below, since today doctor is unknown and reports usage/exit 2. This is an
-  # expected failure location, not claimed red evidence from this spec-only commit.
-  # Real-engine cases are CI-only and need explicit harness/CI selection before
-  # becoming live; merely adding @real-engine must never expose a local socket.
+  # Remove @wip only for the evidence run. Against the slice-2 baseline, doctor
+  # validates files but does not inspect checkout/engine/image readiness or read
+  # image labels. Each case must fail at its first Then below for that missing
+  # observation/diagnostic, not because doctor is unknown or a step is undefined.
+  # These are expected failure locations, not red evidence from this spec commit.
+  # ID-DOCTOR-22 needs assertion-level red/green in the manual platform jobs.
+  # ID-DOCTOR-23/24 retain @engine and run only in the CI engine tier; follow
+  # features/README.md's real-engine red-first procedure. Agents never run that tier.
 
   # Output decisions: --json and inherited ITOS_JSON=1 produce exactly one schema-1
   # object, ok and problems (empty on success), plus an inspection object. It holds
@@ -85,6 +120,9 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
   # message/fix, the problem's exit, and the process exit N, not just a substring.
   # All readiness/identity assertions also check schema 1, ok true and no problems;
   # a named-problem outcome checks the same failure contract as the problem step.
+  # Preserve slice-2's manifest fragment and label diagnostics in ordinary doctor.
+  # A failed lookup leaves image_metadata checked=false, present=null, unused=[];
+  # only a successful image inspection can establish an absent or present label.
 
   @wip @slice-3 @ID-DOCTOR-01 @local-engine-fixture
   Scenario: Inspect a standalone checkout and the exact cached worker image
@@ -94,6 +132,10 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     Then its JSON inspection identifies the checkout, selected engine and requested cached image
     And it exits with code 0
     And its JSON inspection is ready without asserting approval or runtime isolation
+    And its JSON value at "/manifest/image_metadata" is:
+      """
+      {"checked":true,"present":false,"unused":[]}
+      """
     And the Engine API journal contains only ping, version, info and the requested image inspection
     And the checkout and host control state are unchanged
 
@@ -380,6 +422,10 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     And a local Engine API fixture returning image-not-found for the requested digest
     When itos-container runs with "doctor --json"
     Then its JSON output has a doctor problem "doctor.image.missing" with exit 3
+    And its JSON value at "/manifest/image_metadata" is:
+      """
+      {"checked":false,"present":null,"unused":[]}
+      """
     And the problem identifies the requested image reference
     And its fix asks the host operator to prepare the exact image outside doctor
     And the Engine API journal contains only ping, version, info and the requested image inspection
@@ -416,16 +462,109 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
       | missing OS     |
       | missing arch   |
 
-  # Engine-provided Config, including devcontainer.metadata, is passed to the
-  # same restricted metadata validator owned by slice-2, without merging or
-  # executing hidden settings. This item only owns inspection transport/content
-  # identity failures; it does not invent a second metadata permission profile.
+  # Config.User's UID uses slice-2's [1-9][0-9]* form, matching each explicitly
+  # requested manifest containerUser/remoteUser. A :[0-9]+ GID suffix is allowed
+  # but is not a manifest UID. Empty/root/named or malformed users cannot establish
+  # this identity by inspection. Omitted manifest users stay unspecified; doctor
+  # neither fills them from the image/policy nor compares with host approval.
+  # Slice-4 resolves omissions and binds the approved identity. The policy stays
+  # identical across these cases, including the alternate matching UID control.
+  @wip @slice-3 @ID-DOCTOR-29 @local-engine-fixture
+  Scenario Outline: Compare the cached image user with manifest identity requests
+    Given a doctor checkout
+    And a local Engine API fixture
+    And the doctor manifest requests containerUser "<containerUser>" and remoteUser "<remoteUser>"
+    And the inspected image Config.User is "<user>"
+    When itos-container runs with "doctor --json"
+    Then its JSON inspection outcome is "<outcome>" with exit <exit>
+    And its JSON effective manifest matches the checkout request without metadata merging
+    And the Engine API journal contains only ping, version, info and the requested image inspection
+    And the checkout and host control state are unchanged
+
+    Examples:
+      | containerUser | remoteUser | user      | outcome           | exit |
+      | 1000          | 1000       | 1000      | ready             | 0    |
+      | 1000          | 1000       | 1000:1000 | ready             | 0    |
+      | 2000          | 2000       | 2000:2000 | ready             | 0    |
+      | omitted       | 1000       | 1000:1000 | ready             | 0    |
+      | 1000          | omitted    | 1000:1000 | ready             | 0    |
+      | omitted       | omitted    | 1000:1000 | ready             | 0    |
+      | 2000          | 1000       | 1000:1000 | doctor.image.user | 1    |
+      | 1000          | 2000       | 1000:1000 | doctor.image.user | 1    |
+      | 1000          | 1000       | 2000:1000 | doctor.image.user | 1    |
+      | 1000          | 1000       |           | doctor.image.user | 1    |
+      | 1000          | 1000       | 0:1000    | doctor.image.user | 1    |
+      | 1000          | 1000       | root      | doctor.image.user | 1    |
+      | 1000          | 1000       | worker    | doctor.image.user | 1    |
+      | 1000          | 1000       | 1000:     | doctor.image.user | 1    |
+      | 1000          | 1000       | 1000:staff | doctor.image.user | 1    |
+
+  # Only after a usable image response, pass Config.Labels[devcontainer.metadata]
+  # presence and raw text to slice-2's internal/engine/manifest validator. Retain
+  # its profile, limits, unused pointers and manifest.metadata diagnostics; do not
+  # merge hidden settings, execute them or invent a second permission profile.
+  # Unlike slice-2's data-contract tests, these exercise the product binary and
+  # Engine API adapter, so a missing call to the validator is observable.
+  @wip @slice-3 @ID-DOCTOR-27 @local-engine-fixture
+  Scenario Outline: Validate an inspected image label and report accepted metadata as unused
+    Given a doctor checkout
+    And a local Engine API fixture
+    And the inspected image devcontainer.metadata label is:
+      """
+      <label>
+      """
+    When itos-container runs with "doctor --json"
+    Then its JSON value at "/manifest/image_metadata" is:
+      """
+      {"checked":true,"present":true,"unused":<unused>}
+      """
+    And its JSON inspection is ready without asserting approval or runtime isolation
+    And its JSON effective manifest matches the checkout request without metadata merging
+    And it exits with code 0
+    And the Engine API journal contains only ping, version, info and the requested image inspection
+    And the checkout and host control state are unchanged
+
+    Examples:
+      | label                                                                                    | unused                                |
+      | []                                                                                       | []                                    |
+      | [{}]                                                                                     | []                                    |
+      | [{"name":"image display"},{"customizations":{"vscode":{"extensions":["example.editor"]}}}] | ["/0/name","/1/customizations/vscode"] |
+
+  # A valid first entry cannot hide an operational second entry. All response
+  # fields except the label remain valid, isolating the validator wiring failure.
+  @wip @slice-3 @ID-DOCTOR-28 @local-engine-fixture
+  Scenario Outline: Refuse inspected image metadata through the shared manifest validator
+    Given a doctor checkout
+    And a local Engine API fixture
+    And the inspected image devcontainer.metadata label is:
+      """
+      <label>
+      """
+    And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
+    When itos-container runs with "doctor --json"
+    Then its JSON output reports an inspected image metadata problem at "<path>" with exit 2
+    And no executable marker was created
+    And the Engine API journal contains only ping, version, info and the requested image inspection
+    And the checkout and host control state are unchanged
+
+    Examples:
+      | label                                                       | path                 |
+      |                                                             |                      |
+      | not-json                                                    |                      |
+      | [{"containerUser":"1000"}]                                  | /0/containerUser     |
+      | [{"initializeCommand":"./slice-3-record-execution"}]          | /0/initializeCommand |
+      | [{"name":"display"},{"capAdd":["SYS_ADMIN"]}]                 | /1/capAdd            |
+
   @wip @slice-3 @ID-DOCTOR-18 @local-engine-fixture
   Scenario Outline: Do not report readiness from an unusable cached image response
     Given a doctor checkout
     And a local Engine API fixture with image response "<response>"
     When itos-container runs with "doctor --json"
     Then its JSON output has a doctor problem "doctor.image.inspect" with exit 75
+    And its JSON value at "/manifest/image_metadata" is:
+      """
+      {"checked":false,"present":null,"unused":[]}
+      """
     And no engine mutation or image acquisition was attempted
 
     Examples:
@@ -482,10 +621,12 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     And neither output stream nor any changed file contains the synthetic canary
     And no endpoint connection was attempted
 
-  # Run this against a binary actually built for a non-Linux or non-amd64 host.
+  # Run only in the manual macOS/Windows platform jobs with a native non-Linux
+  # binary, never in the Linux engine job or ordinary Linux/mutation selection.
+  # Use a portable connection recorder; no Unix socket or real engine is needed.
   # Do not add a production environment variable to fake the host platform. The
   # domain's platform cases also use value inputs and fakes in its unit tests.
-  @wip @slice-3 @ID-DOCTOR-22 @unsupported-host
+  @wip @slice-3 @ID-DOCTOR-22 @unsupported-host @manual-platform
   Scenario: Refuse an unsupported host before opening an engine connection
     Given a doctor checkout on an unsupported host
     And a connection-recording endpoint fixture
@@ -494,14 +635,15 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     And no endpoint connection was attempted
     And the checkout and host control state are unchanged
 
-  # CI alone provisions the disposable native Docker target and an operator-cached,
-  # digest-pinned Linux amd64 worker fixture from reviewed test material. Record
+  # Use features/README.md's cached fixture protocol in the CI engine tier. Its
+  # image/ID/UID/GID harness inputs supply the normally validated manifest and
+  # independent expectations; never add image or UID fields to the policy. Record
   # host, server version/API, image reference/ID and expected/actual results in CI.
   # The test runner's read-only request recorder is separate from product output;
   # it must see attempted forbidden operations, not merely compare resource counts.
   # Setup failure is a failed required CI case, not a skip. Neither scenario runs
   # a worker or establishes the later run slice's isolation properties.
-  @wip @slice-3 @ID-DOCTOR-23 @real-engine
+  @wip @slice-3 @ID-DOCTOR-23 @engine
   Scenario: Inspect an operator-cached image on native Docker without changing resources
     Given a CI-only doctor checkout and a preloaded native Docker worker fixture
     And a read-only engine request recorder and a snapshot of engine resources
@@ -511,7 +653,7 @@ Feature: Inspect checkout and cached worker readiness without executing checkout
     And the engine recorder observed only inspection requests
     And engine resources, checkout files and host control state are unchanged
 
-  @wip @slice-3 @ID-DOCTOR-24 @real-engine
+  @wip @slice-3 @ID-DOCTOR-24 @engine
   Scenario: Missing real cached content never triggers image acquisition
     Given a CI-only doctor checkout requesting a digest absent from native Docker
     And a read-only engine request recorder and a snapshot of engine resources
