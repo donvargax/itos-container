@@ -297,6 +297,38 @@ func TestRegisteredRunPersistsObservedExitAndActionableCleanup(t *testing.T) {
 	}
 }
 
+func TestRegisteredRunStartupDeadlineCleansCreatedWorker(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		b, store, engine := f.Fixture()
+		registry := &f.Registry{Store: store, Project: b.Frozen.Project}
+		runEngine := &f.RunEngine{Engine: engine}
+		registry.AfterClose = func(id string) {
+			if registry.Records[id].State == "ready" {
+				registry.AfterClose = nil
+				// Expire run's actual startup budget after releasing the create
+				// lock, before it can reopen the session to start the worker.
+				time.Sleep(120 * time.Second)
+				synctest.Wait()
+			}
+		}
+		runner := domain.Runner{Store: store, Registry: registry, Engine: runEngine, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
+		start := time.Now()
+		result := runner.Run(context.Background(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
+		if time.Since(start) != 120*time.Second || result.Outcome != port.Incomplete || result.Exited || result.Cleanup != port.Complete || len(engine.Resources) != 0 {
+			t.Fatal("startup deadline skipped cleanup or invented a workload result", result, time.Since(start))
+		}
+		record := registry.Records[result.SessionID]
+		if record.State != "stopped" || record.WorkloadExit != nil || registry.Leases[result.SessionID] {
+			t.Fatal("cleanup lost completion, unknown exit or released lease", record)
+		}
+		for _, event := range runEngine.Events {
+			if event == "start" {
+				t.Fatal("expired launch started its worker")
+			}
+		}
+	})
+}
+
 func TestRegisteredRunRegistrationAndLateLaunchRefusals(t *testing.T) {
 	for _, fault := range []port.Outcome{port.Refused, port.Unsafe, port.Invalid, port.Internal, port.Incomplete} {
 		t.Run(string(fault), func(t *testing.T) {

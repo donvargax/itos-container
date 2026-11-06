@@ -531,7 +531,7 @@ Feature: Inspect and stop owned offline sessions
 
   # A deadline while reopening after create is not evidence that stop won.
   # The test assembly expires only that Open context; teardown has its own budget.
-  @wip @slice-11 @ID-RECOVERY-26 @linux
+  @slice-11 @ID-RECOVERY-26 @linux
   Scenario: Run cleans its created worker after a session reopen deadline
     Given a recovery run fixture whose session reopen deadline expires after create
     When run attempts the launch and fresh JSON status follows its exit

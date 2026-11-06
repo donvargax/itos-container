@@ -123,3 +123,24 @@ on both backends; no product behavior, expected result or scenario step was
 weakened to accommodate the assembly. Earlier intent-only launch contracts
 continue to exercise that API. The complete non-engine feature suite also
 passes. Native evidence remains the coordinator's CI responsibility.
+
+## Cleanup after a launch reopen deadline
+
+RECOVERY-26 covers a deadline while reopening the registered session between
+create and start. A failed open is not evidence that stop already won: run must
+attempt owned cleanup under its fresh teardown budget. Only a safely loaded
+record showing a superseded launch selects the observation-only path.
+
+The complete step checkpoint is `a98329e`, with the scenario still `@wip`.
+Running it live against that implementation failed at the cleanup assertion:
+the created worker remained. After distinguishing a superseded launch from an
+ordinary incomplete operation, it passes with confirmed removal, durable
+intent/session completion and unknown workload exit. The controlled-clock
+domain regression also expires the actual 120-second startup budget after
+create and requires cleanup without a start or fabricated workload result.
+
+All 26 selected local examples in RECOVERY-07/08/17/25/26 and OFFLINE-15 pass,
+along with the registered-run domain tests. The eleven OFFLINE-15 examples
+also passed before this fix, confirming the reported undefined-step failure
+predated the current implementation. These are non-engine fixtures; native
+green evidence and changed-code proof remain with the coordinating CI loop.

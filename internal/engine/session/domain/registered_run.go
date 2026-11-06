@@ -8,6 +8,10 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
+// launchSuperseded is internal to registered launch: only a loaded record can
+// establish that stop won. A transient Open failure still requires teardown.
+const launchSuperseded port.Outcome = "launch-superseded"
+
 func registrationFailure(f port.Outcome) port.Outcome {
 	switch f {
 	case port.Refused, port.Unsafe, port.Invalid:
@@ -67,9 +71,10 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok {
 		signal = interrupted.Signal
 	}
-	if result.Outcome == port.Incomplete && result.ID == "" {
+	if result.Outcome == launchSuperseded {
 		// Stop already won a transition. Observe its result without repeating or
 		// rewriting cleanup; an unstarted workload never becomes successful.
+		result.Outcome = port.Incomplete
 		observed := (Recovery{Registry: s.Registry, Engine: s.Engine}).status(teardown, id)
 		result.Cleanup = port.Incomplete
 		if len(observed.Failures) == 0 && len(observed.Entries) == 1 && observed.Entries[0].Cleanup == "complete" {
@@ -120,7 +125,7 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	}
 	if entry.Record().State != "preparing" {
 		entry.Close()
-		return nil, nil, "", port.Incomplete
+		return nil, nil, "", launchSuperseded
 	}
 	intent := entry.Intent()
 	if failure = s.Workspace.Pin(intent.Binding()); failure != "" {
@@ -146,7 +151,7 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	}
 	defer entry.Close()
 	if entry.Record().State != "ready" {
-		return c, nil, "", port.Incomplete
+		return c, nil, "", launchSuperseded
 	}
 	intent = entry.Intent()
 	if intent.Record().ContainerID != resource {
