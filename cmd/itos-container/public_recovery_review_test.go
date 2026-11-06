@@ -20,7 +20,7 @@ import (
 	runfake "github.com/donvargax/itos-container/internal/slices/run/port/porttest"
 )
 
-// Only the black-box scenario subprocess selects pending regressions. Its
+// The black-box scenario subprocess selects individual regression cases. Its
 // commands use production domains, codecs and binding adapters over stateful
 // port fakes; faults never supply a successful command result or completed record.
 func TestPublicRecoveryReviewContract(t *testing.T) {
@@ -36,6 +36,12 @@ func TestPublicRecoveryReviewContract(t *testing.T) {
 	default:
 		t.Fatal("unknown recovery review fixture")
 	}
+}
+
+func TestPublicRecoveryInterruptionRegressions(t *testing.T) {
+	t.Run("deadline", publicRecoveryInspectionDeadline)
+	t.Run("controller", publicRecoveryUnknownController)
+	t.Run("completed-wait", publicRecoveryStoppedWait)
 }
 
 func publicRecoveryInspectionDeadline(t *testing.T) {

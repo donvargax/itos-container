@@ -414,7 +414,12 @@ the original intent. Persistent controller and operation descriptor locks separa
 liveness from mutation exclusion. Status probes the controller with a shared lock;
 run and stop serialize transitions, revalidation and durability, releasing the
 operation lock during foreground wait and output draining. Project transactions
-never span engine calls.
+never span engine calls. A controller-probe error leaves presence unknown and
+does not veto explicit stop; ownership validation remains independent. Expiry
+during stop inspection remains temporary and cannot authorize a progress write
+beyond the total budget. When a concurrent stop completed the same worker, run
+can reconcile completion without an observed exit, preserving null and draining
+remaining output without reporting a spurious wait failure.
 See [public session recovery](../decisions/0010-public-session-recovery.md).
 
 Foreground cleanup authorizes removal from the protected original record/snapshot,

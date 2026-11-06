@@ -62,8 +62,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		defer attachment.Close()
 	}
 	if result.Outcome == "" {
-		result.Exit, result.Outcome = s.waitRun(ctx, c, attachment, id, result.ID)
-		result.Exited = result.Outcome == ""
+		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, c, attachment, id, result.ID)
 	}
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer finish()
@@ -96,7 +95,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 			return result
 		}
 	}
-	if result.Exited && attachment != nil {
+	if (result.Exited || result.Outcome == "") && attachment != nil {
 		drain, closeDrain := context.WithTimeout(teardown, 10*time.Second)
 		if f := attachment.Drain(drain); f != "" {
 			result.Outcome = f

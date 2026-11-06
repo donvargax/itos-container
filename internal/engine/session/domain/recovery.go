@@ -164,14 +164,13 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 		return recoveryFailure(id, failure)
 	}
 	defer entry.Close()
-	e, failure := sessionEntry(entry)
+	// Controller presence is advisory for explicit cleanup. Original authority
+	// is independently revalidated by stopSession before any mutation.
+	e, _ := sessionEntry(entry)
+	connection, failure := s.Engine.OpenRun(ctx, entry.Intent().Binding())
 	if failure == "" {
-		connection, f := s.Engine.OpenRun(ctx, entry.Intent().Binding())
-		failure = f
-		if failure == "" {
-			defer connection.Close()
-			failure = stopSession(ctx, entry, connection, signal, exit, remove)
-		}
+		defer connection.Close()
+		failure = stopSession(ctx, entry, connection, signal, exit, remove)
 	}
 	if failure == "" {
 		e.State, e.Resource, e.Cleanup = "stopped", "absent", "complete"
@@ -183,7 +182,7 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 		// Persist uncertainty only for safely held, incomplete sessions. Never
 		// replace a completed tombstone or overwrite substituted authority.
 		r := entry.Record()
-		if r.State != "stopped" && retryableRecovery(failure) && entry.Validate() == "" {
+		if ctx.Err() == nil && r.State != "stopped" && retryableRecovery(failure) && entry.Validate() == "" {
 			r.State, r.LastProblem = "failed", &failure
 			if f := entry.Save(r); f != "" {
 				failure = f
@@ -204,6 +203,12 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 	o, resource, failure := inspectSession(ctx, s, c)
 	if failure != "" && !retryableRecovery(failure) {
 		return failure
+	}
+	// Inspection can consume the remaining total after lock acquisition. Do
+	// not turn that timeout into an ownership refusal by saving with expired
+	// storage authority, or begin another progress write beyond the budget.
+	if ctx.Err() != nil {
+		return port.Incomplete
 	}
 	// A verified explicit workload result can fill an unknown result even when
 	// another controller completed cleanup. Lifecycle and authority stay fixed.

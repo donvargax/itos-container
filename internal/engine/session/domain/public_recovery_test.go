@@ -3,6 +3,7 @@ package domain_test
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -369,6 +370,69 @@ func TestRegisteredRunPersistsObservedExitAndActionableCleanup(t *testing.T) {
 			} else if result.Cleanup != port.Complete || r.State != "stopped" {
 				t.Fatal(result, r)
 			}
+		})
+	}
+}
+
+func TestRegisteredWaitReconcilesConcurrentStop(t *testing.T) {
+	for _, name := range []string{"unknown", "zero", "nonzero", "drain failure", "nonterminal intent", "different worker"} {
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				b, store, engine := f.Fixture()
+				registry := &f.Registry{Store: store, Project: b.Frozen.Project}
+				e := &f.RunEngine{Engine: engine, StdinClosed: true, WaitUntilCancel: true, WaitFailure: port.ExecutionFailed}
+				known := name == "zero" || name == "nonzero"
+				if known {
+					e.WaitFailure = ""
+				}
+				if name == "nonzero" {
+					e.Exit = 7
+				}
+				if name == "drain failure" {
+					e.DrainFailure = port.ExecutionFailed
+				}
+				stopped := false
+				e.After = func(event string) {
+					if event != "wait" || stopped {
+						return
+					}
+					stopped = true
+					for id, record := range registry.Records {
+						result := (domain.Recovery{Registry: registry, Engine: e}).Stop(context.Background(), id)
+						if len(result.Failures) != 0 || result.Entries[0].Cleanup != "complete" {
+							t.Fatal(result)
+						}
+						if name == "nonterminal intent" || name == "different worker" {
+							i, failure := store.Codec.Decode(store.Records[record.Intent])
+							if failure != "" {
+								t.Fatal(failure)
+							}
+							if name == "nonterminal intent" {
+								i.Stage = "owned"
+							} else {
+								i.ContainerID = strings.Repeat("f", 64)
+							}
+							store.Records[record.Intent] = store.Codec.Encode(i)
+						}
+					}
+					synctest.Wait()
+				}
+				runner := domain.Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
+				result := runner.Run(context.Background(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
+				want := port.Outcome("")
+				if name == "drain failure" || name == "nonterminal intent" || name == "different worker" {
+					want = port.ExecutionFailed
+				}
+				if !stopped || result.Outcome != want || result.Exited != known || result.Exit != e.Exit {
+					t.Fatal("concurrent completion lost exit knowledge or failure", result)
+				}
+				if (registry.Records[result.SessionID].WorkloadExit != nil) != known {
+					t.Fatal("reconciliation fabricated or lost workload exit")
+				}
+				if want == "" && (result.Cleanup != port.Complete || !slices.Contains(e.Events, "drain")) {
+					t.Fatal("completed reconciliation skipped drain or cleanup", result, e.Events)
+				}
+			})
 		})
 	}
 }

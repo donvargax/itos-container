@@ -212,3 +212,40 @@ RECOVERY-01/02/07/10/24/28 also pass. The command usage tests, full-ID SDK signa
 checks, controller/unrelated-worker preservation checks and local syscall-observer
 controls pass. No additional host-signal path was found in the audit. Native
 engine validation and changed-code proof remain with the coordinating CI loop.
+
+## Review corrections for deadlines and concurrent completion
+
+The Recovery section in arc42 now makes explicit three existing contract details.
+Stop preserves a temporary inspection timeout when its original thirty-second
+budget expires after lock acquisition; it does not attempt a progress write
+using expired storage authority. A failed controller lease probe remains an
+unknown observation, which status reports, and does not veto explicitly requested
+cleanup. Stop still validates the original record and full worker identity before
+every destructive operation.
+
+Run now represents wait completion separately from observing a workload exit.
+After stdin closes, a concurrent stopped/absent record for the same full worker ID
+can settle reconciliation with an unknown exit. Remaining output is drained, known
+nonzero exits retain their precedence, and null stays null. Contradictory intent
+progress or a different worker ID cannot settle the wait.
+
+RECOVERY-30/31/32 were committed pending in `a3d3136`. Running them live before
+the fixes failed all three at their Then assertions, with all six setup/action
+steps passing. The observed failures were respectively recovery.not-owned/exit 1
+after deadline expiry, recovery.temporary/exit 75 without attempting owned cleanup
+after a probe error, and run.execution-unavailable/exit 75 after stop had completed
+with unknown exit. All three pass after the changes. Their command-level controls
+retain retryable ownership, status probe diagnostics, foreign-resource refusal
+and no repeated mutations or fabricated exit.
+
+The selected RECOVERY-01/02/03/07/13/17/19/25/26/30/31/32 and OFFLINE-15
+regressions pass: 49 scenarios and 254 steps. The session domain, SDK and command
+tests pass too, including known/unknown exit, drain-failure and contradictory
+completion controls. Disposable filesystem tests again required execution outside
+the agent sandbox's UID mapping; no ownership check or fixture was weakened.
+
+The signal/exit audit still finds engine termination targeting full container IDs,
+not host PIDs or process groups. Existing SDK-target and controller/unrelated-worker
+regressions remain the local checks; no local engine or mutation run is authorized.
+The coordinating loop must validate the actual pushed head's native scenarios and
+changed-code proof before closure.

@@ -76,8 +76,9 @@ Feature: Inspect and stop owned offline sessions
   # Unreachable/contradictory observations are failed/unknown, never stopped.
   # An absent controller with pending or unknown cleanup makes stop_candidate
   # true even if the worker is exited or unstarted; otherwise it is false.
-  # A present controller does not forbid an explicit stop. Completed sessions
-  # remain listed, not GC'd.
+  # A present or unknown controller does not forbid an explicit stop. A failed
+  # controller lease probe remains a status problem, not cleanup authority.
+  # Completed sessions remain listed, not GC'd.
   #
   # Status is read-only, including controller discovery: no record rewrite, lock
   # creation, durability repair, ownership adoption, engine mutation or launch.
@@ -98,6 +99,8 @@ Feature: Inspect and stop owned offline sessions
   # engine environment is environment; timeout/unavailable observation, lock
   # contention deadline, uncertain create or uncertain write is temporary. Raw
   # SDK/parser errors never determine presentation. An unclassified defect is internal.
+  # Inspection exhausting stop's total remains temporary; do not attempt progress
+  # writes after expiry or reinterpret expired storage checks as changed ownership.
   # Successful status returns 0 even for a known failed session needing cleanup.
   # Successful stop returns 0 for confirmed cleanup, NOT successful workload;
   # preserve a known nonzero workload_exit or null. Run keeps its existing exit
@@ -155,6 +158,10 @@ Feature: Inspect and stop owned offline sessions
   # Before starting or mutating, run rechecks that stop has not completed or begun;
   # cleanup is terminal, never followed by a late start/recreate. Persist stopping
   # before destructive operations. Preserve original ownership evidence on errors.
+  # If stdin closes while run waits and stop has already completed this exact
+  # worker, run adopts completion without a wait failure, drains remaining output
+  # and preserves a null workload exit. A successful reconciliation is not evidence
+  # of exit zero; a recorded nonzero result retains run's exit precedence.
   # If stop wins after durable intent publication but before create, durably record
   # that cleanup began even though no destructive operation is possible. A missing
   # name and empty concrete ID require recovery.temporary, failed state, unknown
@@ -640,7 +647,7 @@ Feature: Inspect and stop owned offline sessions
   # Use the production command/record adapters with stateful port fakes. The
   # controlled clock spends 25 s acquiring the operation lock, then the remaining
   # 5 s in inspection. Expired progress writes cannot change a timeout's cause.
-  @slice-11 @ID-RECOVERY-30 @linux @wip
+  @slice-11 @ID-RECOVERY-30 @linux
   Scenario: Stop preserves temporary uncertainty when inspection exhausts its remaining budget
     Given a recovery command fixture for "inspection deadline after lock"
     When the recovery command fixture exercises its configured interruption
@@ -648,7 +655,7 @@ Feature: Inspect and stop owned offline sessions
 
   # A failed lease probe supplies unknown controller presence, not lost ownership.
   # Status still reports incomplete observation; explicit stop must attempt cleanup.
-  @slice-11 @ID-RECOVERY-31 @linux @wip
+  @slice-11 @ID-RECOVERY-31 @linux
   Scenario: An unknown controller does not block explicit owned cleanup
     Given a recovery command fixture for "controller probe unavailable"
     When the recovery command fixture exercises its configured interruption
@@ -656,7 +663,7 @@ Feature: Inspect and stop owned offline sessions
 
   # Stop finishes while run's pending wait loses stdin. Completion is independent
   # of observing a workload exit; reconciliation must preserve a nullable exit.
-  @slice-11 @ID-RECOVERY-32 @linux @wip
+  @slice-11 @ID-RECOVERY-32 @linux
   Scenario: Run reconciles concurrent stop completion without inventing a workload exit
     Given a recovery command fixture for "completed stop during stdin closure"
     When the recovery command fixture exercises its configured interruption
