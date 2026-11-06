@@ -143,5 +143,20 @@ func (d *admissionDirectory) sessionRecord(store Store, path string) ([]byte, po
 	}
 	defer p.close()
 	reader := directoryStore{pin: p, ctx: d.ctx, public: true}
-	return reader.Read("record.json")
+	// Progress may replace the inode between lookup, open and final validation.
+	// A descriptor unlinked before fstat also fails the link-count safety check.
+	// Retry the entire checked read, without taking the operation lock. A stable
+	// unsafe record still refuses, and churn cannot hold admission indefinitely.
+	for range 3 {
+		data, readFailure := reader.Read("record.json")
+		if readFailure != "state.path" && readFailure != "state.unsafe" {
+			return data, readFailure
+		}
+		if !reader.Unchanged() {
+			return nil, readFailure
+		}
+		// Preserve the refusal if all attempts fail validation.
+		failure = readFailure
+	}
+	return nil, failure
 }

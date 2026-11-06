@@ -294,7 +294,7 @@ Feature: Run refuses overlapping worker checkouts
   # The test assembly publishes the original worker's valid progress through the
   # production storage adapter after the scanner opens its old record. Its seam
   # changes only filesystem timing, never command outcomes or engine observations.
-  @slice-16 @ID-OVERLAP-10 @linux @wip
+  @slice-16 @ID-OVERLAP-10 @linux
   Scenario: Concurrent progress publication does not refuse a disjoint run
     Given an overlap fixture with concurrent public progress publication
     When an ancestor worker remains active and a disjoint run scans during its progress publication

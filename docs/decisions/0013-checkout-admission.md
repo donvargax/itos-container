@@ -27,6 +27,14 @@ mutable checkouts or other projects' daemons. Missing, unreadable or unsafe evid
 refuses admission. An interrupted reservation or registration remains conservative;
 the existing registration-before-intent recovery gap is tracked separately.
 
+An unlocked public-record read can race normal atomic progress publication. Retry
+the complete checked read up to three times on path or record-safety failures,
+including the zero-link old descriptor left by a concurrent replacement. Every
+attempt retains pinned-directory, no-follow, owner/mode/link and inode validation.
+Stop immediately if the pinned directory changed or the context ended. A stable
+unsafe record or exhausted retry bound still refuses; other failure classifications
+return immediately. Locked storage readers keep their existing single-read semantics.
+
 Cleanup holds its existing session operation lock. Fresh full-ID absence and durable
 absent intent plus stopped public record precede publication of a completion
 certificate under the common lock. A failed completion write cannot publish that
@@ -60,6 +68,13 @@ inventories validate each added certificate's exact binding, completion, owner, 
 and link count; negative harness controls retain rejection of unrelated changes.
 Native green evidence and fresh
 changed-code proof belong exclusively to the coordinating loop's CI run.
+
+Review regression OVERLAP-10 fails at its disjoint-worker activity assertion with
+`run.session-registration-ownership` before the read retry. Adapter regressions
+force replacement before open, after open and after read, keep the operation lock
+held, and bound continuous replacement to three reads. Safety controls retain
+refusal of symlinks, hard links, unsafe modes, changed directories and cancellation.
+The new scenario and all replacement/safety regressions pass after the retry.
 
 The same change restores Windows test compilation by spelling Linux-only diagnostic
 signals numerically behind the existing OS-value guard. In-memory registry fixtures
