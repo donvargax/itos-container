@@ -403,6 +403,30 @@ Feature: Inspect and stop owned offline sessions
       | stop shell control text |
       | status positional ID    |
 
+  # Equals values remain invalid switch syntax. The usage refusal still honors
+  # the requested output mode, including an explicit override of ITOS_JSON.
+  @wip @slice-11 @ID-RECOVERY-28 @linux
+  Scenario Outline: Recovery usage refusals honor equals-form JSON preferences
+    Given a recovery fixture with no engine access and checkout helper sentinels
+    When recovery "<command>" is invoked with "<flags>" <position> the command and ITOS_JSON "<inherited>"
+    Then recovery reports recovery.usage with exit 2 in "<mode>" mode
+    And the recovery refusal performs no state access engine connection approval or checkout helper execution
+
+    Examples:
+      | command | flags                   | position | inherited | mode  |
+      | status  | --json=true             | after    | 0         | JSON  |
+      | stop    | --json=true             | after    | 0         | JSON  |
+      | status  | --json=false            | after    | 1         | plain |
+      | stop    | --json=false            | after    | 1         | plain |
+      | status  | --json=true             | before   | 0         | JSON  |
+      | stop    | --json=true             | before   | 0         | JSON  |
+      | status  | --json=false            | before   | 1         | plain |
+      | stop    | --json=false            | before   | 1         | plain |
+      | status  | --json=true --no-json    | before   | 1         | plain |
+      | stop    | --json=true --no-json    | before   | 1         | plain |
+      | status  | --no-json --json=true    | before   | 1         | JSON  |
+      | stop    | --no-json --json=true    | before   | 1         | JSON  |
+
   @slice-11 @ID-RECOVERY-11 @linux
   Scenario Outline: Foreign or ambiguous ownership is never adopted by stop
     Given a recovery fixture with ownership defect "<defect>" and an independently observed candidate worker

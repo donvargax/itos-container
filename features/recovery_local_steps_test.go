@@ -72,6 +72,36 @@ func (w *world) recoveryLocalSteps(sc *godog.ScenarioContext) {
 		return nil
 	})
 	sc.Step(`^help performs no state access engine connection approval or checkout helper execution$`, w.recoveryInvocationUnchanged)
+	sc.Step(`^recovery "(status|stop)" is invoked with "([^"]*)" (before|after) the command and ITOS_JSON "([01])"$`, func(command, flags, position, inherited string) error {
+		w.doctor.env["ITOS_JSON"] = inherited
+		args := append([]string{command}, strings.Fields(flags)...)
+		if position == "before" {
+			args = append(strings.Fields(flags), command)
+		}
+		args = append(args, "--slice-11-invalid-option")
+		if err := w.recoveryInvocation(args...); err != nil {
+			return err
+		}
+		return w.recoveryFinishWatch()
+	})
+	sc.Step(`^recovery reports recovery.usage with exit 2 in "(JSON|plain)" mode$`, func(mode string) error {
+		r := w.recoveryLocal.results[0]
+		if r.exit != 2 || !strings.Contains(r.stderr, "recovery.usage") {
+			return fmt.Errorf("recovery did not return its typed usage refusal: %+v", r)
+		}
+		if mode == "plain" {
+			if r.stdout != "" {
+				return fmt.Errorf("explicit JSON override left usage output on stdout: %q", r.stdout)
+			}
+			return nil
+		}
+		var report recoveryReport
+		if json.Unmarshal([]byte(r.stdout), &report) != nil || report.Schema != 1 || report.OK || len(report.Problems) != 1 || report.Problems[0].Rule != "recovery.usage" || report.Problems[0].Exit != 2 || report.Sessions == nil || len(report.Sessions) != 0 {
+			return fmt.Errorf("explicit JSON request omitted the schema-1 recovery usage refusal: %q", r.stdout)
+		}
+		return nil
+	})
+	sc.Step(`^the recovery refusal performs no state access engine connection approval or checkout helper execution$`, w.recoveryInvocationUnchanged)
 	sc.Step(`^a recovery fixture with usage variant "([^"]*)" and outside sentinels$`, func(variant string) error {
 		if err := w.recoveryInvocationFixture(); err != nil {
 			return err
