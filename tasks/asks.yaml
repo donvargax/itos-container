@@ -83,3 +83,15 @@ questions:
     item: "slice-16"
     question: "slice-16: CI red evidence for ID-OVERLAP-06 and 07 at d790e7a?"
     answer: "Yes. Run 42307612900: OVERLAP-06's ancestor and descendant rows fail at their Then (the nested contender was created, no run.checkout-overlap) and OVERLAP-07 fails at its Then (both concurrent nested runs created a worker). With the 19 local examples red at their assertions, implement the admission."
+  - id: q-21
+    item: "slice-19"
+    question: "slice-19: CI red evidence for ID-SOCKETS-01 to 03 at dbf75d4?"
+    answer: "No. Run 42308513561: all three fail at their Then steps, but because the product exits 75 (run.execution-unavailable) before the probe reaches its barrier; no socket operation was tried. Make the probe reach its barrier (capture the controller's and engine's reason for the failure), then return blocked for another red run; if the product already refuses checkouts holding sockets, report that with evidence instead. See slice-19-steer.md."
+  - id: q-22
+    item: "slice-17"
+    question: "slice-17: CI red evidence for ID-OFFLINE-29's four rows at 51a9f48?"
+    answer: "Yes. Run 42309692365: all four rows fail at their Then, the worker running in the substituted checkout (inode 7602225/7602226, not the validated 7602190, on Docker 28.0.4). This confirms the substitution race on real Docker. Implement q-19's anchor."
+  - id: q-23
+    item: "slice-12"
+    question: "slice-12: engine green check of the lifecycle scenarios at f75f2c8?"
+    answer: "Not yet. Run 42309496512: 15 of 18 engine cases pass. Still failing: LIFECYCLE-12 (recovery does not report the registered session with its binding and observed state), 13's unread-stdout row (exit 143, expected 17: the observed exit is lost behind the blocked stream) and 13's unread-stderr row (offline recorder refused a mismatched native identity; find whether harness or product). Fix them, then return blocked for another engine run. See slice-12-steer.md."
