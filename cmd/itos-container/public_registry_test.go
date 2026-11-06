@@ -51,7 +51,7 @@ func TestPublicRegistryDiscoveryPreservesReadFailureCause(t *testing.T) {
 }
 
 func TestPublicRegistryRejectsInvalidCandidateBeforeStorage(t *testing.T) {
-	for _, fault := range []string{"host", "pin", "inspect", "changed checkout", "invalid frozen", "different frozen user"} {
+	for _, fault := range []string{"host", "pin", "invalid frozen", "different frozen user"} {
 		t.Run(fault, func(t *testing.T) {
 			m := publicMemoryFixture(t)
 			var registry sp.Registry = m.registry
@@ -61,10 +61,6 @@ func TestPublicRegistryRejectsInvalidCandidateBeforeStorage(t *testing.T) {
 				m.host.UID = "0"
 			case "pin":
 				m.checkout.Failure = rp.CheckoutUnavailable
-			case "inspect":
-				m.checkout.InspectFailure = rp.CheckoutUnavailable
-			case "changed checkout":
-				m.checkout.Changed = true
 			case "invalid frozen":
 				d := ap.Durable{Frozen: m.b.Frozen}
 				d.Frozen.Settings = "{}"
@@ -82,6 +78,32 @@ func TestPublicRegistryRejectsInvalidCandidateBeforeStorage(t *testing.T) {
 			}
 			if lease != nil || failure != want || len(m.files.Events) != 0 || m.checkout.Opened {
 				t.Fatal("candidate refusal leaked authority", failure)
+			}
+		})
+	}
+}
+
+func TestPublicRegistryRequiresGitIdentityOnlyForRegistration(t *testing.T) {
+	for _, fault := range []string{"inspect", "changed checkout"} {
+		t.Run(fault, func(t *testing.T) {
+			m := publicMemoryFixture(t)
+			id, _ := m.seed("a")
+			if fault == "inspect" {
+				m.checkout.InspectFailure = rp.CheckoutUnavailable
+			} else {
+				m.checkout.Changed = true
+			}
+			// Recovery discovers the original binding through the protected
+			// checkout index; launch still requires a fresh Git identity.
+			if ids, failure := m.registry.List(t.Context()); failure != "" || !reflect.DeepEqual(ids, []string{id}) {
+				t.Fatal("mutable Git identity vetoed discovery", ids, failure)
+			}
+			lease, failure := m.registry.Register(t.Context(), ap.Durable{Frozen: m.b.Frozen}, strings.Repeat("b", 64), strings.Repeat("c", 64))
+			if lease != nil {
+				lease.Close()
+			}
+			if lease != nil || failure != sp.Refused || len(m.files.Events) != 0 || m.checkout.Opened {
+				t.Fatal("invalid launch identity reached registration", failure)
 			}
 		})
 	}
@@ -122,7 +144,7 @@ func TestPublicRegistryRetainsEvidenceThroughUpdateFailures(t *testing.T) {
 		t.Run(fault, func(t *testing.T) {
 			m := publicMemoryFixture(t)
 			id, _ := m.seed("a")
-			files := m.files.Sessions[m.c.Project+"/"+id]
+			files := m.files.Sessions[m.index().Project+"/"+id]
 			entry, failure := m.registry.Open(context.Background(), id, false)
 			if failure != "" {
 				t.Fatal(failure)
@@ -190,7 +212,7 @@ func TestPublicRegistryRetainsEvidenceThroughUpdateFailures(t *testing.T) {
 func TestPublicRegistryOwnsProblemStorageAndRejectsChangedRead(t *testing.T) {
 	m := publicMemoryFixture(t)
 	id, _ := m.seed("a")
-	files := m.files.Sessions[m.c.Project+"/"+id]
+	files := m.files.Sessions[m.index().Project+"/"+id]
 	record, failure := m.registry.Codec.DecodePublic(files.Data)
 	if failure != "" {
 		t.Fatal(failure)
@@ -217,7 +239,7 @@ func TestPublicRegistryOwnsProblemStorageAndRejectsChangedRead(t *testing.T) {
 func TestPublicRegistryRevalidationReadFailureReleasesItsLock(t *testing.T) {
 	m := publicMemoryFixture(t)
 	id, _ := m.seed("a")
-	before := string(m.files.Sessions[m.c.Project+"/"+id].Data)
+	before := string(m.files.Sessions[m.index().Project+"/"+id].Data)
 	m.files.AfterRead = func() { m.files.ReadFailure = "state.unavailable" }
 	if entry, failure := m.registry.Open(context.Background(), id, false); entry != nil || failure != sp.Incomplete {
 		t.Fatal("unavailable revalidation acquired a session", entry, failure)
@@ -234,7 +256,7 @@ func TestPublicRegistryRevalidationReadFailureReleasesItsLock(t *testing.T) {
 	if failure := entry.Validate(); failure != "" {
 		t.Fatal("transaction intent close invalidated its session", failure)
 	}
-	if len(m.files.Events) != 0 || string(m.files.Sessions[m.c.Project+"/"+id].Data) != before {
+	if len(m.files.Events) != 0 || string(m.files.Sessions[m.index().Project+"/"+id].Data) != before {
 		t.Fatal("failed revalidation changed evidence")
 	}
 }

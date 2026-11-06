@@ -17,7 +17,8 @@ func TestRegistryListClassifiesReadFailuresWithoutWriting(t *testing.T) {
 	b, _, _ := sf.Fixture()
 	d := ap.Durable{Frozen: b.Frozen}
 	id := strings.Repeat("b", 64)
-	files := &af.Registry{Sessions: map[string]*af.SessionFiles{b.Frozen.Project + "/" + id: {Data: []byte("original")}}}
+	key := registryKey(b.Checkout.Root, b.UID) + "/" + id
+	files := &af.Registry{Sessions: map[string]*af.SessionFiles{key: {Data: []byte("original")}}}
 	r := Registry{Store: Store{Codec: &sf.Codec{Value: b}, Host: &af.Host{UID: b.UID, GID: b.GID}, Input: rp.Input{OS: "linux", Architecture: "amd64"}}, Storage: files}
 	registry := r.ForRun(d)
 	for _, tc := range []struct {
@@ -35,7 +36,7 @@ func TestRegistryListClassifiesReadFailuresWithoutWriting(t *testing.T) {
 	if ids, failure := registry.List(context.Background()); failure != "" || !reflect.DeepEqual(ids, []string{id}) {
 		t.Fatal("retry lost registered session", ids, failure)
 	}
-	if len(files.Events) != 0 || string(files.Sessions[b.Frozen.Project+"/"+id].Data) != "original" {
+	if len(files.Events) != 0 || string(files.Sessions[key].Data) != "original" {
 		t.Fatal("discovery mutated protected state")
 	}
 }
