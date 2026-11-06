@@ -95,7 +95,30 @@ type event struct {
     Files map[string]string
 }
 type call struct { entering bool; sync *event }
-var unixSysProcAttr = syscall.SysProcAttr{Ptrace:true}
+// The outer signal tracer owns the observer, while this observer exclusively
+// owns its child. CLONE_UNTRACED avoids competing ptracers without changing
+// either process's group, session or terminal. Child signal syscalls are logged
+// here as well so that this separation cannot hide a controller's sender.
+var unixSysProcAttr = syscall.SysProcAttr{Ptrace:true, Cloneflags:unix.CLONE_UNTRACED}
+
+func signalCall(log *os.File, tid int, regs unix.PtraceRegs) {
+    if log == nil { return }
+    switch regs.Orig_rax {
+    case unix.SYS_KILL:
+        fmt.Fprintf(log, "%d kill(%d, %d)\n", tid, int32(regs.Rdi), regs.Rsi)
+    case unix.SYS_TKILL:
+        fmt.Fprintf(log, "%d tkill(%d, %d)\n", tid, int32(regs.Rdi), regs.Rsi)
+    case unix.SYS_TGKILL:
+        fmt.Fprintf(log, "%d tgkill(%d, %d, %d)\n", tid, int32(regs.Rdi), int32(regs.Rsi), regs.Rdx)
+    case unix.SYS_PIDFD_SEND_SIGNAL:
+        target, _ := os.ReadFile(fmt.Sprintf("/proc/%d/fdinfo/%d", tid, regs.Rdi))
+        fmt.Fprintf(log, "%d pidfd_send_signal(%d, %d) fdinfo=%q\n", tid, regs.Rdi, regs.Rsi, target)
+    case unix.SYS_SETSID:
+        fmt.Fprintf(log, "%d setsid()\n", tid)
+    case unix.SYS_SETPGID:
+        fmt.Fprintf(log, "%d setpgid(%d, %d)\n", tid, int32(regs.Rdi), int32(regs.Rsi))
+    }
+}
 
 func inode(path string) string {
     var stat unix.Stat_t
@@ -133,6 +156,13 @@ func completed(e *event) {
 func main() {
     if len(os.Args) < 6 { os.Exit(96) }
     runtime.LockOSThread()
+    var signals *os.File
+    if path := os.Getenv("SLICE_11_SIGNAL_TRACE"); path != "" {
+        var err error
+        signals, err = os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+        if err != nil { fmt.Fprintln(os.Stderr, "cannot open controller signal trace:", err); os.Exit(96) }
+        defer signals.Close()
+    }
     journal, err := os.OpenFile(os.Args[1], os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
     if err != nil { os.Exit(96) }
     defer journal.Close()
@@ -179,6 +209,7 @@ func main() {
             // observed stop may be syscall exit, so a simple toggle is unsafe.
             entry := int64(regs.Rax) == -int64(unix.ENOSYS)
             if entry {
+                signalCall(signals, tid, regs)
                 c.sync = nil
                 if regs.Orig_rax == unix.SYS_FSYNC { c.sync = observe(tid, regs.Rdi, root) }
             } else if c.entering && c.sync != nil {
@@ -200,6 +231,9 @@ func main() {
             }
         } else if signal == int(unix.SIGSTOP) {
             signal = 0 // initial stop of a newly traced thread
+        }
+        if signals != nil && signal != 0 && signal != int(unix.SIGURG) {
+            fmt.Fprintf(signals, "%d signal-forward(%d, %d)\n", os.Getpid(), tid, signal)
         }
         if err := unix.PtraceSyscall(tid, signal); err != nil && !errors.Is(err, unix.ESRCH) { fail() }
     }

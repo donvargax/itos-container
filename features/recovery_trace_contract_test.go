@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -54,6 +55,35 @@ func TestRecoveryTrace(t *testing.T) {
 			}
 		})
 	}
+	t.Run("nested-signal-tracer", func(t *testing.T) {
+		state := t.TempDir()
+		journal, pidFile := filepath.Join(state, "sync.jsonl"), filepath.Join(state, "pid")
+		outer, inner := filepath.Join(state, "outer.log"), filepath.Join(state, "inner.log")
+		ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "strace", "-f", "-yy", "-o", outer, "-e", "trace=kill,tkill,tgkill,pidfd_send_signal,setsid,setpgid", trace, journal, pidFile, state, child, "signals", state)
+		cmd.Env = append(sessionChildEnvironment(os.Environ()), "SLICE_11_SIGNAL_TRACE="+inner)
+		output, err := cmd.CombinedOutput()
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 7 || string(output) != "slice-11 trace control\n" {
+			t.Fatalf("outer tracer interfered with durability observer: %v (%s)", err, output)
+		}
+		pid, err := os.ReadFile(pidFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		calls, err := os.ReadFile(inner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(calls), "kill("+string(pid)+", 18)") || strings.Contains(string(calls), "setsid(") || strings.Contains(string(calls), "setpgid(") {
+			t.Fatalf("controller sender was hidden or changed its process group: %s", calls)
+		}
+		want := map[string]any{"schema": 1, "state": "stopped"}
+		if err := recoveryDurableFile(filepath.Join(state, "record.json"), want, []*recoveryProcess{{journal: journal}}); err != nil {
+			t.Fatal("outer tracing lost fsync evidence", err)
+		}
+	})
 	t.Run("controller-death", func(t *testing.T) {
 		state := t.TempDir()
 		pidFile, journal := filepath.Join(state, "slice-11-pid"), filepath.Join(state, "slice-11-journal")
@@ -108,6 +138,7 @@ import ("fmt"; "os"; "path/filepath"; "runtime"; "time"; "golang.org/x/sys/unix"
 func must(err error) { if err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(95) } }
 func main() {
     mode, root := os.Args[1], os.Args[2]
+    if mode == "signals" { must(unix.Kill(os.Getpid(), unix.SIGCONT)); mode = "success" }
     if mode == "wait" { for { time.Sleep(time.Second) } }
     done := make(chan struct{})
     go func() {

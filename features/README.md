@@ -129,15 +129,17 @@ for this **CI-only** invocation (the workflow also supplies the fixture environm
 ```sh
 go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
 cd features
-ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$'
+ITOS_CONTAINER_ENGINE_TESTS=1 SLICE_11_SIGNAL_TRACE="$RUNNER_TEMP/slice-11-controller-signals.log" strace -f -yy -o "$RUNNER_TEMP/strace.log" -e trace=kill,tkill,tgkill,pidfd_send_signal,setsid,setpgid "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$'
 ```
 
-The separate process session keeps a test process-group signal from killing the supervising
-shell. The workflow streams both output channels to the log and
+The diagnostic run stays in the CI step's original process group and session. `strace -f`
+records signal senders and targets in `$RUNNER_TEMP/strace.log`; it does not use `setsid`.
+The workflow streams both output channels to the log and
 `$RUNNER_TEMP/slice-11-features.log`, prints the binary's exit status and decodes exits of
 128 plus a signal number. It preserves the test's failure even when output capture succeeds;
 a capture failure also fails a successful test run. A failure-only step prints the last
-50 kernel messages, `free -m` and the last 100 test-output lines before unconditional cleanup.
+50 kernel messages, `free -m`, signal syscall lines from both traces and the last 100
+test-output lines before unconditional cleanup.
 The explicit `-test.paniconexit0` retains `go test`'s protection against an early `os.Exit(0)`.
 TestMain logs catchable signals to stderr in the engine tier, including its PID, and exits
 nonzero for terminating signals. SIGKILL and SIGSTOP cannot be caught; the supervising shell
@@ -172,7 +174,12 @@ exit 7 or a monotonic heartbeat. Independent observations precede harness cleanu
 the printed retry is parsed into literal argv, never executed by a shell.
 
 Those recovery processes run under a test-only Linux amd64 syscall observer compiled
-with the already pinned `golang.org/x/sys`. It traces only its child and child threads,
+with the already pinned `golang.org/x/sys`. Its child uses `CLONE_UNTRACED` so the outer
+`strace` and the fsync observer do not compete for the same tracee; this changes neither
+the child's group nor session. The observer logs child signal syscalls and reinjections
+to `$SLICE_11_SIGNAL_TRACE` when supplied, so controller sends remain visible alongside
+outer-traced harness sends. A local nested-tracer control asserts sender PID, absence of
+session/group changes, child exit and actual fsync evidence. It traces its child and child threads,
 correlating successful file fsync with the subsequently synced publication directory
 and visible record inode. Failed fsyncs and file existence alone cannot prove durable
 completion. The observer records only disposable fixture state; its journal is temporary

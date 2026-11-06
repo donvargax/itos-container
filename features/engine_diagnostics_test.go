@@ -72,7 +72,7 @@ func TestEngineDiagnostics(t *testing.T) {
 func testEngineDiagnostics(t *testing.T, hostOS string) {
 	t.Helper()
 	if hostOS != "linux" {
-		t.Skip("the engine diagnostic runner uses Linux setsid")
+		t.Skip("the engine diagnostic runner uses Linux strace")
 	}
 	data, err := os.ReadFile("../.github/workflows/ci.yml")
 	if err != nil {
@@ -168,6 +168,13 @@ printf 'feature stderr marker\n' >&2
 			}
 			if tc.signal != "" && !strings.Contains(string(out), "Feature test signal: "+tc.signal) {
 				t.Fatalf("missing signal diagnostic: %s", out)
+			}
+			trace, err := os.ReadFile(filepath.Join(dir, "strace.log"))
+			if err != nil {
+				t.Fatal("signal sender trace missing", err)
+			}
+			if tc.signal != "" && (!strings.Contains(string(trace), "kill(") || !strings.Contains(string(trace), "SIG"+tc.signal)) {
+				t.Fatalf("signal sender syscall missing: %s", trace)
 			}
 		})
 	}

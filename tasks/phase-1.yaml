@@ -1476,12 +1476,19 @@
     scenario-pattern restriction, selecting every live engine case and retaining go test's
     protection against early os.Exit(0). The coordinator's 2026-11-06 slice-11 decision
     supersedes the original go test invocation to diagnose silent engine-job termination.
-    Run the binary in a separate process session, stream and retain stdout/stderr in runner
-    temporary storage, print its exit status and decode 128+signal exits without masking failure.
+    The subsequent q-15 decision requires one diagnostic run WITHOUT a new process session:
+    trace the binary with strace -f -yy, decoding pidfd targets and recording kill, tkill, tgkill, pidfd_send_signal, setsid and
+    setpgid to $RUNNER_TEMP/strace.log. Stream and retain stdout/stderr, print the exit status
+    and decode 128+signal exits without masking failure. Passing under setsid in run 42218236157
+    is evidence of a process-group/session signal, not a product fix. Do not retain setsid
+    unless evidence attributes the cause to the CI runner. The durability observer keeps
+    exclusive ptrace ownership of its child using CLONE_UNTRACED without changing session or
+    group, and logs that child's same signal syscalls plus signal reinjections separately.
+    A local nested-tracer control must retain both signal and successful fsync evidence.
     TestMain logs every catchable signal notification in the engine tier and keeps terminating
     signals fatal. SIGKILL/SIGSTOP require external evidence. A bounded failure-only step prints
-    sudo dmesg's last 50 lines, free -m and the retained test output's last lines; unconditional
-    fixture cleanup still follows. Preserve all selection, environment, budget and result guards.
+    sudo dmesg's last 50 lines, free -m, both traces' signal calls and the test output's last lines;
+    unconditional fixture cleanup still follows. Preserve selection, environment, budget and result guards.
     TestEngineDiagnostics executes the workflow shell with disposable compiler/program fixtures
     for success, assertion failure, compilation failure, SIGTERM and SIGKILL; it never enables
     engine access. TestFeatureSignalDiagnostics requires a disposable child's SIGTERM to be
