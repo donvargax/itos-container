@@ -284,8 +284,10 @@ Feature: Hardened offline foreground run
   # create settings and most result precedence; do not claim they are absent.
   # The reviewed slice-10 head lacked cleanup-environment/3 for case 15.
   # Recheck all rows against the merged dependency before production edits.
-  # If a case already passes, report it for coordinator disposition under the
-  # red-first rule; never force a failure, rewrite the assertion or claim red.
+  # Settled coordinator decision q-9 (extending q-6): a case already passing
+  # against an earlier slice is accepted regression coverage after confirming
+  # it checks product behavior. Comment its origin above the tag and turn it live;
+  # never force a failure, rewrite the assertion or claim red for that case.
   # The q-7 split does not waive slice-13's evidence requirement. No engine or
   # local mutation run is needed here; CI owns changed-code proof at implementation.
 

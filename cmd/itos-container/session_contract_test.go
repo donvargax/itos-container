@@ -34,9 +34,10 @@ import (
 // This protocol exists only in the test binary. Recovery receives a safe record
 // reference and host context, never the independent observer's container ID.
 type sessionContractRequest struct {
-	Action, Backend, Reference, Token, Fault, Umask string
-	Output, Checkpoint, Journal, MemoryFile         string
-	Boundary                                        string
+	Action, Backend, Reference, Token, Fault, Umask      string
+	Output, Checkpoint, Journal, MemoryFile              string
+	Boundary                                             string
+	LaunchBarrier, ReplacedPath, CleanupCause, ChildExit string
 }
 
 type sessionContractResult struct {
@@ -48,6 +49,9 @@ type sessionContractResult struct {
 	Workload                                          *int
 	Events                                            []sessionContractEvent
 	Memory                                            *sessionMemoryOutput
+	Trace                                             []offlineEvent
+	Stdout, Stderr                                    string
+	CleanupCode                                       int
 }
 
 type sessionContractEvent struct {
@@ -117,7 +121,7 @@ func TestSessionContractProbe(t *testing.T) {
 	var result sessionContractResult
 	switch request.Action {
 	case "run", "run-cleanup":
-		result = offlineContract(t, request, controllerFor)
+		result = offlineContract(t, request, controllerFor, ops)
 	case "create":
 		service, _ := approvalServices(os.Stdin, io.Discard, io.Discard)
 		preflight := &sessionContractPreflight{Preflight: approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}}}

@@ -88,7 +88,14 @@ func (w *world) sessionLocalFixture(mode, condition string) error {
 }
 
 func (w *world) sessionSnapshotPath() string {
-	return filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "snapshots", w.approval.project, "1.json")
+	return filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "snapshots", w.approval.project, w.sessionGeneration()+".json")
+}
+
+func (w *world) sessionGeneration() string {
+	if w.approval.generation == "" {
+		return "1"
+	}
+	return w.approval.generation
 }
 func (w *world) sessionSeedSnapshot() error {
 	a := w.approval
