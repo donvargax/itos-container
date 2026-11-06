@@ -87,3 +87,6 @@ questions:
     item: "slice-19"
     question: "slice-19: CI red evidence for ID-SOCKETS-01 to 03 at dbf75d4?"
     answer: "No. Run 42308513561: all three fail at their Then steps, but because the product exits 75 (run.execution-unavailable) before the probe reaches its barrier; no socket operation was tried. Make the probe reach its barrier (capture the controller's and engine's reason for the failure), then return blocked for another red run; if the product already refuses checkouts holding sockets, report that with evidence instead. See slice-19-steer.md."
+  - id: q-22
+    item: "slice-17"
+    question: "slice-17: CI red evidence for ID-OFFLINE-29's four rows at 51a9f48?"
