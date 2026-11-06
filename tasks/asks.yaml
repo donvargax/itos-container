@@ -19,3 +19,7 @@ questions:
     item: "slice-9"
     question: "slice-9: is the engine-tier red evidence for ID-SESSION-11 and ID-SESSION-12 in, so implementation can go on?"
     answer: "Yes. Run 42089306243 at 4bad669 fails both at the assertion: expected exactly one observed create, got 0 requests and 0 created IDs. The fixture smoke passed. Implement."
+  - id: q-5
+    item: "slice-10"
+    question: "slice-10: is the engine-tier red evidence for ID-OFFLINE-06, 07 and 13 in, so implementation can go on?"
+    answer: "Yes. Run 42138046011 at ba71f14 fails all three at the assertion, product exit 3: no argv, no live streams, no frozen workspace reported. The fixture smoke passed. Implement."
