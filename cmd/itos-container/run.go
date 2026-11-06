@@ -7,7 +7,7 @@ package main
 func runOptions(args []string) []string {
 	for i, arg := range args {
 		switch arg {
-		case "--json", "--no-json":
+		case "--json", "--no-json", "--json=true", "--json=false":
 			continue
 		case "run", "status", "stop":
 			out := make([]string, 0, len(args))

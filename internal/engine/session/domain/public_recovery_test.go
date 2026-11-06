@@ -3,6 +3,7 @@ package domain_test
 import (
 	"context"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -189,6 +190,43 @@ func TestPublicStopPreservesResultAndReloadsCompletion(t *testing.T) {
 		})
 	}
 }
+
+func TestPublicStopUsesWorkerIdentityInsteadOfObservedPID(t *testing.T) {
+	for _, pid := range []int{-1, 0, 123} {
+		for _, ignoreTERM := range []bool{false, true} {
+			t.Run(strconv.Itoa(pid)+"/ignoreTERM="+strconv.FormatBool(ignoreTERM), func(t *testing.T) {
+				synctest.Test(t, func(t *testing.T) {
+					s, registry, engine, id := publicRecoveryFixture(t)
+					worker, other := strings.Repeat("2", 64), strings.Repeat("f", 64)
+					o := engine.Resources[worker]
+					o.PID = pid
+					engine.Resources[worker] = o
+					foreign := o
+					foreign.ID, foreign.Name = other, "unrelated-worker"
+					engine.Resources[other] = foreign
+					registry.Leases[id] = true
+					engine.IgnoreSignal, engine.WaitUntilCancel = ignoreTERM, true
+
+					result := s.Stop(context.Background(), id)
+					if len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" || result.Entries[0].Controller != "present" {
+						t.Fatal("explicit stop did not finish owned cleanup with a live controller", result)
+					}
+					if !registry.Leases[id] || !reflect.DeepEqual(engine.Resources, map[string]port.Observation{other: foreign}) {
+						t.Fatal("stop changed the controller or a resource other than its owned worker", engine.Resources)
+					}
+					want := []string{"open", "SIGTERM", "wait"}
+					if ignoreTERM {
+						want = append(want, "SIGKILL", "wait")
+					}
+					if !reflect.DeepEqual(engine.Events, want) {
+						t.Fatal("stop did not use the explicit engine-side termination sequence", engine.Events)
+					}
+				})
+			})
+		}
+	}
+}
+
 func TestPublicRecoveryRefusesFaultsWithoutMutation(t *testing.T) {
 	for _, fault := range []port.Outcome{port.Refused, port.Unsafe, port.Invalid, port.Incomplete, port.Environment, port.Internal} {
 		t.Run(string(fault), func(t *testing.T) {

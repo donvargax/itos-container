@@ -188,9 +188,9 @@ func recoveryJSON(args []string) bool {
 	want := os.Getenv("ITOS_JSON") == "1"
 	for _, a := range args {
 		switch a {
-		case "--json":
+		case "--json", "--json=true":
 			want = true
-		case "--no-json":
+		case "--no-json", "--json=false":
 			want = false
 		case "--":
 			return want

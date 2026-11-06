@@ -169,3 +169,28 @@ and the selected existing status, controller-loss, stop and cleanup scenarios
 pass after the fix. Domain controls preserve cleanup phases and read-only state.
 Native green evidence and changed-code proof still require the coordinator's
 CI run at the pushed head; no local engine or mutation run was performed.
+
+## Usage refusals and signal-target regression checks
+
+Recovery usage errors now honor `--json=true` and `--json=false`, including
+environment overrides and leading switches. Equals values remain invalid switch
+syntax under the shared CLI contract; their refusal uses the requested format.
+Leading switches stay in the selected command's scope, so mixed spellings cannot
+lose the recovery-specific rule or schema. Parsing still stops at `--`.
+
+RECOVERY-28's pending step checkpoint is `c60b694`. With its tag live before the
+fix, all twelve examples failed at the usage-format assertion; setup and action
+steps passed. After the fix, all twelve pass, alongside the selected recovery,
+run and CLI regressions: 64 scenarios and 416 steps. The command and session
+domain/SDK tests, native-registry preservation controls and local syscall-observer
+controls also pass. Storage tests required execution outside the agent sandbox,
+whose UID mapping presents root-owned ancestors as UID 65534; the ownership
+checks and disposable fixtures were unchanged.
+
+The signal/exit audit found no product path that signals a host PID or process
+group. Shared termination sends explicit signals through the engine's full-ID
+container API. Regression checks now assert the actual SDK signal targets and
+exercise stop with observed PIDs -1, 0 and a positive value, a live controller
+lease, an unrelated worker, and both SIGTERM and escalation paths. The unrelated
+worker and controller lease must survive. These local checks do not replace the
+coordinator's native engine run or changed-code proof at the pushed head.

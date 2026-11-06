@@ -405,7 +405,7 @@ Feature: Inspect and stop owned offline sessions
 
   # Equals values remain invalid switch syntax. The usage refusal still honors
   # the requested output mode, including an explicit override of ITOS_JSON.
-  @wip @slice-11 @ID-RECOVERY-28 @linux
+  @slice-11 @ID-RECOVERY-28 @linux
   Scenario Outline: Recovery usage refusals honor equals-form JSON preferences
     Given a recovery fixture with no engine access and checkout helper sentinels
     When recovery "<command>" is invoked with "<flags>" <position> the command and ITOS_JSON "<inherited>"
