@@ -20,7 +20,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	}
 	s := w.session
 	var watch *sessionReadWatch
-	if action == "cleanup" && s.change != "" {
+	if (action == "cleanup" || action == "run-cleanup") && s.change != "" {
 		watch, err = w.sessionWatchInputs()
 		if err != nil {
 			return result, err
@@ -35,13 +35,14 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	}
 	input := prefix + "-input.json"
 	request := map[string]string{"Action": action, "Backend": s.backend, "Reference": reference, "Token": s.token, "Fault": s.fault, "Umask": s.umask, "Output": output, "Checkpoint": selected, "Journal": s.journal}
+	request["Boundary"] = s.boundary
 	request["MemoryFile"] = prefix + "-memory.json"
-	if s.backend == "memory" && action == "cleanup" {
+	if s.backend == "memory" && (action == "cleanup" || action == "run-cleanup") {
 		if err := w.writeMemorySeed(request["MemoryFile"]); err != nil {
 			return result, err
 		}
 	}
-	if action == "cleanup" {
+	if action == "cleanup" || action == "run-cleanup" {
 		delete(request, "Token")
 	}
 	if err := os.WriteFile(input, approvalJSON(request), 0600); err != nil {
@@ -74,7 +75,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	if action == "create" {
+	if action == "create" || action == "run" {
 		// Wait for either the observed checkpoint OR process exit. An unavailable
 		// or refused product cannot turn a missing call into a hung fixture.
 		ticker := time.NewTicker(10 * time.Millisecond)

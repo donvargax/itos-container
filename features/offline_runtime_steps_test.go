@@ -13,6 +13,7 @@ import (
 // These engine steps execute the product binary, never an approval command or
 // a product package. They retain early exits as observations for the Then step.
 func (w *world) offlineRuntimeSteps(sc *godog.ScenarioContext) {
+	w.offlineLocalSteps(sc)
 	sc.Step(`^a CI offline checkout with the cached image and an argument-reporting probe$`, func() error { return w.offlineFixture("argv") })
 	sc.Step(`^the offline argument fixture contains these exact JSON arguments$`, func(doc *godog.DocString) error {
 		if err := json.Unmarshal([]byte(doc.Content), &w.offline.arguments); err != nil {
