@@ -51,3 +51,6 @@ questions:
     item: "slice-14"
     question: "slice-14: six of seven engine scenarios already pass and the DNS one fails in setup; how to proceed?"
     answer: "Run 42195113834: accept the six as regression coverage under q-6, each only with a positive control proving its probe can see what it checks, and a comment naming the protection. The DNS scenario failed in setup (the dual-stack control never became ready), which is not red evidence: fix the control, then stop for a new engine run of it. See slice-14-steer.md."
+  - id: q-13
+    item: "slice-14"
+    question: "slice-14: the rerun of ID-OFFLINE-12 at 27a210d failed at its positive control; what next?"
