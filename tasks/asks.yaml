@@ -35,3 +35,7 @@ questions:
     item: "slice-11"
     question: "slice-11: its branch was specified before the tenth slice merged and lacks its code; may implementation go on?"
     answer: "Yes. The tenth slice merged at 06:48, and main is now merged into slice-11 (c2df944), so the foreground runner and its fixes are on the branch. Implement."
+  - id: q-9
+    item: "slice-13"
+    question: "slice-13: ID-OFFLINE-01 already passes before the work; accept it as regression coverage?"
+    answer: "Yes, as q-6 decided for the tenth slice: comment which earlier slice it exercises, turn it live, and go on. The same holds for any other scenario of this item that already passes for the right reason; see slice-13-steer.md."
