@@ -451,3 +451,16 @@ items:
     status: todo
     depends_on: [slice-10]
     kind: task
+  - id: slice-13
+    title: Launch and cleanup contract
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-10]
+    kind: slice
+    why: >
+      Split from slice-10, 2026-11-06, at its implementer's proposal: ID-OFFLINE-01 (ownership and
+      the full boundary verified before launch), 04 (launch consumes the frozen settings after
+      edits), 05 (checkout substitution cannot redirect the mount) and 15 (exit precedence and
+      cleanup failure). Their scenarios are already specified on slice-10's branch, tagged for this
+      slice.
