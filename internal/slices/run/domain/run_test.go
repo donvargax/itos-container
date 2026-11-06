@@ -24,10 +24,10 @@ func TestRefusalsBeforeStartup(t *testing.T) {
 		{"JSON wins without executable", domain.Invocation{JSON: true, Separated: true}, domain.ErrJSONUnsupported},
 		{"JSON wins with empty executable", domain.Invocation{JSON: true, Separated: true, Argv: []string{"", "--no-json"}}, domain.ErrJSONUnsupported},
 		{"JSON wins with command", domain.Invocation{JSON: true, Separated: true, Argv: []string{"git"}}, domain.ErrJSONUnsupported},
-		{"valid invocation still refuses", domain.Invocation{Separated: true, Argv: []string{"git", "status"}}, domain.ErrStartupUnavailable},
-		{"flag executable", domain.Invocation{Separated: true, Argv: []string{"--json"}}, domain.ErrStartupUnavailable},
-		{"separator executable", domain.Invocation{Separated: true, Argv: []string{"--"}}, domain.ErrStartupUnavailable},
-		{"literal workload arguments", domain.Invocation{Separated: true, Argv: []string{"git", "", "two words", "--", "--help", "--no-json"}}, domain.ErrStartupUnavailable},
+		{"valid invocation", domain.Invocation{Separated: true, Argv: []string{"git", "status"}}, nil},
+		{"flag executable", domain.Invocation{Separated: true, Argv: []string{"--json"}}, nil},
+		{"separator executable", domain.Invocation{Separated: true, Argv: []string{"--"}}, nil},
+		{"literal workload arguments", domain.Invocation{Separated: true, Argv: []string{"git", "", "two words", "--", "--help", "--no-json"}}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := slices.Clone(tc.request.Argv)

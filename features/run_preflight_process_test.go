@@ -114,7 +114,7 @@ func (w *world) runSameTree(allowSnapshot bool) error {
 	}
 	allowed := map[string]bool{root: true, filepath.Dir(w.runSnapshotPath()): true, w.runSnapshotPath(): true}
 	for path := range got {
-		if _, ok := before[path]; !ok && (!allowSnapshot || !allowed[path]) {
+		if _, ok := before[path]; !ok && (!allowSnapshot || (!allowed[path] && !w.localIntentPath(path))) {
 			return fmt.Errorf("unexpected new entry %s", path)
 		}
 	}
@@ -232,6 +232,7 @@ type runProcess struct {
 }
 
 func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
+	originalArgs := append([]string{}, args...)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	bin := w.bin
 	r := w.runFixture()
@@ -268,6 +269,16 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 	if err := p.cmd.Start(); err != nil {
 		cancel()
 		return nil, err
+	}
+	if a := w.doctor.engine.offline; a != nil {
+		for i, arg := range originalArgs {
+			if arg == "--" {
+				a.mu.Lock()
+				a.expected[p.cmd.Process.Pid] = append([]string{}, originalArgs[i+1:]...)
+				a.mu.Unlock()
+				break
+			}
+		}
 	}
 	go func() { _ = p.cmd.Wait(); close(p.done) }()
 	return p, nil
@@ -554,28 +565,6 @@ func (w *world) runThree(schedule string) error {
 		w.doctor.engine.runBarrier = nil
 	}
 	return w.runPreflightProcess(w.env(), "run", "--", "fixture-workload")
-}
-func (w *world) runThreeRefusals() error {
-	if len(w.run.results) != 3 {
-		return fmt.Errorf("missing invocations")
-	}
-	for _, o := range w.run.results {
-		if o.approvalErr != nil {
-			return o.approvalErr
-		}
-		if o.result.exit != 3 || o.result.stdout != "" || !strings.Contains(o.result.stderr, "approval matched") || !strings.Contains(o.result.stderr, "offline startup is not implemented") {
-			return fmt.Errorf("wrong run result %+v", o.result)
-		}
-	}
-	return nil
-}
-func (w *world) runThreeJournals() error {
-	for _, o := range w.run.results {
-		if err := w.runJournal(o.journal, "complete", true); err != nil {
-			return fmt.Errorf("PID %d: %w", o.pid, err)
-		}
-	}
-	return nil
 }
 func (w *world) runSnapshotStable() error {
 	if len(w.run.results) != 3 {

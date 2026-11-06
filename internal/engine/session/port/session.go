@@ -54,6 +54,7 @@ type Binding struct {
 	Frozen                                                approval.Frozen
 	Checkout                                              readiness.CheckoutIdentity
 	UID, GID, Endpoint, EngineID, ImageReference, ImageID string
+	Workspace, Environment                                string
 }
 
 func (b Binding) Intent(token string) Record {

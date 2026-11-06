@@ -332,7 +332,8 @@ must state this in help and security guidance; revisit before egress and credent
    resource identity before any entrypoint or workload instruction. A failed record
    write prevents execution and enters bounded cleanup/recovery. Retain uncertainty
    rather than launching or blindly creating a duplicate. Slice-9 specifies and tests
-   this protocol; the design is settled, its implementation and evidence are absent.
+   this protocol. Its unstarted-only operation remains separate from slice-10's
+   foreground operation, which consumes the same protected store and bindings.
 4. **Verify, then ready.** Verify every required boundary before any worker instruction.
    Unverifiable isolation refuses later execution and enters cleanup/recovery.
    Use `NetworkMode` `none`, inspected before start, with network and DNS probes
@@ -348,8 +349,11 @@ must state this in help and security guidance; revisit before egress and credent
 6. **Finish, stopping.** Observed primary exit ends the session and begins bounded
    owned cleanup. Confirm removal/absence before claiming stopped. Incomplete cleanup
    retains failed-state recovery information. Teardown has a 30 s total budget.
-   Slices 9/11/12 still owe durable records, serialized mutation, safe diagnostics and
-   executable status/stop contracts.
+   Slice-10 now wires the foreground lifecycle through the session engine, with
+   a separately pinned workspace and Docker SDK stream demultiplexing. The wait
+   handshake is bounded; acknowledged workload wait has no lifetime limit.
+   Slice-11/12 still own executable status/stop, signal and controller-loss proof.
+   See [the foreground integration decision](../decisions/0008-foreground-run-integration.md).
 
 ### State and result interpretation
 
@@ -647,7 +651,7 @@ mechanism. Deferred categories remain outside this milestone.
 | --- | --- | --- |
 | Manifest syntax/library, exact supported fields, reserved environment and metadata treatment; separate parsing budgets | slice-2 and slice-6 | Full manifest validation and approval input. No lifecycle hooks run; hidden metadata must not add commands or permissions. Policy's parser/limits are already settled. |
 | Safe checkout/local-engine identity, symlinks and substitution details | slice-3, consumed by slice-4/8/11 | Readiness, approval binding, mount source and ownership checks. Effective UID with root refusal is settled; basenames or dispatch roots alone cannot identify a project. |
-| Approval implementation and session snapshot publication evidence | slice-4, then slice-8 | Canonical fields, matching/supersession, safe state and atomic frozen-input selection are implemented and covered by the [local scenarios](../../features/approval.feature). Slice-8 adds durable immutable publication, refusal ordering, fresh per-invocation inspection and fault/reuse contracts in [run scenarios](../../features/run.feature). Startup remains unavailable. Approval cannot attest human presence; revisit before egress/credentials. |
+| Approval implementation and session snapshot publication evidence | slice-4, then slice-8 | Canonical fields, matching/supersession, safe state and atomic frozen-input selection are implemented and covered by the [local scenarios](../../features/approval.feature). Slice-8 adds durable immutable publication, refusal ordering, fresh per-invocation inspection and fault/reuse contracts in [run scenarios](../../features/run.feature). Slice-10 connects the frozen handoff to owned foreground execution; runtime evidence remains CI-only. Approval cannot attest human presence; revisit before egress/credentials. |
 | Concrete fixture image digest/provenance and image compatibility/metadata checks | T-20 and slice-3, consumed by slice-4/10 | Prepared images and cached-image preflight. Person-operated digest acquisition, no pull/build/substitution by commands, and approval binding are settled. |
 | Exact temporary-location mapping and independent enforcement probes | slice-10, consuming slice-2/3/8 | Prove host UID/GID, checkout-only host mount, read-only root, tmpfs, pids 4096 and NetworkMode none. No persistent worker state, memory/CPU quota claim, proxy or new network topology. |
 | Intent/resource record schema and uncertain-create protocol details | slice-9 | Implement fsynced pre-create intent, unstarted create and reconciliation by trusted record plus random name. Concrete identity precedes execution; labels/names alone cannot authorize cleanup. |

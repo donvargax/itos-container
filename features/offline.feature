@@ -265,7 +265,7 @@ Feature: Hardened offline foreground run
   # directly into exec argv; never pass it through commandWords or a host shell.
   # The trusted probe emits a length-delimited argument report, compared byte for
   # byte; glob matches and shell marker filenames exist to expose interpretation.
-  @wip @slice-10 @ID-OFFLINE-06 @engine
+  @slice-10 @ID-OFFLINE-06 @engine
   Scenario: The worker receives every supplied argument without shell interpretation
     Given a CI offline checkout with the cached image and an argument-reporting probe
     And the offline argument fixture contains these exact JSON arguments
@@ -281,7 +281,7 @@ Feature: Hardened offline foreground run
   # The harness sends it only after observing both frames while the child lives.
   # EOF follows that frame; the probe emits trailing binary frames and exits.
   # Include NUL and non-UTF8 bytes in redirected frames; no JSON/text rewriting.
-  @wip @slice-10 @ID-OFFLINE-07 @engine
+  @slice-10 @ID-OFFLINE-07 @engine
   Scenario: Redirected foreground streams remain live, separate and complete
     Given a CI offline checkout with the cached image and a framed stdin stdout stderr probe
     When the product runs the offline stream probe and the harness answers its live handshake then closes stdin
@@ -376,7 +376,7 @@ Feature: Hardened offline foreground run
   # printf '%s', never eval. Synthetic HOST_ONLY and dispatch/credential namespace
   # markers exist ONLY in the controller's launch environment. Also plant an
   # outside host helper of the same basename to expose host-side command lookup.
-  @wip @slice-10 @ID-OFFLINE-13 @engine
+  @slice-10 @ID-OFFLINE-13 @engine
   Scenario: An explicit shell uses the frozen workspace and environment inside the worker
     Given a CI offline checkout with the cached image and approved workspace subdirectory and literal APP environment
     And the offline controller environment and host helper contain synthetic markers absent from approved settings

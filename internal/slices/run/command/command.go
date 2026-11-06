@@ -2,8 +2,10 @@
 package command
 
 import (
+	"context"
 	"errors"
 	approvalport "github.com/donvargax/itos-container/internal/engine/approval/port"
+	session "github.com/donvargax/itos-container/internal/engine/session/port"
 	"github.com/donvargax/itos-container/internal/slices/run/port"
 	"strconv"
 	"strings"
@@ -16,24 +18,28 @@ import (
 type CLI struct {
 	Snapshots     approvalport.Snapshots `kong:"-"`
 	Approval      port.Approval          `kong:"-"`
+	Runner        port.Runner            `kong:"-"`
 	JSON          bool                   `name:"json" negatable:"" help:"Request JSON (refused by run)."`
 	Args          []string               `arg:"" optional:"" passthrough:"partial" sep:"none" help:"-- followed by a nonempty executable and its arguments."`
 	InheritedJSON bool                   `kong:"-"`
 }
 
-// Help makes the interim refusal explicit without claiming workload execution.
+// Help describes foreground execution and the wrapper/workload boundary.
 func (CLI) Help() string {
 	return "\nUse itos container run -- <command> [arguments...].\n\n" +
 		"    Wrapper --json or ITOS_JSON=1 returns one schema-1 refusal object.\n" +
 		"    Arguments after -- belong only to the workload.\n" +
-		"    Offline startup is not implemented; doctor --policy-only inspects policy only.\n" +
+		"    Run the literal command in one approved offline worker; streams remain separate.\n" +
+		"    The worker uses the frozen workspace, host UID:GID and temporary HOME/TMPDIR.\n" +
 		"    Exit codes:\n" +
 		"      2  missing command/separator or unsupported JSON request\n" +
 		"      1  approval missing, changed, invalid or superseded; use itos container approve\n" +
-		"      3  offline startup is not implemented\n"
+		"      3  required local environment unavailable\n" +
+		"      75 temporary controller or cleanup failure\n" +
+		"    An observed nonzero workload exit wins over a separate cleanup failure.\n"
 }
 
-// Run delegates invocation validation without assembling any startup adapters.
+// Run validates before preflight, then delegates the owned foreground lifecycle.
 func (c CLI) Run(ui *cli.UI) int {
 	args := c.Args
 	separated := len(args) > 0 && args[0] == "--"
@@ -42,17 +48,63 @@ func (c CLI) Run(ui *cli.UI) int {
 	}
 	withJSON := c.JSON || c.InheritedJSON
 	failure := domain.Refuse(domain.Invocation{JSON: withJSON, Separated: separated, Argv: args})
-	if errors.Is(failure, domain.ErrStartupUnavailable) && c.Approval != nil {
-		if _, err := domain.Preflight(c.Approval, c.Snapshots); err != nil {
-			return ui.Fail(err, withJSON)
-		}
-		ui.Line("approval matched")
+	if failure != nil {
+		return ui.Fail(failure, withJSON)
 	}
-	return ui.Fail(failure, withJSON)
+	if c.Approval == nil || c.Snapshots == nil || c.Runner == nil {
+		return ui.Fail(errors.New("run assembly is incomplete"), false)
+	}
+	frozen, err := domain.Preflight(c.Approval, c.Snapshots)
+	if err != nil {
+		return ui.Fail(err, false)
+	}
+	result := c.Runner.Run(context.Background(), frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
+	code := 0
+	if result.Outcome != "" {
+		code = ui.Fail(runFailure{result.Outcome, result.Reference, false}, false)
+	}
+	if result.Reference != "" && result.Cleanup != session.Complete {
+		cleanupCode := ui.Fail(runFailure{result.Cleanup, result.Reference, true}, false)
+		if code == 0 {
+			code = cleanupCode
+		}
+	}
+	if result.Exited && result.Exit != 0 {
+		return result.Exit
+	}
+	return code
 }
+
+type runFailure struct {
+	outcome   session.Outcome
+	reference string
+	cleanup   bool
+}
+
+func (runFailure) Error() string { return "owned run could not be completed" }
 
 // Classify supplies run's stable rules and human guidance to the generic UI.
 func Classify(err error) (int, []cli.Problem) {
+	var run runFailure
+	if errors.As(err, &run) {
+		code, cause := 75, "temporary"
+		switch run.outcome {
+		case session.Refused, session.Unsafe:
+			code, cause = 1, "ownership"
+		case session.Invalid:
+			code, cause = 2, "configuration"
+		case session.IdentityFailed:
+			code, cause = 70, "internal"
+		case session.IsolationUnverified:
+			code = 1
+		}
+		rule := "run." + string(run.outcome)
+		if run.cleanup {
+			rule = "run.cleanup-" + cause
+		}
+		fix := "Have the host user inspect the protected intent and original engine; cleanup is not confirmed."
+		return code, []cli.Problem{{Rule: rule, Exit: code, Message: rule + " " + strconv.QuoteToASCII(run.reference) + ": " + run.Error(), Fix: fix}}
+	}
 	var approval domain.ApprovalRefusal
 	if errors.As(err, &approval) {
 		return 1, []cli.Problem{{Rule: "run.approval-" + approval.Reason, Exit: 1, Message: "run.approval-" + approval.Reason + ": " + approval.Error(), Fix: "Review current settings with itos container approve."}}
@@ -99,12 +151,6 @@ func Classify(err error) (int, []cli.Problem) {
 			Rule: "run.command-required", Exit: cli.CodeUsage,
 			Message: "run requires a nonempty command after --; use itos container run -- <command>",
 			Fix:     "Supply a nonempty executable after --.",
-		}}
-	case errors.Is(err, domain.ErrStartupUnavailable):
-		return cli.CodeEnvironment, []cli.Problem{{
-			Rule: "run.startup-unavailable", Exit: cli.CodeEnvironment,
-			Message: "offline startup is not implemented; doctor --policy-only inspects policy only",
-			Fix:     "Use itos container doctor --policy-only for policy inspection; it does not authorize or start a run.",
 		}}
 	default:
 		return 0, nil
