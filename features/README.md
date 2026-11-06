@@ -147,6 +147,23 @@ individual-test fallback and whole-suite collection. An excluded engine ID provi
 runtime or coverage evidence. Later behaviours require domain/port fake tests alongside
 separate runtime evidence; uncovered code cannot be satisfied by enabling Docker in proof.
 
+Recovery's pending ID-RECOVERY-21 through ID-RECOVERY-23 run fresh product processes
+against the same guarded cached-image fixture. Their native recorder can inject a
+removal-only failure or hold a removal barrier; it still validates concrete ownership
+before forwarding mutations and records refused requests. A static worker probe supplies
+exit 7 or a monotonic heartbeat. Independent observations precede harness cleanup, and
+the printed retry is parsed into literal argv, never executed by a shell.
+
+Those recovery processes run under a test-only Linux amd64 syscall observer compiled
+with the already pinned `golang.org/x/sys`. It traces only its child and child threads,
+correlating successful file fsync with the subsequently synced publication directory
+and visible record inode. Failed fsyncs and file existence alone cannot prove durable
+completion. The observer records only disposable fixture state; its journal is temporary
+test data, not CI changed-code proof. Local `TestRecoveryTrace` controls exercise real
+syscalls without engine access, including failure, ordering and controller death. These
+controls do not provide native recovery red or green evidence; the coordinator must
+still dispatch the three pending engine scenarios before their implementation.
+
 Code proof obtains its listed tests through `tools/bin/scenario-list`. It uses the same
 Gherkin tier/platform selector as execution, before any fixture setup, and preserves
 core itos's TSV files and fingerprints. Thus ordinary Linux proof lists local Engine API

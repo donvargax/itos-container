@@ -25,6 +25,7 @@ type offlineRequest struct {
 	Body, Observation   map[string]any
 	Record              sessionRecord
 	Status              int
+	Cancelled           bool
 }
 
 // Unlike doctor's read-only recorder and slice-9's unstarted recorder, this
@@ -39,6 +40,13 @@ type offlineAPI struct {
 	final       sessionRecord
 	problem     error
 	connections map[net.Conn]bool
+	// Recovery faults and signal capabilities belong only to the slice-11
+	// fixture. They do not broaden the existing offline runtime scenarios.
+	recovery    bool
+	failRemove  bool
+	removeGate  chan struct{}
+	removeReady chan struct{}
+	removeHeld  bool
 }
 
 func (w *world) startOfflineAPI() error {
@@ -89,10 +97,31 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 		entry.Status = http.StatusForbidden
 	}
 	a.requests[index] = entry
+	failRemove := allowed && a.failRemove && entry.Method == http.MethodDelete
+	if failRemove {
+		a.requests[index].Status = http.StatusServiceUnavailable
+	}
+	gate := a.removeGate
+	hold := allowed && entry.Method == http.MethodDelete && gate != nil && !a.removeHeld
+	if hold {
+		a.removeHeld = true
+	}
 	a.mu.Unlock()
 	if !allowed {
 		http.Error(out, "offline fixture refused unsafe request", http.StatusForbidden)
 		return
+	}
+	if failRemove {
+		http.Error(out, "slice-11 transient removal fault", http.StatusServiceUnavailable)
+		return
+	}
+	if hold {
+		close(a.removeReady)
+		select {
+		case <-gate:
+		case <-request.Context().Done():
+			return
+		}
 	}
 	// ReverseProxy relays the attach upgrade in both directions and preserves
 	// half-close, rather than buffering the upgraded stream as an HTTP body.
@@ -136,10 +165,13 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			}
 			return nil
 		},
-		ErrorHandler: func(out http.ResponseWriter, _ *http.Request, _ error) {
+		ErrorHandler: func(out http.ResponseWriter, request *http.Request, _ error) {
 			a.mu.Lock()
 			a.requests[index].Status = http.StatusBadGateway
-			a.problem = errors.New("offline native recorder transport failed")
+			a.requests[index].Cancelled = request.Context().Err() != nil
+			if !a.recovery || request.Context().Err() == nil {
+				a.problem = errors.New("offline native recorder transport failed")
+			}
 			a.mu.Unlock()
 			http.Error(out, "offline fixture transport failed", http.StatusBadGateway)
 		},
@@ -204,6 +236,11 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 			return r.URL.RawQuery == "" && a.safeObserved(observed)
 		case "wait":
 			return len(r.URL.Query()) == 1 && r.URL.Query().Get("condition") == "not-running"
+		case "kill":
+			return a.recovery && len(r.URL.Query()) == 1 &&
+				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL")
+		case "stop":
+			return a.recovery && len(r.URL.Query()) == 2 && r.URL.Query().Get("signal") == "SIGTERM" && r.URL.Query().Get("t") == "10"
 		}
 	}
 	if r.Method == "DELETE" && operation == "" {
