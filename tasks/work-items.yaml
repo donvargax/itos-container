@@ -378,7 +378,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-10]
+    depends_on: [slice-11]
     kind: slice
     why: >
       T-11's stall, signal, engine-loss and controller-kill cases. Waits: 10 s call, 120 s startup,
@@ -436,7 +436,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-14]
+    depends_on: [slice-14, slice-15]
     kind: task
   - id: slice-13
     title: Launch and cleanup contract
@@ -477,3 +477,15 @@ items:
       distinction between implemented ownership, pending recovery and unproven runtime isolation.
       This first-milestone documentation follow-up does not block the current offline owned-run
       step.
+  - id: slice-15
+    title: Isolation retained through controller loss
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-12, slice-14]
+    kind: slice
+    why: >
+      Split from slice-12, 2026-11-06, to break a dependency cycle its spec review found:
+      ID-LIFECYCLE-15 proves network denial still holds after the controller is lost, using
+      slice-14's boundary probes and slice-11's recovery. Its scenario is specified on slice-12's
+      branch and moves here, still @wip.
