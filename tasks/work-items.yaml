@@ -256,14 +256,9 @@ items:
     title: Delete the release machinery until a release is wanted
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      release.yml has no caller and runs tools that are absent (lines 75 and 123), and line 34
-      assumes a public repository, so attestation would fail here. internal/release has no importers
-      and accounted for 71 of T-8's 225 mutants and T-8's Windows failure. Delete both until a
-      release is wanted, amending AGENTS.md's preserve clause. Waits: nothing is blocked by it.
   - id: p2-architecture-stdlib-on-go-list
     title: The architecture check holds stdlib allowlists on go list arrows, which no comment can evade
     phase: 1
@@ -448,4 +443,11 @@ items:
     owner: donvargax
     status: done
     depends_on: []
+    kind: task
+  - id: T-25
+    title: Release a version on each feat or fix once run works
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-10]
     kind: task
