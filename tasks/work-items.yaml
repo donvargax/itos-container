@@ -356,8 +356,8 @@ items:
   - id: slice-10
     title: Hardened offline foreground run
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-9]
     kind: slice
     why: >
