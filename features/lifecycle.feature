@@ -7,7 +7,8 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Authorities: docs/charter.md, docs/plans/offline-run-lifecycle.md's AC-22/23
   # cases, docs/architecture.md (Slices), and arc42's Foreground run, Recovery
   # and Bounded operations. This is slice-12's spec, not runtime evidence.
-  # Baseline reviewed at f1063fc, including slice-10's fixes through 7f1454c.
+  # Baseline reviewed at 263cd14; product code is unchanged from f1063fc,
+  # including slice-10's fixes through 7f1454c.
   # Runner already forwards signals, consumes repeats and shares one 30 s
   # teardown context across grace, drain and cleanup. Preflight still precedes
   # the 120 s startup timer and signal capture; grace starts after signal delivery;
@@ -29,7 +30,8 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # built on slice-13's launch/cleanup contract. The registry names only slice-10.
   # The coordinator must reconcile that ordering before implementation, including
   # slice-11's reuse of slice-12's shared termination contract. A draft dependency
-  # supplies neither an implemented interface nor regression acceptance.
+  # supplies neither an implemented interface nor passing evidence. Once the
+  # prerequisites are available, apply the standing regression rule below.
   # No init/hooks, persistent worker volumes, credentials, egress, watchdog,
   # restart, detached mode, exec, new platform or support claim is introduced.
 
@@ -205,16 +207,28 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # missing probes, unavailable controls or empty reports fail, never skip.
   # Host sentinels must exist and worker-local file/socket controls must work.
 
-  # Red first belongs to the implementer: commit complete steps with @wip retained,
-  # obtain assertion-level local red or coordinator-only CI red_scenarios evidence,
-  # then implement. Then/And assertions are candidate failure points, not observed
-  # failures: undefined steps and this feasibility review supply no red/green proof.
-  # Existing deadlines, signal forwarding, repeat suppression and ownership are
-  # controls, not claimed new red proof. q-6 accepts regressions for slice-10 only;
-  # it does not authorize declaring already-passing slice-12 rows newly red.
-  # Recheck against the merged dependency heads: if a case already passes for the
-  # right reason, obtain explicit regression acceptance before activation, never
-  # force red. In particular compare LIFECYCLE-05/15/16 with slice-11 below.
+  # Standing coordinator decision for slice-12, extending q-6: a scenario that
+  # already passes against behaviour built by earlier slices is ACCEPTED as
+  # regression coverage. Confirm the complete case passes at its required tier
+  # because it observes product behaviour, not fixture assignments or absence of
+  # actions. Comment above its tag which earlier slice it exercises, remove @wip
+  # and continue; no further regression approval or artificial red is required.
+  # Passing outline rows are regressions too; keep them while implementing failing
+  # rows, and turn the outline live when every row passes. A passing assertion
+  # alone does not establish that the rest of a scenario works. Stop only for a
+  # scenario that fails in setup where no step can fix it, or whose assertions
+  # cannot be made to fail against a wrong build. Missing steps are work to add.
+  #
+  # The implementer commits complete steps first with @wip retained and runs them
+  # against the merged dependency heads. For behaviour still missing, obtain
+  # assertion-level local red or coordinator-only CI red_scenarios evidence before
+  # implementing, then passing evidence at the same tier. The standing decision
+  # replaces the red requirement for verified regressions; do not report them as
+  # newly red. Existing deadlines, signal forwarding, repeat suppression and
+  # ownership are controls; compare LIFECYCLE-05/15/16 with slice-11 below.
+  # All lifecycle phrases still need definitions at this drafting checkpoint, so
+  # all scenarios remain @wip. Then/And assertions are candidate failure points,
+  # not observed failures: this spec review supplies no red/green runtime proof.
 
   # Individual waits: existing generic SDK errors do not identify the timed-out
   # phase; preflight/state waits currently lack the complete shared deadline.
@@ -299,9 +313,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # These integration cases adopt slice-11's protected records/public references;
   # no broad listing/prune or new session schema is specified here. Setup seeds
   # an owned candidate, not a prior successful product run or stop.
-  # RECOVERY-19 already specifies recovery timeout classes and totals. Recheck
-  # every row, including the fresh invocation, on merged slice-11 and obtain
-  # regression acceptance for cases already passing before slice-12 work.
+  # Slice-11's RECOVERY-19 specifies recovery timeout classes and totals. Recheck
+  # every row, including the fresh invocation, on merged slice-11. Cases already
+  # passing for the right reason are accepted regressions under the standing rule;
+  # retain this attribution when turning the complete outline live.
   @wip @slice-12 @ID-LIFECYCLE-05 @linux
   Scenario Outline: Each explicit recovery invocation has a fresh finite budget
     Given a lifecycle recovery fixture with a protected owned session and stalled "<operation>" observations
@@ -362,7 +377,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Prove actual delivery and precedence, including zero. Handlers install before
   # their ready frame, write a signal receipt to checkout, then exit as requested.
-  # The baseline forwards the signal and can preserve 17; its zero case returns
+  # Slice-10 forwards the signal and can preserve 17; its zero case returns
   # 75 and neither case reports cancellation separately from execution failure.
   @wip @slice-12 @ID-LIFECYCLE-08 @engine
   Scenario Outline: The primary receives the first signal and its observed exit wins
@@ -455,7 +470,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # control; one 125 s control may be shared by this outline's runtime cases.
   # The harness observes controller termination independently before unblocking
   # drains. Do not make a test-owned reader unblock the product before its bound.
-  # Quiet work and open stdin are existing controls. Readable diagnostics must
+  # Quiet work and open stdin are slice-10 controls. Readable diagnostics must
   # distinguish cancellation from the baseline's generic execution error; the
   # unread-stderr row instead proves bounded return and safe retained failure state.
   @wip @slice-12 @ID-LIFECYCLE-13 @engine
@@ -493,9 +508,11 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Independent native observations are essential: flag inspection alone cannot
   # prove A3. Use a continuous probe with externally released rounds so a fresh
   # report after SIGKILL cannot be a buffered pre-kill result. No watchdog claim.
-  # RECOVERY-22 already specifies the first Then's discovery and stop behavior;
+  # Slice-11's RECOVERY-22 specifies the first Then's discovery and stop behavior;
   # treat it as an integration control. Fresh post-loss boundary assertions need
   # independent CI evidence with slice-14's probes, not that discovery result.
+  # If earlier slices already satisfy the complete case, name them here and turn
+  # it live under the standing regression decision after confirming that evidence.
   @wip @slice-12 @ID-LIFECYCLE-15 @engine
   Scenario: Uncatchable controller loss leaves a live isolated candidate for explicit stop
     Given a CI lifecycle checkout with continuous boundary probes and working external route and host-access controls
@@ -511,8 +528,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # observer retains IDs only for assertions/always-cleanup, never passes them as
   # authority to the new controller. Before absence publication, engine removal
   # may already have succeeded; recovery must inspect, not infer, that fact.
-  # Compare these windows with RECOVERY-14/15/22 on merged slice-11 before claiming
-  # new red evidence; already passing windows require regression acceptance.
+  # Slice-9's uncertain-create ownership and slice-10's foreground cleanup are
+  # existing controls. Compare these windows with RECOVERY-14/15/22 on merged
+  # slice-11 before claiming new red evidence. Already passing windows are
+  # accepted regressions; name the supplying slices here when turning it live.
   @wip @slice-12 @ID-LIFECYCLE-16 @engine
   Scenario Outline: Controller death during an in-flight transition retains recoverable ownership
     Given a CI lifecycle checkout with a trusted controller-kill barrier "<barrier>"
