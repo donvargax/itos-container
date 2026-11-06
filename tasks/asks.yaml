@@ -39,3 +39,7 @@ questions:
     item: "slice-13"
     question: "slice-13: ID-OFFLINE-01 already passes before the work; accept it as regression coverage?"
     answer: "Yes, as q-6 decided for the tenth slice: comment which earlier slice it exercises, turn it live, and go on. The same holds for any other scenario of this item that already passes for the right reason; see slice-13-steer.md."
+  - id: q-10
+    item: "slice-11"
+    question: "slice-11: is the engine-tier red evidence for ID-RECOVERY-21 to 23 in, so implementation can go on?"
+    answer: "Yes. Run 42180081092 at fea67dd fails all three at their assertions (no status or stop yet). The fixture smoke passed. Implement."
