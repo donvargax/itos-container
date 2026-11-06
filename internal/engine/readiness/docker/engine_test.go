@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -208,15 +209,29 @@ func TestSocketChangedDuringNegotiation(t *testing.T) {
 }
 
 func TestUnavailableSocket(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "socket")
+	root := t.TempDir()
+	path := filepath.Join(root, "socket")
+	if err := os.Mkdir(filepath.Join(root, "checkout"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	urlPath := filepath.ToSlash(path)
+	if filepath.VolumeName(path) != "" {
+		// A local device path stays absolute on Windows without making its
+		// drive letter the URL authority. No socket is ever opened by this test.
+		urlPath = "//./" + urlPath
+	}
+	endpoint := (&url.URL{Scheme: "unix", Path: urlPath}).String()
+	// Keep the checkout in the same path namespace as the endpoint. Rel cannot
+	// compare a Windows device path (//./C:/...) with a drive path (C:/...).
+	checkout := filepath.Join(filepath.Dir(urlPath), "checkout")
 	for _, create := range []bool{false, true} {
 		if create {
 			if err := os.WriteFile(path, nil, 0600); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if s, failure := (Engine{}).Open("unix://"+path, t.TempDir(), time.Second); s != nil || failure != port.EngineUnavailable {
-			t.Fatal(s, failure)
+		if s, failure := (Engine{}).Open(endpoint, checkout, time.Second); s != nil || failure != port.EngineUnavailable {
+			t.Fatalf("regular file exists=%t: session %v, failure %v, want unavailable", create, s, failure)
 		}
 	}
 }

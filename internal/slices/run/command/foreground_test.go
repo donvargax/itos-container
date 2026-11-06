@@ -15,7 +15,27 @@ import (
 
 func TestForegroundExitPrecedenceAndSeparateDiagnostics(t *testing.T) {
 	for _, exit := range []int{0, 1, 2, 3, 7, 70, 75} {
-		for _, cleanup := range []session.Outcome{session.Complete, session.Refused, session.Invalid, session.IdentityFailed, session.Incomplete} {
+		for _, tc := range []struct {
+			outcome session.Outcome
+			code    int
+			cause   string
+		}{
+			{session.Complete, 0, ""},
+			{session.Refused, 1, "ownership"},
+			{session.Unsafe, 1, "ownership"},
+			{session.Invalid, 2, "configuration"},
+			{session.EnvironmentMissing, 3, "environment"},
+			{session.IdentityFailed, 70, "internal"},
+			{session.Outcome("private-unclassified-failure"), 70, "internal"},
+			{session.IntentWrite, 75, "temporary"},
+			{session.OwnershipWrite, 75, "temporary"},
+			{session.CompletionWrite, 75, "temporary"},
+			{session.Uncertain, 75, "temporary"},
+			{session.Incomplete, 75, "temporary"},
+			{session.IsolationInspection, 75, "temporary"},
+			{session.ExecutionFailed, 75, "temporary"},
+		} {
+			cleanup := tc.outcome
 			a := &rf.Approval{View: approval.View{Status: "matching", Inspection: af.Ready(), Candidate: approval.Candidate{Project: "p", Fingerprint: "hash", Canonical: "selected"}, Record: approval.Record{Generation: "1"}}}
 			r := &rf.Runner{Result: session.RunResult{Result: session.Result{Reference: "intents/safe.json", Cleanup: cleanup}, Exited: true, Exit: exit}, Output: []byte("out\x00\xff"), ErrorOutput: []byte("err\x00\xfe")}
 			var out, errout strings.Builder
@@ -23,16 +43,7 @@ func TestForegroundExitPrecedenceAndSeparateDiagnostics(t *testing.T) {
 			code := c.Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: command.Classify})
 			want := exit
 			if exit == 0 {
-				switch cleanup {
-				case session.Refused:
-					want = 1
-				case session.Invalid:
-					want = 2
-				case session.IdentityFailed:
-					want = 70
-				case session.Incomplete:
-					want = 75
-				}
+				want = tc.code
 			}
 			if code != want || out.String() != "out\x00\xff" || !strings.HasPrefix(errout.String(), "err\x00\xfe") {
 				t.Fatalf("%d/%s: exit=%d out=%q err=%q", exit, cleanup, code, out.String(), errout.String())
@@ -42,6 +53,9 @@ func TestForegroundExitPrecedenceAndSeparateDiagnostics(t *testing.T) {
 			}
 			if (cleanup != session.Complete) != strings.Contains(errout.String(), "run.cleanup-") {
 				t.Fatal("lost cleanup outcome")
+			}
+			if (tc.cause != "" && !strings.Contains(errout.String(), "run.cleanup-"+tc.cause+" ")) || strings.Contains(errout.String(), "private-unclassified-failure") {
+				t.Fatal("lost cleanup cause or exposed raw adapter failure", errout.String())
 			}
 		}
 	}

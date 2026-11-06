@@ -6,6 +6,7 @@ const (
 	IsolationUnverified Outcome = "isolation-unverified"
 	IsolationInspection Outcome = "isolation-inspection"
 	ExecutionFailed     Outcome = "execution-unavailable"
+	EnvironmentMissing  Outcome = "engine-environment-missing"
 	// StdinClosed is an attachment notification, not a final run outcome. An
 	// engine input write/half-close failed; the worker may already have exited.
 	StdinClosed Outcome = "stdin-closed"

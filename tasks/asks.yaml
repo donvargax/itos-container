@@ -47,3 +47,23 @@ questions:
     item: "slice-12"
     question: "slice-12: its spec review found a dependency cycle with slice-11 and a scenario needing slice-14; what order?"
     answer: "slice-11 owns the shared engine-side termination contract (SIGTERM once, 10 s grace, revalidate, SIGKILL, as its spec describes) and builds it in internal/engine/session; slice-12 reuses it and now depends on slice-11, so all its integration scenarios activate on merged slice-11. ID-LIFECYCLE-15 moves to slice-15 (isolation retained through controller loss), which depends on slice-12 and slice-14. T-25, the first release, waits for slice-14 and slice-15."
+  - id: q-12
+    item: "slice-14"
+    question: "slice-14: six of seven engine scenarios already pass and the DNS one fails in setup; how to proceed?"
+    answer: "Run 42195113834: accept the six as regression coverage under q-6, each only with a positive control proving its probe can see what it checks, and a comment naming the protection. The DNS scenario failed in setup (the dual-stack control never became ready), which is not red evidence: fix the control, then stop for a new engine run of it. See slice-14-steer.md."
+  - id: q-13
+    item: "slice-14"
+    question: "slice-14: the rerun of ID-OFFLINE-12 at 27a210d failed at its positive control; what next?"
+    answer: "Not red evidence: the positive route control (docker-a) failed, so the denial proves nothing. Fix the control and return blocked for one more engine run; if the CI runner itself is the cause, return blocked with a split proposal. See slice-14-steer.md."
+  - id: q-14
+    item: "slice-14"
+    question: "slice-14: ID-OFFLINE-12 now passes with a working positive control; accept it?"
+    answer: "Yes. Run 42203397615 at d76bf2f: the positive control reaches a resolver where allowed, and the worker finds none. Accept as regression coverage under q-6, turn it live with its comment, and finish the slice."
+  - id: q-15
+    item: "slice-11"
+    question: "slice-11: the engine job passes under setsid; is that the fix?"
+    answer: "No. Run 42218236157 shows a signal reached the step's original process group or session, which setsid only escapes. Find the sender with strace on a run without setsid, fix it in the harness or the product, then drop setsid unless the runner itself is the cause. Cover the new proof gaps too. See slice-11-steer.md."
+  - id: q-16
+    item: "slice-11"
+    question: "slice-11: the signal trace shows no product or harness code signals a group or session; keep setsid?"
+    answer: "Yes. Run 42233015284 traced every process the tests start: the only real signal was one SIGKILL by pidfd to a single recorded controller, never a group, session or -1. The step dies from outside that tree (runner or Docker). Keep setsid with a comment citing that run, drop strace, keep the signal log, and fix the Linux unit failures in session/disk and cmd. See slice-11-steer.md."

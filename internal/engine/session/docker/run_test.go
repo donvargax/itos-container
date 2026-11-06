@@ -22,14 +22,15 @@ import (
 )
 
 type runAPI struct {
-	mu         sync.Mutex
-	resource   *container.InspectResponse
-	attached   net.Conn
-	defect     func(*container.InspectResponse)
-	readInput  bool
-	closeInput bool
-	input      []byte
-	signals    []string
+	mu            sync.Mutex
+	resource      *container.InspectResponse
+	attached      net.Conn
+	defect        func(*container.InspectResponse)
+	readInput     bool
+	closeInput    bool
+	input         []byte
+	signals       []string
+	signalTargets []string
 }
 
 func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
@@ -99,9 +100,6 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 					t.Error(err)
 				}
 			}
-			if a.closeInput {
-				_ = a.attached.(*net.UnixConn).CloseRead()
-			}
 			writeFrame(a.attached, 1, []byte("stdout\x00\xff"))
 			writeFrame(a.attached, 2, []byte("stderr\x00\xfe"))
 			if a.closeInput {
@@ -114,6 +112,7 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 7})
 		case strings.HasSuffix(path, "/kill"):
 			a.signals = append(a.signals, r.URL.Query().Get("signal"))
+			a.signalTargets = append(a.signalTargets, strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/kill"))
 			w.WriteHeader(204)
 		case r.Method == "DELETE":
 			if r.URL.Query().Get("force") != "1" || r.URL.Query().Get("v") == "1" {
@@ -163,16 +162,22 @@ func TestForwardingFailureContracts(t *testing.T) {
 
 func TestStdinClosureContracts(t *testing.T) {
 	t.Run("SDK", func(t *testing.T) {
-		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding) {
+		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding, func()) {
 			e, b, a := runSDKFixture(t)
 			a.closeInput = true
-			return e, b
+			return e, b, func() {
+				a.mu.Lock()
+				defer a.mu.Unlock()
+				if err := a.attached.Close(); err != nil {
+					t.Error(err)
+				}
+			}
 		})
 	})
 	t.Run("memory", func(t *testing.T) {
-		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding) {
+		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding, func()) {
 			b, _, e := st.Fixture()
-			return &st.RunEngine{Engine: e, Exit: 7, StdinClosed: true}, b
+			return &st.RunEngine{Engine: e, Exit: 7, StdinClosed: true}, b, func() {}
 		})
 	})
 }
@@ -196,9 +201,13 @@ func TestSDKSignalUsesFullIDAndChecksConnection(t *testing.T) {
 	}
 	a.mu.Lock()
 	got := slices.Clone(a.signals)
+	targets := slices.Clone(a.signalTargets)
 	a.mu.Unlock()
 	if !slices.Equal(got, []string{"SIGINT", "SIGTERM", "SIGKILL"}) {
 		t.Fatal(got)
+	}
+	if !slices.Equal(targets, []string{id, id, id}) {
+		t.Fatal("signal targeted something other than the full owned worker ID", targets)
 	}
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()

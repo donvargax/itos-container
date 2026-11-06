@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -20,6 +21,11 @@ func TestRunOptionsStayInTheirCommand(t *testing.T) {
 		{[]string{"--json", "run", "--", "git", "--no-json"}, []string{"run", "--json", "--", "git", "--no-json"}},
 		{[]string{"--no-json", "run", "--", "git"}, []string{"run", "--no-json", "--", "git"}},
 		{[]string{"--json", "--no-json", "run"}, []string{"run", "--json", "--no-json"}},
+		{[]string{"--json=true", "status"}, []string{"status", "--json=true"}},
+		{[]string{"--json=false", "stop"}, []string{"stop", "--json=false"}},
+		{[]string{"--json=true", "--no-json", "status"}, []string{"status", "--json=true", "--no-json"}},
+		{[]string{"--json=false", "run", "--", "git", "--json=true"}, []string{"run", "--json=false", "--", "git", "--json=true"}},
+		{[]string{"--json=true", "--", "status"}, []string{"--json=true", "--", "status"}},
 		{[]string{"count", "run", "--json"}, []string{"count", "run", "--json"}},
 		{[]string{"--json", "doctor"}, []string{"--json", "doctor"}},
 		{[]string{"--", "run", "--json"}, []string{"--", "run", "--json"}},
@@ -77,7 +83,11 @@ func TestRunAssemblyAndHelp(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("ITOS_JSON", tc.inherited)
-			t.Setenv("ITOS_ROOT", t.TempDir())
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("ITOS_ROOT", root)
 			t.Setenv("XDG_STATE_HOME", t.TempDir())
 			var stdout, stderr strings.Builder
 			code := run(tc.args, strings.NewReader(""), &stdout, &stderr)

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/cli"
@@ -16,6 +18,7 @@ import (
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
 	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
 	session "github.com/donvargax/itos-container/internal/engine/session/domain"
+	sessionentropy "github.com/donvargax/itos-container/internal/engine/session/entropy"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	fake "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
@@ -30,53 +33,97 @@ type offlineContractRunner struct {
 func (r offlineContractRunner) Run(ctx context.Context, d ap.Durable, argv []string, streams sp.Streams) sp.RunResult {
 	return r.run(ctx, d, argv, streams)
 }
-func offlineContract(t *testing.T, request sessionContractRequest, controllerFor func() session.Service) sessionContractResult {
+func offlineContract(t *testing.T, request sessionContractRequest, controllerFor func() session.Service, ops *sessionContractIO) sessionContractResult {
 	t.Helper()
 	var result sessionContractResult
 	var memory *fake.RunEngine
-	assemble := func() session.Runner {
+	var registry *fake.Registry
+	observer := &offlineObserver{t: t, request: request, ops: ops}
+	assemble := func(frozen ap.Durable) session.Runner {
 		service := controllerFor()
 		runner := session.Runner{Store: service.Store, Entropy: service.Entropy, Workspace: &sessiondisk.Workspace{}}
 		if request.Backend == "memory" {
 			memory = &fake.RunEngine{Engine: service.Engine.(*fake.Engine)}
+			memory.Exit, _ = strconv.Atoi(request.ChildExit)
+			memory.Output = []byte("slice-13-workload-out\n")
+			memory.ErrorOutput = []byte("slice-13-workload-err\n")
 			if request.Boundary != "" {
 				memory.Boundary = sp.IsolationUnverified
 				if request.Boundary == "missing security configuration" || request.Boundary == "unavailable boundary inspection" {
 					memory.Boundary = sp.IsolationInspection
 				}
 			}
-			runner.Engine, runner.Workspace = memory, &fake.Workspace{}
+			observer.memory, observer.space = memory, &fake.Workspace{}
+			runner.Engine, runner.Workspace = memory, observer.space
 		} else {
 			runner.Engine = service.Engine.(sp.RunEngine)
 		}
+		if request.Registered == "true" {
+			var public sp.Registry
+			if memory != nil {
+				registry = &fake.Registry{Store: memory.Store, Project: frozen.Frozen.Project}
+				public = registry
+			} else {
+				store := service.Store.(sessiondisk.Store)
+				public = sessiondisk.Registry{Store: store, Storage: disk.Registry{Store: store.Storage.(disk.Storage).Store}, Codec: store.Codec.(sp.PublicCodec), Identity: canonical.JSON{}}
+			}
+			runner.Registry = offlineRegistry{Registry: public, o: observer}
+			// Keep the fixture's operation token for independent intent observers;
+			// allocate the public ID from a separate entropy call, as in production.
+			tokenSource := runner.Entropy
+			runner.Entropy = &offlineRunEntropy{public: sessionentropy.Random{}, token: tokenSource}
+		}
+		runner.Store = offlineStore{Store: runner.Store, o: observer}
+		runner.Engine = offlineEngine{RunEngine: runner.Engine, o: observer}
 		return runner
 	}
 	if request.Action == "run-cleanup" {
-		result = sessionContractOutput(assemble().Cleanup(context.Background(), request.Reference))
+		result = sessionContractOutput(assemble(ap.Durable{}).Cleanup(context.Background(), request.Reference))
 	} else {
 		service, _ := approvalServices(os.Stdin, io.Discard, io.Discard)
 		preflight := &sessionContractPreflight{Preflight: approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}}}
-		observer := offlineContractRunner{run: func(ctx context.Context, frozen ap.Durable, argv []string, streams sp.Streams) sp.RunResult {
+		observedRunner := offlineContractRunner{run: func(ctx context.Context, frozen ap.Durable, argv []string, streams sp.Streams) sp.RunResult {
 			writeSessionContract(t, request.Checkpoint, frozen)
 			var release string
 			if err := json.NewDecoder(os.Stdin).Decode(&release); err != nil || release != "continue" {
 				t.Fatal("offline checkpoint was not released")
 			}
-			actual := assemble().Run(ctx, frozen, argv, streams)
+			actual := assemble(frozen).Run(ctx, frozen, argv, streams)
 			result.Outcome, result.Cleanup, result.Reference, result.ID = string(actual.Outcome), string(actual.Cleanup), actual.Reference, actual.ID
+			result.SessionID = actual.SessionID
 			if actual.Exited {
 				result.Workload = &actual.Exit
 			}
 			return actual
 		}}
-		command := runcommand.CLI{Approval: preflight, Snapshots: disk.Snapshots{Store: service.Store.(disk.Store), Records: canonical.JSON{}}, Runner: observer, Args: []string{"--", "probe", "literal;$HOME"}}
+		command := runcommand.CLI{Approval: preflight, Snapshots: disk.Snapshots{Store: service.Store.(disk.Store), Records: canonical.JSON{}}, Runner: observedRunner, Args: []string{"--", "probe", "literal;$HOME", "slice-13-private-argv"}}
 		var out, errout bytes.Buffer
-		result.Code = command.Run(&cli.UI{In: bytes.NewReader(nil), Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
+		result.Code = command.Run(&cli.UI{In: bytes.NewReader(nil), Stdout: &out, Stderr: &errout, Classify: func(err error) (int, []cli.Problem) {
+			code, problems := runcommand.Classify(err)
+			for _, problem := range problems {
+				if strings.HasPrefix(problem.Rule, "run.cleanup-") {
+					result.CleanupCode = code
+				}
+			}
+			return code, problems
+		}})
+		result.Stdout, result.Stderr = out.String(), errout.String()
 		result.Diagnostic = errout.String()
 		result.PreflightFailure = fmt.Sprintf("status=%s failure=%s ready=%v", preflight.view.Status, preflight.view.Failure, preflight.view.Inspection.Ready)
 	}
+	result.Trace = observer.events
 	if memory != nil {
 		result.RunEvents = memory.Events
+	}
+	if registry != nil {
+		result.PublicRecords = map[string][]byte{}
+		for id, record := range registry.Records {
+			data, err := json.Marshal(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result.PublicRecords[id] = data
+		}
 	}
 	return result
 }

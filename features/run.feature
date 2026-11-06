@@ -546,7 +546,7 @@ Feature: Run invocation refusals
     And run completes the inspected owned foreground worker with exit zero
     And its standard output is empty
     And it never prompts or records approval
-    And only protected snapshot and owned intent records were added without chown or checkout changes
+    And only protected snapshot intent and public session records were added without chown or checkout changes
     And the local foreground journal contains only inspections and owned worker operations
     And no inspection helper sentinel was executed
     And no executable marker was created
@@ -690,7 +690,7 @@ Feature: Run invocation refusals
     And each run's Engine API journal contains fresh inspection and only its owned worker operations
     And the final snapshot is never partial and its inode and mtime remain unchanged after publication
     And the active approval bytes and generation are unchanged
-    And only protected snapshot and owned intent records were added without chown or checkout changes
+    And only protected snapshot intent and public session records were added without chown or checkout changes
     And the local foreground journal contains only inspections and owned worker operations
     And no inspection helper sentinel was executed
     And no executable marker was created
@@ -714,10 +714,10 @@ Feature: Run invocation refusals
     And its standard output is empty
     And the local foreground journal contains only inspections and owned worker operations
     And the protected run snapshot is exactly the independently calculated approval at generation "1"
-    And only protected snapshot and owned intent records were added without chown or checkout changes
+    And only protected snapshot intent and public session records were added without chown or checkout changes
     And no inspection helper sentinel was executed
     And the engine recorder has no connections
-    And the policy inspection files differ only by protected snapshot and owned intent records
+    And the policy inspection files differ only by protected snapshot intent and public session records
 
   # Workload flags reach the exact container Cmd, never wrapper parsing. These
   # HTTP fixtures prove argument delivery; the engine tier proves execution.
@@ -734,10 +734,10 @@ Feature: Run invocation refusals
     And its standard output is empty
     And the local foreground journal contains only inspections and owned worker operations
     And the protected run snapshot is exactly the independently calculated approval at generation "1"
-    And only protected snapshot and owned intent records were added without chown or checkout changes
+    And only protected snapshot intent and public session records were added without chown or checkout changes
     And no inspection helper sentinel was executed
     And the engine recorder has no connections
-    And the policy inspection files differ only by protected snapshot and owned intent records
+    And the policy inspection files differ only by protected snapshot intent and public session records
 
     Examples:
       | arguments                     |

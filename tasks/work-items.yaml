@@ -364,15 +364,9 @@ items:
     title: Status and stop
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-10]
     kind: slice
-    why: >
-      Run's printed retry must work. Foreign, repeated and two-project cases; marker exclusion. By
-      the person's A3 the worker stays isolated if the controller dies, so itos container status or
-      list shows which sessions lost their controller, as candidates to stop. Records beside
-      approvals, random hex IDs, a per-session lock, revalidating daemon and resource before
-      mutating.
   - id: slice-12
     title: Budgets, cancellation and loss
     phase: 1
@@ -442,29 +436,16 @@ items:
     title: Launch and cleanup contract
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-10]
     kind: slice
-    why: >
-      Split from slice-10, 2026-11-06, at its implementer's proposal: ID-OFFLINE-01 (ownership and
-      the full boundary verified before launch), 04 (launch consumes the frozen settings after
-      edits), 05 (checkout substitution cannot redirect the mount) and 15 (exit precedence and
-      cleanup failure). Their scenarios are already specified on slice-10's branch, tagged for this
-      slice.
   - id: slice-14
     title: Native isolation and teardown proof
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: [slice-13]
     kind: slice
-    why: >
-      Split from slice-10, 2026-11-06: ID-OFFLINE-08 to 12, 14 and 16, the engine-tier proofs that
-      the running worker is contained: non-root identity without elevation, ephemeral home and temp,
-      no host files, sockets or namespaces, no network or DNS from the first instruction, and full
-      teardown. Needs setuid, nested-mount, network and DNS and descendant-process controls, with
-      engine red evidence through the coordinator. The milestone's isolation claim, and the first
-      release (T-25), rest on it.
   - id: p2-architecture-session-runtime-status
     title: "Architecture drift: reconcile session and runtime evidence status"
     phase: 1

@@ -31,6 +31,12 @@ type connection struct {
 }
 
 func (e Engine) Open(ctx context.Context, b port.Binding) (port.Connection, port.Outcome) {
+	return e.open(ctx, b, port.Incomplete)
+}
+
+// The foreground capability distinguishes missing local environment while the
+// separate unstarted-only capability retains its existing failure contract.
+func (e Engine) open(ctx context.Context, b port.Binding, unavailable port.Outcome) (port.Connection, port.Outcome) {
 	call, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if call.Err() != nil {
@@ -39,6 +45,9 @@ func (e Engine) Open(ctx context.Context, b port.Binding) (port.Connection, port
 	deadline, _ := call.Deadline()
 	pin, f := e.Readiness.Open(e.Selection, b.Checkout.Root, time.Until(deadline))
 	if f != rp.None {
+		if f == rp.EngineUnavailable {
+			return nil, unavailable
+		}
 		if f == rp.EngineChanged || f == rp.EngineRemote || f == rp.EngineSelection || f == rp.EngineUntrusted {
 			return nil, port.Refused
 		}

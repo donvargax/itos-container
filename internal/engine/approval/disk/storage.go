@@ -89,6 +89,7 @@ type directoryStore struct {
 	pin       *pin
 	ctx       context.Context
 	exclusive func(*os.Root, string, string) error
+	public    bool
 }
 
 func (d *directoryStore) Close()          { d.pin.close() }
@@ -98,7 +99,7 @@ func recordName(name string) bool {
 }
 func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 	p := d.pin
-	if !recordName(name) {
+	if !recordName(name) && (!d.public || name != "record.json") {
 		return nil, "state.invalid"
 	}
 	if !d.Unchanged() {

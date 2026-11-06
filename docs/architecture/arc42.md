@@ -182,15 +182,15 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/slices/init` | Deferred | Non-runnable example generation belongs to later scope. | No init implementation authorized this milestone. |
 | `internal/slices/doctor` | Implemented through slice-4 | File-only validation remains separate; ordinary doctor inspects checkout, engine, image and approval and prints the exact candidate fingerprint. | Shared readiness and approval ports; no state writes or checkout execution. |
 | `internal/slices/approve` | Implemented by slice-4 | Show effective settings/differences and ask y/N at a terminal; offer optional exact-fingerprint non-interactive approval. | Shared policy/manifest/readiness and approval contracts; no prompt again until settings change; never calls the doctor slice. |
-| `internal/slices/run` | Preflight and frozen publication implemented through slice-8 | Refuse JSON before missing argv, validate local prerequisites before engine access, freshly inspect and select approval, then publish immutable frozen settings before refusing unimplemented startup. | Shared approval/readiness and snapshot ports; never prompts, records consent or creates resources. |
-| `internal/slices/status` | Proposed; required for run recovery | Inspect owned state, policy identity, uncertainty and recovery information. | Session contracts; read-only, bounded inspection with safe diagnostics. |
-| `internal/slices/stop` | Proposed; required for run recovery | Cancel an owned session or finish its cleanup. | Session contracts; identity revalidation and safe repeated removal. |
+| `internal/slices/run` | Foreground execution through slice-10; public registration through slice-11 | Validate argv and approval, publish frozen settings and a public recovery identity, then run one owned worker with bounded cleanup. | Shared approval/readiness/session contracts; literal argv, observed-exit precedence and exact cleanup retry. Native runtime proof remains CI-only. |
+| `internal/slices/status` | Implemented by slice-11; native proof remains CI-only | Inspect project-owned sessions, original policy identity, controller presence and uncertainty. | Shared session contracts; read-only bounded inspection and safe schema-1 diagnostics. |
+| `internal/slices/stop` | Implemented by slice-11; native proof remains CI-only | Finish cleanup of one registered session, independently of workload success. | Shared session contracts; mutation-time identity checks, per-session locking and durable repeated removal. |
 | `internal/slices/exec` | Deferred | Additional argv only during a live owned foreground session. | Future session contract; cannot extend lifetime or alter frozen permissions. |
 | `internal/engine/policy` | Implemented by slice-1 and slice-5 | Strict offline schema/default/value validation, bounded parsing and typed failures. | Own domain/port, disk and YAML adapters; reusable policy contracts and I/O-free porttest fakes. |
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
 | `internal/engine/readiness` | Implemented prerequisite | Read-only checkout, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
-| `internal/engine/session` | Owned unstarted create/cleanup implemented by slice-9; runtime integration remains slice-10–12 | Durable intent, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK and entropy adapters; approval protected-storage and frozen-codec ports; readiness identity contracts. Test-only cmd assembly exposes this boundary; public run still stops after preflight. |
+| `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
 or runtime permission. Doctor composes readiness and approval inspection; readiness
@@ -364,7 +364,8 @@ must state this in help and security guidance; revisit before egress and credent
    Run captures SIGINT/SIGTERM before startup, forwards the first signal once after
    reacquiring owned authority, allows 10 s grace, then escalates to SIGKILL within
    the same 30 s teardown budget. Repeated signals cannot interrupt that cleanup.
-   Slice-11/12 still own executable status/stop and native signal/controller-loss proof.
+   Slice-11 adds executable status/stop; native signal and retained-isolation proof
+   remains with slice-12 and the guarded CI tier.
    See [the foreground integration decision](../decisions/0008-foreground-run-integration.md).
    [The failure-cleanup decision](../decisions/0009-foreground-failure-cleanup.md)
    records the review fixes and their local controller proof.
@@ -407,12 +408,35 @@ ownership. Confirmed-absent recorded resources are safe on repeated stop; an unr
 engine does not establish absence. Never prune unrelated resources or remove shared
 images or checkout edits. Worker tmpfs is ephemeral; persistent worker state is excluded.
 
-Place recovery records beside approvals in protected host state. Use random hex
-session IDs and a per-session lock, and revalidate daemon and resource identity before
-mutation. Protected placement separates authority from checkout requests; IDs provide
-safe recovery references; serialization and revalidation prevent concurrent or stale
-deletion. Slice-11 owns record fields, lock API and ID length, without a new ownership
-algorithm being selected here.
+Place recovery records beside approvals in protected host state. Slice-11 uses
+independent random 32-byte lowercase hex IDs and seven-field records referring to
+the original intent. Persistent controller and operation descriptor locks separate
+liveness from mutation exclusion. Status probes the controller with a shared lock;
+run and stop serialize transitions, revalidation and durability, releasing the
+operation lock during foreground wait and output draining. Project transactions
+never span engine calls. A controller-probe error leaves presence unknown and
+does not veto explicit stop; ownership validation remains independent. Expiry
+during stop inspection or either termination wait remains temporary and cannot
+authorize a progress write beyond the total budget. When a concurrent stop completed
+the same worker, run can reconcile completion without an observed exit, preserving null and draining
+remaining output without reporting a spurious wait failure. If the initial stdin
+probe times out on that stop's operation lock, run retries the completion check
+within its existing teardown total. Incomplete or conflicting authority and
+forwarding errors still fail.
+See [public session recovery](../decisions/0010-public-session-recovery.md).
+
+Fresh recovery discovers registrations through the protected
+`sessions/<lookup>/<id>` index, where lookup hashes the host UID and canonical
+checkout path, independently of mutable Git identity. Each record still binds
+its original approval project, intent and snapshot. The snapshot's root and
+host identity must match the invocation; moving a registration into a foreign
+root's index cannot authorize cleanup. Recovery derives the key from the absolute
+effective root path without opening the worker-controlled checkout; removed read
+or search permissions cannot veto cleanup. Launch retains full checkout validation.
+[Stable recovery discovery](../decisions/0011-stable-recovery-index.md) supersedes
+the project-keyed public lookup in decision 0010;
+[recovery without checkout access](../decisions/0012-recovery-without-checkout-access.md)
+supersedes decision 0011's remaining checkout-root pinning requirement.
 
 Foreground cleanup authorizes removal from the protected original record/snapshot,
 current host identity, selected original daemon and freshly inspected full resource
@@ -553,7 +577,7 @@ Fakes perform no I/O and runtime scenarios remain CI-only.
 | Image acquisition and offline boundary | Settled loop choice; T-20 and slices 3/4/10 | Person pulls manifest digest; commands inspect cached content and approval binds it. NetworkMode none is inspected before start and must be proven by network/DNS probes from first instruction through loss, without a guard/proxy/session network. |
 | Durable create intent | Settled loop choice; slice-9 | fsync before unstarted create; reconcile lost response by trusted record plus random name, then record concrete identity before execution. Close the untracked window; names/labels alone confer no authority. |
 | Budgets and signal escalation | Settled loop choice; slice-12 | Calls 10 s, startup 120 s, teardown 30 s without resetting totals; forward once, 10 s grace, SIGKILL, observed exit wins. Bound controller transitions without imposing workload lifetime. |
-| Recovery placement and serialization | Settled loop choice; slice-11 | Records beside approvals, random hex IDs, per-session lock, daemon/resource revalidation before mutation. Separate authority from checkout and prevent concurrent/stale deletion. No lock API, ID length or record schema selected here. |
+| Recovery placement and serialization | Settled loop choice, implemented by slice-11 | [Public session recovery](../decisions/0010-public-session-recovery.md) specifies 32-byte random IDs, strict referenced records, separate controller/operation descriptor locks, bounded observation and durable cleanup. Native support still requires CI evidence. |
 
 Acceptance does not mean every formerly open security mechanism was accepted. Passing
 heading/link/table checks is not runtime proof or permission to invent an open design.
@@ -680,7 +704,6 @@ mechanism. Deferred categories remain outside this milestone.
 | Exact temporary-location mapping and independent enforcement probes | slice-14, consuming slice-2/3/8/10 | Prove host UID/GID, checkout-only host mount, read-only root, tmpfs, pids 4096 and NetworkMode none. No persistent worker state, memory/CPU quota claim, proxy or new network topology. |
 | Intent/resource record schema and uncertain-create protocol details | slice-9 | Implement fsynced pre-create intent, unstarted create and reconciliation by trusted record plus random name. Concrete identity precedes execution; labels/names alone cannot authorize cleanup. |
 | Recovery totals, retry accounting, stream backpressure and remaining cancellation/result mappings | slice-11/12 | Bounded recovery and honest outcomes. Calls/startup/teardown 10/120/30 s and once-forwarded signal, 10 s grace, SIGKILL are settled; observed exit wins. No workload lifetime limit or new signal code selected here. |
-| Recovery fields, lock API, random hex ID length, safe rendering and unknown-outcome observations | slice-11, reusing slice-3/4/9/12 | Build status/stop before promising retries. Protected placement, per-session serialization, mutation-time revalidation and isolated survival after controller loss are settled. Unknown outcomes stay unknown; metadata differs from the snapshot. |
 | Guard/proxy topology and fail-closed addon/runtime failures | Person through later approved-egress experiment/spec — deferred | Online egress only; not a reason to add a guard or session network to offline run. |
 | TLS inspection/passthrough handshake guarantees, unverifiable clients, trust and downgrade refusal | Person through later proxy/TLS spec — deferred | Online destination modes and truthful authority guarantees; no mode chosen here. |
 | Minimal auth provisioning/refresh, account management, callbacks, revocation/deletion and CA/SSH-key rotation | Person through later credential lifecycle specs and explicit live-account consent — deferred | Accounts, network Git and credential-bearing work; no generic host shell/HTTP bridge. |

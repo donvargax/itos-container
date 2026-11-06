@@ -40,6 +40,10 @@ func (s Store) identity() (string, string, port.Outcome) {
 	return uid, gid, ""
 }
 func (s Store) acquire(ctx context.Context, project, token string, create, fresh bool) (*intent, port.Outcome) {
+	return s.acquireMissing(ctx, project, token, create, fresh, port.Refused)
+}
+
+func (s Store) acquireMissing(ctx context.Context, project, token string, create, fresh bool, missing port.Outcome) (*intent, port.Outcome) {
 	if !port.HexID(project) || !port.HexID(token) {
 		return nil, port.Invalid
 	}
@@ -53,7 +57,7 @@ func (s Store) acquire(ctx context.Context, project, token string, create, fresh
 		return nil, storageFailure(f, create)
 	}
 	if directory == nil {
-		return nil, port.Refused
+		return nil, missing
 	}
 	if fresh && s.Checkout.Pin(s.Input.Root) != readiness.None {
 		directory.Close()
@@ -103,11 +107,15 @@ func (s Store) OpenCleanup(ctx context.Context, reference string) (port.Intent, 
 	return s.open(ctx, reference, false)
 }
 func (s Store) open(ctx context.Context, reference string, fresh bool) (port.Intent, port.Outcome) {
+	return s.openMissing(ctx, reference, fresh, port.Refused)
+}
+
+func (s Store) openMissing(ctx context.Context, reference string, fresh bool, missing port.Outcome) (port.Intent, port.Outcome) {
 	project, token, ok := port.ParseReference(reference)
 	if !ok {
 		return nil, port.Invalid
 	}
-	t, failure := s.acquire(ctx, project, token, false, fresh)
+	t, failure := s.acquireMissing(ctx, project, token, false, fresh, missing)
 	if failure != "" {
 		return nil, failure
 	}
@@ -122,7 +130,7 @@ func (s Store) open(ctx context.Context, reference string, fresh bool) (port.Int
 		return nil, storageFailure(f, false)
 	}
 	if data == nil {
-		return nil, port.Refused
+		return nil, missing
 	}
 	record, failure := s.Codec.Decode(data)
 	if failure != "" {

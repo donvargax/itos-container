@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -64,11 +65,11 @@ func ForwardingFailureContract(t Reporter, open func() (port.RunEngine, port.Bin
 
 // StdinClosureContract models an exited worker that leaves redirected stdin
 // unread, with clean stdout/stderr EOF. Only its input destination fails.
-func StdinClosureContract(t Reporter, open func() (port.RunEngine, port.Binding)) {
+func StdinClosureContract(t Reporter, open func() (port.RunEngine, port.Binding, func())) {
 	t.Helper()
 	ctx, end := context.WithTimeout(context.Background(), time.Second)
 	defer end()
-	e, b := open()
+	e, b, closeInput := open()
 	c, failure := e.OpenRun(ctx, b)
 	if failure != "" {
 		t.Errorf("open: %s", failure)
@@ -80,7 +81,10 @@ func StdinClosureContract(t Reporter, open func() (port.RunEngine, port.Binding)
 		t.Errorf("create: %s", failure)
 		return
 	}
-	a, failure := c.Attach(ctx, id, port.Streams{In: strings.NewReader(strings.Repeat("input", 1<<20))})
+	input := make(chan struct{})
+	releaseInput := sync.OnceFunc(func() { close(input) })
+	defer releaseInput()
+	a, failure := c.Attach(ctx, id, port.Streams{In: gatedInput{ready: input, reader: strings.NewReader(strings.Repeat("input", 1<<20))}})
 	if failure != "" {
 		t.Errorf("attach: %s", failure)
 		return
@@ -89,6 +93,14 @@ func StdinClosureContract(t Reporter, open func() (port.RunEngine, port.Binding)
 	if failure = c.Start(ctx, id); failure != "" {
 		t.Errorf("start: %s", failure)
 	}
+	// Observe clean output EOF before closing the input destination. Closing a
+	// socket with unread input can reset both directions on some hosts; that is
+	// an output transport failure, not the stdin-only condition of this contract.
+	if failure = a.Drain(ctx); failure != "" {
+		t.Errorf("output before input closure: %s", failure)
+	}
+	closeInput()
+	releaseInput()
 	select {
 	case failure := <-a.Failures():
 		if failure != port.StdinClosed {
@@ -103,6 +115,16 @@ func StdinClosureContract(t Reporter, open func() (port.RunEngine, port.Binding)
 	if failure := a.Drain(ctx); failure != "" {
 		t.Errorf("input closure invalidated completed output: %s", failure)
 	}
+}
+
+type gatedInput struct {
+	ready  <-chan struct{}
+	reader *strings.Reader
+}
+
+func (r gatedInput) Read(p []byte) (int, error) {
+	<-r.ready
+	return r.reader.Read(p)
 }
 
 func CleanupStoreContract(t Reporter, open func() (port.Store, approval.Durable, func())) {
