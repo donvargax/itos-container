@@ -173,12 +173,20 @@ func (w *world) recoveryOwnershipDefect(defect string) error {
 		if err = os.WriteFile(path, approvalJSON(record), 0600); err != nil {
 			return err
 		}
-	case "different checkout identity":
-		path := filepath.Join(w.doctor.checkout, ".git")
-		if err := os.Rename(path, path+".original"); err != nil {
+	case "different canonical checkout":
+		// Even possession of a valid public record in another protected index
+		// cannot change the root in the original snapshot or authorize cleanup.
+		original := filepath.Dir(w.recoveryRecordPath())
+		other := filepath.Join(w.doctor.host, "other-checkout")
+		if err := os.Mkdir(other, 0700); err != nil {
 			return err
 		}
-		if err := os.Mkdir(path, 0700); err != nil {
+		w.doctor.checkout = other
+		path := filepath.Dir(w.recoveryRecordPath())
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			return err
+		}
+		if err := os.Rename(original, path); err != nil {
 			return err
 		}
 	case "selected daemon differs":

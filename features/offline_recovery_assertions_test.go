@@ -34,7 +34,7 @@ func (w *world) offlinePublicRecord() ([]byte, error) {
 	}
 	data := r.PublicRecords[r.SessionID]
 	if s.backend == "disk" {
-		path := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.approval.project, r.SessionID, "record.json")
+		path := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.recoveryIndexKey(), r.SessionID, "record.json")
 		var err error
 		data, err = os.ReadFile(path)
 		if err != nil {
@@ -73,7 +73,7 @@ func (w *world) offlineRegistryPaths() (map[string]bool, error) {
 }
 
 func (w *world) offlineCompletedRegistryPaths() (map[string]bool, error) {
-	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.approval.project)
+	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.recoveryIndexKey())
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (w *world) offlineCompletedRegistryPaths() (map[string]bool, error) {
 func (w *world) offlineRegistryObjects(id string) (map[string]bool, error) {
 	allowed := map[string]bool{}
 	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions")
-	project := filepath.Join(root, w.approval.project)
+	project := filepath.Join(root, w.recoveryIndexKey())
 	dir := filepath.Join(project, id)
 	tree, err := runTree(root)
 	if err != nil {

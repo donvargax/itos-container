@@ -262,7 +262,7 @@ func (w *world) recoverySeed(phase, resource, exit string) error {
 	return w.recoveryCapture()
 }
 func (w *world) recoveryRecordPath() string {
-	return filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.approval.project, w.recoveryLocal.id, "record.json")
+	return filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.recoveryIndexKey(), w.recoveryLocal.id, "record.json")
 }
 func (w *world) recoveryCapture() error {
 	all := map[string]string{}

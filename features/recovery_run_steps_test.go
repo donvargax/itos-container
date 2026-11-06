@@ -448,7 +448,7 @@ func (w *world) recoveryNoLaunch() error {
 	return nil
 }
 func (w *world) recoveryLocalDiscover() {
-	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.approval.project)
+	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.recoveryIndexKey())
 	dirs, _ := os.ReadDir(root)
 	for _, dir := range dirs {
 		data, err := os.ReadFile(filepath.Join(root, dir.Name(), "record.json"))

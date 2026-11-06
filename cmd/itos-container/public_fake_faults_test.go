@@ -20,7 +20,7 @@ func publicFakeMaterial(t *testing.T) {
 		t.Run(fault, func(t *testing.T) {
 			m := publicMemoryFixture(t)
 			id, _ := m.seed("a")
-			files := m.files.Sessions[m.c.Project+"/"+id]
+			files := m.files.Sessions[m.index().Project+"/"+id]
 			data := string(files.Data)
 			want := 2
 			switch fault {
@@ -76,22 +76,24 @@ func publicFakeMaterial(t *testing.T) {
 }
 
 func publicFakeOwnership(t *testing.T) {
-	for _, defect := range []string{"no registration", "other project", "host UID", "checkout identity", "daemon", "full ID", "name", "token", "project", "fingerprint", "image", "name and ID"} {
+	for _, defect := range []string{"no registration", "other project", "host UID", "canonical checkout", "daemon", "full ID", "name", "token", "project", "fingerprint", "image", "name and ID"} {
 		t.Run(defect, func(t *testing.T) {
 			m := publicMemoryFixture(t)
 			id, worker := m.seed("a")
-			files := m.files.Sessions[m.c.Project+"/"+id]
+			files := m.files.Sessions[m.index().Project+"/"+id]
 			o := m.e.Resources[worker]
 			switch defect {
 			case "no registration":
-				delete(m.files.Sessions, m.c.Project+"/"+id)
+				delete(m.files.Sessions, m.index().Project+"/"+id)
 			case "other project":
-				delete(m.files.Sessions, m.c.Project+"/"+id)
+				delete(m.files.Sessions, m.index().Project+"/"+id)
 				m.files.Sessions[strings.Repeat("f", 64)+"/"+id] = files
 			case "host UID":
 				m.host.UID = "1001"
-			case "checkout identity":
-				m.checkout.Identity.GitInode = "99"
+			case "canonical checkout":
+				delete(m.files.Sessions, m.index().Project+"/"+id)
+				m.registry.Store.Input.Root = "/other-checkout"
+				m.files.Sessions[m.index().Project+"/"+id] = files
 			case "daemon":
 				m.e.DaemonID = "foreign"
 			case "full ID":

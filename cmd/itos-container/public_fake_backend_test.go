@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -77,13 +79,24 @@ func publicMemoryFixture(t *testing.T) publicMemory {
 	return publicMemory{registry, files, storage, host, checkout, c, b, &sf.RunEngine{Engine: engine, WaitFailure: sp.ExecutionFailed}}
 }
 
+func publicIndexKey(root, uid string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte("itos-container/session-index/v1\x00"+uid+"\x00"+root)))
+}
+
+func (m publicMemory) index() ap.Candidate {
+	c := m.c
+	c.Root = m.registry.Store.Input.Root
+	c.Project = publicIndexKey(c.Root, m.host.UID)
+	return c
+}
+
 func (m publicMemory) seed(letter string) (string, string) {
 	id, token, worker := strings.Repeat(letter, 64), strings.Repeat(letter, 63)+"1", strings.Repeat(letter, 63)+"2"
 	i := m.b.Intent(token)
 	i.Stage, i.ContainerID = "owned", worker
 	m.storage.Directories["intents/"+m.c.Project].Files[token+".json"] = m.registry.Store.Codec.Encode(i)
 	p := sp.PublicRecord{Schema: 1, ID: id, Project: m.c.Project, Intent: sp.Reference(m.c.Project, token), State: "failed"}
-	m.files.Sessions[m.c.Project+"/"+id] = &af.SessionFiles{Data: m.registry.Codec.EncodePublic(p)}
+	m.files.Sessions[m.index().Project+"/"+id] = &af.SessionFiles{Data: m.registry.Codec.EncodePublic(p)}
 	m.e.Resources[worker] = sp.Observation{ID: worker, Name: i.Name, ImageID: i.ImageID, Token: token, Project: i.Project, Fingerprint: i.Fingerprint, StatePresent: true, Status: "created"}
 	return id, worker
 }
@@ -127,8 +140,8 @@ func publicFakeDiscovery(t *testing.T) {
 	for _, letter := range []string{"e", "d", "c", "b", "a"} {
 		m.seed(letter)
 	}
-	m.files.Sessions[m.c.Project+"/"+strings.Repeat("c", 64)].Data = []byte("{invalid")
-	m.files.Sessions[m.c.Project+"/"+strings.Repeat("d", 64)].Unsafe = true
+	m.files.Sessions[m.index().Project+"/"+strings.Repeat("c", 64)].Data = []byte("{invalid")
+	m.files.Sessions[m.index().Project+"/"+strings.Repeat("d", 64)].Unsafe = true
 	o := m.e.Resources[strings.Repeat("e", 63)+"2"]
 	o.StatePresent = false
 	m.e.Resources[o.ID] = o
@@ -155,7 +168,7 @@ func publicFakeDeadlines(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
 		id, _ := m.seed("a")
-		locked, f := m.files.Open(context.Background(), m.c, id, false)
+		locked, f := m.files.Open(context.Background(), m.index(), id, false)
 		if f != "" {
 			t.Fatal(f)
 		}
@@ -185,7 +198,7 @@ func publicFakeRegistration(t *testing.T) {
 				entropy.Failure = sp.IdentityFailed
 			}
 			if fault == "occupied" {
-				m.files.Sessions[m.c.Project+"/"+id] = &af.SessionFiles{Data: []byte("existing")}
+				m.files.Sessions[m.index().Project+"/"+id] = &af.SessionFiles{Data: []byte("existing")}
 			}
 			m.e.WaitFailure = ""
 			runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: &sf.Workspace{}, Entropy: entropy}
@@ -240,7 +253,7 @@ func publicFakeRegistration(t *testing.T) {
 			if code != want || created != 0 || !strings.Contains(diagnostic, "run.session-registration-"+cause) || strings.Contains(diagnostic, "itos container stop ") || entropy.Draws > 2 {
 				t.Fatal(code, diagnostic, entropy.Draws)
 			}
-			if fault == "occupied" && string(m.files.Sessions[m.c.Project+"/"+id].Data) != "existing" {
+			if fault == "occupied" && string(m.files.Sessions[m.index().Project+"/"+id].Data) != "existing" {
 				t.Fatal("occupied ID replaced")
 			}
 		})

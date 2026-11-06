@@ -54,10 +54,14 @@ func TestPublicRegistryRetainsOriginalForegroundAuthority(t *testing.T) {
 	if err := os.Mkdir(git, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if current, f := r.Open(ctx, id, true); f == "" {
-		current.Close()
-		t.Fatal("fresh public lookup adopted changed checkout")
+	current, f := r.Open(ctx, id, true)
+	if f != "" {
+		t.Fatal("writable Git identity vetoed fresh recovery", f)
 	}
+	if current.Intent().Binding().Frozen != d.Frozen {
+		t.Fatal("fresh recovery lost its original protected binding")
+	}
+	current.Close()
 	owned, f := original.Open(ctx, id, false)
 	if f != "" {
 		t.Fatal("checkout edits vetoed original foreground cleanup", f)
@@ -86,7 +90,7 @@ func TestPublicRegistryRetainsOriginalForegroundAuthority(t *testing.T) {
 		t.Fatal("known result changed", f)
 	}
 	// The original-binding route still checks the protected bytes on every use.
-	path := filepath.Join(storage.Store.StateHome, "itos-container", "sessions", d.Frozen.Project, id, "record.json")
+	path := filepath.Join(storage.Store.StateHome, "itos-container", "sessions", publicIndexKey(store.Input.Root, owned.Intent().Binding().UID), id, "record.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

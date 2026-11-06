@@ -11,7 +11,7 @@ import (
 )
 
 func (s *isolationWorld) registrationRoot() string {
-	return filepath.Join(s.w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", s.w.approval.project)
+	return filepath.Join(s.w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", s.w.recoveryIndexKey())
 }
 
 func (s *isolationWorld) registrationIntent(r *isolationRun) string {

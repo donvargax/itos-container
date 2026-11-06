@@ -422,6 +422,16 @@ can reconcile completion without an observed exit, preserving null and draining
 remaining output without reporting a spurious wait failure.
 See [public session recovery](../decisions/0010-public-session-recovery.md).
 
+Fresh recovery discovers registrations through the protected
+`sessions/<lookup>/<id>` index, where lookup hashes the host UID and canonical
+checkout path, independently of mutable Git identity. Each record still binds
+its original approval project, intent and snapshot. The snapshot's root and
+host identity must match the invocation; moving a registration into a foreign
+root's index cannot authorize cleanup. Recovery pins root ancestors without
+inspecting `.git`; launch retains full checkout validation. This supersedes the
+project-keyed public lookup in decision 0010, as
+[stable recovery discovery](../decisions/0011-stable-recovery-index.md) explains.
+
 Foreground cleanup authorizes removal from the protected original record/snapshot,
 current host identity, selected original daemon and freshly inspected full resource
 ID. It does not reopen or compare the writable checkout: a worker can replace `.git`

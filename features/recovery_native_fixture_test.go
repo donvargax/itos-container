@@ -96,8 +96,8 @@ func (w *world) recoveryProtected() (map[string]string, error) {
 	}
 	sessions := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions")
 	for path := range all {
-		if path == sessions || path == filepath.Join(sessions, w.approval.project) ||
-			strings.HasPrefix(path, filepath.Join(sessions, w.approval.project)+string(os.PathSeparator)) ||
+		if path == sessions || path == filepath.Join(sessions, w.recoveryIndexKey()) ||
+			strings.HasPrefix(path, filepath.Join(sessions, w.recoveryIndexKey())+string(os.PathSeparator)) ||
 			path == filepath.Join(w.doctor.checkout, "slice-11-heartbeat") || path == filepath.Join(w.doctor.checkout, "slice-11-heartbeat.next") ||
 			path == filepath.Join(w.doctor.checkout, "slice-11-worker-edit") {
 			delete(all, path)
@@ -217,7 +217,7 @@ func (w *world) recoveryDiscover() {
 		r.worker = a.created[0]
 	}
 	a.mu.Unlock()
-	path := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.approval.project)
+	path := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.recoveryIndexKey())
 	entries, err := os.ReadDir(path)
 	if err == nil && len(entries) == 1 && entries[0].IsDir() && offlineHex(entries[0].Name()) {
 		r.id = entries[0].Name()

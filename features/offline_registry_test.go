@@ -122,7 +122,7 @@ func offlineRegistryFixture(t *testing.T) (*world, string, map[string]any) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Join(state, "itos-container", "sessions", project, id)
+	dir := filepath.Join(state, "itos-container", "sessions", w.recoveryIndexKey(), id)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}

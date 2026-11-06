@@ -3,6 +3,9 @@ package disk
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"path/filepath"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
@@ -18,6 +21,37 @@ type Registry struct {
 }
 
 func (s Registry) ForRun(frozen approval.Durable) port.Registry { s.frozen = &frozen; return s }
+
+// The public registry is a protected index, not an approval identity. Its key
+// must survive changes to writable checkout contents, including the Git inode.
+// Each entry still resolves and validates its original intent and snapshot.
+func registryKey(root, uid string) string {
+	digest := sha256.Sum256([]byte("itos-container/session-index/v1\x00" + uid + "\x00" + root))
+	return hex.EncodeToString(digest[:])
+}
+
+func (s Registry) lookup() (approval.Candidate, port.Outcome) {
+	uid, gid, failure := s.Store.identity()
+	if failure != "" {
+		return approval.Candidate{}, failure
+	}
+	root := filepath.Clean(s.Store.Input.Root)
+	if s.frozen != nil {
+		c, f := s.candidate()
+		if f != "" {
+			return approval.Candidate{}, f
+		}
+		root = c.Root
+	} else {
+		// Pin checks every root ancestor without following aliases or reading
+		// .git. Only launch needs Inspect's mutable Git identity checks.
+		if s.Store.Checkout.Pin(root) != readiness.None {
+			return approval.Candidate{}, port.Refused
+		}
+		s.Store.Checkout.Close()
+	}
+	return approval.Candidate{UID: uid, GID: gid, Root: root, Project: registryKey(root, uid)}, ""
+}
 
 func (s Registry) candidate() (approval.Candidate, port.Outcome) {
 	uid, gid, failure := s.Store.identity()
@@ -61,6 +95,7 @@ func (s Registry) Register(ctx context.Context, frozen approval.Durable, id, tok
 		return nil, port.Refused
 	}
 	r := port.PublicRecord{Schema: 1, ID: id, Project: c.Project, Intent: port.Reference(c.Project, token), State: "preparing"}
+	c.Project = registryKey(c.Root, c.UID)
 	lease, f := s.Storage.Register(ctx, c, id, s.Codec.EncodePublic(r))
 	if f != "" {
 		return nil, storageFailure(f, true)
@@ -68,7 +103,7 @@ func (s Registry) Register(ctx context.Context, frozen approval.Durable, id, tok
 	return lease, ""
 }
 func (s Registry) List(ctx context.Context) ([]string, port.Outcome) {
-	c, failure := s.candidate()
+	c, failure := s.lookup()
 	if failure != "" {
 		return nil, failure
 	}
@@ -79,7 +114,7 @@ func (s Registry) List(ctx context.Context) ([]string, port.Outcome) {
 	return ids, ""
 }
 func (s Registry) Open(ctx context.Context, id string, readOnly bool) (port.Session, port.Outcome) {
-	c, failure := s.candidate()
+	c, failure := s.lookup()
 	if failure != "" {
 		return nil, failure
 	}
@@ -104,12 +139,15 @@ func (s Registry) Open(ctx context.Context, id string, readOnly bool) (port.Sess
 	if failure != "" {
 		return nil, failure
 	}
-	if r.ID != id || r.Project != c.Project {
+	if r.ID != id || (s.frozen != nil && r.Project != s.frozen.Frozen.Project) {
 		return nil, port.Invalid
 	}
-	i, failure := s.Store.transaction(ctx, r.Intent, s.frozen == nil)
+	i, failure := s.Store.transaction(ctx, r.Intent, false)
 	if failure != "" {
 		return nil, failure
+	}
+	if i.Binding().Checkout.Root != c.Root {
+		return nil, port.Refused
 	}
 	entry := &publicSession{registry: s, directory: d, record: r, data: data, intent: i, readOnly: readOnly}
 	if failure = entry.Validate(); failure != "" {

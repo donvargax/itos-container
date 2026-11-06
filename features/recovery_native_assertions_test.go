@@ -238,7 +238,7 @@ func (w *world) recoveryCompleted() error {
 	}
 	record := map[string]any{"schema": 1, "id": r.id, "project": w.approval.project, "intent": w.session.reference,
 		"state": "stopped", "workload_exit": exit, "last_problem": nil}
-	return recoveryDurableFile(filepath.Join(state, "sessions", w.approval.project, r.id, "record.json"), record, r.stops)
+	return recoveryDurableFile(filepath.Join(state, "sessions", w.recoveryIndexKey(), r.id, "record.json"), record, r.stops)
 }
 
 func recoveryDurableFile(path string, want map[string]any, processes []*recoveryProcess) error {

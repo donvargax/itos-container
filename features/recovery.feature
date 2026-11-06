@@ -108,13 +108,20 @@ Feature: Inspect and stop owned offline sessions
   # Registration failures use run.session-registration-<cause>, with ownership=1,
   # internal=70 and temporary=75; these occur before create and have no child exit.
   #
-  # Protected record choice: sessions/<project>/<id>/record.json beside approvals,
+  # Protected record choice: sessions/<lookup>/<id>/record.json beside approvals,
   # snapshots and intents under the existing state root. A schema-1 record has
   # exactly schema, id, project, intent, state, workload_exit and last_problem.
   # intent is the exact relative intents/<project>/<token>.json reference; state
   # is one of the six lifecycle values; workload_exit is null or integer 0..255;
   # last_problem is null or a typed failure identifier, never arbitrary text.
   # Bind record filename/ID/project/intent to the original strict intent/snapshot;
+  # lookup is lowercase hex SHA-256 of UTF-8 "itos-container/session-index/v1",
+  # NUL, canonical decimal host UID, NUL and the canonical absolute checkout path.
+  # This host-owned index survives writable .git replacement/removal. Its key is
+  # discovery only: the original snapshot must bind that same host user and root,
+  # and the original daemon/full resource identity still authorize every mutation.
+  # Do not recompute the approval project from current checkout contents. No global
+  # scan or adoption of an entry indexed under a different checkout is permitted.
   # do not duplicate argv, environment, settings, stream bytes or engine bodies.
   # Read one object, max 65536 bytes/depth 16, with no missing/unknown/duplicate/
   # wrongly typed fields or trailing data. A malformed record grants no cleanup.
@@ -170,7 +177,7 @@ Feature: Inspect and stop owned offline sessions
   # with exit 75 and unknown workload exit, without a late create/start or overwrite
   # of cleanup progress. No absent-ID evidence or completed tombstone is invented.
   #
-  # Stop validates the original snapshot, actual user/checkout, pinned local socket
+  # Stop validates the original snapshot, actual user/canonical root, pinned local socket
   # and daemon, then freshly inspects the full resource ID. Revalidate immediately
   # before EACH stop/kill/remove, including after grace waits and storage updates.
   # Match name, token/project/fingerprint labels and image ID against trusted
@@ -181,6 +188,10 @@ Feature: Inspect and stop owned offline sessions
   # Current YAML/manifest/approval may be changed, missing or invalid; original
   # protected snapshot and identity remain required. No approve, host helper,
   # cached-image acquisition or launch preflight is part of recovery.
+  # Writable Git identity never vetoes cleanup; full fresh checkout identity is
+  # still required for launch. This corrects the former RECOVERY-11 Git-veto row
+  # for PRRT_kwDOVkB0ws60fqg0; foreign canonical roots still refuse, even with a
+  # transplanted otherwise-valid registration in their own protected index.
   #
   # For a running owned worker, request SIGTERM once, allowing up to 10 s grace
   # within the original stop total; revalidate and request SIGKILL only if it is
@@ -461,7 +472,7 @@ Feature: Inspect and stop owned offline sessions
       | no public registration             |
       | public ID belongs to other project |
       | mutually consistent other UID      |
-      | different checkout identity        |
+      | different canonical checkout       |
       | selected daemon differs            |
       | full ID observation conflicts      |
       | resource name differs              |
@@ -671,7 +682,7 @@ Feature: Inspect and stop owned offline sessions
 
   # Fresh recovery must survive worker edits to the writable Git directory.
   # The original protected binding remains authoritative after controller loss.
-  @slice-11 @ID-RECOVERY-33 @linux @wip
+  @slice-11 @ID-RECOVERY-33 @linux
   Scenario Outline: Fresh recovery survives a changed writable Git identity
     Given a recovery fixture with recorded phase "running" resource "running" and observed workload exit "unknown"
     When the worker Git directory is "<change>" and fresh status and stop run

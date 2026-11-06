@@ -1,6 +1,7 @@
 package features
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,12 @@ import (
 
 	"github.com/cucumber/godog"
 )
+
+// Independently encode the specified protected lookup key, never derive it
+// from current .git contents or the product's own output.
+func (w *world) recoveryIndexKey() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte("itos-container/session-index/v1\x00"+w.approval.uid+"\x00"+w.doctor.checkout)))
+}
 
 func (w *world) recoveryCheckoutSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the worker Git directory is "([^"]*)" and fresh status and stop run$`, func(change string) error {

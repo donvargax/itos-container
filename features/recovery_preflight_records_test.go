@@ -22,7 +22,7 @@ func (w *world) localRegistryPaths(tree map[string]runEntry) (map[string]bool, e
 		return allowed, nil
 	}
 	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions")
-	project := filepath.Join(root, w.approval.project)
+	project := filepath.Join(root, w.recoveryIndexKey())
 	allowed[root], allowed[project] = true, true
 	intents := map[string]bool{}
 	for _, r := range a.created {

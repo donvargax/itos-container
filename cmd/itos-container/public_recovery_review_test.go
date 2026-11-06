@@ -49,7 +49,7 @@ func publicRecoveryInspectionDeadline(t *testing.T) {
 		m := publicMemoryFixture(t)
 		id, worker := m.seed("a")
 		original := m.e.Resources[worker]
-		files := m.files.Sessions[m.c.Project+"/"+id]
+		files := m.files.Sessions[m.index().Project+"/"+id]
 		before := bytes.Clone(files.Data)
 		locked, f := m.files.Open(context.Background(), m.c, id, false)
 		if f != "" {
@@ -112,7 +112,7 @@ func publicRecoveryUnknownController(t *testing.T) {
 				o.ImageID = "foreign"
 			}
 			m.e.Resources[worker] = o
-			m.files.Sessions[m.c.Project+"/"+id].Controller = true
+			m.files.Sessions[m.index().Project+"/"+id].Controller = true
 			m.registry.Storage = unavailableControllerStorage{m.files}
 			status := publicMemoryCommand(t, m.service(), "status", "", 75)
 			if len(status.Problems) != 2 || status.Problems[0].Rule != "recovery.temporary" || status.Sessions[0].Controller != "unknown" || len(m.files.Events) != 0 {
@@ -132,7 +132,7 @@ func publicRecoveryUnknownController(t *testing.T) {
 			if len(r.Sessions) != 1 || r.Sessions[0].Controller != "unknown" || r.Sessions[0].Cleanup != "complete" || r.Sessions[0].WorkloadExit != nil || r.Sessions[0].Retry != nil {
 				t.Fatal("unknown controller blocked owned completion", r)
 			}
-			if !reflect.DeepEqual(m.e.Resources, map[string]sp.Observation{other: unrelated}) || !m.files.Sessions[m.c.Project+"/"+id].Controller || !slices.Contains(m.e.Events, "SIGTERM") {
+			if !reflect.DeepEqual(m.e.Resources, map[string]sp.Observation{other: unrelated}) || !m.files.Sessions[m.index().Project+"/"+id].Controller || !slices.Contains(m.e.Events, "SIGTERM") {
 				t.Fatal("stop failed to terminate only its owned worker", m.e.Events)
 			}
 		})
@@ -161,7 +161,7 @@ func publicRecoveryStoppedWait(t *testing.T) {
 			if len(stopped.Sessions) != 1 || stopped.Sessions[0].Cleanup != "complete" || stopped.Sessions[0].WorkloadExit != nil {
 				t.Fatal("concurrent stop did not complete with an unknown exit", stopped)
 			}
-			completed = bytes.Clone(m.files.Sessions[m.c.Project+"/"+id].Data)
+			completed = bytes.Clone(m.files.Sessions[m.index().Project+"/"+id].Data)
 			mutations = recoveryReviewMutations(m.e)
 			// Let stdin's notification cancel the original pending wait before
 			// returning to its fake engine response. No real sleep or engine runs.
@@ -178,7 +178,7 @@ func publicRecoveryStoppedWait(t *testing.T) {
 		if id == "" || len(status.Sessions) != 1 || status.Sessions[0].State != "stopped" || status.Sessions[0].Cleanup != "complete" || status.Sessions[0].WorkloadExit != nil || status.Sessions[0].Retry != nil || len(m.e.Resources) != 0 {
 			t.Fatal("run invented a workload result or lost completed cleanup", status)
 		}
-		if !bytes.Equal(completed, m.files.Sessions[m.c.Project+"/"+id].Data) || mutations != recoveryReviewMutations(m.e) {
+		if !bytes.Equal(completed, m.files.Sessions[m.index().Project+"/"+id].Data) || mutations != recoveryReviewMutations(m.e) {
 			t.Fatal("resumed run repeated mutation or rewrote completion")
 		}
 	})
