@@ -42,6 +42,7 @@ type recoveryLocal struct {
 	afterRemoveReady, afterRemoveRelease chan struct{}
 	second                               *world
 	originalIntent                       string
+	jsonExpectations                     []recoveryJSONExpectation
 }
 
 func (w *world) recoveryLocalSteps(sc *godog.ScenarioContext) {
@@ -51,6 +52,7 @@ func (w *world) recoveryLocalSteps(sc *godog.ScenarioContext) {
 	w.recoveryDiscoverySteps(sc)
 	w.recoveryRunSteps(sc)
 	w.recoveryRaceSteps(sc)
+	w.recoveryJSONSteps(sc)
 	sc.Step(`^a recovery fixture with no engine access and checkout helper sentinels$`, w.recoveryInvocationFixture)
 	sc.Step(`^product status help and stop help are requested$`, func() error {
 		for _, command := range []string{"status", "stop"} {

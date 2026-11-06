@@ -55,6 +55,9 @@ Feature: Inspect and stop owned offline sessions
   # - --json and ITOS_JSON=1 produce exactly one schema-1 stdout object, including
   #   refusals. Explicit --no-json overrides the environment. Plain status/stop
   #   give the same facts to stdout; diagnostics go to stderr, no colour/prompts.
+  #   Only the literal environment value 1 inherits JSON. Other values, including
+  #   boolean aliases and unparseable text, keep plain output unless --json is set.
+  #   Successful invocations and parser/argument refusals use this same rule.
   #   Help names project scope, JSON, unknown outcomes and stop's cleanup-only exit.
   #
   # JSON contract: {schema:1, ok:bool, problems:[], sessions:[]} for both commands.
@@ -426,6 +429,18 @@ Feature: Inspect and stop owned offline sessions
       | stop    | --json=true --no-json    | before   | 1         | plain |
       | status  | --no-json --json=true    | before   | 1         | JSON  |
       | stop    | --no-json --json=true    | before   | 1         | JSON  |
+
+  @slice-11 @ID-RECOVERY-29 @linux @wip
+  Scenario Outline: Recovery uses one JSON environment contract on every invocation path
+    Given a recovery fixture with recorded phase "stopped" resource "absent" and observed workload exit "7"
+    When recovery "<command>" successes and usage refusals run with inherited and explicit JSON preferences
+    Then recovery inherits JSON only for the literal value 1 and explicit switches select the same format on every path
+    And recovery inspection leaves every record and resource unchanged
+
+    Examples:
+      | command |
+      | status  |
+      | stop    |
 
   @slice-11 @ID-RECOVERY-11 @linux
   Scenario Outline: Foreign or ambiguous ownership is never adopted by stop
