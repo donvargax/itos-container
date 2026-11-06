@@ -21,6 +21,8 @@ import (
 type foregroundRecovery struct {
 	fault         string
 	block         bool
+	trailing      bool
+	exitCode      int
 	started, exit chan struct{}
 	finish        sync.Once
 	signals       []string
@@ -28,11 +30,35 @@ type foregroundRecovery struct {
 }
 
 func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
-	sc.Step(`^a foreground recovery fixture for "([^"]*)"$`, func(fault string) {
-		w.localOfflineFixture()
-		w.doctor.engine.offline.recovery = &foregroundRecovery{fault: fault, block: fault == "stdout" || fault == "stderr" || strings.Contains(fault, "SIG"), started: make(chan struct{}), exit: make(chan struct{})}
+	sc.Step(`^a foreground recovery fixture for "([^"]*)"$`, w.foregroundRecoveryFixture)
+	sc.Step(`^a foreground recovery fixture with "([^"]*)" and trailing output after exit (\d+)$`, func(signal string, exit int) {
+		w.foregroundRecoveryFixture("handled " + signal)
+		w.doctor.engine.offline.recovery.trailing = true
+		w.doctor.engine.offline.recovery.exitCode = exit
+	})
+	sc.Step(`^a foreground recovery fixture with exit (\d+) and unread redirected stdin$`, func(exit int) {
+		w.foregroundRecoveryFixture("unread stdin")
+		w.doctor.engine.offline.recovery.exitCode = exit
 	})
 	sc.Step(`^the foreground recovery command runs$`, w.foregroundRecoveryRun)
+	sc.Step(`^the foreground recovery command preserves both trailing streams and the interrupted exit$`, func() error {
+		f := w.doctor.engine.offline.recovery
+		want := f.exitCode
+		if want == 0 {
+			want = 75
+		}
+		if w.exit != want || w.stdout != recoveryTailOut || !strings.HasPrefix(w.stderr, recoveryTailErr) {
+			return fmt.Errorf("interrupted exit lost trailing stdout/stderr or worker status: %s", w.report())
+		}
+		return nil
+	})
+	sc.Step(`^the foreground recovery command preserves the worker exit despite unread stdin$`, func() error {
+		if w.exit != w.doctor.engine.offline.recovery.exitCode || w.stdout != "" || w.stderr != "" {
+			return fmt.Errorf("unread stdin replaced the worker exit with a stream failure: %s", w.report())
+		}
+		return nil
+	})
+	sc.Step(`^the foreground recovery command has confirmed owned cleanup$`, w.localOfflineOwned)
 	sc.Step(`^the foreground recovery command reports stream failure and completes owned cleanup$`, func() error {
 		if w.exit != 75 || (w.doctor.engine.offline.recovery.fault != "stderr" && !strings.Contains(w.stderr, "run.execution-unavailable")) {
 			return fmt.Errorf("stream failure did not return execution failure: %s", w.report())
@@ -66,6 +92,14 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 	})
 }
 
+const recoveryTailOut = "final stdout\x00\xff\n"
+const recoveryTailErr = "final stderr\x00\xfe\n"
+
+func (w *world) foregroundRecoveryFixture(fault string) {
+	w.localOfflineFixture()
+	w.doctor.engine.offline.recovery = &foregroundRecovery{fault: fault, block: fault == "stdout" || fault == "stderr" || strings.Contains(fault, "SIG"), started: make(chan struct{}), exit: make(chan struct{})}
+}
+
 func (a *localOfflineAPI) recoveryStart(out http.ResponseWriter, resource map[string]any, id string) {
 	f := a.recovery
 	resource["State"] = map[string]any{"Status": "running", "Running": true, "Pid": 123, "StartedAt": "2026-01-01T00:00:00Z"}
@@ -83,6 +117,9 @@ func (a *localOfflineAPI) recoveryStart(out http.ResponseWriter, resource map[st
 	case "stdin":
 		// The read must finish before reporting exit, as a cat-like worker does.
 		_, a.problem = io.Copy(io.Discard, conn)
+		_ = conn.Close()
+	case "unread stdin":
+		// Model a worker which exits while the controller is still writing input.
 		_ = conn.Close()
 	case "replaced git", "missing git":
 		git := filepath.Join(a.w.doctor.checkout, ".git")
@@ -113,6 +150,18 @@ func (w *world) foregroundRecoveryRun() error {
 	var out, errout strings.Builder
 	cmd.Stdout, cmd.Stderr = &out, &errout
 	cmd.WaitDelay = time.Second
+	if f.fault == "unread stdin" {
+		file, err := os.CreateTemp(w.doctor.checkout, "unread-input-*")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = file.Close() }()
+		// Larger than the socket buffers, so forwarding cannot finish before exit.
+		if err := file.Truncate(4 << 20); err != nil {
+			return err
+		}
+		cmd.Stdin = file
+	}
 	if f.fault == "stdin" || f.fault == "stdout" || f.fault == "stderr" {
 		path := "/dev/full"
 		mode := os.O_WRONLY

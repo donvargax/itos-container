@@ -1,6 +1,7 @@
 package features
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Local transport fixture for the older invocation/preflight scenarios. It
@@ -126,13 +128,41 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 			}
 			a.mu.Lock()
 		}
-		_ = json.NewEncoder(out).Encode(map[string]any{"StatusCode": 0})
+		exit := 0
+		if a.recovery != nil {
+			exit = a.recovery.exitCode
+			if a.recovery.fault == "unread stdin" {
+				// Input closure precedes the exit response, exposing cancellation races.
+				a.mu.Unlock()
+				time.Sleep(100 * time.Millisecond)
+				a.mu.Lock()
+			}
+		}
+		_ = json.NewEncoder(out).Encode(map[string]any{"StatusCode": exit})
+		if a.recovery != nil && a.recovery.trailing && r.Context().Err() == nil {
+			out.(http.Flusher).Flush()
+			conn := a.attached[id]
+			// Release the lock: premature product cleanup must be able to close
+			// the attachment before these bytes, and fail the output assertion.
+			a.mu.Unlock()
+			time.Sleep(100 * time.Millisecond)
+			for stream, data := range []string{recoveryTailOut, recoveryTailErr} {
+				frame := make([]byte, 8)
+				frame[0] = byte(stream + 1)
+				binary.BigEndian.PutUint32(frame[4:], uint32(len(data)))
+				_, _ = conn.Write(append(frame, []byte(data)...))
+			}
+			_ = conn.Close()
+			a.mu.Lock()
+		}
 	case len(parts) == 2 && parts[1] == "kill" && r.Method == "POST" && a.recovery != nil:
 		a.recovery.signals = append(a.recovery.signals, r.URL.Query().Get("signal"))
 		if r.URL.Query().Get("signal") == "SIGKILL" || a.recovery.fault == "handled SIGINT" || a.recovery.fault == "handled SIGTERM" {
 			a.recovery.finish.Do(func() { close(a.recovery.exit) })
 			resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
-			_ = a.attached[id].Close()
+			if !a.recovery.trailing {
+				_ = a.attached[id].Close()
+			}
 		}
 		out.WriteHeader(204)
 	case len(parts) == 1 && r.Method == "DELETE":

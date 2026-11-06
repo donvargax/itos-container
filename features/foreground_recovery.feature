@@ -7,6 +7,10 @@ Feature: Foreground failures retain owned cleanup authority
   Forward the first SIGINT or SIGTERM once, allow 10 seconds, then SIGKILL.
   Repeated signals do not interrupt the 30-second owned teardown budget.
   An observed nonzero worker exit wins; otherwise interrupted execution fails.
+  Observed exit drains trailing output within the uncanceled teardown budget,
+  including after interruption. A worker may exit without consuming all stdin;
+  a closed engine input connection must not hide its observed exit or output.
+  Host input read failures and output forwarding failures still fail execution.
   Launch still requires fresh checkout identity. Removal requires protected
   session/snapshot, current host user, original daemon and full resource identity,
   independently of later changes to the writable checkout.
@@ -52,3 +56,33 @@ Feature: Foreground failures retain owned cleanup authority
       | handled SIGTERM |
       | ignored SIGINT  |
       | ignored SIGTERM |
+
+  @wip @slice-10 @ID-OFFLINE-20
+  Scenario Outline: Interrupted worker exit preserves trailing output
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "1"
+    And a foreground recovery fixture with "<signal>" and trailing output after exit <exit>
+    When the foreground recovery command runs
+    Then the foreground recovery command preserves both trailing streams and the interrupted exit
+    And the foreground recovery command has confirmed owned cleanup
+
+    Examples:
+      | signal  | exit |
+      | SIGINT  | 0    |
+      | SIGTERM | 0    |
+      | SIGINT  | 23   |
+      | SIGTERM | 23   |
+
+  @wip @slice-10 @ID-OFFLINE-21
+  Scenario Outline: Worker exit does not require consuming all redirected stdin
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "1"
+    And a foreground recovery fixture with exit <exit> and unread redirected stdin
+    When the foreground recovery command runs
+    Then the foreground recovery command preserves the worker exit despite unread stdin
+    And the foreground recovery command has confirmed owned cleanup
+
+    Examples:
+      | exit |
+      | 0    |
+      | 23   |
