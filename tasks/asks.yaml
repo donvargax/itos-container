@@ -38,3 +38,4 @@ questions:
   - id: q-9
     item: "slice-13"
     question: "slice-13: ID-OFFLINE-01 already passes before the work; accept it as regression coverage?"
+    answer: "Yes, as q-6 decided for the tenth slice: comment which earlier slice it exercises, turn it live, and go on. The same holds for any other scenario of this item that already passes for the right reason; see slice-13-steer.md."
