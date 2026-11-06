@@ -65,6 +65,11 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	if failure == "" {
 		r := entry.Record()
 		e.Cleanup = "pending"
+		// Start may succeed before the controller can publish running. Report
+		// fresh owned progress without rewriting the record or undoing cleanup.
+		if e.Resource == "running" && (r.State == "preparing" || r.State == "ready") {
+			e.State = "running"
+		}
 		if r.State == "stopped" {
 			if e.Resource == "absent" && entry.Intent().Record().Stage == "absent" {
 				e.Cleanup = "complete"

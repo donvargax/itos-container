@@ -144,3 +144,28 @@ along with the registered-run domain tests. The eleven OFFLINE-15 examples
 also passed before this fix, confirming the reported undefined-step failure
 predated the current implementation. These are non-engine fixtures; native
 green evidence and changed-code proof remain with the coordinating CI loop.
+
+## Native preservation and interrupted launch observations
+
+The coordinator reported OFFLINE-06/07/13 preservation failures and RECOVERY-22
+discovery failure at `a355e47` in CI run `42199501038`. The native preservation
+assertion still counted the required public registration as an unrelated host
+change. It now requires the exact completed record bound to the original intent,
+an independent public ID and protected empty locks before admitting only those
+new paths. Existing paths and every other addition remain in the comparison.
+Disposable-file controls reject missing registration, unrelated edits, extra
+session paths, unsafe locks and changed completion facts; they use no engine.
+
+The controller can die after engine start but before publishing its running
+phase. Fresh status now reports an owned running worker as running even when
+the record still says preparing or ready. It remains read-only, retains unknown
+workload exit and preserves stopping/failed progress. This applies the existing
+fresh-observation contract without changing the shared termination policy.
+
+RECOVERY-27's pending step checkpoint is `40f6c15`. With the tag live before the
+fix, both examples failed at the lifecycle assertion, reporting preparing or
+ready instead of running; all eight RECOVERY-02 controls passed. Both new examples
+and the selected existing status, controller-loss, stop and cleanup scenarios
+pass after the fix. Domain controls preserve cleanup phases and read-only state.
+Native green evidence and changed-code proof still require the coordinator's
+CI run at the pushed head; no local engine or mutation run was performed.

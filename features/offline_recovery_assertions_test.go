@@ -66,13 +66,43 @@ func (w *world) offlineRegistryPaths() (map[string]bool, error) {
 	if _, err := w.offlinePublicRecord(); err != nil {
 		return nil, err
 	}
-	allowed := map[string]bool{}
 	if w.session.backend != "disk" {
-		return allowed, nil
+		return map[string]bool{}, nil
 	}
+	return w.offlineRegistryObjects(w.session.create.SessionID)
+}
+
+func (w *world) offlineCompletedRegistryPaths() (map[string]bool, error) {
+	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.approval.project)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) != 1 || !entries[0].IsDir() || !offlineHex(entries[0].Name()) || entries[0].Name() == w.session.token {
+		return nil, fmt.Errorf("native run did not retain exactly one independent public registration")
+	}
+	id := entries[0].Name()
+	allowed, err := w.offlineRegistryObjects(id)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(root, id, "record.json"))
+	if err != nil {
+		return nil, err
+	}
+	want := map[string]any{"schema": 1, "id": id, "project": w.approval.project, "intent": w.session.reference,
+		"state": "stopped", "workload_exit": 0, "last_problem": nil}
+	if !recoveryJSONEqual(string(data), want) {
+		return nil, fmt.Errorf("native run lost its exact completed registration or original binding")
+	}
+	return allowed, nil
+}
+
+func (w *world) offlineRegistryObjects(id string) (map[string]bool, error) {
+	allowed := map[string]bool{}
 	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions")
 	project := filepath.Join(root, w.approval.project)
-	dir := filepath.Join(project, w.session.create.SessionID)
+	dir := filepath.Join(project, id)
 	tree, err := runTree(root)
 	if err != nil {
 		return nil, err

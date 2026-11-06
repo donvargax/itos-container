@@ -104,6 +104,44 @@ func TestPublicStatusKeepsUnknownExitAndNeverMutates(t *testing.T) {
 		})
 	}
 }
+
+func TestPublicStatusObservesRunningAfterInterruptedLaunch(t *testing.T) {
+	for _, tc := range []struct{ phase, resource, want string }{
+		{"preparing", "created", "preparing"},
+		{"ready", "created", "ready"},
+		{"preparing", "running", "running"},
+		{"ready", "running", "running"},
+		{"running", "running", "running"},
+		{"stopping", "running", "stopping"},
+		{"failed", "running", "failed"},
+	} {
+		t.Run(tc.phase+"/"+tc.resource, func(t *testing.T) {
+			s, registry, engine, id := publicRecoveryFixture(t)
+			record := registry.Records[id]
+			record.State = tc.phase
+			registry.Records[id] = record
+			if tc.resource == "created" {
+				worker := strings.Repeat("2", 64)
+				o := engine.Resources[worker]
+				o.Status, o.Running, o.Started, o.PID = "created", false, false, 0
+				engine.Resources[worker] = o
+			}
+			before := len(registry.Store.Events)
+			result := s.Status(context.Background())
+			if len(result.Failures) != 0 || len(result.Entries) != 1 {
+				t.Fatal(result)
+			}
+			entry := result.Entries[0]
+			if entry.State != tc.want || entry.Resource != tc.resource || entry.Controller != "absent" || entry.Cleanup != "pending" || entry.WorkloadExit != nil || !entry.StopCandidate || !reflect.DeepEqual(entry.Retry, []string{"itos", "container", "stop", id}) {
+				t.Fatal("lost controller's worker was not reported accurately", entry)
+			}
+			if registry.Records[id] != record || registry.Writes != 0 || registry.Syncs != 0 || len(registry.Store.Events) != before || !reflect.DeepEqual(engine.Events, []string{"open"}) {
+				t.Fatal("status changed recorded progress or worker state")
+			}
+		})
+	}
+}
+
 func TestPublicStopPreservesResultAndReloadsCompletion(t *testing.T) {
 	for _, known := range []bool{false, true} {
 		t.Run(map[bool]string{false: "unknown", true: "known"}[known], func(t *testing.T) {

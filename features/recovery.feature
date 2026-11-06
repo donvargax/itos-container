@@ -273,7 +273,7 @@ Feature: Inspect and stop owned offline sessions
   # Controller loss can precede publication of the running phase even though
   # the engine started the worker. Fresh ownership and running observations
   # advance the reported launch phase without rewriting the protected record.
-  @wip @slice-11 @ID-RECOVERY-27 @linux
+  @slice-11 @ID-RECOVERY-27 @linux
   Scenario Outline: Status finds a running worker after loss before its phase was recorded
     Given a recovery fixture with recorded phase "<phase>" resource "running" and observed workload exit "unknown"
     When recovery status is invoked with --json, inherited JSON and inherited JSON overridden by --no-json
