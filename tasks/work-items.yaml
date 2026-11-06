@@ -510,8 +510,8 @@ items:
   - id: slice-20
     title: Hard links to files outside the checkout are refused
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
