@@ -19,6 +19,7 @@ type recoveryLocal struct {
 	watch                                *sessionReadWatch
 	reads                                []string
 	id, phase, resource, exit, mode      string
+	invocationDir                        string
 	immutable                            map[string]string
 	ignoreTERM                           bool
 	unavailable, malformed, stall        bool
@@ -183,7 +184,11 @@ func (w *world) recoveryInvocationFixture() error {
 
 func (w *world) recoveryInvocation(args ...string) error {
 	w.deadline = 15 * time.Second
-	if err := w.runEnv(w.doctor.checkout, w.env(), w.bin, args...); err != nil {
+	dir := w.doctor.checkout
+	if w.recoveryLocal.invocationDir != "" {
+		dir = w.recoveryLocal.invocationDir
+	}
+	if err := w.runEnv(dir, w.env(), w.bin, args...); err != nil {
 		return err
 	}
 	w.recoveryLocal.results = append(w.recoveryLocal.results, doctorResult{exit: w.exit, stdout: w.stdout, stderr: w.stderr})

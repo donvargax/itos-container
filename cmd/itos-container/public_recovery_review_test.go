@@ -29,10 +29,16 @@ func TestPublicRecoveryReviewContract(t *testing.T) {
 		t.Skip("recovery review feature subprocess only")
 	case "inspection deadline after lock":
 		publicRecoveryInspectionDeadline(t)
+	case "SIGTERM deadline after lock":
+		publicRecoveryTerminationDeadline(t, false)
+	case "SIGKILL deadline after lock":
+		publicRecoveryTerminationDeadline(t, true)
 	case "controller probe unavailable":
 		publicRecoveryUnknownController(t)
 	case "completed stop during stdin closure":
 		publicRecoveryStoppedWait(t)
+	case "pending stop during stdin closure":
+		publicRecoveryPendingStop(t)
 	default:
 		t.Fatal("unknown recovery review fixture")
 	}

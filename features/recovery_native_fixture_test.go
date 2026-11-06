@@ -124,6 +124,9 @@ func (w *world) recoveryStart(args ...string) *recoveryProcess {
 	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
 	p.cmd = exec.CommandContext(ctx, trace, append([]string{p.journal, p.pid, state, w.bin}, args...)...)
 	p.cmd.Dir, p.cmd.Env = w.doctor.checkout, w.env()
+	if w.recoveryLocal != nil && w.recoveryLocal.invocationDir != "" {
+		p.cmd.Dir = w.recoveryLocal.invocationDir
+	}
 	for key, value := range w.doctor.env {
 		p.cmd.Env = setEnv(p.cmd.Env, key, value)
 	}

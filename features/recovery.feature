@@ -101,6 +101,8 @@ Feature: Inspect and stop owned offline sessions
   # SDK/parser errors never determine presentation. An unclassified defect is internal.
   # Inspection exhausting stop's total remains temporary; do not attempt progress
   # writes after expiry or reinterpret expired storage checks as changed ownership.
+  # This also holds after either termination wait exhausts the total: no further
+  # reconciliation, signal, removal or progress write may use expired authority.
   # Successful status returns 0 even for a known failed session needing cleanup.
   # Successful stop returns 0 for confirmed cleanup, NOT successful workload;
   # preserve a known nonzero workload_exit or null. Run keeps its existing exit
@@ -169,6 +171,10 @@ Feature: Inspect and stop owned offline sessions
   # worker, run adopts completion without a wait failure, drains remaining output
   # and preserves a null workload exit. A successful reconciliation is not evidence
   # of exit zero; a recorded nonzero result retains run's exit precedence.
+  # If stop still holds the lock when stdin reconciliation's 10 s expires, retry
+  # that observation within run's existing 30 s teardown total. Only completed
+  # cleanup of the same full worker ID can clear that provisional wait failure;
+  # forwarding errors and unavailable or conflicting ownership remain failures.
   # If stop wins after durable intent publication but before create, durably record
   # that cleanup began even though no destructive operation is possible. A missing
   # name and empty concrete ID require recovery.temporary, failed state, unknown
@@ -192,6 +198,10 @@ Feature: Inspect and stop owned offline sessions
   # still required for launch. This corrects the former RECOVERY-11 Git-veto row
   # for PRRT_kwDOVkB0ws60fqg0; foreign canonical roots still refuse, even with a
   # transplanted otherwise-valid registration in their own protected index.
+  # Discovery derives the index from the absolute effective root path without
+  # opening the worker-controlled checkout. Removing read/search permissions on
+  # that root cannot hide protected records. Cleanup still requires the original
+  # snapshot's matching root and host identity plus the full daemon/resource checks.
   #
   # For a running owned worker, request SIGTERM once, allowing up to 10 s grace
   # within the original stop total; revalidate and request SIGKILL only if it is
@@ -682,6 +692,41 @@ Feature: Inspect and stop owned offline sessions
     Given a recovery command fixture for "completed stop during stdin closure"
     When the recovery command fixture exercises its configured interruption
     Then run finishes without a wait failure and status retains stopped cleanup with unknown workload exit and no repeated mutation
+
+  # Both waits can consume the stop total after lock contention. The controlled
+  # clock preserves the real command/record adapters and stateful port contracts.
+  @slice-11 @ID-RECOVERY-34 @linux @wip
+  Scenario Outline: Stop preserves temporary uncertainty after a termination wait exhausts its total
+    Given a recovery command fixture for "<wait> deadline after lock"
+    When the recovery command fixture exercises its configured interruption
+    Then stop reports recovery.temporary with exit 75 within its original total and preserves ownership for a successful retry
+
+    Examples:
+      | wait    |
+      | SIGTERM |
+      | SIGKILL |
+
+  # The independent stop takes 11 s while run's stdin reconciliation has 10 s.
+  # Its unknown-exit completion must still be adopted during bounded teardown.
+  @slice-11 @ID-RECOVERY-35 @linux @wip
+  Scenario: Run reconciles a concurrent stop that outlasts its initial stdin probe
+    Given a recovery command fixture for "pending stop during stdin closure"
+    When the recovery command fixture exercises its configured interruption
+    Then run finishes without a wait failure and status retains stopped cleanup with unknown workload exit and no repeated mutation
+
+  # Launch from outside the chmodded checkout with its original effective root.
+  # Only the disposable fixture restores permissions after both commands return.
+  @slice-11 @ID-RECOVERY-36 @linux @wip
+  Scenario Outline: Fresh recovery remains available after the worker removes checkout access
+    Given a recovery fixture with recorded phase "running" resource "running" and observed workload exit "unknown"
+    When the worker makes the checkout root "<access>" and fresh status and stop run outside it
+    Then status finds the original running session without a controller and stop completes its owned cleanup
+    And only the originally owned worker is removed while checkout edits approvals snapshots and unrelated resources remain
+
+    Examples:
+      | access       |
+      | unreadable   |
+      | inaccessible |
 
   # Fresh recovery must survive worker edits to the writable Git directory.
   # The original protected binding remains authoritative after controller loss.

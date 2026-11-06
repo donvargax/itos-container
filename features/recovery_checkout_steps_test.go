@@ -17,6 +17,32 @@ func (w *world) recoveryIndexKey() string {
 }
 
 func (w *world) recoveryCheckoutSteps(sc *godog.ScenarioContext) {
+	sc.Step(`^the worker makes the checkout root "([^"]*)" and fresh status and stop run outside it$`, func(access string) error {
+		info, err := os.Stat(w.doctor.checkout)
+		if err != nil {
+			return err
+		}
+		mode := os.FileMode(0)
+		if access == "unreadable" {
+			mode = 0111
+		} else if access != "inaccessible" {
+			return fmt.Errorf("unknown checkout access %q", access)
+		}
+		if err := os.Chmod(w.doctor.checkout, mode); err != nil {
+			return err
+		}
+		defer func() { _ = os.Chmod(w.doctor.checkout, info.Mode().Perm()) }()
+		w.recoveryLocal.invocationDir = w.dir
+		w.doctor.env["ITOS_ROOT"] = w.doctor.checkout
+		if err := w.recoveryStatusStop(); err != nil {
+			return err
+		}
+		after, err := os.Stat(w.doctor.checkout)
+		if err != nil || after.Mode().Perm() != mode {
+			return fmt.Errorf("recovery changed checkout permissions: %v", err)
+		}
+		return nil
+	})
 	sc.Step(`^the worker Git directory is "([^"]*)" and fresh status and stop run$`, func(change string) error {
 		git := filepath.Join(w.doctor.checkout, ".git")
 		if err := os.Rename(git, git+".original"); err != nil {
