@@ -2077,3 +2077,14 @@
     this spec uses docs --item T-24 and touches only this ledger entry. No dependency, runtime,
     architecture or security-policy change is needed. Agents commit and stop; the coordinator
     owns push, CI watching and closure after the actual pushed head is green.
+- id: T-25
+  type: ci
+  title: Release a version on each feat or fix once run works
+  why: >
+    The person, 2026-11-05: start releases when slice-10 lands, the first slice where itos-container
+    run runs a worker. release.yml exists but ci.yml never calls it. Wire it in as itos releases: on
+    a push to main whose commits since the last tag carry a feat, a fix or a breaking change, the
+    first tag v0.1.0, archives for Linux and macOS on amd64 and arm64 and Windows on amd64 with
+    checksums. Make sure the tools it calls exist and work here.
+  done_when:
+    - run: grep -q 'release.yml' .github/workflows/ci.yml

@@ -449,3 +449,10 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: T-25
+    title: Release a version on each feat or fix once run works
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
