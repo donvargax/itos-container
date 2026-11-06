@@ -83,3 +83,6 @@ questions:
     item: "slice-16"
     question: "slice-16: CI red evidence for ID-OVERLAP-06 and 07 at d790e7a?"
     answer: "Yes. Run 42307612900: OVERLAP-06's ancestor and descendant rows fail at their Then (the nested contender was created, no run.checkout-overlap) and OVERLAP-07 fails at its Then (both concurrent nested runs created a worker). With the 19 local examples red at their assertions, implement the admission."
+  - id: q-21
+    item: "slice-19"
+    question: "slice-19: CI red evidence for ID-SOCKETS-01 to 03 at dbf75d4?"
