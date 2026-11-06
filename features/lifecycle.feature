@@ -7,11 +7,15 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Authorities: docs/charter.md, docs/plans/offline-run-lifecycle.md's AC-22/23
   # cases, docs/architecture.md (Slices), and arc42's Foreground run, Recovery
   # and Bounded operations. This is slice-12's spec, not runtime evidence.
-  # Read against main 9efa67c and slice-10 fe02965. The latter already bounds
-  # several SDK calls and Runner launch/cleanup, but preflight precedes that
-  # launch budget, drain precedes cleanup's budget, and no signal forwarding
-  # exists. Generic execution-unavailable is not the specific outcome below.
-  # Slice-10 retains OFFLINE-02/03/06/07/13; q-7 moves launch/cleanup to slice-13
+  # Baseline reviewed at f1063fc, including slice-10's fixes through 7f1454c.
+  # Runner already forwards signals, consumes repeats and shares one 30 s
+  # teardown context across grace, drain and cleanup. Preflight still precedes
+  # the 120 s startup timer and signal capture; grace starts after signal delivery;
+  # drain still blocks cleanup; timeout/loss/cancellation use generic failures.
+  # Preserve those working controls; generic execution-unavailable is not the
+  # specific outcome below. Existing local proof is not native signal evidence.
+  # Slice-10 retains OFFLINE-02/03/06/07/13 and foreground_recovery.feature;
+  # q-7 moves launch/cleanup to slice-13
   # and isolation/teardown proof to slice-14. Do not reclaim those scenarios.
   # Slice-11 owns public status/stop, session IDs, recovery records, locks and
   # actionable retries. Also read the in-progress slice-11 recovery.feature draft
@@ -28,6 +32,25 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # supplies neither an implemented interface nor regression acceptance.
   # No init/hooks, persistent worker volumes, credentials, egress, watchdog,
   # restart, detached mode, exec, new platform or support claim is introduced.
+
+  # Supersession belongs to the IMPLEMENTER's behaviour commit, not this draft:
+  # - OFFLINE-19/20 currently expect wrapper 75 even after an observed zero exit.
+  #   Replace only that provisional result with zero when cleanup and streaming
+  #   succeed, and report run.cancelled separately. Keep exact signal counts,
+  #   escalation, nonzero exit precedence, trailing bytes and owned cleanup.
+  #   The ignored-signal fixture also supplies observed zero today; a signal
+  #   request alone cannot turn that fixture observation into invented exit 137.
+  # - OFFLINE-24 currently checks OS signal death during preflight. Preserve its
+  #   prompt abort while inspection is still blocked, zero snapshot publication
+  #   and zero worker mutations; require the typed 130/143 cancellation result.
+  #   Merely catching the signal and waiting for the fixture release must fail.
+  # - OFFLINE-23's classified isolation/ownership refusal still wins over a later
+  #   interrupt. OFFLINE-17/18/21/22 retain failure, authority and stream semantics.
+  #   A real stream read/write error remains distinct from a drain timeout.
+  # Record these replacements in the behaviour commit, keep the live regressions
+  # live, and update arc42's Foreground run, State and result interpretation and
+  # Bounded operations with a decision naming the affected sections and 0009's
+  # provisional cancellation mapping. No sibling feature or design changes here.
 
   # Implementation placement: extend internal/slices/run/{command,domain,port}
   # and internal/engine/session/{domain,port,<named adapters>}. Shared budgets,
@@ -135,6 +158,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # offline_runtime_* and cmd contract assemblies, not their assertions as Givens.
   # Givens prepare disposable checkouts/state, independent canonical approval
   # seeds, original frozen/ownership bindings, trusted probes, clocks and faults.
+  # "Accepted", "observed", "live" and "ready" in a Given describe scripted
+  # observations or probe behaviour configured for When, not a successful run in
+  # setup. Local fixtures write those scripts and seed only the stated preexisting
+  # recovery records; runtime fixtures write the probe and inert fault barriers.
   # They never invoke approve, run, status or stop or construct expected records
   # by calling the production code being tested. Checkpoint fixture changes.
   # Whens perform all product actions, retain early exits/timeouts as data and
@@ -150,12 +177,16 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # ONLY inside the CI worker with T-20's independently inspected cached image.
 
   # Local @linux cases exercise production command/domain/engine contracts via
-  # test-only cmd assemblies with I/O-free fakes and disk/SDK Unix HTTP fixtures.
-  # Controlled monotonic time drives production deadline decisions; do not sleep
-  # for 120 s in a hook, shorten product defaults, or make a fake return the desired
-  # outcome. In adapter tests use controlled barriers and inspect propagated
-  # deadlines plus cancellation of the actual request. No wall-clock value comes
-  # from checkout data. Include just-before/at-boundary tests beneath these cases.
+  # test-only cmd assemblies with I/O-free fakes and disk/SDK fixtures. Start at
+  # the real command entry for whole-invocation budgets and preflight cancellation;
+  # starting the observation after frozen handoff cannot prove LIFECYCLE-01/02/06.
+  # Reuse standard-library testing/synctest and the in-memory SDK transport pattern
+  # in session/docker/run_wait_test.go for full-budget controlled-time checks.
+  # Socket-backed adapter tests separately inspect propagated deadlines and actual
+  # request cancellation; a virtual clock does not advance an external HTTP server.
+  # Use controlled barriers, not 120 s sleeps in hooks, shortened product defaults
+  # or fakes returning the desired timeout/result. No wall-clock value comes from
+  # checkout data. Include just-before/at-boundary tests beneath these cases.
   # Shared fake/adapter contracts must observe the same deadlines and sequencing;
   # fakes model time/events, never do I/O. Capture all API attempts, including
   # reconnects, failed/refused requests and late completions. Export product
@@ -178,7 +209,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # obtain assertion-level local red or coordinator-only CI red_scenarios evidence,
   # then implement. Then/And assertions are candidate failure points, not observed
   # failures: undefined steps and this feasibility review supply no red/green proof.
-  # Existing partial deadlines/ownership are controls, not claimed new red proof.
+  # Existing deadlines, signal forwarding, repeat suppression and ownership are
+  # controls, not claimed new red proof. q-6 accepts regressions for slice-10 only;
+  # it does not authorize declaring already-passing slice-12 rows newly red.
   # Recheck against the merged dependency heads: if a case already passes for the
   # right reason, obtain explicit regression acceptance before activation, never
   # force red. In particular compare LIFECYCLE-05/15/16 with slice-11 below.
@@ -243,15 +276,18 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | authoritative primary exit 17   | 17     | 17      |
       | no authoritative exit available | 75     | unknown |
 
-  # At t=0 observe primary exit. Hold drain 9 s, then make successive healthy
-  # cleanup operations consume the remaining total; keep the last observation
-  # pending at t=30. Current drain-then-new-cleanup-budget can last 40 s.
+  # At t=0 observe primary exit. Hold drain 9 s and make successive healthy
+  # cleanup operations consume the total; keep the last observation pending at
+  # t=30 without any earlier per-call expiry. The baseline already shares 30 s;
+  # distinguish its generic cleanup failure from the required teardown timeout,
+  # and prove that a pending drain does not prevent owned reconciliation.
   @wip @slice-12 @ID-LIFECYCLE-04 @linux
   Scenario Outline: Drain and cleanup share one teardown deadline
     Given a lifecycle contract fixture with observed exit <child> and slow drain reconciliation removal and completion
     When run begins teardown and controlled time reaches 30 seconds through each local backend
     Then each run reports "run.teardown-timeout" by the original teardown deadline and returns <result>
     And the workload exit remains <child> with incomplete cleanup and retained recovery evidence
+    And owned reconciliation begins while final output drain is still pending without discarding available trailing bytes
     And no drain progress retry reconnect or repeated cancellation restarts the teardown clock
     And no successful removal reply is reported as confirmed durable absence
 
@@ -326,11 +362,14 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Prove actual delivery and precedence, including zero. Handlers install before
   # their ready frame, write a signal receipt to checkout, then exit as requested.
+  # The baseline forwards the signal and can preserve 17; its zero case returns
+  # 75 and neither case reports cancellation separately from execution failure.
   @wip @slice-12 @ID-LIFECYCLE-08 @engine
   Scenario Outline: The primary receives the first signal and its observed exit wins
     Given a CI lifecycle checkout with a ready signal-handling probe that exits <child>
     When run launches the probe and the harness sends "<signal>" to the controller after the ready frame
     Then the worker records exactly one "<signal>" and the product returns the observed exit <child> after confirmed cleanup
+    And run reports "run.cancelled" with the first signal separately from the authoritative workload exit and cleanup result
     And the engine journal has exactly one original signal request targeting only the freshly revalidated owned primary with no early SIGKILL or host process signal
     And the final worker frame and checkout edit survive while the exact worker and temporary storage are absent
 
@@ -343,19 +382,26 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # An ignoring probe records signals but keeps running. Send repetitions at
   # elapsed 2 s and 8 s, including the other signal; no repeated input extends grace.
+  # The recorder forwards the first signal immediately, then delays only its
+  # acknowledgement by the example duration. Native receipts prove delivery.
+  # Six seconds is inside the 10 s call limit but makes acknowledgement-relative
+  # grace observably late. The immediate rows retain the healthy timing control.
   @wip @slice-12 @ID-LIFECYCLE-09 @engine
   Scenario Outline: Ignored and repeated cancellation escalates once after the fixed grace
-    Given a CI lifecycle checkout with a ready signal-recording probe that keeps running
+    Given a CI lifecycle checkout with a ready signal-recording probe that keeps running and a signal acknowledgement delayed <delay> seconds
     When run launches the probe and the harness sends "<signal>" followed by repeated SIGINT and SIGTERM during grace
     Then the worker records only the first "<signal>" and native observations show it alive before the 10 second grace expires
     And the journal records exactly one original signal request and one SIGKILL request at the original grace deadline and the product returns the engine-observed exit 137
+    And run reports "run.cancelled" with the first signal separately from the authoritative workload exit and cleanup result
     And owned removal and durable absence complete within the original 30 second teardown budget
     And no unrelated process resource approval snapshot or checkout edit is changed
 
     Examples:
-      | signal  |
-      | SIGINT  |
-      | SIGTERM |
+      | signal  | delay |
+      | SIGINT  | 0     |
+      | SIGTERM | 0     |
+      | SIGINT  | 6     |
+      | SIGTERM | 6     |
 
   # The first signal's acknowledgement stays unavailable for 10 s. Grace starts
   # at cancellation, not acknowledgement; the cancellation result is NOT 137
@@ -409,11 +455,15 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # control; one 125 s control may be shared by this outline's runtime cases.
   # The harness observes controller termination independently before unblocking
   # drains. Do not make a test-owned reader unblock the product before its bound.
+  # Quiet work and open stdin are existing controls. Readable diagnostics must
+  # distinguish cancellation from the baseline's generic execution error; the
+  # unread-stderr row instead proves bounded return and safe retained failure state.
   @wip @slice-12 @ID-LIFECYCLE-13 @engine
   Scenario Outline: Quiet work and blocked streams do not prevent cancellation
     Given a CI lifecycle checkout with a ready signal-handling probe and stream condition "<condition>"
     When run remains live under that condition and the harness sends SIGTERM while leaving the condition in place
     Then the probe records SIGTERM and the product completes owned teardown within 30 seconds of cancellation without waiting for the blocked stream
+    And when controller diagnostics are writable they name "run.cancelled" and SIGTERM separately from observed exit 17
     And the quiet control remains running past both the call and startup durations until cancellation
     And any incomplete output drain is reported as a stream timeout without changing observed exit 17 or claiming complete delivery
     And blocked diagnostic output cannot prevent termination and safe failure state survives when storage is available
