@@ -23,6 +23,7 @@ func TestLifecycleNativeStepsDefined(t *testing.T) {
 	// LIFECYCLE-15 deliberately remains slice-15's unimplemented scenario.
 	definitions := &lifecycleDefinitions{t: t}
 	(&world{}).lifecycleNativeSteps(definitions)
+	(&world{}).offlineIsolationSteps(definitions)
 	suite := godog.TestSuite{
 		Name:    "slice-12-native-definitions",
 		Options: &godog.Options{Paths: []string{"lifecycle.feature"}, Tags: "@slice-12 && @engine", Output: io.Discard},
@@ -296,4 +297,34 @@ func TestLifecyclePipeBackpressureIsMeasured(t *testing.T) {
 	}
 	_ = read.Close()
 	<-done
+}
+
+func TestLifecyclePipeInspectionKeepsReadDeadline(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("native pipe-capacity observation requires Linux")
+	}
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = read.Close(); _ = write.Close() }()
+	if lifecycleFullPipe(read) {
+		t.Fatal("empty pipe was treated as backpressure")
+	}
+	if err := read.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		t.Fatal("pipe inspection disabled the collection deadline", err)
+	}
+	// A writer retained after controller exit must not strand collection.
+	guard := time.AfterFunc(250*time.Millisecond, func() { _ = write.Close() })
+	defer guard.Stop()
+	if _, err := io.ReadAll(read); !os.IsTimeout(err) {
+		t.Fatalf("open writer did not reach the read deadline: %v", err)
+	}
+}
+
+func TestLifecycleBoundRequiresRecordedOrigin(t *testing.T) {
+	w := &world{lifecycle: &lifecycleNative{returned: time.Now()}}
+	if err := w.lifecycleBound(time.Time{}); err == nil || !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("missing cancellation origin became an elapsed duration: %v", err)
+	}
 }

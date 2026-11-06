@@ -77,9 +77,13 @@ func (w *world) lifecycleStart() {
 		close(p.done)
 		return
 	}
-	// Long enough for the specified 125 s quiet observation and separate 30 s
-	// teardown. This is a harness guard, never a passing product deadline.
-	ctx, cancel := context.WithTimeout(context.Background(), 190*time.Second)
+	// Only the quiet control needs its specified 125 s observation. Collection
+	// separately caps teardown at its original origin plus the 2 s tolerance.
+	guard := 75 * time.Second
+	if l.condition == "quiet workload and stdin" {
+		guard = 190 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), guard)
 	p.cancel = cancel
 	probeMode := "handle"
 	if l.mode == "ignore" {
@@ -122,16 +126,24 @@ func (w *world) lifecycleStart() {
 			p.cmd.Stderr = output
 		}
 	}
+	lifecycleStartProcess(ctx, p)
+}
+
+func lifecycleStartProcess(ctx context.Context, p *recoveryProcess) {
 	p.started = time.Now()
+	// Even a descendant retaining an os/exec capture pipe cannot strand Wait
+	// after the guarded observer/controller exits.
+	p.cmd.WaitDelay = time.Second
 	if err := p.cmd.Start(); err != nil {
 		p.err = err
-		cancel()
+		p.finished = time.Now()
+		p.cancel()
 		close(p.done)
 		return
 	}
 	go func() {
 		defer close(p.done)
-		defer cancel()
+		defer p.cancel()
 		err := p.cmd.Wait()
 		p.finished = time.Now()
 		p.exit = 0
@@ -144,9 +156,34 @@ func (w *world) lifecycleStart() {
 			}
 		}
 		if ctx.Err() != nil {
-			p.err = errors.New("lifecycle controller exceeded the harness guard")
+			p.err = fmt.Errorf("lifecycle controller interrupted by harness guard after %s", p.finished.Sub(p.started))
 		}
 	}()
+}
+
+func (l *lifecycleNative) wait() {
+	select {
+	case <-l.run.done:
+		return
+	default:
+	}
+	origin, bound := l.signalled, 32*time.Second
+	if origin.IsZero() {
+		origin = l.exitObserved
+	}
+	if origin.IsZero() {
+		origin, bound = l.run.started, 40*time.Second
+	}
+	timer := time.NewTimer(time.Until(origin.Add(bound)))
+	defer timer.Stop()
+	select {
+	case <-l.run.done:
+		return
+	case <-timer.C:
+		l.err = errors.Join(l.err, fmt.Errorf("lifecycle controller exceeded collection guard after %s", time.Since(origin)))
+		l.run.cancel()
+		l.run.wait()
+	}
 }
 
 // A missing barrier or an early product exit is data for Then, never a failing
@@ -216,7 +253,7 @@ func (w *world) lifecycleSignal(signal string) {
 
 func (w *world) lifecycleCollect() {
 	l := w.lifecycle
-	l.run.wait()
+	l.wait()
 	l.returned = l.run.finished
 	l.err = errors.Join(l.err, l.run.err)
 	if l.stdin != nil {
@@ -225,8 +262,11 @@ func (w *world) lifecycleCollect() {
 	// Closing or reading a blocked pipe is deliberately AFTER independent
 	// process termination. It cannot help the controller satisfy its deadline.
 	if l.pipe != nil {
-		_ = l.pipe.SetReadDeadline(time.Now().Add(2 * time.Second))
-		data, err := io.ReadAll(l.pipe)
+		var data []byte
+		err := l.pipe.SetReadDeadline(time.Now().Add(2 * time.Second))
+		if err == nil {
+			data, err = io.ReadAll(l.pipe)
+		}
 		_ = l.pipe.Close()
 		l.err = errors.Join(l.err, err)
 		if l.condition == "unread workload stdout" {
@@ -273,8 +313,13 @@ func (w *world) closeLifecycleNative() error {
 }
 
 func (w *world) lifecycleFreshRecovery(stop bool) {
+	// A harness abort has already invalidated this row's evidence. Do not
+	// spend more product budgets on follow-ups; the fixture still owns cleanup.
+	if w.lifecycle.err != nil {
+		return
+	}
 	r := w.recovery
-	r.status = w.recoveryStart("status", "--json")
+	r.status = w.recoveryStartWithin(12*time.Second, "status", "--json")
 	r.status.wait()
 	// Use only the public status reference, never the observer's resource ID
 	// or the intent name, as authority for the fresh product invocation.
@@ -282,12 +327,12 @@ func (w *world) lifecycleFreshRecovery(stop bool) {
 	if err == nil && len(report.Sessions) == 1 && offlineHex(report.Sessions[0].ID) && stop {
 		entry := report.Sessions[0]
 		if len(entry.Retry) == 4 && entry.Retry[0] == "itos" && entry.Retry[1] == "container" && entry.Retry[2] == "stop" && entry.Retry[3] == entry.ID {
-			p := w.recoveryStart("stop", "--json", entry.ID)
+			p := w.recoveryStartWithin(32*time.Second, "stop", "--json", entry.ID)
 			p.wait()
 			r.stops = append(r.stops, p)
 		}
 	}
-	r.after = w.recoveryStart("status", "--json")
+	r.after = w.recoveryStartWithin(12*time.Second, "status", "--json")
 	r.after.wait()
 }
 

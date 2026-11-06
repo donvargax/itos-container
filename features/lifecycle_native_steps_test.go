@@ -15,8 +15,8 @@ type lifecycleStepRegistrar interface {
 	Step(expression, function any)
 }
 
-// Native lifecycle cases remain @wip until the coordinator records evidence at
-// this step commit. No Given invokes a product command or supplies a result.
+// Native cases stay @wip until coordinator evidence; verified earlier-slice
+// regressions are live. No Given invokes a command or supplies a result.
 func (w *world) lifecycleNativeSteps(sc lifecycleStepRegistrar) {
 	sc.Step(`^a CI lifecycle checkout with a ready signal-handling probe that exits (\d+)$`, func(child int) error {
 		return w.lifecycleFixture("handle", "", "", child, 0)
@@ -129,8 +129,6 @@ func (w *world) lifecycleNativeSteps(sc lifecycleStepRegistrar) {
 		}
 		return errors.Join(w.lifecycleComplete(), w.lifecycleOneLaunch())
 	})
-	sc.Step(`^checkout edits approvals snapshots and unrelated resources remain intact$`, w.lifecyclePreserved)
-
 	sc.Step(`^a CI lifecycle checkout with a ready signal-handling probe and stream condition "([^"]*)"$`, func(condition string) error {
 		return w.lifecycleFixture("streams", condition, "", 17, 0)
 	})

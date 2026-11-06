@@ -151,7 +151,10 @@ func (w *world) lifecycleRevalidated(entries []offlineRequest) error {
 
 func (w *world) lifecycleBound(origin time.Time) error {
 	l := w.lifecycle
-	if origin.IsZero() || l.returned.IsZero() || l.returned.Before(origin) || l.returned.Sub(origin) > 32*time.Second {
+	if origin.IsZero() || l.returned.IsZero() {
+		return errors.Join(l.err, errors.New("missing lifecycle teardown start or return observation"))
+	}
+	if l.returned.Before(origin) || l.returned.Sub(origin) > 32*time.Second {
 		return fmt.Errorf("controller teardown elapsed %s; required at most 30 s plus 2 s scheduling tolerance", l.returned.Sub(origin))
 	}
 	return l.err

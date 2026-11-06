@@ -3,6 +3,8 @@ package features
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,6 +56,31 @@ func lifecycleUntil(p *recoveryProcess, at time.Time) bool {
 func lifecycleFullPipe(file *os.File) bool {
 	capacity, available, err, readErr := lifecyclePipeSize(file)
 	return err == nil && readErr == nil && capacity > 0 && available == capacity
+}
+
+// Drain only the pre-release prelude. In particular, a short ready frame can
+// occupy a pipe page without filling it; that stranded page makes byte count
+// equality miss real backpressure. Preserve these bytes and stop reading before
+// releasing workload output, so no reader can help cancellation or teardown.
+func lifecyclePipePrelude(file *os.File, stdout bool) ([]byte, error) {
+	if err := file.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.SetReadDeadline(time.Time{}) }()
+	_, size, err, readErr := lifecyclePipeSize(file)
+	if err != nil || readErr != nil {
+		return nil, errors.Join(err, readErr)
+	}
+	ready := []byte("slice-12:ready\n")
+	if stdout {
+		size = len(ready)
+	}
+	data := make([]byte, size)
+	_, err = io.ReadFull(file, data)
+	if err == nil && stdout && !bytes.Equal(data, ready) {
+		err = fmt.Errorf("unexpected controller readiness frame: %q", data)
+	}
+	return data, err
 }
 
 func (w *world) lifecycleCleanupSignals() {
@@ -176,6 +203,18 @@ func (w *world) lifecycleStreams() {
 		}
 	}
 	if l.pipe != nil {
+		stdout := l.condition == "unread workload stdout"
+		data, err := lifecyclePipePrelude(l.pipe, stdout)
+		if stdout {
+			_, _ = l.run.out.Write(data)
+		} else {
+			_, _ = l.run.errout.Write(data)
+		}
+		if err != nil {
+			l.err = errors.Join(l.err, err)
+			w.lifecycleAbortEarly()
+			return
+		}
 		if err := os.WriteFile(filepath.Join(w.doctor.checkout, "slice-12-release-output"), []byte("release"), 0600); err != nil {
 			l.err = err
 			w.lifecycleAbortEarly()

@@ -107,6 +107,10 @@ func (w *world) recoveryProtected() (map[string]string, error) {
 }
 
 func (w *world) recoveryStart(args ...string) *recoveryProcess {
+	return w.recoveryStartWithin(120*time.Second, args...)
+}
+
+func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *recoveryProcess {
 	r := w.recovery
 	p := &recoveryProcess{exit: -1, done: make(chan struct{})}
 	r.processes = append(r.processes, p)
@@ -119,10 +123,11 @@ func (w *world) recoveryStart(args ...string) *recoveryProcess {
 		close(p.done)
 		return p
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	p.cancel = cancel
 	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
 	p.cmd = exec.CommandContext(ctx, trace, append([]string{p.journal, p.pid, state, w.bin}, args...)...)
+	p.cmd.WaitDelay = time.Second
 	p.cmd.Dir, p.cmd.Env = w.doctor.checkout, w.env()
 	if w.recoveryLocal != nil && w.recoveryLocal.invocationDir != "" {
 		p.cmd.Dir = w.recoveryLocal.invocationDir
