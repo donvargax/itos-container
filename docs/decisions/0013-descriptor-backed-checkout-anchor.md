@@ -66,3 +66,38 @@ passes the device unchanged for `type=none` to `mount.Mount`. The
 passes its device argument to `unix.Mount`. This does not pin the CI daemon's
 version or prove that its whole execution path, confinement and kernel accept
 the descriptor source. Record the actual server version with the native result.
+
+## Implementation checkpoint and unresolved verification step
+
+The coordinator accepted run
+[42309692365](https://github.com/donvargax/itos-container/actions/runs/42309692365)
+at `51a9f48e81e61f4654208d9779f6a49992e35692` as assertion-level red evidence
+for all four OFFLINE-29 substitutions. Docker 28.0.4 ran the replacement's
+inode and nonce instead of the validated inode. This establishes the existing
+pathname race; it supplies no green evidence for the descriptor-backed volume.
+
+Source inspection of that daemon version leaves the selected anchor intact:
+its [local driver](https://github.com/moby/moby/blob/v28.0.4/volume/local/local_unix.go#L115-L167)
+passes a `type=none` device unchanged to the mount library. A separate launch
+ordering question remains before this can be implemented with the required
+verification:
+
+- With copying disabled, [container creation](https://github.com/moby/moby/blob/v28.0.4/daemon/create_unix.go#L71-L86)
+  skips volume population. Volume allocation and inspection are not mounted-inode proof.
+- [ContainerStart](https://github.com/moby/moby/blob/v28.0.4/daemon/start.go#L130-L240)
+  sets up mounts and starts the task within the same API operation. Checking
+  after its return cannot ensure verification before the first workload instruction.
+- The [inspect and path-stat types](https://github.com/moby/moby/blob/v28.0.4/api/types/container/container.go#L27-L93)
+  expose no filesystem device/inode pair. The pinned Moby API v1.56.1 types
+  also omit it, and the [local volume status](https://github.com/moby/moby/blob/v28.0.4/volume/local/local.go#L337-L339)
+  is empty. Matching a volume name, options or source string is insufficient.
+- [Pause](https://github.com/moby/moby/blob/v28.0.4/daemon/pause.go#L21-L29)
+  requires an already-running task. Starting then pausing cannot close this gap.
+
+The missing specification is the authorized engine-side identity observation
+and workload-release mechanism. This checkpoint selects none and does not
+weaken the verification requirement, change the volume mechanism or establish
+that Moby rejects the descriptor. A native workload probe can prove what ran,
+but cannot replace the product's required check before release. Production
+anchor implementation and native green remain pending that clarification;
+the current product still uses the unsafe pathname mount.
