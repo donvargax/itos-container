@@ -494,8 +494,8 @@ items:
   - id: slice-19
     title: Host Unix sockets under the checkout are not reachable from the worker
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
@@ -570,8 +570,8 @@ items:
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
@@ -584,8 +584,8 @@ items:
   - id: slice-17
     title: Run binds its mount to the validated checkout inode
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >

@@ -71,3 +71,11 @@ questions:
     item: "slice-12"
     question: "slice-12: engine red evidence for ID-LIFECYCLE-08, 09, 11, 12, 13 and 16 at 9ac4f11?"
     answer: "Partly. Run 42297748701: 08, 09 and 12 are red at their assertions, and 13's first row (quiet workload and stdin) too; accepted. 11 already passes, and 16 passes alone in run 42298705984 (all four rows): regression coverage under the standing rule. 13's other two rows are not evidence: the harness never reached the streams barrier, its guard measured from an unset start (2562047h), and the third row hung the suite until its 5-minute timeout. Fix the harness so the barrier fails fast and the guard measures from a recorded start, without raising timeouts, then return blocked for a red run of @ID-LIFECYCLE-13 before product code reaches that path. See slice-12-steer.md."
+  - id: q-18
+    item: "slice-12"
+    question: "slice-12: engine red evidence for ID-LIFECYCLE-13's four rows at b4a8478, after the harness repair?"
+    answer: "Yes. Run 42304766391: all four rows fail at their Then steps (quiet and open-stdin rows: cancellation not reported separately; unread stdout: exit 75, expected 17; unread stderr: teardown misses the 30 s bound at the 32 s guard). With q-17, every slice-12 scenario has red or regression evidence: implement the product. See slice-12-steer.md."
+  - id: q-19
+    item: "slice-17"
+    question: "slice-17: which anchor keeps Docker's checkout mount bound to the validated inode, with what privilege and lifetime?"
+    answer: "No new privilege and no new helper. An owned Docker volume (local driver, type none, o=bind) whose device is the controller's O_PATH descriptor for the validated checkout, /proc/<pid>/fd/<n>, held open until ContainerStart returns: dockerd does the bind and the kernel resolves the descriptor to the original inode; the container's mount then retains it for the worker's life. The volume is the durable anchor record, published before create, released last. Verify the mounted /workspace device and inode against the validated identity before releasing the workload. Prove it with a red-then-green native scenario first; if Moby resolves the source by name or rejects the path, stop with that evidence. See slice-17-steer.md."
