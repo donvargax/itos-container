@@ -42,3 +42,4 @@ questions:
   - id: q-10
     item: "slice-11"
     question: "slice-11: is the engine-tier red evidence for ID-RECOVERY-21 to 23 in, so implementation can go on?"
+    answer: "Yes. Run 42180081092 at fea67dd fails all three at their assertions (no status or stop yet). The fixture smoke passed. Implement."
