@@ -67,3 +67,6 @@ questions:
     item: "slice-11"
     question: "slice-11: the signal trace shows no product or harness code signals a group or session; keep setsid?"
     answer: "Yes. Run 42233015284 traced every process the tests start: the only real signal was one SIGKILL by pidfd to a single recorded controller, never a group, session or -1. The step dies from outside that tree (runner or Docker). Keep setsid with a comment citing that run, drop strace, keep the signal log, and fix the Linux unit failures in session/disk and cmd. See slice-11-steer.md."
+  - id: q-17
+    item: "slice-12"
+    question: "slice-12: engine red evidence for ID-LIFECYCLE-08, 09, 11, 12, 13 and 16 at 9ac4f11?"
