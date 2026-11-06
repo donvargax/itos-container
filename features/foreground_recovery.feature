@@ -91,7 +91,7 @@ Feature: Foreground failures retain owned cleanup authority
 
   # Hold an acknowledged workload wait beyond the real startup budget. Closing
   # stdin precedes its response; trailing output follows the reconciled wait.
-  @wip @slice-10 @ID-OFFLINE-22
+  @slice-10 @ID-OFFLINE-22
   Scenario Outline: Unread stdin after the startup deadline preserves exit and output
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"

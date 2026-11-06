@@ -3,6 +3,7 @@ package domain_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -90,10 +91,13 @@ func TestUnfinishedOutputDrainIsBoundedBeforeCleanup(t *testing.T) {
 }
 
 func TestClosedWorkerStdinReconcilesOnlyAnObservedExit(t *testing.T) {
-	for _, fault := range []string{"", "running", "unavailable", "foreign ID", "missing state", "created", "wait failure", "canceled", "wait stalls"} {
+	for _, fault := range []string{
+		"", "running", "unavailable", "foreign ID", "foreign name", "missing state", "created", "wait failure", "canceled", "wait stalls",
+		"record", "snapshot", "engine", "record after open", "daemon after open", "unowned record", "different recorded ID", "shared budget",
+	} {
 		t.Run(fault, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				s, d, _, e := runnerFixture()
+				s, d, store, e := runnerFixture()
 				e.StdinClosed, e.WaitUntilCancel, e.Exit = true, true, 23
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
@@ -103,7 +107,7 @@ func TestClosedWorkerStdinReconcilesOnlyAnObservedExit(t *testing.T) {
 						return
 					}
 					waits++
-					if waits == 2 && fault == "wait stalls" {
+					if waits == 2 && (fault == "wait stalls" || fault == "shared budget") {
 						o := e.Resources[e.CreateID]
 						o.Running = true
 						e.Resources[e.CreateID] = o
@@ -111,12 +115,42 @@ func TestClosedWorkerStdinReconcilesOnlyAnObservedExit(t *testing.T) {
 					if waits != 1 {
 						return
 					}
-					if fault == "canceled" {
+					switch fault {
+					case "canceled":
 						cancel()
+					case "record":
+						store.UnsafeRecord = true
+					case "snapshot":
+						store.UnsafeSnapshot = true
+					case "engine":
+						e.Unavailable = true
+					case "record after open":
+						e.AfterOpen = func() { store.UnsafeRecord = true }
+					case "daemon after open":
+						e.AfterOpen = func() { e.Replaced = true }
+					case "unowned record", "different recorded ID":
+						for ref, data := range store.Records {
+							r, _ := store.Codec.Decode(data)
+							if fault == "unowned record" {
+								r.Stage = "absent"
+							} else {
+								r.ContainerID = strings.Repeat("e", 64)
+							}
+							store.Records[ref] = store.Codec.Encode(r)
+						}
+					case "shared budget":
+						e.AfterOpen = func() {
+							time.Sleep(4 * time.Second)
+							e.AfterOpen = nil
+						}
 					}
 					// Wait remains pending until the input-closure notification.
 					// Only its subsequent independent inspection observes exit.
 					e.BeforeInspect = func() {
+						if fault == "shared budget" {
+							time.Sleep(3 * time.Second)
+							e.BeforeInspect = nil
+						}
 						o, exists := e.Resources[e.CreateID]
 						if !exists {
 							return
@@ -129,6 +163,8 @@ func TestClosedWorkerStdinReconcilesOnlyAnObservedExit(t *testing.T) {
 							e.Inspection = "unavailable"
 						case "foreign ID":
 							e.Inspection = "different full container ID"
+						case "foreign name":
+							e.Inspection = "different name"
 						case "missing state":
 							o.StatePresent = false
 						case "created":
@@ -148,7 +184,7 @@ func TestClosedWorkerStdinReconcilesOnlyAnObservedExit(t *testing.T) {
 				} else if r.Exited || r.Outcome != port.ExecutionFailed || slices.Contains(e.Events, "drain") {
 					t.Fatal("unverified exit became successful", r, e.Events)
 				}
-				if fault == "wait stalls" && time.Since(start) != 10*time.Second {
+				if (fault == "wait stalls" || fault == "shared budget") && time.Since(start) != 10*time.Second {
 					t.Fatal("exit reconciliation was not bounded", time.Since(start))
 				}
 			})

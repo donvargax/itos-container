@@ -29,7 +29,7 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	}
 	if result.Outcome == "" {
 		// Waiting for the workload is not a startup operation or a lifetime limit.
-		result.Exit, result.Outcome = waitRun(ctx, connection, attachment, result.ID)
+		result.Exit, result.Outcome = s.waitRun(ctx, connection, attachment, result.Reference, result.ID)
 		result.Exited = result.Outcome == ""
 	}
 	if result.Reference != "" {
@@ -54,7 +54,7 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	return result
 }
 
-func waitRun(ctx context.Context, connection port.RunConnection, attachment port.Attachment, id string) (int, port.Outcome) {
+func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, attachment port.Attachment, reference, id string) (int, port.Outcome) {
 	wait, stop := context.WithCancel(ctx)
 	monitored := make(chan port.Outcome, 1)
 	go func() {
@@ -77,11 +77,28 @@ func waitRun(ctx context.Context, connection port.RunConnection, attachment port
 	// a running or unverifiable worker still requires failure and owned cleanup.
 	probe, end := context.WithTimeout(ctx, 10*time.Second)
 	defer end()
-	o, status := connection.Inspect(probe, id)
-	if status != port.Observed || o.ID != id || !o.StatePresent || o.Running || o.Status != "exited" {
+	// The launch connection retains the startup deadline. Reopen protected
+	// authority and the original daemon within this one reconciliation budget,
+	// independently of elapsed workload time or mutable checkout identity.
+	intent, failure := s.Store.OpenCleanup(probe, reference)
+	if failure != "" {
 		return 0, port.ExecutionFailed
 	}
-	return connection.Wait(probe, id)
+	defer intent.Close()
+	fresh, failure := s.Engine.OpenRun(probe, intent.Binding())
+	if failure != "" {
+		return 0, port.ExecutionFailed
+	}
+	defer fresh.Close()
+	record := intent.Record()
+	if record.Stage != "owned" || record.ContainerID != id || intent.Validate() != "" || fresh.Check(probe) != "" {
+		return 0, port.ExecutionFailed
+	}
+	o, status := fresh.Inspect(probe, id)
+	if status != port.Observed || o.ID != id || !owns(record, o) || !o.StatePresent || o.Running || o.Status != "exited" {
+		return 0, port.ExecutionFailed
+	}
+	return fresh.Wait(probe, id)
 }
 
 // interrupt reacquires protected authority and a fresh engine connection. The
