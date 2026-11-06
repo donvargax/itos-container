@@ -507,14 +507,15 @@ items:
       reachable from /workspace as the host UID: host command execution or network access without
       another mount. A startup scan is not enough, as host processes can create sockets later; deny
       connecting to host sockets, or expose a materialised checkout with no host IPC objects.
-  - id: p1-hard-links-outside-checkout
+  - id: slice-20
     title: Hard links to files outside the checkout are refused
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p1-hard-links-outside-checkout.
       Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
       static, no Docker run; confirm with a scenario before building. Checkout validation
       (internal/engine/readiness/disk/checkout.go:129) rejects symlinks and git indirections but not
