@@ -535,3 +535,19 @@ items:
       a later run for checkout B with XDG_STATE_HOME inside worker A's checkout lets A read and
       rewrite B's approvals, snapshots and recovery records (same UID; the fingerprints are hashes,
       not authentication). Separate every control-state location from every worker mount, both ways.
+  - id: p2-unknown-workload-exit-nonzero
+    title: run never returns 0 when the workload's exit is unknown
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Correctness, this milestone. A read-only security audit of main at 7236d68 (Codex,
+      2026-11-06), static, no Docker run; confirm with a scenario before building. stoppedRun
+      returns (0, false, "") when cleanup completed but WorkloadExit is unknown
+      (internal/engine/session/domain/run.go:141; internal/slices/run/command/command.go:67), so a
+      concurrent stop that removes an exited worker first makes run report success though the
+      command may have failed; cmd/itos-container/public_recovery_review_test.go:183 expects 0. Keep
+      cleanup completion and workload success apart: unknown exit is nonzero, WorkloadExit stays
+      null.
