@@ -44,7 +44,7 @@ mutation:
       line_text: if len(f.Settings) > 1024*1024 || !bounded([]byte(f.Settings)) {
     - file: internal/slices/run/command/command.go
       function: github.com/donvargax/itos-container/internal/slices/run/command.CLI#Run
-      hash: 6edde9fe643a70fa
+      hash: 247743acae843b0d
       line_in_function: 3
       column: 27
       original: "0"
