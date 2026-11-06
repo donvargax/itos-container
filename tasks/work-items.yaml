@@ -363,8 +363,8 @@ items:
   - id: slice-11
     title: Status and stop
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-10]
     kind: slice
     why: >
