@@ -64,7 +64,7 @@ func (w *world) offlineIsolationSteps(sc *godog.ScenarioContext) {
 		{`native Docker confirms the exact worker ID absent while the unrelated same-image worker remains`, "native-absence"},
 		{`checkout edits approvals snapshots and unrelated resources remain intact`, "preserved"},
 		{`native Docker still observes the exact stopped worker and its protected ownership record before harness cleanup`, "retained"},
-		{`the diagnostic carries the safe protected intent reference without the synthetic body marker or a stopped-success claim`, "safe-diagnostic"},
+		{`the diagnostic carries the registered session ID and exact executable stop retry without the synthetic body marker or a stopped-success claim`, "safe-diagnostic"},
 		{`the checkout edit and unrelated resources remain intact`, "preserved"},
 	} {
 		sc.Step("^"+step.phrase+"$", func() error { return w.isolationCheck(step.check) })

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
+	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
@@ -125,6 +126,14 @@ func EngineContract(t Reporter, open func() (port.Engine, port.Binding)) {
 type Codec struct {
 	Value   port.Binding
 	Records map[string]port.Record
+}
+
+// Project selects the supplied binding only for its checkout and host user.
+func (c *Codec) Project(checkout readiness.CheckoutIdentity, uid string) string {
+	if checkout != c.Value.Checkout || uid != c.Value.UID {
+		return ""
+	}
+	return c.Value.Frozen.Project
 }
 
 func (c *Codec) Encode(r port.Record) []byte {

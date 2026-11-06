@@ -22,14 +22,15 @@ import (
 )
 
 type runAPI struct {
-	mu         sync.Mutex
-	resource   *container.InspectResponse
-	attached   net.Conn
-	defect     func(*container.InspectResponse)
-	readInput  bool
-	closeInput bool
-	input      []byte
-	signals    []string
+	mu            sync.Mutex
+	resource      *container.InspectResponse
+	attached      net.Conn
+	defect        func(*container.InspectResponse)
+	readInput     bool
+	closeInput    bool
+	input         []byte
+	signals       []string
+	signalTargets []string
 }
 
 func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
@@ -111,6 +112,7 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 7})
 		case strings.HasSuffix(path, "/kill"):
 			a.signals = append(a.signals, r.URL.Query().Get("signal"))
+			a.signalTargets = append(a.signalTargets, strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/kill"))
 			w.WriteHeader(204)
 		case r.Method == "DELETE":
 			if r.URL.Query().Get("force") != "1" || r.URL.Query().Get("v") == "1" {
@@ -199,9 +201,13 @@ func TestSDKSignalUsesFullIDAndChecksConnection(t *testing.T) {
 	}
 	a.mu.Lock()
 	got := slices.Clone(a.signals)
+	targets := slices.Clone(a.signalTargets)
 	a.mu.Unlock()
 	if !slices.Equal(got, []string{"SIGINT", "SIGTERM", "SIGKILL"}) {
 		t.Fatal(got)
+	}
+	if !slices.Equal(targets, []string{id, id, id}) {
+		t.Fatal("signal targeted something other than the full owned worker ID", targets)
 	}
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()

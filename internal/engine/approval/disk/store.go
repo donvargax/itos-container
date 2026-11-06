@@ -114,6 +114,10 @@ func (s Store) pinAt(c port.Candidate, create bool, collection string) (*pin, po
 	if failure != "" {
 		return nil, failure
 	}
+	return s.pinPath(c, create, path, 3)
+}
+
+func (s Store) pinPath(c port.Candidate, create bool, path string, managedDepth int) (*pin, port.Failure) {
 	uid, err := strconv.ParseUint(c.UID, 10, 32)
 	if err != nil {
 		return nil, "state.unsafe"
@@ -126,7 +130,7 @@ func (s Store) pinAt(c port.Candidate, create bool, collection string) (*pin, po
 	}
 	p.roots = append(p.roots, root)
 	parts := strings.Split(strings.TrimPrefix(path, string(filepath.Separator)), string(filepath.Separator))
-	p.managed = len(parts) - 3
+	p.managed = len(parts) - managedDepth
 	for index, name := range parts {
 		current := p.root()
 		info, err := ops.lstat(current, name)
@@ -168,7 +172,7 @@ func (s Store) pinAt(c port.Candidate, create bool, collection string) (*pin, po
 			}
 		}
 		if !created {
-			if failure = directory(info, uid, index >= p.managed); failure != "" {
+			if failure := directory(info, uid, index >= p.managed); failure != "" {
 				p.close()
 				return nil, failure
 			}

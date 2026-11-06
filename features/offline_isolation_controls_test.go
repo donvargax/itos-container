@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -253,9 +254,46 @@ func (s *isolationWorld) prepareHost() error {
 	if s.config.HostStart == "" {
 		return errors.New("host sentinel start identity unavailable")
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := isolationAwaitHostProcess(ctx, s.config); err != nil {
+		return err
+	}
 	var err error
 	s.hostBefore, err = s.hostControls()
 	return err
+}
+
+func isolationAwaitHostProcess(ctx context.Context, c isolationConfig) error {
+	// Start can return while /proc still exposes an empty exec environment.
+	// Establish the nonce control before probing the worker; subsequent host
+	// controls remain immediate so a lost sentinel cannot pass through retries.
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("host process nonce control is unavailable: %w", err)
+		}
+		if isolationProcessStart(c.HostPID) != c.HostStart {
+			return errors.New("host process sentinel disappeared")
+		}
+		matched, err := isolationProcessNonce(c.HostPID, c.Nonce)
+		if err != nil {
+			return fmt.Errorf("read host process nonce control: %w", err)
+		}
+		if matched {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+		case <-ticker.C:
+		}
+	}
+}
+
+func isolationProcessNonce(pid int, nonce string) (bool, error) {
+	env, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
+	return slices.Contains(strings.Split(string(env), "\x00"), "SLICE_14_SENTINEL="+nonce), err
 }
 
 func isolationProcessStart(pid int) string {
@@ -304,8 +342,8 @@ func (s *isolationWorld) hostControls() (map[string]string, error) {
 	if isolationProcessStart(s.config.HostPID) != s.config.HostStart {
 		return nil, errors.New("host process sentinel disappeared")
 	}
-	env, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", s.config.HostPID))
-	if err != nil || !strings.Contains(string(env), "SLICE_14_SENTINEL="+s.config.Nonce) {
+	matched, err := isolationProcessNonce(s.config.HostPID, s.config.Nonce)
+	if err != nil || !matched {
 		return nil, errors.New("host process nonce control is unavailable")
 	}
 	r["sentinel"] = s.config.HostStart

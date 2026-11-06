@@ -192,6 +192,7 @@ func (s *isolationWorld) execute(c isolationConfig) *isolationRun {
 	r.record, err = sessionReadRecord(w.sessionRecordPath())
 	r.err = errors.Join(r.err, err)
 	r.expected = approvalClone(w.sessionExpectedRecord("absent", r.id))
+	r.err = errors.Join(r.err, s.observeRegistration(r))
 	r.snapshot, err = sessionReadRecord(filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "snapshots", w.approval.project, "1.json"))
 	r.err = errors.Join(r.err, err)
 	return r

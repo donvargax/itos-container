@@ -367,5 +367,5 @@ func (w *world) offlineIncomplete() error {
 			return fmt.Errorf("failed cleanup published completion")
 		}
 	}
-	return w.offlineEffects()
+	return errors.Join(w.offlineEffects(), w.offlineRegisteredRetry())
 }

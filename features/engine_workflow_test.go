@@ -120,6 +120,29 @@ func TestEngineWorkflow(t *testing.T) {
 		{"missing runtime budget", "complete invocation", func(w *engineWorkflow) {
 			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Timeout = 0 })
 		}},
+		{"ignored binary failure", "complete invocation", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) {
+				s.Run = strings.ReplaceAll(s.Run, `exit "$test_status"`, "exit 0")
+			})
+		}},
+		{"missing kernel evidence", "failure diagnostics", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine failure diagnostics", func(s *workflowStep) {
+				s.Run = strings.ReplaceAll(s.Run, "sudo dmesg | tail -50", "true")
+			})
+		}},
+		{"missing independent session", "complete invocation", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) {
+				s.Run = strings.ReplaceAll(s.Run, "setsid --wait ", "")
+			})
+		}},
+		{"missing retained test output", "failure diagnostics", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine failure diagnostics", func(s *workflowStep) {
+				s.Run = strings.ReplaceAll(s.Run, "$RUNNER_TEMP/slice-11-features.log", "$RUNNER_TEMP/missing.log")
+			})
+		}},
+		{"skipped failure diagnostics", "failure diagnostics", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine failure diagnostics", func(s *workflowStep) { s.If = "success()" })
+		}},
 	} {
 		t.Run("reject "+tc.name, func(t *testing.T) {
 			var broken engineWorkflow
@@ -142,7 +165,31 @@ func TestEngineWorkflow(t *testing.T) {
 
 const eventGuard = "${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}"
 const ciGuard = "${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}"
-const engineInvocation = "go test ./features -count=1 -v -timeout=5m -run '^TestFeatures$'"
+const engineInvocation = `go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
+cd features
+set +e
+# Run 42233015284 traced no product/harness process-group signals; the step died
+# from outside that tree. Isolate tests from CI runner/Docker session signals.
+setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
+results=("${PIPESTATUS[@]}")
+set -e
+test_status=${results[0]}
+printf 'Feature test exit status: %s\n' "$test_status"
+if (( test_status > 128 && test_status <= 192 )); then
+  signal_number=$((test_status - 128))
+  printf 'Feature test signal: %s (exit 128+%s)\n' "$(kill -l "$signal_number")" "$signal_number"
+fi
+if (( test_status != 0 )); then exit "$test_status"; fi
+exit "${results[1]}"
+`
+
+const engineFailureDiagnostics = `set +e
+sudo dmesg | tail -50
+free -m
+if [[ -f "$RUNNER_TEMP/slice-11-features.log" ]]; then
+  tail -100 "$RUNNER_TEMP/slice-11-features.log"
+fi
+`
 
 func changeStep(w *engineWorkflow, job, name string, change func(*workflowStep)) {
 	j := w.Jobs[job]
@@ -207,7 +254,7 @@ func engineWorkflowIssues(data []byte) []string {
 	require(engine.Timeout == 10 && !engine.ContinueOnError && len(engine.Needs) == 0, "engine job budget and independence")
 	require(len(engine.Env) == 0, "engine switch must be step-local")
 	enabledPath := ""
-	require(len(engine.Steps) == 6, "engine must have checkout, setup-go, preflight, preparation, scenarios and cleanup only")
+	require(len(engine.Steps) == 7, "engine must have checkout, setup-go, preflight, preparation, scenarios, failure diagnostics and cleanup only")
 	if len(engine.Steps) >= 3 {
 		checkout, setup, preflight := engine.Steps[0], engine.Steps[1], engine.Steps[2]
 		require(checkout.Uses == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" && checkout.With["ref"] == "${{ env.TO }}", "checkout head and pin")
@@ -216,7 +263,7 @@ func engineWorkflowIssues(data []byte) []string {
 	}
 	for i, run := range engine.Steps {
 		if run.Name == "Engine scenarios" {
-			require(run.Run == engineInvocation && run.Timeout == 5 && run.If == "" && !run.ContinueOnError && validFixtureEnvironment(run.Env), "complete invocation, fixture outputs and step budget")
+			require(run.Run == engineInvocation && run.Shell == "bash" && run.Timeout == 5 && run.If == "" && !run.ContinueOnError && validFixtureEnvironment(run.Env), "complete invocation, fixture outputs and step budget")
 			enabledPath = "jobs.engine.steps." + strconv.Itoa(i) + ".env.ITOS_CONTAINER_ENGINE_TESTS"
 		}
 	}

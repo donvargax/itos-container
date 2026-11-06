@@ -47,6 +47,8 @@ import (
 	sessiondocker "github.com/donvargax/itos-container/internal/engine/session/docker"
 	sessiondomain "github.com/donvargax/itos-container/internal/engine/session/domain"
 	sessionentropy "github.com/donvargax/itos-container/internal/engine/session/entropy"
+	sessionport "github.com/donvargax/itos-container/internal/engine/session/port"
+	sessionpresentation "github.com/donvargax/itos-container/internal/engine/session/presentation"
 	approve "github.com/donvargax/itos-container/internal/slices/approve/command"
 	"github.com/donvargax/itos-container/internal/slices/count/command"
 	countdisk "github.com/donvargax/itos-container/internal/slices/count/disk"
@@ -55,6 +57,8 @@ import (
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
 	"github.com/donvargax/itos-container/internal/slices/run/signals"
+	statuscommand "github.com/donvargax/itos-container/internal/slices/status/command"
+	stopcommand "github.com/donvargax/itos-container/internal/slices/stop/command"
 	"github.com/donvargax/itos-container/internal/version"
 )
 
@@ -64,13 +68,15 @@ type commandLine struct {
 	// and no environment variable.
 	ShowVersion kong.VersionFlag `name:"version" help:"Print the version and the commit it was built from, and exit."`
 
-	Approve    approve.CLI    `cmd:"" help:"Review and remember exact offline settings."`
-	Count      command.CLI    `cmd:"" help:"Count the lines and words of a file, or of standard input."`
-	Doctor     doctor.CLI     `cmd:"" help:"Inspect the strict offline policy and restricted worker manifest."`
-	Run        runcommand.CLI `cmd:"" help:"Run a literal command in an approved offline worker."`
-	Version    struct{}       `cmd:"" help:"Print the version and the commit it was built from."`
-	Completion cli.Completion `cmd:"" help:"Print a shell completion script."`
-	Complete   struct{}       `cmd:"" name:"__complete" hidden:""`
+	Approve    approve.CLI       `cmd:"" help:"Review and remember exact offline settings."`
+	Count      command.CLI       `cmd:"" help:"Count the lines and words of a file, or of standard input."`
+	Doctor     doctor.CLI        `cmd:"" help:"Inspect the strict offline policy and restricted worker manifest."`
+	Run        runcommand.CLI    `cmd:"" help:"Run a literal command in an approved offline worker."`
+	Status     statuscommand.CLI `cmd:"" help:"Inspect owned sessions in the effective project."`
+	Stop       stopcommand.CLI   `cmd:"" help:"Stop and clean one registered project session."`
+	Version    struct{}          `cmd:"" help:"Print the version and the commit it was built from."`
+	Completion cli.Completion    `cmd:"" help:"Print a shell completion script."`
+	Complete   struct{}          `cmd:"" name:"__complete" hidden:""`
 }
 
 func main() {
@@ -116,6 +122,9 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	}
 	if err != nil {
 		// With --json, the failure's object too.
+		if name := commandName(runOptions(args)); name == "status" || name == "stop" {
+			return (sessionpresentation.UI{Out: stdout, Err: stderr}).Print(sessionport.RecoveryResult{Failures: []sessionport.RecoveryFailure{{Outcome: sessionport.Usage}}}, recoveryJSON(args))
+		}
 		return ui.Usage(commandName(args), err, wantsJSON(args))
 	}
 	c.Count.Files = input.Files{Disk: countdisk.Files{}, In: in}
@@ -139,15 +148,23 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		service, _ := approvalServices(in, stdout, stderr)
 		c.Run.Approval = approvaldomain.Preflight{Service: service, Local: service.Readiness.(approvalport.StagedReadiness), Canonical: approvalcanonical.JSON{}}
 		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}
-		source := service.Readiness.(inspection.Readiness)
-		c.Run.Runner = signals.Runner{Next: sessiondomain.Runner{
-			Store:   sessiondisk.Store{Storage: approvaldisk.Storage{Store: service.Store.(approvaldisk.Store)}, Codec: sessioncodec.JSON{Approval: approvalcanonical.JSON{}, Parser: jsonc.Parser{}}, Host: approvalhost.Process{}, Checkout: &readinessdisk.Checkout{}, Input: source.Input},
-			Engine:  sessiondocker.Engine{Readiness: docker.Engine{}, Selection: source.Input.Host},
-			Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{},
-		}}
+		runner, _ := sessionServices(service)
+		c.Run.Runner = signals.Runner{Next: runner}
 		ui.Classify = runcommand.Classify
 		c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
 		return c.Run.Run(ui)
+	case "status":
+		service, _ := approvalServices(in, stdout, stderr)
+		_, c.Status.Service = sessionServices(service)
+		c.Status.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr}
+		c.Status.JSON = recoveryJSON(args)
+		return c.Status.Run()
+	case "stop":
+		service, _ := approvalServices(in, stdout, stderr)
+		_, c.Stop.Service = sessionServices(service)
+		c.Stop.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr}
+		c.Stop.JSON = recoveryJSON(args)
+		return c.Stop.Run()
 	case "version":
 		// What --version prints, as kong prints it.
 		_, _ = fmt.Fprintln(stdout, parser.Model.Vars()["version"])
@@ -157,6 +174,33 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	}
 	// A command kong took that has no case here: a bug.
 	return ui.Fail(fmt.Errorf("no case runs the command %q", ctx.Command()), wantsJSON(args))
+}
+
+func sessionServices(service approvaldomain.Service) (sessiondomain.Runner, sessiondomain.Recovery) {
+	source := service.Readiness.(inspection.Readiness)
+	codec := sessioncodec.JSON{Approval: approvalcanonical.JSON{}, Parser: jsonc.Parser{}}
+	protected := service.Store.(approvaldisk.Store)
+	store := sessiondisk.Store{Storage: approvaldisk.Storage{Store: protected}, Codec: codec, Host: approvalhost.Process{}, Checkout: &readinessdisk.Checkout{}, Input: source.Input}
+	registry := sessiondisk.Registry{Store: store, Storage: approvaldisk.Registry{Store: protected}, Codec: codec, Identity: approvalcanonical.JSON{}}
+	engine := sessiondocker.Engine{Readiness: docker.Engine{}, Selection: source.Input.Host}
+	return sessiondomain.Runner{Store: store, Registry: registry, Engine: engine, Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{}}, sessiondomain.Recovery{Registry: registry, Engine: engine}
+}
+
+// recoveryJSON serves parsed commands and usage refusals alike. Only literal 1
+// inherits JSON; Kong's boolean environment decoder accepts other values too.
+func recoveryJSON(args []string) bool {
+	want := os.Getenv("ITOS_JSON") == "1"
+	for _, a := range args {
+		switch a {
+		case "--json", "--json=true":
+			want = true
+		case "--no-json", "--json=false":
+			want = false
+		case "--":
+			return want
+		}
+	}
+	return want
 }
 
 // commandName is the command args name, the first word that is not a flag

@@ -87,6 +87,11 @@ func digest(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeT
 func project(s settings) string {
 	return digest(canonical(map[string]any{"schema": 1, "uid": s.Host.UID, "checkout": s.Checkout}))
 }
+
+// Project uses the same identity binding without loading mutable requests.
+func (JSON) Project(c readiness.CheckoutIdentity, uid string) string {
+	return project(settings{Host: host{UID: uid}, Checkout: checkout{c.Root, c.Device, c.Inode, c.GitDevice, c.GitInode}})
+}
 func candidate(s settings) port.Candidate {
 	data := canonical(s)
 	return port.Candidate{UID: s.Host.UID, GID: s.Host.GID, Root: s.Checkout.Root, Project: project(s), Fingerprint: "sha256:" + digest(data), Canonical: string(data)}

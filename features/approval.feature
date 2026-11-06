@@ -643,7 +643,7 @@ Feature: Review and record approval of exact offline settings
     And it never prompts or records approval
     And the local foreground journal contains only inspections and owned worker operations
     And the protected run snapshot is exactly the independently calculated approval at generation "1"
-    And only protected snapshot and owned intent records were added without chown or checkout changes
+    And only protected snapshot intent and public session records were added without chown or checkout changes
 
   # Cross-command validation and honest help.
   @slice-4 @ID-APPROVAL-27 @local-engine-fixture

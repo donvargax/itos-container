@@ -68,3 +68,7 @@
   scenarios:
     - id: "@ID-OFFLINE-18"
       why: owned cleanup survives writable checkout identity changes while retaining protected authority
+- file: recovery.feature
+  scenarios:
+    - id: "@ID-RECOVERY-08"
+      why: run preserves the observed exit and prints a registered stop retry that completes durable cleanup through a fresh process without a Docker daemon

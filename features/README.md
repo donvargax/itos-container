@@ -123,11 +123,34 @@ wrong server platform or timeout fails the job. It records only server version, 
 OS, architecture and the tested commit. Its 29-second deadline plus a 1-second kill grace
 bounds it to 30 seconds. The preflight attempts no install/start, image pull/build, container
 creation or fallback. A separate preparation step supplies the cached fixture described below.
-The Engine scenarios step alone enables the switch and runs this **CI-only** command:
+The Engine scenarios step first compiles the test binary, then alone enables the switch
+for this **CI-only** invocation (the workflow also supplies the fixture environment):
 
 ```sh
-ITOS_CONTAINER_ENGINE_TESTS=1 go test ./features -count=1 -v -timeout=5m -run '^TestFeatures$'
+go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
+cd features
+ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$'
 ```
+
+The engine tests run in their own session. Coordinator-reviewed run 42233015284
+at `9af619c` traced the entire test process tree and found no product or harness
+group/session signal, while the step's shell still died. The coordinator attributed
+the sender to the external runner or Docker and accepted `setsid --wait` (q-16).
+The workflow no longer runs strace, which consumed its five-minute budget.
+The workflow streams both output channels to the log and
+`$RUNNER_TEMP/slice-11-features.log`, prints the binary's exit status and decodes exits of
+128 plus a signal number. It preserves the test's failure even when output capture succeeds;
+a capture failure also fails a successful test run. A failure-only step prints the last
+50 kernel messages, `free -m` and the last 100
+test-output lines before unconditional cleanup.
+The explicit `-test.paniconexit0` retains `go test`'s protection against an early `os.Exit(0)`.
+TestMain logs catchable signals to stderr in the engine tier, including its PID, and exits
+nonzero for terminating signals. SIGKILL and SIGSTOP cannot be caught; the supervising shell
+and kernel output supply that evidence. These diagnostics address the coordinator's
+2026-11-06 silent engine failures; the trace cleared product and harness signalling,
+while each engine run must still establish its own runtime evidence.
+`TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
+and `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
 The step has a five-minute budget and the job a ten-minute budget. These are test-infrastructure
 budgets, not product startup/resource limits. With no red input the step selects every live
@@ -146,6 +169,28 @@ Mutation, own-test and scenario-coverage runs in `ci` remain engine-disabled, in
 individual-test fallback and whole-suite collection. An excluded engine ID provides no
 runtime or coverage evidence. Later behaviours require domain/port fake tests alongside
 separate runtime evidence; uncovered code cannot be satisfied by enabling Docker in proof.
+
+Recovery's live ID-RECOVERY-21 through ID-RECOVERY-23 run fresh product processes
+against the same guarded cached-image fixture. Their native recorder can inject a
+removal-only failure or hold a removal barrier; it still validates concrete ownership
+before forwarding mutations and records refused requests. A static worker probe supplies
+exit 7 or a monotonic heartbeat. Independent observations precede harness cleanup, and
+the printed retry is parsed into literal argv, never executed by a shell.
+
+Those recovery processes run under a test-only Linux amd64 syscall observer compiled
+with the already pinned `golang.org/x/sys`. Its child uses `CLONE_UNTRACED` so the outer
+`strace` and the fsync observer do not compete for the same tracee; this changes neither
+the child's group nor session. The observer logs child signal syscalls and reinjections
+to `$SLICE_11_SIGNAL_TRACE` when supplied, so controller sends remain visible alongside
+outer-traced harness sends. A local nested-tracer control asserts sender PID, absence of
+session/group changes, child exit and actual fsync evidence. It traces its child and child threads,
+correlating successful file fsync with the subsequently synced publication directory
+and visible record inode. Failed fsyncs and file existence alone cannot prove durable
+completion. The observer records only disposable fixture state; its journal is temporary
+test data, not CI changed-code proof. Local `TestRecoveryTrace` controls exercise real
+syscalls without engine access, including failure, ordering and controller death. These
+controls do not provide native recovery red or green evidence; the coordinator must
+still dispatch the three pending engine scenarios before their implementation.
 
 Code proof obtains its listed tests through `tools/bin/scenario-list`. It uses the same
 Gherkin tier/platform selector as execution, before any fixture setup, and preserves

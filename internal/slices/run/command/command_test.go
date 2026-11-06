@@ -70,6 +70,9 @@ func TestClassifierHandlesWrappedAndUnknownFailures(t *testing.T) {
 	}{
 		{domain.ErrJSONUnsupported, 2, "run.json-unsupported"},
 		{domain.ErrCommandRequired, 2, "run.command-required"},
+		{domain.ApprovalRefusal{Reason: "missing"}, 1, "run.approval-missing"},
+		{domain.ApprovalRefusal{Reason: "changed"}, 1, "run.approval-changed"},
+		{domain.ApprovalRefusal{Reason: "invalid"}, 1, "run.approval-invalid"},
 	} {
 		code, problems := command.Classify(fmt.Errorf("context: %w", tc.err))
 		if code != tc.code || len(problems) != 1 {

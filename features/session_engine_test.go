@@ -75,6 +75,10 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 		}
 	}
 	if (entry.Method == "POST" && entry.Path == "/containers/create") || entry.Method == "DELETE" || (a.w.session.offline && entry.Method == "POST") {
+		if a.w.recoveryLocal != nil && a.w.recoveryLocal.runFixture && entry.Path == "/containers/create" {
+			a.w.session.token = strings.TrimPrefix(request.URL.Query().Get("name"), "itos-container-")
+			a.w.session.reference = "intents/" + a.w.approval.project + "/" + a.w.session.token + ".json"
+		}
 		entry.Record, err = sessionReadRecord(a.w.sessionRecordPath())
 		if err != nil {
 			a.problem = err
@@ -87,6 +91,10 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 	// Every request, even a refused start/acquisition, is recorded before dispatch.
 	a.requests = append(a.requests, entry)
 	index := len(a.requests) - 1
+	if a.w.recoveryLocal != nil && strings.HasPrefix(entry.Path, "/containers/") {
+		a.serveRecovery(out, request, entry, index)
+		return
+	}
 	if a.w.session.offline && strings.HasPrefix(entry.Path, "/containers/") {
 		a.serveOffline(out, request, entry, index)
 		return

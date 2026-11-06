@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -220,7 +221,19 @@ func (w *world) closeOfflineRuntime() error {
 
 func (w *world) offlineUnrelated() error {
 	o := w.offline
-	if o.before == nil || o.after == nil || !reflect.DeepEqual(o.before, o.after) {
+	registry, err := w.offlineCompletedRegistryPaths()
+	if err != nil {
+		return err
+	}
+	after := maps.Clone(o.after)
+	for path := range registry {
+		// Only validated additions belong to this run. Existing objects still
+		// have to match, and no other file below sessions is exempted.
+		if _, existed := o.before[path]; !existed {
+			delete(after, path)
+		}
+	}
+	if o.before == nil || o.after == nil || !reflect.DeepEqual(o.before, after) {
 		return fmt.Errorf("offline run changed unrelated checkout or host fixture files")
 	}
 	if o.resourcesBefore == nil || o.resourcesAfter == nil || !reflect.DeepEqual(o.resourcesBefore, o.resourcesAfter) {

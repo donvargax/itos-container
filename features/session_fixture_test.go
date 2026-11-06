@@ -25,6 +25,8 @@ type sessionResult struct {
 	Trace                                             []offlineTrace
 	Stdout, Stderr                                    string
 	CleanupCode                                       int
+	SessionID                                         string
+	PublicRecords                                     map[string][]byte
 }
 
 type sessionEvent struct {

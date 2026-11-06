@@ -54,6 +54,8 @@ type isolationRun struct {
 	requests         []offlineRequest
 	id               string
 	record           sessionRecord
+	sessionID        string
+	registration     sessionRecord
 	snapshot         sessionRecord
 	input            sessionRecord
 	expected         map[string]any

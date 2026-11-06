@@ -1,17 +1,17 @@
 package main
 
-// runOptions places leading run switches in their command's Kong scope. Kong
+// runOptions places leading run/recovery switches in their command's Kong scope. Kong
 // forbids a root flag with the same name as a child flag, and count and doctor
 // own distinct JSON contracts. Kong still parses and validates the switches;
 // this relocation never crosses a command or workload separator.
 func runOptions(args []string) []string {
 	for i, arg := range args {
 		switch arg {
-		case "--json", "--no-json":
+		case "--json", "--no-json", "--json=true", "--json=false":
 			continue
-		case "run":
+		case "run", "status", "stop":
 			out := make([]string, 0, len(args))
-			out = append(out, "run")
+			out = append(out, arg)
 			out = append(out, args[:i]...)
 			return append(out, args[i+1:]...)
 		default:

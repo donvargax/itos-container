@@ -206,7 +206,7 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 	case len(parts) == 2 && parts[1] == "kill" && r.Method == "POST" && a.recovery != nil:
 		a.recovery.signals = append(a.recovery.signals, r.URL.Query().Get("signal"))
 		a.recovery.notified.Do(func() { close(a.recovery.signaled) })
-		if r.URL.Query().Get("signal") == "SIGKILL" || a.recovery.fault == "handled SIGINT" || a.recovery.fault == "handled SIGTERM" {
+		if r.URL.Query().Get("signal") == "SIGKILL" || !strings.HasPrefix(a.recovery.fault, "ignored ") {
 			a.recovery.finish.Do(func() { close(a.recovery.exit) })
 			resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
 			if !a.recovery.trailing {

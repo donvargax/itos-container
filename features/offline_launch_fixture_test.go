@@ -25,6 +25,7 @@ type offlineLaunchWorld struct {
 	child                    int
 	faultActive, reached     bool
 	watch                    bool
+	registered               bool
 	outside, moved           string
 	outsideBefore            map[string]string
 	manifestB, approvalB     []byte
@@ -113,6 +114,10 @@ func (w *world) offlineCleanupFixture(child int, cause string) error {
 	return w.sessionEach(func(w *world) error {
 		w.session.launch.child, w.session.launch.cause = child, cause
 		w.session.offlineControl.session.launch.child = child
+		// This public cleanup contract and its positive control use the registered
+		// runner. The older launch contracts still exercise the intent-only API.
+		w.session.launch.registered = true
+		w.session.offlineControl.session.launch.registered = true
 		return nil
 	})
 }

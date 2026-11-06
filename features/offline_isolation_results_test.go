@@ -146,17 +146,24 @@ func (s *isolationWorld) safeDiagnostic() error {
 	if !bytes.Contains(r.stderr, []byte(reference)) {
 		return errors.New("cleanup diagnostic omits its original protected intent reference")
 	}
-	for _, v := range []string{"SLICE_14_SYNTHETIC_REMOVE_BODY", "SLICE_14_SYNTHETIC_ARGV", "SLICE_14_SYNTHETIC_ENV", r.config.Nonce, "stopped successfully", "cleanup complete", "itos container stop"} {
-		if bytes.Contains(r.stderr, []byte(v)) || strings.Contains(r.record.Bytes, v) {
-			return errors.New("cleanup diagnostic/ownership leaks payload or claims completed cleanup or an unimplemented retry")
+	if _, err := s.registryPaths(); err != nil {
+		return err
+	}
+	retries := recoveryRetryPattern.FindAllSubmatch(r.stderr, -1)
+	if len(retries) != 1 || string(retries[0][1]) != r.sessionID || !bytes.Contains(r.stderr, []byte("same effective project")) {
+		return errors.New("cleanup diagnostic lacks its exact registered same-project stop retry")
+	}
+	for _, v := range []string{"SLICE_14_SYNTHETIC_REMOVE_BODY", "SLICE_14_SYNTHETIC_ARGV", "SLICE_14_SYNTHETIC_ENV", r.config.Nonce, "stopped successfully", "cleanup complete"} {
+		if bytes.Contains(r.stderr, []byte(v)) || strings.Contains(r.record.Bytes, v) || strings.Contains(r.registration.Bytes, v) {
+			return errors.New("cleanup diagnostic/ownership leaks payload or claims completed cleanup")
 		}
 	}
 	return nil
 }
 
 func (s *isolationWorld) preserved() error {
-	if s.before == nil || s.after == nil || !reflect.DeepEqual(s.before, s.after) {
-		return errors.New("unrelated checkout files, ownership or protected approval changed")
+	if err := s.registryPreserved(); err != nil {
+		return err
 	}
 	before, after := s.resourcesBefore, s.resourcesAfter
 	if s.mode == "exit" && len(s.runs) == 2 {
