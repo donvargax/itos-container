@@ -580,14 +580,15 @@ items:
       allowing disjoint projects. Keep admission and ownership rules in shared engine packages.
       Specify black-box scenarios first, with native-engine evidence only in CI. Broken down from
       null.
-  - id: p1-launch-with-inode-bound-checkout
+  - id: slice-17
     title: Run binds its mount to the validated checkout inode
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p1-launch-with-inode-bound-checkout.
       Close the gap between final validation and Docker resolving the mount pathname. Provide a
       protected inode-bound source through engine ports and adapters, record its ownership before
       use, and cover normal teardown and failure retention. Preserve checkout edits and the
@@ -599,7 +600,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-launch-with-inode-bound-checkout]
+    depends_on: [slice-17]
     kind: idea
     why: >
       Extend existing recovery to the mount ownership introduced by the launch slice. After
