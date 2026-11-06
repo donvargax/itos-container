@@ -579,7 +579,7 @@ Feature: Hardened offline foreground run
   # No prune, shared-image removal, foreign-resource deletion or host-file cleanup
   # by the product. Preserve existing approval/snapshot bytes and checkout edits.
   #
-  # Evidence handoff: this specification supplies no executed red/green.
+  # Evidence handoff: the initial specification supplied no executed red/green.
   # Before slice-10 merged, startup-unavailable was the expected failure at
   # 08's process/child identity, 09's two root/write reports, 10's local controls
   # plus denied host access, 11's worker route reports, 12's worker resolver
@@ -600,11 +600,14 @@ Feature: Hardened offline foreground run
   # Activation needs assertion-level red/green evidence or that verified
   # regression basis, then green CI at the actual pushed head without red input.
   # Coordinator run 42195113834 at 744f548 (2026-11-06 09:45) passed 08/09/10/11/
-  # 14/16 against earlier slices. Their positive controls are required below;
-  # add missing controls and activate these regressions under q-6. Scenario 12
-  # failed during listener/resolver setup, NOT at a behavior assertion. Repair
-  # its control and stop for another coordinator engine run of 12, still @wip.
-  # The new head still needs green CI; no runtime/support or mutation claim here.
+  # 14/16 against earlier slices. Their positive controls are required below and
+  # these cases are live under q-6. Scenario 12 initially failed in its control,
+  # not at a behavior assertion; those failures supply no red evidence.
+  # Coordinator run 42203397615 at d76bf2f (2026-11-06 11:05) passed 12 with its
+  # working resolver control. It too is accepted as regression coverage of
+  # earlier slices, so all seven cases are live. Windows/macOS tests also passed;
+  # that is fixture portability evidence, not container-host support there.
+  # The final pushed head still needs green CI and the required code proof.
 
   # Effective identity comes from the real host process, not fixture environment.
   # Given records its UID/GID and groups, installs a compiled report-only root-owned
@@ -763,8 +766,12 @@ Feature: Hardened offline foreground run
   # uncompressed alias answer names as well as the fixture's compressed names.
   # Independent A/AAAA wire-packet regressions check both forms without an engine;
   # no fixture address, alias, query, positive assertion or denied route is removed.
-  # Keep 12 wip and stop after committing the repair for another coordinator run.
-  @wip @slice-14 @ID-OFFLINE-12 @engine
+  # Accepted q-6 regression of slice-10's verified NetworkMode none before start
+  # (run 42203397615 at d76bf2f). The same resolver clients return the expected
+  # answers before and after both worker phases, with complete nonce/query
+  # reports and receipts. Any worker answer, matching query receipt or missing
+  # attempt fails; broken positive controls cannot establish DNS isolation.
+  @slice-14 @ID-OFFLINE-12 @engine
   Scenario: Offline execution has no external DNS or alternate resolver path
     Given a CI offline checkout with the cached image and controlled system Docker loopback TCP UDP and HTTPS DNS resolvers
     When trusted controls and the product's first-instruction and running DNS probes query unique fixture names
