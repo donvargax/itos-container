@@ -29,27 +29,8 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	}
 	if result.Outcome == "" {
 		// Waiting for the workload is not a startup operation or a lifetime limit.
-		wait, stop := context.WithCancel(ctx)
-		monitored := make(chan struct{})
-		go func() {
-			defer close(monitored)
-			select {
-			case <-attachment.Failures():
-				stop()
-			case <-wait.Done():
-			}
-		}()
-		result.Exit, result.Outcome = connection.Wait(wait, result.ID)
-		stop()
-		<-monitored
+		result.Exit, result.Outcome = waitRun(ctx, connection, attachment, result.ID)
 		result.Exited = result.Outcome == ""
-		if result.Exited {
-			drain, end := context.WithTimeout(ctx, 10*time.Second)
-			if failure := attachment.Drain(drain); failure != "" {
-				result.Outcome = failure
-			}
-			end()
-		}
 	}
 	if result.Reference != "" {
 		teardown, end := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
@@ -57,10 +38,50 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 			result.Exit, result.Exited = s.interrupt(teardown, result.Reference, interrupted.Signal)
 			result.Outcome = port.ExecutionFailed
 		}
+		if result.Exited && attachment != nil {
+			// Exit can precede the last output, including an interrupted worker's
+			// diagnostics. Keep draining independent of the host signal, but inside
+			// the shared teardown budget and before cleanup closes the connection.
+			drain, stop := context.WithTimeout(teardown, 10*time.Second)
+			if failure := attachment.Drain(drain); failure != "" {
+				result.Outcome = failure
+			}
+			stop()
+		}
 		result.Cleanup = s.Cleanup(teardown, result.Reference).Outcome
 		end()
 	}
 	return result
+}
+
+func waitRun(ctx context.Context, connection port.RunConnection, attachment port.Attachment, id string) (int, port.Outcome) {
+	wait, stop := context.WithCancel(ctx)
+	monitored := make(chan port.Outcome, 1)
+	go func() {
+		var failure port.Outcome
+		select {
+		case failure = <-attachment.Failures():
+			stop()
+		case <-wait.Done():
+		}
+		monitored <- failure
+	}()
+	exit, outcome := connection.Wait(wait, id)
+	stop()
+	failure := <-monitored
+	if outcome == "" || failure != port.StdinClosed || ctx.Err() != nil {
+		return exit, outcome
+	}
+	// A worker may close stdin on exit while input forwarding is still pending.
+	// Confirm that the exact worker exited before reacquiring its wait response;
+	// a running or unverifiable worker still requires failure and owned cleanup.
+	probe, end := context.WithTimeout(ctx, 10*time.Second)
+	defer end()
+	o, status := connection.Inspect(probe, id)
+	if status != port.Observed || o.ID != id || !o.StatePresent || o.Running || o.Status != "exited" {
+		return 0, port.ExecutionFailed
+	}
+	return connection.Wait(probe, id)
 }
 
 // interrupt reacquires protected authority and a fresh engine connection. The
@@ -243,6 +264,8 @@ func cleanupRun(ctx context.Context, intent port.Intent, connection port.RunConn
 	id := record.ContainerID
 	if id == "" {
 		observed, status := connection.Inspect(ctx, record.Name)
+		// As in unstarted cleanup, a name-only 404 cannot fence a delayed create.
+		// Preserve the intent until a concrete owned ID can establish absence.
 		if status != port.Observed {
 			return port.Uncertain
 		}

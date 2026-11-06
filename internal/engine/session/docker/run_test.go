@@ -21,13 +21,14 @@ import (
 )
 
 type runAPI struct {
-	mu        sync.Mutex
-	resource  *container.InspectResponse
-	attached  net.Conn
-	defect    func(*container.InspectResponse)
-	readInput bool
-	input     []byte
-	signals   []string
+	mu         sync.Mutex
+	resource   *container.InspectResponse
+	attached   net.Conn
+	defect     func(*container.InspectResponse)
+	readInput  bool
+	closeInput bool
+	input      []byte
+	signals    []string
 }
 
 func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
@@ -97,9 +98,16 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 					t.Error(err)
 				}
 			}
+			if a.closeInput {
+				_ = a.attached.(*net.UnixConn).CloseRead()
+			}
 			writeFrame(a.attached, 1, []byte("stdout\x00\xff"))
 			writeFrame(a.attached, 2, []byte("stderr\x00\xfe"))
-			_ = a.attached.Close()
+			if a.closeInput {
+				_ = a.attached.(*net.UnixConn).CloseWrite()
+			} else {
+				_ = a.attached.Close()
+			}
 			w.WriteHeader(204)
 		case strings.HasSuffix(path, "/wait"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 7})
@@ -148,6 +156,22 @@ func TestForwardingFailureContracts(t *testing.T) {
 		st.ForwardingFailureContract(t, func() (sp.RunEngine, sp.Binding) {
 			b, _, e := st.Fixture()
 			return &st.RunEngine{Engine: e, Output: []byte("out"), ErrorOutput: []byte("err")}, b
+		})
+	})
+}
+
+func TestStdinClosureContracts(t *testing.T) {
+	t.Run("SDK", func(t *testing.T) {
+		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding) {
+			e, b, a := runSDKFixture(t)
+			a.closeInput = true
+			return e, b
+		})
+	})
+	t.Run("memory", func(t *testing.T) {
+		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding) {
+			b, _, e := st.Fixture()
+			return &st.RunEngine{Engine: e, Exit: 7, StdinClosed: true}, b
 		})
 	})
 }

@@ -118,3 +118,29 @@ func TestForegroundUnknownExitIsNotSuccess(t *testing.T) {
 		}
 	}
 }
+
+func TestRunCleanupRetainsNameOnlyNotFoundUntilDelayedCreateAppears(t *testing.T) {
+	s, d, store, e := runnerFixture()
+	e.Fault, e.Following = "delayed create", "explicit not-found"
+	r := s.Run(context.Background(), d, []string{"probe"}, port.Streams{})
+	if r.Outcome != port.Uncertain || r.Cleanup != port.Uncertain || r.Exited {
+		t.Fatal("name-only absence discarded uncertain create", r)
+	}
+	record, failure := store.Codec.Decode(store.Records[r.Reference])
+	if failure != "" || record.Stage != "intent" || record.ContainerID != "" || slices.Contains(e.Events, "remove") {
+		t.Fatal("uncertain intent was changed", record, e.Events)
+	}
+	e.Fault, e.Following = "", ""
+	if recovered := s.Cleanup(context.Background(), r.Reference); recovered.Outcome != port.Complete {
+		t.Fatal("delayed worker could not be recovered", recovered)
+	}
+	creates := 0
+	for _, event := range e.Events {
+		if event == "create" {
+			creates++
+		}
+	}
+	if creates != 1 || slices.Contains(e.Events, "start") {
+		t.Fatal("recovery launched or duplicated the worker", e.Events)
+	}
+}

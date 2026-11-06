@@ -57,9 +57,102 @@ func TestInterruptForwardingAndEscalation(t *testing.T) {
 					if !slices.Contains(e.Events, signal) || slices.Contains(e.Events, "SIGKILL") != ignore {
 						t.Fatal(e.Events)
 					}
+					drain, remove := slices.Index(e.Events, "drain"), slices.Index(e.Events, "remove")
+					if drain < 0 || drain >= remove || e.DrainContextErr != nil {
+						t.Fatal("interrupted exit did not drain before cleanup with a live context", e.Events, e.DrainContextErr)
+					}
 				})
 			})
 		}
+	}
+}
+
+func TestUnfinishedOutputDrainIsBoundedBeforeCleanup(t *testing.T) {
+	for _, interrupted := range []bool{false, true} {
+		synctest.Test(t, func(t *testing.T) {
+			s, d, _, e := runnerFixture()
+			e.DrainUntilCancel, e.Exit = true, 23
+			ctx, cancel := context.WithCancelCause(context.Background())
+			defer cancel(nil)
+			e.After = func(event string) {
+				if interrupted && event == "wait" && ctx.Err() == nil {
+					cancel(port.Interrupt{Signal: "SIGTERM"})
+				}
+			}
+			start := time.Now()
+			r := s.Run(ctx, d, []string{"probe"}, port.Streams{})
+			if !r.Exited || r.Exit != 23 || r.Outcome != port.ExecutionFailed || r.Cleanup != port.Complete ||
+				time.Since(start) != 10*time.Second || e.DrainContextErr != context.DeadlineExceeded {
+				t.Fatal("drain lost exit, exceeded its budget or bypassed cleanup", r, time.Since(start), e.DrainContextErr)
+			}
+		})
+	}
+}
+
+func TestClosedWorkerStdinReconcilesOnlyAnObservedExit(t *testing.T) {
+	for _, fault := range []string{"", "running", "unavailable", "foreign ID", "missing state", "created", "wait failure", "canceled", "wait stalls"} {
+		t.Run(fault, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				s, d, _, e := runnerFixture()
+				e.StdinClosed, e.WaitUntilCancel, e.Exit = true, true, 23
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				waits := 0
+				e.After = func(event string) {
+					if event != "wait" {
+						return
+					}
+					waits++
+					if waits == 2 && fault == "wait stalls" {
+						o := e.Resources[e.CreateID]
+						o.Running = true
+						e.Resources[e.CreateID] = o
+					}
+					if waits != 1 {
+						return
+					}
+					if fault == "canceled" {
+						cancel()
+					}
+					// Wait remains pending until the input-closure notification.
+					// Only its subsequent independent inspection observes exit.
+					e.BeforeInspect = func() {
+						o, exists := e.Resources[e.CreateID]
+						if !exists {
+							return
+						}
+						o.Running, o.Status = false, "exited"
+						switch fault {
+						case "running":
+							o.Running = true
+						case "unavailable":
+							e.Inspection = "unavailable"
+						case "foreign ID":
+							e.Inspection = "different full container ID"
+						case "missing state":
+							o.StatePresent = false
+						case "created":
+							o.Status = "created"
+						case "wait failure":
+							e.WaitFailure = port.ExecutionFailed
+						}
+						e.Resources[e.CreateID] = o
+					}
+				}
+				start := time.Now()
+				r := s.Run(ctx, d, []string{"probe"}, port.Streams{})
+				if fault == "" {
+					if !r.Exited || r.Exit != 23 || r.Outcome != "" || r.Cleanup != port.Complete || waits != 2 {
+						t.Fatal("closed stdin lost the confirmed worker exit", r, e.Events)
+					}
+				} else if r.Exited || r.Outcome != port.ExecutionFailed || slices.Contains(e.Events, "drain") {
+					t.Fatal("unverified exit became successful", r, e.Events)
+				}
+				if fault == "wait stalls" && time.Since(start) != 10*time.Second {
+					t.Fatal("exit reconciliation was not bounded", time.Since(start))
+				}
+			})
+		})
 	}
 }
 

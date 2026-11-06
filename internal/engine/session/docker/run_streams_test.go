@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
@@ -229,6 +230,73 @@ func TestSDKAttachAndFrameFailuresAreNotSuccessfulDrains(t *testing.T) {
 			defer a.Close()
 			if failure := a.Drain(ctx); failure != sp.ExecutionFailed {
 				t.Fatal("malformed stream was reported complete", failure)
+			}
+		})
+	}
+}
+
+func TestSDKStdinHalfCloseAfterOutputEOFIsNotAForwardingFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	e, b, _ := sdkHandlerFixture(t, func(w http.ResponseWriter, _ *http.Request, _ sp.Binding) {
+		if conn := hijackRunStream(t, w); conn != nil {
+			_ = conn.Close()
+		}
+	})
+	c, failure := e.OpenRun(ctx, b)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer c.Close()
+	reader, writer := io.Pipe()
+	defer func() { _ = reader.Close(); _ = writer.Close() }()
+	a, failure := c.Attach(ctx, strings.Repeat("c", 64), sp.Streams{In: reader})
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer a.Close()
+	if failure = a.Drain(ctx); failure != "" {
+		t.Fatal("worker output EOF failed", failure)
+	}
+	// Input is still awaiting its source's EOF when the completed attachment
+	// closes. Release EOF only now, so CloseWrite deterministically fails.
+	a.Close()
+	_ = writer.Close()
+	select {
+	case failure = <-a.Failures():
+		if failure != sp.StdinClosed {
+			t.Fatal("late half-close erased successful output", failure)
+		}
+	case <-ctx.Done():
+		t.Fatal("half-close failure was not reported")
+	}
+	if failure = a.Drain(ctx); failure != "" {
+		t.Fatal("late half-close left a sticky forwarding failure", failure)
+	}
+}
+
+func TestStdinClosureDoesNotEndOutputDrain(t *testing.T) {
+	for _, outputFailure := range []bool{false, true} {
+		synctest.Test(t, func(t *testing.T) {
+			a := &attachment{done: make(chan struct{}), failures: make(chan sp.Outcome, 1)}
+			a.notify(sp.StdinClosed)
+			drained := make(chan sp.Outcome, 1)
+			go func() { drained <- a.Drain(context.Background()) }()
+			synctest.Wait()
+			select {
+			case failure := <-drained:
+				t.Fatal("stdin closure completed unfinished output", failure)
+			default:
+			}
+			want := sp.Outcome("")
+			if outputFailure {
+				a.fail()
+				want = sp.ExecutionFailed
+			} else {
+				close(a.done)
+			}
+			if failure := <-drained; failure != want {
+				t.Fatal("output result was lost after stdin closure", failure)
 			}
 		})
 	}

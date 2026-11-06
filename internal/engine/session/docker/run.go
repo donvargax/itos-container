@@ -191,12 +191,12 @@ func (c *runConnection) Attach(ctx context.Context, id string, streams port.Stre
 	a := &attachment{response: response, done: make(chan struct{}), failures: make(chan port.Outcome, 1)}
 	go func() {
 		if streams.In != nil {
-			if _, err := io.Copy(response.Conn, streams.In); err != nil {
-				a.fail()
+			if _, err := io.Copy(response.Conn, stdinSource{streams.In, a.fail}); err != nil {
+				a.notify(port.StdinClosed)
 			}
 		}
 		if err := response.CloseWrite(); err != nil {
-			a.fail()
+			a.notify(port.StdinClosed)
 		}
 	}()
 	go func() {
@@ -215,26 +215,50 @@ func (c *runConnection) Attach(ctx context.Context, id string, streams port.Stre
 	}()
 	return a, ""
 }
+
+// stdinSource distinguishes a host input read error from the worker closing its
+// input connection. Wrapping the reader keeps io.Copy's fast paths from hiding
+// source errors, including reads that return both bytes and an error.
+type stdinSource struct {
+	port.Reader
+	fail func()
+}
+
+func (s stdinSource) Read(p []byte) (int, error) {
+	n, err := s.Reader.Read(p)
+	if err != nil && err != io.EOF {
+		s.fail()
+	}
+	return n, err
+}
+
 func (a *attachment) fail() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.failure = port.ExecutionFailed
+	a.notify(port.ExecutionFailed)
+}
+func (a *attachment) notify(failure port.Outcome) {
 	select {
-	case a.failures <- port.ExecutionFailed:
+	case a.failures <- failure:
 	default:
 	}
 }
 func (a *attachment) Failures() <-chan port.Outcome { return a.failures }
 func (a *attachment) Drain(ctx context.Context) port.Outcome {
-	select {
-	case <-a.done:
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		return a.failure
-	case failure := <-a.failures:
-		return failure
-	case <-ctx.Done():
-		return port.ExecutionFailed
+	for {
+		select {
+		case <-a.done:
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			return a.failure
+		case failure := <-a.failures:
+			if failure != port.StdinClosed {
+				return failure
+			}
+		case <-ctx.Done():
+			return port.ExecutionFailed
+		}
 	}
 }
 func (a *attachment) Close() { a.response.Close() }

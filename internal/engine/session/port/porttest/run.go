@@ -19,6 +19,8 @@ type RunEngine struct {
 	After                                                            func(string)
 	WaitUntilCancel, IgnoreSignal                                    bool
 	SignalFailure                                                    port.Outcome
+	StdinClosed, DrainUntilCancel                                    bool
+	DrainContextErr                                                  error
 }
 type runConnection struct {
 	*memoryConnection
@@ -74,8 +76,10 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 	if c.run.AttachFailure != "" {
 		return nil, c.run.AttachFailure
 	}
-	a := runAttachment{run: c.run, failures: make(chan port.Outcome, 1)}
-	if streams.In != nil {
+	a := runAttachment{run: c.run, failures: make(chan port.Outcome, 2)}
+	if c.run.StdinClosed {
+		a.failures <- port.StdinClosed
+	} else if streams.In != nil {
 		if _, err := io.Copy(io.Discard, streams.In); err != nil {
 			a.failure = port.ExecutionFailed
 		}
@@ -146,8 +150,15 @@ func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outc
 	c.engine.Resources[id] = o
 	return ""
 }
-func (a runAttachment) Drain(context.Context) port.Outcome {
+func (a runAttachment) Drain(ctx context.Context) port.Outcome {
 	a.run.event("drain")
+	if a.run.DrainUntilCancel {
+		<-ctx.Done()
+	}
+	a.run.DrainContextErr = ctx.Err()
+	if ctx.Err() != nil {
+		return port.ExecutionFailed
+	}
 	if a.failure != "" {
 		return a.failure
 	}

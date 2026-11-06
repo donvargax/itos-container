@@ -57,7 +57,7 @@ Feature: Foreground failures retain owned cleanup authority
       | ignored SIGINT  |
       | ignored SIGTERM |
 
-  @wip @slice-10 @ID-OFFLINE-20
+  @slice-10 @ID-OFFLINE-20
   Scenario Outline: Interrupted worker exit preserves trailing output
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -73,7 +73,7 @@ Feature: Foreground failures retain owned cleanup authority
       | SIGINT  | 23   |
       | SIGTERM | 23   |
 
-  @wip @slice-10 @ID-OFFLINE-21
+  @slice-10 @ID-OFFLINE-21
   Scenario Outline: Worker exit does not require consuming all redirected stdin
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"

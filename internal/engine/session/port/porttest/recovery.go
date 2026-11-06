@@ -62,6 +62,49 @@ func ForwardingFailureContract(t Reporter, open func() (port.RunEngine, port.Bin
 	}
 }
 
+// StdinClosureContract models an exited worker that leaves redirected stdin
+// unread, with clean stdout/stderr EOF. Only its input destination fails.
+func StdinClosureContract(t Reporter, open func() (port.RunEngine, port.Binding)) {
+	t.Helper()
+	ctx, end := context.WithTimeout(context.Background(), time.Second)
+	defer end()
+	e, b := open()
+	c, failure := e.OpenRun(ctx, b)
+	if failure != "" {
+		t.Errorf("open: %s", failure)
+		return
+	}
+	defer c.Close()
+	id, failure := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), []string{"probe"})
+	if failure != "" {
+		t.Errorf("create: %s", failure)
+		return
+	}
+	a, failure := c.Attach(ctx, id, port.Streams{In: strings.NewReader(strings.Repeat("input", 1<<20))})
+	if failure != "" {
+		t.Errorf("attach: %s", failure)
+		return
+	}
+	defer a.Close()
+	if failure = c.Start(ctx, id); failure != "" {
+		t.Errorf("start: %s", failure)
+	}
+	select {
+	case failure := <-a.Failures():
+		if failure != port.StdinClosed {
+			t.Errorf("engine input closure became a host forwarding error: %s", failure)
+		}
+	case <-ctx.Done():
+		t.Errorf("engine input closure was not reported")
+	}
+	if exit, failure := c.Wait(ctx, id); failure != "" || exit != 7 {
+		t.Errorf("input closure lost worker exit: %d %s", exit, failure)
+	}
+	if failure := a.Drain(ctx); failure != "" {
+		t.Errorf("input closure invalidated completed output: %s", failure)
+	}
+}
+
 func CleanupStoreContract(t Reporter, open func() (port.Store, approval.Durable, func())) {
 	t.Helper()
 	store, frozen, replace := open()
