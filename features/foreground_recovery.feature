@@ -1,7 +1,9 @@
 @phase-1 @linux
 Feature: Foreground failures retain owned cleanup authority
   Slice-10 review regressions exercise the product binary against a local HTTP
-  engine fixture. They prove controller decisions, not native signal delivery
+  engine fixture. Deadline and trailing-output cases use the real command through
+  a test-only cmd assembly for short budgets and drain barriers. They prove
+  controller decisions, not native signal delivery
   or isolation; slice-12 and slice-14 retain their CI runtime proof obligations.
   Use the existing SDK and standard-library signal/stream support, with no dependency.
   Forward the first SIGINT or SIGTERM once, allow 10 seconds, then SIGKILL.
@@ -117,8 +119,10 @@ Feature: Foreground failures retain owned cleanup authority
       | SIGINT  |
       | SIGTERM |
 
-  # Hold an acknowledged workload wait beyond the real startup budget. Closing
-  # stdin precedes its response; trailing output follows the reconciled wait.
+  # Hold an acknowledged workload wait beyond the launch connection's observed
+  # deadline, shortened only by the test assembly. Domain tests use virtual time
+  # to enforce the full production budgets. Closing stdin precedes the wait reply;
+  # a drain barrier releases trailing output after the reconciled wait.
   @slice-10 @ID-OFFLINE-22
   Scenario Outline: Unread stdin after the startup deadline preserves exit and output
     Given an approval checkout and isolated host state

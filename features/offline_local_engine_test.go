@@ -31,7 +31,9 @@ type localOfflineAPI struct {
 
 func (w *world) localOfflineFixture() {
 	a := &localOfflineAPI{w: w, resources: map[string]map[string]any{}, created: map[string]map[string]any{}, attached: map[string]net.Conn{}, started: map[string]bool{}, removed: map[string]bool{}, expected: map[int][]string{}}
+	w.doctor.engine.mu.Lock()
 	w.doctor.engine.offline = a
+	w.doctor.engine.mu.Unlock()
 	w.doctor.cleanup = append(w.doctor.cleanup, func() {
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -119,25 +121,40 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		_ = a.attached[id].Close()
 		out.WriteHeader(204)
 	case len(parts) == 2 && parts[1] == "wait" && r.Method == "POST" && a.started[id]:
-		if f := a.recovery; f != nil && f.lateStdin {
+		if f := a.recovery; f != nil && f.fault == "unread stdin" {
 			f.waits++
 			if f.waits == 1 {
-				// Acknowledge the wait before its ten-second handshake deadline,
-				// but keep the worker running past the 120-second startup budget.
+				// Acknowledge before holding the worker past the launch connection's
+				// shortened fixture deadline, observed from the actual port context.
 				out.WriteHeader(200)
 				out.(http.Flusher).Flush()
 				a.mu.Unlock()
-				select {
-				case <-time.After(121 * time.Second):
-				case <-r.Context().Done():
+				expired := false
+				if f.lateStdin {
+					var deadline time.Time
+					select {
+					case deadline = <-f.startup:
+					case <-r.Context().Done():
+					}
+					timer := time.NewTimer(time.Until(deadline))
+					select {
+					case <-timer.C:
+						expired = !deadline.IsZero()
+					case <-r.Context().Done():
+					}
+					timer.Stop()
 				}
 				a.mu.Lock()
+				f.expired = expired
 				resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
 				_ = a.attached[id].(*net.UnixConn).CloseRead()
 				// Release buffered bytes after read shutdown so a writer already
 				// parked in netpoll wakes and observes the closed input. Further
 				// writes fail; most of the redirected file remains unread.
 				f.discarded, a.problem = io.Copy(io.Discard, a.attached[id])
+				if !f.trailing {
+					_ = a.attached[id].(*net.UnixConn).CloseWrite()
+				}
 				// Only the second wait returns exit; the pending first wait must
 				// be canceled by stdin closure. Keep stdout/stderr open to drain.
 				a.mu.Unlock()
@@ -159,21 +176,20 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		exit := 0
 		if a.recovery != nil {
 			exit = a.recovery.exitCode
-			if a.recovery.fault == "unread stdin" {
-				// Input closure precedes the exit response, exposing cancellation races.
-				a.mu.Unlock()
-				time.Sleep(100 * time.Millisecond)
-				a.mu.Lock()
-			}
 		}
 		_ = json.NewEncoder(out).Encode(map[string]any{"StatusCode": exit})
 		if a.recovery != nil && a.recovery.trailing && r.Context().Err() == nil {
 			out.(http.Flusher).Flush()
 			conn := a.attached[id]
-			// Release the lock: premature product cleanup must be able to close
-			// the attachment before these bytes, and fail the output assertion.
+			// Release output only when the real runner starts draining. A runner
+			// which removes first gets no trailing bytes and fails the assertion.
 			a.mu.Unlock()
-			time.Sleep(100 * time.Millisecond)
+			select {
+			case <-a.recovery.draining:
+			case <-a.recovery.done:
+				a.mu.Lock()
+				return true
+			}
 			for stream, data := range []string{recoveryTailOut, recoveryTailErr} {
 				frame := make([]byte, 8)
 				frame[0] = byte(stream + 1)
@@ -189,6 +205,7 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		}
 	case len(parts) == 2 && parts[1] == "kill" && r.Method == "POST" && a.recovery != nil:
 		a.recovery.signals = append(a.recovery.signals, r.URL.Query().Get("signal"))
+		a.recovery.notified.Do(func() { close(a.recovery.signaled) })
 		if r.URL.Query().Get("signal") == "SIGKILL" || a.recovery.fault == "handled SIGINT" || a.recovery.fault == "handled SIGTERM" {
 			a.recovery.finish.Do(func() { close(a.recovery.exit) })
 			resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}

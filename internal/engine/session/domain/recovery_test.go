@@ -51,12 +51,20 @@ func TestInterruptForwardingAndEscalation(t *testing.T) {
 							cancel(port.Interrupt{Signal: signal})
 						}
 					}
+					start := time.Now()
 					r := s.Run(ctx, d, []string{"probe"}, port.Streams{})
 					if r.Outcome != port.ExecutionFailed || !r.Exited || r.Exit != 23 || r.Cleanup != port.Complete {
 						t.Fatal(r, e.Events)
 					}
 					if !slices.Contains(e.Events, signal) || slices.Contains(e.Events, "SIGKILL") != ignore {
 						t.Fatal(e.Events)
+					}
+					want := time.Duration(0)
+					if ignore {
+						want = 10 * time.Second
+					}
+					if time.Since(start) != want {
+						t.Fatal("interrupt grace changed", time.Since(start))
 					}
 					drain, remove := slices.Index(e.Events, "drain"), slices.Index(e.Events, "remove")
 					if drain < 0 || drain >= remove || e.DrainContextErr != nil {
@@ -66,6 +74,32 @@ func TestInterruptForwardingAndEscalation(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestForegroundStartupHasAnAggregateDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s, d, _, e := runnerFixture()
+		s.Engine = &startupStall{RunEngine: e}
+		start := time.Now()
+		r := s.Run(context.Background(), d, []string{"probe"}, port.Streams{})
+		if time.Since(start) != 120*time.Second || r.Outcome != port.Incomplete || r.Exited || slices.Contains(e.Events, "create") {
+			t.Fatal("startup deadline changed or allowed a launch", time.Since(start), r, e.Events)
+		}
+	})
+}
+
+type startupStall struct {
+	port.RunEngine
+	opened bool
+}
+
+func (e *startupStall) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection, port.Outcome) {
+	if !e.opened {
+		e.opened = true
+		<-ctx.Done()
+		return nil, port.Incomplete
+	}
+	return e.RunEngine.OpenRun(ctx, b)
 }
 
 func TestUnfinishedOutputDrainIsBoundedBeforeCleanup(t *testing.T) {

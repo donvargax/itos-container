@@ -7,16 +7,18 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/moby/moby/client"
 
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
+	st "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
 
-// The pinned SDK performs the HTTP handshake synchronously, then reads the
-// response body asynchronously. Exercise both sides through its real transport:
-// the controller must bound a silent daemon without imposing a workload limit.
+// The SDK performs the handshake synchronously, then reads the body in a
+// goroutine. An in-memory HTTP transport lets synctest advance both deadlines;
+// the socket-backed tests below retain real HTTP cancellation evidence.
 func TestRunWaitBoundsHandshakeWithoutBoundingWorkload(t *testing.T) {
 	for _, acknowledged := range []bool{false, true} {
 		name := "silent handshake"
@@ -24,61 +26,69 @@ func TestRunWaitBoundsHandshakeWithoutBoundingWorkload(t *testing.T) {
 			name = "acknowledged workload"
 		}
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			requested := make(chan struct{})
-			finished := make(chan struct{})
-			id := strings.Repeat("c", 64)
-			e, b, _ := sdkHandlerFixture(t, func(w http.ResponseWriter, r *http.Request, _ sp.Binding) {
-				defer close(finished)
-				if r.Method != http.MethodPost || r.URL.Path != "/v1.56/containers/"+id+"/wait" || r.URL.Query().Get("condition") != "not-running" {
-					t.Error("unexpected wait request", r.Method, r.URL)
+			synctest.Test(t, func(t *testing.T) {
+				api, err := client.New(client.WithHost("unix:///fixture.sock"), client.WithAPIVersion("1.56"),
+					client.WithHTTPClient(&http.Client{Transport: clockWaitTransport{acknowledged, t}}))
+				if err != nil {
+					t.Fatal(err)
 				}
-				close(requested)
-				if !acknowledged {
-					<-r.Context().Done()
-					return
+				defer func() { _ = api.Close() }()
+				c := &runConnection{connection: &connection{api: api, pin: &st.Readiness{Current: true}}}
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				defer cancel()
+				start := time.Now()
+				exit, failure := c.Wait(ctx, strings.Repeat("c", 64))
+				elapsed := time.Since(start)
+				if ctx.Err() != nil {
+					t.Fatal("wait exhausted the outer budget instead of its handshake budget")
 				}
-				w.WriteHeader(http.StatusOK)
-				w.(http.Flusher).Flush()
-				select {
-				case <-time.After(11 * time.Second):
-					_, _ = w.Write([]byte(`{"StatusCode":23}`))
-				case <-r.Context().Done():
+				if acknowledged {
+					if exit != 23 || failure != "" || elapsed != 11*time.Second {
+						t.Fatalf("acknowledged workload wait = %d, %s after %v", exit, failure, elapsed)
+					}
+				} else if exit != 0 || failure != sp.ExecutionFailed || elapsed != 10*time.Second {
+					t.Fatalf("silent handshake = %d, %s after %v; want failure at ten seconds", exit, failure, elapsed)
 				}
 			})
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			c, failure := e.OpenRun(ctx, b)
-			if failure != "" {
-				t.Fatal(failure)
-			}
-			defer c.Close()
-			start := time.Now()
-			exit, failure := c.Wait(ctx, id)
-			elapsed := time.Since(start)
-			if ctx.Err() != nil {
-				t.Fatal("wait exhausted the outer test budget instead of its handshake budget")
-			}
-			select {
-			case <-requested:
-			default:
-				t.Fatal("wait never reached the engine fixture")
-			}
-			if acknowledged {
-				if exit != 23 || failure != "" || elapsed < 11*time.Second {
-					t.Fatalf("acknowledged workload wait = %d, %s after %v", exit, failure, elapsed)
-				}
-			} else if exit != 0 || failure != sp.ExecutionFailed || elapsed < 10*time.Second || elapsed >= 13*time.Second {
-				t.Fatalf("silent handshake = %d, %s after %v; want failure at ten seconds", exit, failure, elapsed)
-			}
-			select {
-			case <-finished:
-			case <-ctx.Done():
-				t.Fatal("wait left its HTTP request pending")
-			}
 		})
 	}
 }
+
+type clockWaitTransport struct {
+	acknowledged bool
+	t            *testing.T
+}
+
+func (f clockWaitTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Method != http.MethodPost || r.URL.Path != "/v1.56/containers/"+strings.Repeat("c", 64)+"/wait" || r.URL.Query().Get("condition") != "not-running" {
+		f.t.Error("unexpected wait request", r.Method, r.URL)
+	}
+	if !f.acknowledged {
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	}
+	return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header),
+		Body: &clockWaitBody{ctx: r.Context(), data: strings.NewReader(`{"StatusCode":23}`)}}, nil
+}
+
+type clockWaitBody struct {
+	ctx   context.Context
+	data  *strings.Reader
+	ready bool
+}
+
+func (b *clockWaitBody) Read(p []byte) (int, error) {
+	if !b.ready {
+		select {
+		case <-time.After(11 * time.Second):
+			b.ready = true
+		case <-b.ctx.Done():
+			return 0, b.ctx.Err()
+		}
+	}
+	return b.data.Read(p)
+}
+func (*clockWaitBody) Close() error { return nil }
 
 func TestRunWaitAcknowledgedStreamHonorsCallerCancellation(t *testing.T) {
 	acknowledged := make(chan struct{})

@@ -122,8 +122,9 @@ func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
 	record := doctorRequest{r.Method, r.URL.Path, r.URL.RawQuery, pid}
 	a.mu.Lock()
 	a.journal = append(a.journal, record)
+	offline := a.offline
 	a.mu.Unlock()
-	if a.offline != nil && a.offline.serve(out, r) {
+	if offline != nil && offline.serve(out, r) {
 		return
 	}
 	if !doctorAllowedRequest(record, a.expectedImage, true) {

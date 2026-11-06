@@ -3,9 +3,9 @@ package features
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -31,6 +31,14 @@ type foregroundRecovery struct {
 	finish        sync.Once
 	signals       []string
 	elapsed       time.Duration
+	startup       chan time.Time
+	draining      chan struct{}
+	signaled      chan struct{}
+	done          chan struct{}
+	notified      sync.Once
+	expired       bool
+	startupBudget time.Duration
+	graceBudget   time.Duration
 }
 
 func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
@@ -38,15 +46,21 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 	sc.Step(`^a foreground recovery fixture for "([^"]*)"$`, w.foregroundRecoveryFixture)
 	sc.Step(`^a foreground recovery fixture with "([^"]*)" and trailing output after exit (\d+)$`, func(signal string, exit int) {
 		w.foregroundRecoveryFixture("handled " + signal)
+		w.doctor.engine.offline.mu.Lock()
+		defer w.doctor.engine.offline.mu.Unlock()
 		w.doctor.engine.offline.recovery.trailing = true
 		w.doctor.engine.offline.recovery.exitCode = exit
 	})
 	sc.Step(`^a foreground recovery fixture with exit (\d+) and unread redirected stdin$`, func(exit int) {
 		w.foregroundRecoveryFixture("unread stdin")
+		w.doctor.engine.offline.mu.Lock()
+		defer w.doctor.engine.offline.mu.Unlock()
 		w.doctor.engine.offline.recovery.exitCode = exit
 	})
 	sc.Step(`^a foreground recovery fixture with exit (\d+) and unread stdin after the startup deadline$`, func(exit int) {
 		w.foregroundRecoveryFixture("unread stdin")
+		w.doctor.engine.offline.mu.Lock()
+		defer w.doctor.engine.offline.mu.Unlock()
 		f := w.doctor.engine.offline.recovery
 		f.exitCode, f.lateStdin, f.trailing = exit, true, true
 	})
@@ -63,7 +77,8 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 		return nil
 	})
 	sc.Step(`^the foreground recovery command preserves the worker exit despite unread stdin$`, func() error {
-		if w.exit != w.doctor.engine.offline.recovery.exitCode || w.stdout != "" || w.stderr != "" {
+		f := w.doctor.engine.offline.recovery
+		if w.exit != f.exitCode || w.stdout != "" || w.stderr != "" || f.waits != 2 || f.discarded >= 4<<20 {
 			return fmt.Errorf("unread stdin replaced the worker exit with a stream failure: %s", w.report())
 		}
 		return nil
@@ -71,7 +86,7 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the foreground recovery command preserves the late worker exit and trailing streams$`, func() error {
 		f := w.doctor.engine.offline.recovery
 		if w.exit != f.exitCode || w.stdout != recoveryTailOut || w.stderr != recoveryTailErr ||
-			f.elapsed < 120*time.Second || f.elapsed >= 135*time.Second || f.waits != 2 || f.discarded >= 4<<20 {
+			!f.expired || f.startupBudget < 119*time.Second || f.startupBudget > 120*time.Second || f.elapsed >= 5*time.Second || f.waits != 2 || f.discarded >= 4<<20 {
 			return fmt.Errorf("startup deadline lost the late worker exit or trailing streams: elapsed=%v waits=%d %s", f.elapsed, f.waits, w.report())
 		}
 		return nil
@@ -98,9 +113,9 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 		if strings.HasPrefix(f.fault, "ignored") {
 			want = append(want, "SIGKILL")
 		}
-		valid := reflect.DeepEqual(f.signals, want) && f.elapsed < 25*time.Second
+		valid := reflect.DeepEqual(f.signals, want) && f.elapsed < 5*time.Second
 		if strings.HasPrefix(f.fault, "ignored") {
-			valid = valid && f.elapsed >= 10*time.Second
+			valid = valid && f.elapsed >= 100*time.Millisecond && f.graceBudget > 9*time.Second && f.graceBudget <= 10*time.Second
 		}
 		a.mu.Unlock()
 		if !valid || w.exit != 75 {
@@ -115,7 +130,10 @@ const recoveryTailErr = "final stderr\x00\xfe\n"
 
 func (w *world) foregroundRecoveryFixture(fault string) {
 	w.localOfflineFixture()
-	w.doctor.engine.offline.recovery = &foregroundRecovery{fault: fault, block: fault == "stdout" || fault == "stderr" || strings.Contains(fault, "SIG"), started: make(chan struct{}), exit: make(chan struct{})}
+	w.doctor.engine.offline.mu.Lock()
+	defer w.doctor.engine.offline.mu.Unlock()
+	w.doctor.engine.offline.recovery = &foregroundRecovery{fault: fault, block: fault == "stdout" || fault == "stderr" || strings.Contains(fault, "SIG"),
+		started: make(chan struct{}), exit: make(chan struct{}), startup: make(chan time.Time, 1), draining: make(chan struct{}), signaled: make(chan struct{}), done: make(chan struct{})}
 }
 
 func (a *localOfflineAPI) recoveryStart(out http.ResponseWriter, resource map[string]any, id string) {
@@ -137,13 +155,8 @@ func (a *localOfflineAPI) recoveryStart(out http.ResponseWriter, resource map[st
 		_, a.problem = io.Copy(io.Discard, conn)
 		_ = conn.Close()
 	case "unread stdin":
-		// The worker rejects further input but finishes output cleanly. Closing
-		// with unread socket data instead would also reset stdout/stderr, which
-		// is a separate transport failure, not this stdin-only regression.
-		if !f.lateStdin {
-			_ = conn.(*net.UnixConn).CloseRead()
-			_ = conn.(*net.UnixConn).CloseWrite()
-		}
+		// Reject input once the first wait is acknowledged. This forces the real
+		// input-closure notification to cancel that wait before exit reconciliation.
 	case "replaced git", "missing git":
 		git := filepath.Join(a.w.doctor.checkout, ".git")
 		a.problem = os.Rename(git, git+".before-run")
@@ -162,19 +175,59 @@ func (a *localOfflineAPI) recoveryStart(out http.ResponseWriter, resource map[st
 func (w *world) foregroundRecoveryRun() error {
 	a := w.doctor.engine.offline
 	f := a.recovery
-	budget := 5 * time.Second
-	if strings.Contains(f.fault, "SIG") {
-		budget = 25 * time.Second
+	assembly := f.lateStdin || f.trailing || strings.HasPrefix(f.fault, "ignored")
+	bin, args := w.bin, []string{"run", "--", "probe"}
+	if assembly {
+		var err error
+		bin, err = w.sessionProbeBinary()
+		if err != nil {
+			return err
+		}
+		args = []string{"-test.run=^TestForegroundRecoveryCommand$", "-test.count=1"}
+		if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+			args = append(args, "-test.gocoverdir="+cover)
+		}
 	}
-	if f.lateStdin {
-		budget = 140 * time.Second
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, w.bin, "run", "--", "probe")
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir, cmd.Env = w.doctor.cwd, w.env()
-	var out, errout strings.Builder
-	cmd.Stdout, cmd.Stderr = &out, &errout
+	result := filepath.Join(w.dir, "slice-10-recovery-result.json")
+	stdout, stderr := filepath.Join(w.dir, "slice-10-recovery.out"), filepath.Join(w.dir, "slice-10-recovery.err")
+	if f.fault == "stdout" {
+		stdout = "/dev/full"
+	}
+	if f.fault == "stderr" {
+		stderr = "/dev/full"
+	}
+	cmd.Env = append(cmd.Env, "SLICE_10_RECOVERY_RESULT="+result, "SLICE_10_RECOVERY_STDOUT="+stdout, "SLICE_10_RECOVERY_STDERR="+stderr)
+	if f.lateStdin {
+		cmd.Env = append(cmd.Env, "SLICE_10_RECOVERY_LATE=1")
+	}
+	if strings.HasPrefix(f.fault, "ignored") {
+		cmd.Env = append(cmd.Env, "SLICE_10_RECOVERY_IGNORED=1")
+	}
+	read, write, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = read.Close(); _ = write.Close() }()
+	cmd.ExtraFiles = []*os.File{write}
+	var transcript strings.Builder
+	cmd.Stdout, cmd.Stderr = &transcript, &transcript
+	if !assembly {
+		out, err := os.OpenFile(stdout, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = out.Close() }()
+		errout, err := os.OpenFile(stderr, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = errout.Close() }()
+		cmd.Stdout, cmd.Stderr = out, errout
+	}
 	cmd.WaitDelay = time.Second
 	if f.fault == "unread stdin" {
 		file, err := os.CreateTemp(w.doctor.checkout, "unread-input-*")
@@ -188,34 +241,49 @@ func (w *world) foregroundRecoveryRun() error {
 		}
 		cmd.Stdin = file
 	}
-	if f.fault == "stdin" || f.fault == "stdout" || f.fault == "stderr" {
-		path := "/dev/full"
-		mode := os.O_WRONLY
-		if f.fault == "stdin" {
-			path, mode = w.doctor.checkout, os.O_RDONLY
-		}
-		file, err := os.OpenFile(path, mode, 0)
+	if f.fault == "stdin" {
+		file, err := os.Open(w.doctor.checkout)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = file.Close() }()
-		switch f.fault {
-		case "stdin":
-			cmd.Stdin = file
-		case "stdout":
-			cmd.Stdout = file
-		case "stderr":
-			cmd.Stderr = file
-		}
+		cmd.Stdin = file
 	}
 	start := time.Now()
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	_ = write.Close()
+	observed := make(chan struct{})
+	go func() {
+		defer close(observed)
+		decoder := json.NewDecoder(read)
+		for {
+			var event struct {
+				Name     string
+				Deadline time.Time
+				Budget   time.Duration
+			}
+			if decoder.Decode(&event) != nil {
+				return
+			}
+			a.mu.Lock()
+			switch event.Name {
+			case "startup":
+				f.startupBudget = event.Budget
+				f.startup <- event.Deadline
+			case "grace":
+				f.graceBudget = event.Budget
+			case "drain":
+				close(f.draining)
+			}
+			a.mu.Unlock()
+		}
+	}()
 	a.mu.Lock()
 	a.expected[cmd.Process.Pid] = []string{"probe"}
 	a.mu.Unlock()
-	done := make(chan struct{})
+	done := f.done
 	go func() { _ = cmd.Wait(); close(done) }()
 	if strings.Contains(f.fault, "SIG") {
 		select {
@@ -227,7 +295,7 @@ func (w *world) foregroundRecoveryRun() error {
 			_ = cmd.Process.Signal(signal)
 			if strings.HasPrefix(f.fault, "ignored") {
 				select {
-				case <-time.After(100 * time.Millisecond):
+				case <-f.signaled:
 					_ = cmd.Process.Signal(signal)
 				case <-done:
 				}
@@ -237,7 +305,32 @@ func (w *world) foregroundRecoveryRun() error {
 		}
 	}
 	<-done
+	<-observed
 	f.elapsed = time.Since(start)
-	w.stdout, w.stderr, w.exit = out.String(), errout.String(), cmd.ProcessState.ExitCode()
+	w.exit = cmd.ProcessState.ExitCode()
+	if assembly {
+		data, err := os.ReadFile(result)
+		if err != nil {
+			w.stderr = transcript.String()
+			return nil
+		}
+		if err := json.Unmarshal(data, &w.exit); err != nil {
+			return err
+		}
+	}
+	if f.fault != "stdout" {
+		data, err := os.ReadFile(stdout)
+		if err != nil {
+			return err
+		}
+		w.stdout = string(data)
+	}
+	if f.fault != "stderr" {
+		data, err := os.ReadFile(stderr)
+		if err != nil {
+			return err
+		}
+		w.stderr = string(data)
+	}
 	return nil // Missing launch, signal death and deadline are assertion observations.
 }
