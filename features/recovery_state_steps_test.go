@@ -3,13 +3,11 @@ package features
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -272,6 +270,12 @@ func (w *world) recoveryCapture() error {
 	w.recoveryLocal.before = all
 	w.recoveryLocal.immutable = map[string]string{}
 	for path, value := range all {
+		if w.recoveryLocal.runFixture && strings.HasPrefix(path, filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")) {
+			rel, _ := filepath.Rel(filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container"), path)
+			if rel == "sessions" || strings.HasPrefix(rel, "sessions/") || rel == "intents" || strings.HasPrefix(rel, "intents/") || rel == "snapshots" {
+				continue
+			}
+		}
 		if w.session != nil && (path == w.sessionRecordPath() || path == w.recoveryRecordPath()) {
 			continue
 		}
@@ -309,7 +313,7 @@ func (w *world) recoveryImmutable() error {
 		return fmt.Errorf("recovery changed unrelated state")
 	}
 	for _, q := range w.session.api.requests {
-		if q.Path == "/containers/create" || strings.HasSuffix(q.Path, "/start") || (q.Method == "DELETE" && q.Path != "/containers/"+w.session.seedID) {
+		if (!w.recoveryLocal.runFixture && (q.Path == "/containers/create" || strings.HasSuffix(q.Path, "/start"))) || (q.Method == "DELETE" && q.Path != "/containers/"+w.session.seedID) {
 			return fmt.Errorf("recovery launched or removed another resource")
 		}
 	}
@@ -461,94 +465,4 @@ func (w *world) recoveryChangedInput(input, change string) error {
 	w.recoveryLocal.watch = watch
 	w.doctor.cleanup = append(w.doctor.cleanup, func() { _ = watch.file.Close() })
 	return nil
-}
-
-func (a *sessionAPI) serveRecovery(out http.ResponseWriter, r *http.Request, q sessionRequest, index int) {
-	l := a.w.recoveryLocal
-	status := 200
-	var body any
-	defer func() {
-		a.requests[index].Status = status
-		out.Header().Set("Content-Type", "application/json")
-		out.WriteHeader(status)
-		if body != nil {
-			_ = json.NewEncoder(out).Encode(body)
-		}
-	}()
-	if l.unavailable {
-		status = 503
-		body = map[string]string{"message": doctorCanary}
-		return
-	}
-	if l.stall {
-		a.mu.Unlock()
-		select {
-		case <-r.Context().Done():
-		case <-time.After(35 * time.Second):
-		}
-		a.mu.Lock()
-		status = 503
-		return
-	}
-	parts := strings.Split(strings.TrimPrefix(q.Path, "/containers/"), "/")
-	id := parts[0]
-	c := a.local[id]
-	if strings.HasPrefix(id, "itos-container-") {
-		for key, value := range a.local {
-			if value["Name"] == "/"+id && key != strings.Repeat("f", 64) {
-				c = value
-				id = key
-				break
-			}
-		}
-	}
-	if len(parts) == 2 && parts[1] == "json" && q.Method == "GET" {
-		if c == nil {
-			status = 404
-			body = map[string]string{"message": "absent"}
-			a.absent[id] = true
-			return
-		}
-		if l.malformed {
-			body = map[string]any{"Id": id}
-			return
-		}
-		body = approvalClone(c)
-		return
-	}
-	if c == nil {
-		status = 404
-		return
-	}
-	switch {
-	case len(parts) == 2 && parts[1] == "kill" && q.Method == "POST":
-		signal := r.URL.Query().Get("signal")
-		if signal != "SIGTERM" && signal != "SIGKILL" {
-			status = 403
-			return
-		}
-		if signal == "SIGKILL" || !l.ignoreTERM {
-			c["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
-		}
-		status = 204
-	case len(parts) == 2 && parts[1] == "wait" && q.Method == "POST":
-		if object(c["State"])["Running"] == true {
-			a.mu.Unlock()
-			<-r.Context().Done()
-			a.mu.Lock()
-		}
-		// This fixture deliberately has no explicit observed exit. An inspect
-		// default ExitCode must not turn unknown workload outcome into zero.
-		status = 503
-		body = map[string]string{"message": "no workload observation"}
-	case len(parts) == 1 && q.Method == "DELETE" && id == a.w.session.seedID:
-		if object(c["State"])["Running"] == true || r.URL.Query().Get("v") == "true" {
-			status = 403
-			return
-		}
-		delete(a.local, id)
-		status = 204
-	default:
-		status = 403
-	}
 }

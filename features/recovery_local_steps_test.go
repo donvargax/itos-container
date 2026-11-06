@@ -13,20 +13,42 @@ import (
 )
 
 type recoveryLocal struct {
-	args                            []string
-	results                         []doctorResult
-	before                          map[string]string
-	watch                           *sessionReadWatch
-	reads                           []string
-	id, phase, resource, exit, mode string
-	immutable                       map[string]string
-	ignoreTERM                      bool
-	unavailable, malformed, stall   bool
-	processes                       []*recoveryProcess
+	args                                 []string
+	results                              []doctorResult
+	before                               map[string]string
+	watch                                *sessionReadWatch
+	reads                                []string
+	id, phase, resource, exit, mode      string
+	immutable                            map[string]string
+	ignoreTERM                           bool
+	unavailable, malformed, stall        bool
+	processes                            []*recoveryProcess
+	fault, boundary                      string
+	workerExit                           chan struct{}
+	runExit                              int
+	keepRunning, failRemove, lostRemove  bool
+	removeReady, removeRelease           chan struct{}
+	beforeRequests                       int
+	lease, unrelated                     *recoveryProbe
+	unavailableIDs                       map[string]bool
+	runFixture                           bool
+	probes                               []*recoveryProbe
+	barrierReached                       bool
+	registrations                        []recoveryRegistration
+	markers                              []string
+	mutation, substitution               string
+	inspectionCount                      int
+	inspectReady, inspectRelease         chan struct{}
+	afterRemoveReady, afterRemoveRelease chan struct{}
+	second                               *world
 }
 
 func (w *world) recoveryLocalSteps(sc *godog.ScenarioContext) {
 	w.recoveryStateSteps(sc)
+	w.recoveryFaultSteps(sc)
+	w.recoveryDiscoverySteps(sc)
+	w.recoveryRunSteps(sc)
+	w.recoveryRaceSteps(sc)
 	sc.Step(`^a recovery fixture with no engine access and checkout helper sentinels$`, w.recoveryInvocationFixture)
 	sc.Step(`^product status help and stop help are requested$`, func() error {
 		for _, command := range []string{"status", "stop"} {

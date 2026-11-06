@@ -74,6 +74,10 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 		}
 	}
 	if (entry.Method == "POST" && entry.Path == "/containers/create") || entry.Method == "DELETE" {
+		if a.w.recoveryLocal != nil && a.w.recoveryLocal.runFixture && entry.Path == "/containers/create" {
+			a.w.session.token = strings.TrimPrefix(request.URL.Query().Get("name"), "itos-container-")
+			a.w.session.reference = "intents/" + a.w.approval.project + "/" + a.w.session.token + ".json"
+		}
 		entry.Record, err = sessionReadRecord(a.w.sessionRecordPath())
 		if err != nil {
 			a.problem = err
