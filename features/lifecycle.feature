@@ -467,8 +467,8 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # removal unavailable until after the original teardown expires, then retry.
   # Regression attribution: slice-10 supplies exit-17 precedence and repeat
   # suppression; merged slice-11 supplies the public ID, retained record and stop.
-  # Activate with the rest of slice-12; accept a verified complete passing case.
-  @wip @slice-12 @ID-LIFECYCLE-11 @engine
+  # Verified at 9ac4f11 by CI run 42297748701; accepted under q-6/q-11.
+  @slice-12 @ID-LIFECYCLE-11 @engine
   Scenario: Repeated signals during cleanup preserve the workload result and recovery
     Given a CI lifecycle checkout with an exit-17 probe and an unavailable removal barrier
     When run observes the probe exit and the harness sends SIGINT then SIGTERM during cleanup before restoring removal for an explicit stop
@@ -564,10 +564,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # may already have succeeded; recovery must inspect, not infer, that fact.
   # Slice-9's uncertain-create ownership and slice-10's foreground cleanup are
   # existing controls. Merged slice-11 supplies RECOVERY-14/15/22's public recovery;
-  # compare these windows before claiming new red evidence. Activate with the
-  # rest of slice-12. Already passing windows are accepted regressions; retain
-  # the supplying-slice attribution when turning the complete outline live.
-  @wip @slice-12 @ID-LIFECYCLE-16 @engine
+  # all four windows passed at 9ac4f11 in CI run 42298705984 (24 steps).
+  # Accepted as slice-11 recovery regressions under q-6/q-11.
+  @slice-12 @ID-LIFECYCLE-16 @engine
   Scenario Outline: Controller death during an in-flight transition retains recoverable ownership
     Given a CI lifecycle checkout with a trusted controller-kill barrier "<barrier>"
     When run reaches the barrier and the harness kills only its controller then invokes fresh status and stop after releasing the observation fault

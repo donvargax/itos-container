@@ -364,19 +364,31 @@ Non-engine cases that can run locally retain the ordinary local red-first proced
 manual route adds no product scenarios, supported-host claim or runtime evidence by itself.
 
 Slice-12's native step checkpoint defines all 18 rows of `ID-LIFECYCLE-08`, `09`,
-`11`, `12`, `13` and `16`, with `@wip` retained for coordinator-only red dispatch.
+`11`, `12`, `13` and `16`. The complete `11` case and all four `16` rows are live
+slice-11 recovery regressions, accepted by the coordinator at `9ac4f11` from runs
+`42297748701` and `42298705984`. The remaining cases retain `@wip`.
 The trusted worker writes independent signal receipts and checkout edits. The recorder
 keeps its full-ID mutation checks, streams acknowledged waits, delays only signal
 acknowledgements and disconnects only product transports. The recovery observer records
 successful file/directory fsyncs and controller signal syscalls; real pipe-capacity
-observations establish output backpressure before cancellation. Controller exit is
-observed before reading a blocked pipe. One observed 125-second quiet control may be
-shared within the stream outline, as its spec permits.
+observations establish output backpressure before cancellation. Initial readiness
+and diagnostic bytes are preserved before releasing the output flood, freeing any
+partially occupied pipe page. No further pipe read occurs until controller exit.
+Inspection preserves nonblocking descriptors and collection has a two-second read
+deadline. A missing barrier aborts immediately; collection caps teardown at 32 seconds
+from the recorded cancellation/exit origin, including the two-second scheduling
+tolerance, and os/exec capture waits are bounded after process death. Harness aborts
+remain failures, never successful product cancellation or cleanup. One observed
+125-second quiet control may be shared within the stream outline, as its spec permits.
 
 Local `TestLifecycle*` checks verify step registration, probe compilation, recorder
 forwarding/faults and rejection of incorrect observations. They do not execute the probe
-or provide native red/green evidence. Dispatch the six IDs at this checkpoint; separate
-dispatches can keep the slow stream outline within the existing engine-job budget.
+or provide native red/green evidence. Run `42297748701` supplied accepted assertion
+red for `08`, `09`, `12` and `13`'s quiet row. Its blocked stdout/stderr rows supplied
+no evidence: the harness missed a barrier and hung in collection. After the harness
+repair, dispatch `@ID-LIFECYCLE-13` again and record those rows' own assertion-level
+red before implementing their product path. Do not raise suite timeouts. Separate
+dispatches keep the existing engine-job budget.
 Record complete passing rows as earlier-slice regressions under q-6/q-11, including
 exit 17 and LIFECYCLE-09, and assertion-level failures for missing behaviour. Keep
 LIFECYCLE-15 with slice-15. The local lifecycle scenario steps and product changes are
