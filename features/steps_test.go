@@ -151,6 +151,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.approvalSteps(sc)
 	w.sessionSteps(sc)
 	w.offlineRuntimeSteps(sc)
+	w.offlineIsolationSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.

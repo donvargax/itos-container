@@ -18,10 +18,22 @@ func TestWorkspacePinsAndRejectsSubstitution(t *testing.T) {
 	b := port.Binding{Workspace: "/workspace/sub/child"}
 	b.Checkout.Root = root
 	w := &Workspace{}
+	t.Cleanup(w.Close)
 	if f := w.Pin(b); f != "" || !w.Unchanged() {
 		t.Fatal(f)
 	}
-	if err := os.Rename(filepath.Join(root, "sub"), filepath.Join(root, "old")); err != nil {
+	// Windows refuses renaming an ancestor with an open descendant, even with
+	// delete sharing. Release only the leaf handle; both parents used to check
+	// identity stay pinned. Prove this does not itself invalidate Unchanged.
+	if err := w.roots[len(w.roots)-1].Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !w.Unchanged() {
+		t.Fatal("closing the leaf invalidated parent identity before substitution")
+	}
+	// The handle-relative rename permits the target directory itself to stay
+	// open. Substituting its name must be detected by the still-pinned checkout.
+	if err := w.roots[0].Rename("sub", "old"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "sub", "child"), 0700); err != nil {

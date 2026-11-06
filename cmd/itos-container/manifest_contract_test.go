@@ -47,6 +47,13 @@ func TestManifestContractProcess(t *testing.T) {
 
 func TestOrdinaryDoctorRefusesMissingSelectedManifest(t *testing.T) {
 	root := t.TempDir()
+	// The subject rejects aliased checkout ancestors. macOS temp directories
+	// commonly arrive through /var; give this missing-manifest case a real root.
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ITOS_ROOT", root)
 	if err := os.WriteFile(filepath.Join(root, "itos-container.yaml"), []byte("version: 1\nmanifest: selected.json\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

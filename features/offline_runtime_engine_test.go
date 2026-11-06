@@ -39,6 +39,7 @@ type offlineAPI struct {
 	final       sessionRecord
 	problem     error
 	connections map[net.Conn]bool
+	identities  map[string]map[string]any
 }
 
 func (w *world) startOfflineAPI() error {
@@ -52,7 +53,7 @@ func (w *world) startOfflineAPI() error {
 	if err != nil {
 		return err
 	}
-	a := &offlineAPI{w: w, absent: map[string]bool{}, connections: map[net.Conn]bool{}}
+	a := &offlineAPI{w: w, absent: map[string]bool{}, connections: map[net.Conn]bool{}, identities: map[string]map[string]any{}}
 	a.server = &http.Server{Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second, ConnState: func(c net.Conn, state http.ConnState) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -89,9 +90,17 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 		entry.Status = http.StatusForbidden
 	}
 	a.requests[index] = entry
+	fault := allowed && a.removalFault(entry)
+	if fault {
+		a.requests[index].Status = http.StatusServiceUnavailable
+	}
 	a.mu.Unlock()
 	if !allowed {
 		http.Error(out, "offline fixture refused unsafe request", http.StatusForbidden)
+		return
+	}
+	if fault {
+		http.Error(out, "SLICE_14_SYNTHETIC_REMOVE_BODY", http.StatusServiceUnavailable)
 		return
 	}
 	// ReverseProxy relays the attach upgrade in both directions and preserves
@@ -125,6 +134,7 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 					return nil
 				}
 				a.created = append(a.created, id)
+				a.identities[id] = map[string]any{"Name": "/itos-container-" + a.w.session.token, "Labels": entry.Body["Labels"]}
 				// A create reply alone never counts as observed ownership.
 				observed, err = a.inspect(id)
 				if err != nil {
@@ -157,7 +167,11 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	}
 	if r.Method == "POST" && entry.Path == "/containers/create" {
 		token := strings.TrimPrefix(r.URL.Query().Get("name"), "itos-container-")
-		if !offlineHex(token) || r.URL.Query().Get("name") != "itos-container-"+token || len(r.URL.Query()) != 1 || len(a.created) != 0 {
+		limit := 1
+		if w.offline.isolation != nil {
+			limit = 2
+		}
+		if !offlineHex(token) || r.URL.Query().Get("name") != "itos-container-"+token || len(r.URL.Query()) != 1 || len(a.created) >= limit {
 			return false
 		}
 		w.session.token = token
@@ -221,8 +235,12 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 
 func (a *offlineAPI) identity(c map[string]any, id string) error {
 	w := a.w
-	if !offlineHex(id) || c["Id"] != id || c["Name"] != "/itos-container-"+w.session.token ||
-		c["Image"] != w.doctor.imageID || !reflect.DeepEqual(object(c["Config"])["Labels"], w.sessionLabels()) {
+	name, labels := any("/itos-container-"+w.session.token), any(w.sessionLabels())
+	if original := a.identities[id]; original != nil {
+		name, labels = original["Name"], original["Labels"]
+	}
+	if !offlineHex(id) || c["Id"] != id || c["Name"] != name ||
+		c["Image"] != w.doctor.imageID || !reflect.DeepEqual(object(c["Config"])["Labels"], labels) {
 		return errors.New("offline native observation differs from selected identity")
 	}
 	return nil
