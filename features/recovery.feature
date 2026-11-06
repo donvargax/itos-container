@@ -637,6 +637,31 @@ Feature: Inspect and stop owned offline sessions
     And controller diagnostics public recovery records intents and lock files contain no raw argv environment response bodies or copied stream bytes
     And the foreground stream still contains its deliberate output marker and the original approved snapshot is preserved
 
+  # Use the production command/record adapters with stateful port fakes. The
+  # controlled clock spends 25 s acquiring the operation lock, then the remaining
+  # 5 s in inspection. Expired progress writes cannot change a timeout's cause.
+  @slice-11 @ID-RECOVERY-30 @linux @wip
+  Scenario: Stop preserves temporary uncertainty when inspection exhausts its remaining budget
+    Given a recovery command fixture for "inspection deadline after lock"
+    When the recovery command fixture exercises its configured interruption
+    Then stop reports recovery.temporary with exit 75 within its original total and preserves ownership for a successful retry
+
+  # A failed lease probe supplies unknown controller presence, not lost ownership.
+  # Status still reports incomplete observation; explicit stop must attempt cleanup.
+  @slice-11 @ID-RECOVERY-31 @linux @wip
+  Scenario: An unknown controller does not block explicit owned cleanup
+    Given a recovery command fixture for "controller probe unavailable"
+    When the recovery command fixture exercises its configured interruption
+    Then stop completes owned termination and removal with controller unknown while status retains the probe problem and foreign resources survive
+
+  # Stop finishes while run's pending wait loses stdin. Completion is independent
+  # of observing a workload exit; reconciliation must preserve a nullable exit.
+  @slice-11 @ID-RECOVERY-32 @linux @wip
+  Scenario: Run reconciles concurrent stop completion without inventing a workload exit
+    Given a recovery command fixture for "completed stop during stdin closure"
+    When the recovery command fixture exercises its configured interruption
+    Then run finishes without a wait failure and status retains stopped cleanup with unknown workload exit and no repeated mutation
+
   # Native evidence supplements local fault mapping; DELETE failure happens only
   # after a real observed primary exit and is cleared solely for the public retry.
   @slice-11 @ID-RECOVERY-21 @engine

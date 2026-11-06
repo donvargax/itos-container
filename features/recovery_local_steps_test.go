@@ -53,6 +53,7 @@ func (w *world) recoveryLocalSteps(sc *godog.ScenarioContext) {
 	w.recoveryRunSteps(sc)
 	w.recoveryRaceSteps(sc)
 	w.recoveryJSONSteps(sc)
+	w.recoveryReviewSteps(sc)
 	sc.Step(`^a recovery fixture with no engine access and checkout helper sentinels$`, w.recoveryInvocationFixture)
 	sc.Step(`^product status help and stop help are requested$`, func() error {
 		for _, command := range []string{"status", "stop"} {
