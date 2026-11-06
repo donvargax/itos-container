@@ -163,3 +163,12 @@ func architecture(value string) string {
 	}
 	return value
 }
+
+// ValidateEngine applies the same negotiated-API/native-platform rules for
+// recovery as readiness, without re-reading mutable startup configuration.
+func ValidateEngine(version port.Version, info port.Info) port.Failure {
+	if !compatibleAPI(version) {
+		return port.EngineAPI
+	}
+	return engineFailure(version, info)
+}

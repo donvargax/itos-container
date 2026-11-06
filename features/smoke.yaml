@@ -56,3 +56,7 @@
   scenarios:
     - id: "@ID-RUN-03"
       why: run refuses wrapper and inherited JSON before any startup effects and keeps workload flags separate
+- file: session.feature
+  scenarios:
+    - id: "@ID-SESSION-01"
+      why: durable intent, unstarted ownership and confirmed cleanup through memory and local disk/SDK backends without a Docker daemon
