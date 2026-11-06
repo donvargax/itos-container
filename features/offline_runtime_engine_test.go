@@ -129,6 +129,9 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			return
 		}
 	}
+	if !a.anchorStart(request, entry) {
+		return
+	}
 	// ReverseProxy relays the attach upgrade in both directions and preserves
 	// half-close, rather than buffering the upgraded stream as an HTTP body.
 	proxy := &httputil.ReverseProxy{
@@ -170,6 +173,20 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			if observed != nil {
 				a.requests[index].Observation = observed
 			}
+			if entry.Method == "POST" && entry.Path == "/volumes/create" && response.StatusCode == http.StatusCreated && a.w.anchor != nil {
+				name, _ := entry.Body["Name"].(string)
+				v := a.w.anchor.volumes[name]
+				if v == nil || !anchorVolumeMatches(v, observed) {
+					a.problem = errors.New("native anchor create reply differs from requested identity")
+				} else {
+					// The create reply is not the independent ownership observation.
+					v.observed, err = a.anchorInspect(v)
+					if err != nil {
+						a.problem = err
+					}
+					v.beforeWorker = len(a.created) == 0
+				}
+			}
 			return nil
 		},
 		ErrorHandler: func(out http.ResponseWriter, request *http.Request, _ error) {
@@ -190,6 +207,9 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 // mistaken for product-enforced isolation. Only owned IDs may be mutated.
 func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	w := a.w
+	if strings.HasPrefix(entry.Path, "/volumes/") && w.anchor != nil {
+		return a.anchorVolumeAllowed(r, entry)
+	}
 	if doctorAllowedRequest(doctorRequest{Method: r.Method, Path: r.URL.Path, Query: r.URL.RawQuery}, w.doctor.image, true) ||
 		(r.Method == "GET" && entry.Path == "/images/"+w.doctor.imageID+"/json" && r.URL.RawQuery == "") {
 		return true
@@ -315,6 +335,11 @@ func (a *offlineAPI) safeCreate(body map[string]any) bool {
 				return false
 			}
 			temps++
+		case "volume":
+			if !a.anchorMount(m) {
+				return false
+			}
+			binds++
 		default:
 			return false
 		}
@@ -415,6 +440,9 @@ func (a *offlineAPI) cleanup() error {
 			continue
 		}
 		result = errors.Join(result, a.w.doctor.real.read("/containers/"+id+"/json", nil, 404))
+	}
+	if result == nil {
+		result = a.cleanupAnchorVolumes(ctx)
 	}
 	return result
 }

@@ -453,6 +453,28 @@ Feature: Hardened offline foreground run
   # Do not add those commands or an unattended restart to this item.
   #
   # Source and lifetime decisions:
+  # Coordinator q-19, 2026-11-06 ~22:55 UTC, supersedes earlier mechanism and
+  # retention requirements below. The person reviews this decision later.
+  # The anchor is an owned Docker local volume with type=none, o=bind and
+  # device=/proc/<controller-pid>/fd/<n>, naming the controller's own O_PATH
+  # descriptor for the validated checkout. Hold that descriptor from the final
+  # identity check until ContainerStart returns. The worker mounts the volume
+  # at /workspace, with copying disabled, instead of binding the checkout path.
+  # dockerd performs the bind; the controller gains no CAP_SYS_ADMIN, performs
+  # no host mount and starts no new long-lived helper. The kernel must resolve
+  # the descriptor to the original inode, never a readlink-derived pathname.
+  # Before releasing the workload, independently verify from the engine side
+  # that mounted /workspace's device/inode match the validated identity. A
+  # mismatch requires owned teardown and refusal, with no pathname fallback.
+  # Prove the Moby/kernel hypothesis first in native CI with assertion-level
+  # red then green for the post-check substitution. If Moby resolves the device
+  # by name or rejects /proc, stop with the evidence; do not select a substitute
+  # mechanism. The local SDK fixture is not evidence of kernel resolution.
+  # The labelled volume is the durable anchor record, published before worker
+  # create and released last, after confirmed worker removal. After start the
+  # worker mount retains the inode for the worker's life; no descriptor holder
+  # must outlive the controller. Slice-18 adds recovery's volume release.
+  #
   # An anchor is an owned mount-source resource which continues to name the exact
   # validated checkout directory's device/inode despite renaming or replacing
   # its original path or an ancestor. It exposes the SAME writable files, not a
@@ -477,10 +499,11 @@ Feature: Hardened offline foreground run
   #
   # Retain existing refusal when identity replacement is observed BEFORE the
   # final launch check (OFFLINE-05). For the post-check substitutions below,
-  # the already submitted start must execute against the pinned ORIGINAL inode.
+  # the already submitted start must use the pinned ORIGINAL inode or refuse
+  # without releasing the workload, with owned teardown and no path fallback.
   # Do not repair, reapprove, copy or restore the substituted checkout path.
-  # A healthy run must work, and the late-race rows must run on the original:
-  # always refusing is not an implementation of this capability.
+  # A healthy no-substitution control must work through its own anchor; always
+  # refusing is not an implementation of this capability.
   #
   # Ownership decisions, observable in protected state and ordered I/O traces:
   # After fresh preflight/frozen publication and public session registration,
@@ -488,8 +511,10 @@ Feature: Hardened offline foreground run
   # session ID, original project/snapshot/fingerprint, effective host IDs,
   # selected socket/daemon, validated checkout device/inode and a fresh random
   # operation identity. Reuse the existing 256-bit entropy and protected-store
-  # rules. Independently observe the allocated anchor's concrete identity and
-  # backing inode, then durably publish that ownership BEFORE worker create.
+  # rules. Independently observe the allocated volume's concrete identity,
+  # labels and exact options, then durably publish ownership BEFORE worker
+  # create. Verify the mounted backing inode before workload release; a local
+  # volume allocation alone has not yet established that mount.
   # Record the relationship to the worker intent/full ID when one exists.
   # A returned source string or create response alone is never ownership proof.
   #
@@ -506,13 +531,15 @@ Feature: Hardened offline foreground run
   # Concrete source encoding is adapter-owned; the contract requires evidence
   # of identity and protection, not a particular Go type or pathname spelling.
   #
-  # Keep the anchor usable through startup, workload execution and any uncertain
-  # create/start/remove operation. Release it only after the worker is confirmed
+  # Keep the descriptor through ContainerStart's return and the owned volume
+  # through workload execution and uncertain create/start/remove operations.
+  # Release the volume only after the worker is confirmed
   # absent by full ID, or positively proven never created because no create was
   # issued. A name-only 404, failed request, stopped workload, closed connection
-  # or controller exit is not that proof. Incomplete removal retains the anchor
-  # even AFTER the foreground controller process exits; a process-local FD that
-  # disappears then cannot satisfy retention. Recovery must never recreate it
+  # or controller exit is not that proof. Incomplete removal retains the volume
+  # and protected ownership even AFTER the foreground controller exits. Do not
+  # require the /proc descriptor path to remain usable after that exit or a
+  # stopped worker's mount to persist. Recovery must never recreate the volume
   # from the current checkout pathname. Do not mark the session stopped until
   # worker absence, anchor release/absence and durable completion all succeed.
   # Cleanup uses protected original ownership, not mutable checkout paths or
@@ -548,7 +575,6 @@ Feature: Hardened offline foreground run
   # overridden and update Building-block view, Foreground run, Recovery,
   # Deployment view and the affected ownership/evidence descriptions. Explain
   # the anchor's concrete protection, lifecycle and remaining slice-18 recovery.
-  # This spec-only commit edits no architecture or production code.
   #
   # Supersession is limited to raw checkout-path equality as proof of a source:
   # adapt OFFLINE-01/02/04's local request/inspection oracles and OFFLINE-09's
@@ -597,7 +623,7 @@ Feature: Hardened offline foreground run
     When the registered run completes through both fake and disk SDK mount-anchor adapters
     Then each run durably records anchor intent before allocation and verified concrete anchor ownership before worker create
     And each worker consumes only that anchor backed by the validated checkout inode with the unchanged offline boundary
-    And each anchor stays bound until confirmed worker absence and is released before durable session completion
+    And each owned volume is retained until confirmed worker absence and released before durable session completion
     And each run returns zero with the checkout edit preserved and no owned ephemeral resource remaining
     And mount-anchor operations leave approval snapshots outside targets and unrelated resources unchanged
 
@@ -744,18 +770,21 @@ Feature: Hardened offline foreground run
   # for a positive control. Both race and no-substitution runs need a complete,
   # nonempty target/operation report; missing records, an unexecuted probe or
   # guessed nonexistent paths cannot satisfy either read or mutation denial.
-  # Current code starts on the substitute (or refuses) rather than executing on
-  # the original inode: the first Then is the required CI red assertion per row.
+  # A refused race must have reached the submitted-start barrier, leave no
+  # workload report/edit, report a nonzero refusal and confirm owned teardown.
+  # Missing prerequisites or a recorder refusal do not establish product safety.
+  # Current code can start on the substitute; the first Then is the required CI
+  # red assertion per row. A no-substitution control must execute successfully.
   @wip @slice-17 @ID-OFFLINE-29 @engine
   Scenario Outline: Substitution after the final identity check cannot redirect a submitted start
     Given a CI mount-anchor checkout with the cached image original and replacement nonce trees and a reporting probe
     And the native recorder is armed to pause the submitted worker start before daemon source resolution
     When run reaches that barrier and the fixture makes "<replacement>" before forwarding the unchanged start request
-    Then the worker executes in the original checkout inode and approved subdirectory and writes its edit only to the moved original
+    Then the worker executes in the original checkout inode and approved subdirectory or run refuses before releasing the workload
     And the independently observed protected anchor was owned before use and the worker has exactly the original nonrecursive checkout host source
-    And the worker cannot read the replacement nonce nested host sentinel or anchor control records
-    And every worker append rename and unlink attempt against the actual anchor control records fails while the same operations succeed on worker-local controls
-    And the product returns zero after confirmed worker and anchor absence with the edit preserved and the replacement untouched
+    And any started worker cannot read the replacement nonce nested host sentinel or anchor control records
+    And each started worker fails every append rename and unlink attempt against the actual anchor control records while the same operations succeed on worker-local controls
+    And run confirms worker and anchor absence preserving any original edit and leaving the replacement untouched
     And the no-substitution control executes through its own inode-bound anchor and confirms cleanup
 
     Examples:
@@ -770,21 +799,23 @@ Feature: Hardened offline foreground run
   # live handshake, rename the original checkout aside and install a harmless
   # replacement, then let the probe write/exit. Observe the real workload result
   # and wait for the controller process to exit. The full worker ID must remain
-  # present and the SAME protected anchor must still bind the original inode,
+  # present and the SAME labelled volume and protected ownership must remain,
   # despite the old path's replacement and closure of all controller descriptors.
-  # An independent host observer checks that retained source without starting a
-  # second workload or invoking status/stop recovery. Never count a source string
-  # or the worker's ownership record alone as retained anchor evidence.
+  # Independently inspect the volume's original name/labels/options without
+  # remounting it, starting another workload or invoking status/stop recovery.
+  # Neither the expired descriptor path nor a stopped worker's mount is required
+  # to remain usable. Never count a source string or the worker record alone as
+  # retained volume evidence. Never recreate it from the current checkout path.
   # The healthy control has the same child exit and completes both removals.
   # Identity-checked harness release happens only after all observations. This
   # hands retained state to slice-18; it does not test that item's recovery yet.
   # Today's controller has no anchor to retain, so the first Then fails even
   # when its existing workload-exit/worker-removal failure mapping is correct.
   @wip @slice-17 @ID-OFFLINE-30 @engine
-  Scenario Outline: Failed worker removal retains the inode-bound source after run exits
+  Scenario Outline: Failed worker removal retains the owned volume after run exits
     Given a CI mount-anchor checkout with the cached image and a removal-only transient Engine API fault
     When the anchored workload is released after checkout replacement and exits <child> and the controller returns
-    Then the original owned anchor still binds the original checkout inode with protected recovery evidence after controller exit
+    Then the original owned volume and its protected recovery evidence remain after controller exit
     And native Docker still observes the exact owned worker and no anchor release was attempted
     And the observed workload exit is <child> and run returns <result> with separate "run.cleanup-temporary" guidance and its registered session ID
     And no completed-session claim is made and checkout edits approval snapshots replacement targets and unrelated resources remain intact
