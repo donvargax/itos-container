@@ -52,7 +52,12 @@ func TestRegistryRefusesFailedLockPublication(t *testing.T) {
 				return originalChmod(f, mode)
 			}
 			if fault == "stat" {
-				ops.statFile = func(*os.File) (os.FileInfo, error) { return nil, broken }
+				ops.statFile = func(f *os.File) (os.FileInfo, error) {
+					if strings.HasSuffix(f.Name(), "controller.lock") {
+						return nil, broken
+					}
+					return f.Stat()
+				}
 			}
 			if fault == "parent sync" {
 				ops.syncParent = func(*os.File) error { return broken }

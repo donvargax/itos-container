@@ -51,8 +51,8 @@ func publicRecoveryInspectionDeadline(t *testing.T) {
 		original := m.e.Resources[worker]
 		files := m.files.Sessions[m.index().Project+"/"+id]
 		before := bytes.Clone(files.Data)
-		locked, f := m.files.Open(context.Background(), m.c, id, false)
-		if f != "" {
+		locked, f := m.files.Open(context.Background(), m.index(), id, false)
+		if f != "" || locked == nil {
 			t.Fatal(f)
 		}
 		go func() {
