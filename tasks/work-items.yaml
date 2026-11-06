@@ -378,7 +378,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-10]
+    depends_on: [slice-11]
     kind: slice
     why: >
       T-11's stall, signal, engine-loss and controller-kill cases. Waits: 10 s call, 120 s startup,
