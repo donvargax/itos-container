@@ -16,6 +16,9 @@ Feature: Foreground failures retain owned cleanup authority
   Launch still requires fresh checkout identity. Removal requires protected
   session/snapshot, current host user, original daemon and full resource identity,
   independently of later changes to the writable checkout.
+  A host interrupt never replaces a classified launch or wait refusal. Before
+  owned launch, host signals retain their normal abort behavior: preflight must
+  stop without publishing a snapshot or starting a worker.
 
   @slice-10 @ID-OFFLINE-17
   Scenario Outline: Host stream failures cannot strand the foreground worker
@@ -88,6 +91,31 @@ Feature: Foreground failures retain owned cleanup authority
       | exit |
       | 0    |
       | 23   |
+
+  @wip @slice-10 @ID-OFFLINE-23
+  Scenario Outline: An interrupt preserves an already classified run refusal
+    Given a foreground interrupt contract with "<outcome>" at "<phase>"
+    When the foreground interrupt contract runs
+    Then the foreground interrupt contract retains "<outcome>" with exit 1 and owned cleanup
+
+    Examples:
+      | phase  | outcome              |
+      | launch | isolation-unverified |
+      | launch | ownership-refused    |
+      | wait   | ownership-refused    |
+
+  @wip @slice-10 @ID-OFFLINE-24
+  Scenario Outline: Host signals abort preflight before snapshot publication
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "1"
+    And the run preflight is held at fresh image inspection
+    When the run receives "<signal>" during preflight
+    Then preflight aborts before release without a snapshot or worker
+
+    Examples:
+      | signal  |
+      | SIGINT  |
+      | SIGTERM |
 
   # Hold an acknowledged workload wait beyond the real startup budget. Closing
   # stdin precedes its response; trailing output follows the reconciled wait.

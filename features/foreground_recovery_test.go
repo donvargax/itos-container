@@ -34,6 +34,7 @@ type foregroundRecovery struct {
 }
 
 func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
+	w.foregroundInterruptSteps(sc)
 	sc.Step(`^a foreground recovery fixture for "([^"]*)"$`, w.foregroundRecoveryFixture)
 	sc.Step(`^a foreground recovery fixture with "([^"]*)" and trailing output after exit (\d+)$`, func(signal string, exit int) {
 		w.foregroundRecoveryFixture("handled " + signal)
