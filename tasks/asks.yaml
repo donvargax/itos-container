@@ -78,3 +78,4 @@ questions:
   - id: q-19
     item: "slice-17"
     question: "slice-17: which anchor keeps Docker's checkout mount bound to the validated inode, with what privilege and lifetime?"
+    answer: "No new privilege and no new helper. An owned Docker volume (local driver, type none, o=bind) whose device is the controller's O_PATH descriptor for the validated checkout, /proc/<pid>/fd/<n>, held open until ContainerStart returns: dockerd does the bind and the kernel resolves the descriptor to the original inode; the container's mount then retains it for the worker's life. The volume is the durable anchor record, published before create, released last. Verify the mounted /workspace device and inode against the validated identity before releasing the workload. Prove it with a red-then-green native scenario first; if Moby resolves the source by name or rejects the path, stop with that evidence. See slice-17-steer.md."
