@@ -23,3 +23,6 @@ questions:
     item: "slice-10"
     question: "slice-10: is the engine-tier red evidence for ID-OFFLINE-06, 07 and 13 in, so implementation can go on?"
     answer: "Yes. Run 42138046011 at ba71f14 fails all three at the assertion, product exit 3: no argv, no live streams, no frozen workspace reported. The fixture smoke passed. Implement."
+  - id: q-6
+    item: "slice-10"
+    question: "slice-10: ID-OFFLINE-03 already passes before the work; accept it as regression coverage, or require another red checkpoint?"
