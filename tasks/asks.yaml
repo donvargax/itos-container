@@ -46,3 +46,4 @@ questions:
   - id: q-11
     item: "slice-12"
     question: "slice-12: its spec review found a dependency cycle with slice-11 and a scenario needing slice-14; what order?"
+    answer: "slice-11 owns the shared engine-side termination contract (SIGTERM once, 10 s grace, revalidate, SIGKILL, as its spec describes) and builds it in internal/engine/session; slice-12 reuses it and now depends on slice-11, so all its integration scenarios activate on merged slice-11. ID-LIFECYCLE-15 moves to slice-15 (isolation retained through controller loss), which depends on slice-12 and slice-14. T-25, the first release, waits for slice-14 and slice-15."
