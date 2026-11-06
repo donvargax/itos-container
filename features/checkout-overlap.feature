@@ -198,6 +198,9 @@ Feature: Run refuses overlapping worker checkouts
   # cannot masquerade as an overlap refusal. Each fault is installed before When.
   # The lost-create fixture initially hides the exact random name, then exposes
   # the matching unstarted worker on fault clearance; missing name is not absence.
+  # The successful-DELETE fixture returns HTTP 204 but keeps the original exited
+  # full ID observable. Clearing that fault only permits a later product removal;
+  # the harness does not remove it or publish completion on the product's behalf.
   # The completion fault follows actual removal but prevents durable completion.
   # Stop must re-establish durability before a later admission succeeds.
   @wip @slice-16 @ID-OVERLAP-04 @linux
@@ -210,12 +213,47 @@ Feature: Run refuses overlapping worker checkouts
     Then the descendant run starts only after confirmed original full-ID absence and durable cleanup while original edits approvals and snapshots remain
 
     Examples:
-      | condition                                              |
-      | controller absent with worker still running             |
-      | workload exited with removal refused                    |
-      | controller absent with resource observation unavailable |
-      | resource removed with session completion fsync failed    |
-      | lost create reply with its worker initially invisible    |
+      | condition                                                      |
+      | controller absent with worker still running                    |
+      | workload exited with removal refused                           |
+      | workload exited with successful DELETE but worker still present |
+      | controller absent with resource observation unavailable         |
+      | resource removed with session completion fsync failed           |
+      | lost create reply with its worker initially invisible           |
+
+  # Release must fence a surviving controller before admitting an overlapping
+  # root. Use the existing "created before start" test-assembly barrier after
+  # durable intent ownership and public ready publication, outside operation,
+  # project and admission locks; the original controller lease remains held.
+  # Given configures that barrier without running a command. When observes the
+  # unstarted full ID before attempting the contender. The first refusal is the
+  # expected red assertion: today's separate checkout indexes admit the contender.
+  #
+  # Keep the original controller paused through product stop AND the successful
+  # replacement run. Neither controller exit nor lease release is a prerequisite
+  # for readmission after confirmed durable cleanup. Resume it only after the new
+  # worker is independently observable. Attribute every later request to its
+  # invocation so the replacement's legitimate create cannot hide a stale launch.
+  # Fresh original-checkout status must retain a null workload exit: an unstarted
+  # worker has no result to preserve or invent. This is local lifecycle evidence;
+  # native admission remains OVERLAP-06/07 and mount identity remains slice-17.
+  @wip @slice-16 @ID-OVERLAP-09 @linux
+  Scenario Outline: Cleanup admits the other checkout before a stopped controller resumes
+    Given an overlap fixture with a post-create pre-start barrier for "<first>" outside its session operation lock
+    When the first run pauses after durable ownership and a fresh run attempts the other nested checkout
+    Then the nested contender reports run.checkout-overlap with exit 1 and original-checkout recovery guidance before any resource creation
+    And the paused run has exactly one durably owned unstarted worker and no workload output
+    When product stop completes the paused session and a fresh run targets the other nested checkout before the original controller is released
+    Then stop confirms original full-ID absence and durable cleanup and the fresh contender starts while the original controller remains paused
+    When the original controller resumes while the newly admitted nested worker remains active
+    Then the resumed controller exits nonzero with empty workload output and no create or start request after completed cleanup
+    And fresh original-checkout status reports stopped absent complete and null workload exit while the newly admitted worker keeps its full ID ownership and activity
+    And both nested checkouts approvals and snapshots remain unchanged by the stale continuation
+
+    Examples:
+      | first      |
+      | ancestor   |
+      | descendant |
 
   # Seed the EXISTING seven-field public record, original intent/snapshot and
   # matching running resource directly, with an absent controller. Do not seed
