@@ -86,6 +86,10 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 	// Every request, even a refused start/acquisition, is recorded before dispatch.
 	a.requests = append(a.requests, entry)
 	index := len(a.requests) - 1
+	if a.w.recoveryLocal != nil && strings.HasPrefix(entry.Path, "/containers/") {
+		a.serveRecovery(out, request, entry, index)
+		return
+	}
 	if a.w.session.offline && strings.HasPrefix(entry.Path, "/containers/") {
 		a.serveOffline(out, request, entry, index)
 		return

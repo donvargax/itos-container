@@ -13,14 +13,20 @@ import (
 )
 
 type recoveryLocal struct {
-	args    []string
-	results []doctorResult
-	before  map[string]string
-	watch   *sessionReadWatch
-	reads   []string
+	args                            []string
+	results                         []doctorResult
+	before                          map[string]string
+	watch                           *sessionReadWatch
+	reads                           []string
+	id, phase, resource, exit, mode string
+	immutable                       map[string]string
+	ignoreTERM                      bool
+	unavailable, malformed, stall   bool
+	processes                       []*recoveryProcess
 }
 
 func (w *world) recoveryLocalSteps(sc *godog.ScenarioContext) {
+	w.recoveryStateSteps(sc)
 	sc.Step(`^a recovery fixture with no engine access and checkout helper sentinels$`, w.recoveryInvocationFixture)
 	sc.Step(`^product status help and stop help are requested$`, func() error {
 		for _, command := range []string{"status", "stop"} {
