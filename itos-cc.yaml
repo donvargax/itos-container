@@ -42,15 +42,6 @@ mutation:
       replacement: ">="
       reason: The only differing input length is exactly 1048576 settings bytes. Noncanonical or invalid settings still return state.invalid. Canonical matching settings are wrapped by Encode with additional required envelope fields, so Decode rejects the larger-than-1048576-byte record with the same empty Record and state.invalid. The adapter performs no I/O. Boundary tests cover accepted complete envelopes at the limit and rejected settings at that limit; changing this early bound cannot change the result.
       line_text: if len(f.Settings) > 1024*1024 || !bounded([]byte(f.Settings)) {
-    - file: cmd/itos-container/main.go
-      function: github.com/donvargax/itos-container/cmd/itos-container#run
-      hash: ff2388dee0d19522
-      line_in_function: 21
-      column: 15
-      original: ">"
-      replacement: ">="
-      reason: "Before this guard, run replaces every empty args slice with the one-element slice containing --help. No intervening operation changes args. Thus len(args) is always at least 1 when this expression is reached: both > 0 and >= 0 are true, args[0] is safe, and completion dispatch and all observable outputs are identical. TestRunWithNoArgumentsPrintsTheHelpAndSucceeds and TestRunOfCompleteAnswersFromTheModelWithoutRunningACommand cover the boundary paths."
-      line_text: if len(args) > 0 && args[0] == "__complete" {
     - file: internal/slices/run/command/command.go
       function: github.com/donvargax/itos-container/internal/slices/run/command.CLI#Run
       hash: 6edde9fe643a70fa
