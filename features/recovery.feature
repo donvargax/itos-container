@@ -529,6 +529,17 @@ Feature: Inspect and stop owned offline sessions
       | foreground wait              |
       | observed exit before cleanup |
 
+  # A deadline while reopening after create is not evidence that stop won.
+  # The test assembly expires only that Open context; teardown has its own budget.
+  @wip @slice-11 @ID-RECOVERY-26 @linux
+  Scenario: Run cleans its created worker after a session reopen deadline
+    Given a recovery run fixture whose session reopen deadline expires after create
+    When run attempts the launch and fresh JSON status follows its exit
+    Then run removes the created worker and durably completes cleanup despite the reopen failure
+    And run returns temporary failure without starting the worker or inventing a workload exit
+    And status reports the registered session stopped with unknown workload exit and no pending retry
+    And only the originally owned worker is removed while checkout edits approvals snapshots and unrelated resources remain
+
   # A long-held A operation lock must not block B through a project-wide lock.
   @slice-11 @ID-RECOVERY-18 @linux
   Scenario: Equal project basenames and concurrent sessions have independent recovery

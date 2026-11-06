@@ -93,7 +93,7 @@ func TestPublicRecoveryCommand(t *testing.T) {
 	if request.Fault == "unclassified adapter failure" {
 		recovery.Engine = publicUnknownEngine{}
 	}
-	if request.Boundary != "" {
+	if request.Boundary != "" || request.Fault == "session reopen deadline" {
 		barrier := &publicBarrier{request: request}
 		runner.Registry = &publicBarrierRegistry{Registry: registry, barrier: barrier}
 		runner.Engine = publicBarrierEngine{RunEngine: runner.Engine, barrier: barrier}
@@ -215,6 +215,13 @@ func (r *publicBarrierRegistry) Open(ctx context.Context, id string, readOnly bo
 	}
 	if r.opened == 2 {
 		r.barrier.wait(ctx, "created before start")
+		if r.barrier.request.Fault == "session reopen deadline" {
+			// Exercise the real registry's expired-context path after create;
+			// later cleanup opens retain their fresh teardown context.
+			expired, end := context.WithDeadline(ctx, time.Now().Add(-time.Second))
+			defer end()
+			return r.Registry.Open(expired, id, readOnly)
+		}
 	}
 	return r.Registry.Open(ctx, id, readOnly)
 }

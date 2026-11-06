@@ -257,6 +257,42 @@ func (w *world) recoveryRunSteps(sc *godog.ScenarioContext) {
 		}
 		return w.recoveryLocalSignals()
 	})
+	sc.Step(`^a recovery run fixture whose session reopen deadline expires after create$`, func() error {
+		if err := w.recoveryRunFixture(); err != nil {
+			return err
+		}
+		w.recoveryLocal.fault = "session reopen deadline"
+		return nil
+	})
+	sc.Step(`^run attempts the launch and fresh JSON status follows its exit$`, func() error {
+		if err := w.recoveryProbeInvoke("run", "probe"); err != nil {
+			return err
+		}
+		w.recoveryLocalDiscover()
+		return w.recoveryInvocation("status", "--json")
+	})
+	sc.Step(`^run removes the created worker and durably completes cleanup despite the reopen failure$`, func() error {
+		if len(w.session.api.created) != 1 {
+			return fmt.Errorf("run did not create the worker before the reopen failure")
+		}
+		return w.recoveryLocalDurable()
+	})
+	sc.Step(`^run returns temporary failure without starting the worker or inventing a workload exit$`, func() error {
+		r := w.recoveryLocal.results[0]
+		if r.exit != 75 || !strings.Contains(r.stderr, "run.cleanup-incomplete") || strings.Contains(r.stderr, "run.cleanup-temporary") {
+			return fmt.Errorf("run lost the launch failure or reported incomplete cleanup: %+v", r)
+		}
+		for _, q := range w.session.api.requests {
+			if strings.HasSuffix(q.Path, "/start") || strings.HasSuffix(q.Path, "/kill") {
+				return fmt.Errorf("unstarted worker was started or signalled")
+			}
+		}
+		return nil
+	})
+	sc.Step(`^status reports the registered session stopped with unknown workload exit and no pending retry$`, func() error {
+		_, err := w.recoveryLocalEntry(w.recoveryLocal.results[1], "stopped", "absent", "complete", "unknown")
+		return err
+	})
 	sc.Step(`^a recovery run fixture with a barrier after durable registration and intent publication before any create request$`, func() error {
 		if err := w.recoveryRunFixture(); err != nil {
 			return err
