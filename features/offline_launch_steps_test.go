@@ -140,10 +140,10 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 			return nil
 		})
 	})
-	sc.Step(`^each offline result preserves the observed workload exit and reports incomplete cleanup with its safe protected intent reference$`, func() error { return w.offlineEach((*world).offlineIncomplete) })
-	sc.Step(`^no offline result claims stopped resources or advertises an unimplemented stop retry$`, func() error {
+	sc.Step(`^each offline result preserves the observed workload exit and reports incomplete cleanup with its registered session ID and exact executable stop retry$`, func() error { return w.offlineEach((*world).offlineIncomplete) })
+	sc.Step(`^no offline result claims stopped resources before confirmed durable cleanup$`, func() error {
 		return w.offlineEach(func(w *world) error {
-			for _, text := range []string{"cleanup-complete", "stopped", "itos container stop"} {
+			for _, text := range []string{"cleanup-complete", "stopped"} {
 				if strings.Contains(w.session.create.Diagnostic, text) {
 					return fmt.Errorf("incomplete cleanup advertises %q", text)
 				}
@@ -159,7 +159,7 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 			}
 			diagnostics := strings.TrimPrefix(r.Stderr, "slice-13-workload-err\n")
 			for _, marker := range []string{"literal;$HOME", "slice-13-private-argv", "slice-13-private-env", "slice-13-private-response", "slice-13-workload-out", "slice-13-workload-err", "slice-13-private-adapter-failure", doctorCanary} {
-				if strings.Contains(diagnostics+w.session.final.Bytes+w.session.transcript, marker) {
+				if strings.Contains(diagnostics+w.session.final.Bytes+w.session.transcript+string(approvalJSON(r.PublicRecords)), marker) {
 					return fmt.Errorf("ownership or diagnostic copied private fixture input")
 				}
 			}
