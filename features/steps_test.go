@@ -36,15 +36,16 @@ type world struct {
 	deadline       time.Duration
 	timedOut       bool
 
-	stdin    string // the text the run reads from its standard input, "" for none
-	policy   *policyWorld
-	manifest *manifestWorld
-	doctor   *doctorWorld
-	approval *approvalWorld
-	run      *runWorld
-	session  *sessionWorld
-	offline  *offlineRuntime
-	recovery *recoveryNative
+	stdin         string // the text the run reads from its standard input, "" for none
+	policy        *policyWorld
+	manifest      *manifestWorld
+	doctor        *doctorWorld
+	approval      *approvalWorld
+	run           *runWorld
+	session       *sessionWorld
+	offline       *offlineRuntime
+	recovery      *recoveryNative
+	recoveryLocal *recoveryLocal
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -153,6 +154,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.sessionSteps(sc)
 	w.offlineRuntimeSteps(sc)
 	w.recoveryNativeSteps(sc)
+	w.recoveryLocalSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.
