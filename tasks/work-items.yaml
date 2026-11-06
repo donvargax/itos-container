@@ -370,8 +370,8 @@ items:
   - id: slice-12
     title: Budgets, cancellation and loss
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-11]
     kind: slice
     why: >
@@ -458,6 +458,11 @@ items:
       distinction between implemented ownership, pending recovery and unproven runtime isolation.
       This first-milestone documentation follow-up does not block the current offline owned-run
       step.
+
+      Include the q-11 ownership correction in this existing architecture-drift follow-up. Update
+      recovery.feature and arc42 to identify slice-14's native isolation proof and slice-15's
+      retained-isolation proof (ID-LIFECYCLE-15), which depends on slice-12 and slice-14. Preserve
+      slice-12's budgets, cancellation and loss scope so future briefs follow the settled order.
   - id: slice-15
     title: Isolation retained through controller loss
     phase: 1
