@@ -77,7 +77,14 @@ func (w *world) recoveryStateSteps(sc *godog.ScenarioContext) {
 		if r.exit != 0 || json.Valid([]byte(r.stdout)) {
 			return fmt.Errorf("--no-json did not override inherited JSON")
 		}
-		for _, fact := range []string{l.id, w.approval.project, w.approval.fingerprint, l.phase, l.resource, l.exit} {
+		report, err := recoveryLocalReport(l.results[0], 0)
+		if err != nil {
+			return err
+		}
+		if len(report.Sessions) != 1 {
+			return fmt.Errorf("status did not report exactly one session")
+		}
+		for _, fact := range []string{l.id, w.approval.project, w.approval.fingerprint, report.Sessions[0].State, l.resource, l.exit} {
 			if !strings.Contains(r.stdout, fact) {
 				return fmt.Errorf("plain status omitted %s", fact)
 			}

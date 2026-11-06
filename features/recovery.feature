@@ -270,6 +270,22 @@ Feature: Inspect and stop owned offline sessions
       | stopped   | absent   | 7       | stopped   | complete |
       | stopped   | absent   | unknown | stopped   | complete |
 
+  # Controller loss can precede publication of the running phase even though
+  # the engine started the worker. Fresh ownership and running observations
+  # advance the reported launch phase without rewriting the protected record.
+  @wip @slice-11 @ID-RECOVERY-27 @linux
+  Scenario Outline: Status finds a running worker after loss before its phase was recorded
+    Given a recovery fixture with recorded phase "<phase>" resource "running" and observed workload exit "unknown"
+    When recovery status is invoked with --json, inherited JSON and inherited JSON overridden by --no-json
+    Then every status reports state "running" resource "running" cleanup "pending" and workload exit "unknown"
+    And JSON status has the specified schema and original project and fingerprint while plain status reports the same facts
+    And recovery inspection leaves every record and resource unchanged
+
+    Examples:
+      | phase     |
+      | preparing |
+      | ready     |
+
   # A harness process holds the lease; releasing it changes only observation.
   # A deliberately unrelated live PID cannot turn an absent lease into present.
   @slice-11 @ID-RECOVERY-03 @linux
