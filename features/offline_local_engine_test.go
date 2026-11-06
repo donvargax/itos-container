@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -133,6 +134,10 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 				a.mu.Lock()
 				resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
 				_ = a.attached[id].(*net.UnixConn).CloseRead()
+				// Release buffered bytes after read shutdown so a writer already
+				// parked in netpoll wakes and observes the closed input. Further
+				// writes fail; most of the redirected file remains unread.
+				f.discarded, a.problem = io.Copy(io.Discard, a.attached[id])
 				// Only the second wait returns exit; the pending first wait must
 				// be canceled by stdin closure. Keep stdout/stderr open to drain.
 				a.mu.Unlock()

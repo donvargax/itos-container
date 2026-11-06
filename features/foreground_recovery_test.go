@@ -25,6 +25,7 @@ type foregroundRecovery struct {
 	trailing      bool
 	lateStdin     bool
 	waits         int
+	discarded     int64
 	exitCode      int
 	started, exit chan struct{}
 	finish        sync.Once
@@ -69,8 +70,8 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the foreground recovery command preserves the late worker exit and trailing streams$`, func() error {
 		f := w.doctor.engine.offline.recovery
 		if w.exit != f.exitCode || w.stdout != recoveryTailOut || w.stderr != recoveryTailErr ||
-			f.elapsed < 120*time.Second || f.elapsed >= 135*time.Second {
-			return fmt.Errorf("startup deadline lost the late worker exit or trailing streams: elapsed=%v %s", f.elapsed, w.report())
+			f.elapsed < 120*time.Second || f.elapsed >= 135*time.Second || f.waits != 2 || f.discarded >= 4<<20 {
+			return fmt.Errorf("startup deadline lost the late worker exit or trailing streams: elapsed=%v waits=%d %s", f.elapsed, f.waits, w.report())
 		}
 		return nil
 	})
