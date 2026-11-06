@@ -625,7 +625,10 @@ Feature: Hardened offline foreground run
   # disables its AppArmor mount denial. The same setuid and mount syscalls must
   # succeed before and after the subject; no privilege is added to the worker.
   # Missing sudo is not proof; no 4096-process exhaustion or quota assertion.
-  @wip @slice-14 @ID-OFFLINE-08 @engine
+  # Accepted q-6 regression of slice-10's UID/GID, capabilities, NNP and pids
+  # boundary (run 42195113834). Same-file setuid and root/mount controls bracket
+  # the worker attempts; observed identity/flags and successful elevation fail.
+  @slice-14 @ID-OFFLINE-08 @engine
   Scenario: The first workload process has the host non-root identity without elevation
     Given a CI offline checkout with the cached image and identity capability and setuid probes
     And misleading host identity environment and an unrelated supplementary group are recorded as fixture inputs
@@ -654,7 +657,11 @@ Feature: Hardened offline foreground run
   # The underlying empty directory, not the host mount's sentinel, is visible.
   # Audit both full IDs, mounts and volume inventory before unmounting the fixture.
   # Harness unmount/removal cannot establish ephemeral product teardown.
-  @wip @slice-14 @ID-OFFLINE-09 @engine
+  # Accepted q-6 regression of slice-10's read-only root, nonrecursive checkout
+  # bind and tmpfs, plus slice-13 cleanup (run 42195113834). Writable-root,
+  # checkout/tmpfs writes and the readable nested mount are positive controls;
+  # writable root flags, imported nested bytes or retained temporary files fail.
+  @slice-14 @ID-OFFLINE-09 @engine
   Scenario: Checkout edits persist while writable home and temporary files are ephemeral
     Given a CI offline checkout with the cached image and a filesystem probe
     When the product runs the offline filesystem probe twice with distinct session nonces
@@ -679,7 +686,11 @@ Feature: Hardened offline foreground run
   # observations, and identify the process by nonce/start identity, not a PID
   # alone that could coincide inside the worker. No host-namespace join by a probe.
   # Actual attempts and successful local controls are required for every denial.
-  @wip @slice-14 @ID-OFFLINE-10 @engine
+  # Accepted q-6 regression of slice-10's checkout-only host mount and private
+  # namespaces (run 42195113834). Host reads/connections and process nonce checks
+  # bracket the worker's matching attempts; local file/socket controls must pass.
+  # A reachable host path/socket or matching host namespace/process fails.
+  @slice-14 @ID-OFFLINE-10 @engine
   Scenario: Host files sockets and namespaces are inaccessible to a running worker
     Given a CI offline checkout with the cached image and outside host sentinels and socket listeners
     When the product runs the offline host-access probe
@@ -706,7 +717,10 @@ Feature: Hardened offline foreground run
   # Mirror host/control loopback destinations in their own namespaces; at the
   # same port the worker can exchange its own nonce but never the host's nonce.
   # No control is allowed to attach or repair a subject worker's network.
-  @wip @slice-14 @ID-OFFLINE-11 @engine
+  # Accepted q-6 regression of slice-10's verified NetworkMode none before start
+  # (run 42195113834). Every route has same-client before/after nonce exchanges
+  # and receipts, including IPv6; any worker answer, receipt or network grant fails.
+  @slice-14 @ID-OFFLINE-11 @engine
   Scenario: No external network path exists from the first workload instruction
     Given a CI offline checkout with the cached image and controlled IPv4 IPv6 TCP UDP gateway private and synthetic metadata listeners
     When trusted controls and the product's first-instruction and running network probes attempt every fixture route
@@ -779,7 +793,11 @@ Feature: Hardened offline foreground run
   # heartbeats before harness cleanup. Check original approval/snapshot bytes,
   # ownership completion and persisted edit separately from the exit number.
   # Slice-13's local contract owns durability ordering; a DELETE alone is not it.
-  @wip @slice-14 @ID-OFFLINE-14 @engine
+  # Accepted q-6 regression of slice-10's primary-exit teardown and slice-13's
+  # owned cleanup contract (run 42195113834). A live descendant is independently
+  # observed before exit and an unrelated same-image worker keeps heartbeating;
+  # surviving descendants/resources or a missing durable completion record fail.
+  @slice-14 @ID-OFFLINE-14 @engine
   Scenario Outline: Primary exit determines the result and ends the whole owned worker
     Given a CI offline checkout with the cached image and a primary probe exiting <status> with a surviving child
     When the product runs that offline foreground probe
@@ -874,7 +892,11 @@ Feature: Hardened offline foreground run
   # separate data. Clear the fault only for identity-checked harness cleanup after
   # assertions; its removal cannot turn the product failure into a successful run.
   # Engine loss/cancellation remains slice-12, public status/stop retry slice-11.
-  @wip @slice-14 @ID-OFFLINE-16 @engine
+  # Accepted q-6 regression of slice-10's native exit precedence and slice-13's
+  # classified incomplete cleanup (run 42195113834). A fault-free invocation of
+  # the same probe/status proves removal works, and the unrelated worker stays
+  # live; a changed exit or an absent/completed faulted worker fails.
+  @slice-14 @ID-OFFLINE-16 @engine
   Scenario Outline: Native workload exit is retained when required removal fails
     Given a CI offline checkout with the cached image and a removal-only transient Engine API fault
     When the product runs an offline probe that writes a checkout edit and exits <child>
