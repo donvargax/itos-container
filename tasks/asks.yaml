@@ -47,3 +47,7 @@ questions:
     item: "slice-12"
     question: "slice-12: its spec review found a dependency cycle with slice-11 and a scenario needing slice-14; what order?"
     answer: "slice-11 owns the shared engine-side termination contract (SIGTERM once, 10 s grace, revalidate, SIGKILL, as its spec describes) and builds it in internal/engine/session; slice-12 reuses it and now depends on slice-11, so all its integration scenarios activate on merged slice-11. ID-LIFECYCLE-15 moves to slice-15 (isolation retained through controller loss), which depends on slice-12 and slice-14. T-25, the first release, waits for slice-14 and slice-15."
+  - id: q-12
+    item: "slice-14"
+    question: "slice-14: six of seven engine scenarios already pass and the DNS one fails in setup; how to proceed?"
+    answer: "Run 42195113834: accept the six as regression coverage under q-6, each only with a positive control proving its probe can see what it checks, and a comment naming the protection. The DNS scenario failed in setup (the dual-stack control never became ready), which is not red evidence: fix the control, then stop for a new engine run of it. See slice-14-steer.md."
