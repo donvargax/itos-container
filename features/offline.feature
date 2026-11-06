@@ -562,8 +562,11 @@ Feature: Hardened offline foreground run
   # an empty receipt list alone cannot establish the requested isolation.
   # Controls run before and after the corresponding attempt with the same
   # executable/client and target operation. Never loosen the subject's settings.
-  # Missing IPv6, setuid, nested-mount, resolver or process controls fails the
-  # scenario; no skipped route, weaker fallback or manufactured denial result.
+  # The control checks IPv6 availability in its own network namespace, enables
+  # its namespace's IPv6 interfaces and waits for tentative addresses to settle.
+  # It never changes the runner or worker network. Missing kernel IPv6, setuid,
+  # nested-mount, resolver or process controls fails with the actual setup error;
+  # no skipped route, weaker fallback or manufactured denial result.
   #
   # Observe primary exit, full-ID absence, protected completion record and
   # unrelated resources before harness teardown. The absence record has the
@@ -596,7 +599,12 @@ Feature: Hardened offline foreground run
   # fail against a wrong build. Never weaken a case or manufacture a red result.
   # Activation needs assertion-level red/green evidence or that verified
   # regression basis, then green CI at the actual pushed head without red input.
-  # This draft supplies no runtime/support or mutation claim.
+  # Coordinator run 42195113834 at 744f548 (2026-11-06 09:45) passed 08/09/10/11/
+  # 14/16 against earlier slices. Their positive controls are required below;
+  # add missing controls and activate these regressions under q-6. Scenario 12
+  # failed during listener/resolver setup, NOT at a behavior assertion. Repair
+  # its control and stop for another coordinator engine run of 12, still @wip.
+  # The new head still needs green CI; no runtime/support or mutation claim here.
 
   # Effective identity comes from the real host process, not fixture environment.
   # Given records its UID/GID and groups, installs a compiled report-only root-owned
@@ -613,6 +621,9 @@ Feature: Hardened offline foreground run
   # must elevate its effective UID before and after the subject attempt. It only
   # reports IDs, uses the same cached image, has no network or extra host mounts,
   # and never executes on host. A nosuid/nonexecuting helper is a broken control.
+  # Another control grants root/SETUID/SYS_ADMIN in its private namespaces and
+  # disables its AppArmor mount denial. The same setuid and mount syscalls must
+  # succeed before and after the subject; no privilege is added to the worker.
   # Missing sudo is not proof; no 4096-process exhaustion or quota assertion.
   @wip @slice-14 @ID-OFFLINE-08 @engine
   Scenario: The first workload process has the host non-root identity without elevation
@@ -632,8 +643,10 @@ Feature: Hardened offline foreground run
   # When invokes the product twice with independent session nonces. Each probe
   # observes kernel read-only root mount flags AND attempts an image write (for
   # example creating /slice-14-root-marker). A permission error without the
-  # read-only mount observation is insufficient. Successful checkout and tmpfs
-  # writes provide controls.
+  # read-only mount observation is insufficient. A root-capable control with a
+  # writable image root must write/read the SAME path before and after; the
+  # subject still requires kernel ro mount flags as well as its denied write.
+  # Successful checkout and tmpfs writes provide the non-root write controls.
   # HOME/TMPDIR remain /tmp; use different paths within it to distinguish the
   # home and temp markers. Verify tmpfs type/options and owner identity, not only
   # environment strings. Run two receives run one's names and must attempt reads;
@@ -722,6 +735,11 @@ Feature: Hardened offline foreground run
   # Use the same earliest-operation/live-phase protocol as 11 and require the
   # complete query/phase report plus zero matching resolver receipts. Localhost
   # and hosts-file resolution alone is allowed and is not external DNS traffic.
+  # Dual-stack OFFLINE-11 passed in the coordinator run, so that runner had IPv6.
+  # Give the DNS control usable IPv6 interfaces in its own namespace too, wait
+  # for address assignment/DAD, and avoid re-adding existing resolver aliases.
+  # Surface probe setup errors immediately instead of replacing them with a
+  # generic readiness timeout. All IPv4/IPv6 controls remain mandatory.
   @wip @slice-14 @ID-OFFLINE-12 @engine
   Scenario: Offline execution has no external DNS or alternate resolver path
     Given a CI offline checkout with the cached image and controlled system Docker loopback TCP UDP and HTTPS DNS resolvers

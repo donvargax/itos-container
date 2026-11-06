@@ -97,7 +97,7 @@ func TestOfflineIsolationIdentityOracleRejectsWrongRuntime(t *testing.T) {
 			r[prefix+k] = "0000000000000000"
 		}
 	}
-	s := &isolationWorld{w: &world{approval: &approvalWorld{uid: "1001", gid: "1002"}}, groups: []int{1002, 1003}, setuidBefore: "0", setuidAfter: "0", runs: []*isolationRun{{config: isolationConfig{Nonce: "n"}, reports: []isolationReport{{Kind: "identity", Nonce: "n", Values: r}}}}}
+	s := &isolationWorld{w: &world{approval: &approvalWorld{uid: "1001", gid: "1002"}}, groups: []int{1002, 1003}, setuidBefore: "0", setuidAfter: "0", privilegedBefore: true, privilegedAfter: true, runs: []*isolationRun{{config: isolationConfig{Nonce: "n"}, reports: []isolationReport{{Kind: "identity", Nonce: "n", Values: r}}}}}
 	for _, check := range []string{"identity", "capabilities", "elevation", "pids"} {
 		if err := s.identityCheck(check); err != nil {
 			t.Fatal(err)
@@ -110,6 +110,39 @@ func TestOfflineIsolationIdentityOracleRejectsWrongRuntime(t *testing.T) {
 			t.Errorf("wrong %s passed", test.key)
 		}
 		r[test.key] = old
+	}
+	for _, control := range []*bool{&s.privilegedBefore, &s.privilegedAfter} {
+		*control = false
+		if s.identityCheck("elevation") == nil {
+			t.Error("missing root/mount control passed")
+		}
+		*control = true
+	}
+}
+
+func TestOfflineIsolationRootRequiresWritableControlAndReadOnlyObservation(t *testing.T) {
+	r := map[string]string{"root-options": "ro,relatime", "root-write": "permission denied"}
+	s := &isolationWorld{rootBefore: true, rootAfter: true, runs: []*isolationRun{
+		{config: isolationConfig{Nonce: "first"}, reports: []isolationReport{{Kind: "filesystem", Nonce: "first", Values: r}}},
+		{config: isolationConfig{Nonce: "second"}, reports: []isolationReport{{Kind: "filesystem", Nonce: "second", Values: r}}},
+	}}
+	if err := s.filesystemCheck("root"); err != nil {
+		t.Fatal(err)
+	}
+	for _, control := range []*bool{&s.rootBefore, &s.rootAfter} {
+		*control = false
+		if s.filesystemCheck("root") == nil {
+			t.Error("missing writable-root control passed")
+		}
+		*control = true
+	}
+	r["root-options"] = "rw,relatime"
+	if s.filesystemCheck("root") == nil {
+		t.Error("permission denial alone proved a read-only root")
+	}
+	r["root-options"], r["root-write"] = "ro,relatime", "<nil>"
+	if s.filesystemCheck("root") == nil {
+		t.Error("successful image-root write passed")
 	}
 }
 

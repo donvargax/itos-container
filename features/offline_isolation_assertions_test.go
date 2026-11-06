@@ -124,8 +124,8 @@ func (s *isolationWorld) identityCheck(check string) error {
 			}
 		}
 	case "elevation":
-		if s.setuidBefore != "0" || s.setuidAfter != "0" {
-			return errors.New("same-file setuid controls did not elevate before and after")
+		if s.setuidBefore != "0" || s.setuidAfter != "0" || !s.privilegedBefore || !s.privilegedAfter {
+			return errors.New("setuid and mount controls did not succeed before and after")
 		}
 		if r["setuid-error"] == "" || r["setuid-error"] == "<nil>" || r["after-setuid"] != s.w.approval.uid || r["helper-error"] != "<nil>" || r["helper-uid"] != s.w.approval.uid || r["mount-error"] == "" || r["mount-error"] == "<nil>" {
 			return errors.New("setuid or privileged mount attempt elevated or did not execute")
@@ -147,6 +147,9 @@ func (s *isolationWorld) filesystemCheck(check string) error {
 		r := report.Values
 		switch check {
 		case "root":
+			if !s.rootBefore || !s.rootAfter {
+				return errors.New("same-path writable image root controls did not succeed before and after")
+			}
 			if !strings.Contains(","+r["root-options"]+",", ",ro,") || r["root-write"] == "" || r["root-write"] == "<nil>" {
 				return errors.New("image write was not denied by an observed read-only root")
 			}

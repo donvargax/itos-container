@@ -44,8 +44,11 @@ func (w *world) isolationAction() error {
 	switch s.mode {
 	case "identity":
 		s.setuidAfter, err = s.setuidControl()
+		s.controlError = errors.Join(s.controlError, err)
+		s.privilegedAfter, err = s.privilegeControl()
 	case "filesystem":
 		s.nestedAfter = s.nestedControl()
+		s.rootAfter, err = s.rootWriteControl()
 	case "host":
 		s.hostAfter, err = s.hostControls()
 	case "primary", "exit":

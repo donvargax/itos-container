@@ -99,6 +99,21 @@ func main() {
 		emit(report{Kind: "resolvers", Values: map[string]string{"resolv.conf": text("/etc/resolv.conf")}})
 		return
 	}
+	if os.Args[1] == "privileged-control" {
+		r := ids()
+		r["setuid-error"] = fmt.Sprint(syscall.Setuid(0))
+		r["mount-error"] = fmt.Sprint(mountAttempt())
+		emit(report{Kind: "privileged-control", Values: r})
+		return
+	}
+	if os.Args[1] == "root-write-control" {
+		nonce := os.Args[2]
+		err := rootWrite(nonce)
+		_, matched := fileAttempt("/slice-14-root-marker", nonce)
+		options, _ := mountInfo("/")
+		emit(report{Kind: "root-write-control", Values: map[string]string{"root-write": fmt.Sprint(err), "root-match": strconv.FormatBool(matched), "root-options": options}})
+		return
+	}
 	var c config
 	f, e := os.Open(os.Args[2])
 	must(e)
@@ -154,17 +169,27 @@ func identity(c config) {
 	if json.Unmarshal(child, &cr) == nil {
 		r["helper-uid"] = cr.Values["uid"]
 	}
-	must(os.Mkdir("/tmp/slice-14-mount", 0700))
-	e = syscall.Mount("none", "/tmp/slice-14-mount", "tmpfs", 0, "")
-	r["mount-error"] = fmt.Sprint(e)
-	if e == nil {
-		must(syscall.Unmount("/tmp/slice-14-mount", 0))
-	}
+	r["mount-error"] = fmt.Sprint(mountAttempt())
 	r["pids.max"] = text("/sys/fs/cgroup/pids.max")
 	if r["pids.max"] == "" { // cgroup v1 hosts expose the controller separately.
 		r["pids.max"] = text("/sys/fs/cgroup/pids/pids.max")
 	}
 	emit(report{Kind: "identity", Nonce: c.Nonce, Values: r})
+}
+
+func mountAttempt() error {
+	path, err := os.MkdirTemp("/tmp", "slice-14-mount-")
+	must(err)
+	defer os.Remove(path)
+	err = syscall.Mount("none", path, "tmpfs", 0, "")
+	if err == nil {
+		must(syscall.Unmount(path, 0))
+	}
+	return err
+}
+
+func rootWrite(nonce string) error {
+	return os.WriteFile("/slice-14-root-marker", []byte(nonce), 0600)
 }
 
 func mountInfo(path string) (string, string) {
@@ -189,7 +214,7 @@ func filesystem(c config) {
 	i, e := os.Stat("/tmp")
 	must(e)
 	r["tmp-mode"] = fmt.Sprintf("%o", i.Sys().(*syscall.Stat_t).Mode&07777)
-	r["root-write"] = fmt.Sprint(os.WriteFile("/slice-14-root-marker", []byte(c.Nonce), 0600))
+	r["root-write"] = fmt.Sprint(rootWrite(c.Nonce))
 	r["HOME"], r["TMPDIR"] = os.Getenv("HOME"), os.Getenv("TMPDIR")
 	for key, path := range map[string]string{"checkout": "/workspace/slice-14-edit-", "home": filepath.Join(os.Getenv("HOME"), "slice-14-home-"), "temp": filepath.Join(os.Getenv("TMPDIR"), "slice-14-temp-")} {
 		if c.Previous != "" {

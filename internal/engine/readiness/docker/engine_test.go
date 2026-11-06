@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -209,13 +210,20 @@ func TestSocketChangedDuringNegotiation(t *testing.T) {
 
 func TestUnavailableSocket(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "socket")
+	urlPath := filepath.ToSlash(path)
+	if filepath.VolumeName(path) != "" {
+		// A local device path stays absolute on Windows without making its
+		// drive letter the URL authority. No socket is ever opened by this test.
+		urlPath = "//./" + urlPath
+	}
+	endpoint := (&url.URL{Scheme: "unix", Path: urlPath}).String()
 	for _, create := range []bool{false, true} {
 		if create {
 			if err := os.WriteFile(path, nil, 0600); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if s, failure := (Engine{}).Open("unix://"+path, t.TempDir(), time.Second); s != nil || failure != port.EngineUnavailable {
+		if s, failure := (Engine{}).Open(endpoint, t.TempDir(), time.Second); s != nil || failure != port.EngineUnavailable {
 			t.Fatal(s, failure)
 		}
 	}

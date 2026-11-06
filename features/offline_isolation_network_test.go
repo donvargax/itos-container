@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 )
@@ -105,19 +107,34 @@ func (s *isolationWorld) prepareNetwork() error {
 			}
 		}
 	}
-	s.control, err = s.controlCreate(s.controlDir, []string{"/workspace/slice-14-probe", "serve", "/workspace/config.json"}, "0:0", s.networkID, aliases, []string{"NET_ADMIN", "NET_RAW", "NET_BIND_SERVICE"}, true)
+	s.control, err = s.controlCreate(s.controlDir, []string{"/workspace/slice-14-probe", "serve", "/workspace/config.json"}, "0:0", s.networkID, aliases, []string{"NET_ADMIN", "NET_RAW", "NET_BIND_SERVICE"}, true, func(h *container.HostConfig) {
+		// Host IPv6 defaults need not enable the control's loopback interface.
+		// These settings belong only to its private namespace, never the worker
+		// or runner. Keep every IPv6 route and require a usable dual-stack control.
+		h.Sysctls = map[string]string{"net.ipv6.conf.all.disable_ipv6": "0", "net.ipv6.conf.default.disable_ipv6": "0", "net.ipv6.conf.lo.disable_ipv6": "0"}
+	})
 	if err != nil {
 		return err
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		r, err := s.controlLogs(s.control)
+		if err != nil && !errors.Is(err, errIsolationNoReports) {
+			return fmt.Errorf("listener/resolver control startup: %w", err)
+		}
 		if err == nil {
 			for _, v := range r {
-				if v.Kind == "ready" && v.Nonce == s.config.Nonce {
+				if v.Kind == "ready" && v.Nonce == s.config.Nonce && v.Values["ipv6-loopback"] == "ready" {
 					return nil
 				}
 			}
+		}
+		observed, err := s.controlInspect(s.control)
+		if err != nil {
+			return err
+		}
+		if observed.State == nil || !observed.State.Running {
+			return errors.New("listener/resolver control exited before dual-stack readiness")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

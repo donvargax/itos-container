@@ -18,10 +18,13 @@ func TestWorkspacePinsAndRejectsSubstitution(t *testing.T) {
 	b := port.Binding{Workspace: "/workspace/sub/child"}
 	b.Checkout.Root = root
 	w := &Workspace{}
+	t.Cleanup(w.Close)
 	if f := w.Pin(b); f != "" || !w.Unchanged() {
 		t.Fatal(f)
 	}
-	if err := os.Rename(filepath.Join(root, "sub"), filepath.Join(root, "old")); err != nil {
+	// Use the pinned parent for the rename too. On Windows this uses the
+	// handle-relative rename API instead of MoveFileEx on an open directory.
+	if err := w.roots[0].Rename("sub", "old"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "sub", "child"), 0700); err != nil {

@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/moby/moby/api/types/container"
 )
 
 func (s *isolationWorld) prepare() error {
@@ -37,6 +39,17 @@ func (s *isolationWorld) prepare() error {
 			return err
 		}
 		s.setuidBefore, err = s.setuidControl()
+		if err != nil {
+			return err
+		}
+		// Only this trusted control grants mount authority in its own namespace.
+		s.privilegedControl, err = s.controlCreate(w.doctor.checkout, []string{"/workspace/slice-14-probe", "child", s.config.Nonce}, "0:0", "none", nil, []string{"SYS_ADMIN", "SETUID"}, true, func(h *container.HostConfig) {
+			h.SecurityOpt = append(h.SecurityOpt, "apparmor=unconfined")
+		})
+		if err != nil {
+			return err
+		}
+		s.privilegedBefore, err = s.privilegeControl()
 		return err
 	case "filesystem":
 		source := filepath.Join(w.doctor.host, "slice-14-nested-source")
@@ -62,7 +75,15 @@ func (s *isolationWorld) prepare() error {
 		if !s.nestedBefore {
 			return errors.New("nested read-only host mount control is unavailable")
 		}
-		return nil
+		var err error
+		s.control, err = s.controlCreate(w.doctor.checkout, []string{"/workspace/slice-14-probe", "child", s.config.Nonce}, "0:0", "none", nil, nil, true, func(h *container.HostConfig) {
+			h.ReadonlyRootfs = false
+		})
+		if err != nil {
+			return err
+		}
+		s.rootBefore, err = s.rootWriteControl()
+		return err
 	case "host":
 		return s.prepareHost()
 	case "primary", "exit":
@@ -113,6 +134,28 @@ func (s *isolationWorld) setuidControl() (string, error) {
 		return "", errors.New("same-file setuid control did not elevate without NNP")
 	}
 	return r[0].Values["uid"], nil
+}
+
+func (s *isolationWorld) privilegeControl() (bool, error) {
+	r, err := s.controlExec(s.privilegedControl, "0:0", "/workspace/slice-14-probe", "privileged-control")
+	if err != nil {
+		return false, err
+	}
+	if len(r) != 1 || r[0].Kind != "privileged-control" || r[0].Values["uid"] != "0" || r[0].Values["setuid-error"] != "<nil>" || r[0].Values["mount-error"] != "<nil>" {
+		return false, errors.New("root and mount positive controls did not succeed")
+	}
+	return true, nil
+}
+
+func (s *isolationWorld) rootWriteControl() (bool, error) {
+	r, err := s.controlExec(s.control, "0:0", "/workspace/slice-14-probe", "root-write-control", isolationNonce())
+	if err != nil {
+		return false, err
+	}
+	if len(r) != 1 || r[0].Kind != "root-write-control" || r[0].Values["root-write"] != "<nil>" || r[0].Values["root-match"] != "true" || !strings.Contains(","+r[0].Values["root-options"]+",", ",rw,") {
+		return false, errors.New("same-path writable image root control did not succeed")
+	}
+	return true, nil
 }
 
 func (w *world) isolationIdentityInputs() error {
@@ -260,6 +303,10 @@ func (s *isolationWorld) hostControls() (map[string]string, error) {
 	}
 	if isolationProcessStart(s.config.HostPID) != s.config.HostStart {
 		return nil, errors.New("host process sentinel disappeared")
+	}
+	env, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", s.config.HostPID))
+	if err != nil || !strings.Contains(string(env), "SLICE_14_SENTINEL="+s.config.Nonce) {
+		return nil, errors.New("host process nonce control is unavailable")
 	}
 	r["sentinel"] = s.config.HostStart
 	return r, nil

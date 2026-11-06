@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -118,12 +120,32 @@ func ip(args ...string) {
 func serve(c config) {
 	// Control-only aliases on an internal bridge. No forwarding, host namespace
 	// join, subject mutation or route to the public network is installed.
+	assigned, err := net.InterfaceAddrs()
+	must(err)
+	seen := map[string]bool{}
+	for _, address := range assigned {
+		if p, ok := address.(*net.IPNet); ok {
+			seen[p.IP.String()] = true
+		}
+	}
 	for _, address := range c.Addresses {
+		if seen[address] {
+			continue
+		}
+		seen[address] = true
 		prefix := "/32"
 		if strings.Contains(address, ":") {
 			prefix = "/128"
 		}
 		ip("addr", "add", address+prefix, "dev", "lo")
+	}
+	// IPv6 can exist on the runner while being disabled on a fresh container's
+	// loopback, and newly assigned addresses can still be tentative (DAD).
+	// Check both families in this isolated namespace before claiming readiness;
+	// wait only for address availability, never drop a route or fake a denial.
+	addresses := append([]string{"127.0.0.1", "::1", "172.30.14.2", "fd14:14::2"}, c.Addresses...)
+	for _, address := range addresses {
+		must(controlAddressReady(address))
 	}
 	if c.Mode == "dns" {
 		// Reproduce the subject's independently captured system resolver targets
@@ -149,8 +171,22 @@ func serve(c config) {
 			listenEcho(r.Protocol, r.Address, "control")
 		}
 	}
-	emit(report{Kind: "ready", Nonce: c.Nonce})
+	emit(report{Kind: "ready", Nonce: c.Nonce, Values: map[string]string{"ipv6-loopback": "ready"}})
 	select {}
+}
+
+func controlAddressReady(address string) error {
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		l, err := net.Listen("tcp", net.JoinHostPort(address, "0"))
+		if err == nil {
+			return l.Close()
+		}
+		if !errors.Is(err, syscall.EADDRNOTAVAIL) || !time.Now().Before(deadline) {
+			return fmt.Errorf("control address %s unavailable (IPv6 all=%s lo=%s): %w", address, text("/proc/sys/net/ipv6/conf/all/disable_ipv6"), text("/proc/sys/net/ipv6/conf/lo/disable_ipv6"), err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func loopback(c config) {

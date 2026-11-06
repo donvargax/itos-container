@@ -78,6 +78,7 @@ type isolationWorld struct {
 	networkID, networkName                string
 	networkLabels                         map[string]string
 	control                               *isolationControl
+	privilegedControl                     *isolationControl
 	controlDir                            string
 	before, after                         map[string]string
 	resourcesBefore, resourcesAfter       map[string]string
@@ -86,6 +87,8 @@ type isolationWorld struct {
 	removeFault                           bool
 	nestedBefore, nestedAfter             bool
 	setuidBefore, setuidAfter             string
+	privilegedBefore, privilegedAfter     bool
+	rootBefore, rootAfter                 bool
 	hostBefore, hostAfter                 map[string]string
 	groups                                []int
 	controlBeatsBefore, controlBeatsAfter int
@@ -140,7 +143,7 @@ func (w *world) buildIsolationProbe() error {
 	return nil
 }
 
-func (s *isolationWorld) controlCreate(dir string, argv []string, user, networkID string, aliases []string, capabilities []string, nnp bool) (*isolationControl, error) {
+func (s *isolationWorld) controlCreate(dir string, argv []string, user, networkID string, aliases []string, capabilities []string, nnp bool, configure ...func(*container.HostConfig)) (*isolationControl, error) {
 	c := &isolationControl{name: "slice-14-control-" + isolationNonce(), image: s.w.doctor.imageID, labels: map[string]string{"slice-14.fixture": isolationNonce()}}
 	s.controls = append(s.controls, c) // retain intent even if create's response is lost
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -153,6 +156,9 @@ func (s *isolationWorld) controlCreate(dir string, argv []string, user, networkI
 	host := &container.HostConfig{NetworkMode: container.NetworkMode(networkID), ReadonlyRootfs: true, CapDrop: []string{"ALL"}, CapAdd: capabilities, Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,mode=1777"}, LogConfig: container.LogConfig{Type: "local"}, Mounts: []mount.Mount{{Type: mount.TypeBind, Source: dir, Target: "/workspace", BindOptions: &mount.BindOptions{NonRecursive: true, Propagation: mount.PropagationRPrivate}}}}
 	if nnp {
 		host.SecurityOpt = []string{"no-new-privileges"}
+	}
+	for _, apply := range configure {
+		apply(host)
 	}
 	var netcfg *network.NetworkingConfig
 	if networkID != "none" {
@@ -207,6 +213,8 @@ func (s *isolationWorld) controlLogs(c *isolationControl) ([]isolationReport, er
 	return isolationReports(out.Bytes())
 }
 
+var errIsolationNoReports = errors.New("probe did not produce a report")
+
 func isolationReports(b []byte) ([]isolationReport, error) {
 	d := json.NewDecoder(bytes.NewReader(b))
 	var result []isolationReport
@@ -225,7 +233,7 @@ func isolationReports(b []byte) ([]isolationReport, error) {
 		result = append(result, r)
 	}
 	if len(result) == 0 {
-		return nil, errors.New("probe did not produce a report")
+		return nil, errIsolationNoReports
 	}
 	return result, nil
 }
