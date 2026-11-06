@@ -441,8 +441,8 @@ items:
   - id: slice-13
     title: Launch and cleanup contract
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-10]
     kind: slice
     why: >
