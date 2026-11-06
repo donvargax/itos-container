@@ -66,6 +66,16 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	}
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer finish()
+	if result.Outcome == waitUnreconciled {
+		// A concurrent stop can outlast the short stdin probe. Wait for its
+		// lock within this teardown total and accept only its exact completion,
+		// before our own cleanup can change an incomplete session.
+		result.Outcome = port.ExecutionFailed
+		if entry, f := s.Registry.Open(teardown, id, true); f == "" {
+			result.Exit, result.Exited, result.Outcome = stoppedRun(entry, result.ID)
+			entry.Close()
+		}
+	}
 	signal := "SIGTERM"
 	if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok {
 		signal = interrupted.Signal

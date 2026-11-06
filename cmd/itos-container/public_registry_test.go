@@ -51,7 +51,7 @@ func TestPublicRegistryDiscoveryPreservesReadFailureCause(t *testing.T) {
 }
 
 func TestPublicRegistryRejectsInvalidCandidateBeforeStorage(t *testing.T) {
-	for _, fault := range []string{"host", "pin", "invalid frozen", "different frozen user"} {
+	for _, fault := range []string{"host", "invalid frozen", "different frozen user"} {
 		t.Run(fault, func(t *testing.T) {
 			m := publicMemoryFixture(t)
 			var registry sp.Registry = m.registry
@@ -59,8 +59,6 @@ func TestPublicRegistryRejectsInvalidCandidateBeforeStorage(t *testing.T) {
 			switch fault {
 			case "host":
 				m.host.UID = "0"
-			case "pin":
-				m.checkout.Failure = rp.CheckoutUnavailable
 			case "invalid frozen":
 				d := ap.Durable{Frozen: m.b.Frozen}
 				d.Frozen.Settings = "{}"
@@ -83,27 +81,54 @@ func TestPublicRegistryRejectsInvalidCandidateBeforeStorage(t *testing.T) {
 	}
 }
 
-func TestPublicRegistryRequiresGitIdentityOnlyForRegistration(t *testing.T) {
-	for _, fault := range []string{"inspect", "changed checkout"} {
+func TestPublicRegistryRequiresCheckoutAccessOnlyForRegistration(t *testing.T) {
+	for _, fault := range []string{"pin", "inspect", "changed checkout"} {
 		t.Run(fault, func(t *testing.T) {
 			m := publicMemoryFixture(t)
 			id, _ := m.seed("a")
-			if fault == "inspect" {
+			switch fault {
+			case "pin":
+				m.checkout.Failure = rp.CheckoutUnavailable
+			case "inspect":
 				m.checkout.InspectFailure = rp.CheckoutUnavailable
-			} else {
+			default:
 				m.checkout.Changed = true
 			}
 			// Recovery discovers the original binding through the protected
-			// checkout index; launch still requires a fresh Git identity.
+			// checkout index; launch still requires fresh checkout access.
 			if ids, failure := m.registry.List(t.Context()); failure != "" || !reflect.DeepEqual(ids, []string{id}) {
-				t.Fatal("mutable Git identity vetoed discovery", ids, failure)
+				t.Fatal("mutable checkout vetoed discovery", ids, failure)
 			}
+			entry, failure := m.registry.Open(t.Context(), id, false)
+			if failure != "" {
+				t.Fatal("mutable checkout vetoed recovery authority", failure)
+			}
+			entry.Close()
 			lease, failure := m.registry.Register(t.Context(), ap.Durable{Frozen: m.b.Frozen}, strings.Repeat("b", 64), strings.Repeat("c", 64))
 			if lease != nil {
 				lease.Close()
 			}
 			if lease != nil || failure != sp.Refused || len(m.files.Events) != 0 || m.checkout.Opened {
 				t.Fatal("invalid launch identity reached registration", failure)
+			}
+		})
+	}
+}
+
+func TestPublicRegistryRejectsNonabsoluteDiscoveryRoots(t *testing.T) {
+	for _, root := range []string{"", ".", "relative/checkout"} {
+		t.Run(root, func(t *testing.T) {
+			m := publicMemoryFixture(t)
+			id, _ := m.seed("a")
+			m.registry.Store.Input.Root = root
+			if ids, failure := m.registry.List(t.Context()); ids != nil || failure != sp.Refused {
+				t.Fatal("nonabsolute root reached index discovery", ids, failure)
+			}
+			if entry, failure := m.registry.Open(t.Context(), id, true); entry != nil || failure != sp.Refused {
+				t.Fatal("nonabsolute root opened protected authority", entry, failure)
+			}
+			if len(m.files.Events) != 0 || m.checkout.Opened {
+				t.Fatal("invalid root consulted the checkout or wrote state")
 			}
 		})
 	}

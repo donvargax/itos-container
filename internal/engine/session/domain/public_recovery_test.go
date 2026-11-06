@@ -437,6 +437,33 @@ func TestRegisteredWaitReconcilesConcurrentStop(t *testing.T) {
 	}
 }
 
+func TestRegisteredWaitDoesNotExtendTeardownForUnavailableCompletion(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		b, store, engine := f.Fixture()
+		registry := &f.Registry{Store: store, Project: b.Frozen.Project, WaitForLock: true}
+		e := &f.RunEngine{Engine: engine, StdinClosed: true, WaitUntilCancel: true}
+		e.After = func(event string) {
+			if event == "wait" {
+				for id := range registry.Records {
+					// Keep the competing operation unavailable through both
+					// the stdin probe and the complete teardown budget.
+					registry.Locks[id] = true
+				}
+				synctest.Wait()
+			}
+		}
+		runner := domain.Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
+		start := time.Now()
+		result := runner.Run(context.Background(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
+		if time.Since(start) != 40*time.Second || result.Outcome != port.ExecutionFailed || result.Cleanup != port.Incomplete || result.Exited {
+			t.Fatal("unavailable completion extended teardown or erased failure", result, time.Since(start))
+		}
+		if len(engine.Resources) != 1 || registry.Records[result.SessionID].State != "running" || registry.Leases[result.SessionID] || slices.Contains(e.Events, "drain") || slices.Contains(e.Events, "SIGTERM") {
+			t.Fatal("unavailable ownership authorized completion or mutation", e.Events)
+		}
+	})
+}
+
 func TestRegisteredRunStartupDeadlineCleansCreatedWorker(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		b, store, engine := f.Fixture()

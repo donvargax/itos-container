@@ -416,10 +416,13 @@ run and stop serialize transitions, revalidation and durability, releasing the
 operation lock during foreground wait and output draining. Project transactions
 never span engine calls. A controller-probe error leaves presence unknown and
 does not veto explicit stop; ownership validation remains independent. Expiry
-during stop inspection remains temporary and cannot authorize a progress write
-beyond the total budget. When a concurrent stop completed the same worker, run
-can reconcile completion without an observed exit, preserving null and draining
-remaining output without reporting a spurious wait failure.
+during stop inspection or either termination wait remains temporary and cannot
+authorize a progress write beyond the total budget. When a concurrent stop completed
+the same worker, run can reconcile completion without an observed exit, preserving null and draining
+remaining output without reporting a spurious wait failure. If the initial stdin
+probe times out on that stop's operation lock, run retries the completion check
+within its existing teardown total. Incomplete or conflicting authority and
+forwarding errors still fail.
 See [public session recovery](../decisions/0010-public-session-recovery.md).
 
 Fresh recovery discovers registrations through the protected
@@ -427,10 +430,13 @@ Fresh recovery discovers registrations through the protected
 checkout path, independently of mutable Git identity. Each record still binds
 its original approval project, intent and snapshot. The snapshot's root and
 host identity must match the invocation; moving a registration into a foreign
-root's index cannot authorize cleanup. Recovery pins root ancestors without
-inspecting `.git`; launch retains full checkout validation. This supersedes the
-project-keyed public lookup in decision 0010, as
-[stable recovery discovery](../decisions/0011-stable-recovery-index.md) explains.
+root's index cannot authorize cleanup. Recovery derives the key from the absolute
+effective root path without opening the worker-controlled checkout; removed read
+or search permissions cannot veto cleanup. Launch retains full checkout validation.
+[Stable recovery discovery](../decisions/0011-stable-recovery-index.md) supersedes
+the project-keyed public lookup in decision 0010;
+[recovery without checkout access](../decisions/0012-recovery-without-checkout-access.md)
+supersedes decision 0011's remaining checkout-root pinning requirement.
 
 Foreground cleanup authorizes removal from the protected original record/snapshot,
 current host identity, selected original daemon and freshly inspected full resource

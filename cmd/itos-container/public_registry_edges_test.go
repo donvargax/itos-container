@@ -52,7 +52,7 @@ func TestPublicRegistryAcquisitionFailures(t *testing.T) {
 			if fault == "unavailable storage" {
 				want = sp.Incomplete
 			}
-			if fault == "unsupported host" || fault == "unavailable root" || fault == "unavailable storage" || fault == "invalid frozen" || fault == "foreign frozen host" {
+			if fault == "unsupported host" || fault == "unavailable storage" || fault == "invalid frozen" || fault == "foreign frozen host" {
 				if ids, f := registry.List(t.Context()); ids != nil || f != want {
 					t.Fatal("discovery accepted unusable authority", ids, f)
 				}

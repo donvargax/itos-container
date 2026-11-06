@@ -42,13 +42,12 @@ func (s Registry) lookup() (approval.Candidate, port.Outcome) {
 			return approval.Candidate{}, f
 		}
 		root = c.Root
-	} else {
-		// Pin checks every root ancestor without following aliases or reading
-		// .git. Only launch needs Inspect's mutable Git identity checks.
-		if s.Store.Checkout.Pin(root) != readiness.None {
-			return approval.Candidate{}, port.Refused
-		}
-		s.Store.Checkout.Close()
+	}
+	// Discovery uses only the selected absolute path. Opening the writable
+	// checkout would let its worker veto recovery by changing permissions.
+	// Open binds the original protected snapshot to this root before cleanup.
+	if !filepath.IsAbs(root) {
+		return approval.Candidate{}, port.Refused
 	}
 	return approval.Candidate{UID: uid, GID: gid, Root: root, Project: registryKey(root, uid)}, ""
 }

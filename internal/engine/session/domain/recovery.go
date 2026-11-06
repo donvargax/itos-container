@@ -104,6 +104,11 @@ func finishEntry(e *port.RecoveryEntry) {
 }
 
 func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (port.Observation, string, port.Outcome) {
+	// A wait or prior engine call may have exhausted the total. Expired
+	// storage handles cannot distinguish changed ownership from lost time.
+	if ctx.Err() != nil {
+		return port.Observation{}, "unknown", port.Incomplete
+	}
 	if failure := s.Validate(); failure != "" {
 		return port.Observation{}, "unknown", failure
 	}

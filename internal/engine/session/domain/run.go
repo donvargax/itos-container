@@ -18,6 +18,10 @@ type Runner struct {
 	Registry  port.Registry
 }
 
+// waitUnreconciled is provisional, only for a registered stdin-close probe
+// whose operation-lock budget expired. Teardown must settle it before return.
+const waitUnreconciled port.Outcome = "wait-unreconciled"
+
 func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string, streams port.Streams) port.RunResult {
 	if s.Registry != nil {
 		return s.registeredRun(ctx, frozen, argv, streams)
@@ -89,25 +93,19 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	if s.Registry != nil {
 		entry, f := s.Registry.Open(probe, reference, true)
 		if f != "" {
+			if f == port.Incomplete && probe.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+				return 0, false, waitUnreconciled
+			}
 			return 0, false, port.ExecutionFailed
 		}
 		defer entry.Close()
+		if entry.Record().State == "stopped" {
+			return stoppedRun(entry, id)
+		}
 		if entry.Validate() != "" {
 			return 0, false, port.ExecutionFailed
 		}
 		intent = entry.Intent()
-		if r := entry.Record(); r.State == "stopped" {
-			owned := intent.Record()
-			if owned.Stage != "absent" || owned.ContainerID != id {
-				return 0, false, port.ExecutionFailed
-			}
-			// Stop can finish removal without ever observing a workload exit.
-			// Adopt completion without inventing exit zero or a wait failure.
-			if r.WorkloadExit == nil {
-				return 0, false, ""
-			}
-			return *r.WorkloadExit, true, ""
-		}
 	} else {
 		intent, failure = s.Store.OpenCleanup(probe, reference)
 	}
@@ -130,6 +128,22 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	}
 	exit, outcome = fresh.Wait(probe, id)
 	return exit, outcome == "", outcome
+}
+
+func stoppedRun(entry port.Session, id string) (int, bool, port.Outcome) {
+	if entry.Validate() != "" {
+		return 0, false, port.ExecutionFailed
+	}
+	r, owned := entry.Record(), entry.Intent().Record()
+	if r.State != "stopped" || owned.Stage != "absent" || owned.ContainerID != id {
+		return 0, false, port.ExecutionFailed
+	}
+	// Stop can finish removal without ever observing a workload exit. Adopt
+	// completion without inventing exit zero or hiding a known nonzero result.
+	if r.WorkloadExit == nil {
+		return 0, false, ""
+	}
+	return *r.WorkloadExit, true, ""
 }
 
 // interrupt reacquires protected authority and a fresh engine connection. The

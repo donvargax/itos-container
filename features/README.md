@@ -129,22 +129,26 @@ for this **CI-only** invocation (the workflow also supplies the fixture environm
 ```sh
 go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
 cd features
-ITOS_CONTAINER_ENGINE_TESTS=1 SLICE_11_SIGNAL_TRACE="$RUNNER_TEMP/slice-11-controller-signals.log" strace -f -yy -o "$RUNNER_TEMP/strace.log" -e trace=kill,tkill,tgkill,pidfd_send_signal,setsid,setpgid "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$'
+ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$'
 ```
 
-The diagnostic run stays in the CI step's original process group and session. `strace -f`
-records signal senders and targets in `$RUNNER_TEMP/strace.log`; it does not use `setsid`.
+The engine tests run in their own session. Coordinator-reviewed run 42233015284
+at `9af619c` traced the entire test process tree and found no product or harness
+group/session signal, while the step's shell still died. The coordinator attributed
+the sender to the external runner or Docker and accepted `setsid --wait` (q-16).
+The workflow no longer runs strace, which consumed its five-minute budget.
 The workflow streams both output channels to the log and
 `$RUNNER_TEMP/slice-11-features.log`, prints the binary's exit status and decodes exits of
 128 plus a signal number. It preserves the test's failure even when output capture succeeds;
 a capture failure also fails a successful test run. A failure-only step prints the last
-50 kernel messages, `free -m`, signal syscall lines from both traces and the last 100
+50 kernel messages, `free -m` and the last 100
 test-output lines before unconditional cleanup.
 The explicit `-test.paniconexit0` retains `go test`'s protection against an early `os.Exit(0)`.
 TestMain logs catchable signals to stderr in the engine tier, including its PID, and exits
 nonzero for terminating signals. SIGKILL and SIGSTOP cannot be caught; the supervising shell
 and kernel output supply that evidence. These diagnostics address the coordinator's
-2026-11-06 silent engine failures; they neither identify a cause nor establish runtime proof.
+2026-11-06 silent engine failures; the trace cleared product and harness signalling,
+while each engine run must still establish its own runtime evidence.
 `TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
 and `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
@@ -166,7 +170,7 @@ individual-test fallback and whole-suite collection. An excluded engine ID provi
 runtime or coverage evidence. Later behaviours require domain/port fake tests alongside
 separate runtime evidence; uncovered code cannot be satisfied by enabling Docker in proof.
 
-Recovery's pending ID-RECOVERY-21 through ID-RECOVERY-23 run fresh product processes
+Recovery's live ID-RECOVERY-21 through ID-RECOVERY-23 run fresh product processes
 against the same guarded cached-image fixture. Their native recorder can inject a
 removal-only failure or hold a removal barrier; it still validates concrete ownership
 before forwarding mutations and records refused requests. A static worker probe supplies

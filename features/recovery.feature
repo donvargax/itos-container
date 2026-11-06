@@ -695,7 +695,7 @@ Feature: Inspect and stop owned offline sessions
 
   # Both waits can consume the stop total after lock contention. The controlled
   # clock preserves the real command/record adapters and stateful port contracts.
-  @slice-11 @ID-RECOVERY-34 @linux @wip
+  @slice-11 @ID-RECOVERY-34 @linux
   Scenario Outline: Stop preserves temporary uncertainty after a termination wait exhausts its total
     Given a recovery command fixture for "<wait> deadline after lock"
     When the recovery command fixture exercises its configured interruption
@@ -708,7 +708,7 @@ Feature: Inspect and stop owned offline sessions
 
   # The independent stop takes 11 s while run's stdin reconciliation has 10 s.
   # Its unknown-exit completion must still be adopted during bounded teardown.
-  @slice-11 @ID-RECOVERY-35 @linux @wip
+  @slice-11 @ID-RECOVERY-35 @linux
   Scenario: Run reconciles a concurrent stop that outlasts its initial stdin probe
     Given a recovery command fixture for "pending stop during stdin closure"
     When the recovery command fixture exercises its configured interruption
@@ -716,7 +716,7 @@ Feature: Inspect and stop owned offline sessions
 
   # Launch from outside the chmodded checkout with its original effective root.
   # Only the disposable fixture restores permissions after both commands return.
-  @slice-11 @ID-RECOVERY-36 @linux @wip
+  @slice-11 @ID-RECOVERY-36 @linux
   Scenario Outline: Fresh recovery remains available after the worker removes checkout access
     Given a recovery fixture with recorded phase "running" resource "running" and observed workload exit "unknown"
     When the worker makes the checkout root "<access>" and fresh status and stop run outside it

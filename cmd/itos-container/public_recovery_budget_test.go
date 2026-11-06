@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -12,6 +13,7 @@ import (
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
 	af "github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
 	"github.com/donvargax/itos-container/internal/engine/session/domain"
+	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
 	runfake "github.com/donvargax/itos-container/internal/slices/run/port/porttest"
@@ -19,6 +21,14 @@ import (
 
 // These cases run through the scenario subprocess while red. They exercise
 // production command, registry and record adapters with a controlled clock.
+func TestPublicRecoveryBudgetRegressions(t *testing.T) {
+	t.Run("SIGTERM deadline", func(t *testing.T) { publicRecoveryTerminationDeadline(t, false) })
+	t.Run("SIGKILL deadline", func(t *testing.T) { publicRecoveryTerminationDeadline(t, true) })
+	for _, name := range []string{"unknown", "nonzero", "drain failure", "incomplete stop", "changed record"} {
+		t.Run(name, func(t *testing.T) { publicRecoveryDelayedStop(t, name) })
+	}
+}
+
 func publicRecoveryTerminationDeadline(t *testing.T, kill bool) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
@@ -81,18 +91,56 @@ func publicRecoveryTerminationDeadline(t *testing.T, kill bool) {
 }
 
 func publicRecoveryPendingStop(t *testing.T) {
+	publicRecoveryDelayedStop(t, "unknown")
+}
+
+func publicRecoveryDelayedStop(t *testing.T, name string) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
 		m.e.StdinClosed, m.e.WaitUntilCancel = true, true
+		want := 0
+		if name == "nonzero" {
+			m.e.WaitFailure, m.e.Exit, want = "", 7, 7
+		}
+		if name == "drain failure" {
+			m.e.DrainFailure, want = sp.ExecutionFailed, 75
+		}
+		if name == "changed record" {
+			want = 75
+		}
+		if name == "incomplete stop" {
+			m.e.SignalFailure, want = sp.Incomplete, 75
+		}
 		id := ""
 		finished := make(chan struct{})
 		var completed []byte
 		mutations := 0
+		signals := 0
+		if name == "changed record" {
+			reads := 0
+			m.files.AfterRead = func() {
+				for _, files := range m.files.Sessions {
+					r, f := m.registry.Codec.DecodePublic(files.Data)
+					if f != "" || r.State != "stopped" {
+						continue
+					}
+					reads++
+					if reads == 4 {
+						// Completion validation reads once, run's Open twice.
+						// Replace bytes before its held-session revalidation.
+						files.Data = append(files.Data, ' ')
+					}
+				}
+			}
+		}
 		m.e.After = func(event string) {
 			if event == "SIGTERM" {
 				// Hold the real operation-lock contract across run's ten-second
 				// probe; the competing stop still has time to finish its total.
-				time.Sleep(11 * time.Second)
+				signals++
+				if signals == 1 {
+					time.Sleep(11 * time.Second)
+				}
 				return
 			}
 			if event != "wait" || id != "" {
@@ -107,9 +155,13 @@ func publicRecoveryPendingStop(t *testing.T) {
 			}
 			go func() {
 				defer close(finished)
-				r := publicMemoryCommand(t, m.service(), "stop", id, 0)
-				if len(r.Sessions) != 1 || r.Sessions[0].Cleanup != "complete" || r.Sessions[0].WorkloadExit != nil {
-					t.Error("concurrent stop did not complete with an unknown exit", r)
+				stopExit := 0
+				if name == "incomplete stop" {
+					stopExit = 75
+				}
+				r := publicMemoryCommand(t, m.service(), "stop", id, stopExit)
+				if len(r.Sessions) != 1 || (r.Sessions[0].Cleanup == "complete") != (stopExit == 0) || (r.Sessions[0].WorkloadExit != nil) != (name == "nonzero") {
+					t.Error("competing stop lost its result", r)
 				}
 				completed = bytes.Clone(m.files.Sessions[m.index().Project+"/"+id].Data)
 				mutations = recoveryReviewMutations(m.e)
@@ -122,14 +174,24 @@ func publicRecoveryPendingStop(t *testing.T) {
 		start := time.Now()
 		code := (runcommand.CLI{Approval: approval, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "probe"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
 		<-finished
-		if code != 0 || errout.Len() != 0 {
-			t.Fatalf("run retained a wait failure after the competing stop completed: exit %d, %s", code, errout.String())
+		if code != want || (want == 75 && !strings.Contains(errout.String(), "run.execution-unavailable")) || (want != 75 && errout.Len() != 0) {
+			t.Fatalf("run lost the competing stop outcome: exit %d, want %d, %s", code, want, errout.String())
 		}
+		m.files.AfterRead = nil
 		status := publicMemoryCommand(t, m.service(), "status", "", 0)
-		if time.Since(start) != 11*time.Second || len(status.Sessions) != 1 || status.Sessions[0].State != "stopped" || status.Sessions[0].Resource != "absent" || status.Sessions[0].Cleanup != "complete" || status.Sessions[0].WorkloadExit != nil || status.Sessions[0].Retry != nil || len(m.e.Resources) != 0 {
+		if name == "incomplete stop" {
+			if len(status.Sessions) != 1 || status.Sessions[0].Cleanup != "pending" || status.Sessions[0].WorkloadExit != nil || len(m.e.Resources) != 1 {
+				t.Fatal("failed competing stop was adopted as completion", status)
+			}
+			return
+		}
+		if time.Since(start) != 11*time.Second || len(status.Sessions) != 1 || status.Sessions[0].State != "stopped" || status.Sessions[0].Resource != "absent" || status.Sessions[0].Cleanup != "complete" || (status.Sessions[0].WorkloadExit != nil) != (name == "nonzero") || status.Sessions[0].Retry != nil || len(m.e.Resources) != 0 {
 			t.Fatal("run lost bounded cleanup or invented a workload exit", status)
 		}
-		if !bytes.Equal(completed, m.files.Sessions[m.index().Project+"/"+id].Data) || mutations != recoveryReviewMutations(m.e) || !slices.Contains(m.e.Events, "drain") {
+		if name == "changed record" {
+			completed = append(completed, ' ')
+		}
+		if !bytes.Equal(completed, m.files.Sessions[m.index().Project+"/"+id].Data) || mutations != recoveryReviewMutations(m.e) || (want != 75 && !slices.Contains(m.e.Events, "drain")) {
 			t.Fatal("run repeated cleanup or failed to drain the remaining output")
 		}
 	})
