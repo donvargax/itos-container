@@ -2088,3 +2088,13 @@
     checksums. Make sure the tools it calls exist and work here.
   done_when:
     - run: grep -q 'release.yml' .github/workflows/ci.yml
+- id: T-26
+  type: docs
+  title: "Architecture drift: arc42 lists implemented engines as proposed"
+  why: >
+    T-19 updated arc42 before slices 2, 3 and T-20 landed. docs/architecture/arc42.md's inventory
+    and diagrams still call internal/engine/manifest and readiness proposed, and name T-20 as
+    planned. Update the status words from what the code holds; nothing else in the document changes.
+    The new repository's first registry push, 2026-11-05: also checks that a push to main starts CI.
+  done_when:
+    - run: "! grep -nE 'internal/engine/(manifest|readiness)` \\| Proposed' docs/architecture/arc42.md"
