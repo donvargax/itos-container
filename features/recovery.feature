@@ -195,7 +195,11 @@ Feature: Inspect and stop owned offline sessions
   # protected snapshot and identity remain required. No approve, host helper,
   # cached-image acquisition or launch preflight is part of recovery.
   # Writable Git identity never vetoes cleanup; full fresh checkout identity is
-  # still required for launch. This corrects the former RECOVERY-11 Git-veto row
+  # still required immediately before registered create and start, including
+  # after attachment. Short launch checks compare the current root/Git identity
+  # to the original approved binding without retaining a project storage lock
+  # across engine calls. Recovery opens remain checkout-independent.
+  # This corrects the former RECOVERY-11 Git-veto row
   # for PRRT_kwDOVkB0ws60fqg0; foreign canonical roots still refuse, even with a
   # transplanted otherwise-valid registration in their own protected index.
   # Discovery derives the index from the absolute effective root path without
@@ -743,6 +747,22 @@ Feature: Inspect and stop owned offline sessions
       | missing   |
       | symlinked |
       | a file    |
+
+  # Exercise the production registered Runner and disk registry over stateful
+  # ports, with substitution after intent publication or during attachment.
+  # Each case includes an unchanged-identity control exercising slice-10/11.
+  @wip @slice-11 @ID-RECOVERY-37 @linux
+  Scenario Outline: Registered launch rechecks the approved checkout before create and start
+    Given a recovery command fixture for "<change> before <boundary>"
+    When the recovery command fixture exercises its configured interruption
+    Then registered run refuses the substituted checkout before the barred launch operation while retaining checkout-independent recovery
+
+    Examples:
+      | change           | boundary |
+      | root replacement | create   |
+      | Git replacement  | create   |
+      | root replacement | start    |
+      | Git replacement  | start    |
 
   # Native evidence supplements local fault mapping; DELETE failure happens only
   # after a real observed primary exit and is cleared solely for the public retry.

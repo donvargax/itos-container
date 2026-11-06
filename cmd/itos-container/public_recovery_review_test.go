@@ -39,6 +39,10 @@ func TestPublicRecoveryReviewContract(t *testing.T) {
 		publicRecoveryStoppedWait(t)
 	case "pending stop during stdin closure":
 		publicRecoveryPendingStop(t)
+	case "root replacement before create", "Git replacement before create":
+		publicRegisteredCheckout(t, os.Getenv("SLICE_11_REVIEW_CASE"), "open")
+	case "root replacement before start", "Git replacement before start":
+		publicRegisteredCheckout(t, os.Getenv("SLICE_11_REVIEW_CASE"), "attach")
 	default:
 		t.Fatal("unknown recovery review fixture")
 	}
