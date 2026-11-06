@@ -16,6 +16,9 @@ import (
 type sessionResult struct {
 	Outcome, Reference, ID, Cleanup, PreflightFailure string
 	Handoff                                           bool
+	Code                                              int
+	Diagnostic                                        string
+	RunEvents                                         []string
 	Workload                                          *int
 	Events                                            []sessionEvent
 	Memory                                            *sessionMemoryOutput
@@ -53,6 +56,9 @@ type sessionWorld struct {
 	firstResources                                          map[string]map[string]any
 	second                                                  *sessionWorld
 	selectedReads                                           []string
+	offline                                                 bool
+	boundary                                                string
+	offlineControl                                          *world
 }
 
 func (w *world) sessionFixture(real bool, umask string) error {
@@ -212,10 +218,18 @@ func (w *world) closeSession() error {
 	if w.session == nil || w.session.api == nil {
 		return nil
 	}
+	var controlErr error
+	if control := w.session.offlineControl; control != nil {
+		controlErr = control.closeSession()
+		control.closeDoctor()
+	}
+	if w.session.api.attached != nil {
+		defer func() { _ = w.session.api.attached.Close() }()
+	}
 	// Harness cleanup is separate from product evidence and is bounded. Even a
 	// failed Then must not strand an independently observed fixture resource.
 	err := w.session.api.cleanupObserved()
-	return errors.Join(err, w.session.api.server.Close())
+	return errors.Join(controlErr, err, w.session.api.server.Close())
 }
 
 func (w *world) sessionExpectedRecord(stage, id string) map[string]any {

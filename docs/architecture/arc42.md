@@ -249,9 +249,17 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | slice-7 — implemented invocation refusals | slice-1 | Local argv/JSON refusals introduce the run command slice; valid argv refuses until later increments. [Run scenarios](../../features/run.feature) cover redirected and real-terminal JSON, separator ownership and absence of effects. |
 | slice-8 — implemented preflight and freeze | slice-4 and slice-7 | Revalidate prerequisites before resource effects, consume slice-4's approval/host identity and independent frozen input, and durably publish trusted session settings. No second identity resolver or approval loader. |
 | slice-9 — planned owned create/cleanup | slice-8 and T-20 | Introduce session engine, fsynced intent, unstarted create, lost-response reconciliation, removal and absence confirmation. |
-| slice-10 — planned offline foreground run | slice-9 | CI isolation proof, literal argv, result precedence and teardown; checkout plus tmpfs, NetworkMode none and pids limit 4096. |
+| slice-10 — offline foreground command | slice-9 | ID-OFFLINE-02/03 verify boundary and durable-ownership refusals; 06/07 cover literal argv and foreground streams; 13 covers explicit shell execution in the frozen workspace/environment. |
+| slice-13 — planned launch and cleanup contract | slice-10 | ID-OFFLINE-01/04/05/15 cover ordered launch, frozen settings, checkout substitution and cleanup-failure precedence. |
+| slice-14 — planned native isolation and teardown proof | slice-10 | ID-OFFLINE-08/09/10/11/12/14/16 prove identity, filesystem/network isolation, primary-exit teardown and native cleanup-failure precedence. Checkout plus tmpfs, NetworkMode none and pids 4096 remain the specified boundary. |
 | slice-11 — planned status/stop | slice-10 | Actionable recovery, controller-loss candidates, foreign/repeated/two-project cases and safe diagnostics; protected records, random hex IDs, per-session lock and mutation-time revalidation. |
 | slice-12 — planned budgets/cancellation/loss | slice-10 | Calls 10 s, startup 120 s, teardown 30 s; forward once, 10 s grace, then SIGKILL; observed exit wins. Controller loss preserves isolation until stop. |
+
+The coordinator accepted the slice-10/13/14 scenario split on 2026-11-06.
+[The offline feature](../../features/offline.feature) is the scenario ownership
+authority; the eleven transferred cases remain `@wip` until their owning slices
+supply passing evidence. This split changes delivery scope, not the runtime boundary
+or the requirement for CI-only real-engine proof.
 
 Each owning engine introduces reusable validation and port contracts with its work item.
 Shared contract suites under its `port/porttest` run unchanged against the in-memory
@@ -332,7 +340,8 @@ must state this in help and security guidance; revisit before egress and credent
    resource identity before any entrypoint or workload instruction. A failed record
    write prevents execution and enters bounded cleanup/recovery. Retain uncertainty
    rather than launching or blindly creating a duplicate. Slice-9 specifies and tests
-   this protocol; the design is settled, its implementation and evidence are absent.
+   this protocol. Its unstarted-only operation remains separate from slice-10's
+   foreground operation, which consumes the same protected store and bindings.
 4. **Verify, then ready.** Verify every required boundary before any worker instruction.
    Unverifiable isolation refuses later execution and enters cleanup/recovery.
    Use `NetworkMode` `none`, inspected before start, with network and DNS probes
@@ -348,8 +357,17 @@ must state this in help and security guidance; revisit before egress and credent
 6. **Finish, stopping.** Observed primary exit ends the session and begins bounded
    owned cleanup. Confirm removal/absence before claiming stopped. Incomplete cleanup
    retains failed-state recovery information. Teardown has a 30 s total budget.
-   Slices 9/11/12 still owe durable records, serialized mutation, safe diagnostics and
-   executable status/stop contracts.
+   Slice-10 now wires the foreground lifecycle through the session engine, with
+   a separately pinned workspace and Docker SDK stream demultiplexing. The wait
+   handshake is bounded; acknowledged workload wait has no lifetime limit.
+   Forwarding failures cancel the pending workload wait and trigger bounded cleanup.
+   Run captures SIGINT/SIGTERM before startup, forwards the first signal once after
+   reacquiring owned authority, allows 10 s grace, then escalates to SIGKILL within
+   the same 30 s teardown budget. Repeated signals cannot interrupt that cleanup.
+   Slice-11/12 still own executable status/stop and native signal/controller-loss proof.
+   See [the foreground integration decision](../decisions/0008-foreground-run-integration.md).
+   [The failure-cleanup decision](../decisions/0009-foreground-failure-cleanup.md)
+   records the review fixes and their local controller proof.
 
 ### State and result interpretation
 
@@ -370,7 +388,8 @@ cleanup fails, return a nonzero wrapper failure classified by its cause. T-11 re
 the CLI wrapper meanings, rather than importing helper-tool codes or treating every
 cleanup error as transient. Return zero only with known successful work and cleanup;
 observed exit wins over an inferred signal outcome. Forward a signal once, allow
-10 s grace, then SIGKILL if needed. Slice-12 owns remaining signal-derived and
+10 s grace, then SIGKILL if needed. Interruption without an observed nonzero exit
+uses the existing execution-unavailable failure (75). Slice-12 owns remaining signal-derived and
 cancellation mappings under the charter stop rule; this design invents none.
 
 Pre-launch refusals have no child status. Lost engine/controller observations never
@@ -394,6 +413,13 @@ mutation. Protected placement separates authority from checkout requests; IDs pr
 safe recovery references; serialization and revalidation prevent concurrent or stale
 deletion. Slice-11 owns record fields, lock API and ID length, without a new ownership
 algorithm being selected here.
+
+Foreground cleanup authorizes removal from the protected original record/snapshot,
+current host identity, selected original daemon and freshly inspected full resource
+ID. It does not reopen or compare the writable checkout: a worker can replace `.git`
+without gaining authority over protected ownership or vetoing cleanup. Fresh checkout
+validation remains mandatory for launch. Slice-9's unstarted-only operation retains
+its existing stricter checkout validation.
 
 Retain recovery information until cleanup is confirmed. Report the owned session ID
 and an exact safely rendered `itos container stop` retry containing that ID, as
@@ -550,7 +576,7 @@ The table maps required evidence to the current gates and the work still absent.
 | Inspection executes no checkout code | Policy sentinel/snapshot/connection-recorder cases are live; broader doctor/approve need synthetic markers and positive controls; AC-04 and T-11 strict-input cases. | Doctor/approve marker and API-journal scenarios exercise inspection without checkout execution or image acquisition. Init and lifecycle hooks remain deferred. |
 | Safe checkout, local engine and approved cached image | Slice-3 contracts and CI observations; AC-05/38; T-11 identity, cached-image and hidden-metadata cases. | Readiness is implemented; absent images refuse without acquisition. Synthetic Engine API evidence does not establish runtime isolation. |
 | Host isolation, mount and non-root writable boundary | Independent CI probes for allowed writes and denied host/root/privilege access; AC-07/08/25 and T-11 non-root case. | No runtime proof. Protected online guard material from AC-08 remains deferred. |
-| Offline isolation from first instruction and through loss | Trusted controls plus worker IPv4/IPv6, gateway/private-route and DNS denial; AC-10/11/37 offline portions and T-11 loss cases. | NetworkMode none and T-16's tier are settled; slice-10/12 runtime proof remains absent. Flags and broken controls cannot pass it. |
+| Offline isolation from first instruction and through loss | Trusted controls plus worker IPv4/IPv6, gateway/private-route and DNS denial; AC-10/11/37 offline portions and T-11 loss cases. | NetworkMode none and T-16's tier are settled; slice-14/12 runtime proof remains absent. Flags and broken controls cannot pass it. |
 | Literal argv and verified-before-launch ordering | T-11 argv and explicit-shell cases; AC-21. Slice-7 local refusals plus fake sequencing; actual execution in CI. | No run implementation. Unknown-command errors are not the specified refusal. AC-42 lifecycle hooks are deferred. |
 | Durable ownership, bounded cleanup and independent projects | T-11 write-failure, uncertain-create, cancellation, repeated/foreign stop and two-project cases; AC-06/22/23/28 offline portions. | Settled intent/recovery/budget/signal choices need slice-9/11/12 implementation and proof; remaining details stay with those specs. |
 | Safe diagnostics and honest outcomes | Synthetic marker exclusion and unknown/zero/nonzero outcome cases; AC-22/36 offline portions, with foreground streams captured separately. | No controller/recovery implementation; no credential-scan claim. |
@@ -649,9 +675,9 @@ mechanism. Deferred categories remain outside this milestone.
 | --- | --- | --- |
 | Manifest syntax/library, exact supported fields, reserved environment and metadata treatment; separate parsing budgets | slice-2 and slice-6 | Full manifest validation and approval input. No lifecycle hooks run; hidden metadata must not add commands or permissions. Policy's parser/limits are already settled. |
 | Safe checkout/local-engine identity, symlinks and substitution details | slice-3, consumed by slice-4/8/11 | Readiness, approval binding, mount source and ownership checks. Effective UID with root refusal is settled; basenames or dispatch roots alone cannot identify a project. |
-| Approval implementation and session snapshot publication evidence | slice-4, then slice-8 | Canonical fields, matching/supersession, safe state and atomic frozen-input selection are implemented and covered by the [local scenarios](../../features/approval.feature). Slice-8 adds durable immutable publication, refusal ordering, fresh per-invocation inspection and fault/reuse contracts in [run scenarios](../../features/run.feature). Startup remains unavailable. Approval cannot attest human presence; revisit before egress/credentials. |
+| Approval implementation and session snapshot publication evidence | slice-4, then slice-8 | Canonical fields, matching/supersession, safe state and atomic frozen-input selection are implemented and covered by the [local scenarios](../../features/approval.feature). Slice-8 adds durable immutable publication, refusal ordering, fresh per-invocation inspection and fault/reuse contracts in [run scenarios](../../features/run.feature). Slice-10 connects the frozen handoff to owned foreground execution; runtime evidence remains CI-only. Approval cannot attest human presence; revisit before egress/credentials. |
 | Concrete fixture image digest/provenance and image compatibility/metadata checks | T-20 and slice-3, consumed by slice-4/10 | Prepared images and cached-image preflight. Person-operated digest acquisition, no pull/build/substitution by commands, and approval binding are settled. |
-| Exact temporary-location mapping and independent enforcement probes | slice-10, consuming slice-2/3/8 | Prove host UID/GID, checkout-only host mount, read-only root, tmpfs, pids 4096 and NetworkMode none. No persistent worker state, memory/CPU quota claim, proxy or new network topology. |
+| Exact temporary-location mapping and independent enforcement probes | slice-14, consuming slice-2/3/8/10 | Prove host UID/GID, checkout-only host mount, read-only root, tmpfs, pids 4096 and NetworkMode none. No persistent worker state, memory/CPU quota claim, proxy or new network topology. |
 | Intent/resource record schema and uncertain-create protocol details | slice-9 | Implement fsynced pre-create intent, unstarted create and reconciliation by trusted record plus random name. Concrete identity precedes execution; labels/names alone cannot authorize cleanup. |
 | Recovery totals, retry accounting, stream backpressure and remaining cancellation/result mappings | slice-11/12 | Bounded recovery and honest outcomes. Calls/startup/teardown 10/120/30 s and once-forwarded signal, 10 s grace, SIGKILL are settled; observed exit wins. No workload lifetime limit or new signal code selected here. |
 | Recovery fields, lock API, random hex ID length, safe rendering and unknown-outcome observations | slice-11, reusing slice-3/4/9/12 | Build status/stop before promising retries. Protected placement, per-session serialization, mutation-time revalidation and isolated survival after controller loss are settled. Unknown outcomes stay unknown; metadata differs from the snapshot. |

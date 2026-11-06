@@ -60,3 +60,11 @@
   scenarios:
     - id: "@ID-SESSION-01"
       why: durable intent, unstarted ownership and confirmed cleanup through memory and local disk/SDK backends without a Docker daemon
+- file: offline.feature
+  scenarios:
+    - id: "@ID-OFFLINE-06"
+      why: literal argv reaches one inspected owned worker and cleanup confirms its absence in the guarded CI engine tier
+- file: foreground_recovery.feature
+  scenarios:
+    - id: "@ID-OFFLINE-18"
+      why: owned cleanup survives writable checkout identity changes while retaining protected authority

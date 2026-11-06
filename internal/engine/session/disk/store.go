@@ -27,6 +27,7 @@ type intent struct {
 	binding   port.Binding
 	bytes     []byte
 	name      string
+	fresh     bool
 }
 
 func (s Store) identity() (string, string, port.Outcome) {
@@ -38,7 +39,7 @@ func (s Store) identity() (string, string, port.Outcome) {
 	}
 	return uid, gid, ""
 }
-func (s Store) acquire(ctx context.Context, project, token string, create bool) (*intent, port.Outcome) {
+func (s Store) acquire(ctx context.Context, project, token string, create, fresh bool) (*intent, port.Outcome) {
 	if !port.HexID(project) || !port.HexID(token) {
 		return nil, port.Invalid
 	}
@@ -54,18 +55,18 @@ func (s Store) acquire(ctx context.Context, project, token string, create bool) 
 	if directory == nil {
 		return nil, port.Refused
 	}
-	if s.Checkout.Pin(s.Input.Root) != readiness.None {
+	if fresh && s.Checkout.Pin(s.Input.Root) != readiness.None {
 		directory.Close()
 		return nil, port.Refused
 	}
-	return &intent{store: s, ctx: ctx, directory: directory, candidate: candidate, name: token + ".json"}, ""
+	return &intent{store: s, ctx: ctx, directory: directory, candidate: candidate, name: token + ".json", fresh: fresh}, ""
 }
 func (s Store) New(ctx context.Context, durable approval.Durable, token string) (port.Intent, port.Outcome) {
 	binding, failure := s.Codec.Frozen(durable.Frozen)
 	if failure != "" {
 		return nil, failure
 	}
-	t, failure := s.acquire(ctx, durable.Frozen.Project, token, true)
+	t, failure := s.acquire(ctx, durable.Frozen.Project, token, true, true)
 	if failure != "" {
 		return nil, failure
 	}
@@ -96,11 +97,17 @@ func (s Store) New(ctx context.Context, durable approval.Durable, token string) 
 	return t, ""
 }
 func (s Store) Open(ctx context.Context, reference string) (port.Intent, port.Outcome) {
+	return s.open(ctx, reference, true)
+}
+func (s Store) OpenCleanup(ctx context.Context, reference string) (port.Intent, port.Outcome) {
+	return s.open(ctx, reference, false)
+}
+func (s Store) open(ctx context.Context, reference string, fresh bool) (port.Intent, port.Outcome) {
 	project, token, ok := port.ParseReference(reference)
 	if !ok {
 		return nil, port.Invalid
 	}
-	t, failure := s.acquire(ctx, project, token, false)
+	t, failure := s.acquire(ctx, project, token, false, fresh)
 	if failure != "" {
 		return nil, failure
 	}
@@ -185,15 +192,22 @@ func (t *intent) validateBinding() port.Outcome {
 	if failure != "" || b.UID != uid || b.GID != gid {
 		return port.Refused
 	}
-	checkout, f := t.store.Checkout.Inspect()
-	if f != readiness.None || checkout != b.Checkout || !t.store.Checkout.Unchanged() {
-		return port.Refused
+	if t.fresh {
+		checkout, f := t.store.Checkout.Inspect()
+		if f != readiness.None || checkout != b.Checkout || !t.store.Checkout.Unchanged() {
+			return port.Refused
+		}
 	}
 	return ""
 }
 func (t *intent) Record() port.Record   { return t.record }
 func (t *intent) Binding() port.Binding { return t.binding }
-func (t *intent) Close()                { t.store.Checkout.Close(); t.directory.Close() }
+func (t *intent) Close() {
+	if t.fresh {
+		t.store.Checkout.Close()
+	}
+	t.directory.Close()
+}
 func (t *intent) Validate() port.Outcome {
 	data, f := t.directory.Read(t.name)
 	if f != "" {

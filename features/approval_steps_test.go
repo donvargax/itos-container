@@ -203,12 +203,7 @@ func (w *world) approvalSteps(sc *godog.ScenarioContext) {
 		}
 		return w.approvalContains(reason, "itos container approve")
 	})
-	sc.Step(`^run reports that approval matched before refusing unimplemented offline startup with exit 3$`, func() error {
-		if err := w.exitsWith(3); err != nil {
-			return err
-		}
-		return w.approvalContains("approval matched", "offline startup is not implemented")
-	})
+
 	sc.Step(`^the approved mount boundary contains only the checkout and excludes host approval and snapshot paths$`, w.approvalBoundary)
 	sc.Step(`^approval help describes terminal review, changes, y/N, remembered approval and optional exact --fingerprint$`, func() error {
 		return w.approvalContains("terminal", "changes", "y/N", "settings change", "--fingerprint")

@@ -36,11 +36,15 @@ import (
 type sessionContractRequest struct {
 	Action, Backend, Reference, Token, Fault, Umask string
 	Output, Checkpoint, Journal, MemoryFile         string
+	Boundary                                        string
 }
 
 type sessionContractResult struct {
 	Outcome, Reference, ID, Cleanup, PreflightFailure string
 	Handoff                                           bool
+	Code                                              int
+	Diagnostic                                        string
+	RunEvents                                         []string
 	Workload                                          *int
 	Events                                            []sessionContractEvent
 	Memory                                            *sessionMemoryOutput
@@ -112,6 +116,8 @@ func TestSessionContractProbe(t *testing.T) {
 	}
 	var result sessionContractResult
 	switch request.Action {
+	case "run", "run-cleanup":
+		result = offlineContract(t, request, controllerFor)
 	case "create":
 		service, _ := approvalServices(os.Stdin, io.Discard, io.Discard)
 		preflight := &sessionContractPreflight{Preflight: approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}}}
