@@ -11,6 +11,7 @@ import (
 
 type Registry struct {
 	Store                                   *Store
+	Admissions                              *Admissions
 	Project                                 string
 	Records                                 map[string]port.PublicRecord
 	Leases                                  map[string]bool
@@ -84,6 +85,11 @@ func (s *Registry) Register(ctx context.Context, d approval.Durable, id, token s
 	}
 	if s.SaveFailure != "" {
 		return nil, s.SaveFailure
+	}
+	if s.Admissions != nil {
+		if failure := s.Admissions.reserve(s.Store.Root, id, port.Reference(s.Project, token)); failure != "" {
+			return nil, failure
+		}
 	}
 	s.Records[id] = port.PublicRecord{Schema: 1, ID: id, Project: s.Project, Intent: port.Reference(s.Project, token), State: "preparing"}
 	s.Leases[id] = true
@@ -220,6 +226,7 @@ func (s *memorySession) Save(r port.PublicRecord) port.Outcome {
 	s.record = copyPublic(r)
 	s.registry.Records[r.ID] = copyPublic(r)
 	s.registry.Writes++
+	s.completeAdmission()
 	return ""
 }
 func (s *memorySession) Sync() port.Outcome {
@@ -233,6 +240,7 @@ func (s *memorySession) Sync() port.Outcome {
 		return s.registry.SaveFailure
 	}
 	s.registry.Syncs++
+	s.completeAdmission()
 	return ""
 }
 func (s *memorySession) Close() {
@@ -362,5 +370,11 @@ func RegistryLaunchContract(t Reporter, open func() (port.Registry, port.Store, 
 			i.Close()
 		}
 		s.Close()
+	}
+}
+
+func (s *memorySession) completeAdmission() {
+	if s.registry.Admissions != nil && s.record.State == "stopped" && s.intent.Record().Stage == "absent" && port.HexID(s.intent.Record().ContainerID) {
+		s.registry.Admissions.complete(s.registry.Store.Root, s.record.ID)
 	}
 }

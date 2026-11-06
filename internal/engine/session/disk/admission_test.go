@@ -1,0 +1,295 @@
+package disk
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
+	sp "github.com/donvargax/itos-container/internal/engine/session/port"
+)
+
+type admissionFaultStorage struct {
+	ap.RegistryStorage
+	fault     string
+	afterOpen func()
+}
+
+func (s admissionFaultStorage) Admission(ctx context.Context, c ap.Candidate) (ap.AdmissionDirectory, ap.Failure) {
+	if s.fault == "open" {
+		return nil, "state.unavailable"
+	}
+	d, f := s.RegistryStorage.Admission(ctx, c)
+	if f != "" {
+		return nil, f
+	}
+	if s.afterOpen != nil {
+		s.afterOpen()
+	}
+	return admissionFaultDirectory{AdmissionDirectory: d, fault: s.fault}, ""
+}
+
+type admissionFaultDirectory struct {
+	ap.AdmissionDirectory
+	fault string
+}
+
+func (d admissionFaultDirectory) Names() ([]string, ap.Failure) {
+	if d.fault == "names" {
+		return nil, "state.unavailable"
+	}
+	return d.AdmissionDirectory.Names()
+}
+func (d admissionFaultDirectory) Read(name string) ([]byte, ap.Failure) {
+	if d.fault == "read" {
+		return nil, "state.unavailable"
+	}
+	return d.AdmissionDirectory.Read(name)
+}
+func (d admissionFaultDirectory) Publish(name string, old, next []byte) ap.Failure {
+	if d.fault == "publish" {
+		return "state.write"
+	}
+	return d.AdmissionDirectory.Publish(name, old, next)
+}
+func (d admissionFaultDirectory) Sessions() ([]ap.RegisteredSession, ap.Failure) {
+	if d.fault == "sessions" {
+		return nil, "state.unavailable"
+	}
+	return d.AdmissionDirectory.Sessions()
+}
+func (d admissionFaultDirectory) Unchanged() bool {
+	return d.fault != "changed" && d.AdmissionDirectory.Unchanged()
+}
+
+func TestAdmissionFailuresDoNotGrantRegistration(t *testing.T) {
+	for _, fault := range []string{"open", "names", "read", "publish", "sessions", "changed", "invalid claim", "wrong claim name", "overlap", "invalid legacy", "wrong legacy ID", "missing legacy intent", "wrong legacy index"} {
+		t.Run(fault, func(t *testing.T) {
+			m := newRegistryFixture()
+			m.registry.Storage = admissionFaultStorage{RegistryStorage: m.files, fault: fault}
+			want := sp.Incomplete
+			switch fault {
+			case "open", "publish":
+				want = sp.IntentWrite
+			case "changed":
+				want = sp.Unsafe
+			case "invalid claim", "wrong claim name", "invalid legacy", "wrong legacy ID", "missing legacy intent", "wrong legacy index":
+				want = sp.Invalid
+			case "overlap":
+				want = sp.CheckoutOverlap
+			}
+			if fault == "invalid claim" || fault == "wrong claim name" || fault == "overlap" {
+				r := sp.AdmissionRecord{Schema: 1, Root: m.binding.Checkout.Root + "/child", ID: strings.Repeat("e", 64), Intent: m.record.Intent}
+				name := admissionName(registryKey(r.Root, m.binding.UID), r.ID, m.binding.UID)
+				data := m.codec.EncodeAdmission(r)
+				if fault == "invalid claim" {
+					data = []byte("invalid")
+				}
+				if fault == "wrong claim name" {
+					name = strings.Repeat("0", 64) + ".json"
+				}
+				m.files.Admissions = map[string][]byte{name: data}
+			}
+			if strings.Contains(fault, "legacy") {
+				files := m.seed()
+				switch fault {
+				case "invalid legacy":
+					files.Data = []byte("invalid")
+				case "wrong legacy ID":
+					r := m.record
+					r.ID = strings.Repeat("e", 64)
+					m.codec.Records["other"] = r
+					files.Data = []byte("other")
+				case "missing legacy intent":
+					delete(m.storage.Directories["intents/"+m.binding.Frozen.Project].Files, strings.Repeat("c", 64)+".json")
+				case "wrong legacy index":
+					delete(m.files.Sessions, registryKey(m.binding.Checkout.Root, m.binding.UID)+"/"+m.record.ID)
+					m.files.Sessions[strings.Repeat("0", 64)+"/"+m.record.ID] = files
+				}
+			}
+			lease, failure := m.registry.Register(t.Context(), ap.Durable{Frozen: m.binding.Frozen}, m.record.ID, strings.Repeat("c", 64))
+			if lease != nil {
+				lease.Close()
+			}
+			if lease != nil || failure != want {
+				t.Fatal("unsafe reservation granted authority", failure, want)
+			}
+		})
+	}
+}
+func TestAdmissionCompletionRequiresMatchingReservationAndDurability(t *testing.T) {
+	for _, fault := range []string{"", "open", "read", "publish", "invalid claim", "different claim", "validation"} {
+		t.Run(fault, func(t *testing.T) {
+			m := newRegistryFixture()
+			m.seed()
+			r := m.binding.Intent(strings.Repeat("c", 64))
+			r.Stage, r.ContainerID = "absent", strings.Repeat("e", 64)
+			m.storage.Directories["intents/"+m.binding.Frozen.Project].Files[r.NameToken()+".json"] = m.registry.Store.Codec.Encode(r)
+			entry, failure := m.registry.Open(t.Context(), m.record.ID, false)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer entry.Close()
+			s := entry.(*publicSession)
+			s.registry.Storage = admissionFaultStorage{RegistryStorage: m.files, fault: fault}
+			claim := sp.AdmissionRecord{Schema: 1, Root: m.binding.Checkout.Root, ID: m.record.ID, Intent: m.record.Intent}
+			name := admissionName(registryKey(claim.Root, m.binding.UID), claim.ID, m.binding.UID)
+			if fault == "different claim" {
+				claim.Intent = sp.Reference(m.record.Project, strings.Repeat("0", 64))
+			}
+			data := m.codec.EncodeAdmission(claim)
+			if fault == "invalid claim" {
+				data = []byte("invalid")
+			}
+			m.files.Admissions = map[string][]byte{name: data}
+			stopped := m.record
+			stopped.State = "stopped"
+			m.codec.Records["stopped"] = stopped
+			want := sp.Outcome("")
+			switch fault {
+			case "open", "publish":
+				want = sp.IntentWrite
+			case "read":
+				want = sp.Incomplete
+			case "invalid claim":
+				want = sp.Invalid
+			case "different claim", "validation":
+				want = sp.Refused
+			}
+			if fault == "validation" {
+				m.files.Sessions[registryKey(claim.Root, m.binding.UID)+"/"+claim.ID].Changed = true
+			}
+			if failure := s.Save(stopped); failure != want {
+				t.Fatal(failure, want)
+			}
+			if fault == "" {
+				completed, f := m.codec.DecodeAdmission(m.files.Admissions[name])
+				if f != "" || !completed.Complete {
+					t.Fatal("durable cleanup retained reservation", f)
+				}
+				if f := s.Sync(); f != "" {
+					t.Fatal("completion retry", f)
+				}
+			}
+		})
+	}
+}
+
+func TestAdmissionScanPreservesLegacyRootsAndReadFailures(t *testing.T) {
+	m := newRegistryFixture()
+	m.seed()
+	c := ap.Candidate{UID: m.binding.UID, GID: m.binding.GID, Root: m.binding.Checkout.Root + "/child", Project: m.binding.Frozen.Project}
+	d, f := m.files.Admission(t.Context(), c)
+	if f != "" {
+		t.Fatal(f)
+	}
+	defer d.Close()
+	if f := m.registry.checkAdmission(t.Context(), c, d); f != sp.CheckoutOverlap {
+		t.Fatal("legacy nested root lost", f)
+	}
+	c.Root = m.binding.Checkout.Root + "-more"
+	if f := m.registry.checkAdmission(t.Context(), c, d); f != "" {
+		t.Fatal("legacy disjoint root refused", f)
+	}
+	claim := sp.AdmissionRecord{Schema: 1, Root: m.binding.Checkout.Root, ID: m.record.ID, Intent: m.record.Intent}
+	name := admissionName(registryKey(claim.Root, m.binding.UID), claim.ID, m.binding.UID)
+	m.files.Admissions[name] = m.codec.EncodeAdmission(claim)
+	if f := m.registry.checkAdmission(t.Context(), c, admissionFaultDirectory{AdmissionDirectory: d, fault: "read"}); f != sp.Incomplete {
+		t.Fatal("unreadable reservation ignored", f)
+	}
+}
+func TestAdmissionCompletionRevalidatesAfterAcquiringGlobalLock(t *testing.T) {
+	m := newRegistryFixture()
+	files := m.seed()
+	r := m.binding.Intent(strings.Repeat("c", 64))
+	r.Stage, r.ContainerID = "absent", strings.Repeat("e", 64)
+	m.storage.Directories["intents/"+m.binding.Frozen.Project].Files[r.NameToken()+".json"] = m.registry.Store.Codec.Encode(r)
+	entry, f := m.registry.Open(t.Context(), m.record.ID, false)
+	if f != "" {
+		t.Fatal(f)
+	}
+	defer entry.Close()
+	s := entry.(*publicSession)
+	s.registry.Storage = admissionFaultStorage{RegistryStorage: m.files, afterOpen: func() { files.Changed = true }}
+	stopped := m.record
+	stopped.State = "stopped"
+	m.codec.Records["stopped"] = stopped
+	if f := s.Save(stopped); f != sp.Refused {
+		t.Fatal("changed session released reservation", f)
+	}
+	if len(m.files.Admissions) != 0 {
+		t.Fatal("changed session wrote completion")
+	}
+}
+
+func TestAdmissionCertificateCannotHideChangedPublicAuthority(t *testing.T) {
+	for _, fault := range []string{"intent", "state", "problem", "invalid"} {
+		t.Run(fault, func(t *testing.T) {
+			m := newRegistryFixture()
+			files := m.seed()
+			r := m.record
+			r.State = "stopped"
+			claim := sp.AdmissionRecord{Schema: 1, Root: m.binding.Checkout.Root, ID: r.ID, Intent: r.Intent, Complete: true}
+			switch fault {
+			case "intent":
+				r.Intent = sp.Reference(r.Project, strings.Repeat("0", 64))
+			case "state":
+				r.State = "running"
+			case "problem":
+				problem := sp.Incomplete
+				r.LastProblem = &problem
+			}
+			m.codec.Records["changed"] = r
+			files.Data = []byte("changed")
+			if fault == "invalid" {
+				files.Data = []byte("invalid")
+			}
+			name := admissionName(registryKey(claim.Root, m.binding.UID), claim.ID, m.binding.UID)
+			m.files.Admissions = map[string][]byte{name: m.codec.EncodeAdmission(claim)}
+			c := ap.Candidate{UID: m.binding.UID, GID: m.binding.GID, Root: m.binding.Checkout.Root + "/child", Project: m.binding.Frozen.Project}
+			d, f := m.files.Admission(t.Context(), c)
+			if f != "" {
+				t.Fatal(f)
+			}
+			defer d.Close()
+			if f := m.registry.checkAdmission(t.Context(), c, d); f != sp.Invalid {
+				t.Fatal("inconsistent completed authority admitted checkout", f)
+			}
+		})
+	}
+}
+
+func (d admissionFaultDirectory) Sync(name string, expected []byte) ap.Failure {
+	if d.fault == "sync" {
+		return "state.write"
+	}
+	return d.AdmissionDirectory.Sync(name, expected)
+}
+func TestAdmissionRepeatedCompletionPreservesCertificateAndSyncFailure(t *testing.T) {
+	m := newRegistryFixture()
+	m.seed()
+	r := m.binding.Intent(strings.Repeat("c", 64))
+	r.Stage, r.ContainerID = "absent", strings.Repeat("e", 64)
+	m.storage.Directories["intents/"+m.binding.Frozen.Project].Files[r.NameToken()+".json"] = m.registry.Store.Codec.Encode(r)
+	entry, f := m.registry.Open(t.Context(), m.record.ID, false)
+	if f != "" {
+		t.Fatal(f)
+	}
+	defer entry.Close()
+	s := entry.(*publicSession)
+	stopped := m.record
+	stopped.State = "stopped"
+	m.codec.Records["stopped"] = stopped
+	if f := s.Save(stopped); f != "" {
+		t.Fatal(f)
+	}
+	// A retry must sync, so a publication-only fault cannot break it.
+	s.registry.Storage = admissionFaultStorage{RegistryStorage: m.files, fault: "publish"}
+	if f := s.Sync(); f != "" {
+		t.Fatal("retry rewrote completed admission", f)
+	}
+	s.registry.Storage = admissionFaultStorage{RegistryStorage: m.files, fault: "sync"}
+	if f := s.Sync(); f != sp.IntentWrite {
+		t.Fatal("retry lost admission durability failure", f)
+	}
+}

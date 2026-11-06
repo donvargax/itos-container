@@ -14,6 +14,8 @@ const launchSuperseded port.Outcome = "launch-superseded"
 
 func registrationFailure(f port.Outcome) port.Outcome {
 	switch f {
+	case port.CheckoutOverlap:
+		return f
 	case port.Refused, port.Unsafe, port.Invalid:
 		return port.RegistrationOwnership
 	case port.IdentityFailed, port.Internal:

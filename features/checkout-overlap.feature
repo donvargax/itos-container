@@ -7,11 +7,11 @@ Feature: Run refuses overlapping worker checkouts
   # Authorities: docs/charter.md, docs/architecture.md (Slices), arc42 Foreground
   # run and Recovery, offline-run-lifecycle.md (AC-05/06/23/28), and slice-16's
   # settled requirement for atomic refusal in either order, including concurrency.
-  # This file is the slice-16 spec only. Every step phrase below is NEW; reuse
-  # fixture helpers, not existing steps whose single-project assertions differ.
-  # Implementers first commit complete steps with these tags still @wip. Obtain
-  # assertion-level red before implementation and green afterward. Native red
-  # and green evidence is CI-only under features/README.md, never local Docker.
+  # Red steps were committed at 56f860c. The coordinator accepted all 19 local
+  # assertion failures and native OVERLAP-06 (both orders) / OVERLAP-07 failures
+  # at their Then assertions in run 42307612900, d790e7a, 2026-11-06 ~23:00 UTC.
+  # That settled decision authorizes implementation. Native green evidence
+  # remains CI-only under features/README.md, never local Docker.
   #
   # Admission choices:
   # - Compare canonical absolute checkout roots from the validated frozen binding,
@@ -108,7 +108,7 @@ Feature: Run refuses overlapping worker checkouts
 
   # Sequential admission, with positive controls for both common bad ancestry
   # tests. The different-daemon rows prevent a daemon-scoped admission shortcut.
-  @wip @slice-16 @ID-OVERLAP-01 @linux
+  @slice-16 @ID-OVERLAP-01 @linux
   Scenario Outline: A running checkout excludes its ancestors and descendants
     Given an overlap fixture with descendant "<child>" and "<engines>" local engine fixtures
     When run starts "<first>" and a fresh run attempts the other nested checkout while the first workload remains active
@@ -126,7 +126,7 @@ Feature: Run refuses overlapping worker checkouts
 
   # Native counterpart beside its local rule. A fresh successful run after
   # product cleanup proves the refusal is tied to an outstanding session.
-  @wip @slice-16 @ID-OVERLAP-06 @engine @linux
+  @slice-16 @ID-OVERLAP-06 @engine @linux
   Scenario Outline: Native nested refusal preserves the running worker and releases after cleanup
     Given a CI overlap fixture with nested checkouts the cached image and distinct heartbeat workloads
     When the product runs "<first>" to its first heartbeat and attempts the other nested checkout
@@ -145,7 +145,7 @@ Feature: Run refuses overlapping worker checkouts
   # point even on the red baseline. Pause OUTSIDE its project/session operation
   # locks after both publications and before create. The fixture exposes no
   # worker for the first run, so an engine-running-only scan would admit the second.
-  @wip @slice-16 @ID-OVERLAP-02 @linux
+  @slice-16 @ID-OVERLAP-02 @linux
   Scenario Outline: Preparing a checkout already excludes an overlapping run
     Given an overlap fixture with a pre-create barrier for "<first>" after durable registration and intent publication
     When the first run pauses at the pre-create barrier and a fresh run attempts the other nested checkout
@@ -166,7 +166,7 @@ Feature: Run refuses overlapping worker checkouts
   # budget; keep admitted workloads alive through the admission observations.
   # No particular winner is required. Local contracts additionally force the
   # check/publication race with storage barriers under real descriptor locks.
-  @wip @slice-16 @ID-OVERLAP-03 @linux
+  @slice-16 @ID-OVERLAP-03 @linux
   Scenario Outline: Concurrent nested launches admit exactly one checkout
     Given an overlap fixture with "<engines>" local engine fixtures and a shared preflight rendezvous
     When independent ancestor and descendant run processes leave the rendezvous together and their create replies are observed before release
@@ -184,7 +184,7 @@ Feature: Run refuses overlapping worker checkouts
   # product processes arrive, then releases them together through the trusted
   # API fixture. No daemon flag or controller testing switch. Count actual created
   # resources and advancing heartbeats before any product or harness cleanup.
-  @wip @slice-16 @ID-OVERLAP-07 @engine @linux
+  @slice-16 @ID-OVERLAP-07 @engine @linux
   Scenario: Concurrent native nested launches leave exactly one running worker
     Given a CI overlap fixture with nested checkouts the cached image and a shared preflight rendezvous
     When independent native ancestor and descendant run processes leave the rendezvous together
@@ -203,7 +203,7 @@ Feature: Run refuses overlapping worker checkouts
   # the harness does not remove it or publish completion on the product's behalf.
   # The completion fault follows actual removal but prevents durable completion.
   # Stop must re-establish durability before a later admission succeeds.
-  @wip @slice-16 @ID-OVERLAP-04 @linux
+  @slice-16 @ID-OVERLAP-04 @linux
   Scenario Outline: Controller loss and incomplete cleanup retain the checkout conflict
     Given an overlap fixture with an ancestor run configured to leave "<condition>"
     When run reaches that condition and a fresh descendant run is attempted before product recovery
@@ -237,7 +237,7 @@ Feature: Run refuses overlapping worker checkouts
   # Fresh original-checkout status must retain a null workload exit: an unstarted
   # worker has no result to preserve or invent. This is local lifecycle evidence;
   # native admission remains OVERLAP-06/07 and mount identity remains slice-17.
-  @wip @slice-16 @ID-OVERLAP-09 @linux
+  @slice-16 @ID-OVERLAP-09 @linux
   Scenario Outline: Cleanup admits the other checkout before a stopped controller resumes
     Given an overlap fixture with a post-create pre-start barrier for "<first>" outside its session operation lock
     When the first run pauses after durable ownership and a fresh run attempts the other nested checkout
@@ -260,7 +260,7 @@ Feature: Run refuses overlapping worker checkouts
   # any new admission-specific record. These are valid pre-upgrade sessions,
   # not unknown schemas to accept or records to repair/adopt. The Given writes
   # data only; run's refusal and stop's cleanup remain product observations.
-  @wip @slice-16 @ID-OVERLAP-08 @linux
+  @slice-16 @ID-OVERLAP-08 @linux
   Scenario Outline: Existing registered workers also exclude nested checkouts
     Given an overlap fixture with an existing registered "<first>" worker and no admission-specific metadata
     When a fresh run attempts the other nested checkout before recovery of the existing worker
@@ -277,7 +277,7 @@ Feature: Run refuses overlapping worker checkouts
   # Same-root concurrency is intentionally retained. Releasing A's first
   # session cannot free the checkout still occupied by A's second session;
   # completed tombstones must not block forever after both are cleaned up.
-  @wip @slice-16 @ID-OVERLAP-05 @linux
+  @slice-16 @ID-OVERLAP-05 @linux
   Scenario: A nested checkout stays refused until every session of the overlapping root is cleaned up
     Given an overlap fixture with two independently approved invocations of the ancestor checkout
     When both ancestor runs start and the descendant run is attempted before and after product stop completes only the first ancestor session

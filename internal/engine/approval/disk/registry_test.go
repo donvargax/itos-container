@@ -27,6 +27,7 @@ func TestRegistryStorageContract(t *testing.T) {
 			}
 			porttest.RegistryStorageContract(t, open)
 			porttest.RegistryReadersContract(t, open)
+			porttest.AdmissionStorageContract(t, open)
 		})
 	}
 }
