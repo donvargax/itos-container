@@ -95,3 +95,7 @@ questions:
     item: "slice-12"
     question: "slice-12: engine green check of the lifecycle scenarios at f75f2c8?"
     answer: "Not yet. Run 42309496512: 15 of 18 engine cases pass. Still failing: LIFECYCLE-12 (recovery does not report the registered session with its binding and observed state), 13's unread-stdout row (exit 143, expected 17: the observed exit is lost behind the blocked stream) and 13's unread-stderr row (offline recorder refused a mismatched native identity; find whether harness or product). Fix them, then return blocked for another engine run. See slice-12-steer.md."
+  - id: q-24
+    item: "slice-19"
+    question: "slice-19: second CI red run of ID-SOCKETS-01 to 03 at 3b8b9ac?"
+    answer: "No. Run 42311089210 failed the same way, and the new diagnostics show why: the harness's recording proxy cancelled the product's long-lived /containers/<id>/wait (502, recorder transport: context canceled) and then refused its kill (403, unsafe request). Fix the recorder so wait and attach live for the scenario's budget and the run's own kill is allowed, then return blocked for a third red run. See slice-19-steer.md."
