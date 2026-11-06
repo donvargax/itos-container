@@ -55,3 +55,7 @@ questions:
     item: "slice-14"
     question: "slice-14: the rerun of ID-OFFLINE-12 at 27a210d failed at its positive control; what next?"
     answer: "Not red evidence: the positive route control (docker-a) failed, so the denial proves nothing. Fix the control and return blocked for one more engine run; if the CI runner itself is the cause, return blocked with a split proposal. See slice-14-steer.md."
+  - id: q-14
+    item: "slice-14"
+    question: "slice-14: ID-OFFLINE-12 now passes with a working positive control; accept it?"
+    answer: "Yes. Run 42203397615 at d76bf2f: the positive control reaches a resolver where allowed, and the worker finds none. Accept as regression coverage under q-6, turn it live with its comment, and finish the slice."
