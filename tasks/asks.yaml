@@ -27,3 +27,6 @@ questions:
     item: "slice-10"
     question: "slice-10: ID-OFFLINE-03 already passes before the work; accept it as regression coverage, or require another red checkpoint?"
     answer: "Accept it as regression coverage: comment why above its tag and turn it live. Same for any other slice-10 scenario that already passes for the right reason; don't stop for those. See slice-10-steer.md."
+  - id: q-7
+    item: "slice-10"
+    question: "slice-10: split it as its implementer proposed?"
