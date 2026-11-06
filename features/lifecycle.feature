@@ -6,9 +6,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Authorities: docs/charter.md, docs/plans/offline-run-lifecycle.md's AC-22/23
   # cases, docs/architecture.md (Slices), and arc42's Foreground run, Recovery
-  # and Bounded operations. This is slice-12's spec, not runtime evidence.
-  # Baseline reviewed at 263cd14; product code is unchanged from f1063fc,
-  # including slice-10's fixes through 7f1454c.
+  # and Bounded operations. This file specifies slice-12 and slice-15's
+  # LIFECYCLE-15; it is not runtime evidence.
+  # Baseline reviewed at afc15b2, with slice-11 merged and done. Registered run
+  # already uses its Recovery.stop/terminateSession path for owned termination.
   # Runner already forwards signals, consumes repeats and shares one 30 s
   # teardown context across grace, drain and cleanup. Preflight still precedes
   # the 120 s startup timer and signal capture; grace starts after signal delivery;
@@ -18,20 +19,19 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Slice-10 retains OFFLINE-02/03/06/07/13 and foreground_recovery.feature;
   # q-7 moves launch/cleanup to slice-13
   # and isolation/teardown proof to slice-14. Do not reclaim those scenarios.
-  # Slice-11 owns public status/stop, session IDs, recovery records, locks and
-  # actionable retries. Also read the in-progress slice-11 recovery.feature draft
-  # on its branch; the integration cases require that interface before activation.
-  # They do not select a second record schema, ID grammar or ownership algorithm.
-  # Use project-scoped status (no argument) and stop <session>. Until those
-  # commands are built, run retains its protected intent reference and does not
-  # advertise an executable retry. After integration use its actual public ID.
-  # Activation order: LIFECYCLE-05/11/12/15/16 require merged slice-11 recovery;
-  # LIFECYCLE-15 also requires slice-14's independent boundary probes/controls,
-  # built on slice-13's launch/cleanup contract. The registry names only slice-10.
-  # The coordinator must reconcile that ordering before implementation, including
-  # slice-11's reuse of slice-12's shared termination contract. A draft dependency
-  # supplies neither an implemented interface nor passing evidence. Once the
-  # prerequisites are available, apply the standing regression rule below.
+  # Slice-11 supplies public status/stop, session IDs, recovery records, locks,
+  # actionable retries and the shared engine-side termination contract. Read the
+  # merged recovery.feature and internal/engine/session/domain/recovery.go;
+  # reuse them, with no second record schema, ID grammar or ownership algorithm.
+  # Use project-scoped status (no argument), stop <session> and run's actual
+  # public session ID for the exact retry; an intent reference is not that ID.
+  # Settled order (q-11, 2026-11-06): slice-11 precedes slice-12. LIFECYCLE-05,
+  # 11, 12 and 16 activate on merged slice-11 with the rest of slice-12; there
+  # is no remaining recovery prerequisite. Apply the standing regression rule.
+  # LIFECYCLE-15 belongs to slice-15, still @wip, after BOTH slice-12 and
+  # slice-14. It reuses slice-14's independent boundary probes/controls, built on
+  # slice-13's launch/cleanup contract. First-release T-25 waits for slice-14
+  # and slice-15; this spec adds no runtime support claim.
   # No init/hooks, persistent worker volumes, credentials, egress, watchdog,
   # restart, detached mode, exec, new platform or support claim is introduced.
 
@@ -55,12 +55,18 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # provisional cancellation mapping. No sibling feature or design changes here.
 
   # Implementation placement: extend internal/slices/run/{command,domain,port}
-  # and internal/engine/session/{domain,port,<named adapters>}. Shared budgets,
-  # cancellation outcomes and reconciliation belong in that engine; status/stop
-  # consume engine APIs, never another slice. Only cmd assembles signal, clock,
-  # stream, filesystem and SDK adapters. Fakes in port/porttest do no I/O; run
-  # the same contracts against fakes and adapters. Domain decisions take OS as
-  # a value; retain the exact allowlist and existing architecture enforcement.
+  # and internal/engine/session/{domain,port,<named adapters>}. Reuse slice-11's
+  # shared Recovery.stop/terminateSession contract, already used by registered
+  # run: owned SIGTERM once for explicit stop, 10 s grace, fresh revalidation
+  # and SIGKILL only while still running. Apply run's first-signal and original
+  # cancellation-deadline requirements through that same engine path, preserving
+  # stop's public contract; do not define a parallel termination implementation.
+  # Shared budgets, cancellation outcomes and reconciliation belong in that
+  # engine; status/stop consume engine APIs, never another slice. Only cmd
+  # assembles signal, clock, stream, filesystem and SDK adapters. Fakes in
+  # port/porttest do no I/O; run the same contracts against fakes and adapters.
+  # Domain decisions take OS as a value; retain the exact allowlist and existing
+  # architecture enforcement.
   # Reuse Go 1.27.3 context/time and os/signal in adapters, the pinned Moby client
   # v0.6.2 / API v1.56.1 for inspect/wait/kill/remove and stream framing, and
   # golang.org/x/sys v0.48.0 where a native call is needed. No new dependency,
@@ -156,8 +162,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # state when storage is available; do not promise delivery to an unread pipe.
 
   # Fixture/step handoff: ALL phrases below are new; no step definitions in this
-  # spec commit. Reuse mechanisms from session_* and slice-10's offline_local_*,
-  # offline_runtime_* and cmd contract assemblies, not their assertions as Givens.
+  # spec commit. Reuse mechanisms from session_*, slice-10's offline_local_* and
+  # offline_runtime_*, slice-11's recovery_* and cmd contract assemblies, not
+  # their assertions as Givens. Include registered run in the local assemblies
+  # so they exercise slice-11's shared termination and public recovery contracts.
   # Givens prepare disposable checkouts/state, independent canonical approval
   # seeds, original frozen/ownership bindings, trusted probes, clocks and faults.
   # "Accepted", "observed", "live" and "ready" in a Given describe scripted
@@ -225,7 +233,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # implementing, then passing evidence at the same tier. The standing decision
   # replaces the red requirement for verified regressions; do not report them as
   # newly red. Existing deadlines, signal forwarding, repeat suppression and
-  # ownership are controls; compare LIFECYCLE-05/15/16 with slice-11 below.
+  # ownership are controls. This rule explicitly includes the exit-17 rows and
+  # LIFECYCLE-09, as well as LIFECYCLE-05/11/16's merged slice-11 integration.
+  # Do not demand artificial red for their existing behavior or stop for another
+  # decision; preserve all assertions and verify the complete case at its tier.
   # All lifecycle phrases still need definitions at this drafting checkpoint, so
   # all scenarios remain @wip. Then/And assertions are candidate failure points,
   # not observed failures: this spec review supplies no red/green runtime proof.
@@ -277,6 +288,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Acknowledgement loss after accepted start is different from confirmed failure
   # to start. Independent inspection/wait supplies 17 or remains unavailable.
+  # Regression attribution: slice-10 preserves observed nonzero exits; slice-11
+  # reconciles registered starts through shared stop. Verify the exit-17 row as
+  # written, including its separate timeout report, under the standing rule.
   @wip @slice-12 @ID-LIFECYCLE-03 @linux
   Scenario Outline: A timed-out start is reconciled without inventing a child result
     Given a lifecycle contract fixture with accepted start and a withheld reply followed by "<observation>"
@@ -295,6 +309,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # t=30 without any earlier per-call expiry. The baseline already shares 30 s;
   # distinguish its generic cleanup failure from the required teardown timeout,
   # and prove that a pending drain does not prevent owned reconciliation.
+  # Regression attribution: slice-10 supplies the shared teardown total and
+  # exit-17 precedence; slice-11 supplies registered cleanup. Preserve passing
+  # controls while checking the complete rows under the standing rule.
   @wip @slice-12 @ID-LIFECYCLE-04 @linux
   Scenario Outline: Drain and cleanup share one teardown deadline
     Given a lifecycle contract fixture with observed exit <child> and slow drain reconciliation removal and completion
@@ -313,9 +330,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # These integration cases adopt slice-11's protected records/public references;
   # no broad listing/prune or new session schema is specified here. Setup seeds
   # an owned candidate, not a prior successful product run or stop.
-  # Slice-11's RECOVERY-19 specifies recovery timeout classes and totals. Recheck
-  # every row, including the fresh invocation, on merged slice-11. Cases already
-  # passing for the right reason are accepted regressions under the standing rule;
+  # Merged slice-11's RECOVERY-19 covers recovery timeout classes and totals.
+  # Recheck every row, including the fresh invocation. Cases passing for the
+  # right reason are accepted regressions under the standing rule;
   # retain this attribution when turning the complete outline live.
   @wip @slice-12 @ID-LIFECYCLE-05 @linux
   Scenario Outline: Each explicit recovery invocation has a fresh finite budget
@@ -377,8 +394,11 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Prove actual delivery and precedence, including zero. Handlers install before
   # their ready frame, write a signal receipt to checkout, then exit as requested.
-  # Slice-10 forwards the signal and can preserve 17; its zero case returns
+  # Regression attribution: slice-10 forwards signals and preserves exit 17;
+  # slice-11 supplies registered termination. The merged zero case still returns
   # 75 and neither case reports cancellation separately from execution failure.
+  # Accept any complete exit-17 row that passes at its required tier under the
+  # standing rule; do not replace observed exit with a wrapper cancellation code.
   @wip @slice-12 @ID-LIFECYCLE-08 @engine
   Scenario Outline: The primary receives the first signal and its observed exit wins
     Given a CI lifecycle checkout with a ready signal-handling probe that exits <child>
@@ -401,6 +421,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # acknowledgement by the example duration. Native receipts prove delivery.
   # Six seconds is inside the 10 s call limit but makes acknowledgement-relative
   # grace observably late. The immediate rows retain the healthy timing control.
+  # Regression attribution: slice-10 supplies first-signal/repeat suppression;
+  # slice-11 supplies shared owned termination and escalation. The standing rule
+  # applies to LIFECYCLE-09, including any complete already-passing rows. Verify
+  # native receipts and timings; fixture exit values are not that evidence.
   @wip @slice-12 @ID-LIFECYCLE-09 @engine
   Scenario Outline: Ignored and repeated cancellation escalates once after the fixed grace
     Given a CI lifecycle checkout with a ready signal-recording probe that keeps running and a signal acknowledgement delayed <delay> seconds
@@ -441,6 +465,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Signals after observed primary exit cannot erase 17 or abort recovery. Keep
   # removal unavailable until after the original teardown expires, then retry.
+  # Regression attribution: slice-10 supplies exit-17 precedence and repeat
+  # suppression; merged slice-11 supplies the public ID, retained record and stop.
+  # Activate with the rest of slice-12; accept a verified complete passing case.
   @wip @slice-12 @ID-LIFECYCLE-11 @engine
   Scenario: Repeated signals during cleanup preserve the workload result and recovery
     Given a CI lifecycle checkout with an exit-17 probe and an unavailable removal barrier
@@ -453,6 +480,8 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Block a finite transport request after the healthy control, not the native
   # daemon. The probe stays alive and edits checkout; all authoritative workload
   # exit observations remain unavailable to the controller during this attempt.
+  # Use merged slice-11's public recovery identity and status/stop in this case;
+  # activation does not wait for a later recovery interface.
   @wip @slice-12 @ID-LIFECYCLE-12 @engine
   Scenario: Engine transport loss reports an unknown workload outcome and retains recovery
     Given a CI lifecycle checkout with a live marker probe and a product-only engine disconnect barrier
@@ -492,6 +521,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Local exact-boundary counterpart to blocked real pipes. The output stream
   # never closes, although the engine has already observed the primary's exit.
+  # Regression attribution: slice-10 supplies exit-17 precedence; the separate
+  # stream-timeout assertion still needs proof. Apply the standing rule to the
+  # complete rows, without requiring existing precedence to fail anew.
   @wip @slice-12 @ID-LIFECYCLE-14 @linux
   Scenario Outline: A stalled final drain is a failure distinct from workload exit
     Given a lifecycle contract fixture with observed exit <child> and a final output drain that never completes
@@ -513,7 +545,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # independent CI evidence with slice-14's probes, not that discovery result.
   # If earlier slices already satisfy the complete case, name them here and turn
   # it live under the standing regression decision after confirming that evidence.
-  @wip @slice-12 @ID-LIFECYCLE-15 @engine
+  # Q-11 assigns this case to slice-15 after slice-12 and slice-14. Keep it @wip
+  # until both prerequisites and its independent post-loss evidence are available.
+  @wip @slice-15 @ID-LIFECYCLE-15 @engine
   Scenario: Uncatchable controller loss leaves a live isolated candidate for explicit stop
     Given a CI lifecycle checkout with continuous boundary probes and working external route and host-access controls
     When run launches the probe and the harness kills only the controller with SIGKILL then requests a fresh probe round before status and stop
@@ -529,9 +563,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # authority to the new controller. Before absence publication, engine removal
   # may already have succeeded; recovery must inspect, not infer, that fact.
   # Slice-9's uncertain-create ownership and slice-10's foreground cleanup are
-  # existing controls. Compare these windows with RECOVERY-14/15/22 on merged
-  # slice-11 before claiming new red evidence. Already passing windows are
-  # accepted regressions; name the supplying slices here when turning it live.
+  # existing controls. Merged slice-11 supplies RECOVERY-14/15/22's public recovery;
+  # compare these windows before claiming new red evidence. Activate with the
+  # rest of slice-12. Already passing windows are accepted regressions; retain
+  # the supplying-slice attribution when turning the complete outline live.
   @wip @slice-12 @ID-LIFECYCLE-16 @engine
   Scenario Outline: Controller death during an in-flight transition retains recoverable ownership
     Given a CI lifecycle checkout with a trusted controller-kill barrier "<barrier>"
