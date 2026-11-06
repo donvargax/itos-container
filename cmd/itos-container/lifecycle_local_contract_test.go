@@ -19,6 +19,7 @@ import (
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
+	runport "github.com/donvargax/itos-container/internal/slices/run/port"
 	runfake "github.com/donvargax/itos-container/internal/slices/run/port/porttest"
 )
 
@@ -44,6 +45,8 @@ type lifecycleEvent struct {
 	remaining    time.Duration
 }
 type lifecycleLocal struct {
+	approval            runport.Approval
+	snapshots           ap.Snapshots
 	m                   publicMemory
 	store               sp.Store
 	registry            sp.Registry
@@ -85,8 +88,18 @@ func (l *lifecycleLocal) count(name string) int {
 func (l *lifecycleLocal) invoke(ctx context.Context) (int, string, string) {
 	approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: l.m.c, Record: ap.Record{Candidate: l.m.c, Generation: "1"}, Status: "matching"}}
 	runner := domain.Runner{Store: l.store, Registry: lifecycleRegistry{l.registry, l}, Engine: lifecycleEngine{l}, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
+	var selected runport.Approval = lifecycleApproval{approval, l, ctx}
+	if l.approval != nil {
+		selected = l.approval
+	}
+	snapshots := l.snapshots
+	if snapshots == nil {
+		snapshots = &af.Snapshots{}
+	}
 	var out, errout bytes.Buffer
-	code := (runcommand.CLI{Context: ctx, Approval: lifecycleApproval{approval, l, ctx}, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "synthetic-sensitive-argv"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
+	code := (runcommand.CLI{Context: ctx, Approval: selected, Snapshots: snapshots, Runner: runner, Args: []string{"--", "synthetic-sensitive-argv"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
+	// Collect writes already dispatched by the command without advancing time.
+	synctest.Wait()
 	return code, errout.String(), out.String()
 }
 
@@ -273,6 +286,9 @@ func lifecycleLocalCase(t *testing.T, name, arg, signal, backend string) {
 			switch name {
 			case "start-timeout":
 				<-call.Done()
+				if l.unknownExit {
+					l.hidden = true
+				}
 			case "cancel", "accepted", "lost-signal":
 				interrupted = time.Now()
 				cancel(sp.Interrupt{Signal: signal})
