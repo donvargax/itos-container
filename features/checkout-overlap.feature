@@ -285,3 +285,18 @@ Feature: Run refuses overlapping worker checkouts
     And the first ancestor session alone has confirmed durable cleanup and the second retains its own original ownership
     When product stop completes the second ancestor session and a fresh descendant run is attempted
     Then the descendant run starts despite retained completed ancestor records and preserves both ancestors' workload outcomes edits approvals and snapshots
+
+  # Progress replaces public records atomically under the session operation lock.
+  # Admission scans without that lock, since it may span engine calls. Retry a
+  # raced record read at most three times, rechecking all pinned-path, no-follow,
+  # owner/mode/link and inode checks each time. Persistent churn or unsafe evidence
+  # still refuses. Do not change locked readers or wait for the operation lock.
+  # The test assembly publishes the original worker's valid progress through the
+  # production storage adapter after the scanner opens its old record. Its seam
+  # changes only filesystem timing, never command outcomes or engine observations.
+  @slice-16 @ID-OVERLAP-10 @linux @wip
+  Scenario: Concurrent progress publication does not refuse a disjoint run
+    Given an overlap fixture with concurrent public progress publication
+    When an ancestor worker remains active and a disjoint run scans during its progress publication
+    Then the disjoint workload starts without a registration refusal while the original worker retains its full ID and ownership
+    And both checkouts approvals and snapshots remain unchanged through progress publication

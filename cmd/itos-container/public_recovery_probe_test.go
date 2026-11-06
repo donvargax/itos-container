@@ -80,6 +80,9 @@ func TestPublicRecoveryCommand(t *testing.T) {
 			return sessionOwnerInfo{FileInfo: info, metadata: metadata.Interface()}, nil
 		}
 	}
+	if request.Fault == "public progress replacement" {
+		publicStorage.Stat = publicProgressReplacement(t, publicStorage, request)
+	}
 	store.Storage = intentStorage
 	registry.Store, registry.Storage = store, publicStorage
 	runner.Store, runner.Registry = store, registry
