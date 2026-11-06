@@ -54,6 +54,7 @@ func TestCreateRunRequiresSafeImageAndCertainIdentity(t *testing.T) {
 		images, creates int32
 	}{
 		{"healthy", "", 1, 1},
+		{"large request", "", 1, 1},
 		{"socket after image", sp.Refused, 1, 0},
 		{"invalid environment", sp.Invalid, 1, 0},
 		{"create unavailable", sp.Uncertain, 1, 1},
@@ -71,6 +72,14 @@ func TestCreateRunRequiresSafeImageAndCertainIdentity(t *testing.T) {
 					images.Add(1)
 					_ = json.NewEncoder(w).Encode(map[string]any{"Id": b.ImageID, "Config": map[string]any{}})
 				case r.Method == http.MethodPost && r.URL.Path == "/v1.56/containers/create":
+					// Consume the request before replying, as the real API does.
+					// Otherwise Connection: close can race the client's body write.
+					var request container.CreateRequest
+					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+						t.Errorf("invalid create request: %v", err)
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
 					creates.Add(1)
 					switch tc.fault {
 					case "create unavailable":
@@ -105,7 +114,13 @@ func TestCreateRunRequiresSafeImageAndCertainIdentity(t *testing.T) {
 			case "socket after create":
 				replaceSocketOnReply(t, run.connection, pin, b.Endpoint, "/v1.56/containers/create")
 			}
-			gotID, got := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), []string{"probe", "two words", "$HOME"})
+			argv := []string{"probe", "two words", "$HOME"}
+			if tc.fault == "large request" {
+				// Exceed the socket buffer so an early fixture reply cannot rely
+				// on the entire request already having reached the server.
+				argv = append(argv, strings.Repeat("x", 1<<20))
+			}
+			gotID, got := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), argv)
 			if got != tc.want || (tc.want == "" && gotID != id) || (tc.want != "" && gotID != "") {
 				t.Fatalf("create = %q, %s; want outcome %s", gotID, got, tc.want)
 			}
