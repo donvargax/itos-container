@@ -370,8 +370,8 @@ items:
   - id: slice-12
     title: Budgets, cancellation and loss
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-11]
     kind: slice
     why: >
