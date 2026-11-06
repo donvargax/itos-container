@@ -355,13 +355,9 @@ items:
     title: Owned create and cleanup
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-8, T-20]
     kind: slice
-    why: >
-      Creates internal/engine/session. An fsynced intent record before create; create unstarted,
-      remove, confirm absence; a write failure and a lost create response. Reconcile by record plus
-      random name.
   - id: slice-10
     title: Hardened offline foreground run
     phase: 1
