@@ -20,6 +20,12 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Use project-scoped status (no argument) and stop <session>. Until those
   # commands are built, run retains its protected intent reference and does not
   # advertise an executable retry. After integration use its actual public ID.
+  # Activation order: LIFECYCLE-05/11/12/15/16 require merged slice-11 recovery;
+  # LIFECYCLE-15 also requires slice-14's independent boundary probes/controls,
+  # built on slice-13's launch/cleanup contract. The registry names only slice-10.
+  # The coordinator must reconcile that ordering before implementation, including
+  # slice-11's reuse of slice-12's shared termination contract. A draft dependency
+  # supplies neither an implemented interface nor regression acceptance.
   # No init/hooks, persistent worker volumes, credentials, egress, watchdog,
   # restart, detached mode, exec, new platform or support claim is introduced.
 
@@ -170,20 +176,30 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Red first belongs to the implementer: commit complete steps with @wip retained,
   # obtain assertion-level local red or coordinator-only CI red_scenarios evidence,
-  # then implement. The first Then of each case is its intended failure point.
+  # then implement. Then/And assertions are candidate failure points, not observed
+  # failures: undefined steps and this feasibility review supply no red/green proof.
   # Existing partial deadlines/ownership are controls, not claimed new red proof.
   # Recheck against the merged dependency heads: if a case already passes for the
-  # right reason, report it for an explicit regression decision, never force red.
+  # right reason, obtain explicit regression acceptance before activation, never
+  # force red. In particular compare LIFECYCLE-05/15/16 with slice-11 below.
 
   # Individual waits: existing generic SDK errors do not identify the timed-out
   # phase; preflight/state waits currently lack the complete shared deadline.
+  # For LIFECYCLE-01/02, capture cancellation and phase-entry observations at the
+  # deadline, then advance controlled time through the separate cleanup attempt.
+  # Include accepted-create/start faults whose cleanup remains pending beyond the
+  # timeout; allow final return after the cleanup attempt finishes or exhausts its
+  # budget. Cancelling the controller wait does not undo an accepted side effect.
+  # No authoritative nonzero workload exit is supplied here; LIFECYCLE-03 covers
+  # that precedence. Already-bounded calls may pass the cancellation assertion;
+  # final timeout classification and the cleanup bound still need their own proof.
   @wip @slice-12 @ID-LIFECYCLE-01 @linux
   Scenario Outline: A stalled finite operation consumes at most its call budget
     Given a lifecycle contract fixture with a stalled "<operation>" and a healthy control
-    When the real run contract reaches the operation and controlled time crosses its 10 second deadline through each local backend
-    Then each run reports "run.call-timeout" with exit 75 and the named operation by its call deadline
-    And no subsequent startup phase begins and any accepted mutation remains accountable to the original intent
-    And each run has at most 30 separate seconds for owned cleanup without losing the primary timeout
+    When the real run contract reaches the operation and controlled time advances through its 10 second deadline and the ensuing cleanup through each local backend
+    Then each run cancels its wait for the pending operation by its call deadline and begins no subsequent startup phase
+    And any accepted mutation remains accountable to the original intent
+    And after the cleanup attempt each run reports "run.call-timeout" with exit 75 and the named operation no later than 30 seconds after its call deadline
     And the healthy control launches and cleans exactly one owned worker with unchanged unrelated state
 
     Examples:
@@ -205,10 +221,11 @@ Feature: Bounded offline lifecycle, cancellation and loss
   @wip @slice-12 @ID-LIFECYCLE-02 @linux
   Scenario: Startup has one deadline beginning before preflight
     Given a lifecycle contract fixture with 115 seconds of successful preflight and publication progress and delayed launch observations
-    When run proceeds through the full invocation and controlled time reaches 120 seconds through each local backend
-    Then each run reports "run.startup-timeout" with exit 75 at the original startup deadline
+    When run proceeds through the full invocation and controlled time advances through the 120 second startup deadline and the ensuing cleanup through each local backend
+    Then each run cancels its wait for the pending startup operation at the original 120 second deadline and begins no subsequent startup phase
     And progress reconnects and any retries never extend startup or begin a phase after the deadline
     And the pending operation receives only the remaining startup time and cleanup receives its own 30 second budget
+    And after the cleanup attempt each run reports "run.startup-timeout" with exit 75 no later than 30 seconds after the original startup deadline
     And delayed replies cannot launch work or replace the reported timeout
 
   # Acknowledgement loss after accepted start is different from confirmed failure
@@ -246,6 +263,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # These integration cases adopt slice-11's protected records/public references;
   # no broad listing/prune or new session schema is specified here. Setup seeds
   # an owned candidate, not a prior successful product run or stop.
+  # RECOVERY-19 already specifies recovery timeout classes and totals. Recheck
+  # every row, including the fresh invocation, on merged slice-11 and obtain
+  # regression acceptance for cases already passing before slice-12 work.
   @wip @slice-12 @ID-LIFECYCLE-05 @linux
   Scenario Outline: Each explicit recovery invocation has a fresh finite budget
     Given a lifecycle recovery fixture with a protected owned session and stalled "<operation>" observations
@@ -423,6 +443,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Independent native observations are essential: flag inspection alone cannot
   # prove A3. Use a continuous probe with externally released rounds so a fresh
   # report after SIGKILL cannot be a buffered pre-kill result. No watchdog claim.
+  # RECOVERY-22 already specifies the first Then's discovery and stop behavior;
+  # treat it as an integration control. Fresh post-loss boundary assertions need
+  # independent CI evidence with slice-14's probes, not that discovery result.
   @wip @slice-12 @ID-LIFECYCLE-15 @engine
   Scenario: Uncatchable controller loss leaves a live isolated candidate for explicit stop
     Given a CI lifecycle checkout with continuous boundary probes and working external route and host-access controls
@@ -438,6 +461,8 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # observer retains IDs only for assertions/always-cleanup, never passes them as
   # authority to the new controller. Before absence publication, engine removal
   # may already have succeeded; recovery must inspect, not infer, that fact.
+  # Compare these windows with RECOVERY-14/15/22 on merged slice-11 before claiming
+  # new red evidence; already passing windows require regression acceptance.
   @wip @slice-12 @ID-LIFECYCLE-16 @engine
   Scenario Outline: Controller death during an in-flight transition retains recoverable ownership
     Given a CI lifecycle checkout with a trusted controller-kill barrier "<barrier>"
