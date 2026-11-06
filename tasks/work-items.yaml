@@ -618,14 +618,15 @@ items:
       independent sessions with black-box scenarios, using CI for native-engine evidence. Share
       recovery logic through engine packages without imports between command slices. Broken down
       from null.
-  - id: p1-protect-control-state-publication
+  - id: slice-21
     title: Doctor and approve reject state exposed to another worker
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-16]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-protect-control-state-publication.
       Extend slice-16's shared admission mechanism with protected control-state location tracking
       across XDG_STATE_HOME values. Approve must atomically establish separation before publishing
       records; doctor must inspect without writes. Specify concurrent publication versus worker
@@ -637,7 +638,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-protect-control-state-publication]
+    depends_on: [slice-21]
     kind: idea
     why: >
       Consume the shared location tracking during run admission, atomically refusing mounts
@@ -651,7 +652,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-protect-control-state-publication]
+    depends_on: [slice-21]
     kind: idea
     why: >
       Apply the shared separation contract before trusting session indexes, snapshots or intents
