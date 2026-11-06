@@ -475,3 +475,138 @@ items:
       ID-LIFECYCLE-15 proves network denial still holds after the controller is lost, using
       slice-14's boundary probes and slice-11's recovery. Its scenario is specified on slice-12's
       branch and moves here, still @wip.
+  - id: p1-mount-bound-to-validated-inode
+    title: The checkout mount is bound to the inode that passed validation
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
+      static, no Docker run; confirm with a scenario before building. Docker receives the checkout
+      as a pathname (internal/engine/session/docker/run.go:68; registered_run.go:179), so after the
+      final identity checks and before ContainerStart a worker whose checkout contains another
+      approved checkout can rename the inner one and put a symlink to the host home in its place;
+      the second worker then mounts an unapproved host directory. Fix: hand Docker an inode-bound
+      source through a protected mount anchor held through startup and recovery, and refuse
+      overlapping worker checkouts.
+  - id: p1-host-sockets-in-checkout
+    title: Host Unix sockets under the checkout are not reachable from the worker
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
+      static, no Docker run; confirm with a scenario before building. The whole checkout is
+      bind-mounted (docker/run.go:64) and network none does not isolate filesystem Unix sockets, so
+      a tmux server, SSH control socket or other host service with its socket under the checkout is
+      reachable from /workspace as the host UID: host command execution or network access without
+      another mount. A startup scan is not enough, as host processes can create sockets later; deny
+      connecting to host sockets, or expose a materialised checkout with no host IPC objects.
+  - id: p1-hard-links-outside-checkout
+    title: Hard links to files outside the checkout are refused
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
+      static, no Docker run; confirm with a scenario before building. Checkout validation
+      (internal/engine/readiness/disk/checkout.go:129) rejects symlinks and git indirections but not
+      shared inodes; a local git clone hard-links .git/objects with its source, so the worker can
+      chmod and overwrite a shared object and change the source repository outside the mount.
+      Require independent inodes (refuse hard-linked layouts, or materialise copies or reflinks) and
+      keep that through the run.
+  - id: p2-control-state-outside-every-mount
+    title: Control state never lies inside any worker's checkout
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
+      static, no Docker run; confirm with a scenario before building. The containment check
+      (internal/engine/approval/disk/store.go:99) excludes state under the current checkout only, so
+      a later run for checkout B with XDG_STATE_HOME inside worker A's checkout lets A read and
+      rewrite B's approvals, snapshots and recovery records (same UID; the fingerprints are hashes,
+      not authentication). Separate every control-state location from every worker mount, both ways.
+  - id: p2-unknown-workload-exit-nonzero
+    title: run never returns 0 when the workload's exit is unknown
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Correctness, this milestone. A read-only security audit of main at 7236d68 (Codex,
+      2026-11-06), static, no Docker run; confirm with a scenario before building. stoppedRun
+      returns (0, false, "") when cleanup completed but WorkloadExit is unknown
+      (internal/engine/session/domain/run.go:141; internal/slices/run/command/command.go:67), so a
+      concurrent stop that removes an exited worker first makes run report success though the
+      command may have failed; cmd/itos-container/public_recovery_review_test.go:183 expects 0. Keep
+      cleanup completion and workload success apart: unknown exit is nonzero, WorkloadExit stays
+      null.
+  - id: p3-registration-before-intent
+    title: A crash between registration and intent publication leaves no stuck session
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Recovery debris, this milestone. A read-only security audit of main at 7236d68 (Codex,
+      2026-11-06), static, no Docker run; confirm with a scenario before building. Registration is
+      durable before Store.New publishes its intent (registered_run.go:39;
+      session/disk/registry.go:144), so controller loss or an intent-write failure in that gap
+      leaves a session status and stop both refuse, which no supported command clears; no worker
+      exists, so it is debris, not an escape. Publish both consistently, or add a durable
+      create-not-issued state recovery can retire; a name-only 404 must not become proof of absence.
+  - id: slice-16
+    title: Run refuses overlapping worker checkouts
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      Was p1-refuse-overlapping-worker-checkouts.
+      Prevent one worker from replacing another checkout's parent path. Atomically refuse
+      ancestor/descendant overlaps in either launch order, including concurrent launches, while
+      allowing disjoint projects. Keep admission and ownership rules in shared engine packages.
+      Specify black-box scenarios first, with native-engine evidence only in CI. Broken down from
+      null.
+  - id: slice-17
+    title: Run binds its mount to the validated checkout inode
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      Was p1-launch-with-inode-bound-checkout.
+      Close the gap between final validation and Docker resolving the mount pathname. Provide a
+      protected inode-bound source through engine ports and adapters, record its ownership before
+      use, and cover normal teardown and failure retention. Preserve checkout edits and the
+      sole-host-mount contract. Require CI red/green scenarios for substitution after the final
+      identity check; update affected architecture sections and record the decision. Broken down
+      from null.
+  - id: slice-18
+    title: Status and stop recover owned checkout mount anchors
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-17]
+    kind: slice
+    why: >
+      Was p1-recover-owned-checkout-mounts.
+      Extend existing recovery to the mount ownership introduced by the launch slice. After
+      controller loss or uncertain startup, retain isolation and release only proven-owned anchors
+      after worker removal is confirmed. Cover repeated stop, foreign-resource refusal and
+      independent sessions with black-box scenarios, using CI for native-engine evidence. Share
+      recovery logic through engine packages without imports between command slices. Broken down
+      from null.
