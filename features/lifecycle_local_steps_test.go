@@ -17,6 +17,7 @@ func (w *world) lifecycleLocalSteps(sc *godog.ScenarioContext) {
 	var result doctorResult
 	w.lifecycleTransitionSteps(sc)
 	w.lifecycleBudgetSteps(sc)
+	w.lifecycleRecoverySteps(sc)
 	sc.Step(`^a lifecycle contract fixture with observed exit (\d+) and a final output drain that never completes$`, func(n int) { child = n })
 	sc.Step(`^run cleans the worker and controlled time crosses the 10 second drain deadline through each local backend$`, func() error {
 		bin, err := w.sessionProbeBinary()
