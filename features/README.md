@@ -363,6 +363,25 @@ be available on the default branch for GitHub manual dispatch.
 Non-engine cases that can run locally retain the ordinary local red-first procedure. This
 manual route adds no product scenarios, supported-host claim or runtime evidence by itself.
 
+Slice-12's native step checkpoint defines all 18 rows of `ID-LIFECYCLE-08`, `09`,
+`11`, `12`, `13` and `16`, with `@wip` retained for coordinator-only red dispatch.
+The trusted worker writes independent signal receipts and checkout edits. The recorder
+keeps its full-ID mutation checks, streams acknowledged waits, delays only signal
+acknowledgements and disconnects only product transports. The recovery observer records
+successful file/directory fsyncs and controller signal syscalls; real pipe-capacity
+observations establish output backpressure before cancellation. Controller exit is
+observed before reading a blocked pipe. One observed 125-second quiet control may be
+shared within the stream outline, as its spec permits.
+
+Local `TestLifecycle*` checks verify step registration, probe compilation, recorder
+forwarding/faults and rejection of incorrect observations. They do not execute the probe
+or provide native red/green evidence. Dispatch the six IDs at this checkpoint; separate
+dispatches can keep the slow stream outline within the existing engine-job budget.
+Record complete passing rows as earlier-slice regressions under q-6/q-11, including
+exit 17 and LIFECYCLE-09, and assertion-level failures for missing behaviour. Keep
+LIFECYCLE-15 with slice-15. The local lifecycle scenario steps and product changes are
+the next implementation phase after this native red-first handoff.
+
 ## Tags
 
 | Tag               | Meaning                                                                              |
