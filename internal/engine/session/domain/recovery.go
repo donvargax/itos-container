@@ -225,9 +225,6 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 	}
 	if r.State != "stopped" {
 		r.State, r.LastProblem = "stopping", nil
-		if r.WorkloadExit == nil && exit != nil {
-			r.WorkloadExit = exit
-		}
 		if failure := s.Save(r); failure != "" {
 			return failure
 		}
