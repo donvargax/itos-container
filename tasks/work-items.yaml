@@ -449,16 +449,9 @@ items:
     title: Native isolation and teardown proof
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-13]
     kind: slice
-    why: >
-      Split from slice-10, 2026-11-06: ID-OFFLINE-08 to 12, 14 and 16, the engine-tier proofs that
-      the running worker is contained: non-root identity without elevation, ephemeral home and temp,
-      no host files, sockets or namespaces, no network or DNS from the first instruction, and full
-      teardown. Needs setuid, nested-mount, network and DNS and descendant-process controls, with
-      engine red evidence through the coordinator. The milestone's isolation claim, and the first
-      release (T-25), rest on it.
   - id: p2-architecture-session-runtime-status
     title: "Architecture drift: reconcile session and runtime evidence status"
     phase: 1
