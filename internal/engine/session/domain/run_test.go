@@ -144,3 +144,146 @@ func TestRunCleanupRetainsNameOnlyNotFoundUntilDelayedCreateAppears(t *testing.T
 		t.Fatal("recovery launched or duplicated the worker", e.Events)
 	}
 }
+
+func TestRunRevalidatesBeforeCreateAndStart(t *testing.T) {
+	for _, barrier := range []string{"open", "attach"} {
+		for _, fault := range []string{"record", "workspace", "daemon", "boundary"} {
+			if barrier == "open" && fault == "boundary" {
+				continue // Boundary verification begins after creation.
+			}
+			t.Run(barrier+"/"+fault, func(t *testing.T) {
+				s, d, store, e := runnerFixture()
+				want := port.Refused
+				e.After = func(event string) {
+					if event != barrier {
+						return
+					}
+					switch fault {
+					case "record":
+						store.UnsafeRecord = true
+						want = port.Unsafe
+					case "workspace":
+						s.Workspace.(*st.Workspace).Changed = true
+					case "daemon":
+						e.Replaced = true
+					case "boundary":
+						e.Boundary = port.IsolationUnverified
+						want = port.IsolationUnverified
+					}
+				}
+				r := s.Run(context.Background(), d, []string{"probe"}, port.Streams{})
+				if r.Outcome != want || r.Exited || r.ID != "" || slices.Contains(e.Events, "start") {
+					t.Fatalf("changed authority reached workload: %+v, %v", r, e.Events)
+				}
+				attached := barrier == "attach"
+				if slices.Contains(e.Events, "create") != attached || slices.Contains(e.Events, "detach") != attached {
+					t.Fatalf("wrong refusal boundary or attachment leak: %v", e.Events)
+				}
+				if store.Locked || !s.Workspace.(*st.Workspace).Closed {
+					t.Fatal("launch retained intent or workspace handles")
+				}
+			})
+		}
+	}
+}
+
+func TestRunCleanupRequiresCurrentAuthorityAndObservedAbsence(t *testing.T) {
+	for _, tc := range []struct {
+		fault  string
+		want   port.Outcome
+		remove bool
+	}{
+		{"healthy", port.Complete, true},
+		{"intent only", port.Complete, true},
+		{"already absent", port.Complete, false},
+		{"record after open", port.Unsafe, false},
+		{"daemon after open", port.Refused, false},
+		{"foreign name-only worker", port.Refused, false},
+		{"socket during inspect", port.Refused, false},
+		{"inspection unavailable", port.Incomplete, false},
+		{"missing state", port.Incomplete, false},
+		{"foreign ID", port.Refused, false},
+		{"completed record with live worker", port.Refused, false},
+		{"ownership write", port.OwnershipWrite, false},
+		{"record after sync", port.Unsafe, false},
+		{"daemon after sync", port.Refused, false},
+		{"socket after remove", port.Refused, true},
+		{"absence unavailable", port.Incomplete, true},
+	} {
+		t.Run(tc.fault, func(t *testing.T) {
+			s, d, store, e := runnerFixture()
+			ctx := context.Background()
+			intent, failure := store.New(ctx, d, strings.Repeat("1", 64))
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			record := intent.Record()
+			e.Resources = map[string]port.Observation{e.CreateID: {
+				ID: e.CreateID, Name: record.Name, ImageID: record.ImageID,
+				Token: record.NameToken(), Project: record.Project, Fingerprint: record.Fingerprint,
+				StatePresent: true, Status: "exited",
+			}}
+			if tc.fault != "intent only" && tc.fault != "foreign name-only worker" {
+				record.Stage, record.ContainerID = "owned", e.CreateID
+				if tc.fault == "completed record with live worker" {
+					record.Stage = "absent"
+				}
+				if failure = intent.Save(record); failure != "" {
+					t.Fatal(failure)
+				}
+			}
+			intent.Close()
+			switch tc.fault {
+			case "already absent":
+				delete(e.Resources, e.CreateID)
+			case "record after open":
+				e.AfterOpen = func() { store.UnsafeRecord = true }
+			case "daemon after open":
+				e.AfterOpen = func() { e.Replaced = true }
+			case "foreign name-only worker":
+				e.Inspection = "different name"
+			case "socket during inspect":
+				e.BeforeInspect = func() { e.Replaced = true }
+			case "inspection unavailable":
+				e.Inspection = "unavailable"
+			case "missing state":
+				e.Inspection = "missing State"
+			case "foreign ID":
+				e.Inspection = "different full container ID"
+			case "ownership write":
+				store.Fault = "owned-record file fsync"
+			case "record after sync":
+				store.AfterSave = func() { store.UnsafeRecord = true }
+			case "daemon after sync":
+				store.AfterSave = func() { e.Replaced = true }
+			case "socket after remove":
+				e.BeforeInspect = func() {
+					if e.Removed {
+						e.Replaced = true
+					}
+				}
+			case "absence unavailable":
+				e.Following = "unavailable"
+			}
+			ref := port.Reference(record.Project, record.NameToken())
+			got := s.Cleanup(ctx, ref)
+			if got.Outcome != tc.want || got.Reference != ref || slices.Contains(e.Events, "remove") != tc.remove {
+				t.Fatalf("cleanup = %+v, events %v; want %s, remove %v", got, e.Events, tc.want, tc.remove)
+			}
+			saved, failure := store.Codec.Decode(store.Records[ref])
+			if failure != "" || store.Locked {
+				t.Fatal("cleanup lost the recovery record or retained its lock", failure)
+			}
+			if tc.want == port.Complete {
+				if saved.Stage != "absent" || saved.ContainerID != e.CreateID || len(e.Resources) != 0 {
+					t.Fatal("cleanup completed without recorded, observed absence", saved)
+				}
+			} else if saved != record {
+				t.Fatal("failed cleanup changed recovery authority", saved, record)
+			}
+			if slices.Contains(e.Events, "start") || slices.Contains(e.Events, "create") {
+				t.Fatal("cleanup launched a worker", e.Events)
+			}
+		})
+	}
+}

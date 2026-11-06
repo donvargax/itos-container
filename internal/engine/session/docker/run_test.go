@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -210,18 +211,29 @@ func TestVerifyActualBoundary(t *testing.T) {
 	cases := map[string]func(*container.InspectResponse){
 		"network":            func(r *container.InspectResponse) { r.HostConfig.NetworkMode = "bridge" },
 		"network attachment": func(r *container.InspectResponse) { r.NetworkSettings.Networks["bridge"] = &network.EndpointSettings{} },
-		"root":               func(r *container.InspectResponse) { r.Config.User = "0:0" },
-		"gid":                func(r *container.InspectResponse) { r.Config.User = "1000:0" },
-		"group":              func(r *container.InspectResponse) { r.HostConfig.GroupAdd = []string{"0"} },
-		"root filesystem":    func(r *container.InspectResponse) { r.HostConfig.ReadonlyRootfs = false },
-		"bind":               func(r *container.InspectResponse) { r.HostConfig.Binds = []string{"/:/host"} },
-		"source":             func(r *container.InspectResponse) { r.HostConfig.Mounts[0].Source = "/host" },
-		"propagation":        func(r *container.InspectResponse) { r.HostConfig.Mounts[0].BindOptions.Propagation = "shared" },
-		"recursive":          func(r *container.InspectResponse) { r.HostConfig.Mounts[0].BindOptions.NonRecursive = false },
-		"tmpfs":              func(r *container.InspectResponse) { r.HostConfig.Tmpfs = nil },
-		"volume":             func(r *container.InspectResponse) { r.Config.Volumes = map[string]struct{}{"/data": {}} },
+		"published port": func(r *container.InspectResponse) {
+			r.NetworkSettings.Ports = network.PortMap{network.MustParsePort("8080/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: "18080"}}}
+		},
+		"root":            func(r *container.InspectResponse) { r.Config.User = "0:0" },
+		"gid":             func(r *container.InspectResponse) { r.Config.User = "1000:0" },
+		"group":           func(r *container.InspectResponse) { r.HostConfig.GroupAdd = []string{"0"} },
+		"root filesystem": func(r *container.InspectResponse) { r.HostConfig.ReadonlyRootfs = false },
+		"bind":            func(r *container.InspectResponse) { r.HostConfig.Binds = []string{"/:/host"} },
+		"source":          func(r *container.InspectResponse) { r.HostConfig.Mounts[0].Source = "/host" },
+		"propagation":     func(r *container.InspectResponse) { r.HostConfig.Mounts[0].BindOptions.Propagation = "shared" },
+		"recursive":       func(r *container.InspectResponse) { r.HostConfig.Mounts[0].BindOptions.NonRecursive = false },
+		"tmpfs":           func(r *container.InspectResponse) { r.HostConfig.Tmpfs = nil },
+		"volume":          func(r *container.InspectResponse) { r.Config.Volumes = map[string]struct{}{"/data": {}} },
 		"materialized volume": func(r *container.InspectResponse) {
 			r.Mounts = append(r.Mounts, container.MountPoint{Type: mount.TypeVolume, Destination: "/data"})
+		},
+		"absent bind": func(r *container.InspectResponse) { r.Mounts = nil },
+		"duplicate bind": func(r *container.InspectResponse) {
+			r.Mounts = append(r.Mounts, r.Mounts[0])
+		},
+		"duplicate tmpfs": func(r *container.InspectResponse) {
+			tmpfs := container.MountPoint{Type: mount.TypeTmpfs, Destination: "/tmp"}
+			r.Mounts = append(r.Mounts, tmpfs, tmpfs)
 		},
 		"drop":       func(r *container.InspectResponse) { r.HostConfig.CapDrop = nil },
 		"capability": func(r *container.InspectResponse) { r.HostConfig.CapAdd = []string{"SYS_ADMIN"} },
@@ -246,6 +258,8 @@ func TestVerifyActualBoundary(t *testing.T) {
 		"started":          func(r *container.InspectResponse) { r.State.Running = true },
 		"missing security": func(r *container.InspectResponse) { r.HostConfig = nil },
 		"missing network":  func(r *container.InspectResponse) { r.NetworkSettings = nil },
+		"missing config":   func(r *container.InspectResponse) { r.Config = nil },
+		"missing state":    func(r *container.InspectResponse) { r.State = nil },
 		"wrong identity":   func(r *container.InspectResponse) { r.ID = strings.Repeat("e", 64) },
 	}
 	for name, defect := range cases {

@@ -14,10 +14,21 @@ type Workspace struct {
 	roots []*os.Root
 	names []string
 	infos []fs.FileInfo
+	ops   *workspaceOperations
+}
+
+// Preserve real pinned handles while making failures between inspection and
+// opening a child reproducible in adapter tests.
+type workspaceOperations struct {
+	openChild func(*os.Root, string) (*os.Root, error)
 }
 
 func (w *Workspace) Pin(b port.Binding) port.Outcome {
 	w.Close()
+	ops := workspaceOperations{openChild: (*os.Root).OpenRoot}
+	if w.ops != nil {
+		ops = *w.ops
+	}
 	if b.Workspace != "/workspace" && !strings.HasPrefix(b.Workspace, "/workspace/") {
 		return port.Refused
 	}
@@ -39,7 +50,7 @@ func (w *Workspace) Pin(b port.Binding) port.Outcome {
 			w.Close()
 			return port.Refused
 		}
-		next, err := root.OpenRoot(name)
+		next, err := ops.openChild(root, name)
 		if err != nil {
 			w.Close()
 			return port.Refused

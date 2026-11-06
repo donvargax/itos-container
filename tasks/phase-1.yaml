@@ -2095,6 +2095,57 @@
     T-19 updated arc42 before slices 2, 3 and T-20 landed. docs/architecture/arc42.md's inventory
     and diagrams still call internal/engine/manifest and readiness proposed, and name T-20 as
     planned. Update the status words from what the code holds; nothing else in the document changes.
-    The new repository's first registry push, 2026-11-05: also checks that a push to main starts CI.
-  done_when:
-    - run: "! grep -nE 'internal/engine/(manifest|readiness)` \\| Proposed' docs/architecture/arc42.md"
+
+    This is a documentation task under the charter, with no product behaviour, scenarios or new
+    IDs. The drafter changes only this entry in tasks/phase-1.yaml; the implementer changes only
+    docs/architecture/arc42.md. Read the charter, architecture Slices rules and the whole arc42
+    document first. Use the code and owning specs to establish implementation status, not merely
+    a queued registry entry. Slice-2 and slice-3 are done and their manifest.feature and
+    doctor.feature scenarios are live. internal/engine/manifest/domain/manifest.go implements
+    restricted file/workspace inspection; internal/engine/readiness/domain/inspect.go composes
+    policy, manifest, checkout, local-engine and cached-image inspection. T-20 is done, with
+    tools/bin/engine-fixture, features/testdata/engine-fixture/Dockerfile and the engine job in
+    .github/workflows/ci.yml implementing guarded fixture preparation, output wiring and cleanup.
+    Read that helper and workflow and features/README.md; never execute the helper or Docker.
+
+    In the building-block inventory, label manifest Implemented by slice-2. Keep readiness's
+    already-correct Implemented prerequisite status. Change the Mermaid node labels to manifest
+    (implemented) and readiness (implemented), retaining their identifiers, every dependency
+    arrow and the policy node. In the work-item table, use slice-2 — completed worker manifest,
+    slice-3 — completed readiness inspection and T-20 — completed runtime fixture preparation.
+    Keep prerequisites, responsibilities and consumers unchanged. Correct the adjoining progress
+    paragraph so it no longer calls slice-2 in progress or claims no manifest implementation.
+    Correct the same stale absence claims in the quality view: manifest validation is implemented;
+    slice-6 bounds and slice-10/12 isolation proof are separate responsibilities. In the existing
+    engine-tier evidence paragraph, state T-20 implements fixture preparation. Remove the claim
+    that T-20 images remain absent without suggesting a fixture is installed on every host.
+
+    These are status corrections only. Preserve headings, links, table structure, dependency
+    direction, package responsibilities, security requirements, settled decisions and scope.
+    Add no parser, image pin, library, API, permission, runtime behaviour, workflow or gate change.
+    This does not depart from the accepted design and needs no new ADR. Other architectural
+    drift, including session/recovery status and broader evidence summaries, goes back to the
+    coordinator as an idea rather than expanding this task. Implemented means code is present;
+    it is not a new runtime result, supported-host claim or completion of offline run. Preserve
+    the CI-only engine boundary, socket-free agent work, product inspection without acquisition,
+    and the requirement for independent runtime isolation evidence. No local engine, approval,
+    mutation or generated-evidence operation is needed to edit or check these status words.
+
+    The three checks below read only arc42 using Python's standard library at the existing cheap
+    task/prose tier. They require the implemented entries and graph labels to remain present,
+    unlike the old absence-only grep, which could pass after deleting a row or losing the file.
+    Before implementation the manifest check fails on its Proposed inventory/graph labels,
+    in-progress row/paragraph and absent-manifest prose. The readiness check fails on its proposed
+    graph label and unqualified work-item row; its inventory assertion already passes and is
+    preservation only. The fixture check fails on the planned T-20 row, missing implemented
+    preparation statement and absent-images claim. Report those assertion failures before the
+    edit and all three passing after it. A missing file or Python failure is not status evidence.
+    Semantic review still checks unchanged responsibilities and honest evidence claims; these
+    text checks prove neither engine behaviour nor that CI ran.
+
+    Retain the coordinator's 2026-11-05 first-registry-push check that a push to main starts CI.
+    That observation belongs to the outer loop at the actual pushed head; it is not an offline
+    done_when command or permission for this agent to push, dispatch or change the workflow.
+    Commit the spec with docs --item T-26 and header docs: specify T-26, reconcile implemented
+    engine status; implement the document in docs --task T-26. Let configured hooks and CI run
+    their gates. Agents commit and stop; the loop owns pushing, CI watching and closure.
