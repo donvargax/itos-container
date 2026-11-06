@@ -162,13 +162,23 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 
 func (w *world) sessionProbeBinary() (string, error) {
 	path := filepath.Join(w.dir, "slice-9-contract-probe")
+	// The suite binary lives outside every scenario's writable checkout and
+	// survives their teardown. Reuse only the executable; requests, processes,
+	// state, journals and coverage destinations remain scenario-specific.
+	if filepath.IsAbs(w.bin) {
+		path = w.bin + "-session-probe"
+	}
+	covered := os.Getenv("GOCOVERDIR") != ""
+	if covered {
+		path += "-cover"
+	}
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	args := []string{"test", "-c", "./cmd/itos-container", "-o", path}
-	if os.Getenv("GOCOVERDIR") != "" {
+	if covered {
 		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	}
 	cmd := exec.CommandContext(ctx, "go", args...)
