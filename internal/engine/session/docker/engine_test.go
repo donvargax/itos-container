@@ -538,3 +538,36 @@ func TestSocketAndDeadlineRefusals(t *testing.T) {
 	}
 	c.Remove(ctx, strings.Repeat("c", 64))
 }
+
+func TestForegroundDistinguishesMissingEnvironmentFromTransportAndOwnership(t *testing.T) {
+	for _, tc := range []struct {
+		failure rp.Failure
+		want    sp.Outcome
+	}{
+		{rp.EngineUnavailable, sp.EnvironmentMissing},
+		{rp.EngineInspect, sp.Incomplete},
+		{rp.EngineTimeout, sp.Incomplete},
+		{rp.EngineChanged, sp.Refused},
+		{rp.EngineRemote, sp.Refused},
+		{rp.EngineSelection, sp.Refused},
+		{rp.EngineUntrusted, sp.Refused},
+	} {
+		t.Run(string(tc.failure), func(t *testing.T) {
+			readiness := &rf.Engine{Failure: tc.failure}
+			engine := Engine{Readiness: readiness, Selection: "unix:///fixture-engine.sock"}
+			binding := sp.Binding{Endpoint: engine.Selection}
+			connection, failure := engine.OpenRun(context.Background(), binding)
+			if connection != nil || failure != tc.want || readiness.Opens != 1 || readiness.Selection != engine.Selection {
+				t.Fatalf("foreground opened a fallback or lost the cause: %v, %s, %+v", connection, failure, readiness)
+			}
+			// The distinct unstarted-only contract must not change with foreground reporting.
+			want := tc.want
+			if tc.failure == rp.EngineUnavailable {
+				want = sp.Incomplete
+			}
+			if c, f := engine.Open(context.Background(), binding); c != nil || f != want {
+				t.Fatalf("unstarted-only failure contract changed: %v, %s", c, f)
+			}
+		})
+	}
+}

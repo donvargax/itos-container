@@ -274,7 +274,7 @@ Feature: Hardened offline foreground run
   # atomic publication and parent fsync in the same ordered operation trace.
   # Harness cleanup happens after product observations and cannot satisfy Then.
   #
-  # Evidence handoff: slice-13 is spec-only, with no steps or executed red.
+  # Historical evidence handoff at the slice-13 specification commit:
   # Before slice-10 merged, startup-unavailable was the expected failure at
   # 01's first launch assertion, 04's first A-launch assertion, every 05 row's
   # exit-1 identity assertion and every 15 row's separate cleanup-rule assertion.
@@ -299,7 +299,9 @@ Feature: Hardened offline foreground run
   # independently held observations against these inputs; record the full
   # create-to-durable-completion trace and both workload/result streams.
   # The local argv probe is a fixture engine response, never a host executable.
-  @wip @slice-13 @ID-OFFLINE-01 @linux
+  # Regression from slice-9 durable ownership and slice-10 inspected launch;
+  # passed through both local backends before slice-13 production changes (q-9).
+  @slice-13 @ID-OFFLINE-01 @linux
   Scenario: Run verifies durable ownership and the full boundary before launch
     Given an offline run contract fixture with approved settings and successful engine observations
     When the offline contract executes an argv probe through both fake and disk SDK adapters
@@ -383,7 +385,9 @@ Feature: Hardened offline foreground run
   # Observe both real starts, exact A/B bindings, untouched A snapshot bytes and
   # post-selection input reads for each invocation. Frozen snapshot reads and
   # filesystem identity checks remain allowed; re-reading request values is not.
-  @wip @slice-13 @ID-OFFLINE-04 @linux
+  # Regression from slice-8 frozen selection and slice-10 launch consumption;
+  # passed through both local backends before slice-13 production changes (q-9).
+  @slice-13 @ID-OFFLINE-04 @linux
   Scenario: Launch consumes the selected frozen settings after checkout and approval edits
     Given an offline run contract fixture with independently seeded approved settings A and B
     When run freezes A and the fixture replaces manifest environment, workspace request and active approval with B before create and a fresh run follows
@@ -408,7 +412,9 @@ Feature: Hardened offline foreground run
   # the latter. Outside bytes/modes stay unchanged, and no request uses that source.
   # Restore paths only in harness teardown AFTER observations; restoration cannot
   # rescue product cleanup. Do not relax ownership checks to clean a foreign ID.
-  @wip @slice-13 @ID-OFFLINE-05 @linux
+  # All five rows regress slice-10 workspace pinning and identity revalidation,
+  # including its checkout-independent cleanup fix; baseline passed (q-9).
+  @slice-13 @ID-OFFLINE-05 @linux
   Scenario Outline: Checkout substitution cannot redirect the worker mount or working directory
     Given an offline run contract fixture with a launch barrier at "<boundary>"
     When the offline run reaches that barrier and the fixture replaces "<path>" with an outside symlink before release
@@ -605,7 +611,10 @@ Feature: Hardened offline foreground run
   # No executable stop retry until slice-11 supplies it. Raw argv/environment,
   # response bodies and copied output stay out of ownership records/diagnostics;
   # deliberate workload streams and approved frozen snapshots are separate data.
-  @wip @slice-13 @ID-OFFLINE-15 @linux
+  # Ownership/configuration/temporary rows regress slice-10 result precedence
+  # and passed before this item (q-9). Environment/internal rows with child 0/7
+  # failed the first Then on both backends: temporary/75 instead of 3 or 70.
+  @slice-13 @ID-OFFLINE-15 @linux
   Scenario Outline: Cleanup failure preserves a nonzero workload exit and classifies successful-work failures
     Given an offline run contract fixture with observed workload exit <child> and cleanup cause "<cause>"
     When the offline contract finishes through both fake and disk SDK adapters
