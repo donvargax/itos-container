@@ -72,7 +72,7 @@ func TestEngineDiagnostics(t *testing.T) {
 func testEngineDiagnostics(t *testing.T, hostOS string) {
 	t.Helper()
 	if hostOS != "linux" {
-		t.Skip("the engine diagnostic runner uses Linux strace")
+		t.Skip("the engine diagnostic runner uses Linux setsid")
 	}
 	data, err := os.ReadFile("../.github/workflows/ci.yml")
 	if err != nil {
@@ -123,6 +123,10 @@ cp "$RUNNER_TEMP/program" "$4"
 set -euo pipefail
 [[ "$PWD" = "$RUNNER_TEMP/features" ]]
 [[ "$*" = '-test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run ^TestFeatures$' ]]
+if [[ $(ps -o sid= -p "$$") -ne $$ ]]; then
+  printf 'feature test did not get its own session\n' >&2
+  exit 32
+fi
 printf 'feature stdout marker\n'
 printf 'feature stderr marker\n' >&2
 ` + tc.finish + "\n"
@@ -168,13 +172,6 @@ printf 'feature stderr marker\n' >&2
 			}
 			if tc.signal != "" && !strings.Contains(string(out), "Feature test signal: "+tc.signal) {
 				t.Fatalf("missing signal diagnostic: %s", out)
-			}
-			trace, err := os.ReadFile(filepath.Join(dir, "strace.log"))
-			if err != nil {
-				t.Fatal("signal sender trace missing", err)
-			}
-			if tc.signal != "" && (!strings.Contains(string(trace), "kill(") || !strings.Contains(string(trace), "SIG"+tc.signal)) {
-				t.Fatalf("signal sender syscall missing: %s", trace)
 			}
 		})
 	}

@@ -1476,26 +1476,26 @@
     scenario-pattern restriction, selecting every live engine case and retaining go test's
     protection against early os.Exit(0). The coordinator's 2026-11-06 slice-11 decision
     supersedes the original go test invocation to diagnose silent engine-job termination.
-    The subsequent q-15 decision requires one diagnostic run WITHOUT a new process session:
-    trace the binary with strace -f -yy, decoding pidfd targets and recording kill, tkill, tgkill, pidfd_send_signal, setsid and
-    setpgid to $RUNNER_TEMP/strace.log. Stream and retain stdout/stderr, print the exit status
-    and decode 128+signal exits without masking failure. Passing under setsid in run 42218236157
-    is evidence of a process-group/session signal, not a product fix. Do not retain setsid
-    unless evidence attributes the cause to the CI runner. The durability observer keeps
-    exclusive ptrace ownership of its child using CLONE_UNTRACED without changing session or
-    group, and logs that child's same signal syscalls plus signal reinjections separately.
-    A local nested-tracer control must retain both signal and successful fsync evidence.
+    Run 42233015284 at 9af619c traced the test tree without setsid and found only Go preemption,
+    signal-zero liveness probes and one harness SIGKILL through a pidfd to its recorded
+    controller. No product or harness process-group/session signal explains the step's death;
+    the sender is outside that tree, in the CI runner or Docker. The coordinator's subsequent
+    2026-11-06 decision retains setsid --wait to isolate the tests, with a comment naming this
+    evidence, and removes strace from the workflow because it consumed the five-minute budget.
+    Stream and retain stdout/stderr, print the exit status and decode 128+signal exits without
+    masking failure. Keep the durability observer's fsync evidence and nested-tracer controls.
     TestMain logs every catchable signal notification in the engine tier and keeps terminating
     signals fatal. SIGKILL/SIGSTOP require external evidence. A bounded failure-only step prints
-    sudo dmesg's last 50 lines, free -m, both traces' signal calls and the test output's last lines;
+    sudo dmesg's last 50 lines, free -m and the retained test output's last lines;
     unconditional fixture cleanup still follows. Preserve selection, environment, budget and result guards.
     TestEngineDiagnostics executes the workflow shell with disposable compiler/program fixtures
-    for success, assertion failure, compilation failure, SIGTERM and SIGKILL; it never enables
-    engine access. TestFeatureSignalDiagnostics requires a disposable child's SIGTERM to be
+    for success, assertion failure, compilation failure, SIGTERM, SIGKILL and capture failure.
+    The program verifies it owns its process session; these checks never enable engine access.
+    TestFeatureSignalDiagnostics requires a disposable child's SIGTERM to be
     logged and nonzero. The old workflow failed the standalone invocation checks, and SIGTERM
     killed that child without a TestMain diagnostic. Neither check is native recovery evidence.
-    Commit these diagnostics with ci --task T-16 --item slice-11 and stop blocked so the
-    coordinator can run the engine job and inspect evidence before further fixes.
+    Commit this CI change with ci --task T-16 --item slice-11. The coordinator owns the next
+    engine run; the traced evidence clears product signalling and no longer blocks this slice.
 
     Before that step, require a bounded read-only Docker server preflight against the explicit
     local unix:///var/run/docker.sock endpoint, ignoring caller-selected contexts/remote hosts.

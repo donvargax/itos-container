@@ -130,14 +130,14 @@ func TestEngineWorkflow(t *testing.T) {
 				s.Run = strings.ReplaceAll(s.Run, "sudo dmesg | tail -50", "true")
 			})
 		}},
-		{"hidden signal sender", "complete invocation", func(w *engineWorkflow) {
+		{"missing independent session", "complete invocation", func(w *engineWorkflow) {
 			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) {
-				s.Run = strings.ReplaceAll(s.Run, "strace -f", "setsid --wait strace -f")
+				s.Run = strings.ReplaceAll(s.Run, "setsid --wait ", "")
 			})
 		}},
-		{"missing signal sender evidence", "failure diagnostics", func(w *engineWorkflow) {
+		{"missing retained test output", "failure diagnostics", func(w *engineWorkflow) {
 			changeStep(w, "engine", "Engine failure diagnostics", func(s *workflowStep) {
-				s.Run = strings.ReplaceAll(s.Run, "$RUNNER_TEMP/strace.log", "$RUNNER_TEMP/missing.log")
+				s.Run = strings.ReplaceAll(s.Run, "$RUNNER_TEMP/slice-11-features.log", "$RUNNER_TEMP/missing.log")
 			})
 		}},
 		{"skipped failure diagnostics", "failure diagnostics", func(w *engineWorkflow) {
@@ -167,10 +167,10 @@ const eventGuard = "${{ github.event_name != 'pull_request' || !github.event.pul
 const ciGuard = "${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}"
 const engineInvocation = `go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
 cd features
-command -v strace
-export SLICE_11_SIGNAL_TRACE="$RUNNER_TEMP/slice-11-controller-signals.log"
 set +e
-strace -f -yy -o "$RUNNER_TEMP/strace.log" -e trace=kill,tkill,tgkill,pidfd_send_signal,setsid,setpgid "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
+# Run 42233015284 traced no product/harness process-group signals; the step died
+# from outside that tree. Isolate tests from CI runner/Docker session signals.
+setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
 results=("${PIPESTATUS[@]}")
 set -e
 test_status=${results[0]}
@@ -186,13 +186,6 @@ exit "${results[1]}"
 const engineFailureDiagnostics = `set +e
 sudo dmesg | tail -50
 free -m
-for trace in "$RUNNER_TEMP/strace.log" "$RUNNER_TEMP/slice-11-controller-signals.log"; do
-  if [[ -f "$trace" ]]; then
-    printf 'Signal sender trace: %s\n' "$trace"
-    grep -E 'kill\(|tkill\(|tgkill\(|pidfd_send_signal\(|setsid\(|setpgid\(|signal-forward' "$trace"
-    tail -50 "$trace"
-  fi
-done
 if [[ -f "$RUNNER_TEMP/slice-11-features.log" ]]; then
   tail -100 "$RUNNER_TEMP/slice-11-features.log"
 fi
