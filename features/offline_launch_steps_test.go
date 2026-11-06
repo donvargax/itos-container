@@ -11,15 +11,15 @@ import (
 func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^an offline run contract fixture with approved settings and successful engine observations$`, w.offlineLaunchFixture)
 	sc.Step(`^the offline contract executes an argv probe through both fake and disk SDK adapters$`, w.offlineLaunchAction)
-	sc.Step(`^each offline run starts exactly one inspected owned worker after durable intent, owned ID, boundary verification and attach$`, func() error { return w.sessionEach((*world).offlineLaunchOrder) })
-	sc.Step(`^each create and inspection has the exact frozen image, UID GID, workspace, argv, environment and hardened runtime configuration$`, func() error { return w.sessionEach((*world).offlineFrozenBoundary) })
-	sc.Step(`^each offline run observes exit zero and confirms owned removal before returning zero$`, func() error { return w.sessionEach((*world).offlineLaunchSuccess) })
-	sc.Step(`^no offline operation acquires images, executes host helpers or changes unrelated resources$`, func() error { return w.sessionEach((*world).offlineEffects) })
+	sc.Step(`^each offline run starts exactly one inspected owned worker after durable intent, owned ID, boundary verification and attach$`, func() error { return w.offlineEach((*world).offlineLaunchOrder) })
+	sc.Step(`^each create and inspection has the exact frozen image, UID GID, workspace, argv, environment and hardened runtime configuration$`, func() error { return w.offlineEach((*world).offlineFrozenBoundary) })
+	sc.Step(`^each offline run observes exit zero and confirms owned removal before returning zero$`, func() error { return w.offlineEach((*world).offlineLaunchSuccess) })
+	sc.Step(`^no offline operation acquires images, executes host helpers or changes unrelated resources$`, func() error { return w.offlineEach((*world).offlineEffects) })
 
 	sc.Step(`^an offline run contract fixture with independently seeded approved settings A and B$`, w.offlineFrozenFixture)
 	sc.Step(`^run freezes A and the fixture replaces manifest environment, workspace request and active approval with B before create and a fresh run follows$`, w.offlineFrozenAction)
 	sc.Step(`^the first offline worker actually starts with exactly A's image, UID GID, mounts, working directory and literal environment$`, func() error {
-		return w.sessionEach(func(w *world) error {
+		return w.offlineEach(func(w *world) error {
 			if err := w.offlineLaunchObserved(); err != nil {
 				return err
 			}
@@ -34,7 +34,7 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 		})
 	})
 	sc.Step(`^the fresh offline worker starts with exactly B while A's snapshot remains unchanged$`, func() error {
-		return w.sessionEach(func(w *world) error {
+		return w.offlineEach(func(w *world) error {
 			if err := w.offlineLaunchOrder(); err != nil {
 				return err
 			}
@@ -53,7 +53,7 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 		})
 	})
 	sc.Step(`^neither invocation rereads policy or manifest values after its frozen selection$`, func() error {
-		return w.sessionEach(func(w *world) error {
+		return w.offlineEach(func(w *world) error {
 			l := w.session.launch
 			if !l.watch || len(w.session.selectedReads) != 0 || len(l.first.session.selectedReads) != 0 {
 				return fmt.Errorf("post-selection reads of mutable request/approval values: %v / %v", l.first.session.selectedReads, w.session.selectedReads)
@@ -62,7 +62,7 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 		})
 	})
 	sc.Step(`^both offline runs preserve ownership, isolation and confirmed cleanup$`, func() error {
-		return w.sessionEach(func(w *world) error {
+		return w.offlineEach(func(w *world) error {
 			for _, run := range []*world{w.session.launch.first, w} {
 				if err := run.offlineLaunchSuccess(); err != nil {
 					return err
@@ -77,13 +77,13 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 
 	sc.Step(`^an offline run contract fixture with a launch barrier at "([^"]*)"$`, w.offlineSubstitutionFixture)
 	sc.Step(`^the offline run reaches that barrier and the fixture replaces "([^"]*)" with an outside symlink before release$`, func(path string) error {
-		if err := w.sessionEach(func(w *world) error { w.session.launch.replaced = path; return nil }); err != nil {
+		if err := w.offlineEach(func(w *world) error { w.session.launch.replaced = path; return nil }); err != nil {
 			return err
 		}
 		return w.offlineLaunchAction()
 	})
 	sc.Step(`^the offline run refuses the changed checkout identity with exit 1 and no start$`, func() error {
-		return w.sessionEach(func(w *world) error {
+		return w.offlineEach(func(w *world) error {
 			if err := w.offlineLaunchControl(); err != nil {
 				return err
 			}
@@ -104,9 +104,9 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 			return nil
 		})
 	})
-	sc.Step(`^the outside target is neither mounted, modified nor used as the working directory$`, func() error { return w.sessionEach((*world).offlineOutsideUntouched) })
+	sc.Step(`^the outside target is neither mounted, modified nor used as the working directory$`, func() error { return w.offlineEach((*world).offlineOutsideUntouched) })
 	sc.Step(`^any already created owned worker is cleaned without touching the substituted source$`, func() error {
-		return w.sessionEach(func(w *world) error {
+		return w.offlineEach(func(w *world) error {
 			s := w.session
 			if s.launch.barrier == "before create" {
 				if len(s.api.created) != 0 {
@@ -129,7 +129,7 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^an offline run contract fixture with observed workload exit (\d+) and cleanup cause "([^"]*)"$`, w.offlineCleanupFixture)
 	sc.Step(`^the offline contract finishes through both fake and disk SDK adapters$`, w.offlineLaunchAction)
 	sc.Step(`^each offline result returns (\d+) and separately reports "([^"]*)" with cleanup classification (\d+)$`, func(code int, rule string, cleanup int) error {
-		return w.sessionEach(func(w *world) error {
+		return w.offlineEach(func(w *world) error {
 			if err := w.offlineLaunchControl(); err != nil {
 				return err
 			}
@@ -140,9 +140,9 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 			return nil
 		})
 	})
-	sc.Step(`^each offline result preserves the observed workload exit and reports incomplete cleanup with its safe protected intent reference$`, func() error { return w.sessionEach((*world).offlineIncomplete) })
+	sc.Step(`^each offline result preserves the observed workload exit and reports incomplete cleanup with its safe protected intent reference$`, func() error { return w.offlineEach((*world).offlineIncomplete) })
 	sc.Step(`^no offline result claims stopped resources or advertises an unimplemented stop retry$`, func() error {
-		return w.sessionEach(func(w *world) error {
+		return w.offlineEach(func(w *world) error {
 			for _, text := range []string{"cleanup-complete", "stopped", "itos container stop"} {
 				if strings.Contains(w.session.create.Diagnostic, text) {
 					return fmt.Errorf("incomplete cleanup advertises %q", text)
@@ -152,7 +152,7 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 		})
 	})
 	sc.Step(`^retained offline ownership and diagnostics contain no raw argv environment response body or copied workload output$`, func() error {
-		return w.sessionEach(func(w *world) error {
+		return w.offlineEach(func(w *world) error {
 			r := w.session.create
 			if r.Stdout != "slice-13-workload-out\n" || !strings.HasPrefix(r.Stderr, "slice-13-workload-err\n") {
 				return fmt.Errorf("lost or merged workload streams")

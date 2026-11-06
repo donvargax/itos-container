@@ -2,11 +2,25 @@ package features
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
 )
+
+func (w *world) offlineEach(check func(*world) error) error {
+	if len(w.session.cases) == 0 {
+		return check(w)
+	}
+	var result error
+	for _, child := range w.session.cases {
+		if err := check(child); err != nil {
+			result = errors.Join(result, fmt.Errorf("%s: %w", child.session.backend, err))
+		}
+	}
+	return result
+}
 
 func (w *world) offlineLaunchObserved() error {
 	s := w.session
@@ -320,7 +334,7 @@ func mapFromJSON(data string) map[string]any {
 func (w *world) offlineIncomplete() error {
 	s, l := w.session, w.session.launch
 	r := s.create
-	if !l.reached || r.Workload == nil || *r.Workload != l.child || r.Code == 0 || r.Cleanup == "cleanup-complete" || r.Reference != s.reference || !strings.Contains(r.Diagnostic, s.reference) || !strings.Contains(r.Diagnostic, "cleanup is not confirmed") {
+	if !l.reached || r.Workload == nil || *r.Workload != l.child || r.Code == 0 || r.Cleanup == "cleanup-complete" || r.Reference != s.reference || !strings.Contains(r.Diagnostic, s.reference) || !strings.Contains(r.Diagnostic, "run.cleanup-") {
 		return fmt.Errorf("incomplete cleanup lost workload or recovery reference")
 	}
 	if err := w.offlineLaunchOrder(); err != nil {

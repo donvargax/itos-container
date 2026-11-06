@@ -241,7 +241,7 @@ func (w *world) offlineFrozenPair() error {
 	s.api = &sessionAPI{requests: api.requests, created: api.created, observed: api.observed, local: api.local, absent: api.absent}
 	l.first = &world{root: w.root, bin: w.bin, dir: w.dir, doctor: w.doctor, approval: w.approval, session: s}
 	// A fresh token and generation are independently supplied fixture data.
-	w.session = &sessionWorld{api: api, backend: s.backend, umask: s.umask, offline: true, journal: s.journal, offlineControl: s.offlineControl, launch: l, token: approvalHash(map[string]any{"next": s.token})}
+	w.session = &sessionWorld{api: api, backend: s.backend, umask: s.umask, offline: true, journal: filepath.Join(w.dir, "slice-13-second-io.jsonl"), offlineControl: s.offlineControl, launch: l, token: approvalHash(map[string]any{"next": s.token})}
 	w.session.reference = "intents/" + w.approval.project + "/" + w.session.token + ".json"
 	api.requests, api.created = nil, nil
 	api.observed, api.absent = map[string]map[string]any{}, map[string]bool{}
@@ -249,7 +249,7 @@ func (w *world) offlineFrozenPair() error {
 	a := *w.approval
 	a.settings, a.generation, a.fingerprint = l.settingsB, "2", "sha256:"+approvalHash(l.settingsB)
 	w.approval = &a
-	if err := os.WriteFile(s.journal, nil, 0600); err != nil {
+	if err := os.WriteFile(w.session.journal, nil, 0600); err != nil {
 		return err
 	}
 	if err := w.offlineLocalAction(false); err != nil {
