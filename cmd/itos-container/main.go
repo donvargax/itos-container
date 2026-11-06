@@ -136,18 +136,15 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		c.Approve.Presentation = presentation
 		return c.Approve.Run(ui)
 	case "run":
-		interrupts, release := signals.Capture()
-		defer release()
-		c.Run.Context = interrupts
 		service, _ := approvalServices(in, stdout, stderr)
 		c.Run.Approval = approvaldomain.Preflight{Service: service, Local: service.Readiness.(approvalport.StagedReadiness), Canonical: approvalcanonical.JSON{}}
 		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}
 		source := service.Readiness.(inspection.Readiness)
-		c.Run.Runner = sessiondomain.Runner{
+		c.Run.Runner = signals.Runner{Next: sessiondomain.Runner{
 			Store:   sessiondisk.Store{Storage: approvaldisk.Storage{Store: service.Store.(approvaldisk.Store)}, Codec: sessioncodec.JSON{Approval: approvalcanonical.JSON{}, Parser: jsonc.Parser{}}, Host: approvalhost.Process{}, Checkout: &readinessdisk.Checkout{}, Input: source.Input},
 			Engine:  sessiondocker.Engine{Readiness: docker.Engine{}, Selection: source.Input.Host},
 			Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{},
-		}
+		}}
 		ui.Classify = runcommand.Classify
 		c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
 		return c.Run.Run(ui)

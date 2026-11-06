@@ -92,7 +92,7 @@ Feature: Foreground failures retain owned cleanup authority
       | 0    |
       | 23   |
 
-  @wip @slice-10 @ID-OFFLINE-23
+  @slice-10 @ID-OFFLINE-23
   Scenario Outline: An interrupt preserves an already classified run refusal
     Given a foreground interrupt contract with "<outcome>" at "<phase>"
     When the foreground interrupt contract runs
@@ -104,7 +104,7 @@ Feature: Foreground failures retain owned cleanup authority
       | launch | ownership-refused    |
       | wait   | ownership-refused    |
 
-  @wip @slice-10 @ID-OFFLINE-24
+  @slice-10 @ID-OFFLINE-24
   Scenario Outline: Host signals abort preflight before snapshot publication
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"

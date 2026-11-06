@@ -7,13 +7,26 @@ import (
 	"os/signal"
 	"syscall"
 
+	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	session "github.com/donvargax/itos-container/internal/engine/session/port"
+	"github.com/donvargax/itos-container/internal/slices/run/port"
 )
+
+// Runner installs signal handling only at the owned-launch handoff. Preflight
+// retains the normal host signal disposition so an abort cannot be swallowed
+// by inspection or snapshot publication, which have no owned worker to recover.
+type Runner struct{ Next port.Runner }
+
+func (r Runner) Run(ctx context.Context, frozen approval.Durable, argv []string, streams session.Streams) session.RunResult {
+	interrupts, release := Capture(ctx)
+	defer release()
+	return r.Next.Run(interrupts, frozen, argv, streams)
+}
 
 // Capture records the first signal and consumes repeats until release. The
 // caller releases only after the runner has finished its bounded teardown.
-func Capture() (context.Context, func()) {
-	ctx, cancel := context.WithCancelCause(context.Background())
+func Capture(parent context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancelCause(parent)
 	received := make(chan os.Signal, 2)
 	closed := make(chan struct{})
 	done := make(chan struct{})

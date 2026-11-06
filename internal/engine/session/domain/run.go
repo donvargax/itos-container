@@ -36,7 +36,8 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 		teardown, end := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && !result.Exited {
 			result.Exit, result.Exited = s.interrupt(teardown, result.Reference, interrupted.Signal)
-			result.Outcome = port.ExecutionFailed
+			// Launch or wait already supplied the failure. Interruption must not
+			// erase a more specific refusal while recovering the owned worker.
 		}
 		if result.Exited && attachment != nil {
 			// Exit can precede the last output, including an interrupted worker's
