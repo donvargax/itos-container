@@ -3,6 +3,10 @@ Feature: Hardened offline foreground run
   An approved run executes explicit argv in one owned offline worker.
   Isolation holds before the first workload instruction; foreground exit ends
   the worker and its temporary storage while preserving checkout edits.
+  Slice-10 owns boundary and durable-ownership refusals (02/03), literal argv
+  and foreground streams (06/07), and the explicit shell workspace (13).
+  Slice-13 owns the launch and cleanup contract (01/04/05/15).
+  Slice-14 owns native isolation and teardown proof (08/09/10/11/12/14/16).
 
   # Authorities: docs/charter.md, docs/plans/offline-run-lifecycle.md (AC-07/08,
   # offline AC-10/11, AC-21/22/23/25/37), docs/architecture.md (Slices), and
@@ -165,7 +169,7 @@ Feature: Hardened offline foreground run
 
   # Owned launch ordering and refusal boundaries. The positive row must run;
   # an implementation which always refuses cannot satisfy this contract.
-  @wip @slice-10 @ID-OFFLINE-01 @linux
+  @wip @slice-13 @ID-OFFLINE-01 @linux
   Scenario: Run verifies durable ownership and the full boundary before launch
     Given an offline run contract fixture with approved settings and successful engine observations
     When the offline contract executes an argv probe through both fake and disk SDK adapters
@@ -233,7 +237,7 @@ Feature: Hardened offline foreground run
 
   # Only request contents/current approval change; original path identities and
   # snapshot remain intact. One selected session uses A; a new invocation uses B.
-  @wip @slice-10 @ID-OFFLINE-04 @linux
+  @wip @slice-13 @ID-OFFLINE-04 @linux
   Scenario: Launch consumes the selected frozen settings after checkout and approval edits
     Given an offline run contract fixture with independently seeded approved settings A and B
     When run freezes A and the fixture replaces manifest environment, workspace request and active approval with B before create and a fresh run follows
@@ -245,7 +249,7 @@ Feature: Hardened offline foreground run
   # Unlike edits to request contents, replaced filesystem identity cannot be used
   # as the mount source. The When replaces paths inside a disposable parent only.
   # Every barrier races with early process exit so the red implementation reaches Then.
-  @wip @slice-10 @ID-OFFLINE-05 @linux
+  @wip @slice-13 @ID-OFFLINE-05 @linux
   Scenario Outline: Checkout substitution cannot redirect the worker mount or working directory
     Given an offline run contract fixture with a launch barrier at "<boundary>"
     When the offline run reaches that barrier and the fixture replaces "<path>" with an outside symlink before release
@@ -299,7 +303,7 @@ Feature: Hardened offline foreground run
   # and require the same non-root identity. Never execute it on the host.
   # This tests NNP even where sudo is absent; lack of sudo alone proves nothing.
   # No 4096-process exhaustion or CPU/memory quota assertion is required.
-  @wip @slice-10 @ID-OFFLINE-08 @engine
+  @wip @slice-14 @ID-OFFLINE-08 @engine
   Scenario: The first workload process has the host non-root identity without elevation
     Given a CI offline checkout with the cached image and identity capability and setuid probes
     And misleading host identity environment and an unrelated supplementary group are recorded as fixture inputs
@@ -317,7 +321,7 @@ Feature: Hardened offline foreground run
   # this fixture mount is harness-only, after product observations.
   # A second independent invocation
   # sees the edit but not the nonce placed in /tmp by the first worker.
-  @wip @slice-10 @ID-OFFLINE-09 @engine
+  @wip @slice-14 @ID-OFFLINE-09 @engine
   Scenario: Checkout edits persist while writable home and temporary files are ephemeral
     Given a CI offline checkout with the cached image and a filesystem probe
     When the product runs the offline filesystem probe twice with distinct session nonces
@@ -333,7 +337,7 @@ Feature: Hardened offline foreground run
   # data to the probe, with no mounts. Compare PID/IPC/UTS/mount/network namespace
   # identities to independent host observations, and require worker-local positive
   # controls for file reads/socket communication. A missing probe is not denial.
-  @wip @slice-10 @ID-OFFLINE-10 @engine
+  @wip @slice-14 @ID-OFFLINE-10 @engine
   Scenario: Host files sockets and namespaces are inaccessible to a running worker
     Given a CI offline checkout with the cached image and outside host sentinels and socket listeners
     When the product runs the offline host-access probe
@@ -346,7 +350,7 @@ Feature: Hardened offline foreground run
   # nonce exchange; UDP requires a nonce reply AND listener receipt comparison.
   # Inspect before start and after launch, with no published port or extra
   # network attachment. A worker's own loopback remains usable, never host loopback.
-  @wip @slice-10 @ID-OFFLINE-11 @engine
+  @wip @slice-14 @ID-OFFLINE-11 @engine
   Scenario: No external network path exists from the first workload instruction
     Given a CI offline checkout with the cached image and controlled IPv4 IPv6 TCP UDP gateway private and synthetic metadata listeners
     When trusted controls and the product's first-instruction and running network probes attempt every fixture route
@@ -362,7 +366,7 @@ Feature: Hardened offline foreground run
   # Docker DNS on the fixture bridge; loopback DNS endpoints are controlled in
   # their own namespace. Successful nonce-bearing answers, not NXDOMAIN, prove
   # the controls. Hosts-file names/localhost are not unauthorized DNS traffic.
-  @wip @slice-10 @ID-OFFLINE-12 @engine
+  @wip @slice-14 @ID-OFFLINE-12 @engine
   Scenario: Offline execution has no external DNS or alternate resolver path
     Given a CI offline checkout with the cached image and controlled system Docker loopback TCP UDP and HTTPS DNS resolvers
     When trusted controls and the product's first-instruction and running DNS probes query unique fixture names
@@ -392,7 +396,7 @@ Feature: Hardened offline foreground run
   # Record ownership completion before judging the product result; fixture cleanup
   # cannot make this pass. Existing approval/snapshot and unrelated engine objects
   # remain, including a same-image control worker with a different ownership tuple.
-  @wip @slice-10 @ID-OFFLINE-14 @engine
+  @wip @slice-14 @ID-OFFLINE-14 @engine
   Scenario Outline: Primary exit determines the result and ends the whole owned worker
     Given a CI offline checkout with the cached image and a primary probe exiting <status> with a surviving child
     When the product runs that offline foreground probe
@@ -416,7 +420,7 @@ Feature: Hardened offline foreground run
   # the real SDK against HTTP. Store/configuration faults exercise real adapters.
   # Record the actual child status separately from wrapper classification, even
   # when numbers coincide. Seed only synthetic sensitive markers in all inputs.
-  @wip @slice-10 @ID-OFFLINE-15 @linux
+  @wip @slice-13 @ID-OFFLINE-15 @linux
   Scenario Outline: Cleanup failure preserves a nonzero workload exit and classifies successful-work failures
     Given an offline run contract fixture with observed workload exit <child> and cleanup cause "<cause>"
     When the offline contract finishes through both fake and disk SDK adapters
@@ -444,7 +448,7 @@ Feature: Hardened offline foreground run
   # full ID still present before disabling this fault for harness-only cleanup.
   # This proves runtime outcome/cleanup separation, not slice-12's engine-loss
   # or signal behaviour and not slice-11's status/stop retry interface.
-  @wip @slice-10 @ID-OFFLINE-16 @engine
+  @wip @slice-14 @ID-OFFLINE-16 @engine
   Scenario Outline: Native workload exit is retained when required removal fails
     Given a CI offline checkout with the cached image and a removal-only transient Engine API fault
     When the product runs an offline probe that writes a checkout edit and exits <child>
