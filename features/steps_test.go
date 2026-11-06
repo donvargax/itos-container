@@ -43,6 +43,7 @@ type world struct {
 	approval *approvalWorld
 	run      *runWorld
 	session  *sessionWorld
+	offline  *offlineRuntime
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -53,7 +54,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		sessionErr := w.closeSession()
+		sessionErr := errors.Join(w.closeOfflineRuntime(), w.closeSession())
 		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
@@ -149,6 +150,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.runSteps(sc)
 	w.approvalSteps(sc)
 	w.sessionSteps(sc)
+	w.offlineRuntimeSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.
