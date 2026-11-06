@@ -291,3 +291,53 @@ func TestRegistryUnchangedSaveSyncsWithoutPublicationAndCanRetry(t *testing.T) {
 		})
 	}
 }
+
+func TestRegistryIntentSaveRejectsFailedReopenAndPreservesRetry(t *testing.T) {
+	for _, fault := range []string{"unavailable", "unsafe", "missing", "replaced"} {
+		t.Run(fault, func(t *testing.T) {
+			m := newRegistryFixture()
+			files := m.seed()
+			publicData := bytes.Clone(files.Data)
+			entry, failure := m.registry.Open(t.Context(), m.record.ID, false)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer entry.Close()
+			intent := entry.Intent()
+			original := intent.Record()
+			directory := m.storage.Directories["intents/"+original.Project]
+			name := original.NameToken() + ".json"
+			data := bytes.Clone(directory.Files[name])
+			next := original
+			next.Stage, next.ContainerID = "owned", strings.Repeat("d", 64)
+			want := sp.Refused
+			switch fault {
+			case "unavailable":
+				m.storage.Failure, want = "state.unavailable", sp.Incomplete
+			case "unsafe":
+				directory.ReadFailure, want = "state.path", sp.Unsafe
+			case "missing":
+				delete(directory.Files, name)
+			case "replaced":
+				replacement := next
+				replacement.ContainerID = strings.Repeat("e", 64)
+				directory.Files[name] = m.registry.Store.Codec.Encode(replacement)
+			}
+			before := bytes.Clone(directory.Files[name])
+			if failure := intent.Save(next); failure != want {
+				t.Fatal("failed reopen authorized an intent update", failure)
+			}
+			if intent.Record() != original || intent.Binding() != m.binding || !bytes.Equal(directory.Files[name], before) || directory.Locked || !bytes.Equal(files.Data, publicData) || len(m.files.Events) != 0 {
+				t.Fatal("failed intent reopen changed held authority, storage or locks")
+			}
+			m.storage.Failure, directory.ReadFailure = "", ""
+			directory.Files[name] = bytes.Clone(data)
+			if failure := intent.Save(next); failure != "" {
+				t.Fatal("matching intent could not retry publication", failure)
+			}
+			if intent.Record() != next || intent.Validate() != "" || directory.Locked || !bytes.Equal(directory.Files[name], m.registry.Store.Codec.Encode(next)) || !bytes.Equal(files.Data, publicData) {
+				t.Fatal("successful intent retry lost ownership or changed public progress")
+			}
+		})
+	}
+}
