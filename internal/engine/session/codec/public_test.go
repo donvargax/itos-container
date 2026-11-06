@@ -9,7 +9,30 @@ import (
 	mp "github.com/donvargax/itos-container/internal/engine/manifest/port"
 	mf "github.com/donvargax/itos-container/internal/engine/manifest/port/porttest"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
+	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
+
+func TestPublicCodecContract(t *testing.T) {
+	for _, result := range []string{"unknown", "observed"} {
+		t.Run(result, func(t *testing.T) {
+			record := sp.PublicRecord{Schema: 1, ID: strings.Repeat("a", 64), Project: strings.Repeat("b", 64),
+				Intent: sp.Reference(strings.Repeat("b", 64), strings.Repeat("c", 64)), State: "failed"}
+			if result == "observed" {
+				exit, problem := 7, sp.Incomplete
+				record.WorkloadExit, record.LastProblem = &exit, &problem
+			}
+			data := (JSON{}).EncodePublic(record)
+			for name, codec := range map[string]sp.PublicCodec{
+				"fake": &sf.PublicRecords{Records: map[string]sp.PublicRecord{string(data): record}},
+				"json": JSON{Parser: &mf.Parser{Value: publicValue(t, data)}},
+			} {
+				t.Run(name, func(t *testing.T) {
+					sf.PublicCodecContract(t, codec, record, data)
+				})
+			}
+		})
+	}
+}
 
 func TestPublicCodecRejectsInvalidRecoveryFacts(t *testing.T) {
 	id, project, token := strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64)
