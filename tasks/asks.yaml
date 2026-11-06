@@ -90,3 +90,4 @@ questions:
   - id: q-22
     item: "slice-17"
     question: "slice-17: CI red evidence for ID-OFFLINE-29's four rows at 51a9f48?"
+    answer: "Yes. Run 42309692365: all four rows fail at their Then, the worker running in the substituted checkout (inode 7602225/7602226, not the validated 7602190, on Docker 28.0.4). This confirms the substitution race on real Docker. Implement q-19's anchor."
