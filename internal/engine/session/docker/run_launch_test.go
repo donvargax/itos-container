@@ -148,6 +148,51 @@ func TestVerifyRunRevalidatesSocketAroundInspection(t *testing.T) {
 	}
 }
 
+func TestVerifyRunRequiresEveryOwnershipLabel(t *testing.T) {
+	for _, label := range []string{"intent", "project", "fingerprint"} {
+		for _, fault := range []string{"missing", "mismatched"} {
+			t.Run(label+"/"+fault, func(t *testing.T) {
+				e, b, a := runSDKFixture(t)
+				ctx := context.Background()
+				c, failure := e.OpenRun(ctx, b)
+				if failure != "" {
+					t.Fatal(failure)
+				}
+				defer c.Close()
+				argv := []string{"probe"}
+				id, failure := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), argv)
+				if failure != "" {
+					t.Fatal(failure)
+				}
+				if got := c.VerifyRun(ctx, id, argv); got != "" {
+					t.Fatal("matching ownership control", got)
+				}
+				// Change only this observation's selected label; every other
+				// ownership binding and isolation setting still matches.
+				a.mu.Lock()
+				a.defect = func(r *container.InspectResponse) {
+					key := "io.itos-container." + label
+					if fault == "missing" {
+						delete(r.Config.Labels, key)
+					} else {
+						r.Config.Labels[key] = "foreign"
+					}
+				}
+				a.mu.Unlock()
+				if got := c.VerifyRun(ctx, id, argv); got != sp.Refused {
+					t.Fatalf("%s %s label: got %q, want %q", fault, label, got, sp.Refused)
+				}
+				a.mu.Lock()
+				a.defect = nil
+				a.mu.Unlock()
+				if got := c.VerifyRun(ctx, id, argv); got != "" {
+					t.Fatal("restored ownership control", got)
+				}
+			})
+		}
+	}
+}
+
 func TestStartRunRefusesChangedSocketAndRequestFailure(t *testing.T) {
 	for _, changed := range []bool{false, true} {
 		var starts atomic.Int32
