@@ -449,7 +449,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-10]
+    depends_on: [slice-14]
     kind: task
   - id: slice-13
     title: Launch and cleanup contract
