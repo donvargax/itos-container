@@ -99,3 +99,6 @@ questions:
     item: "slice-19"
     question: "slice-19: second CI red run of ID-SOCKETS-01 to 03 at 3b8b9ac?"
     answer: "No. Run 42311089210 failed the same way, and the new diagnostics show why: the harness's recording proxy cancelled the product's long-lived /containers/<id>/wait (502, recorder transport: context canceled) and then refused its kill (403, unsafe request). Fix the recorder so wait and attach live for the scenario's budget and the run's own kill is allowed, then return blocked for a third red run. See slice-19-steer.md."
+  - id: q-25
+    item: "slice-12"
+    question: "slice-12: second engine green check of the lifecycle scenarios at 41529b1?"
