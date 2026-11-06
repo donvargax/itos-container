@@ -100,9 +100,6 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 					t.Error(err)
 				}
 			}
-			if a.closeInput {
-				_ = a.attached.(*net.UnixConn).CloseRead()
-			}
 			writeFrame(a.attached, 1, []byte("stdout\x00\xff"))
 			writeFrame(a.attached, 2, []byte("stderr\x00\xfe"))
 			if a.closeInput {
@@ -165,16 +162,22 @@ func TestForwardingFailureContracts(t *testing.T) {
 
 func TestStdinClosureContracts(t *testing.T) {
 	t.Run("SDK", func(t *testing.T) {
-		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding) {
+		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding, func()) {
 			e, b, a := runSDKFixture(t)
 			a.closeInput = true
-			return e, b
+			return e, b, func() {
+				a.mu.Lock()
+				defer a.mu.Unlock()
+				if err := a.attached.Close(); err != nil {
+					t.Error(err)
+				}
+			}
 		})
 	})
 	t.Run("memory", func(t *testing.T) {
-		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding) {
+		st.StdinClosureContract(t, func() (sp.RunEngine, sp.Binding, func()) {
 			b, _, e := st.Fixture()
-			return &st.RunEngine{Engine: e, Exit: 7, StdinClosed: true}, b
+			return &st.RunEngine{Engine: e, Exit: 7, StdinClosed: true}, b, func() {}
 		})
 	})
 }

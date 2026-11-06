@@ -18,9 +18,7 @@ import (
 	"github.com/cucumber/godog"
 )
 
-// This first engine handoff implements argv, redirected streams and the explicit
-// shell. The remaining offline IDs retain their @wip tags and are not represented
-// as implemented steps or red evidence by this test.
+// Definition coverage is engine-free; it is not runtime or red evidence.
 func TestOfflineRuntimeStepDefinitions(t *testing.T) {
 	var output strings.Builder
 	suite := godog.TestSuite{Options: &godog.Options{Paths: []string{"offline.feature"}, Format: "progress", Output: &output, ShowStepDefinitions: true}, ScenarioInitializer: func(sc *godog.ScenarioContext) { initializeScenario(sc, "unused", "unused") }}
@@ -44,7 +42,7 @@ func TestOfflineRuntimeStepDefinitions(t *testing.T) {
 		for _, scenario := range feature.Pickles {
 			selected := false
 			for _, tag := range scenario.Tags {
-				selected = selected || tag.Name == "@ID-OFFLINE-06" || tag.Name == "@ID-OFFLINE-07" || tag.Name == "@ID-OFFLINE-13"
+				selected = selected || tag.Name == "@ID-OFFLINE-06" || tag.Name == "@ID-OFFLINE-07" || tag.Name == "@ID-OFFLINE-13" || tag.Name == "@slice-14"
 			}
 			if !selected {
 				continue
@@ -63,7 +61,7 @@ func TestOfflineRuntimeStepDefinitions(t *testing.T) {
 			}
 		}
 	}
-	if checked != 3 {
+	if checked != 18 {
 		t.Fatalf("checked %d offline runtime cases", checked)
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -82,7 +83,11 @@ func TestRunAssemblyAndHelp(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("ITOS_JSON", tc.inherited)
-			t.Setenv("ITOS_ROOT", t.TempDir())
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("ITOS_ROOT", root)
 			t.Setenv("XDG_STATE_HOME", t.TempDir())
 			var stdout, stderr strings.Builder
 			code := run(tc.args, strings.NewReader(""), &stdout, &stderr)
