@@ -15,6 +15,7 @@ import (
 )
 
 type offlineRuntime struct {
+	isolation              *isolationWorld
 	api                    *offlineAPI
 	mode                   string
 	arguments, argv        []string
@@ -210,7 +211,11 @@ func (w *world) closeOfflineRuntime() error {
 	// identified worker. This evidence is deliberately not added to the journal.
 	err := a.server.Close()
 	a.closeConnections()
-	return errors.Join(err, a.cleanup())
+	err = errors.Join(err, a.cleanup())
+	if w.offline.isolation != nil {
+		err = errors.Join(err, w.offline.isolation.close())
+	}
+	return err
 }
 
 func (w *world) offlineUnrelated() error {
