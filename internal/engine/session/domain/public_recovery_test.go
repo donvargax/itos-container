@@ -469,6 +469,41 @@ func TestRegisteredRunStartupDeadlineCleansCreatedWorker(t *testing.T) {
 	})
 }
 
+func TestRegisteredRunAdoptsExitObservedAfterPartialCleanup(t *testing.T) {
+	b, store, engine := f.Fixture()
+	registry := &f.Registry{Store: store, Project: b.Frozen.Project}
+	e := &f.RunEngine{Engine: engine, WaitFailure: port.ExecutionFailed}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	e.After = func(event string) {
+		if event == "wait" {
+			cancel(port.Interrupt{Signal: "SIGTERM"})
+		}
+	}
+	published := false
+	registry.AfterClose = func(id string) {
+		record := registry.Records[id]
+		if record.State != "stopping" || published {
+			return
+		}
+		// Release of the partial-cleanup lock permits a late observer to
+		// publish an explicit exit. This independently supplied observation
+		// is unknown to run until its final cleanup reopens the record.
+		published = true
+		exit := 7
+		record.WorkloadExit = &exit
+		registry.Records[id] = record
+	}
+	runner := domain.Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
+	result := runner.Run(ctx, ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
+	if !published || !result.Exited || result.Exit != 7 || result.Cleanup != port.Complete || result.Outcome != port.ExecutionFailed {
+		t.Fatal("run lost the exit observed during cleanup", result)
+	}
+	if len(engine.Resources) != 0 || registry.Leases[result.SessionID] {
+		t.Fatal("completed run retained its worker or lease")
+	}
+}
+
 func TestRegisteredRunRegistrationAndLateLaunchRefusals(t *testing.T) {
 	for _, fault := range []port.Outcome{port.Refused, port.Unsafe, port.Invalid, port.Internal, port.Incomplete} {
 		t.Run(string(fault), func(t *testing.T) {

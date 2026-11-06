@@ -18,6 +18,9 @@ type Registry struct {
 	Failure  port.Failure
 	Fault    string
 	Events   []RegistryEvent
+	// A read can become unavailable after a preceding successful observation.
+	ReadFailure port.Failure
+	AfterRead   func()
 }
 type RegistryEvent struct {
 	ID, Operation string
@@ -183,6 +186,12 @@ func (d *registryDirectory) Read(name string) ([]byte, port.Failure) {
 	}
 	if !d.Unchanged() {
 		return nil, "state.path"
+	}
+	if d.s.ReadFailure != "" {
+		return nil, d.s.ReadFailure
+	}
+	if d.s.AfterRead != nil {
+		d.s.AfterRead()
 	}
 	return bytes.Clone(d.files.Data), ""
 }
