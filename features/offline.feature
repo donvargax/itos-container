@@ -731,6 +731,19 @@ Feature: Hardened offline foreground run
   # Capture the actual anchor/worker relationship while start is held and while
   # running, then their absence before harness teardown. A no-substitution run
   # with its own session is the working control and must exercise the same source.
+  # Record protection needs attempted mutations as well as denied reads. While
+  # start is held, inventory the actual protected anchor intent/ownership record
+  # paths independently and send them as probe input, never as extra mounts.
+  # At a live workload handshake, checkpoint those records before the probe
+  # attempts append, rename to a sibling name and unlink on each regular file.
+  # Require all attempts to fail and the records to retain their identities,
+  # bytes and modes before releasing the workload to exit/cleanup. Distinguish
+  # any controller writes in the journal from probe effects. The probe must first
+  # and afterwards succeed at the same operations on separate regular-file
+  # controls in its /tmp, under the same UID/GID. Never mutate protected records
+  # for a positive control. Both race and no-substitution runs need a complete,
+  # nonempty target/operation report; missing records, an unexecuted probe or
+  # guessed nonexistent paths cannot satisfy either read or mutation denial.
   # Current code starts on the substitute (or refuses) rather than executing on
   # the original inode: the first Then is the required CI red assertion per row.
   @wip @slice-17 @ID-OFFLINE-29 @engine
@@ -741,6 +754,7 @@ Feature: Hardened offline foreground run
     Then the worker executes in the original checkout inode and approved subdirectory and writes its edit only to the moved original
     And the independently observed protected anchor was owned before use and the worker has exactly the original nonrecursive checkout host source
     And the worker cannot read the replacement nonce nested host sentinel or anchor control records
+    And every worker append rename and unlink attempt against the actual anchor control records fails while the same operations succeed on worker-local controls
     And the product returns zero after confirmed worker and anchor absence with the edit preserved and the replacement untouched
     And the no-substitution control executes through its own inode-bound anchor and confirms cleanup
 
