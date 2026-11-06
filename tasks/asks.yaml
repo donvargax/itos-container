@@ -102,3 +102,4 @@ questions:
   - id: q-25
     item: "slice-12"
     question: "slice-12: second engine green check of the lifecycle scenarios at 41529b1?"
+    answer: "Yes. Run 42312330532: all 18 engine cases pass (117 steps), LIFECYCLE-12 and 13 included. Engine evidence for slice-12 is complete: finish local scenarios 01 to 07 and 10, then push for the code proof."
