@@ -527,16 +527,9 @@ items:
     title: Control state never lies inside any worker's checkout
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. The containment check
-      (internal/engine/approval/disk/store.go:99) excludes state under the current checkout only, so
-      a later run for checkout B with XDG_STATE_HOME inside worker A's checkout lets A read and
-      rewrite B's approvals, snapshots and recovery records (same UID; the fingerprints are hashes,
-      not authentication). Separate every control-state location from every worker mount, both ways.
   - id: p2-unknown-workload-exit-nonzero
     title: run never returns 0 when the workload's exit is unknown
     phase: 1
