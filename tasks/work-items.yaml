@@ -470,3 +470,15 @@ items:
       teardown. Needs setuid, nested-mount, network and DNS and descendant-process controls, with
       engine red evidence through the coordinator. The milestone's isolation claim, and the first
       release (T-25), rest on it.
+  - id: p2-architecture-session-runtime-status
+    title: "Architecture drift: reconcile session and runtime evidence status"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Reconcile arc42 with merged slice-9 ownership work and live engine scenarios, preserving the
+      distinction between implemented ownership, pending recovery and unproven runtime isolation.
+      This first-milestone documentation follow-up does not block the current offline owned-run
+      step.
