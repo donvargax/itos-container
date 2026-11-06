@@ -162,6 +162,15 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # controls. Neither alone proves fresh denied access after controller death.
   # Undefined steps, broken setup/controls, missing barriers or inspection flags
   # alone never count as the required red/green evidence or a support claim.
+
+  # Independent native observations are essential: flag inspection alone cannot
+  # prove A3. Use a continuous probe with externally released rounds so a fresh
+  # report after SIGKILL cannot be a buffered pre-kill result. No watchdog claim.
+  # Slice-11's RECOVERY-22 specifies the first Then's discovery and stop behavior;
+  # treat it as an integration control. Fresh post-loss boundary assertions need
+  # independent CI evidence with slice-14's probes, not that discovery result.
+  # If earlier slices already satisfy the complete case, name them here and turn
+  # it live under the standing regression decision after confirming that evidence.
   @wip @slice-15 @ID-LIFECYCLE-15 @engine
   Scenario: Uncatchable controller loss leaves a live isolated candidate for explicit stop
     Given a CI lifecycle checkout with continuous boundary probes and working external route and host-access controls
