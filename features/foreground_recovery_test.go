@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -119,8 +120,11 @@ func (a *localOfflineAPI) recoveryStart(out http.ResponseWriter, resource map[st
 		_, a.problem = io.Copy(io.Discard, conn)
 		_ = conn.Close()
 	case "unread stdin":
-		// Model a worker which exits while the controller is still writing input.
-		_ = conn.Close()
+		// The worker rejects further input but finishes output cleanly. Closing
+		// with unread socket data instead would also reset stdout/stderr, which
+		// is a separate transport failure, not this stdin-only regression.
+		_ = conn.(*net.UnixConn).CloseRead()
+		_ = conn.(*net.UnixConn).CloseWrite()
 	case "replaced git", "missing git":
 		git := filepath.Join(a.w.doctor.checkout, ".git")
 		a.problem = os.Rename(git, git+".before-run")
