@@ -40,9 +40,18 @@ type RunConnection interface {
 	Attach(context.Context, string, Streams) (Attachment, Outcome)
 	Start(context.Context, string) Outcome
 	Wait(context.Context, string) (int, Outcome)
+	Signal(context.Context, string, string) Outcome
 	RemoveRun(context.Context, string)
 }
 type Attachment interface {
+	// Failures reports forwarding errors while Wait is still pending. Successful
+	// output EOF is not a failure and must not end a running workload.
+	Failures() <-chan Outcome
 	Drain(context.Context) Outcome
 	Close()
 }
+
+// Interrupt carries the first host signal without exposing OS types to domains.
+type Interrupt struct{ Signal string }
+
+func (Interrupt) Error() string { return "foreground interrupted" }

@@ -16,6 +16,7 @@ import (
 
 // CLI lets Kong retain the first separator and every subsequent literal word.
 type CLI struct {
+	Context       context.Context        `kong:"-"`
 	Snapshots     approvalport.Snapshots `kong:"-"`
 	Approval      port.Approval          `kong:"-"`
 	Runner        port.Runner            `kong:"-"`
@@ -58,7 +59,11 @@ func (c CLI) Run(ui *cli.UI) int {
 	if err != nil {
 		return ui.Fail(err, false)
 	}
-	result := c.Runner.Run(context.Background(), frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result := c.Runner.Run(ctx, frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
 	code := 0
 	if result.Outcome != "" {
 		code = ui.Fail(runFailure{result.Outcome, result.Reference, false}, false)

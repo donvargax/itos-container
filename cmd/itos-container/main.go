@@ -54,6 +54,7 @@ import (
 	doctor "github.com/donvargax/itos-container/internal/slices/doctor/command"
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
+	"github.com/donvargax/itos-container/internal/slices/run/signals"
 	"github.com/donvargax/itos-container/internal/version"
 )
 
@@ -135,6 +136,9 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		c.Approve.Presentation = presentation
 		return c.Approve.Run(ui)
 	case "run":
+		interrupts, release := signals.Capture()
+		defer release()
+		c.Run.Context = interrupts
 		service, _ := approvalServices(in, stdout, stderr)
 		c.Run.Approval = approvaldomain.Preflight{Service: service, Local: service.Readiness.(approvalport.StagedReadiness), Canonical: approvalcanonical.JSON{}}
 		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}

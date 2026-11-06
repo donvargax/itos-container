@@ -90,6 +90,9 @@ type Entropy interface{ Token() (string, Outcome) }
 type Store interface {
 	New(context.Context, approval.Durable, string) (Intent, Outcome)
 	Open(context.Context, string) (Intent, Outcome)
+	// OpenCleanup validates protected evidence and host identity independently
+	// of mutable checkout identity. It grants no new launch authority.
+	OpenCleanup(context.Context, string) (Intent, Outcome)
 }
 type Intent interface {
 	Record() Record

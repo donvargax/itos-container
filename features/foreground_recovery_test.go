@@ -150,6 +150,13 @@ func (w *world) foregroundRecoveryRun() error {
 				signal = syscall.SIGTERM
 			}
 			_ = cmd.Process.Signal(signal)
+			if strings.HasPrefix(f.fault, "ignored") {
+				select {
+				case <-time.After(100 * time.Millisecond):
+					_ = cmd.Process.Signal(signal)
+				case <-done:
+				}
+			}
 		case <-done:
 		case <-ctx.Done():
 		}

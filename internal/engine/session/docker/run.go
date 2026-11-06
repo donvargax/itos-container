@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -174,7 +175,10 @@ func safeMounts(mounts []container.MountPoint, root string) bool {
 
 type attachment struct {
 	response client.ContainerAttachResult
-	done     chan port.Outcome
+	done     chan struct{}
+	failures chan port.Outcome
+	mu       sync.Mutex
+	failure  port.Outcome
 }
 
 func (c *runConnection) Attach(ctx context.Context, id string, streams port.Streams) (port.Attachment, port.Outcome) {
@@ -184,12 +188,16 @@ func (c *runConnection) Attach(ctx context.Context, id string, streams port.Stre
 	if err != nil {
 		return nil, port.ExecutionFailed
 	}
-	a := &attachment{response: response, done: make(chan port.Outcome, 1)}
+	a := &attachment{response: response, done: make(chan struct{}), failures: make(chan port.Outcome, 1)}
 	go func() {
 		if streams.In != nil {
-			_, _ = io.Copy(response.Conn, streams.In)
+			if _, err := io.Copy(response.Conn, streams.In); err != nil {
+				a.fail()
+			}
 		}
-		_ = response.CloseWrite()
+		if err := response.CloseWrite(); err != nil {
+			a.fail()
+		}
 	}()
 	go func() {
 		out, errout := io.Writer(io.Discard), io.Writer(io.Discard)
@@ -201,16 +209,29 @@ func (c *runConnection) Attach(ctx context.Context, id string, streams port.Stre
 		}
 		_, err := stdcopy.StdCopy(out, errout, response.Reader)
 		if err != nil {
-			a.done <- port.ExecutionFailed
-		} else {
-			a.done <- ""
+			a.fail()
 		}
+		close(a.done)
 	}()
 	return a, ""
 }
+func (a *attachment) fail() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.failure = port.ExecutionFailed
+	select {
+	case a.failures <- port.ExecutionFailed:
+	default:
+	}
+}
+func (a *attachment) Failures() <-chan port.Outcome { return a.failures }
 func (a *attachment) Drain(ctx context.Context) port.Outcome {
 	select {
-	case failure := <-a.done:
+	case <-a.done:
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.failure
+	case failure := <-a.failures:
 		return failure
 	case <-ctx.Done():
 		return port.ExecutionFailed
@@ -259,4 +280,17 @@ func (c *runConnection) RemoveRun(ctx context.Context, id string) {
 	call, cancel := c.call(ctx)
 	defer cancel()
 	_, _ = c.api.ContainerRemove(call, id, client.ContainerRemoveOptions{Force: true})
+}
+
+func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outcome {
+	if !c.pin.Unchanged() {
+		return port.Refused
+	}
+	call, cancel := c.call(ctx)
+	defer cancel()
+	_, err := c.api.ContainerKill(call, id, client.ContainerKillOptions{Signal: signal})
+	if err != nil {
+		return port.ExecutionFailed
+	}
+	return ""
 }

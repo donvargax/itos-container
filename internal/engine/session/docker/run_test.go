@@ -27,6 +27,7 @@ type runAPI struct {
 	defect    func(*container.InspectResponse)
 	readInput bool
 	input     []byte
+	signals   []string
 }
 
 func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
@@ -102,6 +103,9 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 			w.WriteHeader(204)
 		case strings.HasSuffix(path, "/wait"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 7})
+		case strings.HasSuffix(path, "/kill"):
+			a.signals = append(a.signals, r.URL.Query().Get("signal"))
+			w.WriteHeader(204)
 		case r.Method == "DELETE":
 			if r.URL.Query().Get("force") != "1" || r.URL.Query().Get("v") == "1" {
 				t.Error("incorrect owned removal")
@@ -134,6 +138,48 @@ func TestRunEngineContracts(t *testing.T) {
 			return &st.RunEngine{Engine: e, Exit: 7}, b
 		})
 	})
+}
+
+func TestForwardingFailureContracts(t *testing.T) {
+	t.Run("SDK", func(t *testing.T) {
+		st.ForwardingFailureContract(t, func() (sp.RunEngine, sp.Binding) { e, b, a := runSDKFixture(t); a.readInput = true; return e, b })
+	})
+	t.Run("memory", func(t *testing.T) {
+		st.ForwardingFailureContract(t, func() (sp.RunEngine, sp.Binding) {
+			b, _, e := st.Fixture()
+			return &st.RunEngine{Engine: e, Output: []byte("out"), ErrorOutput: []byte("err")}, b
+		})
+	})
+}
+
+func TestSDKSignalUsesFullIDAndChecksConnection(t *testing.T) {
+	e, b, a := runSDKFixture(t)
+	ctx := context.Background()
+	c, f := e.OpenRun(ctx, b)
+	if f != "" {
+		t.Fatal(f)
+	}
+	defer c.Close()
+	id, f := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), []string{"probe"})
+	if f != "" {
+		t.Fatal(f)
+	}
+	for _, signal := range []string{"SIGINT", "SIGTERM", "SIGKILL"} {
+		if f = c.Signal(ctx, id, signal); f != "" {
+			t.Fatal(f)
+		}
+	}
+	a.mu.Lock()
+	got := slices.Clone(a.signals)
+	a.mu.Unlock()
+	if !slices.Equal(got, []string{"SIGINT", "SIGTERM", "SIGKILL"}) {
+		t.Fatal(got)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if c.Signal(canceled, id, "SIGTERM") != sp.ExecutionFailed {
+		t.Fatal("canceled signal succeeded")
+	}
 }
 
 func TestVerifyActualBoundary(t *testing.T) {

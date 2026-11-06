@@ -11,7 +11,7 @@ Feature: Foreground failures retain owned cleanup authority
   session/snapshot, current host user, original daemon and full resource identity,
   independently of later changes to the writable checkout.
 
-  @wip @slice-10 @ID-OFFLINE-17
+  @slice-10 @ID-OFFLINE-17
   Scenario Outline: Host stream failures cannot strand the foreground worker
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -25,7 +25,7 @@ Feature: Foreground failures retain owned cleanup authority
       | stderr |
       | stdin  |
 
-  @wip @slice-10 @ID-OFFLINE-18
+  @slice-10 @ID-OFFLINE-18
   Scenario Outline: Writable checkout changes cannot veto owned cleanup
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -38,7 +38,7 @@ Feature: Foreground failures retain owned cleanup authority
       | replaced git |
       | missing git  |
 
-  @wip @slice-10 @ID-OFFLINE-19
+  @slice-10 @ID-OFFLINE-19
   Scenario Outline: Foreground interrupts reach bounded owned teardown
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"

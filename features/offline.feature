@@ -18,7 +18,9 @@ Feature: Hardened offline foreground run
   # No hooks, proxy, service container, session network, published ports, image
   # acquisition, credentials, host helpers, auto-remove or restart policy.
   # A3 leaves a surviving worker isolated after controller death until stop.
-  # Slice-12 owns that loss proof, cancellation, signal forwarding and aggregate
+  # Slice-10 review regressions in foreground_recovery.feature now cover local
+  # signal handling, forwarding failures and checkout-independent owned cleanup.
+  # Slice-12 retains native loss/cancellation/signal proof and aggregate
   # 10 s call / 120 s startup / 30 s teardown budgets, not a workload time limit.
   # These budgets still constrain calls here; no unbounded controller operation.
   # Slice-11 owns status/stop, public session IDs and executable retry guidance.

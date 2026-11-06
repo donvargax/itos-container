@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"context"
+	"io"
 	"slices"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
@@ -16,12 +17,18 @@ type RunEngine struct {
 	Events                                                           []string
 	Output, ErrorOutput                                              []byte
 	After                                                            func(string)
+	WaitUntilCancel, IgnoreSignal                                    bool
+	SignalFailure                                                    port.Outcome
 }
 type runConnection struct {
 	*memoryConnection
 	run *RunEngine
 }
-type runAttachment struct{ run *RunEngine }
+type runAttachment struct {
+	run      *RunEngine
+	failure  port.Outcome
+	failures chan port.Outcome
+}
 
 func (e *RunEngine) event(name string) {
 	e.Events = append(e.Events, name)
@@ -67,13 +74,26 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 	if c.run.AttachFailure != "" {
 		return nil, c.run.AttachFailure
 	}
-	if streams.Out != nil {
-		_, _ = streams.Out.Write(c.run.Output)
+	a := runAttachment{run: c.run, failures: make(chan port.Outcome, 1)}
+	if streams.In != nil {
+		if _, err := io.Copy(io.Discard, streams.In); err != nil {
+			a.failure = port.ExecutionFailed
+		}
 	}
-	if streams.Err != nil {
-		_, _ = streams.Err.Write(c.run.ErrorOutput)
+	for _, output := range []struct {
+		writer port.Writer
+		data   []byte
+	}{{streams.Out, c.run.Output}, {streams.Err, c.run.ErrorOutput}} {
+		if output.writer != nil && len(output.data) != 0 {
+			if n, err := output.writer.Write(output.data); err != nil || n != len(output.data) {
+				a.failure = port.ExecutionFailed
+			}
+		}
 	}
-	return runAttachment{c.run}, ""
+	if a.failure != "" {
+		a.failures <- a.failure
+	}
+	return a, ""
 }
 func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 	c.run.event("start")
@@ -93,6 +113,9 @@ func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 }
 func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome) {
 	c.run.event("wait")
+	if c.run.WaitUntilCancel && c.engine.Resources[id].Running {
+		<-ctx.Done()
+	}
 	if ctx.Err() != nil {
 		return 0, port.ExecutionFailed
 	}
@@ -107,11 +130,31 @@ func (c *runConnection) RemoveRun(ctx context.Context, id string) {
 	c.run.event("remove")
 	c.Remove(ctx, id)
 }
+func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outcome {
+	c.run.event(signal)
+	if ctx.Err() != nil {
+		return port.ExecutionFailed
+	}
+	if c.run.SignalFailure != "" {
+		return c.run.SignalFailure
+	}
+	if c.run.IgnoreSignal && signal != "SIGKILL" {
+		return ""
+	}
+	o := c.engine.Resources[id]
+	o.Running, o.Status, o.PID = false, "exited", 0
+	c.engine.Resources[id] = o
+	return ""
+}
 func (a runAttachment) Drain(context.Context) port.Outcome {
 	a.run.event("drain")
+	if a.failure != "" {
+		return a.failure
+	}
 	return a.run.DrainFailure
 }
-func (a runAttachment) Close() { a.run.event("detach") }
+func (a runAttachment) Close()                        { a.run.event("detach") }
+func (a runAttachment) Failures() <-chan port.Outcome { return a.failures }
 
 type Workspace struct {
 	Failure port.Outcome

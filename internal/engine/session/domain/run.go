@@ -29,18 +29,98 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	}
 	if result.Outcome == "" {
 		// Waiting for the workload is not a startup operation or a lifetime limit.
-		result.Exit, result.Outcome = connection.Wait(ctx, result.ID)
+		wait, stop := context.WithCancel(ctx)
+		monitored := make(chan struct{})
+		go func() {
+			defer close(monitored)
+			select {
+			case <-attachment.Failures():
+				stop()
+			case <-wait.Done():
+			}
+		}()
+		result.Exit, result.Outcome = connection.Wait(wait, result.ID)
+		stop()
+		<-monitored
 		result.Exited = result.Outcome == ""
-		drain, end := context.WithTimeout(ctx, 10*time.Second)
-		if failure := attachment.Drain(drain); failure != "" && result.Outcome == "" {
-			result.Outcome = failure
+		if result.Exited {
+			drain, end := context.WithTimeout(ctx, 10*time.Second)
+			if failure := attachment.Drain(drain); failure != "" {
+				result.Outcome = failure
+			}
+			end()
 		}
-		end()
 	}
 	if result.Reference != "" {
-		result.Cleanup = s.Cleanup(context.WithoutCancel(ctx), result.Reference).Outcome
+		teardown, end := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && !result.Exited {
+			result.Exit, result.Exited = s.interrupt(teardown, result.Reference, interrupted.Signal)
+			result.Outcome = port.ExecutionFailed
+		}
+		result.Cleanup = s.Cleanup(teardown, result.Reference).Outcome
+		end()
 	}
 	return result
+}
+
+// interrupt reacquires protected authority and a fresh engine connection. The
+// launch connection's deadline cannot constrain teardown or authorize signals.
+func (s Runner) interrupt(ctx context.Context, reference, signal string) (int, bool) {
+	intent, failure := s.Store.OpenCleanup(ctx, reference)
+	if failure != "" {
+		return 0, false
+	}
+	defer intent.Close()
+	c, failure := s.Engine.OpenRun(ctx, intent.Binding())
+	if failure != "" {
+		return 0, false
+	}
+	defer c.Close()
+	record := intent.Record()
+	if !port.HexID(record.ContainerID) || record.Stage != "owned" {
+		return 0, false
+	}
+	if signalOwned(ctx, intent, c, signal) != "" {
+		return 0, false
+	}
+	grace, end := context.WithTimeout(ctx, 10*time.Second)
+	exit, outcome := c.Wait(grace, record.ContainerID)
+	end()
+	if outcome == "" {
+		return exit, true
+	}
+	if signalOwned(ctx, intent, c, "SIGKILL") != "" {
+		return 0, false
+	}
+	exit, outcome = c.Wait(ctx, record.ContainerID)
+	return exit, outcome == ""
+}
+
+func signalOwned(ctx context.Context, intent port.Intent, c port.RunConnection, signal string) port.Outcome {
+	if failure := intent.Validate(); failure != "" {
+		return failure
+	}
+	if failure := c.Check(ctx); failure != "" {
+		return failure
+	}
+	r := intent.Record()
+	o, status := c.Inspect(ctx, r.ContainerID)
+	if status != port.Observed || !o.StatePresent || o.ID != r.ContainerID || !owns(r, o) {
+		return port.Refused
+	}
+	if !o.Running {
+		return "" // Wait still observes the actual exit status.
+	}
+	if failure := intent.Save(r); failure != "" {
+		return failure
+	}
+	if failure := intent.Validate(); failure != "" {
+		return failure
+	}
+	if failure := c.Check(ctx); failure != "" {
+		return failure
+	}
+	return c.Signal(ctx, r.ContainerID, signal)
 }
 
 func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []string, streams port.Streams) (port.RunResult, port.RunConnection, port.Attachment) {
@@ -136,7 +216,7 @@ func (s Runner) Cleanup(ctx context.Context, reference string) port.Result {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	result := port.Result{Reference: reference}
-	intent, failure := s.Store.Open(ctx, reference)
+	intent, failure := s.Store.OpenCleanup(ctx, reference)
 	if failure != "" {
 		result.Outcome = failure
 		return result

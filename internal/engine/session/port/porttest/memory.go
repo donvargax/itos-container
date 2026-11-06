@@ -32,9 +32,10 @@ type memoryIntent struct {
 	record  port.Record
 	binding port.Binding
 	bytes   string
+	fresh   bool
 }
 
-func (s *Store) open(ctx context.Context, ref string) (*memoryIntent, port.Outcome) {
+func (s *Store) open(ctx context.Context, ref string, fresh bool) (*memoryIntent, port.Outcome) {
 	if ctx.Err() != nil {
 		return nil, port.Incomplete
 	}
@@ -74,14 +75,17 @@ func (s *Store) open(ctx context.Context, ref string) (*memoryIntent, port.Outco
 	if expected != r {
 		return nil, port.Invalid
 	}
-	if b.UID != s.UID || b.GID != s.GID || b.Checkout.Root != s.Root || s.UID == "0" {
+	if b.UID != s.UID || b.GID != s.GID || (fresh && b.Checkout.Root != s.Root) || s.UID == "0" {
 		return nil, port.Refused
 	}
 	s.Locked = true
-	return &memoryIntent{store: s, ref: ref, record: r, binding: b, bytes: string(data)}, ""
+	return &memoryIntent{store: s, ref: ref, record: r, binding: b, bytes: string(data), fresh: fresh}, ""
 }
 func (s *Store) Open(ctx context.Context, ref string) (port.Intent, port.Outcome) {
-	return s.open(ctx, ref)
+	return s.open(ctx, ref, true)
+}
+func (s *Store) OpenCleanup(ctx context.Context, ref string) (port.Intent, port.Outcome) {
+	return s.open(ctx, ref, false)
 }
 func (s *Store) New(ctx context.Context, d approval.Durable, token string) (port.Intent, port.Outcome) {
 	if !port.HexID(token) || !port.HexID(d.Frozen.Project) {
@@ -121,7 +125,7 @@ func (s *Store) New(ctx context.Context, d approval.Durable, token string) (port
 	if !s.publish(ref, r) {
 		return nil, port.IntentWrite
 	}
-	return s.open(ctx, ref)
+	return s.open(ctx, ref, true)
 }
 func (s *Store) publish(ref string, r port.Record) bool {
 	data := s.Codec.Encode(r)
@@ -159,7 +163,7 @@ func (i *memoryIntent) Validate() port.Outcome {
 	if b != i.binding {
 		return port.Invalid
 	}
-	if b.UID != i.store.UID || b.GID != i.store.GID || b.Checkout.Root != i.store.Root {
+	if b.UID != i.store.UID || b.GID != i.store.GID || (i.fresh && b.Checkout.Root != i.store.Root) {
 		return port.Refused
 	}
 	return ""

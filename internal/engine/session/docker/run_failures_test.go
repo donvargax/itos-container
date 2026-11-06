@@ -121,6 +121,9 @@ func TestRunOperationsRefuseReplacedEngineSocket(t *testing.T) {
 	if failure := c.Start(ctx, id); failure != sp.Refused {
 		t.Fatal(failure)
 	}
+	if failure := c.Signal(ctx, id, "SIGTERM"); failure != sp.Refused {
+		t.Fatal(failure)
+	}
 	if exit, failure := c.Wait(ctx, id); exit != 0 || failure != sp.Refused {
 		t.Fatal(exit, failure)
 	}

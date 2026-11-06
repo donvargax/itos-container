@@ -360,8 +360,14 @@ must state this in help and security guidance; revisit before egress and credent
    Slice-10 now wires the foreground lifecycle through the session engine, with
    a separately pinned workspace and Docker SDK stream demultiplexing. The wait
    handshake is bounded; acknowledged workload wait has no lifetime limit.
-   Slice-11/12 still own executable status/stop, signal and controller-loss proof.
+   Forwarding failures cancel the pending workload wait and trigger bounded cleanup.
+   Run captures SIGINT/SIGTERM before startup, forwards the first signal once after
+   reacquiring owned authority, allows 10 s grace, then escalates to SIGKILL within
+   the same 30 s teardown budget. Repeated signals cannot interrupt that cleanup.
+   Slice-11/12 still own executable status/stop and native signal/controller-loss proof.
    See [the foreground integration decision](../decisions/0008-foreground-run-integration.md).
+   [The failure-cleanup decision](../decisions/0009-foreground-failure-cleanup.md)
+   records the review fixes and their local controller proof.
 
 ### State and result interpretation
 
@@ -382,7 +388,8 @@ cleanup fails, return a nonzero wrapper failure classified by its cause. T-11 re
 the CLI wrapper meanings, rather than importing helper-tool codes or treating every
 cleanup error as transient. Return zero only with known successful work and cleanup;
 observed exit wins over an inferred signal outcome. Forward a signal once, allow
-10 s grace, then SIGKILL if needed. Slice-12 owns remaining signal-derived and
+10 s grace, then SIGKILL if needed. Interruption without an observed nonzero exit
+uses the existing execution-unavailable failure (75). Slice-12 owns remaining signal-derived and
 cancellation mappings under the charter stop rule; this design invents none.
 
 Pre-launch refusals have no child status. Lost engine/controller observations never
@@ -406,6 +413,13 @@ mutation. Protected placement separates authority from checkout requests; IDs pr
 safe recovery references; serialization and revalidation prevent concurrent or stale
 deletion. Slice-11 owns record fields, lock API and ID length, without a new ownership
 algorithm being selected here.
+
+Foreground cleanup authorizes removal from the protected original record/snapshot,
+current host identity, selected original daemon and freshly inspected full resource
+ID. It does not reopen or compare the writable checkout: a worker can replace `.git`
+without gaining authority over protected ownership or vetoing cleanup. Fresh checkout
+validation remains mandatory for launch. Slice-9's unstarted-only operation retains
+its existing stricter checkout validation.
 
 Retain recovery information until cleanup is confirmed. Report the owned session ID
 and an exact safely rendered `itos container stop` retry containing that ID, as
