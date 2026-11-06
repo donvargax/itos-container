@@ -187,7 +187,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/slices/stop` | Proposed; required for run recovery | Cancel an owned session or finish its cleanup. | Session contracts; identity revalidation and safe repeated removal. |
 | `internal/slices/exec` | Deferred | Additional argv only during a live owned foreground session. | Future session contract; cannot extend lifetime or alter frozen permissions. |
 | `internal/engine/policy` | Implemented by slice-1 and slice-5 | Strict offline schema/default/value validation, bounded parsing and typed failures. | Own domain/port, disk and YAML adapters; reusable policy contracts and I/O-free porttest fakes. |
-| `internal/engine/manifest` | Proposed | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
+| `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
 | `internal/engine/readiness` | Implemented prerequisite | Read-only checkout, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
 | `internal/engine/session` | Owned unstarted create/cleanup implemented by slice-9; runtime integration remains slice-10–12 | Durable intent, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK and entropy adapters; approval protected-storage and frozen-codec ports; readiness identity contracts. Test-only cmd assembly exposes this boundary; public run still stops after preflight. |
@@ -218,8 +218,8 @@ Docker create/remove evidence. Neither establishes worker execution or isolation
 
 ```mermaid
 flowchart LR
-    manifest["manifest (proposed)"] --> policy["policy (implemented)"]
-    readiness["readiness (proposed)"] --> policy
+    manifest["manifest (implemented)"] --> policy["policy (implemented)"]
+    readiness["readiness (implemented)"] --> policy
     readiness --> manifest
     approval["approval"] --> policy
     approval --> manifest
@@ -230,9 +230,9 @@ flowchart LR
     session --> approval
 ```
 
-The [registry](../../tasks/work-items.yaml) records slice-1 and slice-5 complete and
-slice-2 in progress; this checkout has live policy/parsing scenarios, but no manifest
-implementation. Work-item slices are increments, not commands or the pilot's numbered
+The [registry](../../tasks/work-items.yaml) records slice-1, slice-2, slice-3 and slice-5
+complete; this checkout has live policy/parsing, manifest and readiness scenarios.
+Work-item slices are increments, not commands or the pilot's numbered
 milestone stages. Several extend doctor; slice-4 adds approve and approval inspection.
 
 | Work item | Prerequisites | Shared outputs and consumers |
@@ -240,11 +240,11 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | T-14 — completed foundation | Existing counting example | Slice/engine boundaries, classifiers, fake/adapter contract pattern and enforcement fixtures for all later packages. |
 | slice-1 — completed policy validation | T-14 | Reusable schema, visible defaults, lexical paths, typed failures and shared contracts; doctor exposes policy-only scope. Live [policy scenarios](../../features/policy.feature) exercise acceptance, refusal and absence of effects. |
 | slice-5 — completed bounded policy parsing | slice-1 | [Parsing scenarios](../../features/parsing.feature), v4 parser depth hook and aggregate limits below. Retains policy semantics and independent tooling v3 pin. |
-| slice-2 — worker manifest, in progress | slice-1 | Own restricted fields, JSON-with-comments parser choice, environment and metadata treatment. Hooks do not run this milestone. Reuse policy contracts in doctor; later readiness/approval/run consume manifest values. |
+| slice-2 — completed worker manifest | slice-1 | Own restricted fields, JSON-with-comments parser choice, environment and metadata treatment. Hooks do not run this milestone. Reuse policy contracts in doctor; later readiness/approval/run consume manifest values. |
 | slice-6 — planned manifest/metadata bounds | slice-2 | Own manifest and image-label parsing budgets; policy limits do not establish them. |
 | T-16 — completed engine-test tier | None | Guarded CI-only selection and required engine result; operational authority is [features/README.md](../../features/README.md). No live engine cases or isolation proof yet. |
-| T-20 — planned runtime fixture image | T-16 | Own preparation of trusted images for real-engine scenarios; neither T-16 nor this document makes an image available. |
-| slice-3 — readiness prerequisite | slice-2 and T-20; consumes slice-1 | Safe checkout/local-engine identity and cached digest/architecture/metadata inspection. Effective host UID resolution belongs to slice-4. The pinned engine client and HTTP Engine API fixture allow adapter tests without a daemon; a ping alone is insufficient. |
+| T-20 — completed runtime fixture preparation | T-16 | Own preparation of trusted images for real-engine scenarios; neither T-16 nor this document makes an image available. |
+| slice-3 — completed readiness inspection | slice-2 and T-20; consumes slice-1 | Safe checkout/local-engine identity and cached digest/architecture/metadata inspection. Effective host UID resolution belongs to slice-4. The pinned engine client and HTTP Engine API fixture allow adapter tests without a daemon; a ping alone is insufficient. |
 | slice-4 — implemented approval | slice-1, slice-2 and slice-3 explicitly | Implements revised A1's review, y/N prompt and optional fingerprint route, host effective UID/GID resolution with root refusal, matching/supersession, protected approval and frozen input. [Scenarios](../../features/approval.feature) specify canonicalization/storage and help/security wording. Doctor inspects approval; run blocks unapproved settings and names approve. |
 | slice-7 — implemented invocation refusals | slice-1 | Local argv/JSON refusals introduce the run command slice; valid argv refuses until later increments. [Run scenarios](../../features/run.feature) cover redirected and real-terminal JSON, separator ownership and absence of effects. |
 | slice-8 — implemented preflight and freeze | slice-4 and slice-7 | Revalidate prerequisites before resource effects, consume slice-4's approval/host identity and independent frozen input, and durably publish trusted session settings. No second identity resolver or approval loader. |
@@ -545,12 +545,12 @@ The table maps required evidence to the current gates and the work still absent.
 
 | Requirement | Evidence and gate | Status or gap |
 | --- | --- | --- |
-| Strict policy and restricted manifest | Live slice-1/5 [policy](../../features/policy.feature) and [parsing](../../features/parsing.feature) cases and shared contracts; future slice-2/6 manifest/metadata evidence; AC-01, AC-39/40/41 offline scope. | Policy validation and bounds implemented; manifest not implemented. AC-39's later guard/proxy wording adds none here. |
+| Strict policy and restricted manifest | Live slice-1/5 [policy](../../features/policy.feature) and [parsing](../../features/parsing.feature) cases and shared contracts; live slice-2 manifest cases and separate slice-6 manifest/metadata bounds evidence; AC-01, AC-39/40/41 offline scope. | Policy validation and bounds implemented; manifest validation implemented. AC-39's later guard/proxy wording adds none here. |
 | Explicit matching approval and frozen settings | Slice-4 cases and shared contracts; T-11 missing/mismatched/superseded and frozen-settings cases; AC-02/03/41. | Implemented with local temporary-state scenarios and shared store contracts. Durable session publication and worker isolation remain later proof. |
 | Inspection executes no checkout code | Policy sentinel/snapshot/connection-recorder cases are live; broader doctor/approve need synthetic markers and positive controls; AC-04 and T-11 strict-input cases. | Doctor/approve marker and API-journal scenarios exercise inspection without checkout execution or image acquisition. Init and lifecycle hooks remain deferred. |
 | Safe checkout, local engine and approved cached image | Slice-3 contracts and CI observations; AC-05/38; T-11 identity, cached-image and hidden-metadata cases. | Readiness is implemented; absent images refuse without acquisition. Synthetic Engine API evidence does not establish runtime isolation. |
 | Host isolation, mount and non-root writable boundary | Independent CI probes for allowed writes and denied host/root/privilege access; AC-07/08/25 and T-11 non-root case. | No runtime proof. Protected online guard material from AC-08 remains deferred. |
-| Offline isolation from first instruction and through loss | Trusted controls plus worker IPv4/IPv6, gateway/private-route and DNS denial; AC-10/11/37 offline portions and T-11 loss cases. | NetworkMode none and T-16's tier are settled; slice-10/12 runtime proof and T-20 images remain absent. Flags and broken controls cannot pass it. |
+| Offline isolation from first instruction and through loss | Trusted controls plus worker IPv4/IPv6, gateway/private-route and DNS denial; AC-10/11/37 offline portions and T-11 loss cases. | NetworkMode none and T-16's tier are settled; slice-10/12 runtime proof remains absent. Flags and broken controls cannot pass it. |
 | Literal argv and verified-before-launch ordering | T-11 argv and explicit-shell cases; AC-21. Slice-7 local refusals plus fake sequencing; actual execution in CI. | No run implementation. Unknown-command errors are not the specified refusal. AC-42 lifecycle hooks are deferred. |
 | Durable ownership, bounded cleanup and independent projects | T-11 write-failure, uncertain-create, cancellation, repeated/foreign stop and two-project cases; AC-06/22/23/28 offline portions. | Settled intent/recovery/budget/signal choices need slice-9/11/12 implementation and proof; remaining details stay with those specs. |
 | Safe diagnostics and honest outcomes | Synthetic marker exclusion and unknown/zero/nonzero outcome cases; AC-22/36 offline portions, with foreground streams captured separately. | No controller/recovery implementation; no credential-scan claim. |
@@ -627,8 +627,10 @@ is its operational authority: ordinary, smoke, coverage and mutation runs exclud
 `ITOS_CONTAINER_ENGINE_TESTS=1` only under the guarded Linux amd64 GitHub Actions
 context; ordinary runs never enable it, and `ci` requires that job's success. Its
 read-only preflight acquires no images and starts no resources. No live engine cases
-means infrastructure readiness, not isolation proof or fixture-image availability;
-T-20 owns image preparation. `@wip` alone is not an engine-access boundary. This update
+means infrastructure readiness, not isolation proof or fixture-image availability.
+T-20 implements fixture preparation in that guarded CI job, including output wiring
+and cleanup; availability depends on successful preparation for that run. `@wip` alone
+is not an engine-access boundary. This update
 adds no cases or runtime evidence and changes no gates. Agents commit and stop; only the
 coordinating loop pushes, verifies the actual pushed head and its required proof, and
 closes the item.
