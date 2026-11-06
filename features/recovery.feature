@@ -430,7 +430,7 @@ Feature: Inspect and stop owned offline sessions
       | status  | --no-json --json=true    | before   | 1         | JSON  |
       | stop    | --no-json --json=true    | before   | 1         | JSON  |
 
-  @slice-11 @ID-RECOVERY-29 @linux @wip
+  @slice-11 @ID-RECOVERY-29 @linux
   Scenario Outline: Recovery uses one JSON environment contract on every invocation path
     Given a recovery fixture with recorded phase "stopped" resource "absent" and observed workload exit "7"
     When recovery "<command>" successes and usage refusals run with inherited and explicit JSON preferences

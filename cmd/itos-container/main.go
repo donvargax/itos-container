@@ -157,11 +157,13 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		service, _ := approvalServices(in, stdout, stderr)
 		_, c.Status.Service = sessionServices(service)
 		c.Status.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr}
+		c.Status.JSON = recoveryJSON(args)
 		return c.Status.Run()
 	case "stop":
 		service, _ := approvalServices(in, stdout, stderr)
 		_, c.Stop.Service = sessionServices(service)
 		c.Stop.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr}
+		c.Stop.JSON = recoveryJSON(args)
 		return c.Stop.Run()
 	case "version":
 		// What --version prints, as kong prints it.
@@ -184,6 +186,8 @@ func sessionServices(service approvaldomain.Service) (sessiondomain.Runner, sess
 	return sessiondomain.Runner{Store: store, Registry: registry, Engine: engine, Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{}}, sessiondomain.Recovery{Registry: registry, Engine: engine}
 }
 
+// recoveryJSON serves parsed commands and usage refusals alike. Only literal 1
+// inherits JSON; Kong's boolean environment decoder accepts other values too.
 func recoveryJSON(args []string) bool {
 	want := os.Getenv("ITOS_JSON") == "1"
 	for _, a := range args {

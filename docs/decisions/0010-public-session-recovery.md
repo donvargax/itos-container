@@ -194,3 +194,21 @@ exercise stop with observed PIDs -1, 0 and a positive value, a live controller
 lease, an unrelated worker, and both SIGTERM and escalation paths. The unrelated
 worker and controller lease must survive. These local checks do not replace the
 coordinator's native engine run or changed-code proof at the pushed head.
+
+## Exact JSON environment inheritance
+
+Status and stop now use the same output preference function for successful
+parsing and usage refusals. Their Kong flags no longer decode `ITOS_JSON` as a
+boolean: only literal `1` inherits JSON. Other values keep plain output, and
+explicit `--json` or `--no-json` selects the format on either path. This also
+prevents arbitrary environment text from rejecting an otherwise valid command.
+
+RECOVERY-29's pending step checkpoint is `36034df`. With its tag live before
+the fix, both examples reached the format assertion and failed because successful
+status and stop emitted JSON for `ITOS_JSON=true`. After the fix, both pass
+across 114 invocations covering successes, parser refusals, argument refusals,
+boolean aliases, invalid text and explicit overrides. Selected regressions in
+RECOVERY-01/02/07/10/24/28 also pass. The command usage tests, full-ID SDK signal
+checks, controller/unrelated-worker preservation checks and local syscall-observer
+controls pass. No additional host-signal path was found in the audit. Native
+engine validation and changed-code proof remain with the coordinating CI loop.

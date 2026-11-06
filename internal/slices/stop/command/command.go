@@ -11,7 +11,7 @@ type CLI struct {
 	Context      context.Context           `kong:"-"`
 	Service      port.Recovery             `kong:"-"`
 	Presentation port.RecoveryPresentation `kong:"-"`
-	JSON         bool                      `name:"json" negatable:"" env:"ITOS_JSON" help:"Print one schema-1 JSON object."`
+	JSON         bool                      `name:"json" negatable:"" help:"Print one schema-1 JSON object."`
 	Args         []string                  `arg:"" optional:"" sep:"none" help:"Exactly one full 64-digit lowercase hexadecimal session ID."`
 }
 
