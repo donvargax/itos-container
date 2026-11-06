@@ -158,6 +158,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.recoveryLocalSteps(sc)
 	w.offlineIsolationSteps(sc)
 	w.lifecycleNativeSteps(sc)
+	w.lifecycleLocalSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.

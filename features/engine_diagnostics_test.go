@@ -47,7 +47,7 @@ func logFeatureSignals(hostOS string) {
 				syscall.SIGSEGV, syscall.SIGTERM,
 				syscall.Signal(16), syscall.Signal(31): // Linux SIGSTKFLT and SIGSYS.
 				os.Exit(128 + int(number))
-			case syscall.SIGTSTP, syscall.SIGTTIN, syscall.SIGTTOU:
+			case syscall.Signal(20), syscall.Signal(21), syscall.Signal(22): // Linux job-control signals.
 				// Retain job-control semantics after recording the notification.
 				signal.Reset(sig)
 				self, err := os.FindProcess(os.Getpid())
@@ -58,8 +58,8 @@ func logFeatureSignals(hostOS string) {
 					fmt.Fprintf(os.Stderr, "features TestMain could not restore signal: %v\n", err)
 					os.Exit(1)
 				}
-			case syscall.SIGCONT:
-				signal.Notify(received, syscall.SIGTSTP, syscall.SIGTTIN, syscall.SIGTTOU)
+			case syscall.Signal(18): // Linux SIGCONT.
+				signal.Notify(received, syscall.Signal(20), syscall.Signal(21), syscall.Signal(22))
 			}
 		}
 	}()
