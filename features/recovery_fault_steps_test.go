@@ -101,7 +101,7 @@ func (w *world) recoveryFaultSteps(sc *godog.ScenarioContext) {
 		if err != nil {
 			return err
 		}
-		if !recoveryJSONEqual(string(data), w.sessionExpectedRecord(map[bool]string{true: "absent", false: "owned"}[w.recoveryLocal.phase == "stopped"], w.session.seedID)) {
+		if string(data) != w.recoveryLocal.originalIntent {
 			return fmt.Errorf("original intent lost")
 		}
 		return nil
@@ -134,7 +134,7 @@ func (w *world) recoveryOwnershipDefect(defect string) error {
 	c := w.session.api.local[w.session.seedID]
 	labels := object(object(c["Config"])["Labels"])
 	switch defect {
-	case "no public registration", "public ID belongs to other project", "mutually consistent other UID", "different checkout identity":
+	case "no public registration", "public ID belongs to other project":
 		path := filepath.Dir(w.recoveryRecordPath())
 		if defect == "no public registration" {
 			if err := os.RemoveAll(path); err != nil {
@@ -148,6 +148,38 @@ func (w *world) recoveryOwnershipDefect(defect string) error {
 			if err := os.Rename(path, other); err != nil {
 				return err
 			}
+		}
+	case "mutually consistent other UID":
+		original := w.recoveryRecordPath()
+		data, err := os.ReadFile(original)
+		if err != nil {
+			return err
+		}
+		var record map[string]any
+		if err = json.Unmarshal(data, &record); err != nil {
+			return err
+		}
+		if err = w.sessionSeedRecovery("identity", "record UID differs from the current host UID"); err != nil {
+			return err
+		}
+		path := w.recoveryRecordPath()
+		if err = os.MkdirAll(filepath.Dir(filepath.Dir(path)), 0700); err != nil {
+			return err
+		}
+		if err = os.Rename(filepath.Dir(original), filepath.Dir(path)); err != nil {
+			return err
+		}
+		record["project"], record["intent"] = w.approval.project, w.session.reference
+		if err = os.WriteFile(path, approvalJSON(record), 0600); err != nil {
+			return err
+		}
+	case "different checkout identity":
+		path := filepath.Join(w.doctor.checkout, ".git")
+		if err := os.Rename(path, path+".original"); err != nil {
+			return err
+		}
+		if err := os.Mkdir(path, 0700); err != nil {
+			return err
 		}
 	case "selected daemon differs":
 		w.doctor.engine.info["ID"] = "foreign"
@@ -266,6 +298,11 @@ func (w *world) recoveryObservationFault(fault string) error {
 	if err := w.recoverySeed(phase, resource, "unknown"); err != nil {
 		return err
 	}
+	data, err := os.ReadFile(w.sessionRecordPath())
+	if err != nil {
+		return err
+	}
+	w.recoveryLocal.originalIntent = string(data)
 	switch fault {
 	case "required socket missing":
 		w.doctor.env["DOCKER_HOST"] = "unix://" + filepath.Join(w.dir, "missing.sock")

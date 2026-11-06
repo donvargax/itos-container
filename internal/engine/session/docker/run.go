@@ -25,7 +25,7 @@ type runConnection struct {
 }
 
 func (e Engine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection, port.Outcome) {
-	c, failure := e.Open(ctx, b)
+	c, failure := e.open(ctx, b, true)
 	if failure != "" {
 		return nil, failure
 	}

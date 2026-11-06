@@ -41,9 +41,11 @@ type recoveryLocal struct {
 	inspectReady, inspectRelease         chan struct{}
 	afterRemoveReady, afterRemoveRelease chan struct{}
 	second                               *world
+	originalIntent                       string
 }
 
 func (w *world) recoveryLocalSteps(sc *godog.ScenarioContext) {
+	w.recoveryFakeBackendSteps(sc)
 	w.recoveryStateSteps(sc)
 	w.recoveryFaultSteps(sc)
 	w.recoveryDiscoverySteps(sc)

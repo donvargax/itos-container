@@ -15,9 +15,13 @@ type Runner struct {
 	Engine    port.RunEngine
 	Entropy   port.Entropy
 	Workspace port.Workspace
+	Registry  port.Registry
 }
 
 func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string, streams port.Streams) port.RunResult {
+	if s.Registry != nil {
+		return s.registeredRun(ctx, frozen, argv, streams)
+	}
 	startup, cancel := context.WithTimeout(ctx, 120*time.Second)
 	result, connection, attachment := s.launch(startup, frozen, argv, streams)
 	cancel()
@@ -81,7 +85,24 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	// The launch connection retains the startup deadline. Reopen protected
 	// authority and the original daemon within this one reconciliation budget,
 	// independently of elapsed workload time or mutable checkout identity.
-	intent, failure := s.Store.OpenCleanup(probe, reference)
+	var intent port.Intent
+	failure = ""
+	if s.Registry != nil {
+		entry, f := s.Registry.Open(probe, reference, true)
+		if f != "" {
+			return 0, port.ExecutionFailed
+		}
+		defer entry.Close()
+		if entry.Validate() != "" {
+			return 0, port.ExecutionFailed
+		}
+		if r := entry.Record(); r.State == "stopped" && r.WorkloadExit != nil {
+			return *r.WorkloadExit, ""
+		}
+		intent = entry.Intent()
+	} else {
+		intent, failure = s.Store.OpenCleanup(probe, reference)
+	}
 	if failure != "" {
 		return 0, port.ExecutionFailed
 	}

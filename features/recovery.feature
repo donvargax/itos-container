@@ -188,7 +188,10 @@ Feature: Inspect and stop owned offline sessions
   # edits, approvals and frozen
   # settings survive. Retain tombstones; no retention/GC policy is added here.
   #
-  # Integration handoff: on implementation, supersede only OFFLINE-15's temporary
+  # Integration handoff: public registration extends the inherited preflight
+  # preservation assertions with exact protected records and persistent locks.
+  # Keep their approval/snapshot/checkout invariants and reject any other paths.
+  # On implementation, supersede OFFLINE-15's temporary
   # ban on executable retries and OFFLINE-16's intent-only diagnostic expectation;
   # retain their result precedence and marker exclusions. Their current owner is
   # slice-13/14, not this drafter. Preserve SESSION's unstarted-only API; no relaxed
@@ -222,11 +225,14 @@ Feature: Inspect and stop owned offline sessions
   # No new image, real credentials, runtime support claim or isolation substitute.
   # Commit complete steps red first while @wip remains. Local runs temporarily
   # remove @wip; the coordinator obtains engine red via red_scenarios. Every first
-  # Then below is an expected failure, not evidence collected by this spec. Missing
-  # steps/setup failures/unknown-command diagnostics alone are never red proof.
+  # Then below checks behavior, not fixture setup. The coordinator's standing
+  # q-6 decision accepts already-passing earlier-slice behavior as regression
+  # coverage: verify its positive assertion and name that slice above its tag.
+  # Stop only for unfixable setup or a case unable to reject a wrong build.
+  # Missing steps/setup failures/unknown-command diagnostics alone are never proof.
 
   # Public help precedes inspection and never opens state or an engine.
-  @wip @slice-11 @ID-RECOVERY-24 @linux
+  @slice-11 @ID-RECOVERY-24 @linux
   Scenario: Recovery help describes project scope cleanup results and controller uncertainty
     Given a recovery fixture with no engine access and checkout helper sentinels
     When product status help and stop help are requested
@@ -235,7 +241,7 @@ Feature: Inspect and stop owned offline sessions
     And help performs no state access engine connection approval or checkout helper execution
 
   # Inspection and representation. No state is a useful successful observation.
-  @wip @slice-11 @ID-RECOVERY-01 @linux
+  @slice-11 @ID-RECOVERY-01 @linux
   Scenario: Status of a project with no sessions is read-only and empty
     Given a recovery fixture with a safe checkout and no host state directory
     When recovery status is invoked in plain and JSON modes through each local backend
@@ -244,7 +250,7 @@ Feature: Inspect and stop owned offline sessions
 
   # All records and explicit workload observations are independently seeded.
   # The completed row has a durable absent intent and independently absent ID.
-  @wip @slice-11 @ID-RECOVERY-02 @linux
+  @slice-11 @ID-RECOVERY-02 @linux
   Scenario Outline: Status separates lifecycle resource and workload knowledge
     Given a recovery fixture with recorded phase "<phase>" resource "<resource>" and observed workload exit "<exit>"
     When recovery status is invoked with --json, inherited JSON and inherited JSON overridden by --no-json
@@ -265,7 +271,7 @@ Feature: Inspect and stop owned offline sessions
 
   # A harness process holds the lease; releasing it changes only observation.
   # A deliberately unrelated live PID cannot turn an absent lease into present.
-  @wip @slice-11 @ID-RECOVERY-03 @linux
+  @slice-11 @ID-RECOVERY-03 @linux
   Scenario: Status identifies controller absence without treating a PID as ownership
     Given a recovery fixture with a running worker, a held controller lease and an unrelated live process
     When status is called before and after the fixture lease holder exits
@@ -273,7 +279,7 @@ Feature: Inspect and stop owned offline sessions
     And the worker remains reported running with unknown workload exit
     And status neither signals the unrelated process nor changes resources or protected records
 
-  @wip @slice-11 @ID-RECOVERY-04 @linux
+  @slice-11 @ID-RECOVERY-04 @linux
   Scenario: Status retains useful entries while reporting incomplete inspection
     Given a recovery fixture with safe sessions and separate invalid-state, unsafe-state and unavailable-engine entries
     When recovery status is invoked in JSON mode through each local backend
@@ -282,7 +288,7 @@ Feature: Inspect and stop owned offline sessions
     And malformed entries confer no ownership and all recovery state remains unchanged
 
   # Public registration must be available after abrupt loss, not only at run exit.
-  @wip @slice-11 @ID-RECOVERY-05 @linux
+  @slice-11 @ID-RECOVERY-05 @linux
   Scenario: Run registers a unique recoverable identity before creating a worker
     Given a recovery run fixture with one approved snapshot and two independent invocations
     When both runs reach the create barrier through each local backend and status observes them after release
@@ -290,7 +296,7 @@ Feature: Inspect and stop owned offline sessions
     And each status entry resolves exactly its own original intent snapshot and full worker ID
     And registration and lock objects have the specified protected paths modes and strict schema without workload data
 
-  @wip @slice-11 @ID-RECOVERY-06 @linux
+  @slice-11 @ID-RECOVERY-06 @linux
   Scenario Outline: Failed public registration cannot leave an undiscoverable worker
     Given a recovery run fixture with registration fault "<fault>"
     When run attempts public registration through each local backend
@@ -308,7 +314,7 @@ Feature: Inspect and stop owned offline sessions
       | lock object durability  | temporary |
 
   # Stop is a cleanup result, not a replay of the original workload's exit code.
-  @wip @slice-11 @ID-RECOVERY-07 @linux
+  @slice-11 @ID-RECOVERY-07 @linux
   Scenario Outline: Stop completes owned cleanup and is safe to repeat
     Given a recovery fixture with an owned "<resource>" worker and observed workload exit "<exit>"
     When stop is invoked twice and status follows through each local backend
@@ -328,7 +334,7 @@ Feature: Inspect and stop owned offline sessions
       | durable absent           | 7       |
 
   # The fault is cleared only after run's result and retained worker are captured.
-  @wip @slice-11 @ID-RECOVERY-08 @linux
+  @slice-11 @ID-RECOVERY-08 @linux
   Scenario Outline: The exact retry printed by run completes interrupted cleanup
     Given a recovery run fixture with observed workload exit <child> and transient removal failure
     When run finishes, the removal fault is cleared and a fresh process executes its printed stop argv in the same project
@@ -343,7 +349,7 @@ Feature: Inspect and stop owned offline sessions
       | 75    | 75     |
 
   # Change input bytes only; original checkout identity and protected binding stay.
-  @wip @slice-11 @ID-RECOVERY-09 @linux
+  @slice-11 @ID-RECOVERY-09 @linux
   Scenario Outline: Recovery does not require current requests or current approval
     Given an independently owned recovery fixture whose current "<input>" is "<change>"
     When status and stop are invoked through each local backend
@@ -361,7 +367,7 @@ Feature: Inspect and stop owned offline sessions
       | approval | superseded |
 
   # Invalid strings are data in argv, never evaluated by a shell or echoed raw.
-  @wip @slice-11 @ID-RECOVERY-10 @linux
+  @slice-11 @ID-RECOVERY-10 @linux
   Scenario Outline: Recovery accepts only its complete project-scoped session ID
     Given a recovery fixture with usage variant "<variant>" and outside sentinels
     When the recovery command is invoked in JSON mode with that literal argv
@@ -380,7 +386,7 @@ Feature: Inspect and stop owned offline sessions
       | stop shell control text |
       | status positional ID    |
 
-  @wip @slice-11 @ID-RECOVERY-11 @linux
+  @slice-11 @ID-RECOVERY-11 @linux
   Scenario Outline: Foreign or ambiguous ownership is never adopted by stop
     Given a recovery fixture with ownership defect "<defect>" and an independently observed candidate worker
     When recovery stop and status are invoked through each local backend
@@ -404,7 +410,7 @@ Feature: Inspect and stop owned offline sessions
 
   # Missing original snapshot cannot fall back to a matching active approval.
   # Include unsafe ancestor/lock paths; checkpoint fixture substitutions separately.
-  @wip @slice-11 @ID-RECOVERY-12 @linux
+  @slice-11 @ID-RECOVERY-12 @linux
   Scenario Outline: Unsafe or corrupt recovery material cannot authorize mutation
     Given a recovery fixture with protected material defect "<defect>" and an intact matching current approval
     When recovery status and stop are invoked through each local backend
@@ -440,7 +446,7 @@ Feature: Inspect and stop owned offline sessions
   # on the changed authority must occur before the specific subsequent mutation.
   # Record replacement supplies a different well-formed binding at the pinned
   # filename, not an ordinary update advancing this session's progress.
-  @wip @slice-11 @ID-RECOVERY-13 @linux
+  @slice-11 @ID-RECOVERY-13 @linux
   Scenario Outline: Stop revalidates authority at each destructive boundary
     Given a recovery fixture with a barrier before "<mutation>" and substitution "<change>"
     When stop reaches the barrier and the fixture substitutes that authority before releasing it
@@ -456,7 +462,7 @@ Feature: Inspect and stop owned offline sessions
       | remove   | protected record replacement |
       | remove   | checkout identity change     |
 
-  @wip @slice-11 @ID-RECOVERY-14 @linux
+  @slice-11 @ID-RECOVERY-14 @linux
   Scenario: A delayed uncertain create stays discoverable until its concrete identity can be recovered
     Given a recovery fixture with a registered intent-only operation and a delayed create invisible by name
     When status and stop run before visibility and a fresh stop retries after the fixture exposes the matching worker
@@ -466,7 +472,7 @@ Feature: Inspect and stop owned offline sessions
 
   # The first stop really removes the old ID. Its response/completion can be lost;
   # a new same-named foreign resource must survive the reconstructed controller.
-  @wip @slice-11 @ID-RECOVERY-15 @linux
+  @slice-11 @ID-RECOVERY-15 @linux
   Scenario Outline: Interrupted completion retains evidence for safe retry
     Given a recovery fixture with fault "<fault>" at the first stop's completion boundary
     When stop is attempted, the fault is cleared, a same-named foreign worker is seeded and a fresh process retries stop
@@ -483,7 +489,7 @@ Feature: Inspect and stop owned offline sessions
       | controller death after removal                  |
 
   # Assert real cross-process exclusion and reload, not just a fake call counter.
-  @wip @slice-11 @ID-RECOVERY-16 @linux
+  @slice-11 @ID-RECOVERY-16 @linux
   Scenario: Concurrent stop attempts serialize one session and reload completion
     Given a recovery fixture with a running owned worker and a first-stop removal barrier
     When two independent stop processes overlap and the first barrier is released
@@ -495,7 +501,7 @@ Feature: Inspect and stop owned offline sessions
   # before any create request. Keep run paused until stop acquires that lock and
   # returns; allowing create to finish first would test a different ordering.
   # The fixture configures a missing exact-name observation, not an absent full ID.
-  @wip @slice-11 @ID-RECOVERY-25 @linux
+  @slice-11 @ID-RECOVERY-25 @linux
   Scenario: Stop before create retains uncertain cleanup and prevents a late launch
     Given a recovery run fixture with a barrier after durable registration and intent publication before any create request
     And the recovery engine fixture is configured with a missing intent name and no concrete resource ID
@@ -508,7 +514,7 @@ Feature: Inspect and stop owned offline sessions
 
   # These boundaries already have a concrete owned ID. Park run outside the
   # operation lock and let stop finish first, then test run's stale continuation.
-  @wip @slice-11 @ID-RECOVERY-17 @linux
+  @slice-11 @ID-RECOVERY-17 @linux
   Scenario Outline: Run and stop cannot race cleanup into a late launch or stale update
     Given a recovery run fixture with a transition barrier at "<boundary>"
     When run pauses outside the session operation lock at that barrier and an independent stop completes before run resumes
@@ -523,7 +529,7 @@ Feature: Inspect and stop owned offline sessions
       | observed exit before cleanup |
 
   # A long-held A operation lock must not block B through a project-wide lock.
-  @wip @slice-11 @ID-RECOVERY-18 @linux
+  @slice-11 @ID-RECOVERY-18 @linux
   Scenario: Equal project basenames and concurrent sessions have independent recovery
     Given a recovery fixture with equal-basename projects A and B, two sessions in A and one in B
     When A's first stop is paused holding its session lock while A's second session is inspected and stopped and B is inspected
@@ -533,7 +539,7 @@ Feature: Inspect and stop owned offline sessions
 
   # Include a completed tombstone whose daemon cannot now be reached: old absent
   # evidence never substitutes for this invocation's required confirmation.
-  @wip @slice-11 @ID-RECOVERY-19 @linux
+  @slice-11 @ID-RECOVERY-19 @linux
   Scenario Outline: Recovery bounds unavailable observations and classifies their cause
     Given a recovery fixture with observation failure "<failure>"
     When status and stop are invoked through each local backend with measured monotonic deadlines
@@ -555,7 +561,7 @@ Feature: Inspect and stop owned offline sessions
   # The approved snapshot may contain its literal environment; metadata may not.
   # Status observes pending cleanup before the fault is cleared. Stop then
   # completes cleanup, so only the earlier status carries an executable retry.
-  @wip @slice-11 @ID-RECOVERY-20 @linux
+  @slice-11 @ID-RECOVERY-20 @linux
   Scenario: Recovery reports useful facts without copying sensitive input or output
     Given a recovery run fixture with distinct synthetic argv environment stream and engine-body markers and a cleanup fault
     When run streams its probe output, JSON status inspects the retained session and JSON stop is retried after clearing the fault
@@ -566,7 +572,7 @@ Feature: Inspect and stop owned offline sessions
 
   # Native evidence supplements local fault mapping; DELETE failure happens only
   # after a real observed primary exit and is cleared solely for the public retry.
-  @wip @slice-11 @ID-RECOVERY-21 @engine
+  @slice-11 @ID-RECOVERY-21 @engine
   Scenario: Run's printed stop command removes the native worker left by failed cleanup
     Given a CI recovery checkout with the cached image a marker workload and a removal-only transient fault
     When the product runs the workload to exit 7 and a fresh product process executes its printed stop after the fault is cleared
@@ -576,7 +582,7 @@ Feature: Inspect and stop owned offline sessions
 
   # This case proves discovery/action after loss. Slice-12 separately proves the
   # network/filesystem boundary still holds; a heartbeat is not isolation evidence.
-  @wip @slice-11 @ID-RECOVERY-22 @engine
+  @slice-11 @ID-RECOVERY-22 @engine
   Scenario: A fresh status finds a native worker whose foreground controller was killed
     Given a CI recovery checkout with the cached image and a long-lived heartbeat workload
     When the product starts the workload, the harness kills only its controller, then fresh product status and stop processes run
@@ -585,7 +591,7 @@ Feature: Inspect and stop owned offline sessions
     And stop removes that exact native worker with confirmed durable completion without claiming successful workload execution
     And all checkout edits approvals snapshots and unrelated native resources remain intact
 
-  @wip @slice-11 @ID-RECOVERY-23 @engine
+  @slice-11 @ID-RECOVERY-23 @engine
   Scenario: Native stop is confined to one of two equal-basename projects
     Given two CI recovery checkouts with equal basenames the cached image and independent heartbeat workloads
     When both product runs start and two independent stop processes target only the first project's session

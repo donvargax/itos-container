@@ -24,8 +24,8 @@ Feature: Hardened offline foreground run
   # 10 s call / 120 s startup / 30 s teardown budgets, not a workload time limit.
   # These budgets still constrain calls here; no unbounded controller operation.
   # Slice-11 owns status/stop, public session IDs and executable retry guidance.
-  # This increment retains and reports the existing safe protected intent
-  # reference on incomplete cleanup; it MUST NOT advertise an unbuilt stop retry.
+  # Slice-11 adds the registered public ID and exact executable stop retry;
+  # incomplete cleanup also retains the original protected intent reference.
   #
   # Extend internal/slices/run/{command,domain,port,<named adapters>} and shared
   # internal/engine/session/{domain,port,<named adapters>}. Reuse the actual
@@ -437,8 +437,8 @@ Feature: Hardened offline foreground run
     Given an offline run contract fixture with observed workload exit <child> and cleanup cause "<cause>"
     When the offline contract finishes through both fake and disk SDK adapters
     Then each offline result returns <result> and separately reports "run.cleanup-<cause>" with cleanup classification <cleanup>
-    And each offline result preserves the observed workload exit and reports incomplete cleanup with its safe protected intent reference
-    And no offline result claims stopped resources or advertises an unimplemented stop retry
+    And each offline result preserves the observed workload exit and reports incomplete cleanup with its registered session ID and exact executable stop retry
+    And no offline result claims stopped resources before confirmed durable cleanup
     And retained offline ownership and diagnostics contain no raw argv environment response body or copied workload output
 
     Examples:
@@ -466,7 +466,7 @@ Feature: Hardened offline foreground run
     When the product runs an offline probe that writes a checkout edit and exits <child>
     Then the actual workload exit is <child> and the product returns <result> with a separate temporary cleanup failure
     And native Docker still observes the exact stopped worker and its protected ownership record before harness cleanup
-    And the diagnostic carries the safe protected intent reference without the synthetic body marker or a stopped-success claim
+    And the diagnostic carries the registered session ID and exact executable stop retry without the synthetic body marker or a stopped-success claim
     And the checkout edit and unrelated resources remain intact
 
     Examples:

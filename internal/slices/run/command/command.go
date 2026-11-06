@@ -66,10 +66,10 @@ func (c CLI) Run(ui *cli.UI) int {
 	result := c.Runner.Run(ctx, frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
 	code := 0
 	if result.Outcome != "" {
-		code = ui.Fail(runFailure{result.Outcome, result.Reference, false}, false)
+		code = ui.Fail(runFailure{result.Outcome, result.Reference, result.SessionID, false}, false)
 	}
 	if result.Reference != "" && result.Cleanup != session.Complete {
-		cleanupCode := ui.Fail(runFailure{result.Cleanup, result.Reference, true}, false)
+		cleanupCode := ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
 		if code == 0 {
 			code = cleanupCode
 		}
@@ -83,6 +83,7 @@ func (c CLI) Run(ui *cli.UI) int {
 type runFailure struct {
 	outcome   session.Outcome
 	reference string
+	sessionID string
 	cleanup   bool
 }
 
@@ -94,12 +95,14 @@ func Classify(err error) (int, []cli.Problem) {
 	if errors.As(err, &run) {
 		code, cause := 75, "temporary"
 		switch run.outcome {
-		case session.Refused, session.Unsafe:
+		case session.Refused, session.Unsafe, session.RegistrationOwnership:
 			code, cause = 1, "ownership"
 		case session.Invalid:
 			code, cause = 2, "configuration"
-		case session.IdentityFailed:
+		case session.IdentityFailed, session.RegistrationInternal, session.Internal:
 			code, cause = 70, "internal"
+		case session.Environment:
+			code, cause = 3, "environment"
 		case session.IsolationUnverified:
 			code = 1
 		}
@@ -108,7 +111,12 @@ func Classify(err error) (int, []cli.Problem) {
 			rule = "run.cleanup-" + cause
 		}
 		fix := "Have the host user inspect the protected intent and original engine; cleanup is not confirmed."
-		return code, []cli.Problem{{Rule: rule, Exit: code, Message: rule + " " + strconv.QuoteToASCII(run.reference) + ": " + run.Error(), Fix: fix}}
+		message := rule + " " + strconv.QuoteToASCII(run.reference) + ": " + run.Error()
+		if session.HexID(run.sessionID) {
+			fix = "Use the same effective project: itos container stop " + run.sessionID
+			message += "; " + fix
+		}
+		return code, []cli.Problem{{Rule: rule, Exit: code, Message: message, Fix: fix}}
 	}
 	var approval domain.ApprovalRefusal
 	if errors.As(err, &approval) {

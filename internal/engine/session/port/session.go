@@ -30,6 +30,7 @@ const (
 type Result struct {
 	Outcome       Outcome
 	Reference, ID string
+	SessionID     string
 	Cleanup       Outcome
 }
 

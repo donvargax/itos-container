@@ -340,6 +340,7 @@ func (w *world) recoveryRunSteps(sc *godog.ScenarioContext) {
 		}
 		w.recoveryLocal.failRemove = true
 		w.recoveryLocal.markers = []string{"slice-11-argv-marker", "slice-11-env-marker", "slice-11-stream-marker", "slice-11-engine-body-marker"}
+		w.doctor.env["RECOVERY_SYNTHETIC_SECRET"] = "slice-11-env-marker"
 		return nil
 	})
 	sc.Step(`^run streams its probe output, JSON status inspects the retained session and JSON stop is retried after clearing the fault$`, func() error {

@@ -99,12 +99,19 @@ func (w *world) runSameTree(allowSnapshot bool) error {
 	}
 	before := w.runFixture().before
 	root := filepath.Dir(filepath.Dir(w.runSnapshotPath()))
+	registry := map[string]bool{}
+	if allowSnapshot {
+		registry, err = w.localRegistryPaths(got)
+		if err != nil {
+			return err
+		}
+	}
 	for path, want := range before {
 		actual, ok := got[path]
 		if !ok {
 			return fmt.Errorf("removed existing entry %s", path)
 		}
-		if allowSnapshot && want.Mode.IsDir() && (path == root || strings.HasPrefix(root, path+string(filepath.Separator))) {
+		if allowSnapshot && want.Mode.IsDir() && (path == root || strings.HasPrefix(root, path+string(filepath.Separator)) || registry[path]) {
 			actual.Modified = want.Modified
 			actual.Links = want.Links
 		}
@@ -114,7 +121,7 @@ func (w *world) runSameTree(allowSnapshot bool) error {
 	}
 	allowed := map[string]bool{root: true, filepath.Dir(w.runSnapshotPath()): true, w.runSnapshotPath(): true}
 	for path := range got {
-		if _, ok := before[path]; !ok && (!allowSnapshot || (!allowed[path] && !w.localIntentPath(path))) {
+		if _, ok := before[path]; !ok && (!allowSnapshot || (!allowed[path] && !w.localIntentPath(path) && !registry[path])) {
 			return fmt.Errorf("unexpected new entry %s", path)
 		}
 	}

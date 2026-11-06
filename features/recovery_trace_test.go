@@ -169,7 +169,12 @@ func main() {
         signal := int(status.StopSignal())
         if signal == int(unix.SIGTRAP)|0x80 {
             var regs unix.PtraceRegs
-            if unix.PtraceGetRegs(tid, &regs) != nil { fail() }
+            if err := unix.PtraceGetRegs(tid, &regs); err != nil {
+                // exit_group in a sibling can retire this thread between its
+                // syscall stop and register read. Wait still reaps its exit.
+                if errors.Is(err, unix.ESRCH) { continue }
+                fail()
+            }
             // Linux reports -ENOSYS on syscall entry. A new clone's first
             // observed stop may be syscall exit, so a simple toggle is unsafe.
             entry := int64(regs.Rax) == -int64(unix.ENOSYS)
