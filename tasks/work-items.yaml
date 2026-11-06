@@ -551,3 +551,18 @@ items:
       command may have failed; cmd/itos-container/public_recovery_review_test.go:183 expects 0. Keep
       cleanup completion and workload success apart: unknown exit is nonzero, WorkloadExit stays
       null.
+  - id: p3-registration-before-intent
+    title: A crash between registration and intent publication leaves no stuck session
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Recovery debris, this milestone. A read-only security audit of main at 7236d68 (Codex,
+      2026-11-06), static, no Docker run; confirm with a scenario before building. Registration is
+      durable before Store.New publishes its intent (registered_run.go:39;
+      session/disk/registry.go:144), so controller loss or an intent-write failure in that gap
+      leaves a session status and stop both refuse, which no supported command clears; no worker
+      exists, so it is debris, not an escape. Publish both consistently, or add a durable
+      create-not-issued state recovery can retire; a name-only 404 must not become proof of absence.
