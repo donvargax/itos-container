@@ -75,3 +75,15 @@ questions:
     item: "slice-12"
     question: "slice-12: engine red evidence for ID-LIFECYCLE-13's four rows at b4a8478, after the harness repair?"
     answer: "Yes. Run 42304766391: all four rows fail at their Then steps (quiet and open-stdin rows: cancellation not reported separately; unread stdout: exit 75, expected 17; unread stderr: teardown misses the 30 s bound at the 32 s guard). With q-17, every slice-12 scenario has red or regression evidence: implement the product. See slice-12-steer.md."
+  - id: q-19
+    item: "slice-17"
+    question: "slice-17: which anchor keeps Docker's checkout mount bound to the validated inode, with what privilege and lifetime?"
+    answer: "No new privilege and no new helper. An owned Docker volume (local driver, type none, o=bind) whose device is the controller's O_PATH descriptor for the validated checkout, /proc/<pid>/fd/<n>, held open until ContainerStart returns: dockerd does the bind and the kernel resolves the descriptor to the original inode; the container's mount then retains it for the worker's life. The volume is the durable anchor record, published before create, released last. Verify the mounted /workspace device and inode against the validated identity before releasing the workload. Prove it with a red-then-green native scenario first; if Moby resolves the source by name or rejects the path, stop with that evidence. See slice-17-steer.md."
+  - id: q-20
+    item: "slice-16"
+    question: "slice-16: CI red evidence for ID-OVERLAP-06 and 07 at d790e7a?"
+    answer: "Yes. Run 42307612900: OVERLAP-06's ancestor and descendant rows fail at their Then (the nested contender was created, no run.checkout-overlap) and OVERLAP-07 fails at its Then (both concurrent nested runs created a worker). With the 19 local examples red at their assertions, implement the admission."
+  - id: q-21
+    item: "slice-19"
+    question: "slice-19: CI red evidence for ID-SOCKETS-01 to 03 at dbf75d4?"
+    answer: "No. Run 42308513561: all three fail at their Then steps, but because the product exits 75 (run.execution-unavailable) before the probe reaches its barrier; no socket operation was tried. Make the probe reach its barrier (capture the controller's and engine's reason for the failure), then return blocked for another red run; if the product already refuses checkouts holding sockets, report that with evidence instead. See slice-19-steer.md."
