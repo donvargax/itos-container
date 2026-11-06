@@ -1,0 +1,455 @@
+@phase-1
+Feature: Bounded offline lifecycle, cancellation and loss
+  Controller transitions finish within fixed budgets without limiting workload life.
+  Cancellation preserves observed exits and accounts for operations already accepted.
+  Lost observations retain ownership and uncertainty; controller death grants no access.
+
+  # Authorities: docs/charter.md, docs/plans/offline-run-lifecycle.md's AC-22/23
+  # cases, docs/architecture.md (Slices), and arc42's Foreground run, Recovery
+  # and Bounded operations. This is slice-12's spec, not runtime evidence.
+  # Read against main 9efa67c and slice-10 fe02965. The latter already bounds
+  # several SDK calls and Runner launch/cleanup, but preflight precedes that
+  # launch budget, drain precedes cleanup's budget, and no signal forwarding
+  # exists. Generic execution-unavailable is not the specific outcome below.
+  # Slice-10 retains OFFLINE-02/03/06/07/13; q-7 moves launch/cleanup to slice-13
+  # and isolation/teardown proof to slice-14. Do not reclaim those scenarios.
+  # Slice-11 owns public status/stop, session IDs, recovery records, locks and
+  # actionable retries. Also read the in-progress slice-11 recovery.feature draft
+  # on its branch; the integration cases require that interface before activation.
+  # They do not select a second record schema, ID grammar or ownership algorithm.
+  # Use project-scoped status (no argument) and stop <session>. Until those
+  # commands are built, run retains its protected intent reference and does not
+  # advertise an executable retry. After integration use its actual public ID.
+  # No init/hooks, persistent worker volumes, credentials, egress, watchdog,
+  # restart, detached mode, exec, new platform or support claim is introduced.
+
+  # Implementation placement: extend internal/slices/run/{command,domain,port}
+  # and internal/engine/session/{domain,port,<named adapters>}. Shared budgets,
+  # cancellation outcomes and reconciliation belong in that engine; status/stop
+  # consume engine APIs, never another slice. Only cmd assembles signal, clock,
+  # stream, filesystem and SDK adapters. Fakes in port/porttest do no I/O; run
+  # the same contracts against fakes and adapters. Domain decisions take OS as
+  # a value; retain the exact allowlist and existing architecture enforcement.
+  # Reuse Go 1.27.3 context/time and os/signal in adapters, the pinned Moby client
+  # v0.6.2 / API v1.56.1 for inspect/wait/kill/remove and stream framing, and
+  # golang.org/x/sys v0.48.0 where a native call is needed. No new dependency,
+  # shell engine CLI, handwritten protocol, test flag or network service.
+
+  # Settled limits, measured using monotonic elapsed time:
+  # - Each finite external operation gets min(10 s, remaining phase budget),
+  #   including connection/header establishment, engine/state inspection, safe
+  #   file reads/publication, locks, create/start, signal delivery and removal.
+  #   DNS/dial/SDK negotiation/reconnects share the same operation budget.
+  # - Startup has 120 s from valid invocation BEFORE preflight through frozen
+  #   publication, intent, create, verification, attach and start acknowledgement.
+  #   Successful progress, retries and reconnects never reset that deadline.
+  # - Teardown has a SEPARATE 30 s from the first observed exit, cancellation,
+  #   startup timeout or fatal controller/transport failure, whichever occurs first.
+  #   It includes reconciliation, signal grace/escalation, stream drain, locks,
+  #   removal, absence confirmation and durable completion, not 30 s per stage.
+  #   It must still run when the startup/caller context has expired or cancelled.
+  # - Slice-11 gives status one fresh 10 s total and stop one fresh 30 s total,
+  #   including lock acquisition and all inspections/mutations; calls cap at
+  #   min(10 s, remaining total). Neither resumes an expired timer nor restarts
+  #   work. Automatic reconciliation uses the original attempt's remaining budget.
+  # - Acknowledged foreground wait/stream subscriptions are not finite startup
+  #   calls. Quiet work and idle stdin can run indefinitely after launch. Bound
+  #   establishment and subsequent finite requests; do not impose a heartbeat,
+  #   output-idle timeout, 10 s poll exit or 120 s workload lifetime.
+  # Expiring a context is not proof an accepted mutation or filesystem syscall
+  # was undone. End the controller wait, forbid later launch phases, and retain
+  # uncertain publication/create/start/removal evidence. No blind create/start
+  # retry, no deletion by name, no unfenced not-found becoming confirmed absence.
+  # Late results cannot re-enter ready/running or silently replace a returned
+  # failure. Only fresh identity-checked reconciliation can advance recovery.
+
+  # Linux signal/result choices within those settled limits:
+  # The first SIGINT or SIGTERM observed by run starts cancellation. Before launch
+  # send no worker signal and never enter another startup phase. If start was
+  # accepted but its reply is missing, reconcile it; missing reply is not proof
+  # no process ran. When a live owned primary exists, send the SAME signal once
+  # through the engine to that worker's primary process, never a host PID/group.
+  # Revalidate daemon/record/full resource ID before every signal or removal.
+  # Give the primary until 10 s after cancellation was first observed, INCLUDING
+  # signal-delivery time. Do not use image StopSignal or Docker's default grace.
+  # If a fresh inspection still shows the owned primary running at that deadline,
+  # attempt SIGKILL once; then observe exit and remove it. Unavailable or conflicting
+  # identity/state never permits a speculative kill: retain incomplete recovery.
+  # Delivery acknowledgement is not termination; a lost acknowledgement never
+  # permits repeating the original signal. No forced removal before grace ends
+  # while the primary is known live; confirmed primary exit permits immediate
+  # owned removal of descendants. Remaining teardown time bounds all work.
+  # Later SIGINT/SIGTERM, even a different signal or one during cleanup, neither
+  # forward again, shorten/restart grace, reset teardown, abandon recovery nor
+  # replace an earlier cause. Cancellation after observed exit only continues
+  # cleanup. SIGKILL of the controller cannot execute a cleanup handler.
+  # If teardown already began for a timeout or transport failure, a later signal
+  # cannot replace that primary failure with 130/143 or create another teardown.
+  # A3 is settled: a surviving worker stays isolated until explicit stop; no
+  # controller-liveness lease or automatic worker kill/restart is authorized.
+
+  # Public run result choices (typed outcomes in domain/ports, codes in command):
+  # run.cancelled reports the first signal; with no observed workload exit use
+  # 130 for SIGINT and 143 for SIGTERM. Say not-started only when known; otherwise
+  # say unknown. These are wrapper cancellation outcomes, not invented child exits.
+  # Preserve every observed nonzero primary exit, including 130/137/143 and codes
+  # which resemble wrapper failures. An observed zero plus complete cleanup wins
+  # over cancellation and returns zero; report cancellation separately. Zero plus
+  # failed cleanup returns the classified cleanup failure, as OFFLINE-15 specifies.
+  # An engine-observed SIGKILL status may be 137; never manufacture it from a kill
+  # request. A cancellation with unknown exit keeps 130/143 even if cleanup fails,
+  # with that cleanup failure separately classified and recovery retained.
+  # run.call-timeout, run.startup-timeout and run.teardown-timeout are temporary
+  # wrapper failures (75). Give the safe phase/operation, not raw error payloads.
+  # A phase deadline takes precedence when it expires with the call deadline.
+  # run.engine-lost (75) covers injected transport loss, with unknown workload
+  # outcome unless an authoritative exit was actually observed. A successful
+  # removal or later not-found cannot reconstruct a missing workload exit.
+  # Preserve an observed nonzero exit over timeout/loss and cleanup failures;
+  # observed zero cannot hide a stream/controller failure. Keep causes separate.
+  # Recovery status/stop retain their slice-11 result structure, with an explicit
+  # recovery.temporary (75) on budget exhaustion, never success or fabricated absence.
+  # Diagnostics and recovery exclude raw argv/environment/output/response bodies;
+  # deliberate workload streaming is separate. Retain the original snapshot,
+  # approval, checkout edits and unrelated resources in every case.
+
+  # Stream choices: idle stdin and blocked output while healthy work runs do not
+  # create a workload timer. They must not block cancellation or engine-loss
+  # observation. At teardown, drain for at most min(10 s, remaining teardown),
+  # concurrently with owned stopping/cleanup, preserving available final bytes.
+  # A blocked sink or missing EOF then yields run.stream-timeout (75), not silent
+  # truncation/success. An observed nonzero workload exit still wins. Close only
+  # owned stream handles; no unbounded wait for a goroutine stuck on caller I/O.
+  # Controller diagnostic writes cannot hold teardown indefinitely either. If
+  # stderr is blocked, preserve safe failure information in protected recovery
+  # state when storage is available; do not promise delivery to an unread pipe.
+
+  # Fixture/step handoff: ALL phrases below are new; no step definitions in this
+  # spec commit. Reuse mechanisms from session_* and slice-10's offline_local_*,
+  # offline_runtime_* and cmd contract assemblies, not their assertions as Givens.
+  # Givens prepare disposable checkouts/state, independent canonical approval
+  # seeds, original frozen/ownership bindings, trusted probes, clocks and faults.
+  # They never invoke approve, run, status or stop or construct expected records
+  # by calling the production code being tested. Checkpoint fixture changes.
+  # Whens perform all product actions, retain early exits/timeouts as data and
+  # race each barrier against subprocess exit. A missing barrier fails Then, not
+  # setup. Require successful same-path healthy controls, not absence alone.
+  # Test-only process guards end broken runs and make the named Then fail; a
+  # harness timeout/kill is never product cancellation or successful cleanup.
+  # Record observations before identity-checked bounded harness-only cleanup.
+  # Keep synthetic sensitive markers in inputs and test they stay out of records.
+  # No real state folder, engine acquisition, helper execution from a consumer
+  # checkout, production injection switch or actual credential enters a fixture.
+  # Trusted Go probes may be compiled into the disposable checkout, then execute
+  # ONLY inside the CI worker with T-20's independently inspected cached image.
+
+  # Local @linux cases exercise production command/domain/engine contracts via
+  # test-only cmd assemblies with I/O-free fakes and disk/SDK Unix HTTP fixtures.
+  # Controlled monotonic time drives production deadline decisions; do not sleep
+  # for 120 s in a hook, shorten product defaults, or make a fake return the desired
+  # outcome. In adapter tests use controlled barriers and inspect propagated
+  # deadlines plus cancellation of the actual request. No wall-clock value comes
+  # from checkout data. Include just-before/at-boundary tests beneath these cases.
+  # Shared fake/adapter contracts must observe the same deadlines and sequencing;
+  # fakes model time/events, never do I/O. Capture all API attempts, including
+  # reconnects, failed/refused requests and late completions. Export product
+  # coverage through existing test-assembly GOCOVERDIR support.
+  # Runtime @engine cases require the guarded Linux amd64 native-Docker CI tier
+  # in features/README.md. Actual signals go to the product controller only in
+  # When; native engine observations and probe receipts establish worker effects.
+  # Product-facing disconnects never shut down the shared daemon or independent
+  # observer. Add only identity-checked kill/wait fault forwarding to the recorder.
+  # Runtime timing allows at most 2 s scheduling tolerance per measured bound,
+  # never early escalation; no resetting deadlines or widening product defaults.
+  # Fixed-seed domain contracts cover exact boundaries; CI proves real delivery.
+  # Network denial after controller loss uses slice-14's SAME clients and controlled
+  # IPv4/IPv6 TCP/UDP/gateway/private/synthetic-metadata and DNS/DoH endpoints.
+  # Trusted positive controls before/after each worker attempt must succeed;
+  # missing probes, unavailable controls or empty reports fail, never skip.
+  # Host sentinels must exist and worker-local file/socket controls must work.
+
+  # Red first belongs to the implementer: commit complete steps with @wip retained,
+  # obtain assertion-level local red or coordinator-only CI red_scenarios evidence,
+  # then implement. The first Then of each case is its intended failure point.
+  # Existing partial deadlines/ownership are controls, not claimed new red proof.
+  # Recheck against the merged dependency heads: if a case already passes for the
+  # right reason, report it for an explicit regression decision, never force red.
+
+  # Individual waits: existing generic SDK errors do not identify the timed-out
+  # phase; preflight/state waits currently lack the complete shared deadline.
+  @wip @slice-12 @ID-LIFECYCLE-01 @linux
+  Scenario Outline: A stalled finite operation consumes at most its call budget
+    Given a lifecycle contract fixture with a stalled "<operation>" and a healthy control
+    When the real run contract reaches the operation and controlled time crosses its 10 second deadline through each local backend
+    Then each run reports "run.call-timeout" with exit 75 and the named operation by its call deadline
+    And no subsequent startup phase begins and any accepted mutation remains accountable to the original intent
+    And each run has at most 30 separate seconds for owned cleanup without losing the primary timeout
+    And the healthy control launches and cleans exactly one owned worker with unchanged unrelated state
+
+    Examples:
+      | operation                       |
+      | preflight engine inspection     |
+      | preflight approval state read   |
+      | frozen snapshot publication     |
+      | intent lock acquisition         |
+      | intent publication              |
+      | create response                 |
+      | boundary inspection             |
+      | attach establishment            |
+      | start acknowledgement           |
+
+  # Each successful operation takes less than 10 s. Place 115 s BEFORE Runner
+  # launch, then leave attach/start pending across t=120. This catches the old
+  # budget starting only after preflight. Repeat with progress/reconnect events;
+  # an implementation need not invent retries simply to satisfy a test.
+  @wip @slice-12 @ID-LIFECYCLE-02 @linux
+  Scenario: Startup has one deadline beginning before preflight
+    Given a lifecycle contract fixture with 115 seconds of successful preflight and publication progress and delayed launch observations
+    When run proceeds through the full invocation and controlled time reaches 120 seconds through each local backend
+    Then each run reports "run.startup-timeout" with exit 75 at the original startup deadline
+    And progress reconnects and any retries never extend startup or begin a phase after the deadline
+    And the pending operation receives only the remaining startup time and cleanup receives its own 30 second budget
+    And delayed replies cannot launch work or replace the reported timeout
+
+  # Acknowledgement loss after accepted start is different from confirmed failure
+  # to start. Independent inspection/wait supplies 17 or remains unavailable.
+  @wip @slice-12 @ID-LIFECYCLE-03 @linux
+  Scenario Outline: A timed-out start is reconciled without inventing a child result
+    Given a lifecycle contract fixture with accepted start and a withheld reply followed by "<observation>"
+    When the start call expires and run reconciles and cleans through each local backend
+    Then each run reports the start call timeout separately and returns <result> with workload outcome "<outcome>"
+    And exactly one create and one start were attempted and no late reply restarts or duplicates work
+    And cleanup uses fresh ownership and full ID inspection and retains recovery when absence is unconfirmed
+
+    Examples:
+      | observation                     | result | outcome |
+      | authoritative primary exit 17   | 17     | 17      |
+      | no authoritative exit available | 75     | unknown |
+
+  # At t=0 observe primary exit. Hold drain 9 s, then make successive healthy
+  # cleanup operations consume the remaining total; keep the last observation
+  # pending at t=30. Current drain-then-new-cleanup-budget can last 40 s.
+  @wip @slice-12 @ID-LIFECYCLE-04 @linux
+  Scenario Outline: Drain and cleanup share one teardown deadline
+    Given a lifecycle contract fixture with observed exit <child> and slow drain reconciliation removal and completion
+    When run begins teardown and controlled time reaches 30 seconds through each local backend
+    Then each run reports "run.teardown-timeout" by the original teardown deadline and returns <result>
+    And the workload exit remains <child> with incomplete cleanup and retained recovery evidence
+    And no drain progress retry reconnect or repeated cancellation restarts the teardown clock
+    And no successful removal reply is reported as confirmed durable absence
+
+    Examples:
+      | child | result |
+      | 0     | 75     |
+      | 17    | 17     |
+
+  # These integration cases adopt slice-11's protected records/public references;
+  # no broad listing/prune or new session schema is specified here. Setup seeds
+  # an owned candidate, not a prior successful product run or stop.
+  @wip @slice-12 @ID-LIFECYCLE-05 @linux
+  Scenario Outline: Each explicit recovery invocation has a fresh finite budget
+    Given a lifecycle recovery fixture with a protected owned session and stalled "<operation>" observations
+    When "<command>" exhausts its recovery budget and a fresh invocation follows after the fault clears through each local backend
+    Then the first recovery invocation reports recovery.temporary with exit 75 within <budget> seconds with every finite call bounded to the remaining budget or 10 seconds
+    And the first result retains the session identity and uncertainty without claiming stopped resources or a workload exit
+    And the fresh invocation gets a new <budget> second budget and completes only its requested inspection or owned cleanup
+    And neither invocation creates starts or adopts a worker or changes another session
+
+    Examples:
+      | command | operation                       | budget |
+      | status  | engine inspection               | 10     |
+      | status  | aggregate record reconciliation | 10     |
+      | stop    | session lock acquisition        | 30     |
+      | stop    | signal delivery                 | 30     |
+      | stop    | removal                         | 30     |
+      | stop    | absence confirmation            | 30     |
+      | stop    | aggregate cleanup retries       | 30     |
+
+  # Deterministic cancellation before launch, including a phase whose operation
+  # has returned just as cancellation becomes observable. No lifecycle hooks exist.
+  @wip @slice-12 @ID-LIFECYCLE-06 @linux
+  Scenario Outline: Cancellation prevents the next startup phase
+    Given a lifecycle contract fixture with a cancellation barrier "<barrier>"
+    When the run contract receives "<signal>" at that barrier and the pending operation returns through each local backend
+    Then each run reports "run.cancelled" with exit <result> and a known not-started workload
+    And no operation belonging to a later startup phase or worker signal is attempted
+    And any accepted unstarted worker is reconciled and cleaned within the separate teardown budget
+
+    Examples:
+      | barrier                      | signal  | result |
+      | before preflight             | SIGINT  | 130    |
+      | before preflight             | SIGTERM | 143    |
+      | before create                | SIGINT  | 130    |
+      | before create                | SIGTERM | 143    |
+      | after ownership publication  | SIGINT  | 130    |
+      | after ownership publication  | SIGTERM | 143    |
+      | after boundary verification  | SIGINT  | 130    |
+      | after boundary verification  | SIGTERM | 143    |
+      | after attach before start    | SIGINT  | 130    |
+      | after attach before start    | SIGTERM | 143    |
+
+  # Delay accepted create until after cancellation's first cleanup ends. Name
+  # not-found cannot fence that request; preserve slice-9's uncertain-create rule.
+  @wip @slice-12 @ID-LIFECYCLE-07 @linux
+  Scenario Outline: Cancellation cannot forget an accepted create or start
+    Given a lifecycle contract fixture with an accepted "<operation>" whose response and observations are withheld
+    When run receives SIGTERM in flight and returns before the operation becomes observable and a fresh controller later reconciles it
+    Then the first run returns 143 with "run.cancelled" and workload outcome "<outcome>" while retaining the original protected intent
+    And the first cleanup neither records unfenced absence nor retries create or start
+    And the later controller reconciles the original full identity and cleans without launching or restarting work
+    And no accepted resource or checkout edit is lost from the independent audit
+
+    Examples:
+      | operation | outcome     |
+      | create    | not-started |
+      | start     | unknown     |
+
+  # Prove actual delivery and precedence, including zero. Handlers install before
+  # their ready frame, write a signal receipt to checkout, then exit as requested.
+  @wip @slice-12 @ID-LIFECYCLE-08 @engine
+  Scenario Outline: The primary receives the first signal and its observed exit wins
+    Given a CI lifecycle checkout with a ready signal-handling probe that exits <child>
+    When run launches the probe and the harness sends "<signal>" to the controller after the ready frame
+    Then the worker records exactly one "<signal>" and the product returns the observed exit <child> after confirmed cleanup
+    And the engine journal has exactly one original signal request targeting only the freshly revalidated owned primary with no early SIGKILL or host process signal
+    And the final worker frame and checkout edit survive while the exact worker and temporary storage are absent
+
+    Examples:
+      | signal  | child |
+      | SIGINT  | 0     |
+      | SIGINT  | 17    |
+      | SIGTERM | 0     |
+      | SIGTERM | 17    |
+
+  # An ignoring probe records signals but keeps running. Send repetitions at
+  # elapsed 2 s and 8 s, including the other signal; no repeated input extends grace.
+  @wip @slice-12 @ID-LIFECYCLE-09 @engine
+  Scenario Outline: Ignored and repeated cancellation escalates once after the fixed grace
+    Given a CI lifecycle checkout with a ready signal-recording probe that keeps running
+    When run launches the probe and the harness sends "<signal>" followed by repeated SIGINT and SIGTERM during grace
+    Then the worker records only the first "<signal>" and native observations show it alive before the 10 second grace expires
+    And the journal records exactly one original signal request and one SIGKILL request at the original grace deadline and the product returns the engine-observed exit 137
+    And owned removal and durable absence complete within the original 30 second teardown budget
+    And no unrelated process resource approval snapshot or checkout edit is changed
+
+    Examples:
+      | signal  |
+      | SIGINT  |
+      | SIGTERM |
+
+  # The first signal's acknowledgement stays unavailable for 10 s. Grace starts
+  # at cancellation, not acknowledgement; the cancellation result is NOT 137
+  # when both wait and exit inspection remain unavailable. Same signal delivery
+  # must not be repeated even if the first request may have reached the primary.
+  # Fresh full-identity inspection can still establish running before escalation;
+  # after escalation it cannot establish a primary exit. Safe mutation authority
+  # is available, but authoritative exit and final absence observations are not.
+  @wip @slice-12 @ID-LIFECYCLE-10 @linux
+  Scenario Outline: Lost signal acknowledgement never becomes an observed workload exit
+    Given a lifecycle contract fixture with a live owned worker and lost signal acknowledgement and exit observations
+    When run receives "<signal>" and controlled time crosses grace and teardown deadlines through each local backend
+    Then each run preserves "run.cancelled" with exit <result> and an explicitly unknown workload outcome
+    And the first signal is attempted once and escalation is attempted at the original 10 second deadline without a second grace period
+    And each mutation revalidates the original daemon record and full ID and uncertain cleanup retains recovery
+    And successful signal or removal acknowledgements never synthesize exit zero or 137
+
+    Examples:
+      | signal  | result |
+      | SIGINT  | 130    |
+      | SIGTERM | 143    |
+
+  # Signals after observed primary exit cannot erase 17 or abort recovery. Keep
+  # removal unavailable until after the original teardown expires, then retry.
+  @wip @slice-12 @ID-LIFECYCLE-11 @engine
+  Scenario: Repeated signals during cleanup preserve the workload result and recovery
+    Given a CI lifecycle checkout with an exit-17 probe and an unavailable removal barrier
+    When run observes the probe exit and the harness sends SIGINT then SIGTERM during cleanup before restoring removal for an explicit stop
+    Then run returns 17 within the original teardown budget with a separate incomplete cleanup result and usable recovery identity
+    And neither signal is forwarded to an already exited primary or causes duplicate unsafe removal or loss of the protected record
+    And the later stop removes only the original full ID and confirms durable absence without restarting the worker
+    And the checkout edit approvals snapshots and unrelated resources remain intact
+
+  # Block a finite transport request after the healthy control, not the native
+  # daemon. The probe stays alive and edits checkout; all authoritative workload
+  # exit observations remain unavailable to the controller during this attempt.
+  @wip @slice-12 @ID-LIFECYCLE-12 @engine
+  Scenario: Engine transport loss reports an unknown workload outcome and retains recovery
+    Given a CI lifecycle checkout with a live marker probe and a product-only engine disconnect barrier
+    When run launches the probe and loses its wait and inspection transport before any exit observation and a later status and stop follow restoration
+    Then run returns 75 with "run.engine-lost" and an explicitly unknown workload outcome within bounded teardown
+    And the first result retains ownership and incomplete cleanup rather than a success exit or false absent claim
+    And native observations show the surviving worker unchanged and isolated during disconnection
+    And the later status and stop revalidate the original resource and confirm owned cleanup without rewriting unknown history as workload success
+    And checkout edits approvals snapshots and unrelated resources remain intact
+
+  # Signal responsiveness must survive actual pipe backpressure. For the quiet
+  # row wait 125 s after ready with no output/input; for blocked rows fill only
+  # the named pipe after ready. The handler writes its signal receipt to checkout
+  # and exits 17 without waiting on a blocked writer. Include a same-path quiet
+  # control; one 125 s control may be shared by this outline's runtime cases.
+  # The harness observes controller termination independently before unblocking
+  # drains. Do not make a test-owned reader unblock the product before its bound.
+  @wip @slice-12 @ID-LIFECYCLE-13 @engine
+  Scenario Outline: Quiet work and blocked streams do not prevent cancellation
+    Given a CI lifecycle checkout with a ready signal-handling probe and stream condition "<condition>"
+    When run remains live under that condition and the harness sends SIGTERM while leaving the condition in place
+    Then the probe records SIGTERM and the product completes owned teardown within 30 seconds of cancellation without waiting for the blocked stream
+    And the quiet control remains running past both the call and startup durations until cancellation
+    And any incomplete output drain is reported as a stream timeout without changing observed exit 17 or claiming complete delivery
+    And blocked diagnostic output cannot prevent termination and safe failure state survives when storage is available
+
+    Examples:
+      | condition                  |
+      | quiet workload and stdin   |
+      | unread workload stdout     |
+      | unread workload stderr     |
+      | stdin writer remains open  |
+
+  # Local exact-boundary counterpart to blocked real pipes. The output stream
+  # never closes, although the engine has already observed the primary's exit.
+  @wip @slice-12 @ID-LIFECYCLE-14 @linux
+  Scenario Outline: A stalled final drain is a failure distinct from workload exit
+    Given a lifecycle contract fixture with observed exit <child> and a final output drain that never completes
+    When run cleans the worker and controlled time crosses the 10 second drain deadline through each local backend
+    Then each run reports "run.stream-timeout" and returns <result> without waiting beyond the shared teardown deadline
+    And the authoritative workload exit remains <child> and confirmed owned cleanup remains complete
+    And available trailing bytes are preserved without storing workload output in diagnostics or recovery
+
+    Examples:
+      | child | result |
+      | 0     | 75     |
+      | 17    | 17     |
+
+  # Independent native observations are essential: flag inspection alone cannot
+  # prove A3. Use a continuous probe with externally released rounds so a fresh
+  # report after SIGKILL cannot be a buffered pre-kill result. No watchdog claim.
+  @wip @slice-12 @ID-LIFECYCLE-15 @engine
+  Scenario: Uncatchable controller loss leaves a live isolated candidate for explicit stop
+    Given a CI lifecycle checkout with continuous boundary probes and working external route and host-access controls
+    When run launches the probe and the harness kills only the controller with SIGKILL then requests a fresh probe round before status and stop
+    Then status identifies the lost-controller session as a stop candidate with unknown workload outcome and its exact retry removes only that owned worker
+    And the same worker reports a fresh post-loss round under the unchanged offline filesystem identity and network boundary while remaining alive until stop
+    And all external route and resolver controls succeed while every worker attempt is denied with no matching listener receipt
+    And host sentinels sockets approval and recovery state remain inaccessible while worker-local controls and checkout writes succeed
+    And stop revalidates the full ID and confirms durable absence without changing the original unknown workload history solely because removal succeeded
+    And no automatic restart replacement worker new permission or synthetic workload success is reported and checkout edits survive
+
+  # Crash windows use actual controller SIGKILL, not a returned fake error. The
+  # observer retains IDs only for assertions/always-cleanup, never passes them as
+  # authority to the new controller. Before absence publication, engine removal
+  # may already have succeeded; recovery must inspect, not infer, that fact.
+  @wip @slice-12 @ID-LIFECYCLE-16 @engine
+  Scenario Outline: Controller death during an in-flight transition retains recoverable ownership
+    Given a CI lifecycle checkout with a trusted controller-kill barrier "<barrier>"
+    When run reaches the barrier and the harness kills only its controller then invokes fresh status and stop after releasing the observation fault
+    Then fresh status reports controller absent with the original recovery identity and pending or unknown cleanup without inventing workload success or completed cleanup
+    And fresh stop reconciles only the original intent daemon snapshot and concrete resource identity and confirms durable absence
+    And no replacement create start name-only removal or unrelated resource mutation is attempted
+    And pre-start interruptions execute no worker instruction and any already running worker retains its offline boundary until removal
+
+    Examples:
+      | barrier                                      |
+      | after accepted create before reply           |
+      | after accepted start before reply            |
+      | during removal before its reply              |
+      | after removal before durable absence update  |
