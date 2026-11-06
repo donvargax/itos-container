@@ -59,3 +59,6 @@ questions:
     item: "slice-14"
     question: "slice-14: ID-OFFLINE-12 now passes with a working positive control; accept it?"
     answer: "Yes. Run 42203397615 at d76bf2f: the positive control reaches a resolver where allowed, and the worker finds none. Accept as regression coverage under q-6, turn it live with its comment, and finish the slice."
+  - id: q-15
+    item: "slice-11"
+    question: "slice-11: the engine job passes under setsid; is that the fix?"
