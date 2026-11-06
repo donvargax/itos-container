@@ -527,16 +527,9 @@ items:
     title: Control state never lies inside any worker's checkout
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. The containment check
-      (internal/engine/approval/disk/store.go:99) excludes state under the current checkout only, so
-      a later run for checkout B with XDG_STATE_HOME inside worker A's checkout lets A read and
-      rewrite B's approvals, snapshots and recovery records (same UID; the fingerprints are hashes,
-      not authentication). Separate every control-state location from every worker mount, both ways.
   - id: p2-unknown-workload-exit-nonzero
     title: run never returns 0 when the workload's exit is unknown
     phase: 1
@@ -618,3 +611,47 @@ items:
       independent sessions with black-box scenarios, using CI for native-engine evidence. Share
       recovery logic through engine packages without imports between command slices. Broken down
       from null.
+  - id: slice-21
+    title: Doctor and approve reject state exposed to another worker
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-16]
+    kind: slice
+    why: >
+      Was p1-protect-control-state-publication.
+      Extend slice-16's shared admission mechanism with protected control-state location tracking
+      across XDG_STATE_HOME values. Approve must atomically establish separation before publishing
+      records; doctor must inspect without writes. Specify concurrent publication versus worker
+      admission, unsafe-location refusals and safe independent projects. Keep shared contracts,
+      fakes and disk adapters in engine packages. Broken down from
+      p2-control-state-outside-every-mount.
+  - id: slice-22
+    title: Run refuses checkouts exposing any project's control state
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-21]
+    kind: slice
+    why: >
+      Was p1-run-excludes-all-control-state.
+      Consume the shared location tracking during run admission, atomically refusing mounts
+      containing another project's approvals, snapshots, recovery records or coordination state.
+      Cover different state roots, both operation orders and concurrent launches. Preserve
+      protection for persistent records after workers exit. Require black-box red/green evidence,
+      with actual mount-isolation evidence only in CI. Broken down from
+      p2-control-state-outside-every-mount.
+  - id: slice-23
+    title: Status and stop refuse worker-exposed recovery records
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-21]
+    kind: slice
+    why: >
+      Was p1-recovery-rejects-exposed-control-state.
+      Apply the shared separation contract before trusting session indexes, snapshots or intents
+      during recovery. Cover controller loss, changed state selection and unverifiable separation
+      without authorizing removal from exposed records. Preserve read-only status, ownership-checked
+      stop and persistent state protection. Keep each command in its own slice and reusable recovery
+      logic in engine packages. Broken down from p2-control-state-outside-every-mount.
