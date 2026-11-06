@@ -59,3 +59,7 @@ questions:
     item: "slice-14"
     question: "slice-14: ID-OFFLINE-12 now passes with a working positive control; accept it?"
     answer: "Yes. Run 42203397615 at d76bf2f: the positive control reaches a resolver where allowed, and the worker finds none. Accept as regression coverage under q-6, turn it live with its comment, and finish the slice."
+  - id: q-15
+    item: "slice-11"
+    question: "slice-11: the engine job passes under setsid; is that the fix?"
+    answer: "No. Run 42218236157 shows a signal reached the step's original process group or session, which setsid only escapes. Find the sender with strace on a run without setsid, fix it in the harness or the product, then drop setsid unless the runner itself is the cause. Cover the new proof gaps too. See slice-11-steer.md."
