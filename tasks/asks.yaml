@@ -74,3 +74,4 @@ questions:
   - id: q-18
     item: "slice-12"
     question: "slice-12: engine red evidence for ID-LIFECYCLE-13's four rows at b4a8478, after the harness repair?"
+    answer: "Yes. Run 42304766391: all four rows fail at their Then steps (quiet and open-stdin rows: cancellation not reported separately; unread stdout: exit 75, expected 17; unread stderr: teardown misses the 30 s bound at the 32 s guard). With q-17, every slice-12 scenario has red or regression evidence: implement the product. See slice-12-steer.md."
