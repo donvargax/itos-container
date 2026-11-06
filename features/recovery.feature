@@ -152,6 +152,13 @@ Feature: Inspect and stop owned offline sessions
   # Before starting or mutating, run rechecks that stop has not completed or begun;
   # cleanup is terminal, never followed by a late start/recreate. Persist stopping
   # before destructive operations. Preserve original ownership evidence on errors.
+  # If stop wins after durable intent publication but before create, durably record
+  # that cleanup began even though no destructive operation is possible. A missing
+  # name and empty concrete ID require recovery.temporary, failed state, unknown
+  # resource/cleanup and an exact retry; they cannot establish successful cleanup.
+  # Retain the intent and registration. Resumed run returns run.cleanup-temporary
+  # with exit 75 and unknown workload exit, without a late create/start or overwrite
+  # of cleanup progress. No absent-ID evidence or completed tombstone is invented.
   #
   # Stop validates the original snapshot, actual user/checkout, pinned local socket
   # and daemon, then freshly inspects the full resource ID. Revalidate immediately
@@ -484,20 +491,36 @@ Feature: Inspect and stop owned offline sessions
     And the waiting stop reloads durable completion without a second signal remove or completion rewrite
     And a concurrent status returns a consistent session or recovery.temporary within its budget without writing state
 
+  # The run barrier is outside the operation lock, after durable publication but
+  # before any create request. Keep run paused until stop acquires that lock and
+  # returns; allowing create to finish first would test a different ordering.
+  # The fixture configures a missing exact-name observation, not an absent full ID.
+  @wip @slice-11 @ID-RECOVERY-25 @linux
+  Scenario: Stop before create retains uncertain cleanup and prevents a late launch
+    Given a recovery run fixture with a barrier after durable registration and intent publication before any create request
+    And the recovery engine fixture is configured with a missing intent name and no concrete resource ID
+    When run reaches the barrier, an independent JSON stop finishes before run is released and fresh JSON status follows run's exit
+    Then stop and the later status report recovery.temporary with exit 75 state failed resource unknown cleanup unknown workload exit null and the exact retry argv
+    And stop durably records that cleanup began before releasing the session operation lock
+    And resumed run returns run.cleanup-temporary with exit 75 and unknown workload exit without overwriting cleanup progress
+    And no create start stop kill or remove request occurs and the original intent retains its empty concrete ID without an absent update
+    And the registration and original snapshot remain discoverable without a stopped or complete claim
+
+  # These boundaries already have a concrete owned ID. Park run outside the
+  # operation lock and let stop finish first, then test run's stale continuation.
   @wip @slice-11 @ID-RECOVERY-17 @linux
   Scenario Outline: Run and stop cannot race cleanup into a late launch or stale update
     Given a recovery run fixture with a transition barrier at "<boundary>"
-    When run and an independent stop overlap at that barrier and are released in the fixture's order
-    Then stop finishes with confirmed durable cleanup and no run transition starts or recreates the session afterward
+    When run pauses outside the session operation lock at that barrier and an independent stop completes before run resumes
+    Then stop returns zero with confirmed full-ID absence and durable cleanup and no run transition starts or recreates the session afterward
     And run preserves any observed workload exit without overwriting completion or inventing success
     And every engine mutation uses the same session lock and freshly validated ownership
 
     Examples:
-      | boundary                                      |
-      | registration and intent durable before create |
-      | created before start                          |
-      | foreground wait                               |
-      | observed exit before cleanup                  |
+      | boundary                     |
+      | created before start         |
+      | foreground wait              |
+      | observed exit before cleanup |
 
   # A long-held A operation lock must not block B through a project-wide lock.
   @wip @slice-11 @ID-RECOVERY-18 @linux
@@ -530,11 +553,14 @@ Feature: Inspect and stop owned offline sessions
 
   # Deliberate output is a positive control, captured separately from diagnostics.
   # The approved snapshot may contain its literal environment; metadata may not.
+  # Status observes pending cleanup before the fault is cleared. Stop then
+  # completes cleanup, so only the earlier status carries an executable retry.
   @wip @slice-11 @ID-RECOVERY-20 @linux
   Scenario: Recovery reports useful facts without copying sensitive input or output
     Given a recovery run fixture with distinct synthetic argv environment stream and engine-body markers and a cleanup fault
-    When run streams its probe output, status inspects the retained session and stop is retried after clearing the fault
-    Then status and stop report the real session ID original fingerprint cleanup progress and exact retry without any synthetic marker
+    When run streams its probe output, JSON status inspects the retained session and JSON stop is retried after clearing the fault
+    Then status reports the real session ID original fingerprint cleanup pending and exact retry argv without any synthetic marker
+    And stop returns zero with that session ID original fingerprint cleanup complete and retry null without any synthetic marker
     And controller diagnostics public recovery records intents and lock files contain no raw argv environment response bodies or copied stream bytes
     And the foreground stream still contains its deliberate output marker and the original approved snapshot is preserved
 
