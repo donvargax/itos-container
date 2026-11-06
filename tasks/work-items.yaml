@@ -646,3 +646,16 @@ items:
       protection for persistent records after workers exit. Require black-box red/green evidence,
       with actual mount-isolation evidence only in CI. Broken down from
       p2-control-state-outside-every-mount.
+  - id: p1-recovery-rejects-exposed-control-state
+    title: Status and stop refuse worker-exposed recovery records
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-protect-control-state-publication]
+    kind: idea
+    why: >
+      Apply the shared separation contract before trusting session indexes, snapshots or intents
+      during recovery. Cover controller loss, changed state selection and unverifiable separation
+      without authorizing removal from exposed records. Preserve read-only status, ownership-checked
+      stop and persistent state protection. Keep each command in its own slice and reusable recovery
+      logic in engine packages. Broken down from p2-control-state-outside-every-mount.
