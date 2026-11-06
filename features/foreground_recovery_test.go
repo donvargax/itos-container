@@ -23,6 +23,8 @@ type foregroundRecovery struct {
 	fault         string
 	block         bool
 	trailing      bool
+	lateStdin     bool
+	waits         int
 	exitCode      int
 	started, exit chan struct{}
 	finish        sync.Once
@@ -41,6 +43,11 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 		w.foregroundRecoveryFixture("unread stdin")
 		w.doctor.engine.offline.recovery.exitCode = exit
 	})
+	sc.Step(`^a foreground recovery fixture with exit (\d+) and unread stdin after the startup deadline$`, func(exit int) {
+		w.foregroundRecoveryFixture("unread stdin")
+		f := w.doctor.engine.offline.recovery
+		f.exitCode, f.lateStdin, f.trailing = exit, true, true
+	})
 	sc.Step(`^the foreground recovery command runs$`, w.foregroundRecoveryRun)
 	sc.Step(`^the foreground recovery command preserves both trailing streams and the interrupted exit$`, func() error {
 		f := w.doctor.engine.offline.recovery
@@ -56,6 +63,14 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the foreground recovery command preserves the worker exit despite unread stdin$`, func() error {
 		if w.exit != w.doctor.engine.offline.recovery.exitCode || w.stdout != "" || w.stderr != "" {
 			return fmt.Errorf("unread stdin replaced the worker exit with a stream failure: %s", w.report())
+		}
+		return nil
+	})
+	sc.Step(`^the foreground recovery command preserves the late worker exit and trailing streams$`, func() error {
+		f := w.doctor.engine.offline.recovery
+		if w.exit != f.exitCode || w.stdout != recoveryTailOut || w.stderr != recoveryTailErr ||
+			f.elapsed < 120*time.Second || f.elapsed >= 135*time.Second {
+			return fmt.Errorf("startup deadline lost the late worker exit or trailing streams: elapsed=%v %s", f.elapsed, w.report())
 		}
 		return nil
 	})
@@ -123,8 +138,10 @@ func (a *localOfflineAPI) recoveryStart(out http.ResponseWriter, resource map[st
 		// The worker rejects further input but finishes output cleanly. Closing
 		// with unread socket data instead would also reset stdout/stderr, which
 		// is a separate transport failure, not this stdin-only regression.
-		_ = conn.(*net.UnixConn).CloseRead()
-		_ = conn.(*net.UnixConn).CloseWrite()
+		if !f.lateStdin {
+			_ = conn.(*net.UnixConn).CloseRead()
+			_ = conn.(*net.UnixConn).CloseWrite()
+		}
 	case "replaced git", "missing git":
 		git := filepath.Join(a.w.doctor.checkout, ".git")
 		a.problem = os.Rename(git, git+".before-run")
@@ -133,7 +150,7 @@ func (a *localOfflineAPI) recoveryStart(out http.ResponseWriter, resource map[st
 		}
 		_ = conn.Close()
 	}
-	if !f.block {
+	if !f.block && !f.lateStdin {
 		resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
 	}
 	close(f.started)
@@ -146,6 +163,9 @@ func (w *world) foregroundRecoveryRun() error {
 	budget := 5 * time.Second
 	if strings.Contains(f.fault, "SIG") {
 		budget = 25 * time.Second
+	}
+	if f.lateStdin {
+		budget = 140 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()

@@ -118,6 +118,29 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		_ = a.attached[id].Close()
 		out.WriteHeader(204)
 	case len(parts) == 2 && parts[1] == "wait" && r.Method == "POST" && a.started[id]:
+		if f := a.recovery; f != nil && f.lateStdin {
+			f.waits++
+			if f.waits == 1 {
+				// Acknowledge the wait before its ten-second handshake deadline,
+				// but keep the worker running past the 120-second startup budget.
+				out.WriteHeader(200)
+				out.(http.Flusher).Flush()
+				a.mu.Unlock()
+				select {
+				case <-time.After(121 * time.Second):
+				case <-r.Context().Done():
+				}
+				a.mu.Lock()
+				resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
+				_ = a.attached[id].(*net.UnixConn).CloseRead()
+				// Only the second wait returns exit; the pending first wait must
+				// be canceled by stdin closure. Keep stdout/stderr open to drain.
+				a.mu.Unlock()
+				<-r.Context().Done()
+				a.mu.Lock()
+				return true
+			}
+		}
 		if a.recovery != nil && a.recovery.block {
 			out.WriteHeader(200)
 			out.(http.Flusher).Flush()
@@ -152,7 +175,11 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 				binary.BigEndian.PutUint32(frame[4:], uint32(len(data)))
 				_, _ = conn.Write(append(frame, []byte(data)...))
 			}
-			_ = conn.Close()
+			if a.recovery.lateStdin {
+				_ = conn.(*net.UnixConn).CloseWrite()
+			} else {
+				_ = conn.Close()
+			}
 			a.mu.Lock()
 		}
 	case len(parts) == 2 && parts[1] == "kill" && r.Method == "POST" && a.recovery != nil:

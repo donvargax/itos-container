@@ -10,6 +10,8 @@ Feature: Foreground failures retain owned cleanup authority
   Observed exit drains trailing output within the uncanceled teardown budget,
   including after interruption. A worker may exit without consuming all stdin;
   a closed engine input connection must not hide its observed exit or output.
+  This also holds after the 120-second startup deadline; exit reconciliation
+  has a fresh 10-second budget bound to the original protected session and daemon.
   Host input read failures and output forwarding failures still fail execution.
   Launch still requires fresh checkout identity. Removal requires protected
   session/snapshot, current host user, original daemon and full resource identity,
@@ -80,6 +82,22 @@ Feature: Foreground failures retain owned cleanup authority
     And a foreground recovery fixture with exit <exit> and unread redirected stdin
     When the foreground recovery command runs
     Then the foreground recovery command preserves the worker exit despite unread stdin
+    And the foreground recovery command has confirmed owned cleanup
+
+    Examples:
+      | exit |
+      | 0    |
+      | 23   |
+
+  # Hold an acknowledged workload wait beyond the real startup budget. Closing
+  # stdin precedes its response; trailing output follows the reconciled wait.
+  @wip @slice-10 @ID-OFFLINE-22
+  Scenario Outline: Unread stdin after the startup deadline preserves exit and output
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "1"
+    And a foreground recovery fixture with exit <exit> and unread stdin after the startup deadline
+    When the foreground recovery command runs
+    Then the foreground recovery command preserves the late worker exit and trailing streams
     And the foreground recovery command has confirmed owned cleanup
 
     Examples:
