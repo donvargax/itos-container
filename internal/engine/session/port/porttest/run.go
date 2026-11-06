@@ -17,6 +17,7 @@ type RunEngine struct {
 	Events                                                           []string
 	Output, ErrorOutput                                              []byte
 	After                                                            func(string)
+	AfterStart                                                       func()
 	WaitUntilCancel, IgnoreSignal                                    bool
 	SignalFailure                                                    port.Outcome
 	StdinClosed, DrainUntilCancel                                    bool
@@ -113,6 +114,9 @@ func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 	o.Started = true
 	o.PID = 123
 	c.engine.Resources[id] = o
+	if c.run.AfterStart != nil {
+		c.run.AfterStart()
+	}
 	return ""
 }
 func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome) {

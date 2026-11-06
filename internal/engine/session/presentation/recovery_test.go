@@ -3,12 +3,46 @@ package presentation_test
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	"github.com/donvargax/itos-container/internal/engine/session/presentation"
 )
+
+func TestRecoveryPresentationOrdersEveryProblemAndSession(t *testing.T) {
+	a, b := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	wantProblems := []port.RecoveryFailure{{Session: a, Outcome: port.Incomplete}, {Session: a, Outcome: port.Unsafe}, {Session: b, Outcome: port.Invalid}}
+	wantRules := []string{"recovery.temporary", "recovery.unsafe-state", "recovery.invalid-state"}
+	// Both input orders exercise ordering independently of the upstream domain.
+	// Duplicate facts must survive rendering rather than becoming deduplicated.
+	for _, reverse := range []bool{false, true} {
+		problems := slices.Clone(wantProblems)
+		sessions := []port.RecoveryEntry{{ID: a}, {ID: a}, {ID: b}}
+		if reverse {
+			slices.Reverse(problems)
+			slices.Reverse(sessions)
+		}
+		var out, errout bytes.Buffer
+		code := (presentation.UI{Out: &out, Err: &errout}).Print(port.RecoveryResult{Failures: problems, Entries: sessions}, true)
+		var got struct {
+			Problems []presentation.Problem
+			Sessions []port.RecoveryEntry
+		}
+		if err := json.Unmarshal(out.Bytes(), &got); err != nil || code != 75 || len(got.Problems) != 3 || len(got.Sessions) != 3 {
+			t.Fatal("lost recovery facts", out.String(), code, err)
+		}
+		for n, p := range got.Problems {
+			if p.Session != wantProblems[n].Session || p.Rule != wantRules[n] {
+				t.Fatal("problems are not ordered by session then rule", got.Problems)
+			}
+		}
+		if got.Sessions[0].ID != a || got.Sessions[1].ID != a || got.Sessions[2].ID != b {
+			t.Fatal("sessions are not ordered or a duplicate was lost", got.Sessions)
+		}
+	}
+}
 
 func TestRecoveryPresentationClassifiesAndSortsWithoutRawErrors(t *testing.T) {
 	for _, example := range []struct {

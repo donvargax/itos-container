@@ -19,7 +19,23 @@ type Registry struct {
 	Writes, Syncs                           int
 	AfterRegister                           func()
 	AfterClose                              func(string)
+	AfterOpen                               func(string)
+	BeforeSave                              func(port.PublicRecord)
 	WaitForLock                             bool
+	LockReleased                            <-chan struct{}
+}
+
+type boundRegistry struct {
+	*Registry
+	frozen approval.Durable
+}
+
+func (s *Registry) ForRun(d approval.Durable) port.Registry { return boundRegistry{s, d} }
+func (s boundRegistry) Open(ctx context.Context, id string, readOnly bool) (port.Session, port.Outcome) {
+	if s.frozen.Frozen.Project != s.Project {
+		return nil, port.Refused
+	}
+	return s.Registry.Open(ctx, id, readOnly)
 }
 
 func copyPublic(r port.PublicRecord) port.PublicRecord {
@@ -114,7 +130,11 @@ func (s *Registry) Open(ctx context.Context, id string, readOnly bool) (port.Ses
 	}
 	if s.Locks[id] || (!readOnly && s.Readers[id] > 0) {
 		if s.WaitForLock {
-			<-ctx.Done()
+			select {
+			case <-ctx.Done():
+			case <-s.LockReleased:
+				return s.Open(ctx, id, readOnly)
+			}
 		}
 		return nil, port.Incomplete
 	}
@@ -137,7 +157,11 @@ func (s *Registry) Open(ctx context.Context, id string, readOnly bool) (port.Ses
 	} else {
 		s.Locks[id] = true
 	}
-	return &memorySession{registry: s, record: copyPublic(r), intent: i, readOnly: readOnly}, ""
+	entry := &memorySession{registry: s, record: copyPublic(r), intent: i, readOnly: readOnly}
+	if s.AfterOpen != nil {
+		s.AfterOpen(id)
+	}
+	return entry, ""
 }
 
 type memorySession struct {
@@ -165,6 +189,9 @@ func (s *memorySession) Validate() port.Outcome {
 	return s.intent.Validate()
 }
 func (s *memorySession) Save(r port.PublicRecord) port.Outcome {
+	if s.registry.BeforeSave != nil {
+		s.registry.BeforeSave(copyPublic(r))
+	}
 	if s.readOnly {
 		return port.Refused
 	}
