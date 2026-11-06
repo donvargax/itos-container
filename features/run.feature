@@ -531,6 +531,7 @@ Feature: Run invocation refusals
   @slice-8 @ID-RUN-13 @local-engine-fixture @linux
   Scenario Outline: Approved preflight publishes exact settings with host identity
     Given an approval checkout and isolated host state
+    And a local owned foreground Engine API fixture
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And the run manifest users are "<users>"
     And the inspected image Config.User is "<image-user>"
@@ -542,12 +543,11 @@ Feature: Run invocation refusals
     When itos-container runs with "run -- fixture-workload '' 'two words' --json"
     Then the protected run snapshot is exactly the independently calculated approval at generation "1"
     And the snapshot resolves both manifest users to the effective UID and binds the effective GID
-    And run reports that approval matched before refusing unimplemented offline startup with exit 3
-    And its error output says "doctor --policy-only"
+    And run completes the inspected owned foreground worker with exit zero
     And its standard output is empty
     And it never prompts or records approval
-    And only the protected run snapshot subtree was added without chown or checkout changes
-    And the Engine API journal contains only ping, version, info and the requested image inspection
+    And only protected snapshot and owned intent records were added without chown or checkout changes
+    And the local foreground journal contains only inspections and owned worker operations
     And no inspection helper sentinel was executed
     And no executable marker was created
 
@@ -571,6 +571,7 @@ Feature: Run invocation refusals
   @slice-8 @ID-RUN-14 @local-engine-fixture @linux
   Scenario Outline: A later run revalidates even when a frozen snapshot exists
     Given an approval checkout and isolated host state
+    And a local owned foreground Engine API fixture
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And a seeded matching approval at generation "1"
     And the run preflight files are snapshotted
@@ -579,7 +580,7 @@ Feature: Run invocation refusals
     And the second run reports "<rule>" with exit <exit> and journal "<journal>"
     And the first snapshot and active approval were not rewritten by either run
     And the second run published no snapshot and made no startup handoff
-    And neither run attempted engine mutation, image acquisition or helper execution
+    And the first run completed owned execution and the second made no startup effects
     And no inspection helper sentinel was executed
     And no executable marker was created
 
@@ -679,17 +680,18 @@ Feature: Run invocation refusals
   @slice-8 @ID-RUN-19 @local-engine-fixture @linux
   Scenario Outline: Repeated and concurrent preflights reuse one complete immutable snapshot
     Given an approval checkout and isolated host state
+    And a local owned foreground Engine API fixture
     And executable marker fixtures for Git hooks, fsmonitor, credential helpers, builds and PATH tools
     And a seeded matching approval at generation "1"
     And the run preflight files are snapshotted
     When two runs for the same approval execute "<schedule>" and a third run follows
     Then all three runs observe the same exact protected snapshot for generation "1"
-    And all three reach only the unimplemented-startup refusal with exit 3 and empty stdout
-    And each run's Engine API journal contains ping, version, info and only the requested image inspection
+    And all three complete owned foreground execution with exit zero and empty stdout
+    And each run's Engine API journal contains fresh inspection and only its owned worker operations
     And the final snapshot is never partial and its inode and mtime remain unchanged after publication
     And the active approval bytes and generation are unchanged
-    And only the protected run snapshot subtree was added without chown or checkout changes
-    And no engine mutation or image acquisition was attempted
+    And only protected snapshot and owned intent records were added without chown or checkout changes
+    And the local foreground journal contains only inspections and owned worker operations
     And no inspection helper sentinel was executed
     And no executable marker was created
 
@@ -698,58 +700,44 @@ Feature: Run invocation refusals
       | sequentially |
       | concurrently |
 
-  # The registry and arc42 explicitly require valid argv to refuse until later
-  # increments. Interface choice: classify unavailable offline startup as a
-  # missing requirement (exit 3), explain that it is not implemented, and point
-  # to policy-only doctor as inspection, never as permission or a run fallback.
-  # Slice-4 supersedes the original pre-prerequisite refusal. Valid argv now
-  # checks a valid approved temporary checkout, preserving the same argument
-  # boundary checks and the refusal to launch an unimplemented worker.
+  # Slice-10 supersedes the temporary startup refusal. The local API fixture
+  # observes literal Cmd, owned launch and cleanup without executing host tools.
   @ID-RUN-06 @slice-7 @local-engine-fixture
-  Scenario: A valid command refuses while offline startup is not implemented
+  Scenario: A valid command reaches owned foreground execution
     Given an approval checkout and isolated host state
+    And a local owned foreground Engine API fixture
     And a seeded matching approval at generation "1"
     And the policy inspection files are snapshotted
     And the run preflight files are snapshotted
     When itos-container runs with "run -- git status"
-    Then its error output says "offline startup is not implemented"
-    And its error output says "doctor --policy-only"
-    And its error output says "itos-container:"
-    And it exits with code 3
+    Then run completes the inspected owned foreground worker with exit zero
     And its standard output is empty
-    And no engine mutation or image acquisition was attempted
+    And the local foreground journal contains only inspections and owned worker operations
     And the protected run snapshot is exactly the independently calculated approval at generation "1"
-    And only the protected run snapshot subtree was added without chown or checkout changes
-    And the engine recorder has no connections
+    And only protected snapshot and owned intent records were added without chown or checkout changes
     And no inspection helper sentinel was executed
-    And the policy inspection files differ only by the protected run snapshot
+    And the engine recorder has no connections
+    And the policy inspection files differ only by protected snapshot and owned intent records
 
-  # Acceptance of workload flags must reach the same interim refusal, not help,
-  # JSON, flag validation or empty-command handling. ITOS_JSON is cleared by the
-  # clean harness environment. This proves option ownership only; actual argv
-  # preservation (including empty arguments) and worker execution belong to the
-  # later CI real-engine run slice, not to this refusal-only increment.
-  # The first word after the first separator is the executable, even when it is
-  # --json, --help or --. It is nonempty syntax; do not resolve it on the host.
-  # Later separators remain workload arguments and never restart wrapper parsing.
+  # Workload flags reach the exact container Cmd, never wrapper parsing. These
+  # HTTP fixtures prove argument delivery; the engine tier proves execution.
+  # Executable-looking --json/--help/-- need no host executable of that name.
   @ID-RUN-07 @slice-7 @local-engine-fixture
   Scenario Outline: Arguments after the separator belong only to the workload
     Given an approval checkout and isolated host state
+    And a local owned foreground Engine API fixture
     And a seeded matching approval at generation "1"
     And the policy inspection files are snapshotted
     And the run preflight files are snapshotted
     When itos-container runs with "<arguments>"
-    Then its error output says "offline startup is not implemented"
-    And its error output says "doctor --policy-only"
-    And its error output says "itos-container:"
-    And it exits with code 3
+    Then run completes the inspected owned foreground worker with exit zero
     And its standard output is empty
-    And no engine mutation or image acquisition was attempted
+    And the local foreground journal contains only inspections and owned worker operations
     And the protected run snapshot is exactly the independently calculated approval at generation "1"
-    And only the protected run snapshot subtree was added without chown or checkout changes
-    And the engine recorder has no connections
+    And only protected snapshot and owned intent records were added without chown or checkout changes
     And no inspection helper sentinel was executed
-    And the policy inspection files differ only by the protected run snapshot
+    And the engine recorder has no connections
+    And the policy inspection files differ only by protected snapshot and owned intent records
 
     Examples:
       | arguments                     |

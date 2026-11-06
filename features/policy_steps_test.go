@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -299,14 +300,16 @@ func (w *world) policyFiles() (map[string]string, error) {
 	return files, nil
 }
 
-// Build a harmless executable for the test host, including Windows. A copied
-// helper records its name; it never delegates to a host command or engine.
-func (w *world) installPolicySentinels() error {
-	bin := filepath.Join(w.policy.host, "bin")
-	if err := os.Mkdir(bin, 0o700); err != nil {
-		return err
+// Compile the invariant helper once per test process, including on Windows.
+// Every scenario still receives independent files and recorder state. Reusing
+// only the bytes avoids repeated compiler startup during listed coverage.
+var policySentinel = sync.OnceValues(func() ([]byte, error) {
+	dir, err := os.MkdirTemp("", "slice-10-policy-sentinel-")
+	if err != nil {
+		return nil, err
 	}
-	source := filepath.Join(bin, "sentinel.go")
+	defer func() { _ = os.RemoveAll(dir) }()
+	source := filepath.Join(dir, "sentinel.go")
 	code := `package main
 import ("os"; "path/filepath")
 func main() {
@@ -315,14 +318,23 @@ func main() {
 }
 `
 	if err := os.WriteFile(source, []byte(code), 0o600); err != nil {
+		return nil, err
+	}
+	target := filepath.Join(dir, "helper.exe")
+	build := exec.Command("go", "build", "-trimpath", "-buildvcs=false", "-o", target, source)
+	if output, err := build.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("building inspection sentinel: %w: %s", err, output)
+	}
+	return os.ReadFile(target)
+})
+
+// A copied helper records its name; it never delegates to a host command or engine.
+func (w *world) installPolicySentinels() error {
+	bin := filepath.Join(w.policy.host, "bin")
+	if err := os.Mkdir(bin, 0o700); err != nil {
 		return err
 	}
-	target := filepath.Join(bin, "helper.exe")
-	build := exec.Command("go", "build", "-o", target, source)
-	if output, err := build.CombinedOutput(); err != nil {
-		return fmt.Errorf("building inspection sentinel: %w: %s", err, output)
-	}
-	data, err := os.ReadFile(target)
+	data, err := policySentinel()
 	if err != nil {
 		return err
 	}
