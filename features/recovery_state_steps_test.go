@@ -13,6 +13,7 @@ import (
 )
 
 func (w *world) recoveryStateSteps(sc *godog.ScenarioContext) {
+	w.recoveryCheckoutSteps(sc)
 	sc.Step(`^a recovery fixture with a safe checkout and no host state directory$`, func() error {
 		if err := w.approvalCheckout(); err != nil {
 			return err

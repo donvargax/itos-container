@@ -669,6 +669,22 @@ Feature: Inspect and stop owned offline sessions
     When the recovery command fixture exercises its configured interruption
     Then run finishes without a wait failure and status retains stopped cleanup with unknown workload exit and no repeated mutation
 
+  # Fresh recovery must survive worker edits to the writable Git directory.
+  # The original protected binding remains authoritative after controller loss.
+  @slice-11 @ID-RECOVERY-33 @linux @wip
+  Scenario Outline: Fresh recovery survives a changed writable Git identity
+    Given a recovery fixture with recorded phase "running" resource "running" and observed workload exit "unknown"
+    When the worker Git directory is "<change>" and fresh status and stop run
+    Then status finds the original running session without a controller and stop completes its owned cleanup
+    And only the originally owned worker is removed while checkout edits approvals snapshots and unrelated resources remain
+
+    Examples:
+      | change    |
+      | replaced  |
+      | missing   |
+      | symlinked |
+      | a file    |
+
   # Native evidence supplements local fault mapping; DELETE failure happens only
   # after a real observed primary exit and is cleared solely for the public retry.
   @slice-11 @ID-RECOVERY-21 @engine
