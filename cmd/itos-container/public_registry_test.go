@@ -34,6 +34,31 @@ func TestPublicRegistryContracts(t *testing.T) {
 	}
 }
 
+func TestPublicRegistryLaunchContracts(t *testing.T) {
+	for _, backend := range []string{"memory", "disk"} {
+		t.Run(backend, func(t *testing.T) {
+			sf.RegistryLaunchContract(t, func() (sp.Registry, sp.Store, ap.Durable, func()) {
+				if backend == "memory" {
+					b, store, _ := sf.Fixture()
+					return &sf.Registry{Store: store, Project: b.Frozen.Project}, store, ap.Durable{Frozen: b.Frozen}, func() { store.Root += "-replaced" }
+				}
+				store, d, storage := sessionStoreFixture(t)
+				registry := sessiondisk.Registry{Store: store, Storage: approvaldisk.Registry{Store: storage.Store}, Codec: store.Codec.(sessioncodec.JSON), Identity: canonical.JSON{}}
+				return registry, store, d, func() {
+					git := filepath.Join(store.Input.Root, ".git")
+					if err := os.Rename(git, git+"-original"); err != nil {
+						t.Fatal(err)
+					}
+					// Preserve a valid Git layout; only its identity changes.
+					if err := os.CopyFS(git, os.DirFS(git+"-original")); err != nil {
+						t.Fatal(err)
+					}
+				}
+			})
+		})
+	}
+}
+
 func TestPublicRegistryDiscoveryPreservesReadFailureCause(t *testing.T) {
 	m := publicMemoryFixture(t)
 	id, _ := m.seed("a")

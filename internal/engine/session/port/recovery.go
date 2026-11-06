@@ -45,13 +45,17 @@ type Session interface {
 	Intent() Intent
 	Controller() (string, Outcome)
 	Validate() Outcome
+	// ValidateLaunch also compares the current checkout root and Git identity
+	// with the approved binding. Call before create/start, never for recovery.
+	ValidateLaunch() Outcome
 	Save(PublicRecord) Outcome
 	Sync() Outcome
 	Close()
 }
 
 // RunRegistry retains the already selected original binding for foreground
-// cleanup. Fresh public lookups continue to resolve the current checkout.
+// cleanup. Public lookup and recovery do not open the mutable checkout;
+// Session.ValidateLaunch supplies the separate fresh launch check.
 type RunRegistry interface {
 	ForRun(approval.Durable) Registry
 }

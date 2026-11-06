@@ -173,7 +173,7 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if failure != "" {
 		return c, nil, "", failure
 	}
-	if failure = entry.Validate(); failure != "" {
+	if failure = entry.ValidateLaunch(); failure != "" {
 		return c, a, "", failure
 	}
 	if failure = validateLaunch(ctx, intent, c, s.Workspace); failure != "" {
@@ -200,7 +200,7 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 }
 func createRegistered(ctx context.Context, entry port.Session, c port.RunConnection, workspace port.Workspace, argv []string) (string, port.Outcome) {
 	i := entry.Intent()
-	if failure := entry.Validate(); failure != "" {
+	if failure := entry.ValidateLaunch(); failure != "" {
 		return "", failure
 	}
 	if failure := validateLaunch(ctx, i, c, workspace); failure != "" {

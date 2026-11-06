@@ -187,6 +187,12 @@ func (s *publicSession) Controller() (string, port.Outcome) {
 	return state, ""
 }
 func (s *publicSession) Validate() port.Outcome {
+	return s.validate(false)
+}
+func (s *publicSession) ValidateLaunch() port.Outcome {
+	return s.validate(true)
+}
+func (s *publicSession) validate(fresh bool) port.Outcome {
 	if !s.directory.Unchanged() {
 		return port.Refused
 	}
@@ -197,7 +203,11 @@ func (s *publicSession) Validate() port.Outcome {
 	if !bytes.Equal(data, s.data) {
 		return port.Refused
 	}
-	return s.intent.Validate()
+	// Keep this choice local to the short validation transaction. Subsequent
+	// recovery reads/writes must not inherit a launch-only checkout dependency.
+	i := *s.intent
+	i.fresh = fresh
+	return i.Validate()
 }
 func (s *publicSession) Save(next port.PublicRecord) port.Outcome {
 	if s.readOnly {

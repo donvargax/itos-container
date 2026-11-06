@@ -16,6 +16,14 @@ import (
 	runfake "github.com/donvargax/itos-container/internal/slices/run/port/porttest"
 )
 
+func TestRegisteredLaunchCheckoutValidation(t *testing.T) {
+	for _, change := range []string{"root replacement", "Git replacement"} {
+		for _, boundary := range []string{"open", "attach"} {
+			t.Run(change+"/"+boundary, func(t *testing.T) { publicRegisteredCheckout(t, change, boundary) })
+		}
+	}
+}
+
 func publicRegisteredCheckout(t *testing.T, change, boundary string) {
 	t.Helper()
 	for _, substitute := range []bool{false, true} {

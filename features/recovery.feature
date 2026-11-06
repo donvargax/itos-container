@@ -751,7 +751,7 @@ Feature: Inspect and stop owned offline sessions
   # Exercise the production registered Runner and disk registry over stateful
   # ports, with substitution after intent publication or during attachment.
   # Each case includes an unchanged-identity control exercising slice-10/11.
-  @wip @slice-11 @ID-RECOVERY-37 @linux
+  @slice-11 @ID-RECOVERY-37 @linux
   Scenario Outline: Registered launch rechecks the approved checkout before create and start
     Given a recovery command fixture for "<change> before <boundary>"
     When the recovery command fixture exercises its configured interruption

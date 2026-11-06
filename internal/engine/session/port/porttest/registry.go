@@ -3,6 +3,7 @@ package porttest
 import (
 	"context"
 	"strings"
+	"time"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
@@ -138,7 +139,7 @@ func (s *Registry) Open(ctx context.Context, id string, readOnly bool) (port.Ses
 		}
 		return nil, port.Incomplete
 	}
-	i, f := s.Store.open(ctx, r.Intent, true)
+	i, f := s.Store.open(ctx, r.Intent, false)
 	if f != "" {
 		if f == port.Refused && s.Store.Records[r.Intent] == nil {
 			f = port.Invalid
@@ -187,6 +188,14 @@ func (s *memorySession) Validate() port.Outcome {
 		return port.Refused
 	}
 	return s.intent.Validate()
+}
+func (s *memorySession) ValidateLaunch() port.Outcome {
+	if f := s.Validate(); f != "" {
+		return f
+	}
+	i := *s.intent
+	i.fresh = true
+	return i.Validate()
 }
 func (s *memorySession) Save(r port.PublicRecord) port.Outcome {
 	if s.registry.BeforeSave != nil {
@@ -298,5 +307,60 @@ func RegistryContract(t Reporter, open func() (port.Registry, port.Store, approv
 	}
 	if f = s.Sync(); f != port.Refused {
 		t.Errorf("status repaired durability: %s", f)
+	}
+}
+
+// RegistryLaunchContract separates fresh launch identity from protected cleanup
+// authority on both a held session and a freshly opened recovery handle.
+func RegistryLaunchContract(t Reporter, open func() (port.Registry, port.Store, approval.Durable, func())) {
+	t.Helper()
+	registry, store, frozen, replaceCheckout := open()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	id, token := strings.Repeat("a", 64), strings.Repeat("1", 64)
+	lease, f := registry.Register(ctx, frozen, id, token)
+	if f != "" {
+		t.Errorf("register: %s", f)
+		return
+	}
+	defer lease.Close()
+	i, f := store.New(ctx, frozen, token)
+	if f != "" {
+		t.Errorf("intent: %s", f)
+		return
+	}
+	i.Close()
+	s, f := registry.Open(ctx, id, false)
+	if f != "" {
+		t.Errorf("open: %s", f)
+		return
+	}
+	if f := s.ValidateLaunch(); f != "" {
+		t.Errorf("approved launch refused: %s", f)
+	}
+	replaceCheckout()
+	for attempt := range 2 {
+		if attempt != 0 {
+			s, f = registry.Open(ctx, id, true)
+			if f != "" {
+				t.Errorf("checkout replacement vetoed recovery: %s", f)
+				return
+			}
+		}
+		before := s.Record()
+		if f := s.ValidateLaunch(); f != port.Refused {
+			t.Errorf("substituted checkout authorized launch: %s", f)
+		}
+		if f := s.Validate(); f != "" || s.Record() != before {
+			t.Errorf("launch refusal changed protected recovery authority: %s", f)
+		}
+		// Validation cannot retain a project-wide lock across engine calls.
+		i, f := store.OpenCleanup(ctx, before.Intent)
+		if f != "" {
+			t.Errorf("launch validation retained intent authority: %s", f)
+		} else {
+			i.Close()
+		}
+		s.Close()
 	}
 }
