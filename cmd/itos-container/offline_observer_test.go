@@ -197,7 +197,6 @@ func (c offlineConnection) Wait(ctx context.Context, id string) (int, sp.Outcome
 	c.o.event(offlineEvent{Operation: "wait", ID: id, Failure: string(f), Exit: exit})
 	if f == "" && c.o.request.CleanupCause != "" {
 		c.o.barrier("after exit")
-		c.o.exited = true
 		if c.o.memory != nil {
 			e := c.o.memory
 			switch c.o.request.CleanupCause {
@@ -210,7 +209,15 @@ func (c offlineConnection) Wait(ctx context.Context, id string) (int, sp.Outcome
 			}
 		}
 	}
+	if f == "" {
+		c.o.exited = true
+	}
 	return exit, f
+}
+
+func (c offlineConnection) Remove(ctx context.Context, id string) {
+	c.RunConnection.Remove(ctx, id)
+	c.o.event(offlineEvent{Operation: "remove", ID: id})
 }
 
 func (c offlineConnection) RemoveRun(ctx context.Context, id string) {

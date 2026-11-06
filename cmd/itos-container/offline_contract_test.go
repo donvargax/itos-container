@@ -18,6 +18,7 @@ import (
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
 	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
 	session "github.com/donvargax/itos-container/internal/engine/session/domain"
+	sessionentropy "github.com/donvargax/itos-container/internal/engine/session/entropy"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	fake "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
@@ -36,8 +37,9 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 	t.Helper()
 	var result sessionContractResult
 	var memory *fake.RunEngine
+	var registry *fake.Registry
 	observer := &offlineObserver{t: t, request: request, ops: ops}
-	assemble := func() session.Runner {
+	assemble := func(frozen ap.Durable) session.Runner {
 		service := controllerFor()
 		runner := session.Runner{Store: service.Store, Entropy: service.Entropy, Workspace: &sessiondisk.Workspace{}}
 		if request.Backend == "memory" {
@@ -56,12 +58,27 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 		} else {
 			runner.Engine = service.Engine.(sp.RunEngine)
 		}
+		if request.Registered == "true" {
+			var public sp.Registry
+			if memory != nil {
+				registry = &fake.Registry{Store: memory.Store, Project: frozen.Frozen.Project}
+				public = registry
+			} else {
+				store := service.Store.(sessiondisk.Store)
+				public = sessiondisk.Registry{Store: store, Storage: disk.Registry{Store: store.Storage.(disk.Storage).Store}, Codec: store.Codec.(sp.PublicCodec), Identity: canonical.JSON{}}
+			}
+			runner.Registry = offlineRegistry{Registry: public, o: observer}
+			// Keep the fixture's operation token for independent intent observers;
+			// allocate the public ID from a separate entropy call, as in production.
+			tokenSource := runner.Entropy
+			runner.Entropy = &offlineRunEntropy{public: sessionentropy.Random{}, token: tokenSource}
+		}
 		runner.Store = offlineStore{Store: runner.Store, o: observer}
 		runner.Engine = offlineEngine{RunEngine: runner.Engine, o: observer}
 		return runner
 	}
 	if request.Action == "run-cleanup" {
-		result = sessionContractOutput(assemble().Cleanup(context.Background(), request.Reference))
+		result = sessionContractOutput(assemble(ap.Durable{}).Cleanup(context.Background(), request.Reference))
 	} else {
 		service, _ := approvalServices(os.Stdin, io.Discard, io.Discard)
 		preflight := &sessionContractPreflight{Preflight: approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}}}
@@ -71,8 +88,9 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 			if err := json.NewDecoder(os.Stdin).Decode(&release); err != nil || release != "continue" {
 				t.Fatal("offline checkpoint was not released")
 			}
-			actual := assemble().Run(ctx, frozen, argv, streams)
+			actual := assemble(frozen).Run(ctx, frozen, argv, streams)
 			result.Outcome, result.Cleanup, result.Reference, result.ID = string(actual.Outcome), string(actual.Cleanup), actual.Reference, actual.ID
+			result.SessionID = actual.SessionID
 			if actual.Exited {
 				result.Workload = &actual.Exit
 			}
@@ -96,6 +114,16 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 	result.Trace = observer.events
 	if memory != nil {
 		result.RunEvents = memory.Events
+	}
+	if registry != nil {
+		result.PublicRecords = map[string][]byte{}
+		for id, record := range registry.Records {
+			data, err := json.Marshal(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result.PublicRecords[id] = data
+		}
 	}
 	return result
 }

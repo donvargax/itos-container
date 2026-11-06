@@ -158,8 +158,12 @@ func (w *world) offlineLaunchSteps(sc *godog.ScenarioContext) {
 				return fmt.Errorf("lost or merged workload streams")
 			}
 			diagnostics := strings.TrimPrefix(r.Stderr, "slice-13-workload-err\n")
+			public, err := w.offlinePublicRecord()
+			if err != nil {
+				return err
+			}
 			for _, marker := range []string{"literal;$HOME", "slice-13-private-argv", "slice-13-private-env", "slice-13-private-response", "slice-13-workload-out", "slice-13-workload-err", "slice-13-private-adapter-failure", doctorCanary} {
-				if strings.Contains(diagnostics+w.session.final.Bytes+w.session.transcript+string(approvalJSON(r.PublicRecords)), marker) {
+				if strings.Contains(diagnostics+w.session.final.Bytes+w.session.transcript+string(public), marker) {
 					return fmt.Errorf("ownership or diagnostic copied private fixture input")
 				}
 			}

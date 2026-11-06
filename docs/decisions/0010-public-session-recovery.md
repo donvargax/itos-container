@@ -102,3 +102,24 @@ at `fea67dd` failed RECOVERY-21 at executable retry/cleanup, RECOVERY-22 at fres
 status discovery, and RECOVERY-23 at independently targeted stop processes, after
 fixture smoke passed. Those three scenarios are live for CI; neither native green
 evidence nor changed-code mutation/coverage proof is claimed by this local work.
+
+## Cleanup contract integration after the slice-13 merge
+
+The merged OFFLINE-15 scenario required public recovery, but its two renamed
+steps still had the intent-only phrases and its test assembly omitted the
+registry. The eleven examples passed their cause/exit assertions and then
+failed on undefined steps. Completing the steps made all eleven fail on both
+backends at the missing registered-ID assertion, with no undefined steps.
+That checkpoint is committed in `acb0ec0`.
+
+The cleanup fixture and its fault-free controls now use registered run with
+the registry fake or production disk registry. Observers export actual public records and
+move the unclassified adapter fault to the registry transition boundary.
+The assertions bind the printed retry to the original project and intent,
+check protected registration and empty locks, and preserve all existing exit,
+ownership, unrelated-state and marker exclusions. Only those exact new paths
+are admitted to the earlier preservation check. All eleven examples now pass
+on both backends; no product behavior, expected result or scenario step was
+weakened to accommodate the assembly. Earlier intent-only launch contracts
+continue to exercise that API. The complete non-engine feature suite also
+passes. Native evidence remains the coordinator's CI responsibility.

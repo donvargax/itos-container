@@ -607,13 +607,17 @@ Feature: Hardened offline foreground run
   # none may publish cleanup completion or return zero. For the invalid-record
   # case retain those invalid bytes for diagnosis, never silently replace them.
   # Diagnostics use stderr and distinguish incomplete cleanup from stopped
-  # workload; the existing reference is not a public session ID or restart grant.
-  # No executable stop retry until slice-11 supplies it. Raw argv/environment,
+  # workload. Slice-11 supplies an independent registered session ID and exact
+  # same-project executable stop retry; the intent reference is not a public ID
+  # or restart grant. Raw argv/environment,
   # response bodies and copied output stay out of ownership records/diagnostics;
   # deliberate workload streams and approved frozen snapshots are separate data.
   # Ownership/configuration/temporary rows regress slice-10 result precedence
   # and passed before this item (q-9). Environment/internal rows with child 0/7
   # failed the first Then on both backends: temporary/75 instead of 3 or 70.
+  # Slice-13's complete cause/exit matrix remains regression coverage alongside
+  # slice-11's registered retry assertions. Both backends and their fault-free
+  # controls now traverse the registered runner, with no precomputed results.
   @slice-13 @ID-OFFLINE-15 @linux
   Scenario Outline: Cleanup failure preserves a nonzero workload exit and classifies successful-work failures
     Given an offline run contract fixture with observed workload exit <child> and cleanup cause "<cause>"

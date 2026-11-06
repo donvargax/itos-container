@@ -40,6 +40,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	if s.launch != nil {
 		request["LaunchBarrier"], request["ReplacedPath"] = s.launch.barrier, s.launch.replaced
 		request["CleanupCause"], request["ChildExit"] = s.launch.cause, strconv.Itoa(s.launch.child)
+		request["Registered"] = strconv.FormatBool(s.launch.registered)
 		if err := os.WriteFile(selected+"-barrier", nil, 0600); err != nil {
 			return result, err
 		}

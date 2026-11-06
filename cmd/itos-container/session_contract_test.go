@@ -38,6 +38,7 @@ type sessionContractRequest struct {
 	Output, Checkpoint, Journal, MemoryFile              string
 	Boundary                                             string
 	LaunchBarrier, ReplacedPath, CleanupCause, ChildExit string
+	Registered                                           string
 }
 
 type sessionContractResult struct {
@@ -52,6 +53,8 @@ type sessionContractResult struct {
 	Trace                                             []offlineEvent
 	Stdout, Stderr                                    string
 	CleanupCode                                       int
+	SessionID                                         string
+	PublicRecords                                     map[string][]byte
 }
 
 type sessionContractEvent struct {

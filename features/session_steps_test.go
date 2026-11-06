@@ -2,6 +2,7 @@ package features
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"strings"
 
@@ -65,7 +66,20 @@ func (w *world) sessionSteps(sc *godog.ScenarioContext) {
 
 func (w *world) sessionUnrelated() error {
 	s := w.session
-	if s.before == nil || s.after == nil || !reflect.DeepEqual(s.before, s.after) {
+	after := s.after
+	if s.launch != nil && s.launch.registered {
+		allowed, err := w.offlineRegistryPaths()
+		if err != nil {
+			return err
+		}
+		after = maps.Clone(after)
+		for path := range allowed {
+			if _, existed := s.before[path]; !existed {
+				delete(after, path)
+			}
+		}
+	}
+	if s.before == nil || after == nil || !reflect.DeepEqual(s.before, after) {
 		return fmt.Errorf("session changed protected checkout or control state")
 	}
 	if w.doctor.real != nil && (s.resourcesBefore == nil || s.resourcesAfter == nil || !reflect.DeepEqual(s.resourcesBefore, s.resourcesAfter)) {
