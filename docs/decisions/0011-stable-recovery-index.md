@@ -6,7 +6,7 @@ changing the approval project key. After controller death, status and stop
 looked in a different protected directory before loading the original evidence.
 
 This decision refines arc42's **Recovery** section and supersedes decision 0010's
-project-keyed public registry path and RECOVERY-11's Git-identity veto. Public
+project-keyed public registry path and RECOVERY-11/13's Git-identity vetoes. Public
 registrations now live at `sessions/<lookup>/<id>/record.json`. The lookup is
 lowercase hex SHA-256 of the UTF-8 concatenation of
 `itos-container/session-index/v1`, NUL, canonical decimal host UID, NUL, and the
@@ -32,6 +32,9 @@ restart authority is added.
 
 RECOVERY-33 exercises fresh commands after four Git changes. RECOVERY-11 retains
 foreign-root refusal, including an otherwise-valid registration transplanted
-into that root's index. The existing concurrency, durability, daemon and full-ID
+into that root's index. RECOVERY-13 checks original protected-intent replacement
+at the mutation boundary in place of its former writable-Git veto. This retains
+slice-9's original-intent comparison as regression coverage. The concurrency,
+durability, daemon and full-ID
 cases continue to apply. These local tests use disposable filesystem and HTTP
 fixtures, not native runtime isolation evidence.

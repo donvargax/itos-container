@@ -75,6 +75,15 @@ func (w *world) recoveryRaceSteps(sc *godog.ScenarioContext) {
 		if w.recoveryLocal.substitution == "protected record replacement" && r["intent"] != "intents/"+w.approval.project+"/"+strings.Repeat("c", 64)+".json" {
 			return fmt.Errorf("replacement record overwritten")
 		}
+		if w.recoveryLocal.substitution == "protected intent replacement" {
+			data, err := os.ReadFile(w.sessionRecordPath())
+			if err != nil {
+				return err
+			}
+			if !recoveryJSONEqual(string(data), w.sessionExpectedRecord("owned", strings.Repeat("f", 64))) {
+				return fmt.Errorf("replacement intent overwritten")
+			}
+		}
 		return nil
 	})
 	sc.Step(`^a recovery fixture with fault "([^"]*)" at the first stop's completion boundary$`, func(fault string) error {
@@ -394,12 +403,13 @@ func (w *world) recoverySubstitute() error {
 			return err
 		}
 		return os.Rename(next, w.recoveryRecordPath())
-	case "checkout identity change":
-		path := filepath.Join(w.doctor.checkout, ".git")
-		if err := os.Rename(path, path+".old"); err != nil {
+	case "protected intent replacement":
+		path := w.sessionRecordPath()
+		next := path + ".next"
+		if err := os.WriteFile(next, approvalJSON(w.sessionExpectedRecord("owned", strings.Repeat("f", 64))), 0600); err != nil {
 			return err
 		}
-		return os.Mkdir(path, 0700)
+		return os.Rename(next, path)
 	default:
 		return fmt.Errorf("unknown substitution")
 	}

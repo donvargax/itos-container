@@ -520,6 +520,9 @@ Feature: Inspect and stop owned offline sessions
   # on the changed authority must occur before the specific subsequent mutation.
   # Record replacement supplies a different well-formed binding at the pinned
   # filename, not an ordinary update advancing this session's progress.
+  # The intent replacement row exercises slice-9's protected-intent revalidation.
+  # It replaces the former Git-veto row for PRRT_kwDOVkB0ws60fqg0: writable Git
+  # identity is not authority; RECOVERY-33 requires recovery despite its changes.
   @slice-11 @ID-RECOVERY-13 @linux
   Scenario Outline: Stop revalidates authority at each destructive boundary
     Given a recovery fixture with a barrier before "<mutation>" and substitution "<change>"
@@ -534,7 +537,7 @@ Feature: Inspect and stop owned offline sessions
       | SIGKILL  | resource identity change     |
       | remove   | resource identity change     |
       | remove   | protected record replacement |
-      | remove   | checkout identity change     |
+      | remove   | protected intent replacement |
 
   @slice-11 @ID-RECOVERY-14 @linux
   Scenario: A delayed uncertain create stays discoverable until its concrete identity can be recovered
