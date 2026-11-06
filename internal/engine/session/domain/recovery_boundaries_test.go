@@ -4,11 +4,38 @@ import (
 	"bytes"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
+
+func TestPublicStopAcceptsOnlyValidObservedWorkloadExits(t *testing.T) {
+	for _, exit := range []int{-1, 0, 255, 256} {
+		t.Run(strconv.Itoa(exit), func(t *testing.T) {
+			s, registry, engine, id := publicRecoveryFixture(t)
+			engine.Exit = exit
+			result := s.Stop(t.Context(), id)
+			r := registry.Records[id]
+			if exit == -1 || exit == 256 {
+				requireRecoveryFailure(t, result, id, port.Incomplete)
+				if result.Entries[0].WorkloadExit != nil || r.WorkloadExit != nil || r.State != "failed" || r.LastProblem == nil || *r.LastProblem != port.Incomplete || engine.Removed || len(engine.Resources) != 1 {
+					t.Fatal("invalid wait result became exit knowledge or completed cleanup", result, r)
+				}
+				i, failure := registry.Store.Codec.Decode(registry.Store.Records[r.Intent])
+				if failure != "" || i.Stage != "owned" || i.ContainerID != strings.Repeat("2", 64) {
+					t.Fatal("invalid wait result lost owned recovery evidence", i, failure)
+				}
+			} else if len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" || result.Entries[0].WorkloadExit == nil || *result.Entries[0].WorkloadExit != exit || r.State != "stopped" || r.WorkloadExit == nil || *r.WorkloadExit != exit || len(engine.Resources) != 0 {
+				t.Fatal("valid boundary exit was rejected or lost during cleanup", result, r)
+			}
+			if registry.Locks[id] || !slices.Equal(engine.Events, []string{"open", "SIGTERM", "wait"}) {
+				t.Fatal("exit validation retained the lock or repeated termination", engine.Events)
+			}
+		})
+	}
+}
 
 func TestPublicStopRefusesCompletedRecordWithPresentWorker(t *testing.T) {
 	s, registry, engine, id := publicRecoveryFixture(t)
