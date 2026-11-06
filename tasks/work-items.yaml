@@ -633,14 +633,15 @@ items:
       admission, unsafe-location refusals and safe independent projects. Keep shared contracts,
       fakes and disk adapters in engine packages. Broken down from
       p2-control-state-outside-every-mount.
-  - id: p1-run-excludes-all-control-state
+  - id: slice-22
     title: Run refuses checkouts exposing any project's control state
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-21]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-run-excludes-all-control-state.
       Consume the shared location tracking during run admission, atomically refusing mounts
       containing another project's approvals, snapshots, recovery records or coordination state.
       Cover different state roots, both operation orders and concurrent launches. Preserve
