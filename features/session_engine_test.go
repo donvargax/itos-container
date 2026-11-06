@@ -21,6 +21,7 @@ import (
 type sessionRequest struct {
 	Method, Path, Query string
 	Body                map[string]any
+	Response            map[string]any
 	Record              sessionRecord
 	Events              []sessionEvent
 	Status              int
@@ -36,6 +37,7 @@ type sessionAPI struct {
 	local    map[string]map[string]any
 	absent   map[string]bool
 	problem  error
+	attached net.Conn
 }
 
 func (w *world) startSessionAPI() error {
@@ -72,7 +74,7 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.problem = errors.New("session request body is not an object")
 		}
 	}
-	if (entry.Method == "POST" && entry.Path == "/containers/create") || entry.Method == "DELETE" {
+	if (entry.Method == "POST" && entry.Path == "/containers/create") || entry.Method == "DELETE" || (a.w.session.offline && entry.Method == "POST") {
 		entry.Record, err = sessionReadRecord(a.w.sessionRecordPath())
 		if err != nil {
 			a.problem = err
@@ -85,6 +87,10 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 	// Every request, even a refused start/acquisition, is recorded before dispatch.
 	a.requests = append(a.requests, entry)
 	index := len(a.requests) - 1
+	if a.w.session.offline && strings.HasPrefix(entry.Path, "/containers/") {
+		a.serveOffline(out, request, entry, index)
+		return
+	}
 	if !a.allowed(request, entry) {
 		a.requests[index].Status = http.StatusForbidden
 		http.Error(out, "session fixture refuses request "+doctorCanary, http.StatusForbidden)

@@ -16,9 +16,15 @@ import (
 type sessionResult struct {
 	Outcome, Reference, ID, Cleanup, PreflightFailure string
 	Handoff                                           bool
+	Code                                              int
+	Diagnostic                                        string
+	RunEvents                                         []string
 	Workload                                          *int
 	Events                                            []sessionEvent
 	Memory                                            *sessionMemoryOutput
+	Trace                                             []offlineTrace
+	Stdout, Stderr                                    string
+	CleanupCode                                       int
 }
 
 type sessionEvent struct {
@@ -53,6 +59,10 @@ type sessionWorld struct {
 	firstResources                                          map[string]map[string]any
 	second                                                  *sessionWorld
 	selectedReads                                           []string
+	offline                                                 bool
+	boundary                                                string
+	offlineControl                                          *world
+	launch                                                  *offlineLaunchWorld
 }
 
 func (w *world) sessionFixture(real bool, umask string) error {
@@ -212,16 +222,24 @@ func (w *world) closeSession() error {
 	if w.session == nil || w.session.api == nil {
 		return nil
 	}
+	var controlErr error
+	if control := w.session.offlineControl; control != nil {
+		controlErr = control.closeSession()
+		control.closeDoctor()
+	}
+	if w.session.api.attached != nil {
+		defer func() { _ = w.session.api.attached.Close() }()
+	}
 	// Harness cleanup is separate from product evidence and is bounded. Even a
 	// failed Then must not strand an independently observed fixture resource.
 	err := w.session.api.cleanupObserved()
-	return errors.Join(err, w.session.api.server.Close())
+	return errors.Join(controlErr, err, w.session.api.server.Close())
 }
 
 func (w *world) sessionExpectedRecord(stage, id string) map[string]any {
 	a, d, s := w.approval, w.doctor, w.session
-	return map[string]any{"schema": float64(1), "project": a.project, "generation": "1", "fingerprint": a.fingerprint,
-		"snapshot": "snapshots/" + a.project + "/1.json", "uid": a.uid, "gid": a.gid,
+	return map[string]any{"schema": float64(1), "project": a.project, "generation": w.sessionGeneration(), "fingerprint": a.fingerprint,
+		"snapshot": "snapshots/" + a.project + "/" + w.sessionGeneration() + ".json", "uid": a.uid, "gid": a.gid,
 		"engine_endpoint": d.env["DOCKER_HOST"], "engine_id": d.engineID, "name": "itos-container-" + s.token,
 		"image_reference": d.image, "image_id": d.imageID, "container_id": id, "stage": stage}
 }

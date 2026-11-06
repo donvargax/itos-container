@@ -153,9 +153,20 @@ publishes immutable `snapshots/<project>/<generation>.json` under the same prote
 host-state root as approval. An identical snapshot is reused without rewriting it;
 unsafe or conflicting state refuses, and an uncertain write yields no startup input.
 Every invocation revalidates prerequisites and approval, even if the snapshot exists.
-Successful publication currently reaches an exit-3 refusal because offline startup
-is not implemented; the durable snapshot remains.
-These commands execute no helper or workload and prove no runtime isolation.
+Successful publication now creates one owned unstarted worker from the frozen
+image config ID. Run durably records its inspected full ID, verifies the offline
+boundary, attaches separate stdin/stdout/stderr, then starts the literal argv.
+There is no implicit shell, image acquisition, helper execution or approval prompt.
+An explicit shell executes inside the worker. HOME and TMPDIR use `/tmp` tmpfs;
+the checkout is mounted at `/workspace` with the approved working subdirectory.
+
+Run observes the workload exit, drains output and removes only the revalidated
+owned worker. Zero requires confirmed removal and durable completion. An observed
+nonzero workload exit wins over a separate cleanup error. Failure retains a safe
+protected intent reference; public status/stop recovery remains pending.
+The implementation targets Linux amd64/native Docker. Runtime support and the
+remaining isolation properties require their CI engine scenarios; local fixtures
+are not isolation evidence.
 
 ## Implemented approval
 

@@ -42,6 +42,11 @@ import (
 	readiness "github.com/donvargax/itos-container/internal/engine/readiness/domain"
 	readinessport "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	readinessreference "github.com/donvargax/itos-container/internal/engine/readiness/reference"
+	sessioncodec "github.com/donvargax/itos-container/internal/engine/session/codec"
+	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
+	sessiondocker "github.com/donvargax/itos-container/internal/engine/session/docker"
+	sessiondomain "github.com/donvargax/itos-container/internal/engine/session/domain"
+	sessionentropy "github.com/donvargax/itos-container/internal/engine/session/entropy"
 	approve "github.com/donvargax/itos-container/internal/slices/approve/command"
 	"github.com/donvargax/itos-container/internal/slices/count/command"
 	countdisk "github.com/donvargax/itos-container/internal/slices/count/disk"
@@ -49,6 +54,7 @@ import (
 	doctor "github.com/donvargax/itos-container/internal/slices/doctor/command"
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
+	"github.com/donvargax/itos-container/internal/slices/run/signals"
 	"github.com/donvargax/itos-container/internal/version"
 )
 
@@ -61,7 +67,7 @@ type commandLine struct {
 	Approve    approve.CLI    `cmd:"" help:"Review and remember exact offline settings."`
 	Count      command.CLI    `cmd:"" help:"Count the lines and words of a file, or of standard input."`
 	Doctor     doctor.CLI     `cmd:"" help:"Inspect the strict offline policy and restricted worker manifest."`
-	Run        runcommand.CLI `cmd:"" help:"Validate a run invocation; offline startup is not implemented."`
+	Run        runcommand.CLI `cmd:"" help:"Run a literal command in an approved offline worker."`
 	Version    struct{}       `cmd:"" help:"Print the version and the commit it was built from."`
 	Completion cli.Completion `cmd:"" help:"Print a shell completion script."`
 	Complete   struct{}       `cmd:"" name:"__complete" hidden:""`
@@ -133,6 +139,12 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		service, _ := approvalServices(in, stdout, stderr)
 		c.Run.Approval = approvaldomain.Preflight{Service: service, Local: service.Readiness.(approvalport.StagedReadiness), Canonical: approvalcanonical.JSON{}}
 		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}
+		source := service.Readiness.(inspection.Readiness)
+		c.Run.Runner = signals.Runner{Next: sessiondomain.Runner{
+			Store:   sessiondisk.Store{Storage: approvaldisk.Storage{Store: service.Store.(approvaldisk.Store)}, Codec: sessioncodec.JSON{Approval: approvalcanonical.JSON{}, Parser: jsonc.Parser{}}, Host: approvalhost.Process{}, Checkout: &readinessdisk.Checkout{}, Input: source.Input},
+			Engine:  sessiondocker.Engine{Readiness: docker.Engine{}, Selection: source.Input.Host},
+			Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{},
+		}}
 		ui.Classify = runcommand.Classify
 		c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
 		return c.Run.Run(ui)

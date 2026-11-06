@@ -141,6 +141,24 @@ func TestStoreContractWithProtectedStorageFake(t *testing.T) {
 	})
 }
 
+func TestCleanupStoreContracts(t *testing.T) {
+	t.Run("disk", func(t *testing.T) {
+		sf.CleanupStoreContract(t, func() (sp.Store, ap.Durable, func()) {
+			b, _, _ := sf.Fixture()
+			storage := &af.Storage{Directories: map[string]*af.Directory{"snapshots/" + b.Frozen.Project: {Files: map[string][]byte{"1.json": []byte("snapshot")}}}}
+			checkout := &rf.Checkout{Identity: b.Checkout}
+			store := Store{Storage: storage, Codec: &sf.Codec{Value: b}, Host: &af.Host{UID: b.UID, GID: b.GID}, Checkout: checkout, Input: rp.Input{Root: b.Checkout.Root, OS: "linux", Architecture: "amd64"}}
+			return store, ap.Durable{Frozen: b.Frozen}, func() { checkout.Failure = rp.CheckoutUnavailable }
+		})
+	})
+	t.Run("memory", func(t *testing.T) {
+		sf.CleanupStoreContract(t, func() (sp.Store, ap.Durable, func()) {
+			b, store, _ := sf.Fixture()
+			return store, ap.Durable{Frozen: b.Frozen}, func() { store.Root = "replacement" }
+		})
+	})
+}
+
 func TestIntentRevalidatesEvidenceBeforeSave(t *testing.T) {
 	for _, tc := range []struct {
 		fault string

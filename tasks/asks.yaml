@@ -31,3 +31,19 @@ questions:
     item: "slice-10"
     question: "slice-10: split it as its implementer proposed?"
     answer: "Yes. slice-10 keeps ID-OFFLINE-02, 03, 06, 07 and 13. 01, 04, 05 and 15 move to slice-13 (launch and cleanup contract); 08 to 12, 14 and 16 move to slice-14 (native isolation and teardown proof). Retag the moved scenarios on slice-10's branch, still @wip, in a test commit. T-25, the first release, now waits for slice-14, so no release claims isolation before it is proven."
+  - id: q-8
+    item: "slice-11"
+    question: "slice-11: its branch was specified before the tenth slice merged and lacks its code; may implementation go on?"
+    answer: "Yes. The tenth slice merged at 06:48, and main is now merged into slice-11 (c2df944), so the foreground runner and its fixes are on the branch. Implement."
+  - id: q-9
+    item: "slice-13"
+    question: "slice-13: ID-OFFLINE-01 already passes before the work; accept it as regression coverage?"
+    answer: "Yes, as q-6 decided for the tenth slice: comment which earlier slice it exercises, turn it live, and go on. The same holds for any other scenario of this item that already passes for the right reason; see slice-13-steer.md."
+  - id: q-10
+    item: "slice-11"
+    question: "slice-11: is the engine-tier red evidence for ID-RECOVERY-21 to 23 in, so implementation can go on?"
+    answer: "Yes. Run 42180081092 at fea67dd fails all three at their assertions (no status or stop yet). The fixture smoke passed. Implement."
+  - id: q-11
+    item: "slice-12"
+    question: "slice-12: its spec review found a dependency cycle with slice-11 and a scenario needing slice-14; what order?"
+    answer: "slice-11 owns the shared engine-side termination contract (SIGTERM once, 10 s grace, revalidate, SIGKILL, as its spec describes) and builds it in internal/engine/session; slice-12 reuses it and now depends on slice-11, so all its integration scenarios activate on merged slice-11. ID-LIFECYCLE-15 moves to slice-15 (isolation retained through controller loss), which depends on slice-12 and slice-14. T-25, the first release, waits for slice-14 and slice-15."

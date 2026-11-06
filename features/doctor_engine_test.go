@@ -53,6 +53,7 @@ type doctorAPI struct {
 	forward                  http.RoundTripper // nil for local fixtures; CI-only recorder uses it
 	expectedImage            string
 	runBarrier               func(int)
+	offline                  *localOfflineAPI
 }
 
 func newDoctorAPI(image string) *doctorAPI {
@@ -121,7 +122,11 @@ func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
 	record := doctorRequest{r.Method, r.URL.Path, r.URL.RawQuery, pid}
 	a.mu.Lock()
 	a.journal = append(a.journal, record)
+	offline := a.offline
 	a.mu.Unlock()
+	if offline != nil && offline.serve(out, r) {
+		return
+	}
 	if !doctorAllowedRequest(record, a.expectedImage, true) {
 		http.Error(out, "fixture forbids this request", http.StatusForbidden)
 		return

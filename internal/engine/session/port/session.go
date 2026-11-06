@@ -54,6 +54,7 @@ type Binding struct {
 	Frozen                                                approval.Frozen
 	Checkout                                              readiness.CheckoutIdentity
 	UID, GID, Endpoint, EngineID, ImageReference, ImageID string
+	Workspace, Environment                                string
 }
 
 func (b Binding) Intent(token string) Record {
@@ -89,6 +90,9 @@ type Entropy interface{ Token() (string, Outcome) }
 type Store interface {
 	New(context.Context, approval.Durable, string) (Intent, Outcome)
 	Open(context.Context, string) (Intent, Outcome)
+	// OpenCleanup validates protected evidence and host identity independently
+	// of mutable checkout identity. It grants no new launch authority.
+	OpenCleanup(context.Context, string) (Intent, Outcome)
 }
 type Intent interface {
 	Record() Record

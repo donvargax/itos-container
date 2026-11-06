@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,7 +21,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	}
 	s := w.session
 	var watch *sessionReadWatch
-	if action == "cleanup" && s.change != "" {
+	if (action == "cleanup" || action == "run-cleanup") && s.change != "" {
 		watch, err = w.sessionWatchInputs()
 		if err != nil {
 			return result, err
@@ -35,13 +36,21 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	}
 	input := prefix + "-input.json"
 	request := map[string]string{"Action": action, "Backend": s.backend, "Reference": reference, "Token": s.token, "Fault": s.fault, "Umask": s.umask, "Output": output, "Checkpoint": selected, "Journal": s.journal}
+	request["Boundary"] = s.boundary
+	if s.launch != nil {
+		request["LaunchBarrier"], request["ReplacedPath"] = s.launch.barrier, s.launch.replaced
+		request["CleanupCause"], request["ChildExit"] = s.launch.cause, strconv.Itoa(s.launch.child)
+		if err := os.WriteFile(selected+"-barrier", nil, 0600); err != nil {
+			return result, err
+		}
+	}
 	request["MemoryFile"] = prefix + "-memory.json"
-	if s.backend == "memory" && action == "cleanup" {
+	if s.backend == "memory" && (action == "cleanup" || action == "run-cleanup") {
 		if err := w.writeMemorySeed(request["MemoryFile"]); err != nil {
 			return result, err
 		}
 	}
-	if action == "cleanup" {
+	if action == "cleanup" || action == "run-cleanup" {
 		delete(request, "Token")
 	}
 	if err := os.WriteFile(input, approvalJSON(request), 0600); err != nil {
@@ -74,7 +83,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	if action == "create" {
+	if action == "create" || action == "run" {
 		// Wait for either the observed checkpoint OR process exit. An unavailable
 		// or refused product cannot turn a missing call into a hung fixture.
 		ticker := time.NewTicker(10 * time.Millisecond)
@@ -108,7 +117,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 						return result, seedErr
 					}
 				}
-				if s.change != "" {
+				if s.change != "" || (s.launch != nil && s.launch.watch) {
 					watch, err = w.sessionWatchInputs()
 					if err != nil {
 						cancel()
@@ -125,7 +134,11 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 			}
 		}
 	}
-	err = <-done
+	if s.launch == nil {
+		err = <-done
+	} else {
+		err = w.offlineAwaitBarrier(ctx, cancel, done, selected+"-barrier", stdin)
+	}
 	if watch != nil {
 		reads, watchErr := watch.finish()
 		s.selectedReads = append(s.selectedReads, reads...)
@@ -152,19 +165,32 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	err = json.Unmarshal(data, &result)
 	if err == nil && s.backend == "memory" {
 		err = w.observeMemory(result.Memory)
+		if err != nil && s.offline {
+			err = fmt.Errorf("%w (exit %d; %s; %s)", err, result.Code, result.Diagnostic, result.PreflightFailure)
+		}
 	}
 	return result, err
 }
 
 func (w *world) sessionProbeBinary() (string, error) {
 	path := filepath.Join(w.dir, "slice-9-contract-probe")
+	// The suite binary lives outside every scenario's writable checkout and
+	// survives their teardown. Reuse only the executable; requests, processes,
+	// state, journals and coverage destinations remain scenario-specific.
+	if filepath.IsAbs(w.bin) {
+		path = w.bin + "-session-probe"
+	}
+	covered := os.Getenv("GOCOVERDIR") != ""
+	if covered {
+		path += "-cover"
+	}
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	args := []string{"test", "-c", "./cmd/itos-container", "-o", path}
-	if os.Getenv("GOCOVERDIR") != "" {
+	if covered {
 		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	}
 	cmd := exec.CommandContext(ctx, "go", args...)
