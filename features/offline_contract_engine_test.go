@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // This is a local HTTP Engine API fixture. It records actual SDK calls and
@@ -12,6 +13,9 @@ func (a *sessionAPI) serveOffline(out http.ResponseWriter, request *http.Request
 	s := a.w.session
 	reply := func(status int, value any) {
 		a.requests[index].Status = status
+		if object, ok := value.(map[string]any); ok {
+			a.requests[index].Response = approvalClone(object)
+		}
 		out.Header().Set("Content-Type", "application/json")
 		out.WriteHeader(status)
 		if value != nil {
@@ -51,6 +55,9 @@ func (a *sessionAPI) serveOffline(out http.ResponseWriter, request *http.Request
 	switch {
 	case entry.Method == "GET" && operation == "json":
 		inspected := approvalClone(c)
+		if s.launch != nil && s.launch.faultActive && s.launch.cause == "ownership" {
+			object(object(inspected["Config"])["Labels"])["io.itos-container.intent"] = strings.Repeat("f", 64)
+		}
 		count := 0
 		for _, r := range a.requests {
 			if r.Method == "GET" && strings.HasPrefix(r.Path, "/containers/") {
@@ -87,11 +94,24 @@ func (a *sessionAPI) serveOffline(out http.ResponseWriter, request *http.Request
 			return
 		}
 		c["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
+		_ = a.attached.SetWriteDeadline(time.Now().Add(2 * time.Second))
+		for i, text := range []string{"slice-13-workload-out\n", "slice-13-workload-err\n"} {
+			frame := []byte{byte(i + 1), 0, 0, 0, 0, 0, 0, byte(len(text))}
+			_, _ = a.attached.Write(append(frame, []byte(text)...))
+		}
 		_ = a.attached.Close()
 		reply(204, nil)
 	case entry.Method == "POST" && operation == "wait":
-		reply(200, map[string]any{"StatusCode": 0})
+		exit := 0
+		if s.launch != nil {
+			exit = s.launch.child
+		}
+		reply(200, map[string]any{"StatusCode": exit})
 	case entry.Method == "DELETE" && operation == "":
+		if s.launch != nil && s.launch.faultActive && s.launch.cause == "temporary" {
+			reply(503, map[string]any{"message": "slice-13-private-response"})
+			return
+		}
 		delete(a.local, id)
 		reply(204, nil)
 	default:

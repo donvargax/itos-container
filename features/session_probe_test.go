@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -36,6 +37,13 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	input := prefix + "-input.json"
 	request := map[string]string{"Action": action, "Backend": s.backend, "Reference": reference, "Token": s.token, "Fault": s.fault, "Umask": s.umask, "Output": output, "Checkpoint": selected, "Journal": s.journal}
 	request["Boundary"] = s.boundary
+	if s.launch != nil {
+		request["LaunchBarrier"], request["ReplacedPath"] = s.launch.barrier, s.launch.replaced
+		request["CleanupCause"], request["ChildExit"] = s.launch.cause, strconv.Itoa(s.launch.child)
+		if err := os.WriteFile(selected+"-barrier", nil, 0600); err != nil {
+			return result, err
+		}
+	}
 	request["MemoryFile"] = prefix + "-memory.json"
 	if s.backend == "memory" && (action == "cleanup" || action == "run-cleanup") {
 		if err := w.writeMemorySeed(request["MemoryFile"]); err != nil {
@@ -109,7 +117,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 						return result, seedErr
 					}
 				}
-				if s.change != "" {
+				if s.change != "" || (s.launch != nil && s.launch.watch) {
 					watch, err = w.sessionWatchInputs()
 					if err != nil {
 						cancel()
@@ -126,7 +134,11 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 			}
 		}
 	}
-	err = <-done
+	if s.launch == nil {
+		err = <-done
+	} else {
+		err = w.offlineAwaitBarrier(ctx, cancel, done, selected+"-barrier", stdin)
+	}
 	if watch != nil {
 		reads, watchErr := watch.finish()
 		s.selectedReads = append(s.selectedReads, reads...)

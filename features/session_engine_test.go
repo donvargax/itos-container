@@ -21,6 +21,7 @@ import (
 type sessionRequest struct {
 	Method, Path, Query string
 	Body                map[string]any
+	Response            map[string]any
 	Record              sessionRecord
 	Events              []sessionEvent
 	Status              int
@@ -73,7 +74,7 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.problem = errors.New("session request body is not an object")
 		}
 	}
-	if (entry.Method == "POST" && entry.Path == "/containers/create") || entry.Method == "DELETE" {
+	if (entry.Method == "POST" && entry.Path == "/containers/create") || entry.Method == "DELETE" || (a.w.session.offline && entry.Method == "POST") {
 		entry.Record, err = sessionReadRecord(a.w.sessionRecordPath())
 		if err != nil {
 			a.problem = err
