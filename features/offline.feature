@@ -166,6 +166,10 @@ Feature: Hardened offline foreground run
   # steps, unavailable fixture controls and today's startup refusal are not
   # recorded red evidence until the assertions actually run. This spec records
   # expected failures only and supplies no runtime or mutation evidence.
+  # Coordinator exception (2026-11-06): already-passing slice-10 cases are accepted
+  # regressions when they exercise product behavior; record their origin above tags.
+  # Engine red checkpoint for 06/07/13 is accepted from run 42138046011 at ba71f14;
+  # their passing runtime evidence still belongs to CI at the actual pushed head.
 
   # Owned launch ordering and refusal boundaries. The positive row must run;
   # an implementation which always refuses cannot satisfy this contract.
@@ -181,7 +185,10 @@ Feature: Hardened offline foreground run
   # Change one inspected field after an otherwise correctly configured create.
   # "missing" and "unavailable" are observation faults, not a compliant default.
   # Full-ID ownership still matches, allowing cleanup without executing the worker.
-  @wip @slice-10 @ID-OFFLINE-02 @linux
+  # Passed before activation: slice-10 commit f069faa already verifies the fresh
+  # inspected boundary and refuses launch while retaining owned cleanup authority.
+  # Accepted as regression coverage under the coordinator's 2026-11-06 decision.
+  @slice-10 @ID-OFFLINE-02 @linux
   Scenario Outline: A created worker with an unverified boundary never starts
     Given an offline run contract fixture whose pre-start inspection has "<defect>"
     When the offline contract attempts launch through both fake and disk SDK adapters
@@ -226,7 +233,10 @@ Feature: Hardened offline foreground run
   # The write fault applies to every owned-record publication, including cleanup.
   # The complete pre-create intent survives. Clearing the fault is a separate
   # explicit cleanup action, not permission to launch after a failed publication.
-  @wip @slice-10 @ID-OFFLINE-03 @linux
+  # Passed before slice-10: slice-9 established durable concrete-ID publication
+  # before mutation and recovery from retained intent after a persistent fsync fault.
+  # This accepted regression now exercises that contract through the foreground runner.
+  @slice-10 @ID-OFFLINE-03 @linux
   Scenario: Run cannot execute a worker whose concrete ownership is not durable
     Given an offline run contract fixture with persistent owned-record fsync failure
     When the offline contract attempts launch and later retries cleanup after clearing the fault
