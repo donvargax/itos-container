@@ -23,6 +23,7 @@ type localOfflineAPI struct {
 	started, removed map[string]bool
 	expected         map[int][]string
 	problem          error
+	recovery         *foregroundRecovery
 }
 
 func (w *world) localOfflineFixture() {
@@ -107,11 +108,33 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 			return true
 		}
 		a.started[id] = true
+		if a.recovery != nil {
+			a.recoveryStart(out, resource, id)
+			return true
+		}
 		resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
 		_ = a.attached[id].Close()
 		out.WriteHeader(204)
 	case len(parts) == 2 && parts[1] == "wait" && r.Method == "POST" && a.started[id]:
+		if a.recovery != nil && a.recovery.block {
+			out.WriteHeader(200)
+			out.(http.Flusher).Flush()
+			a.mu.Unlock()
+			select {
+			case <-a.recovery.exit:
+			case <-r.Context().Done():
+			}
+			a.mu.Lock()
+		}
 		_ = json.NewEncoder(out).Encode(map[string]any{"StatusCode": 0})
+	case len(parts) == 2 && parts[1] == "kill" && r.Method == "POST" && a.recovery != nil:
+		a.recovery.signals = append(a.recovery.signals, r.URL.Query().Get("signal"))
+		if r.URL.Query().Get("signal") == "SIGKILL" || a.recovery.fault == "handled SIGINT" || a.recovery.fault == "handled SIGTERM" {
+			a.recovery.finish.Do(func() { close(a.recovery.exit) })
+			resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
+			_ = a.attached[id].Close()
+		}
+		out.WriteHeader(204)
 	case len(parts) == 1 && r.Method == "DELETE":
 		if a.record(token, "owned", id) != nil {
 			a.problem = fmt.Errorf("remove without durable ownership")
@@ -120,6 +143,10 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		}
 		delete(a.resources, id)
 		a.removed[id] = true
+		if a.recovery != nil {
+			a.recovery.finish.Do(func() { close(a.recovery.exit) })
+			_ = a.attached[id].Close()
+		}
 		out.WriteHeader(204)
 	default:
 		a.problem = fmt.Errorf("unexpected run request %s %s", r.Method, path)
