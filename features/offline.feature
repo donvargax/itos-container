@@ -754,6 +754,10 @@ Feature: Hardened offline foreground run
   # for address assignment/DAD, and avoid re-adding existing resolver aliases.
   # Surface probe setup errors immediately instead of replacing them with a
   # generic readiness timeout. All IPv4/IPv6 controls remain mandatory.
+  # The DNS control alone needs a writable disposable root to rewrite its own
+  # generated resolv.conf with the observed system resolver targets: Docker
+  # makes that file read-only along with the root. This does not change the
+  # worker's read-only root or resolver, the daemon, or the network-only control.
   @wip @slice-14 @ID-OFFLINE-12 @engine
   Scenario: Offline execution has no external DNS or alternate resolver path
     Given a CI offline checkout with the cached image and controlled system Docker loopback TCP UDP and HTTPS DNS resolvers

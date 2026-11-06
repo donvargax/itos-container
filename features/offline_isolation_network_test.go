@@ -108,6 +108,10 @@ func (s *isolationWorld) prepareNetwork() error {
 		}
 	}
 	s.control, err = s.controlCreate(s.controlDir, []string{"/workspace/slice-14-probe", "serve", "/workspace/config.json"}, "0:0", s.networkID, aliases, []string{"NET_ADMIN", "NET_RAW", "NET_BIND_SERVICE"}, true, func(h *container.HostConfig) {
+		// Docker also makes its generated resolv.conf read-only with the root.
+		// Only the DNS control rewrites its own resolver file to reproduce the
+		// worker's observed targets; it needs a writable disposable root for that.
+		h.ReadonlyRootfs = s.mode != "dns"
 		// Host IPv6 defaults need not enable the control's loopback interface.
 		// These settings belong only to its private namespace, never the worker
 		// or runner. Keep every IPv6 route and require a usable dual-stack control.
