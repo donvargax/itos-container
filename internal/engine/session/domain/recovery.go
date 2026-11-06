@@ -291,7 +291,7 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 
 func retryableRecovery(f port.Outcome) bool {
 	switch f {
-	case port.Incomplete, port.Uncertain, port.IntentWrite, port.OwnershipWrite:
+	case port.Incomplete, port.Uncertain, port.IntentWrite, port.OwnershipWrite, port.EnvironmentMissing:
 		return true
 	default:
 		return false

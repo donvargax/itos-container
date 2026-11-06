@@ -14,6 +14,7 @@ type RunEngine struct {
 	eventMu sync.Mutex
 	*Engine
 	Boundary, AttachFailure, StartFailure, WaitFailure, DrainFailure port.Outcome
+	OpenFailure                                                      port.Outcome
 	Exit                                                             int
 	Argv                                                             []string
 	Events                                                           []string
@@ -24,6 +25,7 @@ type RunEngine struct {
 	SignalFailure                                                    port.Outcome
 	StdinClosed, DrainUntilCancel                                    bool
 	DrainContextErr                                                  error
+	WaitRelease                                                      <-chan struct{}
 }
 type runConnection struct {
 	*memoryConnection
@@ -44,6 +46,9 @@ func (e *RunEngine) event(name string) {
 	}
 }
 func (e *RunEngine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection, port.Outcome) {
+	if e.OpenFailure != "" {
+		return nil, e.OpenFailure
+	}
 	c, f := e.Open(ctx, b)
 	if f != "" {
 		return nil, f
@@ -125,6 +130,12 @@ func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 }
 func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome) {
 	c.run.event("wait")
+	if c.run.WaitRelease != nil {
+		select {
+		case <-c.run.WaitRelease:
+		case <-ctx.Done():
+		}
+	}
 	if c.run.WaitUntilCancel && c.engine.Resources[id].Running {
 		<-ctx.Done()
 	}

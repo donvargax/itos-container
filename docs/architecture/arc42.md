@@ -253,7 +253,8 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | slice-13 — planned launch and cleanup contract | slice-10 | ID-OFFLINE-01/04/05/15 cover ordered launch, frozen settings, checkout substitution and cleanup-failure precedence. |
 | slice-14 — planned native isolation and teardown proof | slice-10 | ID-OFFLINE-08/09/10/11/12/14/16 prove identity, filesystem/network isolation, primary-exit teardown and native cleanup-failure precedence. Checkout plus tmpfs, NetworkMode none and pids 4096 remain the specified boundary. |
 | slice-11 — planned status/stop | slice-10 | Actionable recovery, controller-loss candidates, foreign/repeated/two-project cases and safe diagnostics; protected records, random hex IDs, per-session lock and mutation-time revalidation. |
-| slice-12 — planned budgets/cancellation/loss | slice-10 | Calls 10 s, startup 120 s, teardown 30 s; forward once, 10 s grace, then SIGKILL; observed exit wins. Controller loss preserves isolation until stop. |
+| slice-12 — budgets/cancellation/loss in progress | slice-11 | Calls 10 s, startup 120 s, teardown 30 s; reuse shared termination, forward once, 10 s grace, then SIGKILL; observed exit wins. |
+| slice-15 — planned isolation through controller loss | slice-12 and slice-14 | LIFECYCLE-15 proves isolation retained until explicit stop, using slice-14's independent boundary probes. |
 
 The coordinator accepted the slice-10/13/14 scenario split on 2026-11-06.
 [The offline feature](../../features/offline.feature) is the scenario ownership
@@ -366,6 +367,8 @@ must state this in help and security guidance; revisit before egress and credent
    escalates to SIGKILL within the same 30 s teardown budget. Signal delivery
    consumes grace. Repeated signals cannot interrupt that cleanup. Final output
    drains concurrently with owned cleanup for at most 10 s within that total;
+   expiry closes the owned attachment immediately so backpressure cannot keep
+   the engine's exit observation blocked until cleanup returns;
    a blocked consumer cannot retain the operation lock or hold removal.
    Slice-11 adds executable status/stop; native signal and retained-isolation proof
    remains with slice-12 and the guarded CI tier.

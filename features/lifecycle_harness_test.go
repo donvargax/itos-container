@@ -108,6 +108,40 @@ func TestLifecycleRecorderSignalsRemainOwned(t *testing.T) {
 	}
 }
 
+func TestLifecycleRecorderRelaysWaitAfterOwnedRemoval(t *testing.T) {
+	id := strings.Repeat("a", 64)
+	w := offlineRecorderWorld(t, http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
+		// Native absence is an observation, not evidence of substituted identity.
+		if r.URL.Path != "/containers/"+id+"/wait" && r.URL.Path != "/containers/"+id+"/json" {
+			t.Error("unexpected request reached native transport", r.Method, r.URL.Path)
+		}
+		http.Error(out, `{"message":"already removed"}`, http.StatusNotFound)
+	}))
+	a := w.offline.api
+	a.created, a.recovery, a.lifecycle = []string{id}, true, newLifecycleFaults("streams", "", 0)
+	for _, target := range []string{id, strings.Repeat("f", 64), "itos-container-" + w.session.token} {
+		response := httptest.NewRecorder()
+		a.serve(response, httptest.NewRequest("POST", "http://engine/containers/"+target+"/wait?condition=not-running", nil))
+		want := http.StatusForbidden
+		if target == id {
+			want = http.StatusNotFound
+		}
+		if response.Code != want || a.problem != nil {
+			t.Fatalf("late read-only wait: status %d, want %d, recorder failure %v", response.Code, want, a.problem)
+		}
+	}
+	// The same absent native observation still cannot authorize a mutation.
+	for _, methodPath := range []struct{ method, path string }{
+		{"POST", "/kill?signal=SIGTERM"}, {"POST", "/start"}, {"DELETE", ""},
+	} {
+		response := httptest.NewRecorder()
+		a.serve(response, httptest.NewRequest(methodPath.method, "http://engine/containers/"+id+methodPath.path, nil))
+		if response.Code != http.StatusForbidden || a.problem == nil {
+			t.Fatal("absent native identity authorized a mutation", methodPath, response.Code)
+		}
+	}
+}
+
 func TestLifecycleRecorderDelaysOnlySignalAcknowledgement(t *testing.T) {
 	w, mutations := recoveryRecorderWorld(t)
 	a := w.offline.api

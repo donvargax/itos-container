@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -23,7 +24,7 @@ import (
 // Both backends use production command/domain code. The second also exercises
 // the protected record codec, binding and transaction adapter over memory files.
 func TestLifecycleContract(t *testing.T) {
-	names := []string{"drain0", "drain17", "signal0", "signal17", "exit-signal-race17", "grace"}
+	names := []string{"drain0", "drain17", "signal0", "signal17", "blocked-signal17", "exit-signal-race17", "grace"}
 	if selected := os.Getenv("SLICE_12_CONTRACT"); selected != "" {
 		names = []string{selected}
 	}
@@ -66,6 +67,19 @@ func lifecycleContract(t *testing.T, name, backend string) {
 	case strings.HasPrefix(name, "signal"):
 		m.e.WaitUntilCancel = true
 		m.e.AfterStart = func() { signalled = time.Now(); cancel(sp.Interrupt{Signal: "SIGTERM"}) }
+	case name == "blocked-signal17":
+		// Model an engine whose exit response cannot finish until the blocked
+		// attachment is detached. Neither cancellation nor signal delivery is
+		// an authoritative exit; only the subsequently released wait supplies it.
+		released := make(chan struct{})
+		var detached sync.Once
+		m.e.WaitRelease, m.e.DrainUntilCancel = released, true
+		m.e.AfterStart = func() { signalled = time.Now(); cancel(sp.Interrupt{Signal: "SIGTERM"}) }
+		m.e.After = func(event string) {
+			if event == "detach" {
+				detached.Do(func() { close(released) })
+			}
+		}
 	case name == "exit-signal-race17":
 		m.e.AfterWait = func() { cancel(sp.Interrupt{Signal: "SIGTERM"}) }
 	case name == "grace":
@@ -110,6 +124,9 @@ func lifecycleContract(t *testing.T, name, backend string) {
 		}
 		if name == "grace" && killAt != 10*time.Second {
 			t.Fatal("grace was restarted after delivery", killAt)
+		}
+		if name == "blocked-signal17" && (elapsed != 10*time.Second || !strings.Contains(errout.String(), "run.stream-timeout")) {
+			t.Fatal("blocked attachment delayed exit observation or hid incomplete output", elapsed, errout.String())
 		}
 	}
 	r := (domain.Recovery{Registry: registry, Engine: m.e}).Status(context.Background())

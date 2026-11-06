@@ -265,9 +265,15 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	if !containsSessionID(a.created, id) || !offlineHex(id) {
 		return false
 	}
+	if r.Method == "POST" && operation == "wait" {
+		// Wait is read-only and may arrive after concurrent owned removal.
+		// Relay the native response for this exact recorded full ID, including
+		// not-found; an absent object cannot provide fresh mutation authority.
+		return len(r.URL.Query()) == 1 && r.URL.Query().Get("condition") == "not-running"
+	}
 	observed, err := a.inspect(id)
 	if err != nil || a.identity(observed, id) != nil {
-		a.problem = errors.New("offline recorder refused a mismatched native identity")
+		a.problem = fmt.Errorf("offline recorder refused a mismatched native identity for %s /containers/<owned>/%s (inspection failed: %t)", r.Method, operation, err != nil)
 		return false
 	}
 	entry.Observation = observed
@@ -287,8 +293,6 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 			return true
 		case "start":
 			return r.URL.RawQuery == "" && a.safeObserved(observed)
-		case "wait":
-			return len(r.URL.Query()) == 1 && r.URL.Query().Get("condition") == "not-running"
 		case "kill":
 			return a.recovery && len(r.URL.Query()) == 1 &&
 				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL" ||

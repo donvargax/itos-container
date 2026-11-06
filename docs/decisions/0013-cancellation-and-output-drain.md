@@ -23,11 +23,23 @@ precedence over later signals.
 
 Final output drains concurrently with owned stopping and removal. A blocked drain
 expires within ten seconds and reports `run.stream-timeout`, separately from the
-workload exit and cleanup. Caller-owned stream handles are never closed. Diagnostic
+workload exit and cleanup. On expiry it closes the owned attachment immediately,
+so engine exit observation cannot remain blocked on an unread output sink until
+cleanup returns. Closing the attachment does not wait for caller I/O; caller-owned
+stream handles are never closed. Diagnostic
 writes use only the original teardown's remaining time; an unread stderr cannot
 keep the controller alive. The existing seven-field recovery record retains a
 safe typed stream-timeout in `last_problem`, including after confirmed cleanup.
 This does not reopen a stopped session or change its immutable workload result.
+
+A reconnect that reports the local engine unavailable is retryable recovery
+failure. When protected state remains writable, retain failed progress and the
+original unknown workload result, so a restored status reports the surviving
+worker under the same session binding and a fresh stop can finish cleanup.
+
+The arc42 work-item table follows q-11's settled order: slice-12 consumes
+slice-11's shared termination contract. Controller-loss isolation evidence is
+slice-15's LIFECYCLE-15, after slice-12 and slice-14.
 
 OFFLINE-19 and OFFLINE-20 now expect observed zero to win and require the separate
 cancellation diagnostic. Their signal-count, escalation, trailing-byte, nonzero
