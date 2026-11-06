@@ -415,21 +415,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: architecture-drift-arc42-status
+  - id: T-26
     title: "Architecture drift: arc42 lists implemented engines as proposed"
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      T-19 updated arc42 before slices 2, 3 and T-20 landed. docs/architecture/arc42.md's inventory
-      and diagrams still call internal/engine/manifest and readiness proposed, and name T-20 as
-      planned. Update the status words from what the code holds; nothing else in the document
-      changes.
-
-      The new repository's first registry push, 2026-11-05: also checks that a push to main starts
-      CI.
+    kind: task
   - id: T-23
     title: Request Bugbot's review again
     phase: 1
