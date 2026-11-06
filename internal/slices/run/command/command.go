@@ -101,10 +101,17 @@ func Classify(err error) (int, []cli.Problem) {
 			code, cause = 2, "configuration"
 		case session.IdentityFailed, session.RegistrationInternal, session.Internal:
 			code, cause = 70, "internal"
-		case session.Environment:
+		case session.Environment, session.EnvironmentMissing:
 			code, cause = 3, "environment"
 		case session.IsolationUnverified:
 			code = 1
+		case session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,
+			session.Uncertain, session.Incomplete, session.IsolationInspection, session.ExecutionFailed:
+			// Known transient failures retain their temporary classification.
+		default:
+			if run.cleanup {
+				code, cause = 70, "internal"
+			}
 		}
 		rule := "run." + string(run.outcome)
 		if run.cleanup {

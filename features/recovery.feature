@@ -174,8 +174,9 @@ Feature: Inspect and stop owned offline sessions
   #
   # For a running owned worker, request SIGTERM once, allowing up to 10 s grace
   # within the original stop total; revalidate and request SIGKILL only if it is
-  # still observed running. Do not inherit an image's custom StopSignal. Reuse
-  # slice-12's engine-side termination contract; never signal a controller PID.
+  # still observed running. Do not inherit an image's custom StopSignal. Slice-11
+  # owns this shared termination contract in internal/engine/session; slice-12
+  # depends on and reuses it (q-11). Never signal a controller PID.
   # Created/exited workers need removal only. Remove by verified full ID without
   # volume deletion; confirm that full ID absent, durably mark the intent absent,
   # then publish session stopped. A DELETE reply alone is not completion. Preserve

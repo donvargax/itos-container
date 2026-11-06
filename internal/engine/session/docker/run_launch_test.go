@@ -29,7 +29,7 @@ func TestOpenRunRefusesUnavailableOrChangedEngine(t *testing.T) {
 				want = sp.Incomplete
 			case "unavailable":
 				pin.Failure = rp.EngineUnavailable
-				want = sp.Environment
+				want = sp.EnvironmentMissing
 			case "foreign endpoint":
 				b.Endpoint = "unix:///foreign"
 			case "foreign daemon":

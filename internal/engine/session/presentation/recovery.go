@@ -34,7 +34,7 @@ func problem(f port.RecoveryFailure) Problem {
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.unsafe-state", 1, "Protected recovery state is unsafe.", "Have the host user inspect ownership, modes and links outside the checkout."
 	case port.Invalid:
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.invalid-state", 2, "Protected recovery state is invalid or incomplete.", "Have the host user inspect the retained original record, intent and snapshot."
-	case port.Environment:
+	case port.Environment, port.EnvironmentMissing:
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.environment", 3, "The supported local engine environment is unavailable.", "Restore the original Linux amd64 native Docker environment."
 	case port.Uncertain, port.Incomplete, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.ExecutionFailed:
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.temporary", 75, "Recovery observation or durable completion is uncertain.", "Retry inspection or stop in the same effective project when the original engine and protected state are available."

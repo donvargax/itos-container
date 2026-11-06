@@ -15,7 +15,7 @@ func TestRecoveryPresentationClassifiesAndSortsWithoutRawErrors(t *testing.T) {
 		failure port.Outcome
 		rule    string
 		code    int
-	}{{port.Usage, "usage", 2}, {port.Refused, "not-owned", 1}, {port.Unsafe, "unsafe-state", 1}, {port.Invalid, "invalid-state", 2}, {port.Environment, "environment", 3}, {port.Uncertain, "temporary", 75}, {port.Incomplete, "temporary", 75}, {port.IntentWrite, "temporary", 75}, {port.OwnershipWrite, "temporary", 75}, {port.CompletionWrite, "temporary", 75}, {port.ExecutionFailed, "temporary", 75}, {port.Internal, "internal", 70}, {"raw-sensitive-marker", "internal", 70}} {
+	}{{port.Usage, "usage", 2}, {port.Refused, "not-owned", 1}, {port.Unsafe, "unsafe-state", 1}, {port.Invalid, "invalid-state", 2}, {port.Environment, "environment", 3}, {port.EnvironmentMissing, "environment", 3}, {port.Uncertain, "temporary", 75}, {port.Incomplete, "temporary", 75}, {port.IntentWrite, "temporary", 75}, {port.OwnershipWrite, "temporary", 75}, {port.CompletionWrite, "temporary", 75}, {port.ExecutionFailed, "temporary", 75}, {port.Internal, "internal", 70}, {"raw-sensitive-marker", "internal", 70}} {
 		var out, errout bytes.Buffer
 		r := port.RecoveryResult{Failures: []port.RecoveryFailure{{Session: "raw-sensitive-marker", Outcome: example.failure}}}
 		code := (presentation.UI{Out: &out, Err: &errout}).Print(r, true)

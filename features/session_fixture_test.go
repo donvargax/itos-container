@@ -22,6 +22,9 @@ type sessionResult struct {
 	Workload                                          *int
 	Events                                            []sessionEvent
 	Memory                                            *sessionMemoryOutput
+	Trace                                             []offlineTrace
+	Stdout, Stderr                                    string
+	CleanupCode                                       int
 }
 
 type sessionEvent struct {
@@ -59,6 +62,7 @@ type sessionWorld struct {
 	offline                                                 bool
 	boundary                                                string
 	offlineControl                                          *world
+	launch                                                  *offlineLaunchWorld
 }
 
 func (w *world) sessionFixture(real bool, umask string) error {
@@ -234,8 +238,8 @@ func (w *world) closeSession() error {
 
 func (w *world) sessionExpectedRecord(stage, id string) map[string]any {
 	a, d, s := w.approval, w.doctor, w.session
-	return map[string]any{"schema": float64(1), "project": a.project, "generation": "1", "fingerprint": a.fingerprint,
-		"snapshot": "snapshots/" + a.project + "/1.json", "uid": a.uid, "gid": a.gid,
+	return map[string]any{"schema": float64(1), "project": a.project, "generation": w.sessionGeneration(), "fingerprint": a.fingerprint,
+		"snapshot": "snapshots/" + a.project + "/" + w.sessionGeneration() + ".json", "uid": a.uid, "gid": a.gid,
 		"engine_endpoint": d.env["DOCKER_HOST"], "engine_id": d.engineID, "name": "itos-container-" + s.token,
 		"image_reference": d.image, "image_id": d.imageID, "container_id": id, "stage": stage}
 }

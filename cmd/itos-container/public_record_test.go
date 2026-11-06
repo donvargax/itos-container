@@ -39,7 +39,7 @@ func TestPublicRecordStrictSchema(t *testing.T) {
 			t.Fatalf("invalid workload exit accepted: %s", value)
 		}
 	}
-	for _, failure := range []port.Outcome{port.Refused, port.Unsafe, port.Invalid, port.Environment, port.Internal, port.Incomplete, port.Uncertain, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.ExecutionFailed, port.IsolationInspection, port.IsolationUnverified} {
+	for _, failure := range []port.Outcome{port.Refused, port.Unsafe, port.Invalid, port.Environment, port.EnvironmentMissing, port.Internal, port.Incomplete, port.Uncertain, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.ExecutionFailed, port.IsolationInspection, port.IsolationUnverified} {
 		r, f := c.DecodePublic([]byte(base))
 		if f != "" {
 			t.Fatal(f)

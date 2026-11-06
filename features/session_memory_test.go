@@ -76,7 +76,7 @@ func (w *world) writeMemorySeed(path string) error {
 		unsafe    *bool
 	}{
 		{w.sessionRecordPath(), s.reference, records, &unsafeRecord},
-		{w.sessionSnapshotPath(), "snapshots/" + w.approval.project + "/1.json", snapshots, &unsafeSnapshot},
+		{w.sessionSnapshotPath(), "snapshots/" + w.approval.project + "/" + w.sessionGeneration() + ".json", snapshots, &unsafeSnapshot},
 	} {
 		info, err := os.Lstat(target.path)
 		if err == nil {
