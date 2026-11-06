@@ -1,0 +1,76 @@
+package command
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"testing/synctest"
+	"time"
+
+	"github.com/donvargax/itos-container/internal/cli"
+	session "github.com/donvargax/itos-container/internal/engine/session/port"
+)
+
+func TestLifecycleResultPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		result   session.RunResult
+		code     int
+		messages []string
+	}{
+		{"unknown interrupt", session.RunResult{Signal: "SIGINT", Started: true}, 130, []string{"run.cancelled SIGINT", "unknown"}},
+		{"unstarted term", session.RunResult{Signal: "SIGTERM"}, 143, []string{"run.cancelled SIGTERM", "not-started"}},
+		{"zero", session.RunResult{Signal: "SIGTERM", Exited: true}, 0, []string{"run.cancelled SIGTERM", "workload outcome 0"}},
+		{"nonzero", session.RunResult{Signal: "SIGINT", Exited: true, Exit: 17, Stream: session.StreamTimeout}, 17, []string{"run.cancelled SIGINT", "workload outcome 17", "run.stream-timeout"}},
+		{"stream failure", session.RunResult{Exited: true, Stream: session.StreamTimeout}, 75, []string{"run.stream-timeout"}},
+		{"lost engine", session.RunResult{Result: session.Result{Outcome: session.EngineLost}}, 75, []string{"run.engine-lost", "unknown"}},
+		{"unknown with cleanup failure", session.RunResult{Signal: "SIGTERM", Started: true, Result: session.Result{Reference: "protected", Cleanup: session.Incomplete}}, 143, []string{"run.cancelled SIGTERM", "unknown", "run.cleanup-temporary"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output strings.Builder
+			code := reportRun(&cli.UI{Stderr: &output, Classify: Classify}, tc.result)
+			if code != tc.code {
+				t.Fatal(code, output.String())
+			}
+			for _, message := range tc.messages {
+				if !strings.Contains(output.String(), message) {
+					t.Fatal("missing", message, output.String())
+				}
+			}
+		})
+	}
+}
+
+type heldDiagnostic struct {
+	entered chan struct{}
+	release <-chan struct{}
+}
+
+func (w heldDiagnostic) Write(data []byte) (int, error) {
+	close(w.entered)
+	<-w.release
+	return len(data), nil
+}
+
+func TestUnreadDiagnosticUsesRemainingTeardown(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deadline, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		time.Sleep(11 * time.Second)
+		until, _ := deadline.Deadline()
+		release := make(chan struct{})
+		entered := make(chan struct{})
+		done := make(chan int, 1)
+		go func() {
+			done <- reportRun(&cli.UI{Stderr: heldDiagnostic{entered, release}, Classify: Classify}, session.RunResult{Signal: "SIGTERM", Exited: true, Exit: 17, Deadline: until})
+		}()
+		<-entered
+		start := time.Now()
+		code := <-done
+		if code != 17 || time.Since(start) != 19*time.Second {
+			t.Fatal("diagnostic delivery extended teardown", code, time.Since(start))
+		}
+		close(release)
+		synctest.Wait()
+	})
+}

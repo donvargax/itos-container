@@ -8,7 +8,9 @@ Feature: Foreground failures retain owned cleanup authority
   Use the existing SDK and standard-library signal/stream support, with no dependency.
   Forward the first SIGINT or SIGTERM once, allow 10 seconds, then SIGKILL.
   Repeated signals do not interrupt the 30-second owned teardown budget.
-  An observed nonzero worker exit wins; otherwise interrupted execution fails.
+  An observed worker exit wins over cancellation when cleanup and streams succeed.
+  Cancellation is reported separately with the first signal; an unknown result
+  retains the signal-derived wrapper status.
   Observed exit drains trailing output within the uncanceled teardown budget,
   including after interruption. A worker may exit without consuming all stdin;
   a closed engine input connection must not hide its observed exit or output.

@@ -54,6 +54,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	result.Reference, result.SessionID = port.Reference(frozen.Frozen.Project, token), id
 	c, attachment, resource, failure := s.registeredLaunch(startup, id, argv, streams)
 	result.ID, result.Outcome = resource, failure
+	result.Started = attachment != nil
 	end()
 	if c != nil {
 		defer c.Close()
@@ -66,6 +67,12 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	}
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer finish()
+	result.Deadline, _ = teardown.Deadline()
+	teardown = context.WithValue(teardown, runGraceKey{}, result.Deadline.Add(-20*time.Second))
+	if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && (result.Outcome == "" || result.Outcome == port.ExecutionFailed) {
+		result.Signal = interrupted.Signal
+		result.Outcome = ""
+	}
 	if result.Outcome == waitUnreconciled {
 		// A concurrent stop can outlast the short stdin probe. Wait for its
 		// lock within this teardown total and accept only its exact completion,
@@ -95,6 +102,9 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		return result
 	}
 	recovery := Recovery{Registry: s.Registry, Engine: s.Engine}
+	// The output subscription is independent of termination and removal. A blocked
+	// consumer must never hold the operation lock or prevent owned cleanup.
+	drain := startDrain(teardown, attachment)
 	if !result.Exited && attachment != nil {
 		prepared := recovery.stop(teardown, id, signal, nil, false)
 		if len(prepared.Entries) == 1 && prepared.Entries[0].WorkloadExit != nil {
@@ -102,15 +112,12 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		}
 		if len(prepared.Failures) != 0 {
 			result.Cleanup = prepared.Failures[0].Outcome
+			result.Stream = <-drain
+			if teardown.Err() != nil {
+				result.Outcome = port.TeardownTimeout
+			}
 			return result
 		}
-	}
-	if (result.Exited || result.Outcome == "") && attachment != nil {
-		drain, closeDrain := context.WithTimeout(teardown, 10*time.Second)
-		if f := attachment.Drain(drain); f != "" {
-			result.Outcome = f
-		}
-		closeDrain()
 	}
 	var exit *int
 	if result.Exited {
@@ -124,6 +131,24 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	if !result.Exited && len(cleaned.Entries) == 1 && cleaned.Entries[0].WorkloadExit != nil {
 		result.Exit, result.Exited = *cleaned.Entries[0].WorkloadExit, true
 	}
+	result.Stream = <-drain
+	if teardown.Err() != nil {
+		result.Cleanup = port.Incomplete
+		result.Outcome = port.TeardownTimeout
+	}
+	if result.Stream == port.StreamTimeout {
+		// Preserve the safe typed cause even when the diagnostic pipe is unread.
+		if entry, f := s.Registry.Open(teardown, id, false); f == "" {
+			record := entry.Record()
+			problem := port.StreamTimeout
+			record.LastProblem = &problem
+			if f := entry.Save(record); f != "" {
+				result.Cleanup = f
+			}
+			entry.Close()
+		}
+	}
+
 	return result
 }
 

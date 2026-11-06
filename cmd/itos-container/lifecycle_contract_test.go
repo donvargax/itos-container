@@ -23,15 +23,20 @@ import (
 // Both backends use production command/domain code. The second also exercises
 // the protected record codec, binding and transaction adapter over memory files.
 func TestLifecycleContract(t *testing.T) {
-	name := os.Getenv("SLICE_12_CONTRACT")
-	if name == "" {
-		return
+	names := []string{"drain0", "drain17", "signal0", "signal17", "exit-signal-race17", "grace"}
+	if selected := os.Getenv("SLICE_12_CONTRACT"); selected != "" {
+		names = []string{selected}
 	}
-	for _, backend := range []string{"ports", "protected records"} {
-		t.Run(backend, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) { lifecycleContract(t, name, backend) })
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			for _, backend := range []string{"ports", "protected records"} {
+				t.Run(backend, func(t *testing.T) {
+					synctest.Test(t, func(t *testing.T) { lifecycleContract(t, name, backend) })
+				})
+			}
 		})
 	}
+
 }
 
 func lifecycleContract(t *testing.T, name, backend string) {
@@ -61,6 +66,8 @@ func lifecycleContract(t *testing.T, name, backend string) {
 	case strings.HasPrefix(name, "signal"):
 		m.e.WaitUntilCancel = true
 		m.e.AfterStart = func() { signalled = time.Now(); cancel(sp.Interrupt{Signal: "SIGTERM"}) }
+	case name == "exit-signal-race17":
+		m.e.AfterWait = func() { cancel(sp.Interrupt{Signal: "SIGTERM"}) }
 	case name == "grace":
 		m.e.WaitUntilCancel, m.e.IgnoreSignal = true, true
 		m.e.Exit = 137

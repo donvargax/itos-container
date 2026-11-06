@@ -64,21 +64,73 @@ func (c CLI) Run(ui *cli.UI) int {
 		ctx = context.Background()
 	}
 	result := c.Runner.Run(ctx, frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
+	return reportRun(ui, result)
+}
+
+func reportRun(ui *cli.UI, result session.RunResult) int {
 	code := 0
 	if result.Outcome != "" {
-		code = ui.Fail(runFailure{result.Outcome, result.Reference, result.SessionID, false}, false)
+		code, _ = Classify(runFailure{result.Outcome, result.Reference, result.SessionID, false})
 	}
-	if result.Reference != "" && result.Cleanup != session.Complete {
-		cleanupCode := ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
-		if code == 0 {
-			code = cleanupCode
+	if result.Stream != "" && code == 0 {
+		code, _ = Classify(runFailure{result.Stream, result.Reference, result.SessionID, false})
+	}
+	if result.Reference != "" && result.Cleanup != session.Complete && code == 0 {
+		code, _ = Classify(runFailure{result.Cleanup, result.Reference, result.SessionID, true})
+	}
+	if result.Signal != "" && !result.Exited {
+		code = 130
+		if result.Signal == "SIGTERM" {
+			code = 143
 		}
 	}
 	if result.Exited && result.Exit != 0 {
-		return result.Exit
+		code = result.Exit
+	}
+	// Diagnostics are bounded by the same teardown deadline. No caller-owned
+	// writer is closed and no blocked writer is joined after that deadline.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if result.Signal != "" {
+			ui.Fail(cancelFailure{result.Signal, workloadOutcome(result)}, false)
+		}
+		if result.Stream != "" {
+			ui.Fail(runFailure{result.Stream, result.Reference, result.SessionID, false}, false)
+		}
+		if result.Outcome != "" {
+			ui.Fail(runFailure{result.Outcome, result.Reference, result.SessionID, false}, false)
+		}
+		if result.Reference != "" && result.Cleanup != session.Complete {
+			ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
+		}
+	}()
+	if result.Deadline.IsZero() {
+		<-done
+	} else {
+		ctx, cancel := context.WithDeadline(context.Background(), result.Deadline)
+		defer cancel()
+		select {
+		case <-done:
+		case <-ctx.Done():
+		}
 	}
 	return code
 }
+
+func workloadOutcome(r session.RunResult) string {
+	if r.Exited {
+		return strconv.Itoa(r.Exit)
+	}
+	if !r.Started {
+		return "not-started"
+	}
+	return "unknown"
+}
+
+type cancelFailure struct{ signal, workload string }
+
+func (cancelFailure) Error() string { return "run cancelled" }
 
 type runFailure struct {
 	outcome   session.Outcome
@@ -91,6 +143,14 @@ func (runFailure) Error() string { return "owned run could not be completed" }
 
 // Classify supplies run's stable rules and human guidance to the generic UI.
 func Classify(err error) (int, []cli.Problem) {
+	var cancelled cancelFailure
+	if errors.As(err, &cancelled) {
+		code := 130
+		if cancelled.signal == "SIGTERM" {
+			code = 143
+		}
+		return code, []cli.Problem{{Rule: "run.cancelled", Exit: code, Message: "run.cancelled " + cancelled.signal + "; workload outcome " + cancelled.workload, Fix: "Inspect the retained session if cleanup is incomplete."}}
+	}
 	var run runFailure
 	if errors.As(err, &run) {
 		code, cause := 75, "temporary"
@@ -106,7 +166,7 @@ func Classify(err error) (int, []cli.Problem) {
 		case session.IsolationUnverified:
 			code = 1
 		case session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,
-			session.Uncertain, session.Incomplete, session.IsolationInspection, session.ExecutionFailed:
+			session.Uncertain, session.Incomplete, session.IsolationInspection, session.ExecutionFailed, session.StreamTimeout, session.EngineLost, session.TeardownTimeout:
 			// Known transient failures retain their temporary classification.
 		default:
 			if run.cleanup {
@@ -119,6 +179,9 @@ func Classify(err error) (int, []cli.Problem) {
 		}
 		fix := "Have the host user inspect the protected intent and original engine; cleanup is not confirmed."
 		message := rule + " " + strconv.QuoteToASCII(run.reference) + ": " + run.Error()
+		if run.outcome == session.EngineLost {
+			message += "; workload outcome unknown unless separately observed"
+		}
 		if session.HexID(run.sessionID) {
 			fix = "Use the same effective project: itos container stop " + run.sessionID
 			message += "; " + fix

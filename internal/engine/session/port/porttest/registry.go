@@ -211,7 +211,7 @@ func (s *memorySession) Save(r port.PublicRecord) port.Outcome {
 		return s.registry.SaveFailure
 	}
 	if r.ID != s.record.ID || r.Schema != s.record.Schema || r.Project != s.record.Project || r.Intent != s.record.Intent ||
-		(s.record.State == "stopped" && (r.State != "stopped" || r.LastProblem != nil)) || (s.record.WorkloadExit != nil && (r.WorkloadExit == nil || *r.WorkloadExit != *s.record.WorkloadExit)) {
+		(s.record.State == "stopped" && (r.State != "stopped" || (r.LastProblem != nil && *r.LastProblem != port.StreamTimeout))) || (s.record.WorkloadExit != nil && (r.WorkloadExit == nil || *r.WorkloadExit != *s.record.WorkloadExit)) {
 		return port.Refused
 	}
 	if samePublic(s.record, r) {

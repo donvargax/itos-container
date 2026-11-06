@@ -366,7 +366,8 @@ manual route adds no product scenarios, supported-host claim or runtime evidence
 Slice-12's native step checkpoint defines all 18 rows of `ID-LIFECYCLE-08`, `09`,
 `11`, `12`, `13` and `16`. The complete `11` case and all four `16` rows are live
 slice-11 recovery regressions, accepted by the coordinator at `9ac4f11` from runs
-`42297748701` and `42298705984`. The remaining cases retain `@wip`.
+`42297748701` and `42298705984`. The implementation also activates `08`, `09`,
+`12` and `13`; their native green run remains the coordinator's CI responsibility.
 The trusted worker writes independent signal receipts and checkout edits. The recorder
 keeps its full-ID mutation checks, streams acknowledged waits, delays only signal
 acknowledgements and disconnects only product transports. The recovery observer records
@@ -386,13 +387,16 @@ forwarding/faults and rejection of incorrect observations. They do not execute t
 or provide native red/green evidence. Run `42297748701` supplied accepted assertion
 red for `08`, `09`, `12` and `13`'s quiet row. Its blocked stdout/stderr rows supplied
 no evidence: the harness missed a barrier and hung in collection. After the harness
-repair, dispatch `@ID-LIFECYCLE-13` again and record those rows' own assertion-level
-red before implementing their product path. Do not raise suite timeouts. Separate
-dispatches keep the existing engine-job budget.
+repair, coordinator run `42304766391` at `b4a8478` supplied accepted assertion-level
+red for all four `13` rows. Do not raise suite timeouts. Separate red dispatches
+keep the existing engine-job budget.
 Record complete passing rows as earlier-slice regressions under q-6/q-11, including
 exit 17 and LIFECYCLE-09, and assertion-level failures for missing behaviour. Keep
-LIFECYCLE-15 with slice-15. The local lifecycle scenario steps and product changes are
-the next implementation phase after this native red-first handoff.
+LIFECYCLE-15 with slice-15. Local `14` now runs the real run command through port
+fakes and protected record adapters over memory storage, with controlled time.
+Both rows failed at their typed stream-timeout assertion before implementation
+and pass afterward. The other local lifecycle scenarios remain pending; native
+signal evidence does not substitute for their command-budget checks.
 
 ## Tags
 

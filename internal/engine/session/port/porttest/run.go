@@ -4,12 +4,14 @@ import (
 	"context"
 	"io"
 	"slices"
+	"sync"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
 // RunEngine is an in-memory lifecycle fake, including explicit boundary faults.
 type RunEngine struct {
+	eventMu sync.Mutex
 	*Engine
 	Boundary, AttachFailure, StartFailure, WaitFailure, DrainFailure port.Outcome
 	Exit                                                             int
@@ -17,7 +19,7 @@ type RunEngine struct {
 	Events                                                           []string
 	Output, ErrorOutput                                              []byte
 	After                                                            func(string)
-	AfterStart                                                       func()
+	AfterStart, AfterWait                                            func()
 	WaitUntilCancel, IgnoreSignal                                    bool
 	SignalFailure                                                    port.Outcome
 	StdinClosed, DrainUntilCancel                                    bool
@@ -34,7 +36,9 @@ type runAttachment struct {
 }
 
 func (e *RunEngine) event(name string) {
+	e.eventMu.Lock()
 	e.Events = append(e.Events, name)
+	e.eventMu.Unlock()
 	if e.After != nil {
 		e.After(name)
 	}
@@ -132,6 +136,9 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 	o.Running = false
 	o.PID = 0
 	c.engine.Resources[id] = o
+	if c.run.AfterWait != nil {
+		c.run.AfterWait()
+	}
 	return c.run.Exit, c.run.WaitFailure
 }
 func (c *runConnection) RemoveRun(ctx context.Context, id string) {

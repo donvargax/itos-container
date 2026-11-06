@@ -423,7 +423,7 @@ func TestRegisteredWaitReconcilesConcurrentStop(t *testing.T) {
 				if name == "drain failure" || name == "nonterminal intent" || name == "different worker" {
 					want = port.ExecutionFailed
 				}
-				if !stopped || result.Outcome != want || result.Exited != known || result.Exit != e.Exit {
+				if !stopped || (result.Outcome != want && result.Stream != want) || result.Exited != known || result.Exit != e.Exit {
 					t.Fatal("concurrent completion lost exit knowledge or failure", result)
 				}
 				if (registry.Records[result.SessionID].WorkloadExit != nil) != known {
@@ -455,10 +455,10 @@ func TestRegisteredWaitDoesNotExtendTeardownForUnavailableCompletion(t *testing.
 		runner := domain.Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
 		start := time.Now()
 		result := runner.Run(context.Background(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
-		if time.Since(start) != 40*time.Second || result.Outcome != port.ExecutionFailed || result.Cleanup != port.Incomplete || result.Exited {
+		if time.Since(start) != 40*time.Second || result.Outcome != port.TeardownTimeout || result.Cleanup != port.Incomplete || result.Exited {
 			t.Fatal("unavailable completion extended teardown or erased failure", result, time.Since(start))
 		}
-		if len(engine.Resources) != 1 || registry.Records[result.SessionID].State != "running" || registry.Leases[result.SessionID] || slices.Contains(e.Events, "drain") || slices.Contains(e.Events, "SIGTERM") {
+		if len(engine.Resources) != 1 || registry.Records[result.SessionID].State != "running" || registry.Leases[result.SessionID] || slices.Contains(e.Events, "SIGTERM") {
 			t.Fatal("unavailable ownership authorized completion or mutation", e.Events)
 		}
 	})
@@ -523,7 +523,7 @@ func TestRegisteredRunAdoptsExitObservedAfterPartialCleanup(t *testing.T) {
 	}
 	runner := domain.Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
 	result := runner.Run(ctx, ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
-	if !published || !result.Exited || result.Exit != 7 || result.Cleanup != port.Complete || result.Outcome != port.ExecutionFailed {
+	if !published || !result.Exited || result.Exit != 7 || result.Cleanup != port.Complete || result.Signal != "SIGTERM" {
 		t.Fatal("run lost the exit observed during cleanup", result)
 	}
 	if len(engine.Resources) != 0 || registry.Leases[result.SessionID] {
@@ -581,41 +581,40 @@ func TestRegisteredRunRegistrationAndLateLaunchRefusals(t *testing.T) {
 	}
 }
 
-func TestRegisteredRunDrainsOutsideOperationLockBeforeRemoval(t *testing.T) {
-	for _, interrupted := range []bool{false, true} {
-		t.Run(map[bool]string{false: "exit", true: "interrupt"}[interrupted], func(t *testing.T) {
-			b, store, engine := f.Fixture()
-			registry := &f.Registry{Store: store, Project: b.Frozen.Project}
-			e := &f.RunEngine{Engine: engine, Exit: 7}
-			ctx, cancel := context.WithCancelCause(context.Background())
-			defer cancel(nil)
-			drained := false
-			e.After = func(event string) {
-				if interrupted && event == "wait" {
-					cancel(port.Interrupt{Signal: "SIGTERM"})
-				}
-				if event == "drain" {
-					drained = true
-					if len(engine.Resources) != 1 {
-						t.Fatal("removed before draining")
-					}
-					for id := range registry.Records {
-						entry, failure := registry.Open(context.Background(), id, true)
-						if failure != "" {
-							t.Fatal("drain held operation lock", failure)
-						}
-						entry.Close()
-					}
-				}
+// Slice-12 supersedes serial drain-before-removal: cleanup must progress while
+// output is blocked. The deadline and authoritative exit remain independent.
+func TestRegisteredRunCleansWhileDrainIsPending(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		b, store, engine := f.Fixture()
+		registry := &f.Registry{Store: store, Project: b.Frozen.Project}
+		e := &f.RunEngine{Engine: engine, Exit: 7, DrainUntilCancel: true}
+		checked := make(chan struct{})
+		e.After = func(event string) {
+			if event == "drain" {
+				<-checked
 			}
-			runner := domain.Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
-			r := runner.Run(ctx, ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
-			if !drained || !r.Exited || r.Exit != 7 || r.Cleanup != port.Complete || len(engine.Resources) != 0 {
-				t.Fatal(r, drained)
+		}
+		runner := domain.Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
+		done := make(chan port.RunResult, 1)
+		go func() {
+			done <- runner.Run(context.Background(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
+		}()
+		synctest.Wait()
+		if len(engine.Resources) != 0 {
+			t.Fatal("blocked drain prevented owned removal")
+		}
+		for id := range registry.Records {
+			entry, failure := registry.Open(context.Background(), id, true)
+			if failure != "" {
+				t.Fatal("drain retained operation lock", failure)
 			}
-			if interrupted && r.Outcome != port.ExecutionFailed {
-				t.Fatal("interrupt became success", r)
-			}
-		})
-	}
+			entry.Close()
+		}
+		close(checked)
+		time.Sleep(10 * time.Second)
+		r := <-done
+		if !r.Exited || r.Exit != 7 || r.Cleanup != port.Complete || r.Stream != port.StreamTimeout {
+			t.Fatal(r)
+		}
+	})
 }

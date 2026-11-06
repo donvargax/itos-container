@@ -244,6 +244,13 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 	if failure = s.Intent().Save(i); failure != "" {
 		return failure
 	}
+	if resource == "exited" && ctx.Value(runGraceKey{}) != nil && s.Record().WorkloadExit == nil {
+		if exit, f := c.Wait(ctx, i.ContainerID); f == "" {
+			if f = recordExit(s, exit); f != "" {
+				return f
+			}
+		}
+	}
 	if resource == "running" {
 		if failure = terminateSession(ctx, s, c, signal); failure != "" {
 			return failure
@@ -291,12 +298,20 @@ func retryableRecovery(f port.Outcome) bool {
 	}
 }
 func terminateSession(ctx context.Context, s port.Session, c port.RunConnection, signal string) port.Outcome {
-	if failure := recoverySignal(ctx, s, c, signal); failure != "" {
+	deadline, foreground := ctx.Value(runGraceKey{}).(time.Time)
+	// Explicit stop retains slice-11's contract. Foreground run supplies the
+	// cancellation deadline so delivery time cannot restart its grace.
+	failure := recoverySignal(ctx, s, c, signal)
+	if failure != "" && (!foreground || !retryableSignal(failure)) {
 		return failure
 	}
 	grace, end := context.WithTimeout(ctx, 10*time.Second)
+	if foreground {
+		end()
+		grace, end = context.WithDeadline(ctx, deadline)
+	}
+	defer end()
 	exit, failure := c.Wait(grace, s.Intent().Record().ContainerID)
-	end()
 	if failure == "" {
 		return recordExit(s, exit)
 	}
@@ -305,7 +320,19 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 		return failure
 	}
 	if resource != "running" {
+		if foreground && resource == "exited" {
+			if exit, f := c.Wait(ctx, s.Intent().Record().ContainerID); f == "" {
+				return recordExit(s, exit)
+			}
+		}
 		return ""
+	}
+	if foreground {
+		// An early transport error cannot shorten the primary's promised grace.
+		<-grace.Done()
+		if ctx.Err() != nil {
+			return port.Incomplete
+		}
 	}
 	if failure = recoverySignal(ctx, s, c, "SIGKILL"); failure != "" {
 		return failure
@@ -323,6 +350,7 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 	}
 	return ""
 }
+
 func recoverySignal(ctx context.Context, s port.Session, c port.RunConnection, signal string) port.Outcome {
 	_, resource, failure := inspectSession(ctx, s, c)
 	if failure != "" {
@@ -366,3 +394,11 @@ func finishSession(s port.Session) port.Outcome {
 	r.State, r.LastProblem = "stopped", nil
 	return s.Save(r)
 }
+
+// A lost acknowledgement does not authorize retrying the original signal. Fresh
+// inspection and the original grace deadline decide whether escalation is safe.
+func retryableSignal(f port.Outcome) bool {
+	return retryableRecovery(f) || f == port.ExecutionFailed || f == port.EngineLost
+}
+
+type runGraceKey struct{}

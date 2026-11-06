@@ -237,9 +237,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # LIFECYCLE-09, as well as LIFECYCLE-05/11/16's merged slice-11 integration.
   # Do not demand artificial red for their existing behavior or stop for another
   # decision; preserve all assertions and verify the complete case at its tier.
-  # All lifecycle phrases still need definitions at this drafting checkpoint, so
-  # all scenarios remain @wip. Then/And assertions are candidate failure points,
-  # not observed failures: this spec review supplies no red/green runtime proof.
+  # Native definitions and coordinator red evidence cover 08/09/11/12/13/16.
+  # Local 14 has assertion-level red and green command evidence. The remaining
+  # local @wip cases still need their complete executable step handoff; neither
+  # the native runs nor the drafting assertions provide their local proof.
 
   # Individual waits: existing generic SDK errors do not identify the timed-out
   # phase; preflight/state waits currently lack the complete shared deadline.
@@ -399,7 +400,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # 75 and neither case reports cancellation separately from execution failure.
   # Accept any complete exit-17 row that passes at its required tier under the
   # standing rule; do not replace observed exit with a wrapper cancellation code.
-  @wip @slice-12 @ID-LIFECYCLE-08 @engine
+  @slice-12 @ID-LIFECYCLE-08 @engine
   Scenario Outline: The primary receives the first signal and its observed exit wins
     Given a CI lifecycle checkout with a ready signal-handling probe that exits <child>
     When run launches the probe and the harness sends "<signal>" to the controller after the ready frame
@@ -425,7 +426,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # slice-11 supplies shared owned termination and escalation. The standing rule
   # applies to LIFECYCLE-09, including any complete already-passing rows. Verify
   # native receipts and timings; fixture exit values are not that evidence.
-  @wip @slice-12 @ID-LIFECYCLE-09 @engine
+  @slice-12 @ID-LIFECYCLE-09 @engine
   Scenario Outline: Ignored and repeated cancellation escalates once after the fixed grace
     Given a CI lifecycle checkout with a ready signal-recording probe that keeps running and a signal acknowledgement delayed <delay> seconds
     When run launches the probe and the harness sends "<signal>" followed by repeated SIGINT and SIGTERM during grace
@@ -482,7 +483,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # exit observations remain unavailable to the controller during this attempt.
   # Use merged slice-11's public recovery identity and status/stop in this case;
   # activation does not wait for a later recovery interface.
-  @wip @slice-12 @ID-LIFECYCLE-12 @engine
+  @slice-12 @ID-LIFECYCLE-12 @engine
   Scenario: Engine transport loss reports an unknown workload outcome and retains recovery
     Given a CI lifecycle checkout with a live marker probe and a product-only engine disconnect barrier
     When run launches the probe and loses its wait and inspection transport before any exit observation and a later status and stop follow restoration
@@ -502,7 +503,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Quiet work and open stdin are slice-10 controls. Readable diagnostics must
   # distinguish cancellation from the baseline's generic execution error; the
   # unread-stderr row instead proves bounded return and safe retained failure state.
-  @wip @slice-12 @ID-LIFECYCLE-13 @engine
+  @slice-12 @ID-LIFECYCLE-13 @engine
   Scenario Outline: Quiet work and blocked streams do not prevent cancellation
     Given a CI lifecycle checkout with a ready signal-handling probe and stream condition "<condition>"
     When run remains live under that condition and the harness sends SIGTERM while leaving the condition in place
@@ -524,7 +525,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Regression attribution: slice-10 supplies exit-17 precedence; the separate
   # stream-timeout assertion still needs proof. Apply the standing rule to the
   # complete rows, without requiring existing precedence to fail anew.
-  @wip @slice-12 @ID-LIFECYCLE-14 @linux
+  @slice-12 @ID-LIFECYCLE-14 @linux
   Scenario Outline: A stalled final drain is a failure distinct from workload exit
     Given a lifecycle contract fixture with observed exit <child> and a final output drain that never completes
     When run cleans the worker and controlled time crosses the 10 second drain deadline through each local backend

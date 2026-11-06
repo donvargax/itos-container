@@ -1,12 +1,18 @@
 package port
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 const (
 	IsolationUnverified Outcome = "isolation-unverified"
 	IsolationInspection Outcome = "isolation-inspection"
 	ExecutionFailed     Outcome = "execution-unavailable"
 	EnvironmentMissing  Outcome = "engine-environment-missing"
+	TeardownTimeout     Outcome = "teardown-timeout"
+	StreamTimeout       Outcome = "stream-timeout"
+	EngineLost          Outcome = "engine-lost"
 	// StdinClosed is an attachment notification, not a final run outcome. An
 	// engine input write/half-close failed; the worker may already have exited.
 	StdinClosed Outcome = "stdin-closed"
@@ -21,9 +27,14 @@ type Streams struct {
 }
 
 type RunResult struct {
+	Stream Outcome
 	Result
-	Exit   int
-	Exited bool
+	Exit    int
+	Exited  bool
+	Signal  string
+	Started bool
+	// Deadline bounds diagnostic delivery as part of the original teardown.
+	Deadline time.Time
 }
 
 // Workspace pins the approved subdirectory and refuses later substitution.

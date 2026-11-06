@@ -35,12 +35,17 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	if attachment != nil {
 		defer attachment.Close()
 	}
+	result.Started = result.ID != ""
 	if result.Outcome == "" {
 		// Waiting for the workload is not a startup operation or a lifetime limit.
 		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, connection, attachment, result.Reference, result.ID)
 	}
 	if result.Reference != "" {
 		teardown, end := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		result.Deadline, _ = teardown.Deadline()
+		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && (result.Outcome == "" || result.Outcome == port.ExecutionFailed) {
+			result.Signal, result.Outcome = interrupted.Signal, ""
+		}
 		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && !result.Exited {
 			result.Exit, result.Exited = s.interrupt(teardown, result.Reference, interrupted.Signal)
 			// Launch or wait already supplied the failure. Interruption must not

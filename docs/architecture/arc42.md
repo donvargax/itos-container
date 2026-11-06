@@ -362,8 +362,11 @@ must state this in help and security guidance; revisit before egress and credent
    handshake is bounded; acknowledged workload wait has no lifetime limit.
    Forwarding failures cancel the pending workload wait and trigger bounded cleanup.
    Run captures SIGINT/SIGTERM before startup, forwards the first signal once after
-   reacquiring owned authority, allows 10 s grace, then escalates to SIGKILL within
-   the same 30 s teardown budget. Repeated signals cannot interrupt that cleanup.
+   reacquiring owned authority, allows grace until 10 s from cancellation, then
+   escalates to SIGKILL within the same 30 s teardown budget. Signal delivery
+   consumes grace. Repeated signals cannot interrupt that cleanup. Final output
+   drains concurrently with owned cleanup for at most 10 s within that total;
+   a blocked consumer cannot retain the operation lock or hold removal.
    Slice-11 adds executable status/stop; native signal and retained-isolation proof
    remains with slice-12 and the guarded CI tier.
    See [the foreground integration decision](../decisions/0008-foreground-run-integration.md).
@@ -389,9 +392,14 @@ cleanup fails, return a nonzero wrapper failure classified by its cause. T-11 re
 the CLI wrapper meanings, rather than importing helper-tool codes or treating every
 cleanup error as transient. Return zero only with known successful work and cleanup;
 observed exit wins over an inferred signal outcome. Forward a signal once, allow
-10 s grace, then SIGKILL if needed. Interruption without an observed nonzero exit
-uses the existing execution-unavailable failure (75). Slice-12 owns remaining signal-derived and
-cancellation mappings under the charter stop rule; this design invents none.
+10 s grace measured from cancellation, then SIGKILL if needed. Report
+`run.cancelled` and the first signal separately. With no observed exit, SIGINT
+returns 130 and SIGTERM returns 143; these are wrapper outcomes. Observed zero
+with successful cleanup and streams returns zero. `run.engine-lost` and
+`run.stream-timeout` remain failures even with observed zero. Nonzero observed
+exit retains precedence over each of these failures.
+[The lifecycle result decision](../decisions/0013-cancellation-and-output-drain.md)
+supersedes 0009's provisional cancellation result.
 
 Pre-launch refusals have no child status. Lost engine/controller observations never
 become invented workload success or failure: a surviving controller reports its
@@ -543,13 +551,19 @@ no claim to redact arbitrary workload output or permission to copy it into recov
 **Bounded operations.** Calls have 10 s, startup 120 s and teardown 30 s. Retries and
 progress cannot reset totals, so a stalled daemon cannot hold a transition indefinitely.
 Attach establishment belongs within startup; timeout still needs separately bounded
-cleanup and uncertain-operation reconciliation. Forward a signal once, allow 10 s
-grace, then SIGKILL; the grace bounds cooperative shutdown before forced termination.
+cleanup and uncertain-operation reconciliation. Forward a signal once, allowing
+10 s from the original cancellation before SIGKILL. Delivery acknowledgement
+cannot restart grace; an unavailable acknowledgement never authorizes repeating
+the original signal. Revalidate full ownership again before escalation.
 Observed exit wins and delivery alone never proves termination. Foreground waiting
 has no invented workload lifetime limit. A4 selects pids limit 4096, with no memory or
 CPU quota claim. Parser structural bounds and CI job timeouts are separate. Slice-12
-owns remaining repeated-cancellation, backpressure and result details; slice-11/12
-must specify finite recovery budgets without inventing them here. Open security
+owns the remaining preflight and finite-call budget implementation. Slice-11
+supplies fresh 10 s status and 30 s stop totals. Registered foreground cleanup
+and final drain proceed concurrently. Diagnostic delivery uses only remaining
+teardown time, and protected `last_problem` can retain a typed stream timeout
+even in a completed cleanup tombstone. This records delivery failure without
+changing resource absence or the authoritative workload exit. Open security
 choices follow the charter stop rule, not a blanket reopening of settled limits.
 
 **Dependencies and platforms.** Owning behaviour specs choose maintained libraries,
