@@ -63,3 +63,7 @@ questions:
     item: "slice-11"
     question: "slice-11: the engine job passes under setsid; is that the fix?"
     answer: "No. Run 42218236157 shows a signal reached the step's original process group or session, which setsid only escapes. Find the sender with strace on a run without setsid, fix it in the harness or the product, then drop setsid unless the runner itself is the cause. Cover the new proof gaps too. See slice-11-steer.md."
+  - id: q-16
+    item: "slice-11"
+    question: "slice-11: the signal trace shows no product or harness code signals a group or session; keep setsid?"
+    answer: "Yes. Run 42233015284 traced every process the tests start: the only real signal was one SIGKILL by pidfd to a single recorded controller, never a group, session or -1. The step dies from outside that tree (runner or Docker). Keep setsid with a comment citing that run, drop strace, keep the signal log, and fix the Linux unit failures in session/disk and cmd. See slice-11-steer.md."
