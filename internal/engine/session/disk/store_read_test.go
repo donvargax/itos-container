@@ -13,8 +13,12 @@ import (
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
 
-func intentReadFixture() (Store, sp.Binding, *af.Storage, *rf.Checkout) {
+func intentReadFixture(t *testing.T) (Store, sp.Binding, *af.Storage, *rf.Checkout) {
+	t.Helper()
 	b, _, _ := sf.Fixture()
+	// Registry discovery uses host filepath semantics even with memory storage.
+	// The shared port fixture's /checkout is not an absolute path on Windows.
+	b.Checkout.Root = t.TempDir()
 	storage := &af.Storage{Directories: map[string]*af.Directory{
 		"intents/" + b.Frozen.Project:   {Files: map[string][]byte{}},
 		"snapshots/" + b.Frozen.Project: {Files: map[string][]byte{"1.json": []byte("snapshot")}},
@@ -32,7 +36,7 @@ func TestOpeningMissingIntentDoesNotCreateStorage(t *testing.T) {
 	for _, operation := range []string{"launch", "cleanup"} {
 		for _, missing := range []string{"collection", "record"} {
 			t.Run(operation+"/"+missing, func(t *testing.T) {
-				store, b, storage, checkout := intentReadFixture()
+				store, b, storage, checkout := intentReadFixture(t)
 				key := "intents/" + b.Frozen.Project
 				if missing == "collection" {
 					delete(storage.Directories, key)
@@ -72,7 +76,7 @@ func TestIntentReadFailurePreservesCauseEvidenceAndRetry(t *testing.T) {
 			{"state.conflict", sp.Refused},
 		} {
 			t.Run(operation+"/"+string(tc.failure), func(t *testing.T) {
-				store, b, storage, checkout := intentReadFixture()
+				store, b, storage, checkout := intentReadFixture(t)
 				token := strings.Repeat("1", 64)
 				record := b.Intent(token)
 				directory := storage.Directories["intents/"+b.Frozen.Project]
