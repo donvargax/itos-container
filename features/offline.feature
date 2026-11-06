@@ -758,6 +758,12 @@ Feature: Hardened offline foreground run
   # generated resolv.conf with the observed system resolver targets: Docker
   # makes that file read-only along with the root. This does not change the
   # worker's read-only root or resolver, the daemon, or the network-only control.
+  # The run at 27a210d reached readiness but failed the docker-a positive control;
+  # this is still not red evidence. The packet decoder must accept Docker's
+  # uncompressed alias answer names as well as the fixture's compressed names.
+  # Independent A/AAAA wire-packet regressions check both forms without an engine;
+  # no fixture address, alias, query, positive assertion or denied route is removed.
+  # Keep 12 wip and stop after committing the repair for another coordinator run.
   @wip @slice-14 @ID-OFFLINE-12 @engine
   Scenario: Offline execution has no external DNS or alternate resolver path
     Given a CI offline checkout with the cached image and controlled system Docker loopback TCP UDP and HTTPS DNS resolvers

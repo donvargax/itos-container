@@ -22,8 +22,17 @@ func TestWorkspacePinsAndRejectsSubstitution(t *testing.T) {
 	if f := w.Pin(b); f != "" || !w.Unchanged() {
 		t.Fatal(f)
 	}
-	// Use the pinned parent for the rename too. On Windows this uses the
-	// handle-relative rename API instead of MoveFileEx on an open directory.
+	// Windows refuses renaming an ancestor with an open descendant, even with
+	// delete sharing. Release only the leaf handle; both parents used to check
+	// identity stay pinned. Prove this does not itself invalidate Unchanged.
+	if err := w.roots[len(w.roots)-1].Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !w.Unchanged() {
+		t.Fatal("closing the leaf invalidated parent identity before substitution")
+	}
+	// The handle-relative rename permits the target directory itself to stay
+	// open. Substituting its name must be detected by the still-pinned checkout.
 	if err := w.roots[0].Rename("sub", "old"); err != nil {
 		t.Fatal(err)
 	}

@@ -330,7 +330,7 @@ func isolationRouteReports(reports []isolationReport, c isolationConfig, nonce s
 						expected += ":" + a.Nonce
 					}
 					if a.Error != "" || a.Result != expected {
-						return fmt.Errorf("positive route control %s/%s failed", r.Phase, want.Name)
+						return fmt.Errorf("positive route control %s/%s failed: result %q, want %q, operation error %q", r.Phase, want.Name, a.Result, expected, a.Error)
 					}
 				} else if a.Result != "" || a.Error == "" {
 					return fmt.Errorf("worker route %s/%s succeeded or supplied no operation outcome", r.Phase, want.Name)

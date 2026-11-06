@@ -16,44 +16,6 @@ import (
 // This fixture handles only one uncompressed IN A/AAAA question. It is not a
 // production resolver and never forwards. Nonce names and fixed synthetic
 // answers make cache hits and an unrelated DNS service observable.
-func dnsQuery(name string, kind uint16) []byte {
-	b := make([]byte, 12)
-	binary.BigEndian.PutUint16(b, 0x1414)
-	binary.BigEndian.PutUint16(b[2:], 0x100)
-	binary.BigEndian.PutUint16(b[4:], 1)
-	for _, s := range strings.Split(name, ".") {
-		b = append(b, byte(len(s)))
-		b = append(b, s...)
-	}
-	b = append(b, 0, byte(kind>>8), byte(kind), 0, 1)
-	return b
-}
-func question(b []byte) (string, int, uint16) {
-	if len(b) < 17 {
-		return "", 0, 0
-	}
-	var labels []string
-	i := 12
-	for {
-		if i >= len(b) {
-			return "", 0, 0
-		}
-		n := int(b[i])
-		i++
-		if n == 0 {
-			break
-		}
-		if n > 63 || i+n > len(b) {
-			return "", 0, 0
-		}
-		labels = append(labels, string(b[i:i+n]))
-		i += n
-	}
-	if i+4 > len(b) {
-		return "", 0, 0
-	}
-	return strings.Join(labels, "."), i + 4, binary.BigEndian.Uint16(b[i:])
-}
 func dnsResponse(q []byte) []byte {
 	name, end, kind := question(q)
 	if end == 0 || !strings.HasSuffix(name, ".slice-14.test") {
@@ -74,18 +36,6 @@ func dnsResponse(q []byte) []byte {
 	b = append(b, 0xc0, 0x0c, byte(kind>>8), byte(kind), 0, 1, 0, 0, 0, 0, 0, byte(len(ip)))
 	return append(b, ip...)
 }
-func dnsAnswer(b []byte) string {
-	_, end, _ := question(b)
-	if end == 0 || len(b) < end+12 || binary.BigEndian.Uint16(b[6:]) < 1 {
-		return ""
-	}
-	n := int(binary.BigEndian.Uint16(b[end+10:]))
-	if len(b) < end+12+n || (n != 4 && n != 16) {
-		return ""
-	}
-	return net.IP(b[end+12 : end+12+n]).String()
-}
-
 func dnsAttempt(c config, r route, nonce string) (string, error) {
 	if r.Protocol == "https" {
 		return httpsDNS(c, r, nonce)
