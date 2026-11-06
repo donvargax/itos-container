@@ -633,16 +633,17 @@ Feature: Review and record approval of exact offline settings
       | invalid                            | invalid |
 
   @slice-4 @ID-APPROVAL-26 @local-engine-fixture
-  Scenario: Matching approval reaches the interim startup refusal without asking again
+  Scenario: Matching approval reaches owned execution without asking again
     Given an approval checkout and isolated host state
+    And a local owned foreground Engine API fixture
     And a seeded matching approval at generation "1"
     And the run preflight files are snapshotted
     When itos-container runs with "run -- fixture-workload --json"
-    Then run reports that approval matched before refusing unimplemented offline startup with exit 3
+    Then run completes the inspected owned foreground worker with exit zero
     And it never prompts or records approval
-    And no engine mutation or image acquisition was attempted
+    And the local foreground journal contains only inspections and owned worker operations
     And the protected run snapshot is exactly the independently calculated approval at generation "1"
-    And only the protected run snapshot subtree was added without chown or checkout changes
+    And only protected snapshot and owned intent records were added without chown or checkout changes
 
   # Cross-command validation and honest help.
   @slice-4 @ID-APPROVAL-27 @local-engine-fixture

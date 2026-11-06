@@ -357,19 +357,14 @@ items:
     title: Hardened offline foreground run
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-9]
     kind: slice
-    why: >
-      @engine proof: first-instruction network and DNS denial by NetworkMode none, inspected before
-      start; non-root; read-only root; the checkout as sole mount; literal argv; exit precedence;
-      teardown. No persistent state this milestone, by the person's A2: checkout and tmpfs. Pids
-      limit 4096, no memory or CPU quota claim, by A4.
   - id: slice-11
     title: Status and stop
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-10]
     kind: slice
     why: >
@@ -418,8 +413,8 @@ items:
   - id: T-26
     title: "Architecture drift: arc42 lists implemented engines as proposed"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: T-23
@@ -446,8 +441,8 @@ items:
   - id: slice-13
     title: Launch and cleanup contract
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-10]
     kind: slice
     why: >
@@ -470,3 +465,15 @@ items:
       teardown. Needs setuid, nested-mount, network and DNS and descendant-process controls, with
       engine red evidence through the coordinator. The milestone's isolation claim, and the first
       release (T-25), rest on it.
+  - id: p2-architecture-session-runtime-status
+    title: "Architecture drift: reconcile session and runtime evidence status"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Reconcile arc42 with merged slice-9 ownership work and live engine scenarios, preserving the
+      distinction between implemented ownership, pending recovery and unproven runtime isolation.
+      This first-milestone documentation follow-up does not block the current offline owned-run
+      step.

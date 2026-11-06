@@ -24,6 +24,16 @@ func TestSessionContractCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(removeCallerPath)
+	// Both IDs share the compiled assembly, but must export their own executed
+	// counters into the current ID's directory when the subprocess runs.
+	bin := filepath.Join(t.TempDir(), "itos-container")
+	// An earlier plain run must not supply an uninstrumented executable to a
+	// later coverage request using the same suite path.
+	t.Setenv("GOCOVERDIR", "")
+	plain := &world{root: root, bin: bin, dir: t.TempDir()}
+	if _, err := plain.sessionProbeBinary(); err != nil {
+		t.Fatal(err)
+	}
 	for _, id := range []string{"ID-SESSION-01", "ID-SESSION-08"} {
 		t.Run(id, func(t *testing.T) {
 			coverdir := t.TempDir()
@@ -35,7 +45,7 @@ func TestSessionContractCoverage(t *testing.T) {
 			var output bytes.Buffer
 			if selection.count == 0 || runScenarios(selection, godog.Options{
 				Format: "progress", Output: &output, Paths: []string{"."}, TestingT: t,
-			}, func(sc *godog.ScenarioContext) { initializeScenario(sc, root, "unused") }) != 0 {
+			}, func(sc *godog.ScenarioContext) { initializeScenario(sc, root, bin) }) != 0 {
 				t.Fatalf("session contract scenarios failed: %s", output.String())
 			}
 			profile := filepath.Join(t.TempDir(), "coverage.out")
