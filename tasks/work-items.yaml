@@ -595,14 +595,15 @@ items:
       sole-host-mount contract. Require CI red/green scenarios for substitution after the final
       identity check; update affected architecture sections and record the decision. Broken down
       from null.
-  - id: p1-recover-owned-checkout-mounts
+  - id: slice-18
     title: Status and stop recover owned checkout mount anchors
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-17]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-recover-owned-checkout-mounts.
       Extend existing recovery to the mount ownership introduced by the launch slice. After
       controller loss or uncertain startup, retain isolation and release only proven-owned anchors
       after worker removal is confirmed. Cover repeated stop, foreign-resource refusal and
