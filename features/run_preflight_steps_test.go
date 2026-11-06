@@ -17,6 +17,11 @@ func (w *world) runFixture() *runWorld {
 	return w.run
 }
 func (w *world) runPreflightSteps(sc *godog.ScenarioContext) {
+	sc.Step(`^a local owned foreground Engine API fixture$`, w.localOfflineFixture)
+	sc.Step(`^run completes the inspected owned foreground worker with exit zero$`, w.localOfflineSuccess)
+	sc.Step(`^the local foreground journal contains only inspections and owned worker operations$`, w.localOfflineOwned)
+	sc.Step(`^only protected snapshot and owned intent records were added without chown or checkout changes$`, func() error { return w.runSameTree(true) })
+	sc.Step(`^the first run completed owned execution and the second made no startup effects$`, w.localOfflineFirstRun)
 	sc.Step(`^run preflight has local defect "([^"]*)"$`, w.runLocalDefect)
 	sc.Step(`^run preflight has local approval condition "([^"]*)"$`, w.runApprovalCondition)
 	sc.Step(`^run preflight has engine observation "([^"]*)"$`, w.runEngineObservation)
@@ -76,17 +81,17 @@ func (w *world) runPreflightSteps(sc *godog.ScenarioContext) {
 		}
 		return nil
 	})
-	sc.Step(`^all three reach only the unimplemented-startup refusal with exit 3 and empty stdout$`, w.runThreeRefusals)
-	sc.Step(`^each run's Engine API journal contains ping, version, info and only the requested image inspection$`, w.runThreeJournals)
+	sc.Step(`^all three complete owned foreground execution with exit zero and empty stdout$`, w.runThreeCompletions)
+	sc.Step(`^each run's Engine API journal contains fresh inspection and only its owned worker operations$`, w.runThreeJournals)
 	sc.Step(`^the final snapshot is never partial and its inode and mtime remain unchanged after publication$`, w.runSnapshotStable)
-	sc.Step(`^the policy inspection files differ only by the protected run snapshot$`, func() error {
+	sc.Step(`^the policy inspection files differ only by protected snapshot and owned intent records$`, func() error {
 		got, err := w.policyFiles()
 		if err != nil {
 			return err
 		}
 		prefix := filepath.Dir(filepath.Dir(w.runSnapshotPath()))
 		for path := range got {
-			if path == prefix || strings.HasPrefix(path, prefix+string(filepath.Separator)) {
+			if path == prefix || strings.HasPrefix(path, prefix+string(filepath.Separator)) || w.localIntentPath(path) {
 				delete(got, path)
 			}
 		}

@@ -23,7 +23,7 @@ func TestRunReportsRefusals(t *testing.T) {
 		{"no command", command.CLI{}, 2, "run requires a nonempty command after --", false},
 		{"no separator", command.CLI{Args: []string{"git", "status"}}, 2, "itos container run -- <command>", false},
 		{"empty executable", command.CLI{Args: []string{"--", "", "git"}}, 2, "run requires a nonempty command after --", false},
-		{"no startup", command.CLI{Args: []string{"--", "git", "--json"}}, 3, "doctor --policy-only", false},
+		{"incomplete assembly", command.CLI{Args: []string{"--", "git", "--json"}}, 70, "run assembly is incomplete", false},
 		{"wrapper JSON", command.CLI{JSON: true, Args: []string{"--", "git", "--no-json"}}, 2, "run does not support wrapper JSON", true},
 		{"inherited JSON", command.CLI{InheritedJSON: true}, 2, "run does not support wrapper JSON", true},
 	} {
@@ -70,7 +70,6 @@ func TestClassifierHandlesWrappedAndUnknownFailures(t *testing.T) {
 	}{
 		{domain.ErrJSONUnsupported, 2, "run.json-unsupported"},
 		{domain.ErrCommandRequired, 2, "run.command-required"},
-		{domain.ErrStartupUnavailable, 3, "run.startup-unavailable"},
 	} {
 		code, problems := command.Classify(fmt.Errorf("context: %w", tc.err))
 		if code != tc.code || len(problems) != 1 {
@@ -86,9 +85,9 @@ func TestClassifierHandlesWrappedAndUnknownFailures(t *testing.T) {
 	}
 }
 
-func TestHelpExplainsInterimScope(t *testing.T) {
+func TestHelpExplainsForegroundScope(t *testing.T) {
 	help := (command.CLI{}).Help()
-	for _, text := range []string{"itos container run -- <command>", "ITOS_JSON=1", "schema-1", "not implemented", "doctor --policy-only", "2 ", "3 "} {
+	for _, text := range []string{"itos container run -- <command>", "ITOS_JSON=1", "schema-1", "offline worker", "streams remain separate", "2 ", "3 "} {
 		if !strings.Contains(help, text) {
 			t.Errorf("help lacks %q", text)
 		}
