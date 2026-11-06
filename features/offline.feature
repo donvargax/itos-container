@@ -9,6 +9,8 @@ Feature: Hardened offline foreground run
   and foreground streams (06/07), and the explicit shell workspace (13).
   Slice-13 owns the launch and cleanup contract (01/04/05/15).
   Slice-14 owns native isolation and teardown proof (08/09/10/11/12/14/16).
+  Slice-17 owns inode-bound checkout sources and their foreground lifetime
+  (25-31); slice-18 owns their recovery by fresh status/stop processes.
 
   # Authorities: docs/charter.md, docs/plans/offline-run-lifecycle.md (AC-07/08,
   # offline AC-10/11, AC-21/22/23/25/37), docs/architecture.md (Slices), and
@@ -430,6 +432,354 @@ Feature: Hardened offline foreground run
       | before create                | workspace subdirectory |
       | after create before start    | checkout root         |
       | after create before start    | workspace subdirectory |
+
+  # Slice-17: close the interval AFTER the final checkout identity check and
+  # BEFORE the daemon resolves the worker's source. OFFLINE-05 remains the
+  # earlier-check refusal contract; another stat or a pathname comparison does
+  # not close this interval. At specification base 7e7acfa, session/docker/run.go
+  # still sends binding.Checkout.Root as Source. Workspace pins detect changes
+  # but supply no inode-bound source to Docker, and ownership records describe
+  # only the worker. These are expected failures, not executed red evidence.
+  #
+  # Authorities: the charter, pilot AC-05/06/07/22/23/25, the offline lifecycle
+  # contract, arc42's Foreground run/Recovery, and slice-17's registry brief.
+  # Settled scope: provide a protected inode-bound source through shared engine
+  # ports/adapters, record ownership before use, retain checkout edits and the
+  # sole-host-source boundary, and cover foreground teardown and failure retention.
+  # Slice-16 owns overlapping-checkout admission. These cases inject replacement
+  # from a trusted disposable fixture, so refusing overlaps cannot satisfy them.
+  # Slice-18 owns discovering/releasing retained anchors with fresh status/stop,
+  # controller-loss recovery, repeated stop and cross-session recovery conflicts.
+  # Do not add those commands or an unattended restart to this item.
+  #
+  # Source and lifetime decisions:
+  # An anchor is an owned mount-source resource which continues to name the exact
+  # validated checkout directory's device/inode despite renaming or replacing
+  # its original path or an ancestor. It exposes the SAME writable files, not a
+  # copy, snapshot, hard-linked reconstruction or new project volume. A symlink
+  # to the original pathname, a resolved pathname, matching bytes, or a descriptor
+  # which the daemon turns back into that mutable pathname is not an anchor.
+  # Its namespace entry and lifetime are protected from the worker. Matching
+  # host/worker UID or a random name alone provides no protection. Neither anchor
+  # management paths nor their parents/control records enter the worker mount.
+  #
+  # The worker still gets exactly one host source, read/write at /workspace,
+  # private and nonrecursive, excluding nested host mounts; workspaceFolder
+  # remains an existing directory under it. Retain /tmp tmpfs, the frozen image,
+  # argv/environment, host non-root UID:GID and every other offline restriction.
+  # No extra worker mount, copied checkout, chown, persistent worker volume,
+  # checkout helper execution, engine reconfiguration or elevated worker is allowed.
+  # The anchor is session control infrastructure, not a new permission in the
+  # manifest or approval; keep the original checkout identity in frozen settings.
+  # Only the independently verified anchor may be consumed by create/start.
+  # Protected-path spelling alone cannot replace the identity observation.
+  # Unsupported anchoring refuses; there is no original-path fallback.
+  #
+  # Retain existing refusal when identity replacement is observed BEFORE the
+  # final launch check (OFFLINE-05). For the post-check substitutions below,
+  # the already submitted start must execute against the pinned ORIGINAL inode.
+  # Do not repair, reapprove, copy or restore the substituted checkout path.
+  # A healthy run must work, and the late-race rows must run on the original:
+  # always refusing is not an implementation of this capability.
+  #
+  # Ownership decisions, observable in protected state and ordered I/O traces:
+  # After fresh preflight/frozen publication and public session registration,
+  # durably publish anchor intent BEFORE any anchor allocation. Bind it to the
+  # session ID, original project/snapshot/fingerprint, effective host IDs,
+  # selected socket/daemon, validated checkout device/inode and a fresh random
+  # operation identity. Reuse the existing 256-bit entropy and protected-store
+  # rules. Independently observe the allocated anchor's concrete identity and
+  # backing inode, then durably publish that ownership BEFORE worker create.
+  # Record the relationship to the worker intent/full ID when one exists.
+  # A returned source string or create response alone is never ownership proof.
+  #
+  # Anchor records use the existing protected host state, outside the checkout,
+  # with no-follow/pinned ancestors, private directories/files and strict decoding.
+  # Version or explicitly discriminate mount-bearing ownership so a reader that
+  # cannot account for its anchor refuses instead of declaring cleanup complete.
+  # Preserve old unstarted-only records and their no-mount capability unchanged.
+  # Use complete writes, file fsync, atomic publication and parent/ancestor fsync;
+  # mere file existence is insufficient. Failed publication returns no usable
+  # source or launch handoff. A possibly allocated anchor keeps its original
+  # durable intent and observed identity for reconciliation, never an untracked
+  # best-effort resource or a second allocation after an uncertain response.
+  # Concrete source encoding is adapter-owned; the contract requires evidence
+  # of identity and protection, not a particular Go type or pathname spelling.
+  #
+  # Keep the anchor usable through startup, workload execution and any uncertain
+  # create/start/remove operation. Release it only after the worker is confirmed
+  # absent by full ID, or positively proven never created because no create was
+  # issued. A name-only 404, failed request, stopped workload, closed connection
+  # or controller exit is not that proof. Incomplete removal retains the anchor
+  # even AFTER the foreground controller process exits; a process-local FD that
+  # disappears then cannot satisfy retention. Recovery must never recreate it
+  # from the current checkout pathname. Do not mark the session stopped until
+  # worker absence, anchor release/absence and durable completion all succeed.
+  # Cleanup uses protected original ownership, not mutable checkout paths or
+  # current approval. Never remove checkout contents, a foreign anchor or an
+  # unrelated resource, and never force/lazily detach an unverified mount.
+  #
+  # Presentation decisions: new plain stderr rules run.mount-write (75) for
+  # anchor intent/ownership publication failure, run.mount-unavailable (3) for
+  # an unsupported/unavailable anchoring facility, run.mount-refused (1) for
+  # unsafe/mismatched source identity, and run.mount-uncertain (75) when source
+  # allocation cannot be settled. State the cause and safe corrective guidance;
+  # never suggest falling back to a path, weakening isolation or auto-approving.
+  # Anchor teardown uses existing run.cleanup-ownership (1) and
+  # run.cleanup-temporary (75), separate from observed workload exit. A nonzero
+  # workload result wins; zero plus incomplete cleanup is nonzero. Retain the
+  # registered session ID and protected evidence, without claiming fresh-process
+  # anchor recovery has been implemented here. Existing stop guidance is a retry,
+  # not evidence that stop can yet release this new resource (slice-18).
+  # No raw argv, environment, response body or copied output enters diagnostics
+  # or ownership records. Existing prerequisite failures keep their own rules.
+  # Calls/startup/teardown keep 10/120/30 s budgets; no new workload lifetime limit.
+  #
+  # Implementation handoff: extend internal/slices/run and shared
+  # internal/engine/session domain/port/named adapters, reusing readiness and
+  # approval ports; only cmd assembles. Run shared anchor contracts against
+  # I/O-free port/porttest fakes and adapters. Reuse pinned Moby client v0.6.2 /
+  # api v1.56.1 for engine transport, Go 1.27.3 and x/sys v0.48.0 for native
+  # adapter operations rather than a shell client or handwritten engine protocol.
+  # No new dependency/service or allowlist expansion is selected. OS is a value;
+  # retain notices and architecture import boundaries. If an adapter needs a new
+  # privilege/topology outside this contract, stop and report that design gap.
+  # In the implementation PR, record a decision naming the arc42 sections
+  # overridden and update Building-block view, Foreground run, Recovery,
+  # Deployment view and the affected ownership/evidence descriptions. Explain
+  # the anchor's concrete protection, lifecycle and remaining slice-18 recovery.
+  # This spec-only commit edits no architecture or production code.
+  #
+  # Supersession is limited to raw checkout-path equality as proof of a source:
+  # adapt OFFLINE-01/02/04's local request/inspection oracles and OFFLINE-09's
+  # native mount oracle to verify the owned anchor plus ORIGINAL backing inode.
+  # Keep the wrong-source, additional-mount, nonrecursive, writable-checkout and
+  # protected-state denials. Preserve OFFLINE-05 and all unrelated live behavior;
+  # do not re-tag live cases or relax them to accept arbitrary protected paths.
+  #
+  # EVERY mount-anchor phrase below is NEW. Reuse offline_launch_steps_test.go /
+  # offline_launch_fixture_test.go and cmd/itos-container/offline_contract_test.go
+  # for local registered-run assemblies; offline_runtime_steps_test.go,
+  # offline_runtime_fixture_test.go and offline_runtime_engine_test.go for native
+  # binary execution, independent seeded approvals and API recording. Feature
+  # steps observe subprocess results/files; they import no production packages.
+  # No Given invokes run/approve or asserts product behavior. Each only prepares
+  # disposable files, independent approval seeds, synthetic observations, probes,
+  # fault settings and checkpoints. No real state folder or credential is used.
+  #
+  # Local cases run the real registered command/domain with both memory ports
+  # and disk/SDK adapters against HTTP fixtures. They prove decisions, mapping
+  # and real storage durability, never native mounting. Native anchor operations
+  # and ALL real-engine setup/actions/cleanup remain CI-only @engine. Keep kernel
+  # fault seams and HTTP responses at adapter boundaries, not precomputed CLI
+  # results; fake ports do no I/O. Fault-free controls use the same assembly and
+  # backends and must exercise actual anchor ownership, worker launch and cleanup.
+  # Record failed operations too; never infer an unused fault was exercised.
+  # Thin unavailable stubs may make the red step commit compile, but cannot
+  # supply fake successful behavior. A missing capability reaches Then as data.
+  #
+  # Whens race barriers against child exit and finite deadlines; early refusal,
+  # unreached barriers and missing records reach Then, not setup failure/hang.
+  # Never demand an anchor already exists as a precondition for the red action.
+  # Checkpoints separate fixture replacements from product effects. Observe
+  # outcomes, resources and records BEFORE bounded, identity-checked harness
+  # cleanup, including after a failed assertion. Harness cleanup is not proof.
+  # Commit complete steps red first with @wip retained. Require local assertion
+  # red/green for 25-28/31, and the coordinator's guarded red_scenarios CI dispatch
+  # followed by ordinary green CI for EVERY row of 29-30. Undefined steps, skips
+  # or broken controls provide no red evidence. No local engine or mutation run.
+
+  # Current launch has no anchor intent/resource or bound source, so the first
+  # Then fails even though its existing worker can run and clean successfully.
+  @wip @slice-17 @ID-OFFLINE-25 @linux
+  Scenario: Run durably owns an inode-bound source before using it and releases it last
+    Given a mount-anchor contract fixture with approved settings and a writable checkout
+    When the registered run completes through both fake and disk SDK mount-anchor adapters
+    Then each run durably records anchor intent before allocation and verified concrete anchor ownership before worker create
+    And each worker consumes only that anchor backed by the validated checkout inode with the unchanged offline boundary
+    And each anchor stays bound until confirmed worker absence and is released before durable session completion
+    And each run returns zero with the checkout edit preserved and no owned ephemeral resource remaining
+    And mount-anchor operations leave approval snapshots outside targets and unrelated resources unchanged
+
+  # Fault the named anchor publication, not the existing worker-record write.
+  # Short writes/file fsync fail before final publication; parent fsync may
+  # leave an absent or complete record but yields no usable source. Hold the
+  # named fault through the first attempt. After intent failure no anchor is
+  # allocated. After concrete-ownership failure, any allocated anchor must be
+  # independently released or retained with its durable original intent and an
+  # explicit incomplete-cleanup result; never forgotten or consumed by a worker.
+  # Today these publications do not occur and run reaches worker create instead
+  # of the first Then's mount-write refusal. Include a separate healthy control.
+  @wip @slice-17 @ID-OFFLINE-26 @linux
+  Scenario Outline: Anchor publication failure prevents worker creation
+    Given a mount-anchor contract fixture with persistent publication fault "<fault>"
+    When the registered run and its fault-free control execute through both mount-anchor backends
+    Then each faulted run reports "run.mount-write" with exit 75 and no worker create or start
+    And anchor allocation occurs only after durable intent and no failed publication yields a usable source
+    And every possibly allocated anchor is accounted for by confirmed release or retained protected ownership with incomplete cleanup
+    And each fault-free control launches through its owned anchor and confirms complete cleanup
+    And mount-anchor operations leave approval snapshots outside targets and unrelated resources unchanged
+
+    Examples:
+      | fault                         |
+      | anchor intent short write     |
+      | anchor intent file fsync      |
+      | anchor intent parent fsync    |
+      | anchor intent ancestor fsync  |
+      | anchor ownership short write  |
+      | anchor ownership file fsync   |
+      | anchor ownership parent fsync |
+
+  # These faults precede worker create. The replaced-source row changes the
+  # independently observed concrete anchor after ownership publication, keeping
+  # its path/name the same. Allocation uncertainty includes unavailable follow-up
+  # inspection and MUST retain intent, not retry allocation or infer absence.
+  # Same-name foreign resources are fixture-owned and must remain untouched.
+  # Today no source capability is requested/verified, so the first Then fails.
+  @wip @slice-17 @ID-OFFLINE-27 @linux
+  Scenario Outline: Run refuses an unavailable or unverified inode-bound source without fallback
+    Given a mount-anchor contract fixture with source fault "<fault>"
+    When the registered run and its fault-free control execute through both mount-anchor backends
+    Then each faulted run reports "<rule>" with exit <exit> and no worker create or start
+    And no operation falls back to the original pathname or allocates a replacement after uncertainty
+    And source uncertainty retains the original anchor intent and source mismatch authorizes no foreign-resource mutation
+    And each fault-free control launches through its owned anchor and confirms complete cleanup
+
+    Examples:
+      | fault                                                    | rule                  | exit |
+      | anchoring facility unavailable                           | run.mount-unavailable | 3    |
+      | observed anchor has a different backing checkout inode   | run.mount-refused     | 1    |
+      | protected source replaced after ownership publication    | run.mount-refused     | 1    |
+      | allocation response lost and reconciliation unavailable  | run.mount-uncertain   | 75   |
+
+  # Both rows acquire and durably own the anchor before the worker fault. The
+  # mismatch row returns a wrong runtime boundary for an otherwise owned
+  # unstarted full ID; cleanup must confirm that ID absent before source release.
+  # The lost-create row sends create, loses its reply and returns name-only 404
+  # during reconciliation: the request may still finish, so keep the anchor and
+  # original intent even when no worker ID can yet be observed. No second create.
+  # Neither row runs a workload or invents its exit. Today no owned anchor can
+  # satisfy the first Then, regardless of the existing worker failure handling.
+  @wip @slice-17 @ID-OFFLINE-31 @linux
+  Scenario Outline: Failed startup releases a source only when no worker can still use it
+    Given a mount-anchor contract fixture with worker startup fault "<fault>"
+    When the registered run and its fault-free control execute through both mount-anchor backends
+    Then each faulted run accounts for its durably owned anchor as "<anchor>"
+    And each faulted run reports "<rule>" with exit <exit> and no start or invented workload result
+    And no worker create is retried and a name-only absence never permits anchor release
+    And each fault-free control launches through its owned anchor and confirms complete cleanup
+    And mount-anchor operations leave approval snapshots outside targets and unrelated resources unchanged
+
+    Examples:
+      | fault                                           | anchor                              | rule                     | exit |
+      | owned unstarted worker fails boundary inspection | released after full-ID absence      | run.isolation-unverified | 1    |
+      | worker create reply lost and name lookup absent  | retained while creation is uncertain | run.create-uncertain    | 75   |
+
+  # Observe workload exit zero first, then inject the named fault. For the
+  # missing worker observation, make removal uncertain and full-ID inspection
+  # unavailable, never a 404. For the foreign anchor, change its observed tuple
+  # after worker removal; a similar name cannot permit release. Completion fsync
+  # faults occur after actual anchor absence, so records may describe absence
+  # without durable completion; do not falsely assert the anchor still exists.
+  # The first Then fails today: there is no retained mount ownership. Later
+  # result assertions also expose ignored anchor-release/publication failures.
+  @wip @slice-17 @ID-OFFLINE-28 @linux
+  Scenario Outline: Incomplete foreground cleanup retains anchor evidence and never claims completion
+    Given a mount-anchor contract fixture with a zero-exit workload and cleanup fault "<fault>"
+    When the registered run and its fault-free control execute through both mount-anchor backends
+    Then each faulted run retains protected anchor ownership and reports its actual worker and anchor observations as incomplete cleanup
+    And each faulted run returns <exit> with separate "<rule>" guidance and its registered session ID
+    And no anchor release precedes confirmed worker absence or mutates a foreign source
+    And no session completion is reported before anchor absence and durable completion publication
+    And each fault-free control launches through its owned anchor and confirms complete cleanup
+    And mount-anchor operations leave approval snapshots outside targets and unrelated resources unchanged
+
+    Examples:
+      | fault                                      | rule                  | exit |
+      | worker removal fails and full ID remains   | run.cleanup-temporary | 75   |
+      | worker removal and absence remain unknown  | run.cleanup-temporary | 75   |
+      | owned anchor release fails                 | run.cleanup-temporary | 75   |
+      | anchor identity is now foreign             | run.cleanup-ownership | 1    |
+      | anchor completion file fsync fails         | run.cleanup-temporary | 75   |
+      | anchor completion parent fsync fails       | run.cleanup-temporary | 75   |
+
+  # Native race fixture: independent original/replacement device-inode pairs,
+  # distinct nonce files, the SAME trusted reporting probe in both trees, and
+  # an approved /workspace/subdir. Both targets are harmless temporary trees;
+  # no host home, credentials or real socket is substituted. Prepare writable
+  # nonce controls in both, plus a nested host mount with an outside sentinel.
+  # A host control verifies the nested mount before and after the worker probe.
+  # Independently inspect T-20's cached fixture; never pull/build/substitute it.
+  #
+  # The native recorder holds the actual POST /containers/<full-id>/start AFTER
+  # the controller has submitted it, before forwarding it to the daemon. Thus
+  # all product pre-start identity checks have finished. Rename the root or its
+  # parent aside and put the example's real directory/symlink at the old name,
+  # then forward that exact request unchanged. Ancestor replacement contains
+  # the same relative checkout name, pointing at the replacement tree. Keep the
+  # original reachable only at its moved fixture location until observations end.
+  # No sleeps, production test flag, earlier validation barrier or post-mount swap.
+  # The recorder must allow the old build's original-source request to reach the
+  # harmless substitute; recorder rejection cannot masquerade as product safety.
+  # Retain normal identity restrictions for all unrelated resources/requests.
+  #
+  # Probe reports /workspace's device/inode, nonce, working directory, and writes
+  # a fresh nonce in subdir. Compare with independently recorded host identity
+  # and the moved original's new edit, not with the outgoing request or path text.
+  # Copied files cannot satisfy inode equality. The worker also attempts the
+  # nested sentinel and anchor-control paths; the latter stay outside its view.
+  # Capture the actual anchor/worker relationship while start is held and while
+  # running, then their absence before harness teardown. A no-substitution run
+  # with its own session is the working control and must exercise the same source.
+  # Current code starts on the substitute (or refuses) rather than executing on
+  # the original inode: the first Then is the required CI red assertion per row.
+  @wip @slice-17 @ID-OFFLINE-29 @engine
+  Scenario Outline: Substitution after the final identity check cannot redirect a submitted start
+    Given a CI mount-anchor checkout with the cached image original and replacement nonce trees and a reporting probe
+    And the native recorder is armed to pause the submitted worker start before daemon source resolution
+    When run reaches that barrier and the fixture makes "<replacement>" before forwarding the unchanged start request
+    Then the worker executes in the original checkout inode and approved subdirectory and writes its edit only to the moved original
+    And the independently observed protected anchor was owned before use and the worker has exactly the original nonrecursive checkout host source
+    And the worker cannot read the replacement nonce nested host sentinel or anchor control records
+    And the product returns zero after confirmed worker and anchor absence with the edit preserved and the replacement untouched
+    And the no-substitution control executes through its own inode-bound anchor and confirms cleanup
+
+    Examples:
+      | replacement                               |
+      | checkout root replaced by outside symlink |
+      | checkout root replaced by real directory  |
+      | checkout ancestor replaced by symlink     |
+      | checkout ancestor replaced by directory   |
+
+  # Keep the native removal-only HTTP 503 fault active until observations end;
+  # actual create/start/wait/inspection still use the daemon. After the probe's
+  # live handshake, rename the original checkout aside and install a harmless
+  # replacement, then let the probe write/exit. Observe the real workload result
+  # and wait for the controller process to exit. The full worker ID must remain
+  # present and the SAME protected anchor must still bind the original inode,
+  # despite the old path's replacement and closure of all controller descriptors.
+  # An independent host observer checks that retained source without starting a
+  # second workload or invoking status/stop recovery. Never count a source string
+  # or the worker's ownership record alone as retained anchor evidence.
+  # The healthy control has the same child exit and completes both removals.
+  # Identity-checked harness release happens only after all observations. This
+  # hands retained state to slice-18; it does not test that item's recovery yet.
+  # Today's controller has no anchor to retain, so the first Then fails even
+  # when its existing workload-exit/worker-removal failure mapping is correct.
+  @wip @slice-17 @ID-OFFLINE-30 @engine
+  Scenario Outline: Failed worker removal retains the inode-bound source after run exits
+    Given a CI mount-anchor checkout with the cached image and a removal-only transient Engine API fault
+    When the anchored workload is released after checkout replacement and exits <child> and the controller returns
+    Then the original owned anchor still binds the original checkout inode with protected recovery evidence after controller exit
+    And native Docker still observes the exact owned worker and no anchor release was attempted
+    And the observed workload exit is <child> and run returns <result> with separate "run.cleanup-temporary" guidance and its registered session ID
+    And no completed-session claim is made and checkout edits approval snapshots replacement targets and unrelated resources remain intact
+    And the fault-free native control preserves the same workload exit and confirms worker and anchor removal
+
+    Examples:
+      | child | result |
+      | 0     | 75     |
+      | 7     | 7      |
 
   # Literal arguments and streams. The JSON DocString is fixture data decoded
   # directly into exec argv; never pass it through commandWords or a host shell.
