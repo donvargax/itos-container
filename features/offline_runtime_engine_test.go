@@ -43,8 +43,8 @@ type offlineAPI struct {
 	problem     error
 	connections map[net.Conn]bool
 	identities  map[string]map[string]any
-	// Recovery faults and signal capabilities belong only to the slice-11
-	// fixture. They do not broaden the existing offline runtime scenarios.
+	// Recovery faults belong only to the slice-11 fixture. Owned teardown is
+	// allowed for every run after the same full-ID and identity checks.
 	recovery    bool
 	failRemove  bool
 	removeGate  chan struct{}
@@ -134,17 +134,38 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 		}
 	}
 	// ReverseProxy relays the attach upgrade in both directions and preserves
-	// half-close, rather than buffering the upgraded stream as an HTTP body.
+	// half-close. Use the bare transport, without the inspection client's timeout:
+	// attach and wait live until the caller/scenario ends them.
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.Out.URL.Scheme, r.Out.URL.Host, r.Out.Host = "http", "engine", "engine"
 		},
-		Transport: a.w.doctor.real.transport,
+		Transport:     a.w.doctor.real.transport,
+		FlushInterval: -1, // forward wait's acknowledgement before its exit body
 		ModifyResponse: func(response *http.Response) error {
 			a.mu.Lock()
 			a.requests[index].Status = response.StatusCode
 			a.mu.Unlock()
 			if response.StatusCode == http.StatusSwitchingProtocols {
+				return nil
+			}
+			if entry.Method == "POST" && strings.HasSuffix(entry.Path, "/wait") && response.StatusCode == http.StatusOK {
+				// Waiting for EOF here hides Docker's immediate acknowledgement
+				// and turns the product's handshake limit into a workload timeout.
+				response.Body = &offlineWaitBody{ReadCloser: response.Body, record: func(data []byte, err error) {
+					a.mu.Lock()
+					defer a.mu.Unlock()
+					if err == nil {
+						err = json.Unmarshal(data, &a.requests[index].Observation)
+					}
+					if err != nil {
+						a.requests[index].Diagnostic = "recorder wait stream: " + err.Error()
+						a.requests[index].Cancelled = request.Context().Err() != nil
+						if !a.recovery || request.Context().Err() == nil {
+							a.problem = errors.New("offline native recorder wait stream failed")
+						}
+					}
+				}}
 				return nil
 			}
 			data, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
@@ -196,6 +217,35 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 		},
 	}
 	proxy.ServeHTTP(out, request)
+}
+
+// Retain bounded journal data while forwarding bytes immediately. Close runs
+// after the proxy finishes copying, before it completes the downstream body.
+type offlineWaitBody struct {
+	io.ReadCloser
+	data    []byte
+	failure error
+	once    sync.Once
+	record  func([]byte, error)
+}
+
+func (b *offlineWaitBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	keep := min(n, (4<<20)-len(b.data))
+	b.data = append(b.data, p[:keep]...)
+	if keep != n {
+		b.failure = errors.New("wait response exceeded journal limit")
+	}
+	if err != nil && err != io.EOF {
+		b.failure = err
+	}
+	return n, err
+}
+
+func (b *offlineWaitBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.once.Do(func() { b.record(b.data, errors.Join(b.failure, err)) })
+	return err
 }
 
 // Called under the journal lock. Refusals remain evidence, and are never
@@ -261,10 +311,10 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		case "wait":
 			return len(r.URL.Query()) == 1 && r.URL.Query().Get("condition") == "not-running"
 		case "kill":
-			return a.recovery && len(r.URL.Query()) == 1 &&
+			return len(r.URL.Query()) == 1 && len(r.URL.Query()["signal"]) == 1 &&
 				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL")
 		case "stop":
-			return a.recovery && len(r.URL.Query()) == 2 && r.URL.Query().Get("signal") == "SIGTERM" && r.URL.Query().Get("t") == "10"
+			return reflect.DeepEqual(r.URL.Query(), url.Values{"signal": {"SIGTERM"}, "t": {"10"}})
 		}
 	}
 	if r.Method == "DELETE" && operation == "" {

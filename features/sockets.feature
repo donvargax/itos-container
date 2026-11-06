@@ -136,6 +136,17 @@ Feature: Host Unix sockets in the checkout stay outside the worker boundary
   # socket operation, with the controls above. Do not implement denial first.
   # If product refusal of checkouts containing sockets prevents startup instead,
   # report that evidence for the coordinator to decide the specification change.
+  #
+  # Coordinator decision, 2026-11-06 ~23:30 UTC: run 42311089210 at 3b8b9ac is
+  # also NOT accepted. Create 201, attach 101 and start 204 were followed by a
+  # recorder wait 502 (context canceled) and an owned kill 403. Repair the
+  # recorder before requesting a third red run: forward wait's acknowledgement
+  # immediately, journal its exit body while streaming, and impose no wait or
+  # attach lifetime limit beyond the scenario budget. Permit contract teardown
+  # of the same independently verified full-ID worker, including SIGTERM and
+  # SIGKILL. Keep foreign identities and unrelated mutations refused. These
+  # fixture repairs supply no socket-isolation evidence; retain @wip and stop
+  # for the coordinator's third guarded run of ID-SOCKETS-01/02/03.
 
   # Prepare each operation's listener at both a short root path and a nested
   # checkout path before invoking run. The probe's earliest operations attempt
