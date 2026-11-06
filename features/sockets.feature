@@ -125,6 +125,17 @@ Feature: Host Unix sockets in the checkout stay outside the worker boundary
   # and obtain ordinary green engine CI at the pushed head. Undefined steps,
   # fixture failures and selection skips supply no evidence. Agents use no engine
   # and run no local mutation proof; ordinary code proof remains engine-disabled.
+  #
+  # Coordinator decision, 2026-11-06: run 42308513561 at dbf75d4 is NOT accepted
+  # red evidence. All three cases exited 75 with run.execution-unavailable before
+  # the probe barrier; no socket operation ran. Diagnose startup in the harness,
+  # retaining controller stderr, recorder refusals, engine response messages and
+  # observed engine state in incomplete-workload failures. Fix fixture blockers,
+  # then stop for another guarded red run of all three IDs. Valid red requires the
+  # probe inside the worker and a host listener nonce receipt or a successful
+  # socket operation, with the controls above. Do not implement denial first.
+  # If product refusal of checkouts containing sockets prevents startup instead,
+  # report that evidence for the coordinator to decide the specification change.
 
   # Prepare each operation's listener at both a short root path and a nested
   # checkout path before invoking run. The probe's earliest operations attempt

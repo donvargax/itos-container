@@ -26,6 +26,8 @@ type offlineRequest struct {
 	Record              sessionRecord
 	Status              int
 	Cancelled           bool
+	Diagnostic          string
+	State               map[string]any
 }
 
 // Unlike doctor's read-only recorder and slice-9's unstarted recorder, this
@@ -96,12 +98,14 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 	allowed := readErr == nil && len(body) <= 65536 && a.allowed(request, &entry)
 	if !allowed {
 		entry.Status = http.StatusForbidden
+		entry.Diagnostic = "recorder refused unsafe request"
 	}
 	a.requests[index] = entry
 	failRemove := allowed && a.failRemove && entry.Method == http.MethodDelete
 	fault := allowed && a.removalFault(entry)
 	if failRemove || fault {
 		a.requests[index].Status = http.StatusServiceUnavailable
+		a.requests[index].Diagnostic = "recorder injected removal fault"
 	}
 	gate := a.removeGate
 	hold := allowed && entry.Method == http.MethodDelete && gate != nil && !a.removeHeld
@@ -153,6 +157,10 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			_ = json.Unmarshal(data, &observed)
 			a.mu.Lock()
 			defer a.mu.Unlock()
+			if response.StatusCode >= http.StatusBadRequest {
+				message, _ := observed["message"].(string)
+				a.requests[index].Diagnostic = "engine response: " + message
+			}
 			if entry.Method == "POST" && entry.Path == "/containers/create" && response.StatusCode == http.StatusCreated {
 				id, _ := observed["Id"].(string)
 				if !offlineHex(id) {
@@ -169,12 +177,16 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			}
 			if observed != nil {
 				a.requests[index].Observation = observed
+				if state, ok := observed["State"].(map[string]any); ok {
+					a.requests[index].State = state
+				}
 			}
 			return nil
 		},
-		ErrorHandler: func(out http.ResponseWriter, request *http.Request, _ error) {
+		ErrorHandler: func(out http.ResponseWriter, request *http.Request, err error) {
 			a.mu.Lock()
 			a.requests[index].Status = http.StatusBadGateway
+			a.requests[index].Diagnostic = "recorder transport: " + err.Error()
 			a.requests[index].Cancelled = request.Context().Err() != nil
 			if !a.recovery || request.Context().Err() == nil {
 				a.problem = errors.New("offline native recorder transport failed")
@@ -229,6 +241,7 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		return false
 	}
 	entry.Observation = observed
+	entry.State = object(observed["State"])
 	entry.Record, err = sessionReadRecord(w.sessionRecordPath())
 	if err != nil {
 		a.problem = err
@@ -344,7 +357,14 @@ func offlineEmpty(value any) bool {
 func (a *offlineAPI) safeObserved(c map[string]any) bool {
 	config := approvalClone(object(c["Config"]))
 	config["Image"] = c["Image"]
-	config["HostConfig"] = c["HostConfig"]
+	host := approvalClone(object(c["HostConfig"]))
+	// Docker may report the explicit boolean form after accepting the bare
+	// create option. Normalize only this equivalent inspected representation;
+	// missing, false or additional security options still fail safeCreate.
+	if reflect.DeepEqual(host["SecurityOpt"], []any{"no-new-privileges=true"}) {
+		host["SecurityOpt"] = []any{"no-new-privileges"}
+	}
+	config["HostConfig"] = host
 	return a.safeCreate(config)
 }
 

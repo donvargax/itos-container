@@ -105,7 +105,12 @@ func socketPositive(a socketAttempt) bool {
 		a.Connected == connect && a.Sent && a.Reply == a.Nonce
 }
 
-func (s *socketWorld) completeReports() error {
+func (s *socketWorld) completeReports() (err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%w\nstartup diagnostics (not product red evidence):\n%s", err, s.startupDiagnostics())
+		}
+	}()
 	if s.fixtureErr != nil {
 		return fmt.Errorf("socket fixture/control failure (not product red evidence): %w", s.fixtureErr)
 	}

@@ -12,7 +12,7 @@ import (
 func TestRegistryLaunchRevalidatesCurrentCheckoutWithoutChangingRecovery(t *testing.T) {
 	for _, fault := range []string{"root inode", "Git inode", "pin", "inspect", "changed"} {
 		t.Run(fault, func(t *testing.T) {
-			m := newRegistryFixture()
+			m := newRegistryFixture(t)
 			files := m.seed()
 			before := bytes.Clone(files.Data)
 			checkout := m.registry.Store.Checkout.(*rf.Checkout)

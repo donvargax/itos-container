@@ -28,6 +28,14 @@ func logFeatureSignals(hostOS string) {
 	if hostOS != "linux" {
 		return
 	}
+	// Linux signal numbers, used only after the OS check. Job-control names
+	// are absent from syscall on Windows, where this test file still compiles.
+	const (
+		sigCONT = syscall.Signal(18)
+		sigTSTP = syscall.Signal(20)
+		sigTTIN = syscall.Signal(21)
+		sigTTOU = syscall.Signal(22)
+	)
 	received := make(chan os.Signal, 64)
 	// This subscription lasts until TestMain exits, including m.Run's cleanup.
 	signal.Notify(received)
@@ -47,7 +55,7 @@ func logFeatureSignals(hostOS string) {
 				syscall.SIGSEGV, syscall.SIGTERM,
 				syscall.Signal(16), syscall.Signal(31): // Linux SIGSTKFLT and SIGSYS.
 				os.Exit(128 + int(number))
-			case syscall.SIGTSTP, syscall.SIGTTIN, syscall.SIGTTOU:
+			case sigTSTP, sigTTIN, sigTTOU:
 				// Retain job-control semantics after recording the notification.
 				signal.Reset(sig)
 				self, err := os.FindProcess(os.Getpid())
@@ -58,8 +66,8 @@ func logFeatureSignals(hostOS string) {
 					fmt.Fprintf(os.Stderr, "features TestMain could not restore signal: %v\n", err)
 					os.Exit(1)
 				}
-			case syscall.SIGCONT:
-				signal.Notify(received, syscall.SIGTSTP, syscall.SIGTTIN, syscall.SIGTTOU)
+			case sigCONT:
+				signal.Notify(received, sigTSTP, sigTTIN, sigTTOU)
 			}
 		}
 	}()
