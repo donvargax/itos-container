@@ -123,11 +123,28 @@ wrong server platform or timeout fails the job. It records only server version, 
 OS, architecture and the tested commit. Its 29-second deadline plus a 1-second kill grace
 bounds it to 30 seconds. The preflight attempts no install/start, image pull/build, container
 creation or fallback. A separate preparation step supplies the cached fixture described below.
-The Engine scenarios step alone enables the switch and runs this **CI-only** command:
+The Engine scenarios step first compiles the test binary, then alone enables the switch
+for this **CI-only** invocation (the workflow also supplies the fixture environment):
 
 ```sh
-ITOS_CONTAINER_ENGINE_TESTS=1 go test ./features -count=1 -v -timeout=5m -run '^TestFeatures$'
+go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
+cd features
+ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$'
 ```
+
+The separate process session keeps a test process-group signal from killing the supervising
+shell. The workflow streams both output channels to the log and
+`$RUNNER_TEMP/slice-11-features.log`, prints the binary's exit status and decodes exits of
+128 plus a signal number. It preserves the test's failure even when output capture succeeds;
+a capture failure also fails a successful test run. A failure-only step prints the last
+50 kernel messages, `free -m` and the last 100 test-output lines before unconditional cleanup.
+The explicit `-test.paniconexit0` retains `go test`'s protection against an early `os.Exit(0)`.
+TestMain logs catchable signals to stderr in the engine tier, including its PID, and exits
+nonzero for terminating signals. SIGKILL and SIGSTOP cannot be caught; the supervising shell
+and kernel output supply that evidence. These diagnostics address the coordinator's
+2026-11-06 silent engine failures; they neither identify a cause nor establish runtime proof.
+`TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
+and `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
 The step has a five-minute budget and the job a ten-minute budget. These are test-infrastructure
 budgets, not product startup/resource limits. With no red input the step selects every live
