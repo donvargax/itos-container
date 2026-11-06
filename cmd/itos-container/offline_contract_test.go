@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -72,6 +73,7 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 		var out, errout bytes.Buffer
 		result.Code = command.Run(&cli.UI{In: bytes.NewReader(nil), Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
 		result.Diagnostic = errout.String()
+		result.PreflightFailure = fmt.Sprintf("status=%s failure=%s ready=%v", preflight.view.Status, preflight.view.Failure, preflight.view.Inspection.Ready)
 	}
 	if memory != nil {
 		result.RunEvents = memory.Events

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/cucumber/godog"
@@ -231,7 +232,7 @@ func (w *world) offlineLocalCleanup() error {
 			if err := w.sessionExactRecord(q.Record, "owned", id); err != nil {
 				return err
 			}
-			if err := w.sessionDurability(q.Events, "owned", id); err != nil {
+			if err := w.offlineOwnedDurability(q.Events, id); err != nil {
 				return err
 			}
 			removed = true
@@ -251,4 +252,41 @@ func (w *world) offlineLocalCleanup() error {
 		return err
 	}
 	return w.sessionUnrelated()
+}
+
+// Foreground cleanup re-syncs an already published owned record. Check the
+// complete publication and any later re-sync in journal order; choosing the last
+// fsync and the earlier rename independently would misorder this valid sequence.
+func (w *world) offlineOwnedDurability(events []sessionEvent, id string) error {
+	written, synced, published, durable := false, false, false, false
+	for _, e := range events {
+		if e.Stage != "owned" {
+			continue
+		}
+		record, err := sessionDecodeRecord(e.Bytes)
+		if err != nil || !reflect.DeepEqual(record, w.sessionExpectedRecord("owned", id)) {
+			return fmt.Errorf("owned durability event has different bindings")
+		}
+		if e.Failed {
+			durable, synced = false, false
+			continue
+		}
+		switch e.Operation {
+		case "write":
+			written, synced, published, durable = true, false, false, false
+		case "file fsync":
+			synced, durable = true, false
+		case "atomic publication":
+			if !written || !synced {
+				return fmt.Errorf("owned publication preceded write or fsync")
+			}
+			published = true
+		case "parent fsync":
+			durable = published && synced
+		}
+	}
+	if !durable {
+		return fmt.Errorf("owned removal preceded completed publication or re-sync")
+	}
+	return nil
 }

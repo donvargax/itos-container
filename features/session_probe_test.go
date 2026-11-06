@@ -153,6 +153,9 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	err = json.Unmarshal(data, &result)
 	if err == nil && s.backend == "memory" {
 		err = w.observeMemory(result.Memory)
+		if err != nil && s.offline {
+			err = fmt.Errorf("%w (exit %d; %s; %s)", err, result.Code, result.Diagnostic, result.PreflightFailure)
+		}
 	}
 	return result, err
 }
