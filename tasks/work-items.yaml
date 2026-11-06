@@ -566,14 +566,15 @@ items:
       leaves a session status and stop both refuse, which no supported command clears; no worker
       exists, so it is debris, not an escape. Publish both consistently, or add a durable
       create-not-issued state recovery can retire; a name-only 404 must not become proof of absence.
-  - id: p1-refuse-overlapping-worker-checkouts
+  - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p1-refuse-overlapping-worker-checkouts.
       Prevent one worker from replacing another checkout's parent path. Atomically refuse
       ancestor/descendant overlaps in either launch order, including concurrent launches, while
       allowing disjoint projects. Keep admission and ownership rules in shared engine packages.
