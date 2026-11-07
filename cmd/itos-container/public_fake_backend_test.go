@@ -58,6 +58,9 @@ type publicMemory struct {
 func publicMemoryFixture(t *testing.T) publicMemory {
 	t.Helper()
 	ready := af.Ready()
+	// The disk registry validates a native absolute path even with port fakes.
+	// /checkout is not absolute on Windows; freeze the native fixture identity.
+	ready.Checkout.Root = t.TempDir()
 	c := canonical.JSON{}.Candidate(ready, "1000", "1000")
 	frozen := ap.Frozen{Project: c.Project, Generation: "1", Fingerprint: c.Fingerprint, Settings: c.Canonical}
 	jsonCodec := codec.JSON{Approval: canonical.JSON{}, Parser: parser.Parser{}}
