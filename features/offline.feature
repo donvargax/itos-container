@@ -634,6 +634,13 @@ Feature: Hardened offline foreground run
   # anchored runs can be activated with all these live contracts intact. This
   # prerequisite neither specifies slice-18 implicitly nor authorizes its
   # implementation here; q-19's anchor and q-27's detector remain settled.
+  # The registry also makes slice-18 depend on slice-17. Waiting for slice-17
+  # to close before specifying and integrating slice-18 would make this a
+  # circular prerequisite. Leave that scheduling/integration change to the
+  # coordinating loop; do not edit the registry, absorb slice-18's scope or
+  # weaken a live recovery assertion to break the cycle. Q-33 authorizes anchor
+  # implementation from the accepted red evidence now; the integration
+  # prerequisite gates activation, not preparation of that implementation.
   # OFFLINE-30 proves retention for that handoff, never fresh-process release.
   #
   # Step handoff at ba0ba6b: local cases 25-28/31/32 are defined in
