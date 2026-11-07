@@ -50,6 +50,7 @@ type lifecycleLocal struct {
 	m                   publicMemory
 	store               sp.Store
 	registry            sp.Registry
+	engine              sp.RunEngine
 	events              []lifecycleEvent
 	hook                func(context.Context, string)
 	hidden, unknownExit bool
@@ -97,7 +98,11 @@ func (l *lifecycleLocal) invoke(ctx context.Context) (int, string, string) {
 
 func (l *lifecycleLocal) invokeWithStreams(ctx context.Context, out, errout sp.Writer) int {
 	approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: l.m.c, Record: ap.Record{Candidate: l.m.c, Generation: "1"}, Status: "matching"}}
-	runner := domain.Runner{Store: l.store, Registry: lifecycleRegistry{l.registry, l}, Engine: lifecycleEngine{l}, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
+	engine := l.engine
+	if engine == nil {
+		engine = lifecycleEngine{l}
+	}
+	runner := domain.Runner{Store: l.store, Registry: lifecycleRegistry{l.registry, l}, Engine: engine, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
 	var selected runport.Approval = lifecycleApproval{approval, l, ctx}
 	if l.approval != nil {
 		selected = l.approval

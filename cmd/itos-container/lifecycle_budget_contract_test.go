@@ -32,6 +32,11 @@ func TestLifecycleBudgetContract(t *testing.T) {
 	for _, backend := range []string{"ports", "protected records"} {
 		t.Run(backend, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
+				if name == "startup lifetime" {
+					cause, operation, _ := strings.Cut(os.Getenv("SLICE_12_ARGUMENT"), "|")
+					lifecycleStartupLifetimeCase(t, cause, operation, backend)
+					return
+				}
 				if name == "checkout lifetime" {
 					cause, operation, _ := strings.Cut(os.Getenv("SLICE_12_ARGUMENT"), "|")
 					lifecycleCheckoutLifetimeCase(t, cause, operation, backend)

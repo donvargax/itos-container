@@ -658,3 +658,31 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | execution-unavailable | termination |
       | engine-lost           | removal     |
       | execution-unavailable | removal     |
+
+  # Review regression: a socket identity syscall can ignore its request context.
+  # Release it only after command return (or the failing bounded harness guard).
+  # Create is accepted before its reply stalls; attach holds a late handle;
+  # start stalls before issuing its request. Preserve the connection until the
+  # operation actually finishes, with no subsequent launch or repeated mutation.
+  @wip @slice-12 @ID-LIFECYCLE-20 @linux
+  Scenario Outline: Non-cancellable launch operations cannot extend the controller wait
+    Given a lifecycle launch with a cancellation-ignoring "<operation>" interrupted by "<cause>"
+    When run returns before the pending launch operation is released through each local backend
+    Then run reports the interruption within its original operation and teardown budgets while retaining the pending connection
+    And late launch completion closes its connection and any attachment without resuming launch retrying mutations or changing the returned result
+    And the healthy control launches and cleans exactly one owned worker with unchanged unrelated state
+
+    Examples:
+      | operation             | cause           |
+      | create response       | call timeout    |
+      | boundary inspection   | call timeout    |
+      | attach establishment  | call timeout    |
+      | start acknowledgement | call timeout    |
+      | create response       | startup timeout |
+      | boundary inspection   | startup timeout |
+      | attach establishment  | startup timeout |
+      | start acknowledgement | startup timeout |
+      | create response       | SIGINT          |
+      | boundary inspection   | SIGINT          |
+      | attach establishment  | SIGINT          |
+      | start acknowledgement | SIGINT          |
