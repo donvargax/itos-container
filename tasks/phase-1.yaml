@@ -2332,20 +2332,32 @@
 
     Add TestRecoveryProtectedHeartbeatRename using disposable files and the real recovery
     preservation collector, without constructing a native fixture, starting a product command
-    or connecting to an engine. Include an unchanged control and a controlled rename_after_listing
-    case. Have the walker enumerate the real staging entry, rename it over the published heartbeat
-    exactly once, then deliver that already-enumerated entry to the collector. Assert the rename
-    was reached and performed, the heartbeat advanced, the protected snapshot is unchanged and
-    the capture succeeds. Exercise recovery's actual exclusion wiring, not just an isolated
-    skip predicate. The old collector must fail on the vanished staging entry before repair;
-    after repair it must not call Info or read either excluded entry. Use controlled callbacks
-    or handshakes, never sleeps, scheduling hints, retries, stress loops or an increased count
-    to seek a passing schedule. Any seam must leave the ordinary native path using WalkDir.
+    or connecting to an engine. Include an unchanged control and controlled rename_after_listing
+    and rename_with_cached_info cases. In each rename case, have the walker enumerate the real
+    staging entry, rename it over the published heartbeat exactly once, then deliver that entry
+    to the collector. The first case delivers the original DirEntry, so its Info lookup sees
+    the missing path. For the second, obtain the real entry's FileInfo before renaming and
+    deliver a DirEntry wrapper whose Info returns that saved metadata; the old collector then
+    reaches ReadFile on the missing path. This models disappearance between metadata lookup
+    and reading without adding another scheduling hook. Metadata obtained by the test to
+    arrange this schedule is distinct from calls made by the collector under test.
+
+    Assert the rename was reached and performed exactly once, the heartbeat advanced, the
+    protected snapshot is unchanged and the capture succeeds. Exercise recovery's actual
+    exclusion wiring, not just an isolated skip predicate. Before repair, both rename cases
+    must fail at the capture assertion, respectively on metadata lookup and file reading;
+    after repair the collector must not call Info or read either excluded entry. Use controlled
+    callbacks or handshakes, never sleeps, scheduling hints, retries, stress loops or an
+    increased count to seek a passing schedule. Any seam must leave the ordinary native path
+    using WalkDir.
 
     Add TestRecoveryProtectedSnapshotBoundaries with a healthy control and fault controls that
     retain the audit. Deleting a non-excluded entry after enumeration must still return its
-    filesystem error. Cover an unrelated .next file, the same heartbeat basename under a nested
-    checkout directory and under the host root, and strict default collectors with no exclusions.
+    filesystem error, both with the original DirEntry and with pre-deletion cached metadata.
+    Check the missing-file cause and the offending path, not just an arbitrary non-nil error,
+    so a different setup failure cannot satisfy these controls. Cover an unrelated .next file,
+    the same heartbeat basename under a nested checkout directory and under the host root,
+    and strict default collectors with no exclusions.
     Unrelated checkout/host additions, removals, content changes and mode changes must still
     change the captured snapshot; include an approval-file sentinel. Preserve link handling
     without following targets. Keep the existing TestOfflineRegistryPreservation and
@@ -2361,8 +2373,15 @@
     rename-after-enumeration case failed at the preservation assertion with lstat on the missing
     slice-11-heartbeat.next. Setup and the forced rename succeeded. No engine, product command
     or approval was involved, and no implementation or generated proof is committed by this spec.
-    Reproduce that controlled failure before repair and keep the ordering as a permanent
-    regression. Missing tests alone are not race evidence.
+    A draft refresh at f54b262 reproduced that failure with per-call walk plumbing through the
+    unchanged collectors and disposable offlineRegistryFixture files. Its unchanged control
+    passed; rename_after_listing failed at the capture assertion with lstat, and
+    rename_with_cached_info failed there with open. Each fault performed exactly one successful
+    rename and advanced the heartbeat from 1 to 2 before the assertion. The temporary Go overlay
+    changed only observation scheduling, leaving the existing late filtering in place; none
+    of that instrumentation is part of this docs commit. Reproduce both controlled failures
+    before repair and keep their ordering as permanent regressions. Missing tests alone are
+    not race evidence.
 
     The first check below discovers both named regressions before running them, preserves go
     test's exit status and refuses an empty selection. Before implementation it fails with
@@ -2376,7 +2395,7 @@
     Linux amd64 GitHub Actions engine context with its prepared cached-image inputs and native
     guard; never spoof that context or run it on the agent host. The coordinator's reported
     lstat failure is its pre-work evidence; a flaky native check need not fail on every run.
-    During drafting, itos task T-31 also invoked this command locally: with CI and GITHUB_ACTIONS
+    During earlier drafting, itos task T-31 invoked this command locally: with CI and GITHUB_ACTIONS
     unset, the selection guard refuses before native fixture setup. That invocation supplies
     neither native red evidence nor a pass; no native scenario was executed. Use itos work show
     to read the entry, since itos task executes both checks. Require actual selected execution
