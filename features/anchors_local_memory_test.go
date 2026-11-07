@@ -15,7 +15,7 @@ func (w *world) anchorRecoveryMemory() error {
 		return err
 	}
 	a := w.anchorLocalRecovery
-	request := map[string]string{"phase": a.phase, "worker": a.worker, "volume": a.volume, "completion": a.completion, "exit": a.exit}
+	request := map[string]string{"mode": a.mode, "fault": a.fault, "phase": a.phase, "worker": a.worker, "volume": a.volume, "completion": a.completion, "exit": a.exit}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	args := []string{"-test.run=^TestAnchorRecoveryMemory$", "-test.count=1", "-test.v"}

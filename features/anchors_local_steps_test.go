@@ -16,6 +16,14 @@ import (
 // These records are independently encoded fixture data, not product run output.
 // The descriptor belongs to no fixture process; recovery must only compare it.
 type anchorRecoveryLocal struct {
+	ready, release                          chan struct{}
+	held                                    bool
+	priorDelay                              bool
+	control                                 *world
+	savedWorker                             map[string]any
+	firstVolume                             string
+	reached                                 bool
+	mode, fault                             string
 	phase, worker, volume, completion, exit string
 	name                                    string
 	intent                                  map[string]any
@@ -24,9 +32,16 @@ type anchorRecoveryLocal struct {
 	volumes                                 map[string]map[string]any
 	memory                                  doctorResult
 	problem                                 error
+	firstRequests                           int
+	firstRecords                            map[string]string
+	original                                string
 }
 
 func (w *world) anchorRecoveryLocalSteps(sc *godog.ScenarioContext) {
+	w.anchorRecoveryStopSteps(sc)
+	w.anchorRecoveryFaultSteps(sc)
+	w.anchorRecoveryDefectSteps(sc)
+	w.anchorRecoveryRaceSteps(sc)
 	sc.Step(`^an anchor recovery fixture with phase "([^"]*)" worker "([^"]*)" volume "([^"]*)" completion "([^"]*)" and observed exit "([^"]*)"$`, w.anchorRecoverySeed)
 	sc.Step(`^fresh anchor status processes inspect each local backend in plain and JSON modes$`, func() error {
 		w.anchorLocalRecovery.problem = errors.Join(w.recoveryInvocation("status", "--json"), w.recoveryInvocation("status", "--no-json"))
@@ -44,6 +59,9 @@ func (w *world) anchorRecoverySeed(phase, worker, volume, completion, exit strin
 	if err := w.recoverySeed(phase, worker, exit); err != nil {
 		return err
 	}
+	return w.anchorRecoveryAdd(phase, worker, volume, completion, exit)
+}
+func (w *world) anchorRecoveryAdd(phase, worker, volume, completion, exit string) error {
 	a := &anchorRecoveryLocal{phase: phase, worker: worker, volume: volume, completion: completion, exit: exit, name: "itos-container-anchor-" + w.session.token, legacyID: strings.Repeat("c", 64)}
 	w.anchorLocalRecovery = a
 	r := w.sessionExpectedRecord("owned", w.session.seedID)
@@ -82,6 +100,9 @@ func (w *world) anchorRecoverySeed(phase, worker, volume, completion, exit strin
 	}
 	if c := w.session.api.local[w.session.seedID]; c != nil {
 		c["Mounts"] = []any{map[string]any{"Type": "volume", "Name": a.name, "Driver": "local", "Destination": "/workspace", "RW": true}}
+		if c["HostConfig"] == nil {
+			c["HostConfig"] = map[string]any{}
+		}
 		object(c["HostConfig"])["Mounts"] = []any{map[string]any{"Type": "volume", "Source": a.name, "Target": "/workspace", "VolumeOptions": map[string]any{"NoCopy": true}}}
 	}
 	if err = w.anchorRecoverySeedLegacy(); err != nil {

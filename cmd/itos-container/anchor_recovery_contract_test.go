@@ -9,12 +9,15 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/session/domain"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 	"github.com/donvargax/itos-container/internal/engine/session/presentation"
 	status "github.com/donvargax/itos-container/internal/slices/status/command"
+	stop "github.com/donvargax/itos-container/internal/slices/stop/command"
 )
 
 // This executable seam only assembles real handlers and codecs with I/O-free
@@ -28,6 +31,9 @@ func TestAnchorRecoveryMemory(t *testing.T) {
 	if err := json.Unmarshal([]byte(input), &request); err != nil {
 		t.Fatal(err)
 	}
+	synctest.Test(t, func(t *testing.T) { anchorRecoveryMemoryCase(t, request) })
+}
+func anchorRecoveryMemoryCase(t *testing.T, request map[string]string) {
 	m := publicMemoryFixture(t)
 	id, worker := m.seed("a")
 	token := strings.Repeat("a", 63) + "1"
@@ -48,12 +54,23 @@ func TestAnchorRecoveryMemory(t *testing.T) {
 	files.Data = m.registry.Codec.EncodePublic(p)
 	o := m.e.Resources[worker]
 	o.Status = request["worker"]
+	if o.Status == "running ignoring SIGTERM" {
+		o.Status = "running"
+		m.e.IgnoreSignal = true
+	}
 	if o.Status == "running" {
 		o.Running, o.Started, o.PID = true, true, 123
 	}
 	if o.Status == "exited" {
 		o.Started = true
 	}
+	m.e.Resources[worker] = o
+	var observed map[string]any
+	encoded, _ := json.Marshal(o)
+	_ = json.Unmarshal(encoded, &observed)
+	observed["AnchorName"], observed["AnchorExact"] = r.Anchor.Name, true
+	encoded, _ = json.Marshal(observed)
+	_ = json.Unmarshal(encoded, &o)
 	m.e.Resources[worker] = o
 	if request["worker"] == "absent" {
 		delete(m.e.Resources, worker)
@@ -76,6 +93,14 @@ func TestAnchorRecoveryMemory(t *testing.T) {
 	before := append([]byte(nil), files.Data...)
 	beforeLegacy := append([]byte(nil), l.Data...)
 	service := domain.Recovery{Registry: m.registry, Engine: engine}
+	if request["mode"] == "stop" {
+		anchorRecoveryMemoryStop(t, m, engine, service, id, worker, r, p)
+		return
+	}
+	if request["mode"] != "" {
+		anchorRecoveryMemoryFaultCase(t, request, m, engine, service, id, worker, r, p)
+		return
+	}
 	var out, errout bytes.Buffer
 	code := (status.CLI{Service: service, Presentation: presentation.UI{Out: &out, Err: &errout}, JSON: true}).Run()
 	var report struct{ Sessions []map[string]any }
@@ -136,12 +161,25 @@ func TestAnchorRecoveryMemory(t *testing.T) {
 }
 
 type anchorRecoveryMemoryEngine struct {
+	delay         time.Duration
+	inspectAnchor func(context.Context, string, sp.AnchorObservation, sp.Inspection) (sp.AnchorObservation, sp.Inspection)
+	removeAnchor  func(context.Context, string) bool
+	removeWorker  func(context.Context, string) bool
 	sp.RunEngine
-	volumes     *sf.AnchorResources
-	inspections int
+	volumes      *sf.AnchorResources
+	inspections  int
+	deletions    int
+	beforeDelete func()
 }
 
 func (e *anchorRecoveryMemoryEngine) OpenRun(ctx context.Context, b sp.Binding) (sp.RunConnection, sp.Outcome) {
+	if e.delay > 0 {
+		select {
+		case <-time.After(e.delay):
+		case <-ctx.Done():
+			return nil, sp.Incomplete
+		}
+	}
 	c, f := e.RunEngine.OpenRun(ctx, b)
 	if f != "" {
 		return nil, f
@@ -159,8 +197,92 @@ func (c anchorRecoveryMemoryConnection) AllocateAnchor(ctx context.Context, r sp
 }
 func (c anchorRecoveryMemoryConnection) InspectAnchor(ctx context.Context, name string) (sp.AnchorObservation, sp.Inspection) {
 	c.engine.inspections++
-	return c.engine.volumes.InspectAnchor(ctx, name)
+	o, s := c.engine.volumes.InspectAnchor(ctx, name)
+	if c.engine.inspectAnchor != nil {
+		return c.engine.inspectAnchor(ctx, name, o, s)
+	}
+	return o, s
 }
 func (c anchorRecoveryMemoryConnection) RemoveAnchor(ctx context.Context, name string) {
+	if c.engine.beforeDelete != nil {
+		c.engine.beforeDelete()
+	}
+	c.engine.deletions++
+	if c.engine.removeAnchor != nil && !c.engine.removeAnchor(ctx, name) {
+		return
+	}
 	c.engine.volumes.RemoveAnchor(ctx, name)
+}
+
+func (c anchorRecoveryMemoryConnection) Remove(ctx context.Context, id string) {
+	if c.engine.removeWorker != nil && !c.engine.removeWorker(ctx, id) {
+		return
+	}
+	c.RunConnection.Remove(ctx, id)
+}
+
+func anchorRecoveryMemoryStop(t *testing.T, m publicMemory, engine *anchorRecoveryMemoryEngine, service domain.Recovery, id, worker string, r sp.Record, p sp.PublicRecord) {
+	t.Helper()
+	engine.beforeDelete = func() {
+		if _, present := m.e.Resources[worker]; present {
+			t.Error("anchor removed before worker absence")
+		}
+	}
+	var previous []byte
+	deletions := 0
+	for attempt := 0; attempt < 2; attempt++ {
+		before := len(m.e.Events)
+		var out, errout bytes.Buffer
+		code := (stop.CLI{Service: service, Presentation: presentation.UI{Out: &out, Err: &errout}, JSON: true, Args: []string{id}}).Run()
+		var report struct{ Sessions []map[string]any }
+		if code != 0 || json.Unmarshal(out.Bytes(), &report) != nil {
+			t.Fatalf("anchor stop failed: %d %s %s", code, out.String(), errout.String())
+		}
+		if len(report.Sessions) != 1 {
+			t.Fatal("missing session", report)
+		}
+		e := report.Sessions[0]
+		for key, want := range map[string]string{"state": "stopped", "resource": "absent", "anchor": "absent", "cleanup": "complete"} {
+			if e[key] != want {
+				t.Errorf("%s=%v want %s", key, e[key], want)
+			}
+		}
+		if e["retry"] != nil || e["stop_candidate"] != false {
+			t.Error("completion retains retry")
+		}
+		if p.WorkloadExit == nil && e["workload_exit"] != nil {
+			t.Error("invented workload exit")
+		}
+		if p.WorkloadExit != nil && e["workload_exit"] != float64(*p.WorkloadExit) {
+			t.Error("lost workload exit")
+		}
+		if _, present := m.e.Resources[worker]; present {
+			t.Error("worker remains")
+		}
+		if _, present := engine.volumes.Resources[r.Anchor.Name]; present {
+			t.Error("anchor remains")
+		}
+		files := m.files.Sessions[m.index().Project+"/"+id]
+		if attempt == 0 {
+			deletions = engine.deletions
+			previous = append([]byte(nil), files.Data...)
+		} else {
+			if engine.deletions != deletions {
+				t.Error("repeat deleted anchor")
+			}
+			if !bytes.Equal(previous, files.Data) {
+				t.Error("repeat rewrote completion")
+			}
+			for _, event := range m.e.Events[before:] {
+				if event == "remove" || event == "SIGTERM" || event == "SIGKILL" || event == "create" || event == "start" {
+					t.Error("repeat mutated worker", event)
+				}
+			}
+		}
+	}
+	for _, event := range m.e.Events {
+		if event == "create" || event == "start" {
+			t.Error("recovery launched work")
+		}
+	}
 }
