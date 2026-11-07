@@ -117,6 +117,58 @@ at `3aae532` in q-33 on 2026-11-07, approximately 16:40 UTC, as assertion-level
 red evidence for both OFFLINE-30 removal-retention rows. Each failed at its Then
 with "missing original owned volume and protected recovery evidence after
 controller exit". Implementation of that behavior is authorized. The local
-ownership/fault cases 25–28/31 still need their red steps and local evidence.
+ownership/fault/detector cases 25–28/31/32 have the red checkpoint recorded below.
 Production implementation and native green remain pending; the current product
 still uses the unsafe pathname mount.
+
+## Local checkpoint and recovery integration gap
+
+The local steps are committed in `bb19503`, with contextual preflight diagnostics
+and both-backend assertion reporting corrected in `4c57651`. With `@wip` removed
+only for the local run, all 25 rows of OFFLINE-25/26/27/28/31/32 failed at their
+first behavior assertion on both memory and disk/SDK backends. There were no
+undefined steps or setup failures in that evidence run. The failures were missing
+anchor allocation, missing publication/source refusal, missing immediate detector
+teardown, or missing retained anchor authority, as appropriate to each case.
+
+The filesystem sandbox exposes root ancestors as UID 65534. Its `state.unsafe`
+preflight failures also affect the existing OFFLINE-01 control and are not red
+evidence. The accepted local run used normal host ancestry, disposable state and
+the HTTP fixture, without a Docker socket or an approval command.
+
+A subsequent uncommitted implementation draft passed all 25 local rows, including
+both backends and their healthy controls. It added schema-2 anchor ownership,
+descriptor-backed volume requests, post-start inspection/stat and foreground
+release ordering. That result is local evidence only. No native green, kernel
+resolution proof, changed-code proof or support claim was obtained.
+
+The draft exposed an integration conflict that must be resolved before the
+behavior commit. This decision and OFFLINE's handoff assign fresh-process anchor
+recovery to slice-18 and require readers that cannot account for the anchor to
+refuse completion. However, these existing live scenarios launch new sessions
+and require fresh processes to complete their cleanup:
+
+- RECOVERY-21 requires run's printed stop retry to return zero after a failed
+  foreground removal.
+- RECOVERY-22 requires fresh status and stop after the foreground controller dies.
+- RECOVERY-23 requires independent stop processes to complete one of two runs.
+- LIFECYCLE-16 requires fresh stop to reconcile uncertain launch boundaries.
+
+The draft's schema-2 refusal also fails existing local recovery checks, including
+`TestLifecycleEngineLossRetainsRecoverableFailure`,
+`TestPublicRecoveryBudgetRegressions` and
+`TestRegisteredWaitReconcilesConcurrentStop`. These tests require actual recovery;
+an early ownership refusal cannot replace it. No native scenario was run locally
+to reproduce the corresponding engine cases.
+
+Neither weakening or retagging those live scenarios nor implementing slice-18
+without its specification is authorized by the current handoff. The coordinator
+needs to reconcile the slice boundary with the live recovery contract. This does
+not reopen q-19's anchor or q-27's detector decisions.
+
+The draft was saved as `/tmp/slice-17-anchor-prototype.patch`, based on `4c57651`,
+then removed from the worktree. It is incomplete: besides the recovery conflict,
+existing adapter/unit fixtures still need the new mount contract and new
+production paths need shared-contract and unit coverage. Do not treat that patch
+as a mergeable implementation or its local green as full regression evidence.
+The committed branch retains the red steps with every slice-17 scenario `@wip`.
