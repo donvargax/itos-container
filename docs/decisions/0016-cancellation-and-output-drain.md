@@ -32,6 +32,14 @@ keep the controller alive. The existing seven-field recovery record retains a
 safe typed stream-timeout in `last_problem`, including after confirmed cleanup.
 This does not reopen a stopped session or change its immutable workload result.
 
+This also clarifies arc42's “Recovery” admission rules alongside decision 0014.
+A completed admission certificate remains valid when its matching stopped public
+record retains `stream-timeout`. Admission still refuses mismatched intent,
+non-stopped state, and every other retained failure beside a completion certificate.
+The output diagnostic neither releases an incomplete reservation nor invalidates
+durably completed resource cleanup. The preservation audit uses the same specified
+distinction while continuing to check the exact certificate's identity and safety.
+
 A reconnect that reports the local engine unavailable is retryable recovery
 failure. When protected state remains writable, retain failed progress and the
 original unknown workload result, so a restored status reports the surviving

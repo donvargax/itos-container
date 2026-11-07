@@ -25,7 +25,7 @@ import (
 // Both backends use production command/domain code. The second also exercises
 // the protected record codec, binding and transaction adapter over memory files.
 func TestLifecycleContract(t *testing.T) {
-	names := []string{"drain0", "drain17", "signal0", "signal17", "blocked-signal17", "exit-signal-race17", "grace"}
+	names := []string{"drain0", "drain17", "readmit0", "readmit17", "signal0", "signal17", "blocked-signal17", "exit-signal-race17", "grace"}
 	if selected := os.Getenv("SLICE_12_CONTRACT"); selected != "" {
 		names = []string{selected}
 	}

@@ -478,7 +478,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Admission completion records owned resource cleanup independently from the
   # retained output diagnostic (decisions 0014 and 0016). A later invocation must
   # not mistake the completed session's stream timeout for unresolved ownership.
-  @slice-12 @ID-LIFECYCLE-25 @linux @wip
+  # Both rows failed at the fresh-run Then on 67644fb: the protected-record
+  # backend returned run.session-registration-ownership after complete cleanup.
+  @slice-12 @ID-LIFECYCLE-25 @linux
   Scenario Outline: Completed cleanup remains admissible after an output timeout
     Given a lifecycle readmission fixture with observed exit <child> and a stalled final output drain
     When run finishes cleanup and a fresh run follows the stream timeout through each local backend

@@ -451,6 +451,10 @@ re-establish that evidence for legacy sessions. Existing operation-lock state ch
 fence stale create/start continuations before a nested checkout is readmitted; controller
 lease release is unnecessary. Each same-root session releases independently. Admission
 never contacts another project's daemon and status/stop keep their original scope.
+An independently retained `stream-timeout` on a stopped public record does not
+invalidate its matching completion certificate or block subsequent admission.
+Every other retained failure, a non-stopped record or mismatched intent still
+refuses a claimed completion; output loss cannot release an incomplete reservation.
 Admission marks claims pending until public registration succeeds durably. The common
 lock lets admission ignore only a pending claim with an absent public record; that
 publisher cannot still grant launch authority. Active and legacy claims, visible
