@@ -1,22 +1,9 @@
 package features
 
-import (
-	"os"
-	"path/filepath"
-)
-
 func (w *world) buildLifecycleProbe() error {
-	path := w.bin + "-slice-12-probe"
-	if _, err := os.Stat(path); err != nil {
-		if err := recoveryBuildHelper(w.root, path, lifecycleProbeSource); err != nil {
-			return err
-		}
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(w.doctor.checkout, "slice-12-probe"), data, 0700)
+	return w.installNativeProbe("slice-12-probe", func(path string) error {
+		return recoveryBuildHelper(w.root, path, lifecycleProbeSource)
+	})
 }
 
 // Compiled on the host, executed ONLY as the explicitly supplied native worker

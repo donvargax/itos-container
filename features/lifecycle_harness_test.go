@@ -170,6 +170,46 @@ func TestLifecycleRecorderDelaysOnlySignalAcknowledgement(t *testing.T) {
 	}
 }
 
+func TestLifecycleRemovalFaultStaysUnavailableAfterBarrierRelease(t *testing.T) {
+	f := newLifecycleFaults("cleanup-signals", "", 0)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	r := httptest.NewRequest(http.MethodDelete, "http://engine/containers/owned", nil).WithContext(ctx)
+	e := offlineRequest{Method: http.MethodDelete, Path: "/containers/owned"}
+	response := httptest.NewRecorder()
+	done := make(chan bool, 1)
+	go func() { done <- f.before(response, r, e) }()
+	select {
+	case <-f.ready:
+	case <-ctx.Done():
+		t.Fatal("removal never reached the signal overlap barrier")
+	}
+	select {
+	case <-done:
+		t.Fatal("removal completed before signals could overlap it")
+	default:
+	}
+	f.releaseBarrier()
+	select {
+	case refused := <-done:
+		if !refused || response.Code != http.StatusServiceUnavailable || ctx.Err() != nil {
+			t.Fatal("released removal did not report unavailability before call expiry")
+		}
+	case <-ctx.Done():
+		t.Fatal("removal waited for its call timeout after the overlap ended")
+	}
+	// Repeated attempts cannot reach the engine merely because the barrier
+	// ended. Only explicit restoration for the fresh stop permits forwarding.
+	response = httptest.NewRecorder()
+	if !f.before(response, r, e) || response.Code != http.StatusServiceUnavailable {
+		t.Fatal("barrier release accidentally restored engine removal")
+	}
+	f.restore()
+	if f.before(httptest.NewRecorder(), r, e) {
+		t.Fatal("fresh recovery could not reach removal after restoration")
+	}
+}
+
 func TestLifecycleRecorderStreamsWaitAndDisconnectsOnlyController(t *testing.T) {
 	for _, disconnect := range []bool{false, true} {
 		t.Run(map[bool]string{false: "healthy", true: "disconnect"}[disconnect], func(t *testing.T) {

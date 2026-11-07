@@ -79,6 +79,12 @@ func (f *lifecycleFaults) restore() {
 	f.lost = false
 	f.mode = "restored"
 	f.mu.Unlock()
+	f.releaseBarrier()
+}
+
+// Finish the controlled overlap without restoring the injected failure. A
+// cleanup-signals DELETE still receives 503 until a separate restore call.
+func (f *lifecycleFaults) releaseBarrier() {
 	f.releaseOnce.Do(func() { close(f.release) })
 }
 

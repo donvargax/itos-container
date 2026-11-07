@@ -117,6 +117,10 @@ func (w *world) lifecycleCleanupSignals() {
 	if lifecycleUntil(l.run, time.Now().Add(100*time.Millisecond)) {
 		w.lifecycleSignal("SIGTERM")
 	}
+	// Both signals have now overlapped the pending removal. Return the
+	// injected unavailable response promptly; keep rejecting every removal
+	// until run returns and the later explicit stop restores the transport.
+	l.fault.releaseBarrier()
 	w.lifecycleCollect()
 	l.fault.restore()
 	w.lifecycleFreshRecovery(true)

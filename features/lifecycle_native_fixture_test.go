@@ -37,16 +37,13 @@ type lifecycleNative struct {
 }
 
 func (w *world) lifecycleFixture(mode, condition, barrier string, child, delay int) error {
-	if err := w.recoveryNativeFixture("lifecycle"); err != nil {
+	if err := w.recoveryFixtureWithProbe("lifecycle", w.buildLifecycleProbe); err != nil {
 		return err
 	}
 	l := &lifecycleNative{mode: mode, condition: condition, barrier: barrier, child: child, delay: time.Duration(delay) * time.Second}
 	w.lifecycle = l
 	l.fault = newLifecycleFaults(mode, barrier, l.delay)
 	w.offline.api.lifecycle = l.fault
-	if err := w.buildLifecycleProbe(); err != nil {
-		return err
-	}
 	var err error
 	w.recovery.before, err = w.lifecycleProtected()
 	return err
@@ -321,10 +318,17 @@ func (w *world) lifecycleFreshRecovery(stop bool) {
 	r := w.recovery
 	r.status = w.recoveryStartWithin(12*time.Second, "status", "--json")
 	r.status.wait()
+	if !stop {
+		// No product action separates these observations. One fresh status
+		// supplies the completed-run assertions; a stop still gets its own
+		// before/after invocations below.
+		r.after = r.status
+		return
+	}
 	// Use only the public status reference, never the observer's resource ID
 	// or the intent name, as authority for the fresh product invocation.
 	report, err := recoveryReadReport(r.status)
-	if err == nil && len(report.Sessions) == 1 && offlineHex(report.Sessions[0].ID) && stop {
+	if err == nil && len(report.Sessions) == 1 && offlineHex(report.Sessions[0].ID) {
 		entry := report.Sessions[0]
 		if len(entry.Retry) == 4 && entry.Retry[0] == "itos" && entry.Retry[1] == "container" && entry.Retry[2] == "stop" && entry.Retry[3] == entry.ID {
 			p := w.recoveryStartWithin(32*time.Second, "stop", "--json", entry.ID)

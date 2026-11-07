@@ -42,11 +42,21 @@ type recoveryProcess struct {
 }
 
 func (w *world) recoveryNativeFixture(mode string) error {
+	return w.recoveryFixtureWithProbe(mode, w.buildRecoveryProbe)
+}
+
+func (w *world) buildRecoveryProbe() error {
+	return w.installNativeProbe("slice-11-probe", func(path string) error {
+		return recoveryBuildHelper(w.root, path, recoveryWorkerSource)
+	})
+}
+
+func (w *world) recoveryFixtureWithProbe(mode string, buildProbe func() error) error {
 	if err := doctorRealGuard(); err != nil {
 		return err
 	}
 	w.recovery = &recoveryNative{mode: mode}
-	if err := w.offlineFixture("recovery"); err != nil {
+	if err := w.offlineFixtureWithProbe("recovery", buildProbe); err != nil {
 		return err
 	}
 	a := w.offline.api
@@ -57,13 +67,6 @@ func (w *world) recoveryNativeFixture(mode string) error {
 	}
 	a.mu.Unlock()
 	if _, err := w.recoveryTraceBinary(); err != nil {
-		return err
-	}
-	if err := recoveryBuildHelper(w.root, filepath.Join(w.doctor.checkout, "slice-11-probe"), recoveryWorkerSource); err != nil {
-		return err
-	}
-	// Helper source is outside the approval input and never executed on the host.
-	if err := os.Remove(filepath.Join(w.doctor.checkout, "slice-11-probe.go")); err != nil {
 		return err
 	}
 	var err error

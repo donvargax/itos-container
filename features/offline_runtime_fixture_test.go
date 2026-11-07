@@ -40,6 +40,10 @@ var (
 )
 
 func (w *world) offlineFixture(mode string) error {
+	return w.offlineFixtureWithProbe(mode, w.buildOfflineProbe)
+}
+
+func (w *world) offlineFixtureWithProbe(mode string, buildProbe func() error) error {
 	// Guard before even allocating a fixture or reading native-engine inputs.
 	if err := doctorRealGuard(); err != nil {
 		return err
@@ -61,7 +65,7 @@ func (w *world) offlineFixture(mode string) error {
 	if err := w.approvalManifest(); err != nil {
 		return err
 	}
-	if err := w.buildOfflineProbe(); err != nil {
+	if err := buildProbe(); err != nil {
 		return err
 	}
 	// Shell glob candidates and marker names make interpretation observable.
