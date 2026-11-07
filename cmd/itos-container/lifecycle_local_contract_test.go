@@ -52,6 +52,7 @@ type lifecycleLocal struct {
 	store               sp.Store
 	registry            sp.Registry
 	engine              sp.RunEngine
+	workspace           sp.Workspace
 	eventMu             sync.Mutex
 	events              []lifecycleEvent
 	hook                func(context.Context, string)
@@ -108,7 +109,11 @@ func (l *lifecycleLocal) invokeWithStreams(ctx context.Context, out, errout sp.W
 	if engine == nil {
 		engine = lifecycleEngine{l}
 	}
-	runner := domain.Runner{Store: l.store, Registry: lifecycleRegistry{l.registry, l}, Engine: engine, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
+	workspace := l.workspace
+	if workspace == nil {
+		workspace = &sf.Workspace{}
+	}
+	runner := domain.Runner{Store: l.store, Registry: lifecycleRegistry{l.registry, l}, Engine: engine, Workspace: workspace, Entropy: &publicMemoryEntropy{}}
 	var selected runport.Approval = lifecycleApproval{approval, l, ctx}
 	if l.approval != nil {
 		selected = l.approval

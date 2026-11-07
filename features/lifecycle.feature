@@ -697,3 +697,25 @@ Feature: Bounded offline lifecycle, cancellation and loss
     Then run reports its original failure and teardown timeout within 30 seconds with unknown workload outcome and retained recovery
     And the pending exit observation retains its connection until completion without changing the returned result or recovery record
     And a healthy foreground wait longer than startup still returns its observed exit and cleans only its owned worker
+
+  # Review regression: a pending workspace identity check supplies no evidence
+  # of substitution. Preserve its call/startup timeout or first signal, and keep
+  # a completed substitution check's ownership refusal as a separate control.
+  @slice-12 @ID-LIFECYCLE-22 @linux @wip
+  Scenario Outline: Interrupted workspace revalidation preserves its original cause
+    Given a lifecycle workspace revalidation blocked before "<phase>" and interrupted by "<cause>"
+    When run returns before the pending workspace revalidation is released through each local backend
+    Then run reports the original revalidation timeout or cancellation rather than an ownership refusal within its original budgets
+    And no later launch phase runs and the pending workspace remains pinned until its late completion
+    And a confirmed workspace substitution still refuses launch while an unchanged workspace launches and cleans normally
+
+    Examples:
+      | phase  | cause           |
+      | create | call timeout    |
+      | start  | call timeout    |
+      | create | startup timeout |
+      | start  | startup timeout |
+      | create | SIGINT          |
+      | start  | SIGINT          |
+      | create | SIGTERM         |
+      | start  | SIGTERM         |

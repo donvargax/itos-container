@@ -32,6 +32,11 @@ func TestLifecycleBudgetContract(t *testing.T) {
 	for _, backend := range []string{"ports", "protected records"} {
 		t.Run(backend, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
+				if name == "workspace revalidation" {
+					cause, phase, _ := strings.Cut(os.Getenv("SLICE_12_ARGUMENT"), "|")
+					lifecycleWorkspaceRevalidationCase(t, cause, phase, backend)
+					return
+				}
 				if name == "teardown wait" {
 					lifecycleTeardownWaitCase(t, backend)
 					return

@@ -14,6 +14,9 @@ import (
 func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 	var name, operation string
 	var result doctorResult
+	sc.Step(`^a lifecycle workspace revalidation blocked before "([^"]*)" and interrupted by "([^"]*)"$`, func(phase, cause string) {
+		name, operation = "workspace revalidation", cause+"|"+phase
+	})
 	sc.Step(`^a lifecycle exited worker with an unrecorded exit and a cancellation-ignoring recovery wait$`, func() {
 		name, operation = "teardown wait", ""
 	})
@@ -50,6 +53,7 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^run stops waiting and the abandoned checkout operation later finishes through each local backend$`, run)
 	sc.Step(`^run returns before the pending launch operation is released through each local backend$`, run)
 	sc.Step(`^run returns before the pending exit observation is released through each local backend$`, run)
+	sc.Step(`^run returns before the pending workspace revalidation is released through each local backend$`, run)
 	assert := func() error {
 		if result.exit != 0 || !strings.Contains(result.stdout, "--- PASS: TestLifecycleBudgetContract ") {
 			return fmt.Errorf("lifecycle budget contract failed: %s", result.stdout)
@@ -57,6 +61,9 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 		return nil
 	}
 	for _, phrase := range []string{
+		`run reports the original revalidation timeout or cancellation rather than an ownership refusal within its original budgets`,
+		`no later launch phase runs and the pending workspace remains pinned until its late completion`,
+		`a confirmed workspace substitution still refuses launch while an unchanged workspace launches and cleans normally`,
 		`each run cancels its wait for the pending operation by its call deadline and begins no subsequent startup phase`,
 		`any accepted mutation remains accountable to the original intent`,
 		`after the cleanup attempt each run reports "run.call-timeout" with exit 75 and the named operation no later than 30 seconds after its call deadline`,

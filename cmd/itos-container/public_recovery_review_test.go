@@ -153,6 +153,7 @@ func publicRecoveryStoppedWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
 		m.e.StdinClosed, m.e.WaitUntilCancel = true, true
+		stdin := make(chan sp.Outcome, 1)
 		id := ""
 		var completed []byte
 		mutations := 0
@@ -173,11 +174,13 @@ func publicRecoveryStoppedWait(t *testing.T) {
 			}
 			completed = bytes.Clone(m.files.Sessions[m.index().Project+"/"+id].Data)
 			mutations = recoveryReviewMutations(m.e)
-			// Let stdin's notification cancel the original pending wait before
-			// returning to its fake engine response. No real sleep or engine runs.
+			// The scenario closes stdin after stop completes. Queue that event
+			// only after capturing completion, so an independently cancellable
+			// wait cannot race ahead of the fixture's stop or its audit snapshot.
+			stdin <- sp.StdinClosed
 			synctest.Wait()
 		}
-		runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
+		runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: recoveryStdinEngine{m.e, stdin}, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
 		approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: m.c, Record: ap.Record{Candidate: m.c, Generation: "1"}, Status: "matching"}}
 		var out, errout bytes.Buffer
 		code := (runcommand.CLI{Approval: approval, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "probe"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
@@ -193,6 +196,41 @@ func publicRecoveryStoppedWait(t *testing.T) {
 		}
 	})
 }
+
+// Keep all engine behavior and attachment draining real to the port fake; only
+// the test-owned stdin event is delayed until its stated concurrent stop barrier.
+type recoveryStdinEngine struct {
+	sp.RunEngine
+	stdin <-chan sp.Outcome
+}
+
+func (e recoveryStdinEngine) OpenRun(ctx context.Context, b sp.Binding) (sp.RunConnection, sp.Outcome) {
+	c, f := e.RunEngine.OpenRun(ctx, b)
+	if c == nil {
+		return nil, f
+	}
+	return recoveryStdinConnection{c, e.stdin}, f
+}
+
+type recoveryStdinConnection struct {
+	sp.RunConnection
+	stdin <-chan sp.Outcome
+}
+
+func (c recoveryStdinConnection) Attach(ctx context.Context, id string, streams sp.Streams) (sp.Attachment, sp.Outcome) {
+	a, f := c.RunConnection.Attach(ctx, id, streams)
+	if a == nil {
+		return nil, f
+	}
+	return recoveryStdinAttachment{a, c.stdin}, f
+}
+
+type recoveryStdinAttachment struct {
+	sp.Attachment
+	stdin <-chan sp.Outcome
+}
+
+func (a recoveryStdinAttachment) Failures() <-chan sp.Outcome { return a.stdin }
 
 func recoveryReviewMutations(e *sf.RunEngine) int {
 	n := 0
