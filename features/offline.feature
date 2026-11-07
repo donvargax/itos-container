@@ -10,7 +10,7 @@ Feature: Hardened offline foreground run
   Slice-13 owns the launch and cleanup contract (01/04/05/15).
   Slice-14 owns native isolation and teardown proof (08/09/10/11/12/14/16).
   Slice-17 owns inode-bound checkout sources and their foreground lifetime
-  (25-31); slice-18 owns their recovery by fresh status/stop processes.
+  (25-32); slice-18 owns their recovery by fresh status/stop processes.
 
   # Authorities: docs/charter.md, docs/plans/offline-run-lifecycle.md (AC-07/08,
   # offline AC-10/11, AC-21/22/23/25/37), docs/architecture.md (Slices), and
@@ -439,7 +439,8 @@ Feature: Hardened offline foreground run
   # not close this interval. At specification base 7e7acfa, session/docker/run.go
   # still sends binding.Checkout.Root as Source. Workspace pins detect changes
   # but supply no inode-bound source to Docker, and ownership records describe
-  # only the worker. These are expected failures, not executed red evidence.
+  # only the worker. This is still true at the drafter's base 6b0cb03. Native
+  # red evidence is accepted for 29/30 below; local cases still need red steps.
   #
   # Authorities: the charter, pilot AC-05/06/07/22/23/25, the offline lifecycle
   # contract, arc42's Foreground run/Recovery, and slice-17's registry brief.
@@ -453,8 +454,9 @@ Feature: Hardened offline foreground run
   # Do not add those commands or an unattended restart to this item.
   #
   # Source and lifetime decisions:
-  # Coordinator q-19, 2026-11-06 ~22:55 UTC, supersedes earlier mechanism and
-  # retention requirements below. The person reviews this decision later.
+  # Coordinator q-19, 2026-11-06 ~22:55 UTC, and q-27, ~23:50 UTC, supersede
+  # earlier mechanism, verification timing and retention requirements. The
+  # person reviews these decisions later; they are settled for implementation.
   # The anchor is an owned Docker local volume with type=none, o=bind and
   # device=/proc/<controller-pid>/fd/<n>, naming the controller's own O_PATH
   # descriptor for the validated checkout. Hold that descriptor from the final
@@ -463,11 +465,6 @@ Feature: Hardened offline foreground run
   # dockerd performs the bind; the controller gains no CAP_SYS_ADMIN, performs
   # no host mount and starts no new long-lived helper. The kernel must resolve
   # the descriptor to the original inode, never a readlink-derived pathname.
-  # Q-27 supersedes pre-workload verification: immediately after ContainerStart
-  # returns, inspect State.Pid and stat /proc/<pid>/root/workspace from the host.
-  # Compare device/inode with the validated identity. A mismatch or unavailable
-  # stat requires immediate owned kill/removal and refusal, with no pathname
-  # fallback. The anchor prevents substitution; this check only detects failure.
   # Prove the Moby/kernel hypothesis first in native CI with assertion-level
   # red then green for the post-check substitution. If Moby resolves the device
   # by name or rejects /proc, stop with the evidence; do not select a substitute
@@ -495,6 +492,9 @@ Feature: Hardened offline foreground run
   # checkout helper execution, engine reconfiguration or elevated worker is allowed.
   # The anchor is session control infrastructure, not a new permission in the
   # manifest or approval; keep the original checkout identity in frozen settings.
+  # This one owned local volume replaces the earlier raw checkout bind; it is
+  # the sole exception to this file's earlier no-volume/no-volume-deletion rules.
+  # Other named/anonymous volumes and persistent worker data remain forbidden.
   # Only the independently verified anchor may be consumed by create/start.
   # Protected-path spelling alone cannot replace the identity observation.
   # Unsupported anchoring refuses; there is no original-path fallback.
@@ -506,9 +506,16 @@ Feature: Hardened offline foreground run
   # path fallback. Q-27 (2026-11-06 ~23:50 UTC) settles the detector: immediately
   # after ContainerStart returns, inspect State.Pid and stat the host path
   # /proc/<pid>/root/workspace. Compare device/inode with the validated identity.
+  # The worker runs as the host UID with no-new-privileges. Use the PID from
+  # fresh inspection of the owned full ID, never a cached PID, the controller's
+  # own /workspace, a volume mountpoint or the current checkout pathname.
   # A mismatch or unavailable stat means immediate owned kill/removal and mount
   # refusal. The descriptor-backed volume prevents substitution; this check
   # detects a failed anchor and cannot precede the first workload instruction.
+  # Unavailable inspection or an unusable init PID also leaves the stat unmade
+  # and requires the same refusal. Do not wait for normal workload completion
+  # or a graceful-stop interval before attempting owned kill/removal. Preserve
+  # the existing bounded calls/teardown and ownership checks for every mutation.
   # No gate binary, extra mount, privilege or long-lived helper is authorized.
   # A detector refusal after successful start must fail native acceptance, even
   # if teardown precedes probe output. Stop with evidence if Moby rejects the
@@ -540,8 +547,8 @@ Feature: Hardened offline foreground run
   # source or launch handoff. A possibly allocated anchor keeps its original
   # durable intent and observed identity for reconciliation, never an untracked
   # best-effort resource or a second allocation after an uncertain response.
-  # Concrete source encoding is adapter-owned; the contract requires evidence
-  # of identity and protection, not a particular Go type or pathname spelling.
+  # Concrete Go types are adapter-owned; q-19 fixes the local driver's options
+  # and /proc/<controller-pid>/fd/<n> device form, not a resolved source path.
   #
   # Keep the descriptor through ContainerStart's return and the owned volume
   # through workload execution and uncertain create/start/remove operations.
@@ -562,8 +569,12 @@ Feature: Hardened offline foreground run
   # anchor intent/ownership publication failure, run.mount-unavailable (3) for
   # an unsupported/unavailable anchoring facility, run.mount-refused (1) for
   # unsafe/mismatched source identity, and run.mount-uncertain (75) when source
-  # allocation cannot be settled. State the cause and safe corrective guidance;
-  # never suggest falling back to a path, weakening isolation or auto-approving.
+  # allocation cannot be settled. Q-27 detector failures, including an unmade
+  # stat, report run.mount-refused with classification 1; preserve any actually
+  # observed nonzero workload exit separately under the existing result rule.
+  # A post-start refusal never claims that the worker did not execute. State
+  # the cause and safe corrective guidance; never suggest falling back to a
+  # path, weakening isolation or auto-approving.
   # Anchor teardown uses existing run.cleanup-ownership (1) and
   # run.cleanup-temporary (75), separate from observed workload exit. A nonzero
   # workload result wins; zero plus incomplete cleanup is nonzero. Retain the
@@ -595,12 +606,16 @@ Feature: Hardened offline foreground run
   # protected-state denials. Preserve OFFLINE-05 and all unrelated live behavior;
   # do not re-tag live cases or relax them to accept arbitrary protected paths.
   #
-  # EVERY mount-anchor phrase below is NEW. Reuse offline_launch_steps_test.go /
+  # Step handoff at 6b0cb03: local cases 25-28/31/32 still need ALL their
+  # mount-anchor definitions. Reuse offline_launch_steps_test.go /
   # offline_launch_fixture_test.go and cmd/itos-container/offline_contract_test.go
-  # for local registered-run assemblies; offline_runtime_steps_test.go,
-  # offline_runtime_fixture_test.go and offline_runtime_engine_test.go for native
-  # binary execution, independent seeded approvals and API recording. Feature
-  # steps observe subprocess results/files; they import no production packages.
+  # for local registered-run assemblies. Native 29/30 are already defined in
+  # offline_anchor_steps_test.go with offline_anchor_fixture_test.go,
+  # offline_anchor_engine_test.go, offline_anchor_assertions_test.go and
+  # offline_anchor_retention_test.go. Keep their submitted-start barrier,
+  # independent observations and positive controls; their accepted red evidence
+  # does not cover the missing local steps. Feature steps observe subprocess
+  # results/files; they import no production packages.
   # No Given invokes run/approve or asserts product behavior. Each only prepares
   # disposable files, independent approval seeds, synthetic observations, probes,
   # fault settings and checkpoints. No real state folder or credential is used.
@@ -623,9 +638,10 @@ Feature: Hardened offline foreground run
   # outcomes, resources and records BEFORE bounded, identity-checked harness
   # cleanup, including after a failed assertion. Harness cleanup is not proof.
   # Commit complete steps red first with @wip retained. Require local assertion
-  # red/green for 25-28/31, and the coordinator's guarded red_scenarios CI dispatch
-  # followed by ordinary green CI for EVERY row of 29-30. Undefined steps, skips
-  # or broken controls provide no red evidence. No local engine or mutation run.
+  # red/green for 25-28/31/32. The coordinator has accepted guarded CI red for
+  # EVERY row of 29/30 as recorded below; implementation still needs ordinary
+  # green CI at the actual pushed head. Undefined steps, skips or broken controls
+  # provide no red evidence. No local engine or mutation run.
 
   # Current launch has no anchor intent/resource or bound source, so the first
   # Then fails even though its existing worker can run and clean successfully.
@@ -634,7 +650,9 @@ Feature: Hardened offline foreground run
     Given a mount-anchor contract fixture with approved settings and a writable checkout
     When the registered run completes through both fake and disk SDK mount-anchor adapters
     Then each run durably records anchor intent before allocation and verified concrete anchor ownership before worker create
+    And each worker mounts its owned local volume at /workspace with copying disabled and the exact descriptor-backed driver options
     And each worker consumes only that anchor backed by the validated checkout inode with the unchanged offline boundary
+    And each controller holds the validated descriptor through the start response and immediately checks the mounted device and inode using the freshly inspected worker PID
     And each owned volume is retained until confirmed worker absence and released before durable session completion
     And each run returns zero with the checkout edit preserved and no owned ephemeral resource remaining
     And mount-anchor operations leave approval snapshots outside targets and unrelated resources unchanged
@@ -668,10 +686,14 @@ Feature: Hardened offline foreground run
       | anchor ownership file fsync   |
       | anchor ownership parent fsync |
 
-  # These faults precede worker create. The replaced-source row changes the
-  # independently observed concrete anchor after ownership publication, keeping
-  # its path/name the same. Allocation uncertainty includes unavailable follow-up
-  # inspection and MUST retain intent, not retry allocation or infer absence.
+  # These faults precede worker create. The descriptor row compares the opened
+  # source's device/inode with validation before allocation; it cannot inspect
+  # a mounted backing inode on an as-yet unmounted local volume. OFFLINE-32
+  # covers the mounted-inode mismatch after start, as q-27 requires. The
+  # replaced-source row changes the independently observed volume's ownership
+  # tuple or exact driver options after publication, keeping its name the same.
+  # Allocation uncertainty includes unavailable follow-up inspection and MUST
+  # retain intent, not retry allocation or infer absence.
   # Same-name foreign resources are fixture-owned and must remain untouched.
   # Today no source capability is requested/verified, so the first Then fails.
   @wip @slice-17 @ID-OFFLINE-27 @linux
@@ -686,9 +708,52 @@ Feature: Hardened offline foreground run
     Examples:
       | fault                                                    | rule                  | exit |
       | anchoring facility unavailable                           | run.mount-unavailable | 3    |
-      | observed anchor has a different backing checkout inode   | run.mount-refused     | 1    |
-      | protected source replaced after ownership publication    | run.mount-refused     | 1    |
-      | allocation response lost and reconciliation unavailable  | run.mount-uncertain   | 75   |
+      | opened checkout descriptor has a different checkout inode | run.mount-refused     | 1    |
+      | protected source replaced after ownership publication     | run.mount-refused     | 1    |
+      | allocation response lost and reconciliation unavailable   | run.mount-uncertain   | 75   |
+
+  # Q-27's detector runs after successful start, never before worker create or
+  # the first workload instruction. Given seeds normal anchor/worker ownership
+  # inputs and arms only the named observation fault; it does not launch, assert
+  # readiness or fabricate the command's result. When invokes the registered
+  # runner and records start, fresh full-ID inspect, host stat and owned teardown
+  # in order, through both backends. These are LOCAL adapter fault observations,
+  # not a native substituted mount or evidence that the anchor itself is safe.
+  # The device/inode rows change only the named component, retaining the other.
+  # The unusable PID row returns State.Pid=0; the stat-unavailable row returns
+  # a permission error for the inspected PID's /proc/<pid>/root/workspace.
+  # The inspect fault affects only the detector observation; teardown's fresh
+  # ownership inspections and removal remain available in all five rows.
+  # Faults activate only after a successful start response. A missing detector
+  # must reach Then as missing observations, not fail setup or block a barrier.
+  # The healthy control independently supplies the validated device/inode and
+  # requires that exact post-start inspect/stat sequence before normal waiting.
+  # The worker may already have executed. Assert immediate owned kill/removal,
+  # not absence of workload output, and do not invent an exit for a killed task.
+  # No graceful-stop wait, fallback, second create/start or gate binary may
+  # substitute for the detector. Keep the volume until full-ID worker absence;
+  # failed cleanup retains protected evidence under OFFLINE-28's existing rule.
+  # Current Start only calls ContainerStart and returns; the first Then fails
+  # because there is no mounted-identity detector or teardown on its failure.
+  # These new steps still require committed assertion-level local red evidence.
+  @wip @slice-17 @ID-OFFLINE-32 @linux
+  Scenario Outline: A post-start anchor detector failure immediately tears down the owned worker
+    Given a mount-anchor contract fixture with post-start detector fault "<fault>"
+    When the registered run and its fault-free control execute through both mount-anchor backends
+    Then each faulted run attempts the post-start mounted-identity check and immediately kills and removes only its revalidated owned worker
+    And each detector refusal reports "run.mount-refused" with classification 1 and a nonzero result while preserving any observed nonzero workload exit
+    And no detector refusal claims the worker never started or falls back to a pathname or another create or start
+    And each owned volume is retained until confirmed worker absence and released before durable session completion
+    And each fault-free control launches through its owned anchor and confirms complete cleanup
+    And mount-anchor operations leave approval snapshots outside targets and unrelated resources unchanged
+
+    Examples:
+      | fault                                      |
+      | mounted workspace device differs           |
+      | mounted workspace inode differs            |
+      | post-start inspection unavailable          |
+      | post-start inspection has no live init PID  |
+      | mounted workspace stat unavailable         |
 
   # Both rows acquire and durably own the anchor before the worker fault. The
   # mismatch row returns a wrong runtime boundary for an otherwise owned
@@ -787,6 +852,12 @@ Feature: Hardened offline foreground run
   # Missing prerequisites or a recorder refusal do not establish product safety.
   # Current code can start on the substitute; the first Then is the required CI
   # red assertion per row. A no-substitution control must execute successfully.
+  # Accepted q-22 red evidence, 2026-11-06 ~23:20 UTC: run 42309692365 at
+  # 51a9f48 failed this first Then in all four rows on Docker 28.0.4. The
+  # worker saw 2049:7602225/7602226 and the replacement nonce instead of the
+  # validated 2049:7602190. Q-27 keeps the independent probe as anchor proof:
+  # a detector refusal after successful start cannot pass, even if teardown
+  # beats probe output. Native green for the selected anchor remains pending.
   @wip @slice-17 @ID-OFFLINE-29 @engine
   Scenario Outline: Substitution after the final identity check cannot redirect a submitted start
     Given a CI mount-anchor checkout with the cached image original and replacement nonce trees and a reporting probe
@@ -823,6 +894,10 @@ Feature: Hardened offline foreground run
   # hands retained state to slice-18; it does not test that item's recovery yet.
   # Today's controller has no anchor to retain, so the first Then fails even
   # when its existing workload-exit/worker-removal failure mapping is correct.
+  # Accepted q-33 red evidence, 2026-11-07 ~16:40 UTC: run 42390617135 at
+  # 3aae532 failed this first Then in both child/result rows with "missing
+  # original owned volume and protected recovery evidence after controller
+  # exit". Implementation is authorized; native green remains required.
   @wip @slice-17 @ID-OFFLINE-30 @engine
   Scenario Outline: Failed worker removal retains the owned volume after run exits
     Given a CI mount-anchor checkout with the cached image and a removal-only transient Engine API fault
