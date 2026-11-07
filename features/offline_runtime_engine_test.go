@@ -23,6 +23,7 @@ import (
 type offlineRequest struct {
 	Method, Path, Query string
 	Body, Observation   map[string]any
+	Anchor              map[string]any
 	Record              sessionRecord
 	Status              int
 	Cancelled           bool
@@ -319,6 +320,11 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 			}
 			return true
 		case "start":
+			entry.Anchor, err = a.observeMountAnchor(observed)
+			if err != nil {
+				a.problem = err
+				return false
+			}
 			return r.URL.RawQuery == "" && a.safeObserved(observed)
 		case "kill":
 			return (a.recovery || w.anchor != nil) && len(r.URL.Query()) == 1 &&

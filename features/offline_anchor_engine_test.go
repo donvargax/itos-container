@@ -123,6 +123,18 @@ func (a *offlineAPI) anchorInspect(v *anchorVolume) (map[string]any, error) {
 	return observed, nil
 }
 
+// Preserve a fresh native volume observation alongside each worker boundary.
+// The oracle runs after teardown, when the volume may already be absent.
+func (a *offlineAPI) observeMountAnchor(worker map[string]any) (map[string]any, error) {
+	labels := object(object(worker["Config"])["Labels"])
+	token, _ := labels["io.itos-container.intent"].(string)
+	v := a.anchorVolumes()["itos-container-anchor-"+token]
+	if !offlineHex(token) || v == nil {
+		return nil, errors.New("native worker has no recorded anchor")
+	}
+	return a.anchorInspect(v)
+}
+
 func (a *offlineAPI) anchorMount(m map[string]any) bool {
 	if m["Target"] != "/workspace" || m["ReadOnly"] == true {
 		return false

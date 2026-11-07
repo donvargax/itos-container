@@ -259,3 +259,51 @@ recovery, lifecycle and exit handling; its old fixture mismatches were corrected
 and rerun without weakening their workload, ownership or cleanup assertions.
 The local HTTP fixture assemblies supply an explicit simulated mounted root;
 native scenarios continue to use the product binary and actual host stat.
+
+## Short-lived workload conflict found in PR 13
+
+Review thread `PRRT_kwDOVkB0ws606Rfz` identifies a real consequence of q-27:
+a successful workload can exit before the post-start inspect, leaving no live
+init PID for `/proc/<pid>/root/workspace`. It can also exit between inspect and
+stat. The existing detector refuses these cases and invokes owned teardown,
+as q-27 requires when that stat cannot be made. This conflicts with the
+foreground contract's successful-exit preservation for ordinary short commands.
+
+The volume's options and labels prove its requested source and ownership; they
+do not observe the inode actually mounted in a worker which has already exited.
+Neither a successful engine wait nor an exited state supplies that observation.
+Returning success from either would silently waive q-27. The trusted native
+race probe waits for a harness release and therefore does not resolve this
+ordinary-workload race. Retrying the workload would execute it twice and is not
+authorized either.
+
+The implementer leaves the detector intact and the review thread unresolved.
+The coordinator must reconcile short-lived success with q-27's mandatory stat
+and refusal rule before this item can be complete; this document selects no
+new helper, privilege, mount, or detector fallback. A regression scenario must
+cover exit before inspection and exit between inspection and stat once that
+behavior is settled.
+
+## Native mount oracle review and local validation
+
+Thread `PRRT_kwDOVkB0ws606Rf2` found that the existing mount and controller-loss
+oracles still rejected every volume. The recorder now captures an independent
+volume inspection at start and during each loss round. The shared oracle binds
+that observation to the original protected intent, public session and approved
+checkout identity, checking the exact local driver, creation time, bind options,
+labels and mount inventory. Loss rounds also retain the same original anchor
+and protected ownership record after controller death.
+
+The new local positive control first failed at the old oracle's rejection of
+the owned volume. It passes after the repair, along with 24 negative controls
+and an HTTP recorder control which rejects substituted native volume data.
+Focused oracle tests also pass with the race detector. These are harness checks;
+the existing native scenarios still need CI at the pushed head.
+
+The reported CI line `FAIL .../features 600.444s` does not identify the active
+test or its goroutine stack. A complete engine-disabled local package run passes
+in 430.195 seconds, including all 1,348 live local scenarios in 404.03 seconds.
+The sandbox's remapped root ownership first caused fixture refusals; this full
+run used host ownership and disposable state, with the engine tier disabled.
+No timeout or gate was changed. The CI timeout remains unverified pending its
+full failure context; this passing run is not a claimed fix for that failure.
