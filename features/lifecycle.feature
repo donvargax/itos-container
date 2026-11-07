@@ -725,7 +725,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Review regression: cancellation arrives after the finite-call precheck but
   # before the workspace operation is dispatched. Exercise both ready select
   # alternatives; neither may acquire a pin after its caller has been cancelled.
-  @wip @slice-12 @ID-LIFECYCLE-23 @linux
+  # Both rows failed at their no-pin assertion on 88dd0e5 with @wip removed,
+  # through both local backends; the cancelled dispatch still called Pin.
+  @slice-12 @ID-LIFECYCLE-23 @linux
   Scenario Outline: Cancellation before workspace acquisition prevents late pins
     Given a lifecycle workspace acquisition interrupted by "<signal>" before adapter dispatch
     When run returns and all dispatched workspace calls settle through each local backend

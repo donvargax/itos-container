@@ -86,6 +86,12 @@ func held[T any](ctx context.Context, gate chan struct{}, name string, fn func()
 		select {
 		case <-gate:
 			defer func() { gate <- struct{}{} }()
+			// Cancellation and the gate can both be ready after dispatch. Do
+			// not touch a handle its caller may already have closed.
+			if budget.Cause(call) != nil {
+				var zero T
+				return zero
+			}
 			return fn()
 		case <-call.Done():
 			var zero T
