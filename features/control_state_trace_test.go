@@ -66,7 +66,7 @@ func controlTraceSource() string {
 }
 
 func (f *controlFixture) traceCommand(args ...string) *recoveryProcess {
-	index := strconv.Itoa(len(f.p.recovery.processes))
+	index := filepath.Base(f.p.dir) + "-" + strconv.Itoa(len(f.p.recovery.processes))
 	p := &recoveryProcess{exit: -1, done: make(chan struct{}), journal: filepath.Join(f.parent, "slice-21-trace-"+index), pid: filepath.Join(f.parent, "slice-21-pid-"+index)}
 	f.p.recovery.processes = append(f.p.recovery.processes, p)
 	trace := f.p.bin + "-slice-21-trace"
