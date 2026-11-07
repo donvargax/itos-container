@@ -674,3 +674,10 @@ items:
       adds engine cases, so main will go red more often. Measure each scenario's time, make the slow
       ones fast (LIFECYCLE-13's first row took 128 s in red), and shard the engine job by feature if
       the total still nears the limit. Raising the limit is the person's call, not a fix.
+  - id: T-32
+    title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
