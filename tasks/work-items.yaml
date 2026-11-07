@@ -599,8 +599,8 @@ items:
   - id: slice-21
     title: Doctor and approve reject state exposed to another worker
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-16]
     kind: slice
     why: >
