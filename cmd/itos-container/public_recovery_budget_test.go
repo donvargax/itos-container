@@ -52,11 +52,19 @@ func publicRecoveryTerminationDeadline(t *testing.T, kill bool) {
 		}()
 		waits, writes := 0, 0
 		var progress []byte
+		observed := make(chan struct{})
+		wantWaits := 1
+		if kill {
+			wantWaits = 2
+		}
 		m.e.After = func(event string) {
 			if event != "wait" {
 				return
 			}
 			waits++
+			if waits == wantWaits {
+				defer close(observed)
+			}
 			progress, writes = bytes.Clone(files.Data), len(m.files.Events)
 			if kill && waits == 2 {
 				// SIGKILL has been requested but its wait response stalls through
@@ -67,16 +75,18 @@ func publicRecoveryTerminationDeadline(t *testing.T, kill bool) {
 		}
 		start := time.Now()
 		r := publicMemoryCommand(t, m.service(), "stop", id, 75)
-		if time.Since(start) != 30*time.Second || len(r.Problems) != 1 || r.Problems[0].Rule != "recovery.temporary" || len(r.Sessions) != 1 {
-			t.Fatal("termination lost its original deadline or temporary cause", r, time.Since(start))
+		elapsed := time.Since(start)
+		// The bounded controller can return before the abandoned fake wait.
+		// Preserve its return time, then join the callback and settle the adapter
+		// before reading its observations or reconfiguring a fresh retry.
+		<-observed
+		synctest.Wait()
+		if elapsed != 30*time.Second || len(r.Problems) != 1 || r.Problems[0].Rule != "recovery.temporary" || len(r.Sessions) != 1 {
+			t.Fatal("termination lost its original deadline or temporary cause", r, elapsed)
 		}
 		e := r.Sessions[0]
 		if e.State != "failed" || e.Resource != "unknown" || e.Cleanup != "unknown" || e.WorkloadExit != nil || !slices.Equal(e.Retry, []string{"itos", "container", "stop", id}) {
 			t.Fatal("termination timeout invented completion or lost the retry", e)
-		}
-		wantWaits := 1
-		if kill {
-			wantWaits = 2
 		}
 		if waits != wantWaits || !slices.Contains(m.e.Events, "SIGTERM") || slices.Contains(m.e.Events, "SIGKILL") != kill ||
 			!bytes.Equal(progress, files.Data) || writes != len(m.files.Events) || len(m.e.Resources) != 1 {
@@ -98,6 +108,8 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
 		m.e.StdinClosed, m.e.WaitUntilCancel = true, true
+		stdin := make(chan sp.Outcome, 1)
+		m.e.StdinFailures = stdin
 		want := 0
 		if name == "nonzero" {
 			m.e.WaitFailure, m.e.Exit, want = "", 7, 7
@@ -126,6 +138,13 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 						continue
 					}
 					reads++
+					if reads == 1 {
+						// Save validates completion while stop still holds the
+						// operation lock. Capture its actual bytes and mutations
+						// before run can resume and apply the substitution below.
+						completed = bytes.Clone(files.Data)
+						mutations = recoveryReviewMutations(m.e)
+					}
 					if reads == 4 {
 						// Completion validation reads once, run's Open twice.
 						// Replace bytes before its held-session revalidation.
@@ -140,6 +159,7 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 				// two healthy finite calls, each below the ten-second cap.
 				signals++
 				if signals == 1 {
+					stdin <- sp.StdinClosed
 					time.Sleep(6 * time.Second)
 				}
 				return
@@ -168,8 +188,15 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 				if len(r.Sessions) != 1 || (r.Sessions[0].Cleanup == "complete") != (stopExit == 0) || (r.Sessions[0].WorkloadExit != nil) != (name == "nonzero") {
 					t.Error("competing stop lost its result", r)
 				}
-				completed = bytes.Clone(m.files.Sessions[m.index().Project+"/"+id].Data)
-				mutations = recoveryReviewMutations(m.e)
+				if name == "changed record" {
+					// Force run to resume before this command's caller is
+					// scheduled. A post-return snapshot can already include
+					// the substitution and would expect it a second time.
+					synctest.Wait()
+				} else {
+					completed = bytes.Clone(m.files.Sessions[m.index().Project+"/"+id].Data)
+					mutations = recoveryReviewMutations(m.e)
+				}
 			}()
 			synctest.Wait()
 		}
@@ -196,8 +223,14 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 		if name == "changed record" {
 			completed = append(completed, ' ')
 		}
-		if !bytes.Equal(completed, m.files.Sessions[m.index().Project+"/"+id].Data) || mutations != recoveryReviewMutations(m.e) || (want != 75 && !slices.Contains(m.e.Events, "drain")) {
-			t.Fatal("run repeated cleanup or failed to drain the remaining output")
+		if !bytes.Equal(completed, m.files.Sessions[m.index().Project+"/"+id].Data) {
+			t.Fatal("run rewrote the competing stop's completion")
+		}
+		if got := recoveryReviewMutations(m.e); mutations != got {
+			t.Fatalf("run repeated cleanup: mutations %d -> %d", mutations, got)
+		}
+		if want != 75 && !slices.Contains(m.e.Events, "drain") {
+			t.Fatal("run failed to drain the remaining output")
 		}
 	})
 }
