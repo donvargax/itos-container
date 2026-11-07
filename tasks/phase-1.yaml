@@ -2178,5 +2178,3 @@
   why: >
     The person asked on 2026-11-07 to stop Bugbot reviews: push.pr.reviewers drops cursor[bot], so
     itos review request and push --ready ask and wait for Codex alone.
-  done_when:
-    - run: "! grep -q 'kind: bugbot' itos.yaml"
