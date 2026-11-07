@@ -147,6 +147,18 @@ Feature: Host Unix sockets in the checkout stay outside the worker boundary
   # SIGKILL. Keep foreign identities and unrelated mutations refused. These
   # fixture repairs supply no socket-isolation evidence; retain @wip and stop
   # for the coordinator's third guarded run of ID-SOCKETS-01/02/03.
+  #
+  # Coordinator decision, 2026-11-06 ~23:50 UTC: run 42312676619 at 1662753
+  # supplies ACCEPTED red evidence for ID-SOCKETS-01 and ID-SOCKETS-03. The
+  # worker connected and sent to every checkout host socket, including stream,
+  # seqpacket, all three datagram operations and nested paths. Those two cases
+  # need no further red run. ID-SOCKETS-02 is NOT accepted: its child/private
+  # seqpacket control failed with ExchangeError "interrupted system call".
+  # Retry EINTR in the trusted probe's exchange and other blocking socket calls;
+  # retain genuine timeout/denial errors, all nonce receipts and control checks.
+  # Keep all scenarios @wip and stop after that harness repair for a guarded red
+  # run of ID-SOCKETS-02 ALONE. Do not implement product denial until its red is
+  # attributable too. Local fixture regressions supply no engine red evidence.
 
   # Prepare each operation's listener at both a short root path and a nested
   # checkout path before invoking run. The probe's earliest operations attempt

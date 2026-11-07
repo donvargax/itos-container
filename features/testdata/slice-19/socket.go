@@ -63,11 +63,35 @@ func boundedSocket(kind int) (int, error) {
 	return fd, nil
 }
 
+// A signal can interrupt blocking calls on these timeout-bearing sockets.
+// Retry only EINTR: timeouts and actual denials remain observable failures.
+// Linux reports EINTR before transferring any bytes, so retrying cannot
+// duplicate a nonce; successful short writes retain their separate failure.
+func retryInterrupted(call func() error) error {
+	for {
+		err := call()
+		if !errors.Is(err, unix.EINTR) {
+			return err
+		}
+	}
+}
+
+func writeMessage(fd int, payload []byte) (n int, err error) {
+	err = retryInterrupted(func() error {
+		n, err = unix.Write(fd, payload)
+		return err
+	})
+	return n, err
+}
+
 func message(fd, kind int) (string, unix.Sockaddr, error) {
 	var result []byte
 	for len(result) < 4096 {
 		b := make([]byte, 4096)
 		n, from, err := unix.Recvfrom(fd, b, 0)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
 		if err != nil {
 			return "", from, err
 		}
@@ -109,17 +133,20 @@ func operate(t target, path, nonce string) attempt {
 	a.Invoked = true
 	switch t.Op {
 	case "dgram-sendto":
-		err = unix.Sendto(fd, payload, 0, to)
+		err = retryInterrupted(func() error { return unix.Sendto(fd, payload, 0, to) })
 		a.Sent = err == nil
 	case "dgram-sendmsg":
 		var n int
-		n, err = unix.SendmsgN(fd, payload, nil, to, 0)
+		err = retryInterrupted(func() error {
+			n, err = unix.SendmsgN(fd, payload, nil, to, 0)
+			return err
+		})
 		a.Sent = err == nil
 		if err == nil && n != len(payload) {
 			a.ExchangeError = "partial addressed send"
 		}
 	default:
-		err = unix.Connect(fd, to)
+		err = retryInterrupted(func() error { return unix.Connect(fd, to) })
 		a.Connected = err == nil
 	}
 	if err != nil {
@@ -131,7 +158,7 @@ func operate(t target, path, nonce string) attempt {
 		return a
 	}
 	if a.Connected {
-		n, e := unix.Write(fd, payload)
+		n, e := writeMessage(fd, payload)
 		a.Sent = e == nil && n == len(payload)
 		if !a.Sent {
 			a.ExchangeError = fmt.Sprintf("nonce write %d: %v", n, e)
@@ -178,6 +205,7 @@ func listen(t target, path string, received func(string)) (func(), error) {
 			if socketType(t.Op) != unix.SOCK_DGRAM {
 				peer, _, err = unix.Accept4(fd, unix.SOCK_CLOEXEC)
 				if err != nil {
+					// This also retries EINTR, checking stop before each accept.
 					continue
 				}
 				for _, option := range []int{unix.SO_RCVTIMEO, unix.SO_SNDTIMEO} {
@@ -188,9 +216,9 @@ func listen(t target, path string, received func(string)) (func(), error) {
 			if e == nil {
 				received(value)
 				if socketType(t.Op) == unix.SOCK_DGRAM {
-					_ = unix.Sendto(peer, []byte(value+"\n"), 0, from)
+					_ = retryInterrupted(func() error { return unix.Sendto(peer, []byte(value+"\n"), 0, from) })
 				} else {
-					_, _ = unix.Write(peer, []byte(value+"\n"))
+					_, _ = writeMessage(peer, []byte(value+"\n"))
 				}
 			}
 			if peer != fd {

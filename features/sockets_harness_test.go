@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -11,6 +12,25 @@ import (
 	"testing"
 	"time"
 )
+
+func TestSocketProbeInterruptions(t *testing.T) {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		t.Skip("trusted probe uses Linux amd64 Unix socket syscalls")
+	}
+	root, err := moduleRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	// testdata is deliberately outside ./...; exercise the trusted fixture's
+	// syscall regressions explicitly, without a product or engine invocation.
+	cmd := exec.CommandContext(ctx, "go", "test", "./features/testdata/slice-19", "-count=1", "-timeout=20s")
+	cmd.Dir, cmd.Env = root, sessionChildEnvironment(os.Environ())
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("trusted probe interruption regressions: %v\n%s", err, output)
+	}
+}
 
 // These controls execute only the trusted socket fixture on the test host.
 // They never run the product, use an engine, spoof CI, or supply product red
