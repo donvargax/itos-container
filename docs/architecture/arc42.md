@@ -471,7 +471,7 @@ the completion check
 within its existing teardown total. Incomplete or conflicting authority and
 forwarding errors still fail.
 See [public session recovery](../decisions/0010-public-session-recovery.md).
-[Unknown workload exit](../decisions/0014-unknown-workload-exit.md) corrects the
+[Unknown workload exit](../decisions/0015-unknown-workload-exit.md) corrects the
 earlier concurrent-completion success claim; known nonzero exits retain precedence.
 
 Fresh recovery discovers registrations through the protected

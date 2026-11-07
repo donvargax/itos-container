@@ -237,7 +237,7 @@ can settle reconciliation with an unknown exit. Remaining output is drained, kno
 nonzero exits retain their precedence, and null stays null. Contradictory intent
 progress or a different worker ID cannot settle the wait.
 
-Slice-24's [unknown workload exit decision](0014-unknown-workload-exit.md)
+Slice-24's [unknown workload exit decision](0015-unknown-workload-exit.md)
 supersedes this section's original successful-run interpretation of concurrent
 completion, including RECOVERY-32 and RECOVERY-35. Successful cleanup with an
 unknown workload exit returns wrapper 75 and `run.workload-exit-unknown` unless
