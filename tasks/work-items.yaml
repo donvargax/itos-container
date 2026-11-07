@@ -426,7 +426,7 @@ items:
     phase: 1
     owner: donvargax
     status: doing
-    depends_on: [slice-14, slice-15]
+    depends_on: [slice-14, slice-15, slice-17, slice-19]
     kind: task
   - id: slice-13
     title: Launch and cleanup contract
@@ -668,8 +668,8 @@ items:
   - id: T-31
     title: Native stop confined to one of two equal-basename projects passes reliably
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-33
