@@ -510,8 +510,8 @@ items:
   - id: slice-20
     title: Hard links to files outside the checkout are refused
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
@@ -655,3 +655,18 @@ items:
       without authorizing removal from exposed records. Preserve read-only status, ownership-checked
       stop and persistent state protection. Keep each command in its own slice and reusable recovery
       logic in engine packages. Broken down from p2-control-state-outside-every-mount.
+  - id: p1-flaky-recovery-budget-changed-record
+    title: TestPublicRecoveryBudgetRegressions/changed_record passes reliably on Linux CI
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      main's CI went red at 78f26bb (run 42313659921, Tests on ubuntu-latest) on a docs-only push:
+      cmd/itos-container/public_recovery_budget_test.go:195 'run repeated cleanup or failed to drain
+      the remaining output' in the changed_record case, while the run before (3931b4c) passed;
+      slice-12's attempt 5 also saw it fail in CI and could not reproduce it locally. A unit test
+      that flakes turns main red at random, and with it the release T-25 needs. Find the race
+      (likely drain versus cleanup ordering under load) and fix it, never by retrying the test or
+      widening its timeout.
