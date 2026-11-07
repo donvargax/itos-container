@@ -57,10 +57,14 @@ func TestPublicRecoveryCommand(t *testing.T) {
 	}
 	out, errout := open(request.Stdout), open(request.Stderr)
 	service, _ := approvalServices(nil, out, errout)
+	if home := os.Getenv("SLICE_21_ACCOUNT_HOME"); home != "" {
+		service.Host = controlAccountHost{Host: service.Host, home: home}
+	}
 	runner, recovery := sessionServices(service)
 	registry := runner.Registry.(sessiondisk.Registry)
 	publicStorage := registry.Storage.(approvaldisk.Registry)
 	store := runner.Store.(sessiondisk.Store)
+	store.Host = service.Host
 	intentStorage := store.Storage.(approvaldisk.Storage)
 	ioFault := publicProbeIO(request.Fault)
 	publicStorage.IO, intentStorage.IO = ioFault, ioFault

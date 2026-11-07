@@ -48,6 +48,7 @@ type world struct {
 	recoveryLocal *recoveryLocal
 	overlap       *overlapFixture
 	hardlinks     *hardlinkWorld
+	control       *controlFixture
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -160,6 +161,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.offlineIsolationSteps(sc)
 	w.overlapSteps(sc)
 	w.hardlinkSteps(sc)
+	w.controlStateSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.
