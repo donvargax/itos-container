@@ -66,17 +66,17 @@ func (w *Workspace) Pin(b port.Binding) port.Outcome {
 	}
 	return ""
 }
-func (w *Workspace) Unchanged() bool {
+func (w *Workspace) Validate() port.Outcome {
 	if len(w.roots) == 0 {
-		return false
+		return port.Refused
 	}
 	for i, name := range w.names {
 		info, err := w.roots[i].Lstat(name)
 		if err != nil || !os.SameFile(w.infos[i], info) {
-			return false
+			return port.Refused
 		}
 	}
-	return true
+	return ""
 }
 func (w *Workspace) Close() {
 	for _, root := range w.roots {

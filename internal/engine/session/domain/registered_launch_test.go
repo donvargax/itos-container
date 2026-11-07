@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -9,6 +10,90 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
+
+func TestRegisteredLaunchCancelledAfterLockAcquisition(t *testing.T) {
+	runner, registry, engine, workspace, id := registeredSessionFixture(t)
+	before := registry.Records[id]
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	registry.AfterOpen = func(string) { cancel() }
+	c, a, worker, failure := runner.registeredLaunch(ctx, id, []string{"probe"}, port.Streams{})
+	if c != nil || a != nil || worker != "" || failure != port.ExecutionFailed {
+		t.Fatal("cancelled lock acquisition advanced launch", worker, failure)
+	}
+	if registry.Locks[id] || registry.Store.Locked || workspace.Closed || len(engine.Events) != 0 || registry.Records[id] != before {
+		t.Fatal("cancelled launch retained authority or entered another startup phase")
+	}
+}
+
+// Schedule a real cancellation at the next controller check after the adapter
+// has returned successfully. This exercises the interval between acquisition
+// and the next launch phase without racing goroutines or changing Err's result.
+type launchCancellationContext struct {
+	context.Context
+	interrupt context.CancelCauseFunc
+	cause     error
+	armed     bool
+}
+
+func (c *launchCancellationContext) Err() error {
+	if c.armed {
+		c.armed = false
+		c.interrupt(c.cause)
+	}
+	return c.Context.Err()
+}
+
+func TestRegisteredLaunchCancellationAfterSuccessfulAcquisition(t *testing.T) {
+	for _, phase := range []string{"open", "attach"} {
+		for _, signal := range []string{"SIGINT", "SIGTERM"} {
+			t.Run(phase+"/"+signal, func(t *testing.T) {
+				runner, registry, engine, workspace, id := registeredSessionFixture(t)
+				parent, cancel := context.WithCancelCause(t.Context())
+				defer cancel(nil)
+				ctx := &launchCancellationContext{Context: parent, interrupt: cancel, cause: port.Interrupt{Signal: signal}}
+				engine.After = func(event string) {
+					if event == phase {
+						ctx.armed = true
+					}
+				}
+				connection, attachment, worker, failure := runner.registeredLaunch(ctx, id, []string{"probe"}, port.Streams{})
+				if connection != nil {
+					defer connection.Close()
+				}
+				if attachment != nil {
+					defer attachment.Close()
+				}
+				wantEvents, wantState, wantWorker := []string{"open"}, "preparing", ""
+				if phase == "attach" {
+					wantEvents, wantState, wantWorker = []string{"open", "create", "verify", "attach"}, "ready", engine.CreateID
+				}
+				if failure != port.ExecutionFailed || connection == nil || (attachment != nil) != (phase == "attach") || worker != wantWorker || context.Cause(ctx) != (port.Interrupt{Signal: signal}) {
+					t.Fatal("cancelled acquisition lost its cause or cleanup handles", worker, failure)
+				}
+				if !slices.Equal(engine.Events, wantEvents) || !workspace.Closed || registry.Locks[id] || registry.Store.Locked {
+					t.Fatal("cancelled acquisition advanced launch or retained authority", engine.Events)
+				}
+				record := registry.Records[id]
+				if record.State != wantState || record.WorkloadExit != nil {
+					t.Fatal("cancelled acquisition overwrote progress or invented an exit", record)
+				}
+				intent, decodeFailure := registry.Store.Codec.Decode(registry.Store.Records[record.Intent])
+				if decodeFailure != "" || intent.ContainerID != wantWorker {
+					t.Fatal("cancelled acquisition lost the original resource binding", intent, decodeFailure)
+				}
+				if phase == "attach" {
+					resource := engine.Resources[worker]
+					if resource.ID != worker || resource.Status != "created" || resource.Started || resource.Running || len(engine.Resources) != 1 {
+						t.Fatal("cancelled attachment started or lost its owned worker", resource)
+					}
+				} else if len(engine.Resources) != 0 {
+					t.Fatal("cancelled connection created a worker")
+				}
+			})
+		}
+	}
+}
 
 func registeredSessionFixture(t *testing.T) (Runner, *f.Registry, *f.RunEngine, *f.Workspace, string) {
 	t.Helper()
@@ -21,7 +106,7 @@ func registeredSessionFixture(t *testing.T) (Runner, *f.Registry, *f.RunEngine, 
 		t.Fatal(failure)
 	}
 	t.Cleanup(lease.Close)
-	intent, failure := store.New(t.Context(), durable, token)
+	intent, failure := store.Prepare(t.Context(), durable, token)
 	if failure != "" {
 		t.Fatal(failure)
 	}

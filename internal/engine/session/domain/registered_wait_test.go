@@ -84,7 +84,8 @@ func TestRegisteredRunWaitsForStopWithinItsExistingTeardownTotal(t *testing.T) {
 		b, store, engine := f.Fixture()
 		released := make(chan struct{})
 		registry := &f.Registry{Store: store, Project: b.Frozen.Project, WaitForLock: true, LockReleased: released}
-		e := &f.RunEngine{Engine: engine, StdinClosed: true, WaitUntilCancel: true, Exit: 7}
+		stdin := make(chan port.Outcome, 1)
+		e := &f.RunEngine{Engine: engine, StdinFailures: stdin, WaitUntilCancel: true, Exit: 7}
 		id := strings.Repeat("1", 64)
 		e.After = func(event string) {
 			if event != "wait" {
@@ -92,6 +93,7 @@ func TestRegisteredRunWaitsForStopWithinItsExistingTeardownTotal(t *testing.T) {
 			}
 			e.After = nil
 			registry.Locks[id] = true
+			stdin <- port.StdinClosed
 			go func() {
 				time.Sleep(11 * time.Second)
 				synctest.Wait() // Run is blocked in its teardown lock acquisition.

@@ -46,6 +46,6 @@ func (w *world) recoveryReviewSteps(sc *godog.ScenarioContext) {
 	}
 	sc.Step(`^stop reports recovery.temporary with exit 75 within its original total and preserves ownership for a successful retry$`, assert)
 	sc.Step(`^stop completes owned termination and removal with controller unknown while status retains the probe problem and foreign resources survive$`, assert)
-	sc.Step(`^run finishes without a wait failure and status retains stopped cleanup with unknown workload exit and no repeated mutation$`, assert)
+	sc.Step(`^run reports wrapper exit 75 and run.workload-exit-unknown while status retains stopped cleanup with unknown workload exit and no repeated mutation$`, assert)
 	sc.Step(`^registered run refuses the substituted checkout before the barred launch operation while retaining checkout-independent recovery$`, assert)
 }

@@ -7,7 +7,7 @@ Feature: Checkout Unix sockets have an explicit milestone boundary
   # The person's q-30 decision, 2026-11-07 ~01:50 UTC, supersedes the original
   # slice-19 continuous-denial spec. Authorities: docs/charter.md,
   # docs/plans/container-pilot.md (Goal and limits), docs/architecture.md (Slices),
-  # docs/decisions/0013-checkout-socket-milestone-limit.md and
+  # docs/decisions/0019-checkout-socket-milestone-limit.md and
   # docs/plans/checkout-socket-enforcement.md.
   #
   # Slice-19 requires a startup scan before create. Any Unix socket, live or

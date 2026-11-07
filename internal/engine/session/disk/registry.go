@@ -5,7 +5,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"path/filepath"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
+	"path"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
@@ -35,7 +36,9 @@ func (s Registry) lookup() (approval.Candidate, port.Outcome) {
 	if failure != "" {
 		return approval.Candidate{}, failure
 	}
-	root := filepath.Clean(s.Store.Input.Root)
+	// identity() has selected Linux; interpret its paths independently of the
+	// host running a portable contract test.
+	root := path.Clean(s.Store.Input.Root)
 	if s.frozen != nil {
 		c, f := s.candidate()
 		if f != "" {
@@ -46,7 +49,7 @@ func (s Registry) lookup() (approval.Candidate, port.Outcome) {
 	// Discovery uses only the selected absolute path. Opening the writable
 	// checkout would let its worker veto recovery by changing permissions.
 	// Open binds the original protected snapshot to this root before cleanup.
-	if !filepath.IsAbs(root) {
+	if !path.IsAbs(root) {
 		return approval.Candidate{}, port.Refused
 	}
 	return approval.Candidate{UID: uid, GID: gid, Root: root, Project: registryKey(root, uid)}, ""
@@ -95,8 +98,20 @@ func (s Registry) Register(ctx context.Context, frozen approval.Durable, id, tok
 	}
 	r := port.PublicRecord{Schema: 1, ID: id, Project: c.Project, Intent: port.Reference(c.Project, token), State: "preparing"}
 	c.Project = registryKey(c.Root, c.UID)
+	admission, failure := s.reserve(ctx, c, r)
+	if failure != "" {
+		return nil, failure
+	}
+	defer admission.Close()
 	lease, f := s.Storage.Register(ctx, c, id, s.Codec.EncodePublic(r))
 	if f != "" {
+		return nil, storageFailure(f, true)
+	}
+	pending := port.AdmissionRecord{Schema: 1, Root: c.Root, ID: id, Intent: r.Intent, Pending: true}
+	active := pending
+	active.Pending = false
+	if f = admission.Publish(admissionName(c.Project, id, c.UID), s.Codec.EncodeAdmission(pending), s.Codec.EncodeAdmission(active)); f != "" {
+		lease.Close()
 		return nil, storageFailure(f, true)
 	}
 	return lease, ""
@@ -217,7 +232,7 @@ func (s *publicSession) Save(next port.PublicRecord) port.Outcome {
 		return failure
 	}
 	if next.Schema != s.record.Schema || next.ID != s.record.ID || next.Project != s.record.Project || next.Intent != s.record.Intent ||
-		(s.record.State == "stopped" && (next.State != "stopped" || next.LastProblem != nil)) ||
+		(s.record.State == "stopped" && (next.State != "stopped" || (next.LastProblem != nil && *next.LastProblem != port.StreamTimeout))) ||
 		(s.record.WorkloadExit != nil && (next.WorkloadExit == nil || *next.WorkloadExit != *s.record.WorkloadExit)) {
 		return port.Refused
 	}
@@ -237,7 +252,10 @@ func (s *publicSession) Save(next port.PublicRecord) port.Outcome {
 		return storageFailure(f, true)
 	}
 	s.record, s.data = clonePublic(next), data
-	return s.Validate()
+	if failure := s.Validate(); failure != "" {
+		return failure
+	}
+	return s.completeAdmission()
 }
 func (s *publicSession) Sync() port.Outcome {
 	if s.readOnly {
@@ -249,7 +267,10 @@ func (s *publicSession) Sync() port.Outcome {
 	if f := s.directory.Sync("record.json", s.data); f != "" {
 		return storageFailure(f, true)
 	}
-	return s.Validate()
+	if failure := s.Validate(); failure != "" {
+		return failure
+	}
+	return s.completeAdmission()
 }
 
 // A public session holds its operation lock while these short intent
@@ -271,7 +292,7 @@ func (s Store) transaction(ctx context.Context, ref string, fresh bool) (*transa
 	}
 	defer opened.Close()
 	i := opened.(*intent)
-	return &transactionIntent{store: s, ctx: ctx, reference: ref, record: i.record, binding: i.binding, data: bytes.Clone(i.bytes), fresh: fresh}, ""
+	return &transactionIntent{store: s, ctx: budget.Lifetime(ctx), reference: ref, record: i.record, binding: i.binding, data: bytes.Clone(i.bytes), fresh: fresh}, ""
 }
 func (t *transactionIntent) Record() port.Record   { return t.record }
 func (t *transactionIntent) Binding() port.Binding { return t.binding }

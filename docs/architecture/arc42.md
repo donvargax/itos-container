@@ -61,7 +61,7 @@ created or swapped into the checkout after startup inspection remain reachable,
 including during the run. Slice-19 requires only refusal of sockets found before
 create, at any depth including `.git`, without following symlinks outside the
 checkout. This check is not implemented yet and supplies no continuous IPC
-boundary. The [scope decision](../decisions/0013-checkout-socket-milestone-limit.md)
+boundary. The [scope decision](../decisions/0019-checkout-socket-milestone-limit.md)
 overrides the isolation target here; kernel/runtime enforcement is deferred to
 milestone 2 in [the research handoff](../plans/checkout-socket-enforcement.md).
 
@@ -199,15 +199,26 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/slices/exec` | Deferred | Additional argv only during a live owned foreground session. | Future session contract; cannot extend lifetime or alter frozen permissions. |
 | `internal/engine/policy` | Implemented by slice-1 and slice-5 | Strict offline schema/default/value validation, bounded parsing and typed failures. | Own domain/port, disk and YAML adapters; reusable policy contracts and I/O-free porttest fakes. |
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
-| `internal/engine/readiness` | Implemented prerequisite | Read-only checkout, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
+| `internal/engine/readiness` | Implemented prerequisite, extended by slice-20 | Read-only checkout, regular-file inode independence, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
-| `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
+| `internal/engine/budget` | Implemented by slice-12 | Shared phase and finite-operation deadlines, late-result handling and retained handle lifetimes. | Context/time only; typed values in ports, policy in domain. |
+| `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, cross-project checkout admission, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
 or runtime permission. Doctor composes readiness and approval inspection; readiness
 never calls approval, so their composition creates no cycle.
 Typed diagnostic contracts live with the policy, manifest and readiness engine ports;
 doctor and approval share those rule/exit mappings without calling another slice.
+The checkout port recursively requires one filesystem link per regular file,
+including Git, hidden, ignored and untracked entries. Its disk adapter enumerates
+pinned directories, reads link metadata without file contents or symlink traversal,
+and refuses unavailable observations. Each scan, including revalidation, reads
+at most 128 entries per batch and shares a 100,000-entry limit and 10-second
+monotonic deadline across descendants through directory depth 64 (root depth 0).
+Exhaustion refuses safety; time checks between synchronous filesystem calls do
+not preempt a blocked kernel call. Approval does not cache this layout property;
+the [shared-inode decision](../decisions/0013-refuse-shared-checkout-inodes.md)
+extends admission and revalidation without adding link counts to the fingerprint.
 Only cmd binds canonical encoding, effective identity, protected disk storage and
 terminal presentation. The disk store locks pinned project directories, so read-only
 inspection and frozen selection need no lock-file creation. It validates ancestor and
@@ -264,7 +275,8 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | slice-13 — planned launch and cleanup contract | slice-10 | ID-OFFLINE-01/04/05/15 cover ordered launch, frozen settings, checkout substitution and cleanup-failure precedence. |
 | slice-14 — planned native isolation and teardown proof | slice-10 | ID-OFFLINE-08/09/10/11/12/14/16 prove identity, filesystem/network isolation, primary-exit teardown and native cleanup-failure precedence. Checkout plus tmpfs, NetworkMode none and pids 4096 remain the specified boundary. |
 | slice-11 — planned status/stop | slice-10 | Actionable recovery, controller-loss candidates, foreign/repeated/two-project cases and safe diagnostics; protected records, random hex IDs, per-session lock and mutation-time revalidation. |
-| slice-12 — planned budgets/cancellation/loss | slice-10 | Calls 10 s, startup 120 s, teardown 30 s; forward once, 10 s grace, then SIGKILL; observed exit wins. Controller loss preserves isolation until stop. |
+| slice-12 — budgets/cancellation/loss in progress | slice-11 | Calls 10 s, startup 120 s, teardown 30 s; reuse shared termination, forward once, 10 s grace, then SIGKILL; observed exit wins. |
+| slice-15 — planned isolation through controller loss | slice-12 and slice-14 | LIFECYCLE-15 proves isolation retained until explicit stop, using slice-14's independent boundary probes. |
 
 The coordinator accepted the slice-10/13/14 scenario split on 2026-11-06.
 [The offline feature](../../features/offline.feature) is the scenario ownership
@@ -310,6 +322,13 @@ settled milestone choices below replacing its open-choice and setup/state assump
 
 Ordinary doctor and approve execute no checkout code, install no hooks, log in
 to no account and pull/build/start no images or sessions. Approval cannot launch work.
+Ordinary inspection refuses multiply linked regular files with
+`doctor.checkout.hardlink` (exit 1, checkout root subject); an unreadable subtree
+or exhausted enumeration budget uses `doctor.checkout.unavailable` (exit 3).
+File-only modes make no layout claim.
+Revalidation after engine inspection and consent detects a newly shared inode;
+late launch validation refuses start while cleanup retains protected ownership.
+Worker-created hard links within the sole checkout mount do not block recovery.
 Init and lifecycle hooks remain deferred. The person never types a hash in the
 terminal flow. A host agent can approve through the optional flag or a faked terminal:
 approval records **what, not who**, and neither path proves human presence. Slice-4
@@ -317,7 +336,9 @@ must state this in help and security guidance; revisit before egress and credent
 
 ### Foreground run and its failure paths
 
-1. **Preflight, preparing.** Require nonempty executable argv after `--`. Preserve all
+1. **Preflight, preparing.** After validating the invocation, start the single
+   120-second startup deadline before preflight. Capture the first signal through
+   cleanup and diagnostic delivery. Require nonempty executable argv after `--`. Preserve all
    subsequent argument boundaries without an implicit shell or injected agent flags.
    T-11 requires missing/empty-command refusal and wrapper/inherited JSON refusal
    before resources; a workload `--json` remains a literal argument. Then reuse strict
@@ -344,14 +365,23 @@ must state this in help and security guidance; revisit before egress and credent
    identical records are reused without rewriting; all reuse re-establishes file
    and directory durability. Uncertain publication returns no usable handoff.
    Every new invocation still validates current requests, identities and approval.
-3. **Create and own, preparing.** Slice-19 requires a checkout socket inspection
-   before create: refuse any Unix socket at any depth, including `.git`, without
-   following symlinks outside the checkout, with typed isolation refusal and no
-   created worker. This is a startup check, not continuous enforcement; sockets
-   created or swapped in after inspection remain reachable (q-30). The check
-   awaits fresh ID-SOCKETS-01 red evidence and implementation. Persist an intent
-   record with `fsync` before create, then create unstarted. Reconcile a lost
-   response using the trusted record plus a
+3. **Admit, create and own, preparing.** Slice-19 requires a checkout
+   socket inspection before create: refuse any Unix socket at any depth, including
+   `.git`, without following symlinks outside the checkout, with typed isolation
+   refusal and no created worker. This is a startup check, not continuous
+   enforcement; sockets created or swapped in after inspection remain reachable
+   (q-30). The check awaits fresh ID-SOCKETS-01 red evidence and implementation.
+   Slice-16 atomically reserves the validated
+   canonical checkout under one protected control-root lock before registration or
+   create. Strict ancestor/descendant roots conflict across projects and daemons;
+   equal roots and disjoint roots retain concurrency. Legacy registrations without
+   admission metadata remain authority. The lock spans short storage transactions,
+   never engine calls or session operation locks. See
+   [the admission decision](../decisions/0014-checkout-admission.md).
+   New foreground runs publish a reserved intent before public registration, then
+   clear the pending reservation marker durably before receiving launch authority.
+   Advance the intent with `fsync` under the operation lock before create,
+   then create unstarted. Reconcile a lost response using the trusted record plus a
    random name before launch or cleanup, closing the untracked-create window. Names
    or labels alone never authorize adoption or deletion. Durably record concrete
    resource identity before any entrypoint or workload instruction. A failed record
@@ -379,8 +409,13 @@ must state this in help and security guidance; revisit before egress and credent
    handshake is bounded; acknowledged workload wait has no lifetime limit.
    Forwarding failures cancel the pending workload wait and trigger bounded cleanup.
    Run captures SIGINT/SIGTERM before startup, forwards the first signal once after
-   reacquiring owned authority, allows 10 s grace, then escalates to SIGKILL within
-   the same 30 s teardown budget. Repeated signals cannot interrupt that cleanup.
+   reacquiring owned authority, allows grace until 10 s from cancellation, then
+   escalates to SIGKILL within the same 30 s teardown budget. Signal delivery
+   consumes grace. Repeated signals cannot interrupt that cleanup. Final output
+   drains concurrently with owned cleanup for at most 10 s within that total;
+   expiry closes the owned attachment immediately so backpressure cannot keep
+   the engine's exit observation blocked until cleanup returns;
+   a blocked consumer cannot retain the operation lock or hold removal.
    Slice-11 adds executable status/stop; native signal and retained-isolation proof
    remains with slice-12 and the guarded CI tier.
    See [the foreground integration decision](../decisions/0008-foreground-run-integration.md).
@@ -406,9 +441,14 @@ cleanup fails, return a nonzero wrapper failure classified by its cause. T-11 re
 the CLI wrapper meanings, rather than importing helper-tool codes or treating every
 cleanup error as transient. Return zero only with known successful work and cleanup;
 observed exit wins over an inferred signal outcome. Forward a signal once, allow
-10 s grace, then SIGKILL if needed. Interruption without an observed nonzero exit
-uses the existing execution-unavailable failure (75). Slice-12 owns remaining signal-derived and
-cancellation mappings under the charter stop rule; this design invents none.
+10 s grace measured from cancellation, then SIGKILL if needed. Report
+`run.cancelled` and the first signal separately. With no observed exit, SIGINT
+returns 130 and SIGTERM returns 143; these are wrapper outcomes. Observed zero
+with successful cleanup and streams returns zero. `run.engine-lost` and
+`run.stream-timeout` remain failures even with observed zero. Nonzero observed
+exit retains precedence over each of these failures.
+[The lifecycle result decision](../decisions/0016-cancellation-and-output-drain.md)
+supersedes 0009's provisional cancellation result.
 
 Pre-launch refusals have no child status. Lost engine/controller observations never
 become invented workload success or failure: a surviving controller reports its
@@ -416,6 +456,27 @@ classified nonzero failure and an unknown child outcome; a dead controller canno
 return a result or run cleanup. Signal delivery is not termination evidence.
 
 ### Recovery
+
+Slice-16 retains registered checkout reservations through controller loss and uncertain cleanup.
+New runs publish a `reserved` intent before registration, and advance it durably to
+`intent` under the operation lock before sending create. Stop can instead durably
+cancel a reserved intent, publish stopped progress and certify completion without
+an engine call or an invented worker ID/exit. Once create may have been sent, only
+durable absent intent and stopped public session, following fresh full-ID absence,
+permit completion certification under the common admission lock. Repeated stop can
+re-establish that evidence for legacy sessions. Existing operation-lock state checks
+fence stale create/start continuations before a nested checkout is readmitted; controller
+lease release is unnecessary. Each same-root session releases independently. Admission
+never contacts another project's daemon and status/stop keep their original scope.
+An independently retained `stream-timeout` on a stopped public record does not
+invalidate its matching completion certificate or block subsequent admission.
+Every other retained failure, a non-stopped record or mismatched intent still
+refuses a claimed completion; output loss cannot release an incomplete reservation.
+Admission marks claims pending until public registration succeeds durably. The common
+lock lets admission ignore only a pending claim with an absent public record; that
+publisher cannot still grant launch authority. Active and legacy claims, visible
+registrations, and unreadable or unsafe state retain their conservative rules.
+See [the admission decision](../decisions/0014-checkout-admission.md).
 
 Status inspects owned sessions after partial startup, lost create response, cancellation,
 engine loss or controller interruption. Stop cancels a live owned session or resumes
@@ -435,12 +496,18 @@ never span engine calls. A controller-probe error leaves presence unknown and
 does not veto explicit stop; ownership validation remains independent. Expiry
 during stop inspection or either termination wait remains temporary and cannot
 authorize a progress write beyond the total budget. When a concurrent stop completed
-the same worker, run can reconcile completion without an observed exit, preserving null and draining
-remaining output without reporting a spurious wait failure. If the initial stdin
-probe times out on that stop's operation lock, run retries the completion check
+the same worker, run reconciles cleanup independently of the workload result,
+preserving null and draining remaining output. Without an observed exit or another
+failure, run returns wrapper exit 75 and `run.workload-exit-unknown`, explaining
+that the workload exit is unknown and cleanup is complete, with no cleanup retry.
+Stop and status still succeed; no synthetic exit or last problem is persisted.
+If the initial stdin probe times out on that stop's operation lock, run retries
+the completion check
 within its existing teardown total. Incomplete or conflicting authority and
 forwarding errors still fail.
 See [public session recovery](../decisions/0010-public-session-recovery.md).
+[Unknown workload exit](../decisions/0015-unknown-workload-exit.md) corrects the
+earlier concurrent-completion success claim; known nonzero exits retain precedence.
 
 Fresh recovery discovers registrations through the protected
 `sessions/<lookup>/<id>` index, where lookup hashes the host UID and canonical
@@ -560,13 +627,26 @@ no claim to redact arbitrary workload output or permission to copy it into recov
 **Bounded operations.** Calls have 10 s, startup 120 s and teardown 30 s. Retries and
 progress cannot reset totals, so a stalled daemon cannot hold a transition indefinitely.
 Attach establishment belongs within startup; timeout still needs separately bounded
-cleanup and uncertain-operation reconciliation. Forward a signal once, allow 10 s
-grace, then SIGKILL; the grace bounds cooperative shutdown before forced termination.
+cleanup and uncertain-operation reconciliation. Forward a signal once, allowing
+10 s from the original cancellation before SIGKILL. Delivery acknowledgement
+cannot restart grace; an unavailable acknowledgement never authorizes repeating
+the original signal. Revalidate full ownership again before escalation.
 Observed exit wins and delivery alone never proves termination. Foreground waiting
 has no invented workload lifetime limit. A4 selects pids limit 4096, with no memory or
-CPU quota claim. Parser structural bounds and CI job timeouts are separate. Slice-12
-owns remaining repeated-cancellation, backpressure and result details; slice-11/12
-must specify finite recovery budgets without inventing them here. Open security
+CPU quota claim. Parser structural bounds and CI job timeouts are separate.
+[Decision 0017](../decisions/0017-controller-operation-budgets.md) implements
+whole-invocation startup and finite-call budgets in the shared budget engine.
+Late results cannot resume launch. Acquired handles retain the phase lifetime;
+requests keep their individual deadlines. Pending storage operations retain their
+locks until they finish, and failed fsync retains visible but uncertain progress.
+Slice-11 supplies fresh 10 s status and 30 s stop totals. Stop may retry bounded
+lock observations within its original total; mutations are never blindly retried. Registered foreground cleanup
+and final drain proceed concurrently. Registered run reserves the final second
+of its original 30 s total for diagnostic delivery; cleanup exhaustion cannot
+replace the original run failure. [Decision 0018](../decisions/0018-teardown-diagnostics.md)
+records the split and return-time checks. Protected `last_problem` can retain a typed stream timeout
+even in a completed cleanup tombstone. This records delivery failure without
+changing resource absence or the authoritative workload exit. Open security
 choices follow the charter stop rule, not a blanket reopening of settled limits.
 
 **Dependencies and platforms.** Owning behaviour specs choose maintained libraries,

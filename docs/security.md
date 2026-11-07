@@ -35,7 +35,7 @@ Do not treat a socket-free startup check as proof of host IPC isolation.
 
 Continuous enforcement is deferred to milestone 2 under
 `p1-checkout-socket-kernel-enforcement`; see the
-[decision](decisions/0013-checkout-socket-milestone-limit.md) and
+[decision](decisions/0019-checkout-socket-milestone-limit.md) and
 [Landlock/gVisor research](plans/checkout-socket-enforcement.md).
 
 ## Approval boundary

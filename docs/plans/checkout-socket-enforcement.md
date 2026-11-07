@@ -4,7 +4,7 @@
 
 The person settled q-30 on 2026-11-07 at approximately 01:50 UTC: defer kernel
 enforcement and document the gap for milestone 1. The
-[accepted decision](../decisions/0013-checkout-socket-milestone-limit.md) supersedes
+[accepted decision](../decisions/0019-checkout-socket-milestone-limit.md) supersedes
 the earlier proposal to block this milestone on continuous socket denial.
 
 Slice-19 now requires startup refusal before create for any Unix socket in the

@@ -15,6 +15,10 @@ type Checkout struct {
 	InspectFailure  port.Failure
 	Changed, Opened bool
 	Roots           []string
+	Inspections     int
+	Revalidations   int
+	LinkCounts      map[string]uint64
+	Unreadable      bool
 }
 
 func (c *Checkout) Pin(root string) port.Failure {
@@ -23,16 +27,34 @@ func (c *Checkout) Pin(root string) port.Failure {
 	return c.Failure
 }
 func (c *Checkout) Inspect() (port.CheckoutIdentity, port.Failure) {
+	c.Inspections++
 	if !c.Opened {
 		return port.CheckoutIdentity{}, port.CheckoutUnavailable
 	}
 	if c.InspectFailure != port.None {
 		return port.CheckoutIdentity{}, c.InspectFailure
 	}
+	if failure := c.independence(); failure != port.None {
+		return port.CheckoutIdentity{}, failure
+	}
 	return c.Identity, port.None
 }
-func (c *Checkout) Unchanged() bool { return c.Opened && !c.Changed }
-func (c *Checkout) Close()          { c.Opened = false }
+func (c *Checkout) independence() port.Failure {
+	if c.Unreadable {
+		return port.CheckoutUnavailable
+	}
+	for _, links := range c.LinkCounts {
+		if links != 1 {
+			return port.CheckoutHardlink
+		}
+	}
+	return port.None
+}
+func (c *Checkout) Unchanged() bool {
+	c.Revalidations++
+	return c.Opened && !c.Changed && c.independence() == port.None
+}
+func (c *Checkout) Close() { c.Opened = false }
 
 // Engine records selection and budget without dialing or measuring real time.
 type Engine struct {
@@ -65,10 +87,12 @@ type Session struct {
 	LaterInfoFailure                          port.Failure
 	InfoReads                                 int
 	ImageReads                                []string
+	VersionReads, Revalidations               int
 }
 
 func (s *Session) Endpoint() string { return s.Address }
 func (s *Session) Version() (port.Version, port.Failure) {
+	s.VersionReads++
 	if s.VersionFailure != port.None {
 		return port.Version{}, s.VersionFailure
 	}
@@ -99,5 +123,8 @@ func (s *Session) Image(reference string) (port.Image, port.Failure) {
 	image.RepoDigests = slices.Clone(image.RepoDigests)
 	return image, port.None
 }
-func (s *Session) Unchanged() bool { return !s.Changed }
-func (s *Session) Close()          { s.Closed = true }
+func (s *Session) Unchanged() bool {
+	s.Revalidations++
+	return !s.Changed
+}
+func (s *Session) Close() { s.Closed = true }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -69,7 +70,9 @@ func publicRecoveryInspectionDeadline(t *testing.T) {
 			time.Sleep(25 * time.Second)
 			locked.Close()
 		}()
+		inspected := make(chan struct{})
 		m.e.BeforeInspect = func() {
+			defer close(inspected)
 			time.Sleep(5 * time.Second)
 			synctest.Wait()
 		}
@@ -85,6 +88,9 @@ func publicRecoveryInspectionDeadline(t *testing.T) {
 		if !bytes.Equal(before, files.Data) || len(m.files.Events) != 0 || !reflect.DeepEqual(m.e.Resources[worker], original) {
 			t.Fatal("expired stop changed protected progress or its worker")
 		}
+		// The bounded controller can return before the expired fake inspection
+		// finishes. Settle that callback before reconfiguring the fresh retry.
+		<-inspected
 		m.e.BeforeInspect = nil
 		r = publicMemoryCommand(t, m.service(), "stop", id, 0)
 		if len(r.Sessions) != 1 || r.Sessions[0].Cleanup != "complete" || r.Sessions[0].WorkloadExit != nil || len(m.e.Resources) != 0 {
@@ -153,6 +159,8 @@ func publicRecoveryStoppedWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
 		m.e.StdinClosed, m.e.WaitUntilCancel = true, true
+		stdin := make(chan sp.Outcome, 1)
+		m.e.StdinFailures = stdin
 		id := ""
 		var completed []byte
 		mutations := 0
@@ -173,16 +181,18 @@ func publicRecoveryStoppedWait(t *testing.T) {
 			}
 			completed = bytes.Clone(m.files.Sessions[m.index().Project+"/"+id].Data)
 			mutations = recoveryReviewMutations(m.e)
-			// Let stdin's notification cancel the original pending wait before
-			// returning to its fake engine response. No real sleep or engine runs.
+			// The scenario closes stdin after stop completes. Queue that event
+			// only after capturing completion, so an independently cancellable
+			// wait cannot race ahead of the fixture's stop or its audit snapshot.
+			stdin <- sp.StdinClosed
 			synctest.Wait()
 		}
 		runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
 		approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: m.c, Record: ap.Record{Candidate: m.c, Generation: "1"}, Status: "matching"}}
 		var out, errout bytes.Buffer
 		code := (runcommand.CLI{Approval: approval, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "probe"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
-		if code != 0 || errout.Len() != 0 {
-			t.Fatalf("run misreported completed cleanup as a wait failure: exit %d, %s", code, errout.String())
+		if code != 75 || !strings.Contains(errout.String(), "run.workload-exit-unknown") || strings.Contains(errout.String(), "run.execution-unavailable") || strings.Contains(errout.String(), "itos container stop") {
+			t.Fatalf("run lost the unknown workload result after completed cleanup: exit %d, %s", code, errout.String())
 		}
 		status := publicMemoryCommand(t, m.service(), "status", "", 0)
 		if id == "" || len(status.Sessions) != 1 || status.Sessions[0].State != "stopped" || status.Sessions[0].Cleanup != "complete" || status.Sessions[0].WorkloadExit != nil || status.Sessions[0].Retry != nil || len(m.e.Resources) != 0 {

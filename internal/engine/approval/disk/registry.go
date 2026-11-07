@@ -3,6 +3,7 @@ package disk
 import (
 	"context"
 	"errors"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,7 +98,7 @@ func (s Registry) Register(ctx context.Context, c port.Candidate, id string, dat
 	if exclusive == nil {
 		exclusive = (*os.Root).Link
 	}
-	d := &sessionDirectory{directoryStore: directoryStore{pin: p, ctx: ctx, public: true, exclusive: exclusive}}
+	d := &sessionDirectory{directoryStore: directoryStore{pin: p, ctx: budget.Lifetime(ctx), public: true, exclusive: exclusive}}
 	controller, failure := d.openLock("controller.lock", true)
 	if failure != "" {
 		return nil, failure
@@ -152,7 +153,7 @@ func (s Registry) Open(ctx context.Context, c port.Candidate, id string, readOnl
 	if failure != "" || p == nil {
 		return nil, failure
 	}
-	d := &sessionDirectory{directoryStore: directoryStore{pin: p, ctx: ctx, public: true, exclusive: (*os.Root).Link}, readOnly: readOnly}
+	d := &sessionDirectory{directoryStore: directoryStore{pin: p, ctx: budget.Lifetime(ctx), public: true, exclusive: (*os.Root).Link}, readOnly: readOnly}
 	success := false
 	defer func() {
 		if !success {

@@ -119,3 +119,19 @@ questions:
     item: "slice-19"
     question: "slice-19: CI red evidence for ID-SOCKETS-02 at 69b02a8?"
     answer: "Yes. Run 42323471709: the worker reached host sockets created after launch, with the positive controls passing. With 01 and 03, every slice-19 scenario has red evidence: implement the denial."
+  - id: q-30
+    item: "slice-19"
+    question: "slice-19: which enforcement denies host Unix sockets in the checkout: Landlock with a product init, the gVisor runtime, or defer?"
+    answer: "Defer (the person, 2026-11-07). For this milestone: refuse at startup a checkout that holds any Unix socket, with no worker created; document plainly that sockets created or swapped in during a run stay reachable; move ID-SOCKETS-02 and 03 out of slice-19 to p1-checkout-socket-kernel-enforcement, keeping the Landlock and gVisor research for milestone 2. See slice-19-steer.md."
+  - id: q-31
+    item: "slice-21"
+    question: "slice-21: is the local red evidence at 4d64985 enough to implement?"
+    answer: "Yes. All 45 examples fail at their behaviour assertions against recording fake engines (docs/plans/control-state-red-evidence.md); none is an engine scenario, so no CI red run is needed. Implement."
+  - id: q-32
+    item: "slice-15"
+    question: "slice-15: native evidence for ID-LIFECYCLE-15 at e22aa63?"
+    answer: "Run 42390615242: it already passes (8 of 8 steps), covered by slice-12's work. Accepted as regression coverage under the standing rule: activate it."
+  - id: q-33
+    item: "slice-17"
+    question: "slice-17: CI red evidence for ID-OFFLINE-30 at 3aae532?"
+    answer: "Yes. Run 42390617135: both rows fail at their Then (missing original owned volume and protected recovery evidence after controller exit). Implement."

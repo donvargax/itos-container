@@ -140,6 +140,10 @@ func TestEngineAndImageFailures(t *testing.T) {
 		{"recheck", port.EngineInspect, func(e *porttest.Engine, _ *porttest.Checkout) { e.Session.LaterInfoFailure = port.EngineInspect }},
 		{"checkout", port.CheckoutChanged, func(_ *porttest.Engine, c *porttest.Checkout) { c.Changed = true }},
 		{"layout", port.CheckoutLayout, func(_ *porttest.Engine, c *porttest.Checkout) { c.InspectFailure = port.CheckoutLayout }},
+		{"hard link", port.CheckoutHardlink, func(_ *porttest.Engine, c *porttest.Checkout) {
+			c.LinkCounts = map[string]uint64{".git/objects/pack/shared": 2}
+		}},
+		{"unreadable subtree", port.CheckoutUnavailable, func(_ *porttest.Engine, c *porttest.Checkout) { c.Unreadable = true }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			i, input, e, c := fixture()
@@ -150,6 +154,9 @@ func TestEngineAndImageFailures(t *testing.T) {
 			}
 			if c.Opened || (e.Opens != 0 && e.Failure == port.None && !e.Session.Closed) {
 				t.Fatal("leaked inspection pin/session")
+			}
+			if (tc.want == port.CheckoutHardlink || tc.want == port.CheckoutUnavailable) && e.Opens != 0 {
+				t.Fatal("unsafe file layout reached engine")
 			}
 		})
 	}

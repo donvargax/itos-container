@@ -72,3 +72,19 @@
   scenarios:
     - id: "@ID-RECOVERY-08"
       why: run preserves the observed exit and prints a registered stop retry that completes durable cleanup through a fresh process without a Docker daemon
+- file: lifecycle.feature
+  scenarios:
+    - id: "@ID-LIFECYCLE-11"
+      why: repeated signals preserve the observed workload exit and bounded recovery, then explicit stop confirms durable owned cleanup in the guarded CI engine tier
+- file: checkout-overlap.feature
+  scenarios:
+    - id: "@ID-OVERLAP-01"
+      why: nested launches refuse across one or two daemons while disjoint checkout controls remain active
+- file: hardlinks.feature
+  scenarios:
+    - id: "@ID-HARDLINK-03"
+      why: shared Git storage refuses inspection and an independent copy restores readiness with the original approval
+- file: run_exit.feature
+  scenarios:
+    - id: "@ID-RUNEXIT-02"
+      why: unknown workload exit remains nonzero after concurrent stop exceeds the stdin probe, with preserved cleanup and drained output

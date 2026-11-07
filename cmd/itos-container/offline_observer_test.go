@@ -39,6 +39,7 @@ type offlineObserver struct {
 	events  []offlineEvent
 	checks  int
 	exited  bool
+	drained chan struct{}
 }
 
 func (o *offlineObserver) event(e offlineEvent) {
@@ -67,6 +68,11 @@ type offlineStore struct {
 func (s offlineStore) New(ctx context.Context, d ap.Durable, token string) (sp.Intent, sp.Outcome) {
 	i, f := s.Store.New(ctx, d, token)
 	return s.observed(i, f, "intent")
+}
+
+func (s offlineStore) Prepare(ctx context.Context, d ap.Durable, token string) (sp.Intent, sp.Outcome) {
+	i, f := s.Store.Prepare(ctx, d, token)
+	return s.observed(i, f, "reserved")
 }
 
 func (s offlineStore) OpenCleanup(ctx context.Context, ref string) (sp.Intent, sp.Outcome) {
@@ -124,7 +130,12 @@ func (i offlineIntent) Validate() sp.Outcome {
 func (i offlineIntent) Save(r sp.Record) sp.Outcome {
 	f := i.Intent.Save(r)
 	i.o.record = i.Record()
-	i.o.event(offlineEvent{Operation: "save", Failure: string(f)})
+	operation := "save"
+	if r.Stage == "intent" {
+		// Registered runs publish create issuance separately from reservation.
+		operation = "intent"
+	}
+	i.o.event(offlineEvent{Operation: operation, Failure: string(f)})
 	return f
 }
 
@@ -183,6 +194,7 @@ func (c offlineConnection) Attach(ctx context.Context, id string, streams sp.Str
 	if f != "" {
 		return a, f
 	}
+	c.o.drained = make(chan struct{})
 	return offlineAttachment{Attachment: a, o: c.o}, f
 }
 
@@ -233,5 +245,6 @@ type offlineAttachment struct {
 func (a offlineAttachment) Drain(ctx context.Context) sp.Outcome {
 	f := a.Attachment.Drain(ctx)
 	a.o.event(offlineEvent{Operation: "drain", Failure: string(f)})
+	close(a.o.drained)
 	return f
 }

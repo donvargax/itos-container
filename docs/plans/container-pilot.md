@@ -59,7 +59,7 @@ found before worker creation, at any depth including `.git`, without following
 symlinks outside the checkout. That check is specified but not implemented yet
 and cannot close the race after inspection. Continuous enforcement is deferred
 to milestone 2 under `p1-checkout-socket-kernel-enforcement`; see the
-[accepted scope decision](../decisions/0013-checkout-socket-milestone-limit.md)
+[accepted scope decision](../decisions/0019-checkout-socket-milestone-limit.md)
 and [research handoff](checkout-socket-enforcement.md). This is a known gap in
 the isolation target, not a claim that startup scanning establishes it.
 

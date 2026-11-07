@@ -18,8 +18,8 @@ guidance, the threat model and run's isolation help must state this limit.
 This overrides arc42's **Constraints**, **Context and scope**, and **Foreground
 run and its failure paths** where their host/network isolation target would
 otherwise imply continuous denial of checkout host sockets. The startup check
-belongs before **Create and own**, with filesystem access behind an adapter
-port. No kernel bootstrap, alternative runtime, new mount or dependency is
+belongs before create in **Admit, create and own**, with filesystem access
+behind an adapter port. No kernel bootstrap, alternative runtime, new mount or dependency is
 authorized for this milestone.
 
 Reword ID-SOCKETS-01 as startup refusal and obtain one fresh guarded CI red run

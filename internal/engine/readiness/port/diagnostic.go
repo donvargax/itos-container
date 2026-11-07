@@ -35,6 +35,8 @@ func Diagnostic(issue Issue) Problem {
 		p.Rule, p.Message, p.Fix = "checkout.path", "Checkout inspection path is unsafe", "use real root directories and Git metadata without symbolic links"
 	case CheckoutChanged:
 		p.Rule, p.Message, p.Fix = "checkout.changed", "Checkout identity changed during inspection", "stabilize the checkout and inspect again"
+	case CheckoutHardlink:
+		p.Rule, p.Message, p.Fix = "checkout.hardlink", "Checkout contains hard links that share file inodes", "prepare an independent checkout without shared file inodes"
 	case EngineRemote:
 		p.Rule, p.Message, p.Fix = "engine.remote", "Remote engine transports are unsupported", "select a host-owned local Unix socket"
 	case EngineSelection:

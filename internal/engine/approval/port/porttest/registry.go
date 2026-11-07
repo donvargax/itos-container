@@ -3,6 +3,7 @@ package porttest
 import (
 	"bytes"
 	"context"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/port"
 	"strings"
 	"sync"
 	"time"
@@ -13,11 +14,14 @@ import (
 // Registry is a stateful in-memory protected-storage fake. Filesystem faults
 // are supplied observations; no process, clock or filesystem is consulted.
 type Registry struct {
-	mu       sync.Mutex
-	Sessions map[string]*SessionFiles
-	Failure  port.Failure
-	Fault    string
-	Events   []RegistryEvent
+	mu               sync.Mutex
+	admissionGate    chan struct{}
+	Admissions       map[string][]byte
+	AdmissionFailure port.Failure
+	Sessions         map[string]*SessionFiles
+	Failure          port.Failure
+	Fault            string
+	Events           []RegistryEvent
 	// A read can become unavailable after a preceding successful observation.
 	ReadFailure port.Failure
 	AfterRead   func()
@@ -140,7 +144,7 @@ func (s *Registry) Open(ctx context.Context, c port.Candidate, id string, readOn
 		}
 		s.mu.Lock()
 	}
-	return &registryDirectory{s: s, files: f, id: id, ctx: ctx, readOnly: readOnly}, ""
+	return &registryDirectory{s: s, files: f, id: id, ctx: budget.Lifetime(ctx), readOnly: readOnly}, ""
 }
 
 type registryDirectory struct {

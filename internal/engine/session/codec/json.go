@@ -46,7 +46,7 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 		return bad()
 	}
 	switch record.Stage {
-	case "intent":
+	case "intent", "reserved", "cancelled":
 		if record.ContainerID != "" {
 			return bad()
 		}

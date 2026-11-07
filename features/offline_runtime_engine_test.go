@@ -28,6 +28,7 @@ type offlineRequest struct {
 	Cancelled           bool
 	Diagnostic          string
 	State               map[string]any
+	At, Replied         time.Time
 }
 
 // Unlike doctor's read-only recorder and slice-9's unstarted recorder, this
@@ -50,6 +51,7 @@ type offlineAPI struct {
 	removeGate  chan struct{}
 	removeReady chan struct{}
 	removeHeld  bool
+	lifecycle   *lifecycleFaults
 }
 
 func (w *world) startOfflineAPI() error {
@@ -86,7 +88,7 @@ func offlineHex(value string) bool {
 }
 
 func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
-	entry := offlineRequest{Method: request.Method, Path: doctorRequestPath(request.URL.Path), Query: request.URL.RawQuery}
+	entry := offlineRequest{Method: request.Method, Path: doctorRequestPath(request.URL.Path), Query: request.URL.RawQuery, At: time.Now()}
 	body, readErr := io.ReadAll(io.LimitReader(request.Body, 65537))
 	if len(body) != 0 && json.Unmarshal(body, &entry.Body) != nil {
 		readErr = errors.New("non-JSON offline request")
@@ -116,6 +118,18 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 	if !allowed {
 		http.Error(out, "offline fixture refused unsafe request", http.StatusForbidden)
 		return
+	}
+	if a.lifecycle != nil {
+		var cancel context.CancelFunc
+		request, cancel = a.lifecycle.request(request)
+		defer cancel()
+		if a.lifecycle.before(out, request, entry) {
+			a.mu.Lock()
+			a.requests[index].Status = http.StatusServiceUnavailable
+			a.requests[index].Cancelled = request.Context().Err() != nil
+			a.mu.Unlock()
+			return
+		}
 	}
 	if failRemove {
 		http.Error(out, "slice-11 transient removal fault", http.StatusServiceUnavailable)
@@ -149,6 +163,23 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			if response.StatusCode == http.StatusSwitchingProtocols {
 				return nil
 			}
+			if a.lifecycle != nil && strings.HasSuffix(entry.Path, "/wait") && response.StatusCode == http.StatusOK {
+				// Acknowledged wait is a streaming subscription. Buffering its
+				// entire body here would fabricate a 10 s handshake timeout for
+				// quiet workloads, before any product lifetime assertion.
+				response.Body = &lifecycleWaitBody{ReadCloser: response.Body, finished: func(data []byte, failure error) {
+					var observed map[string]any
+					_ = json.Unmarshal(data, &observed)
+					a.mu.Lock()
+					defer a.mu.Unlock()
+					a.requests[index].Cancelled = request.Context().Err() != nil
+					if failure == io.EOF && !a.requests[index].Cancelled {
+						a.requests[index].Observation = observed
+						a.requests[index].Replied = time.Now()
+					}
+				}}
+				return nil
+			}
 			if entry.Method == "POST" && strings.HasSuffix(entry.Path, "/wait") && response.StatusCode == http.StatusOK {
 				// Waiting for EOF here hides Docker's immediate acknowledgement
 				// and turns the product's handshake limit into a workload timeout.
@@ -177,7 +208,6 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			var observed map[string]any
 			_ = json.Unmarshal(data, &observed)
 			a.mu.Lock()
-			defer a.mu.Unlock()
 			if response.StatusCode >= http.StatusBadRequest {
 				message, _ := observed["message"].(string)
 				a.requests[index].Diagnostic = "engine response: " + message
@@ -186,6 +216,7 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 				id, _ := observed["Id"].(string)
 				if !offlineHex(id) {
 					a.problem = errors.New("native create reply lacks a full container ID")
+					a.mu.Unlock()
 					return nil
 				}
 				a.created = append(a.created, id)
@@ -202,6 +233,16 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 					a.requests[index].State = state
 				}
 			}
+			a.mu.Unlock()
+			if a.lifecycle != nil {
+				a.lifecycle.response(request, entry, response.StatusCode)
+			}
+			a.mu.Lock()
+			a.requests[index].Cancelled = request.Context().Err() != nil
+			if !a.requests[index].Cancelled {
+				a.requests[index].Replied = time.Now()
+			}
+			a.mu.Unlock()
 			return nil
 		},
 		ErrorHandler: func(out http.ResponseWriter, request *http.Request, err error) {
@@ -209,7 +250,7 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.requests[index].Status = http.StatusBadGateway
 			a.requests[index].Diagnostic = "recorder transport: " + err.Error()
 			a.requests[index].Cancelled = request.Context().Err() != nil
-			if !a.recovery || request.Context().Err() == nil {
+			if a.lifecycle == nil && (!a.recovery || request.Context().Err() == nil) {
 				a.problem = errors.New("offline native recorder transport failed")
 			}
 			a.mu.Unlock()
@@ -259,7 +300,7 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	if r.Method == "POST" && entry.Path == "/containers/create" {
 		token := strings.TrimPrefix(r.URL.Query().Get("name"), "itos-container-")
 		limit := 1
-		if w.offline.isolation != nil {
+		if w.offline.isolation != nil || w.hardlinks != nil {
 			limit = 2
 		}
 		if !offlineHex(token) || r.URL.Query().Get("name") != "itos-container-"+token || len(r.URL.Query()) != 1 || len(a.created) >= limit {
@@ -285,9 +326,15 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	if !containsSessionID(a.created, id) || !offlineHex(id) {
 		return false
 	}
+	if r.Method == "POST" && operation == "wait" {
+		// Wait is read-only and may arrive after concurrent owned removal.
+		// Relay the native response for this exact recorded full ID, including
+		// not-found; an absent object cannot provide fresh mutation authority.
+		return len(r.URL.Query()) == 1 && r.URL.Query().Get("condition") == "not-running"
+	}
 	observed, err := a.inspect(id)
 	if err != nil || a.identity(observed, id) != nil {
-		a.problem = errors.New("offline recorder refused a mismatched native identity")
+		a.problem = fmt.Errorf("offline recorder refused a mismatched native identity for %s /containers/<owned>/%s (inspection failed: %t)", r.Method, operation, err != nil)
 		return false
 	}
 	entry.Observation = observed
@@ -308,11 +355,10 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 			return true
 		case "start":
 			return r.URL.RawQuery == "" && a.safeObserved(observed)
-		case "wait":
-			return len(r.URL.Query()) == 1 && r.URL.Query().Get("condition") == "not-running"
 		case "kill":
 			return len(r.URL.Query()) == 1 && len(r.URL.Query()["signal"]) == 1 &&
-				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL")
+				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL" ||
+					(a.lifecycle != nil && r.URL.Query().Get("signal") == "SIGINT"))
 		case "stop":
 			return reflect.DeepEqual(r.URL.Query(), url.Values{"signal": {"SIGTERM"}, "t": {"10"}})
 		}
