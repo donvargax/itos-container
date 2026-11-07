@@ -22,6 +22,34 @@ func TestAdmissionCodecContract(t *testing.T) {
 		}
 	}
 }
+
+func TestAdmissionCodecSizeBoundary(t *testing.T) {
+	r := sp.AdmissionRecord{Schema: 1, Root: "/work", ID: strings.Repeat("a", 64), Intent: sp.Reference(strings.Repeat("b", 64), strings.Repeat("c", 64))}
+	encoded := (JSON{}).EncodeAdmission(r)
+	for _, tc := range []struct {
+		name string
+		size int
+		want sp.Outcome
+	}{
+		{"below limit", 65535, ""},
+		{"at limit", 65536, ""},
+		{"above limit", 65537, sp.Invalid},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Whitespace changes the byte envelope without changing the record.
+			data := []byte(string(encoded) + strings.Repeat(" ", tc.size-len(encoded)))
+			codec := JSON{Parser: &mf.Parser{Value: publicValue(t, data)}}
+			wantRecord := r
+			if tc.want != "" {
+				wantRecord = sp.AdmissionRecord{}
+			}
+			if got, failure := codec.DecodeAdmission(data); failure != tc.want || got != wantRecord {
+				t.Fatalf("%d-byte admission: got %#v, %s; want %#v, %s", tc.size, got, failure, wantRecord, tc.want)
+			}
+		})
+	}
+}
+
 func TestAdmissionCodecRejectsInvalidAuthority(t *testing.T) {
 	r := sp.AdmissionRecord{Schema: 1, Root: "/work", ID: strings.Repeat("a", 64), Intent: sp.Reference(strings.Repeat("b", 64), strings.Repeat("c", 64))}
 	for _, tc := range []struct{ field, raw string }{
