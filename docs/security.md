@@ -19,6 +19,25 @@ scanner and proves every supported combination before claiming that protection. 
 check commands can execute programs, so run them only in an environment appropriate to that
 trust. itos's hooks and commit rules are workflow controls, not a security sandbox.
 
+## Checkout Unix sockets: known milestone limit
+
+The writable checkout bind exposes host pathname Unix sockets to the worker.
+Network mode `none` and a private IPC namespace do not prevent this access.
+Host sockets created or swapped into the checkout during a run remain reachable.
+A host service listening there can therefore give the worker access to host
+actions or networking even though the worker has no external network interface.
+
+The person's q-30 decision scopes slice-19 to refusing sockets found at startup,
+before creating a worker, including sockets in nested directories and `.git`.
+That refusal is specified but awaits a fresh CI red run and implementation.
+It will not close the race after inspection or provide continuous enforcement.
+Do not treat a socket-free startup check as proof of host IPC isolation.
+
+Continuous enforcement is deferred to milestone 2 under
+`p1-checkout-socket-kernel-enforcement`; see the
+[decision](decisions/0013-checkout-socket-milestone-limit.md) and
+[Landlock/gVisor research](plans/checkout-socket-enforcement.md).
+
 ## Approval boundary
 
 [Slice-4's approval scenarios](../features/approval.feature) exercise the implemented

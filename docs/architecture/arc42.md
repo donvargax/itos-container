@@ -56,6 +56,15 @@ and selected local container engine. Containers do not defend against a host
 administrator or kernel/container escape. The writable checkout is deliberately
 exposed to destructive edits by its workload.
 
+The person's q-30 decision accepts a first-milestone limit: host Unix sockets
+created or swapped into the checkout after startup inspection remain reachable,
+including during the run. Slice-19 requires only refusal of sockets found before
+create, at any depth including `.git`, without following symlinks outside the
+checkout. This check is not implemented yet and supplies no continuous IPC
+boundary. The [scope decision](../decisions/0013-checkout-socket-milestone-limit.md)
+overrides the isolation target here; kernel/runtime enforcement is deferred to
+milestone 2 in [the research handoff](../plans/checkout-socket-enforcement.md).
+
 Hooks, Git configuration and agent instructions are workflow safeguards, not isolation.
 After worker edits, checkout hooks, builds, plugins and dependency installs stay inside
 the sandbox until the person reviews them. Host inspection must not execute checkout
@@ -119,7 +128,9 @@ The controller validates data crossing from the checkout; it must not execute th
 data. The worker cannot access host approval/recovery records, host credentials or
 engine control. The control arrow through the engine is trusted orchestration, not an
 API exposed to the worker. The mount is intentionally writable, so edits return to the
-checkout. No worker-to-network path exists in the required target.
+checkout. No worker-to-network path exists in the required target, but the
+accepted milestone limit above permits indirect access through host listeners
+created or swapped into the checkout after inspection.
 
 [CLI dispatch context](../CLI.md#extension-dispatch-and-environment) belongs to the
 host controller. `ITOS_ROOT` does not establish safe checkout identity; `ITOS_CONFIG`
@@ -333,8 +344,14 @@ must state this in help and security guidance; revisit before egress and credent
    identical records are reused without rewriting; all reuse re-establishes file
    and directory durability. Uncertain publication returns no usable handoff.
    Every new invocation still validates current requests, identities and approval.
-3. **Create and own, preparing.** Persist an intent record with `fsync` before create,
-   then create unstarted. Reconcile a lost response using the trusted record plus a
+3. **Create and own, preparing.** Slice-19 requires a checkout socket inspection
+   before create: refuse any Unix socket at any depth, including `.git`, without
+   following symlinks outside the checkout, with typed isolation refusal and no
+   created worker. This is a startup check, not continuous enforcement; sockets
+   created or swapped in after inspection remain reachable (q-30). The check
+   awaits fresh ID-SOCKETS-01 red evidence and implementation. Persist an intent
+   record with `fsync` before create, then create unstarted. Reconcile a lost
+   response using the trusted record plus a
    random name before launch or cleanup, closing the untracked-create window. Names
    or labels alone never authorize adoption or deletion. Durably record concrete
    resource identity before any entrypoint or workload instruction. A failed record
