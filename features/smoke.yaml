@@ -72,6 +72,10 @@
   scenarios:
     - id: "@ID-RECOVERY-08"
       why: run preserves the observed exit and prints a registered stop retry that completes durable cleanup through a fresh process without a Docker daemon
+- file: checkout-overlap.feature
+  scenarios:
+    - id: "@ID-OVERLAP-01"
+      why: nested launches refuse across one or two daemons while disjoint checkout controls remain active
 - file: hardlinks.feature
   scenarios:
     - id: "@ID-HARDLINK-03"

@@ -1,7 +1,6 @@
 package domain_test
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
@@ -55,8 +54,8 @@ func TestRegisteredRunRequiresBothIndependentTokensBeforePublication(t *testing.
 	}
 }
 
-func TestRegisteredRunRetainsRegistrationWhenIntentPublicationFails(t *testing.T) {
-	for _, fault := range []string{"intent file fsync", "intent parent fsync"} {
+func TestRegisteredRunPublishesNoRegistrationWhenPreparationFails(t *testing.T) {
+	for _, fault := range []string{"reserved-record file fsync", "reserved-record parent fsync"} {
 		t.Run(fault, func(t *testing.T) {
 			b, store, engine := f.Fixture()
 			id, token := strings.Repeat("1", 64), strings.Repeat("2", 64)
@@ -70,16 +69,17 @@ func TestRegisteredRunRetainsRegistrationWhenIntentPublicationFails(t *testing.T
 				t.Fatal("failed intent publication exposed a retry or claimed workload progress", result)
 			}
 			ref := port.Reference(b.Frozen.Project, token)
-			want := port.PublicRecord{Schema: 1, ID: id, Project: b.Frozen.Project, Intent: ref, State: "preparing"}
-			if !reflect.DeepEqual(registry.Records, map[string]port.PublicRecord{id: want}) || registry.Writes != 1 || registry.Leases[id] || registry.Locks[id] || store.Locked {
-				t.Fatal("intent publication failure lost registration or retained a lease", registry.Records)
+			if len(registry.Records) != 0 || registry.Writes != 0 || registry.Leases[id] || registry.Locks[id] || store.Locked {
+				t.Fatal("failed preparation published a registration or retained a lease", registry.Records)
 			}
 			if len(engine.Events) != 0 || len(runEngine.Events) != 0 || len(engine.Resources) != 0 {
 				t.Fatal("undurable intent authorized engine access")
 			}
-			if fault == "intent parent fsync" {
+			if fault == "reserved-record parent fsync" {
 				i, failure := store.Codec.Decode(store.Records[ref])
-				if failure != "" || i != b.Intent(token) {
+				want := b.Intent(token)
+				want.Stage = "reserved"
+				if failure != "" || i != want {
 					t.Fatal("uncertain publication discarded the visible original intent", i, failure)
 				}
 			} else if len(store.Records) != 0 {

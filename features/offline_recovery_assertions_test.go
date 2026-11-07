@@ -3,6 +3,7 @@ package features
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -103,7 +104,7 @@ func (w *world) offlineRegistryObjects(id string) (map[string]bool, error) {
 	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions")
 	project := filepath.Join(root, w.recoveryIndexKey())
 	dir := filepath.Join(project, id)
-	tree, err := runTree(root)
+	tree, err := runTree(filepath.Dir(root))
 	if err != nil {
 		return nil, err
 	}
@@ -124,5 +125,19 @@ func (w *world) offlineRegistryObjects(id string) (map[string]bool, error) {
 		}
 		allowed[path] = true
 	}
+	var record map[string]any
+	if err := json.Unmarshal([]byte(tree[filepath.Join(dir, "record.json")].Data), &record); err != nil {
+		return nil, err
+	}
+	intent, ok := record["intent"].(string)
+	if !ok {
+		return nil, fmt.Errorf("registration has no original intent")
+	}
+	complete := record["state"] == "stopped" && record["last_problem"] == nil
+	admission, err := w.admissionPaths(tree, id, intent, &complete)
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(allowed, admission)
 	return allowed, nil
 }

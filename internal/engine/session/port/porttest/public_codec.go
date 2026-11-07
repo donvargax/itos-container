@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"bytes"
+	"strconv"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
@@ -9,7 +10,8 @@ import (
 // PublicRecords selects supplied valid representations without implementing a
 // wire codec. Each distinct record has one encoding; unknown values are invalid.
 type PublicRecords struct {
-	Records map[string]port.PublicRecord
+	Records    map[string]port.PublicRecord
+	Admissions map[string]port.AdmissionRecord
 }
 
 func (c *PublicRecords) EncodePublic(record port.PublicRecord) []byte {
@@ -62,6 +64,47 @@ func PublicCodecContract(t Reporter, codec port.PublicCodec, record port.PublicR
 	for _, invalid := range [][]byte{nil, []byte("not a record")} {
 		if got, failure := codec.DecodePublic(invalid); failure != port.Invalid || got != (port.PublicRecord{}) {
 			t.Errorf("invalid representation acquired a record: %#v, %s", got, failure)
+		}
+	}
+}
+
+func (c *PublicRecords) EncodeAdmission(r port.AdmissionRecord) []byte {
+	if c.Admissions == nil {
+		c.Admissions = map[string]port.AdmissionRecord{}
+	}
+	for data, known := range c.Admissions {
+		if r == known {
+			return []byte(data)
+		}
+	}
+	key := "admission-" + strconv.Itoa(len(c.Admissions))
+	c.Admissions[key] = r
+	return []byte(key)
+}
+func (c *PublicRecords) DecodeAdmission(data []byte) (port.AdmissionRecord, port.Outcome) {
+	r, ok := c.Admissions[string(data)]
+	if !ok {
+		return port.AdmissionRecord{}, port.Invalid
+	}
+	return r, ""
+}
+
+func AdmissionCodecContract(t Reporter, codec port.PublicCodec, r port.AdmissionRecord) {
+	t.Helper()
+	data := codec.EncodeAdmission(r)
+	value, failure := codec.DecodeAdmission(data)
+	if failure != "" || value != r {
+		t.Errorf("admission did not round trip: %#v %s", value, failure)
+	}
+	if len(data) > 0 {
+		data[0] ^= 1
+	}
+	if got, failure := codec.DecodeAdmission(codec.EncodeAdmission(r)); failure != "" || got != r {
+		t.Errorf("caller altered encoded admission: %#v %s", got, failure)
+	}
+	for _, invalid := range [][]byte{nil, []byte("not a record")} {
+		if got, failure := codec.DecodeAdmission(invalid); failure != port.Invalid || got != (port.AdmissionRecord{}) {
+			t.Errorf("invalid admission gained authority: %#v %s", got, failure)
 		}
 	}
 }

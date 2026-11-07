@@ -62,9 +62,6 @@ func publicRegisteredCheckout(t *testing.T, change, boundary string) {
 			// Keep the changed identity in place for fresh status/stop. A launch
 			// refusal must not accidentally make cleanup depend on that identity.
 			wantCode, wantCleanup := 0, "complete"
-			if substitute && boundary == "open" {
-				wantCode, wantCleanup = 75, "unknown"
-			}
 			status := publicMemoryCommand(t, m.service(), "status", "", wantCode)
 			if len(status.Sessions) != 1 || status.Sessions[0].Project != m.c.Project || status.Sessions[0].Fingerprint != m.c.Fingerprint || status.Sessions[0].Cleanup != wantCleanup {
 				t.Fatal("fresh discovery lost original binding after launch", status)
@@ -82,8 +79,8 @@ func publicRegisteredCheckout(t *testing.T, change, boundary string) {
 					t.Fatal("run retained its controller lease")
 				}
 			}
-			if substitute && boundary == "open" && !slices.Equal(entry.Retry, []string{"itos", "container", "stop", entry.ID}) {
-				t.Fatal("pre-create uncertainty lost its exact retry", entry)
+			if substitute && boundary == "open" && (entry.Retry != nil || entry.State != "stopped" || entry.Resource != "absent") {
+				t.Fatal("proven pre-create cancellation retained uncertainty", entry)
 			}
 			if substitute && boundary == "attach" && (!m.e.Removed || slices.Contains(m.e.Events, "SIGTERM") || slices.Contains(m.e.Events, "SIGKILL")) {
 				t.Fatal("unstarted worker was signalled or not removed", m.e.Events)

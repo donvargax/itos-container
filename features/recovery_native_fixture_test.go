@@ -95,6 +95,17 @@ func (w *world) recoveryProtected() (map[string]string, error) {
 		return nil, err
 	}
 	sessions := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions")
+	tree, err := runTree(filepath.Dir(sessions))
+	if err != nil {
+		return nil, err
+	}
+	admission, err := w.currentAdmissionPaths(tree)
+	if err != nil {
+		return nil, err
+	}
+	for path := range admission {
+		delete(all, path)
+	}
 	for path := range all {
 		if path == sessions || path == filepath.Join(sessions, w.recoveryIndexKey()) ||
 			strings.HasPrefix(path, filepath.Join(sessions, w.recoveryIndexKey())+string(os.PathSeparator)) ||
