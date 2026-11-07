@@ -77,12 +77,12 @@ func (w *world) controlLockSteps(sc *godog.ScenarioContext) {
 		}
 		return f.p.exitsWith(0)
 	})
-	sc.Step(`^P reports approval.state.busy with exit 75 within the ten-second call budget without writes or worker creation$`, func() error {
+	sc.Step(`^P reports "([^"]*)" with exit 75 within the ten-second call budget without writes or worker creation$`, func(rule string) error {
 		f := w.control
 		if err := errors.Join(f.err, f.p.exitsWith(75)); err != nil {
 			return err
 		}
-		if !strings.Contains(f.p.stdout+f.p.stderr, "approval.state.busy") || elapsed < 9*time.Second || elapsed > 12*time.Second {
+		if !strings.Contains(f.p.stdout+f.p.stderr, rule) || elapsed < 9*time.Second || elapsed > 12*time.Second {
 			return fmt.Errorf("missing typed call-budget refusal after %s: %s %s", elapsed, f.p.stdout, f.p.stderr)
 		}
 		return errors.Join(f.unchanged(), f.inspectionOnly())

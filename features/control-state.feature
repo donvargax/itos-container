@@ -485,10 +485,10 @@ Feature: Doctor and approve keep control state outside another worker's checkout
     Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
     And valid "<command>" inputs and a private coordination lock held by another process
     When P invokes "<command>" while that private lock remains held
-    Then P reports approval.state.busy with exit 75 within the ten-second call budget without writes or worker creation
+    Then P reports "<rule>" with exit 75 within the ten-second call budget without writes or worker creation
 
     Examples:
-      | command |
-      | doctor  |
-      | approve |
-      | run     |
+      | command | rule                |
+      | doctor  | approval.state.busy |
+      | approve | approval.state.busy |
+      | run     | run.call-timeout    |
