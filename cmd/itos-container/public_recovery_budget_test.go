@@ -29,6 +29,14 @@ func TestPublicRecoveryBudgetRegressions(t *testing.T) {
 	}
 }
 
+func TestPublicRecoveryChangedRecordObservationOrder(t *testing.T) {
+	for _, order := range []string{"stop_observer_first", "run_observer_first"} {
+		t.Run(order, func(t *testing.T) {
+			publicRecoveryDelayedStopOrder(t, "changed record", order)
+		})
+	}
+}
+
 func publicRecoveryTerminationDeadline(t *testing.T, kill bool) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
@@ -95,6 +103,10 @@ func publicRecoveryPendingStop(t *testing.T) {
 }
 
 func publicRecoveryDelayedStop(t *testing.T, name string) {
+	publicRecoveryDelayedStopOrder(t, name, "")
+}
+
+func publicRecoveryDelayedStopOrder(t *testing.T, name, order string) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
 		m.e.StdinClosed, m.e.WaitUntilCancel = true, true
@@ -113,23 +125,35 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 		}
 		id := ""
 		finished := make(chan struct{})
+		stopObserved, runReturned := make(chan struct{}), make(chan struct{})
+		observations := make(chan string, 3)
 		var completed []byte
+		var replacementReads []int
 		mutations := 0
 		signals := 0
-		if name == "changed record" {
-			reads := 0
-			m.files.AfterRead = func() {
-				for _, files := range m.files.Sessions {
-					r, f := m.registry.Codec.DecodePublic(files.Data)
-					if f != "" || r.State != "stopped" {
-						continue
+		reads := 0
+		m.files.AfterRead = func() {
+			for _, files := range m.files.Sessions {
+				r, f := m.registry.Codec.DecodePublic(files.Data)
+				if f != "" || r.State != "stopped" {
+					continue
+				}
+				reads++
+				if reads == 1 {
+					// Stop validates its completed record while still holding the
+					// operation lock. Freeze both baselines before run can resume.
+					completed = bytes.Clone(files.Data)
+					mutations = recoveryReviewMutations(m.e)
+				}
+				if name == "changed record" && reads == 4 {
+					// Completion validation reads once, run's Open twice.
+					// Replace bytes before its held-session revalidation.
+					if order == "stop_observer_first" {
+						<-stopObserved
 					}
-					reads++
-					if reads == 4 {
-						// Completion validation reads once, run's Open twice.
-						// Replace bytes before its held-session revalidation.
-						files.Data = append(files.Data, ' ')
-					}
+					files.Data = append(files.Data, ' ')
+					replacementReads = append(replacementReads, reads)
+					observations <- "run revalidation"
 				}
 			}
 		}
@@ -155,16 +179,20 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 			}
 			go func() {
 				defer close(finished)
+				defer close(stopObserved)
 				stopExit := 0
 				if name == "incomplete stop" {
 					stopExit = 75
 				}
 				r := publicMemoryCommand(t, m.service(), "stop", id, stopExit)
+				if order == "run_observer_first" {
+					// Let run finish revalidation and return before observing stop.
+					<-runReturned
+				}
 				if len(r.Sessions) != 1 || (r.Sessions[0].Cleanup == "complete") != (stopExit == 0) || (r.Sessions[0].WorkloadExit != nil) != (name == "nonzero") {
 					t.Error("competing stop lost its result", r)
 				}
-				completed = bytes.Clone(m.files.Sessions[m.index().Project+"/"+id].Data)
-				mutations = recoveryReviewMutations(m.e)
+				observations <- "stop result"
 			}()
 			synctest.Wait()
 		}
@@ -173,7 +201,23 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 		var out, errout bytes.Buffer
 		start := time.Now()
 		code := (runcommand.CLI{Approval: approval, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "probe"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
+		observations <- "run return"
+		close(runReturned)
 		<-finished
+		close(observations)
+		if order != "" {
+			var observed []string
+			for event := range observations {
+				observed = append(observed, event)
+			}
+			wanted := []string{"stop result", "run revalidation", "run return"}
+			if order == "run_observer_first" {
+				wanted = []string{"run revalidation", "run return", "stop result"}
+			}
+			if !slices.Equal(observed, wanted) {
+				t.Fatalf("observation order = %v, want %v", observed, wanted)
+			}
+		}
 		if code != want || (want == 75 && !strings.Contains(errout.String(), "run.execution-unavailable")) || (want != 75 && errout.Len() != 0) {
 			t.Fatalf("run lost the competing stop outcome: exit %d, want %d, %s", code, want, errout.String())
 		}
@@ -188,11 +232,24 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 		if time.Since(start) != 11*time.Second || len(status.Sessions) != 1 || status.Sessions[0].State != "stopped" || status.Sessions[0].Resource != "absent" || status.Sessions[0].Cleanup != "complete" || (status.Sessions[0].WorkloadExit != nil) != (name == "nonzero") || status.Sessions[0].Retry != nil || len(m.e.Resources) != 0 {
 			t.Fatal("run lost bounded cleanup or invented a workload exit", status)
 		}
-		if name == "changed record" {
-			completed = append(completed, ' ')
+		if completed == nil {
+			t.Fatal("stop completion validation was not observed")
 		}
-		if !bytes.Equal(completed, m.files.Sessions[m.index().Project+"/"+id].Data) || mutations != recoveryReviewMutations(m.e) || (want != 75 && !slices.Contains(m.e.Events, "drain")) {
-			t.Fatal("run repeated cleanup or failed to drain the remaining output")
+		expectedRecord := completed
+		if name == "changed record" {
+			if !slices.Equal(replacementReads, []int{4}) {
+				t.Fatalf("replacement reads = %v, want only held-session revalidation (4)", replacementReads)
+			}
+			expectedRecord = append(bytes.Clone(completed), ' ')
+		}
+		if actual := m.files.Sessions[m.index().Project+"/"+id].Data; !bytes.Equal(expectedRecord, actual) {
+			t.Fatalf("completed record bytes changed: expected %d bytes, actual %d", len(expectedRecord), len(actual))
+		}
+		if actual := recoveryReviewMutations(m.e); mutations != actual {
+			t.Fatalf("run repeated engine mutation: completed %d, final %d", mutations, actual)
+		}
+		if want != 75 && !slices.Contains(m.e.Events, "drain") {
+			t.Fatal("run failed to drain the remaining output")
 		}
 	})
 }
