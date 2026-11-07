@@ -28,10 +28,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Settled order (q-11, 2026-11-06): slice-11 precedes slice-12. LIFECYCLE-05,
   # 11, 12 and 16 activate on merged slice-11 with the rest of slice-12; there
   # is no remaining recovery prerequisite. Apply the standing regression rule.
-  # LIFECYCLE-15 belongs to slice-15, still @wip, after BOTH slice-12 and
+  # LIFECYCLE-15 belongs to slice-15 after BOTH slice-12 and
   # slice-14. It reuses slice-14's independent boundary probes/controls, built on
   # slice-13's launch/cleanup contract. First-release T-25 waits for slice-14
-  # and slice-15; this spec adds no runtime support claim.
+  # and slice-15; its accepted regression evidence is recorded above its tag.
   # No init/hooks, persistent worker volumes, credentials, egress, watchdog,
   # restart, detached mode, exec, new platform or support claim is introduced.
 
@@ -592,8 +592,8 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | 17    | 17     |
 
   # Slice-15 carries ID-LIFECYCLE-15 from slice-12, as the person's q-11 directs.
-  # Its ID was allocated in e2261dd; retain its title and steps, still @wip.
-  # This is a transfer, not a new scenario allocation or executed evidence.
+  # Its ID was allocated in e2261dd; its title, steps and @wip tag were transferred.
+  # That transfer was not a new scenario allocation or executed evidence.
   # Reviewed main 4b7c463fda8df0f829de90198a4a013b4f8b7813,
   # slice-12 ac37a3feed6c172a3c5a42cb652528dee8c6ceb0,
   # slice-14 aa66b4d73cec64e0cd4a6d2b22bb20bfa00dfdec,
@@ -733,7 +733,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Reuse recovery's actual file-fsync/publication/parent-fsync observations and
   # shared local durability contract; a visible record or DELETE alone is not it.
   #
-  # Evidence handoff: on reviewed main and dependency heads the first Then is the
+  # Draft evidence handoff: on reviewed main and dependency heads the first Then is the
   # expected failure: public status/stop and registration are absent. The runner
   # already configures an offline worker; no failing isolation claim is made from
   # source inspection. All phrases are still undefined here, so this draft is
@@ -760,7 +760,13 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # it live under the standing regression decision after confirming that evidence.
   # Q-11 assigns this case to slice-15 after slice-12 and slice-14. Keep it @wip
   # until both prerequisites and its independent post-loss evidence are available.
-  @wip @slice-15 @ID-LIFECYCLE-15 @engine
+  # Regression attribution: merged slice-12 covers the complete case, consuming
+  # slice-11 recovery/termination and slice-14 boundary probes and controls.
+  # CI run 42390615242 at e22aa6366a7bf024322d8b59f2b9f112c4cb26dd passed all
+  # eight steps in the guarded Linux amd64 native-Docker tier. Coordinator q-32
+  # (2026-11-07) accepts that pass under the standing regression rule and directs
+  # activation. It is passing regression evidence, not an assertion-level red.
+  @slice-15 @ID-LIFECYCLE-15 @engine
   Scenario: Uncatchable controller loss leaves a live isolated candidate for explicit stop
     Given a CI lifecycle checkout with continuous boundary probes and working external route and host-access controls
     When run launches the probe and the harness kills only the controller with SIGKILL then requests a fresh probe round before status and stop
