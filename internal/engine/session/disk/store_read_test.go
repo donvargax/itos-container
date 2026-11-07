@@ -16,9 +16,8 @@ import (
 func intentReadFixture(t *testing.T) (Store, sp.Binding, *af.Storage, *rf.Checkout) {
 	t.Helper()
 	b, _, _ := sf.Fixture()
-	// Registry discovery uses host filepath semantics even with memory storage.
-	// The shared port fixture's /checkout is not an absolute path on Windows.
-	b.Checkout.Root = t.TempDir()
+	// These memory ports model Linux, regardless of the test runner's OS.
+	// Keep the shared fixture's Linux root instead of a host-native temp path.
 	storage := &af.Storage{Directories: map[string]*af.Directory{
 		"intents/" + b.Frozen.Project:   {Files: map[string][]byte{}},
 		"snapshots/" + b.Frozen.Project: {Files: map[string][]byte{"1.json": []byte("snapshot")}},

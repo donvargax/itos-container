@@ -2,7 +2,6 @@ package disk
 
 import (
 	"context"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -19,7 +18,6 @@ func TestRegistryRejectsInvalidAuthorityBeforeDiscoveryOrRegistration(t *testing
 	for _, fault := range []string{"host", "invalid frozen", "frozen UID", "frozen GID"} {
 		t.Run(fault, func(t *testing.T) {
 			b, _, _ := sf.Fixture()
-			b.Checkout.Root, _ = filepath.Abs(b.Checkout.Root)
 			d := ap.Durable{Frozen: b.Frozen}
 			host := &af.Host{UID: b.UID, GID: b.GID}
 			checkout := &rf.Checkout{Identity: b.Checkout}
@@ -63,7 +61,6 @@ func TestRegistryDiscoveryRejectsRelativeRoots(t *testing.T) {
 	for _, root := range []string{"", ".", "relative/checkout"} {
 		t.Run(root, func(t *testing.T) {
 			b, _, _ := sf.Fixture()
-			b.Checkout.Root, _ = filepath.Abs(b.Checkout.Root)
 			files := &af.Registry{Failure: "state.unavailable"}
 			r := Registry{Store: Store{Host: &af.Host{UID: b.UID, GID: b.GID},
 				Input: rp.Input{Root: root, OS: "linux", Architecture: "amd64"}}, Storage: files}
@@ -81,7 +78,6 @@ func TestRegistryCheckoutFaultsPreventRegistrationButNotDiscovery(t *testing.T) 
 	for _, fault := range []string{"pin", "inspect", "changed"} {
 		t.Run(fault, func(t *testing.T) {
 			b, _, _ := sf.Fixture()
-			b.Checkout.Root = t.TempDir()
 			id, token := strings.Repeat("b", 64), strings.Repeat("c", 64)
 			key := registryKey(b.Checkout.Root, b.UID) + "/" + id
 			files := &af.Registry{Sessions: map[string]*af.SessionFiles{key: {Data: []byte("original")}}}
@@ -112,7 +108,6 @@ func TestRegistryCheckoutFaultsPreventRegistrationButNotDiscovery(t *testing.T) 
 
 func TestRegistryListClassifiesReadFailuresWithoutWriting(t *testing.T) {
 	b, _, _ := sf.Fixture()
-	b.Checkout.Root = t.TempDir()
 	d := ap.Durable{Frozen: b.Frozen}
 	id := strings.Repeat("b", 64)
 	key := registryKey(b.Checkout.Root, b.UID) + "/" + id

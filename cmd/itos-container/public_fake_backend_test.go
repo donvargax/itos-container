@@ -58,8 +58,7 @@ type publicMemory struct {
 func publicMemoryFixture(t *testing.T) publicMemory {
 	t.Helper()
 	ready := af.Ready()
-	// Registry discovery uses host filepath semantics even with memory ports.
-	ready.Checkout.Root = t.TempDir()
+	// Memory ports model Linux paths even when this test runs on another OS.
 	c := canonical.JSON{}.Candidate(ready, "1000", "1000")
 	frozen := ap.Frozen{Project: c.Project, Generation: "1", Fingerprint: c.Fingerprint, Settings: c.Canonical}
 	jsonCodec := codec.JSON{Approval: canonical.JSON{}, Parser: parser.Parser{}}
