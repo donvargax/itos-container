@@ -2,6 +2,7 @@ package features
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -144,15 +145,18 @@ func (w *world) anchorLocalFixture(fault string) error {
 }
 
 func (w *world) anchorLocalEach(check func(*world) error) error {
-	return w.sessionEach(func(w *world) error {
+	var failures error
+	err := w.sessionEach(func(w *world) error {
 		if w.session.fixtureError != nil {
-			return fmt.Errorf("%s fixture: %w %s", w.session.backend, w.session.fixtureError, w.session.transcript)
+			failures = errors.Join(failures, fmt.Errorf("%s fixture: %w %s", w.session.backend, w.session.fixtureError, w.session.transcript))
+			return nil
 		}
 		if err := check(w); err != nil {
-			return fmt.Errorf("%s: %w", w.session.backend, err)
+			failures = errors.Join(failures, fmt.Errorf("%s: %w", w.session.backend, err))
 		}
 		return nil
 	})
+	return errors.Join(err, failures)
 }
 
 func anchorEventIndex(w *world, op string) int {

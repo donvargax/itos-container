@@ -74,6 +74,11 @@ func (s *sessionContractPreflight) Inspect() ap.View {
 	return s.view
 }
 
+func (s *sessionContractPreflight) InspectContext(ctx context.Context) ap.View {
+	s.view = s.Preflight.InspectContext(ctx)
+	return s.view
+}
+
 func assembleSessionContract(request sessionContractRequest, ops *sessionContractIO) session.Service {
 	root := os.Getenv("ITOS_ROOT")
 	codec := sessioncodec.JSON{Approval: canonical.JSON{}, Parser: manifestjson.Parser{}}
