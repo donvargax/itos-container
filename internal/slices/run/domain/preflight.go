@@ -43,6 +43,9 @@ func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.S
 	if strings.HasPrefix(string(view.Failure), "identity.") || hasIssues(view) {
 		return approval.Durable{}, Prerequisite{view}
 	}
+	if view.Failure == "state.busy" {
+		return approval.Durable{}, budget.Failure{Operation: "preflight approval state read"}
+	}
 	if view.Failure != "" {
 		return approval.Durable{}, ApprovalRefusal{Reason: "invalid"}
 	}
@@ -65,6 +68,9 @@ func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.S
 	}
 	if ctx.Err() != nil {
 		return approval.Durable{}, context.Cause(ctx)
+	}
+	if failure == "state.busy" {
+		return approval.Durable{}, budget.Failure{Operation: "approval selection"}
 	}
 	if failure != "" {
 		reason := string(failure)

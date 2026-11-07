@@ -55,10 +55,18 @@ func (w *world) controlLockSteps(sc *godog.ScenarioContext) {
 			f.workers.first = f.workers.start("P", "", "")
 			f.workers.observe(f.workers.first, false)
 			f.err = errors.Join(f.err, f.workers.live(f.workers.first))
-		} else if command == "run" {
-			f.err = errors.Join(f.err, f.p.runDoctor(f.p.env(), "run", "--", "slice-21-workload"))
 		} else {
-			f.inspect(command, "JSON")
+			args := []string{command, "--json"}
+			if command == "approve" {
+				args = append(args, "--fingerprint", f.p.approval.fingerprint)
+			}
+			if command == "run" {
+				args = []string{"run", "--", "slice-21-workload"}
+			}
+			// The ordinary doctor harness has an 8 s guard; this case observes
+			// the product's 10 s deadline and needs a longer independent guard.
+			f.p.deadline = 15 * time.Second
+			f.err = errors.Join(f.err, f.p.runEnv(f.p.doctor.cwd, f.p.env(), f.p.bin, args...))
 		}
 		elapsed = time.Since(started)
 	}

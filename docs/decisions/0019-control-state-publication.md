@@ -16,8 +16,26 @@ locks, protected directory primitives and JSON encoding.
 
 Resolve the effective UID's account home independently of HOME, USER, LOGNAME and
 XDG_STATE_HOME. Pin its existing directory and ancestors, verify ownership and writes,
-and lock that same directory inode before all catalog and selected-state locks.
-Read-only inspection takes shared exclusion and never creates or fsyncs state.
+and retain their identities without locking the home inode. Coordinator q-35
+(2026-11-07, approximately 17:40 UTC) supersedes the original home-lock protocol:
+a different UID can flock a readable home and deny service. Homes may remain 0755
+or 0750; only other-user writes are forbidden.
+
+Bootstrap with mkdir(0700), accepting EEXIST; open coordination with
+O_DIRECTORY|O_NOFOLLOW and validate the descriptor's UID, exact 0700 mode and
+pinned identity. Exclusively create control.lock there, or open the existing file
+without following links, validating an owned 0600 regular single-link inode.
+Racing same-user creators converge on that inode. Never replace, unlink or repair
+it on retry. Take its flock before catalog and selected-state locks, revalidate
+the directory and file identities after acquisition and through publication.
+
+Every lock wait is bounded by the 10-second call budget. Contention returns typed,
+retryable approval.state.busy (75); run retains run.call-timeout (75). Neither a
+home-directory lock nor a background context can create an unbounded wait.
+Read-only inspection takes shared private-file exclusion and never creates or
+fsyncs state. If the lock is absent it may inspect only safe bootstrap-only or
+legacy-approval state, rechecking absence before returning. Completed catalog or
+session evidence without its lock refuses; inspection never restores a lock.
 Writers take exclusive exclusion; no common lock spans consent, engine I/O, or
 session operation-lock acquisition. Initial intent publication releases common
 exclusion before returning authority to its caller. Admission retains it through
@@ -26,14 +44,16 @@ its existing durable certificate transaction.
 
 Treat the account home's .local/state/itos-container tree as protected before it
 exists. Recheck both that prospective footprint and the selected managed location
-against all discoverable outstanding reservations before mkdir. Track roots across
+against all discoverable outstanding reservations before mkdir, then repeat
+discovery and checks after acquiring the private lock. Track roots across
 XDG selections without project or daemon filtering. Reuse the original pending,
 pre-create cancellation, legacy intent/snapshot validation and completion rules;
 controller loss, acknowledged deletion and uncertain completion do not release a
 reservation. Discovery never contacts another daemon or acquires an operation lock.
 
 After consent, or validated existing approval, bootstrap only the fixed private
-chain and coordination files. Sync created directories and parents, atomically
+chain and private lock before exclusion. After locking and rechecking, sync the
+lock, directories and parents, then atomically
 publish self.json binding the entire fixed tree and coordination inode, and finish
 file/rename/parent durability before ordinary selected-state writes. The default
 selected tree uses this same binding. Keep safe surviving directories and private
@@ -52,7 +72,7 @@ enrolled without rewriting their generation, bytes, inode or mtime.
 Approval checks separation on inspection and inside publication after consent.
 Matching reuse also enters the common transaction. Run validates existing approval
 before enrollment and rechecks it under common exclusion. Preparing-intent creation
-and worker registration use the same account lock, so cancellation while publication
+and worker registration use the same private lock, so cancellation while publication
 holds exclusion creates neither an intent nor public launch authority. Location
 bindings remain after controller exit and worker cleanup.
 

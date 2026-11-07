@@ -9,7 +9,6 @@ import (
 	"os"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
@@ -83,22 +82,7 @@ func (s Storage) Open(ctx context.Context, c port.Candidate, collection string, 
 }
 func lockBusy(err error) bool { return errors.Is(err, syscall.EWOULDBLOCK) }
 func lockContext(ctx context.Context, file *os.File) error {
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		err := tryLock(file)
-		if err == nil || !lockBusy(err) {
-			return err
-		}
-		timer := time.NewTimer(10 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
+	return sessionLock(ctx, file, false)
 }
 
 type directoryStore struct {

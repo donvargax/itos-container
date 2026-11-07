@@ -119,3 +119,43 @@ unremapped ancestor ownership: the agent sandbox otherwise produces unrelated
 `state.unsafe` refusals. All command state is disposable and engine observations
 use recording HTTP fixtures. No real approval state, daemon or mutation proof is
 used by this follow-up.
+
+## Private coordination lock revision (q-35)
+
+The coordinator's 2026-11-07 decision replaces the publicly readable account-home
+lock with a validated private inode. Commits `3d7fa1b` and `76c7ec3` add pending
+CONTROL-12/13 steps before implementation. The second preserves run's existing
+call-timeout diagnostic; doctor and approve require approval.state.busy, all exit
+75. The deadline fixture uses a 15 s outer guard to observe the product's 10 s
+limit, rather than the ordinary doctor harness's 8 s guard.
+
+All six new examples failed at their behavior assertions on the original code.
+A further run with current steps and a temporary Go overlay of `76c7ec3` production
+code also includes the coordinator-revised CONTROL-10. All seven fail at assertions:
+20 setup/action steps pass, seven assertions fail, and five later steps are skipped.
+CONTROL-10 observes the forbidden home flock; CONTROL-12 observes blocked commands
+or no worker activity; CONTROL-13 receives exit 1 instead of the retryable exit 75.
+There are no undefined steps. The home-lock helper holds a real read-only descriptor
+in another process, modeling the capability available to another UID on a 0755
+home; it does not change UIDs or require a privileged process.
+
+After implementation, all 51 CONTROL examples pass, including bootstrap fault and
+retry durability, no-write doctor inspection, retained identities, admission
+exclusion, both new lock outlines and the revised private bootstrap ordering.
+Adapter tests additionally cover unsafe lock metadata, missing/replaced lock
+inodes, descriptor validation failures, concurrent mkdir creators converging on
+one lock, and reservation evidence appearing during bootstrap. Shared disk/fake
+contracts require retryable contention. Approval/session packages, run preflight
+and command assembly pass their unit tests. The full affected local selection
+(CONTROL, APPROVAL, OVERLAP, RUN, RECOVERY and DOCTOR), including syscall observer
+controls, passes in 260 s. All state is disposable and all local
+engine observations use recording HTTP fixtures.
+
+The supplied engine failure at `daa7f80` is a five-minute suite timeout, not a
+failing CONTROL assertion. Registry item `p1-engine-suite-within-its-limit` already
+records this failure on main (`b2ad2ad`, run 42392045565) even with all 49 scenarios
+passing. LIFECYCLE-13 deliberately observes a quiet worker for 125 s and shares
+that control; removing this wait would weaken its contract. The supplied log tail
+contains transport wait stacks without identifying the timed-out scenario. No
+real-engine run or timeout-fix claim is made locally; the coordinator needs the
+full failed log and fresh CI evidence. Gates and their limits remain unchanged.

@@ -136,3 +136,22 @@ func TestPreflightPreservesCancellationAfterSelection(t *testing.T) {
 		}
 	}
 }
+
+func TestPreflightPrivateLockContentionIsRetryable(t *testing.T) {
+	for _, stage := range []string{"inspection", "selection"} {
+		t.Run(stage, func(t *testing.T) {
+			a := &porttest.Approval{View: approval.View{Status: "matching", Inspection: af.Ready(), Candidate: approval.Candidate{Project: "p", Fingerprint: "hash", Canonical: "selected"}, Record: approval.Record{Generation: "1"}}}
+			if stage == "inspection" {
+				a.View.Failure = "state.busy"
+			} else {
+				a.Failure = "state.busy"
+			}
+			snapshots := &af.Snapshots{}
+			value, err := Preflight(a, snapshots)
+			var timed budget.Failure
+			if !errors.As(err, &timed) || timed.Operation == "" || timed.Phase != "" || value != (approval.Durable{}) || len(snapshots.Values) != 0 {
+				t.Fatalf("busy %s granted authority or lost call failure: %+v %v", stage, value, err)
+			}
+		})
+	}
+}

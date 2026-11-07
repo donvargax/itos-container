@@ -89,6 +89,9 @@ func (f *controlFixture) seedBinding(path string) (string, error) {
 	if err := os.MkdirAll(f.coordination(), 0700); err != nil {
 		return "", err
 	}
+	if err := controlSeedLock(f.coordination()); err != nil {
+		return "", err
+	}
 	name := approvalHash(path) + ".json"
 	if path == f.fixedRoot() {
 		name = "self.json"

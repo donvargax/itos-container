@@ -27,6 +27,9 @@ func (w *world) seedControlLocations() error {
 	if err := os.MkdirAll(catalog, 0700); err != nil {
 		return err
 	}
+	if err := controlSeedLock(catalog); err != nil {
+		return err
+	}
 	for _, path := range []string{fixed, selected} {
 		name := approvalHash(path) + ".json"
 		if path == fixed {
@@ -56,7 +59,7 @@ func (w *world) approvalControlPaths() (map[string]bool, error) {
 	fixed := filepath.Join(home, ".local/state/itos-container")
 	catalog := filepath.Join(fixed, "coordination")
 	selected := filepath.Dir(filepath.Dir(filepath.Dir(w.approval.record)))
-	allowed := map[string]bool{}
+	allowed := map[string]bool{filepath.Join(catalog, "control.lock"): true}
 	for _, path := range []string{filepath.Join(home, ".local"), filepath.Join(home, ".local/state"), fixed, catalog} {
 		allowed[path] = true
 	}
@@ -104,4 +107,15 @@ func (w *world) approvalControlPaths() (map[string]bool, error) {
 	// Directories above the fixed tree keep their identities; doctorTree observes
 	// mode/owner/content, so only the exact new fixed-chain entries are allowed.
 	return allowed, nil
+}
+
+func controlSeedLock(catalog string) error {
+	file, err := os.OpenFile(filepath.Join(catalog, "control.lock"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if errors.Is(err, os.ErrExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return file.Close()
 }

@@ -41,7 +41,7 @@ func TestStorageLockRespectsCallerDeadline(t *testing.T) {
 		timed, cancel := context.WithTimeout(ctx, budget)
 		defer cancel()
 		started := time.Now()
-		if second, f := storage.Open(timed, c, "intents", false); second != nil || f != "state.unavailable" {
+		if second, f := storage.Open(timed, c, "intents", false); second != nil || f != "state.busy" {
 			t.Fatal(second, f)
 		}
 		if elapsed := time.Since(started); elapsed != budget || !errors.Is(timed.Err(), context.DeadlineExceeded) {
@@ -75,7 +75,7 @@ func TestStorageCancellationBeforeLockAcquisition(t *testing.T) {
 		return file, err
 	}
 	s.ops = &ops
-	if opened, f := (Storage{Store: s}).Open(ctx, c, "intents", false); opened != nil || f != "state.unavailable" {
+	if opened, f := (Storage{Store: s}).Open(ctx, c, "intents", false); opened != nil || f != "state.busy" {
 		t.Fatalf("canceled lock acquisition = %v, %s", opened, f)
 	}
 	if lockFile == nil {

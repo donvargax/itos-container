@@ -13,13 +13,14 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/domain"
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 )
 
-// Control owns the per-account transaction. The existing account-home inode is
-// the lock before, during and after bootstrap; no selected-root lock replaces it.
+// Control owns the per-account transaction through a validated private lock file.
+// The account home is pinned for identity checks, never used as a lock inode.
 // Reservations is the session engine's read-only ownership validator.
 type Control struct {
 	Account      port.Account
@@ -40,6 +41,8 @@ type locationBinding struct {
 }
 type controlTransaction struct {
 	home            *pin
+	lock            *os.File
+	lockInfo        os.FileInfo
 	catalog         *pin
 	pins            []*pin
 	store           Store
@@ -49,6 +52,8 @@ type controlTransaction struct {
 	data            map[string][]byte
 }
 
+const controlLockName = "control.lock"
+
 func (t *controlTransaction) Close() {
 	for _, p := range t.pins {
 		p.close()
@@ -57,9 +62,15 @@ func (t *controlTransaction) Close() {
 		t.catalog.close()
 	}
 	t.home.close()
+	if t.lock != nil {
+		_ = t.lock.Close()
+	}
 }
 func (t *controlTransaction) Unchanged() bool {
 	if !t.home.unchanged() || !accountDirectory(t.home) {
+		return false
+	}
+	if !t.lockUnchanged() {
 		return false
 	}
 	if t.catalog != nil && !t.catalog.unchanged() {
@@ -81,6 +92,8 @@ func accountDirectory(p *pin) bool {
 	return ok && owner == p.uid && info.Mode().Perm()&0022 == 0
 }
 func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.ControlTransaction, port.Failure) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	if s.Account == nil || s.Reservations == nil {
 		return nil, "state.unavailable"
 	}
@@ -100,7 +113,7 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	store := s.Store
 	store.Control = nil
 	ops := store.operations()
-	ops.lock = func(f *os.File, _ bool) error { return sessionLock(ctx, f, !write) }
+	ops.lock = func(*os.File, bool) error { return nil }
 	store.ops = &ops
 	h, failure := store.pinPath(c, false, home, 0)
 	if failure != "" {
@@ -113,10 +126,6 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 		h.close()
 		return nil, "state.unsafe"
 	}
-	// All further pins are subordinate to the existing home descriptor lock.
-	ops.lock = func(*os.File, bool) error { return nil }
-	unlocked := ops
-	store.ops = &unlocked
 	t := &controlTransaction{home: h, store: store, candidate: c, fixed: fixed, selected: selected, bindings: map[string]locationBinding{}, data: map[string][]byte{}}
 	success := false
 	defer func() {
@@ -124,10 +133,38 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 			t.Close()
 		}
 	}()
+	if failure = t.openCatalog(false); failure != "" {
+		return nil, failure
+	}
+	if failure = t.acquire(ctx, false, write); failure != "" {
+		return nil, failure
+	}
 	if failure = t.inspect(ctx, s.Reservations); failure != "" {
 		return nil, failure
 	}
 	if write {
+		if t.lock == nil {
+			// No publication/registration can precede the private lock. Check
+			// legacy evidence before mkdir, then re-read after racing creators
+			// converge on the same validated inode.
+			if !t.Unchanged() {
+				return nil, "state.path"
+			}
+			if failure = t.openCatalog(true); failure != "" {
+				return nil, failure
+			}
+			if failure = t.acquire(ctx, true, true); failure != "" {
+				return nil, failure
+			}
+			for _, p := range t.pins {
+				p.close()
+			}
+			t.pins = nil
+			t.bindings, t.data = map[string]locationBinding{}, map[string][]byte{}
+			if failure = t.inspect(ctx, s.Reservations); failure != "" {
+				return nil, failure
+			}
+		}
 		if failure = t.enroll(); failure != "" {
 			return nil, failure
 		}
@@ -155,17 +192,18 @@ func (s Store) prospective(c port.Candidate, path string, depth int) (*pin, port
 	}
 }
 func (t *controlTransaction) inspect(ctx context.Context, reservations port.Reservations) port.Failure {
-	var failure port.Failure
-	t.catalog, failure = t.store.pinPath(t.candidate, false, filepath.Join(t.fixed, "coordination"), 2)
-	if failure != "" {
-		return failure
-	}
 	if t.catalog != nil {
+		if _, err := t.catalog.dir.Seek(0, 0); err != nil {
+			return "state.unavailable"
+		}
 		names, f := pinnedNames(t.catalog)
 		if f != "" {
 			return f
 		}
 		for _, name := range names {
+			if name == controlLockName {
+				continue
+			}
 			if name != "self.json" && !recordName(name) && !locationTemp(name) {
 				return "state.invalid"
 			}
@@ -199,6 +237,9 @@ func (t *controlTransaction) inspect(ctx context.Context, reservations port.Rese
 				return "state.invalid"
 			}
 			t.bindings[binding.Path], t.data[binding.Path] = binding, data
+		}
+		if len(t.bindings) > 0 && t.lock == nil {
+			return "state.unavailable"
 		}
 		if len(t.bindings) > 0 && t.data[t.fixed] == nil {
 			return "state.invalid"
@@ -350,12 +391,8 @@ func (t *controlTransaction) enroll() port.Failure {
 	if !t.Unchanged() {
 		return "state.path"
 	}
-	if t.catalog == nil {
-		p, f := t.store.pinPath(t.candidate, true, filepath.Join(t.fixed, "coordination"), 2)
-		if f != "" {
-			return f
-		}
-		t.catalog = p
+	if t.catalog.ops.syncFile(t.lock) != nil {
+		return "state.write"
 	}
 	if f := syncDirectories(t.catalog); f != "" {
 		return f

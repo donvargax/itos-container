@@ -81,7 +81,7 @@ func ControlContract(t Reporter, open func() ControlFixture) {
 	if other != nil {
 		other.Close()
 	}
-	if blocked != "state.unavailable" || other != nil {
+	if blocked != "state.busy" || other != nil {
 		t.Errorf("another selected root bypassed exclusion: %s", blocked)
 	}
 	tx.Close()

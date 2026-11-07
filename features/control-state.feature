@@ -44,27 +44,36 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # The account home must already exist. Pin and validate it and its ancestors
   # without following links, using the existing protected-ancestor rules; the
   # home itself must belong to the effective UID and forbid other-user writes.
-  # Lock that existing directory descriptor for every common transaction, before
-  # acquiring catalog or selected-root locks. Use the SAME lock inode before,
-  # during and after initialization, across processes and environment selections;
-  # never switch to a newly created coordination directory or lock file. Missing
-  # home or unavailable locking refuses with approval.state.unavailable (3).
-  # Revalidate its pinned identity after locking and before each publication.
-  # Read-only inspection may take a shared descriptor lock without creating state.
+  # Never flock the home inode: other UIDs may open a 0755 or 0750 home.
+  # After the read-only safety checks, a consenting writer bootstraps the fixed
+  # chain with mkdir(0700), accepting EEXIST, then opens coordination with
+  # O_DIRECTORY|O_NOFOLLOW and validates its descriptor's UID and exact 0700 mode.
+  # Create control.lock exclusively inside it, accepting EEXIST only after opening
+  # without following links and validating an owned 0600 regular single-link inode.
+  # Same-user racing creators converge on that private inode; unsafe entries refuse.
+  # Take that file's shared/exclusive flock before catalog or selected-root locks.
+  # Every wait has the 10 s call deadline, including approval reads and commits;
+  # timeout is retryable approval.state.busy (75), or run.call-timeout (75) under
+  # run's existing call budget. No wait uses an unbounded background context.
+  # Revalidate home, coordination and lock identities after locking and publication.
+  # Read-only inspection never creates a lock: an absent lock permits only safe
+  # bootstrap-only or legacy-approval inspection, rechecking absence before return;
+  # completed catalog/session evidence without a lock is unavailable, never repaired.
   # No common lock spans consent, engine I/O or acquiring a session operation lock.
   #
   # The fixed bootstrap footprint is the account home's .local/state/itos-container
   # tree, including coordination. Treat it as a prospective protected location
   # even with no catalog; absence is not permission to bypass initialization.
-  # Under exclusive account-home exclusion, recheck the candidate, selected legacy
+  # Before bootstrap creation, recheck the candidate, selected legacy
   # state, any existing catalog and every discoverable outstanding reservation
   # against both this footprint and the selected location BEFORE any mkdir.
+  # After acquiring the private lock, repeat discovery and checks under exclusion.
   # The own-checkout, exposure and missing-evidence refusals still apply. Neither
   # an empty catalog nor a bootstrap retry can erase legacy session evidence.
   #
   # Only after consent (or validated existing approval for matching reuse/run),
   # bootstrap may create missing .local, state, itos-container and coordination
-  # directories along that fixed chain, plus private self-binding publication
+  # directories along that fixed chain, plus the private lock and self-binding publication
   # files inside coordination. This is the sole exception to claim-before-create:
   # it permits no approvals, snapshots, intents, sessions or other selected-root
   # entries yet. It applies even when HOME equals the account home and unset
@@ -81,9 +90,9 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   #
   # Failure or controller death during bootstrap grants no approval or worker
   # launch authority. Retain surviving bootstrap entries; never delete/reset the
-  # tree or change the lock inode to retry. Admission cannot pass an initializing
+  # tree or change the private lock inode to retry. Admission cannot pass an initializing
   # publisher; after interruption it must complete this same protocol under the
-  # home lock using validated existing approval, or refuse before registration.
+  # private lock using validated existing approval, or refuse before registration.
   # A fresh consenting approve revalidates surviving safe directories and bindings
   # and redoes every required directory/file/parent fsync before proceeding.
   # A safe directory-only prefix or unpublished private self-binding temp file
@@ -386,20 +395,19 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | catalog is absent beside selected legacy session state | approval.state.unavailable | 3    |
       | host account home lookup is unavailable                | approval.state.unavailable | 3    |
 
-  # The default tree contains its own coordination catalog. Today approval
-  # succeeds without a catalog self-binding or account-home exclusion: the first
-  # Then fails on ordering/protection, not on the already-working approval result.
-  # The later doctor and matching-reuse checks are persistence/no-rewrite controls.
+  # q-35 supersedes CONTROL-10's original home-lock ordering. The fixed private
+  # bootstrap chain precedes exclusion; self-binding and approval remain inside
+  # it. The later doctor and matching-reuse checks retain no-write guarantees.
   @slice-21 @ID-CONTROL-10 @local-engine-fixture
-  Scenario: First approval bootstraps the default tree containing its own catalog
+  Scenario: First approval bootstraps private coordination before publishing its default-tree catalog
     Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
     When P consents with its independently calculated exact fingerprint in a fresh process
-    Then P holds account-home exclusion from before the first bootstrap directory through approval publication and completes durable self-binding before any ordinary state write
+    Then P validates private bootstrap entries before taking private coordination exclusion through approval publication and completes durable self-binding before any ordinary state write
     And P reports matching approval with exit 0 and exactly generation 1 beneath the default tree bound in its own catalog
     And only the fixed bootstrap chain self-binding and P approval were created with private ownership and no engine mutation or checkout execution
     When the approval process has exited and fresh P doctor and matching approve use the same default layout
     Then both report matching approval with exit 0 while the completed self-binding and approval keep their bytes identities and generation
-    And the fresh doctor writes nothing and the matching approve uses the same account-home lock without creating a duplicate location binding
+    And the fresh doctor writes nothing and the matching approve uses the same private coordination lock without creating a duplicate location binding
 
   # Faults never target ordinary approval writes. Today's untracked approval
   # succeeds, so the exact state.write refusal is the first failing Then in
@@ -467,7 +475,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
 
   # A read-only home descriptor models the locking capability of another UID on
   # a 0755 home. flock conflicts depend on the inode, not the holder's UID.
-  @wip @slice-21 @ID-CONTROL-12 @local-engine-fixture
+  @slice-21 @ID-CONTROL-12 @local-engine-fixture
   Scenario Outline: Another UID's home-directory lock cannot delay control commands
     Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
     And a readable account home and valid inputs for locked-home "<command>"
@@ -480,7 +488,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | approve |
       | run     |
 
-  @wip @slice-21 @ID-CONTROL-13 @local-engine-fixture
+  @slice-21 @ID-CONTROL-13 @local-engine-fixture
   Scenario Outline: Contended private coordination locks have a retryable call deadline
     Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
     And valid "<command>" inputs and a private coordination lock held by another process

@@ -178,7 +178,7 @@ func controlObserve(tid int, r unix.PtraceRegs, root string) *event {
 func controlFault(e *event) bool {
     fault := os.Getenv("SLICE_21_FAULT")
     coord := filepath.Join(os.Getenv("SLICE_21_ACCOUNT_HOME"), ".local/state/itos-container/coordination")
-    inside := strings.HasPrefix(e.Path, coord+"/")
+    inside := strings.HasPrefix(e.Path, coord+"/") && filepath.Base(e.Path) != "control.lock"
     switch fault {
     case "coordination directory create": return e.Op == "mkdir" && e.Path == coord
     case "coordination directory fsync": return e.Op == "fsync" && e.Directory && e.Path == coord

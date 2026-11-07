@@ -19,7 +19,7 @@ func (w *world) controlBootstrapSteps(sc *godog.ScenarioContext) {
 	})
 	sc.Step(`^default-tree bootstrap has fault "([^"]*)" while ordinary approval writes remain healthy$`, func(fault string) { w.control.p.doctor.env["SLICE_21_FAULT"] = fault })
 	sc.Step(`^P consents with its independently calculated exact fingerprint in a fresh process$`, func() { w.control.tracedApproval() })
-	sc.Step(`^P holds account-home exclusion from before the first bootstrap directory through approval publication and completes durable self-binding before any ordinary state write$`, func() error { return w.control.bootstrapOrdering() })
+	sc.Step(`^P validates private bootstrap entries before taking private coordination exclusion through approval publication and completes durable self-binding before any ordinary state write$`, func() error { return w.control.bootstrapOrdering() })
 	sc.Step(`^P reports matching approval with exit 0 and exactly generation 1 beneath the default tree bound in its own catalog$`, func() error {
 		f := w.control
 		return errors.Join(f.err, f.p.approvalSuccess(), f.p.approvalStored("1"), f.selfBinding())
@@ -39,7 +39,7 @@ func (w *world) controlBootstrapSteps(sc *godog.ScenarioContext) {
 		}
 		return errors.Join(f.retainedBootstrap(), f.p.approvalStored("1"))
 	})
-	sc.Step(`^the fresh doctor writes nothing and the matching approve uses the same account-home lock without creating a duplicate location binding$`, func() error {
+	sc.Step(`^the fresh doctor writes nothing and the matching approve uses the same private coordination lock without creating a duplicate location binding$`, func() error {
 		f := w.control
 		if err := errors.Join(f.err, f.catalogOnlySelf()); err != nil {
 			return err
@@ -49,11 +49,11 @@ func (w *world) controlBootstrapSteps(sc *godog.ScenarioContext) {
 			return err
 		}
 		for _, e := range events {
-			if e.Op == "flock" && e.Path == f.home && e.Phase == "end" && e.Success && e.Flags&2 != 0 {
+			if e.Op == "flock" && e.Path == filepath.Join(f.coordination(), "control.lock") && e.Phase == "end" && e.Success && e.Flags&2 != 0 {
 				return nil
 			}
 		}
-		return errors.New("matching reuse did not acquire the original account-home lock")
+		return errors.New("matching reuse did not acquire the original private coordination lock")
 	})
 	sc.Step(`^P reports approval.state.write with exit 75 and no approval directory record or temp file was created$`, func() error {
 		f := w.control
@@ -114,7 +114,10 @@ func (f *controlFixture) bootstrapOrdering() error {
 	locked, fileSynced, bound, durable, ordinary := false, false, false, false, false
 	created, dirSynced := map[string]bool{}, map[string]bool{}
 	for _, e := range events {
-		if e.Op == "flock" && e.Path == f.home && e.Phase == "end" && e.Success {
+		if e.Op == "flock" && e.Path == f.home && e.Flags&3 != 0 {
+			return errors.New("command still locks the publicly readable home inode")
+		}
+		if e.Op == "flock" && e.Path == filepath.Join(f.coordination(), "control.lock") && e.Phase == "end" && e.Success {
 			if e.Flags&2 != 0 {
 				locked = true
 			}
@@ -122,12 +125,12 @@ func (f *controlFixture) bootstrapOrdering() error {
 				locked = false
 			}
 		}
-		if (e.Op == "mkdir" || e.Op == "create" || e.Op == "rename" || e.Op == "write" || e.Op == "fsync") && e.Phase == "begin" && strings.HasPrefix(e.Path, f.fixedRoot()+"/") && !locked {
-			return errors.New("managed-state mutation occurred outside account-home exclusion")
+		if (e.Op == "mkdir" || e.Op == "create" || e.Op == "rename" || e.Op == "write" || e.Op == "fsync") && e.Phase == "begin" && strings.HasPrefix(e.Path, f.fixedRoot()+"/") && !locked && !f.bootstrapOnly(e) {
+			return errors.New("managed-state mutation occurred outside private coordination exclusion")
 		}
 		if e.Phase == "end" && e.Success && e.Op == "mkdir" {
-			if !locked {
-				return errors.New("bootstrap directory was created before account-home exclusion")
+			if !locked && !f.bootstrapOnly(e) {
+				return errors.New("non-bootstrap directory was created before private exclusion")
 			}
 			created[e.Path] = true
 			dirSynced[e.Path], dirSynced[filepath.Dir(e.Path)] = false, false
@@ -151,7 +154,7 @@ func (f *controlFixture) bootstrapOrdering() error {
 		if e.Phase == "begin" && (e.Op == "mkdir" || e.Op == "create") && (e.Path == filepath.Join(f.fixedRoot(), "approvals") || strings.Contains(e.Path, "/approvals/")) {
 			ordinary = true
 			if !locked || !durable {
-				return errors.New("ordinary approval storage preceded durable catalog self-binding under the home lock")
+				return errors.New("ordinary approval storage preceded durable catalog self-binding under the private lock")
 			}
 			for path := range created {
 				if strings.Contains(path, "/approvals") {
@@ -212,7 +215,7 @@ func (f *controlFixture) catalogOnlySelf() error {
 		return err
 	}
 	for _, entry := range entries {
-		if entry.Name() != "self.json" && (!strings.HasPrefix(entry.Name(), ".") || !strings.HasSuffix(entry.Name(), ".tmp")) {
+		if entry.Name() != "self.json" && entry.Name() != "control.lock" && (!strings.HasPrefix(entry.Name(), ".") || !strings.HasSuffix(entry.Name(), ".tmp")) {
 			return errors.New("default tree acquired an extra catalog binding")
 		}
 	}
@@ -236,7 +239,7 @@ func (f *controlFixture) bootstrapFootprint(approval bool) error {
 		return err
 	}
 	allowed := map[string]bool{}
-	for _, path := range []string{filepath.Join(f.home, ".local"), filepath.Join(f.home, ".local/state"), f.fixedRoot(), f.coordination(), filepath.Join(f.coordination(), "self.json")} {
+	for _, path := range []string{filepath.Join(f.home, ".local"), filepath.Join(f.home, ".local/state"), f.fixedRoot(), f.coordination(), filepath.Join(f.coordination(), "self.json"), filepath.Join(f.coordination(), "control.lock")} {
 		allowed[path] = true
 	}
 	for path, value := range now {
@@ -309,4 +312,17 @@ func (f *controlFixture) bootstrapReuse() {
 	f.err = errors.Join(f.err, f.unchanged())
 	f.tracedApproval()
 	f.results = append(f.results, doctorResult{exit: f.p.exit, stdout: f.p.stdout, stderr: f.p.stderr})
+}
+
+// Only mkdir/sync of the fixed private chain and creation of its lock inode may
+// precede exclusion. Binding writes and all selected-tree mutations still wait.
+func (f *controlFixture) bootstrapOnly(e controlEvent) bool {
+	if e.Op == "mkdir" || (e.Op == "fsync" && e.Directory) {
+		for _, path := range []string{f.home, filepath.Join(f.home, ".local"), filepath.Join(f.home, ".local/state"), f.fixedRoot(), f.coordination()} {
+			if e.Path == path {
+				return true
+			}
+		}
+	}
+	return e.Op == "create" && e.Path == filepath.Join(f.coordination(), "control.lock")
 }

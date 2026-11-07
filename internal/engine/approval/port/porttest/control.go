@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 )
@@ -57,13 +58,15 @@ type Control struct {
 }
 
 func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.ControlTransaction, port.Failure) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	if s.Account.Failure != "" || s.Account.Home == "" {
 		return nil, "state.unavailable"
 	}
 	select {
 	case s.State.lock <- struct{}{}:
 	case <-ctx.Done():
-		return nil, "state.unavailable"
+		return nil, "state.busy"
 	}
 	success := false
 	defer func() {
@@ -72,7 +75,7 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 		}
 	}()
 	if ctx.Err() != nil {
-		return nil, "state.unavailable"
+		return nil, "state.busy"
 	}
 	s.State.mu.Lock()
 	defer s.State.mu.Unlock()

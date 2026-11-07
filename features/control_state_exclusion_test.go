@@ -40,7 +40,7 @@ func (w *world) controlExclusionSteps(sc *godog.ScenarioContext) {
 		}
 		attempt := false
 		for _, e := range events[f.admissionEvents:] {
-			if e.Op == "flock" && (e.Path == f.home || strings.HasSuffix(e.Path, "/admission")) && e.Flags&2 != 0 {
+			if e.Op == "flock" && (e.Path == filepath.Join(f.coordination(), "control.lock") || strings.HasSuffix(e.Path, "/admission")) && e.Flags&2 != 0 {
 				attempt = true
 				if e.Phase == "end" && e.Success {
 					return errors.New("worker acquired admission while approval publication was held")
@@ -127,7 +127,7 @@ func (f *controlFixture) exclusionRace() {
 	f.err = errors.Join(f.err, overlapAwait("contender's actual admission lock attempt", 10*time.Second, func() bool {
 		events, _ := controlEvents(r.process.journal)
 		for _, e := range events[f.admissionEvents:] {
-			if e.Op == "flock" && e.Phase == "end" && (e.Path == f.home || strings.HasSuffix(e.Path, "/admission")) && e.Flags&2 != 0 {
+			if e.Op == "flock" && e.Phase == "end" && (e.Path == filepath.Join(f.coordination(), "control.lock") || strings.HasSuffix(e.Path, "/admission")) && e.Flags&2 != 0 {
 				return true
 			}
 		}

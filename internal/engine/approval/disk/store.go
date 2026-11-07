@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 )
@@ -23,6 +24,7 @@ type Store struct {
 	Records         port.Records
 	Control         port.Control
 	ops             *operations
+	ctx             context.Context
 }
 type operations struct {
 	// Keep filesystem failures injectable while retaining real pinned handles.
@@ -54,7 +56,13 @@ func (s Store) operations() operations {
 	ops := operations{
 		openRoot: os.OpenRoot, lstat: (*os.Root).Lstat, mkdir: (*os.Root).Mkdir,
 		openDir: (*os.Root).Open, openChild: (*os.Root).OpenRoot, statRoot: (*os.Root).Stat,
-		syncDir: (*os.File).Sync, lock: lock, openPrivate: openPrivate, chmodPrivate: chmodPrivate,
+		syncDir: (*os.File).Sync, lock: func(f *os.File, exclusive bool) error {
+			ctx := s.ctx
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			return sessionLock(ctx, f, !exclusive)
+		}, openPrivate: openPrivate, chmodPrivate: chmodPrivate,
 		openRecord: (*os.Root).OpenFile, statFile: (*os.File).Stat, readAll: io.ReadAll,
 		nonce: rand.Read, chmod: (*os.File).Chmod, closeFile: (*os.File).Close,
 		create: func(r *os.Root, n string) (*os.File, error) {
@@ -221,7 +229,7 @@ func (s Store) pinPath(c port.Candidate, create bool, path string, managedDepth 
 	}
 	if err = ops.lock(p.dir, create); err != nil {
 		p.close()
-		return nil, "state.unavailable"
+		return nil, lockFailure(err)
 	}
 	if !p.unchanged() {
 		p.close()
@@ -336,10 +344,13 @@ func (p *pin) readNamed(c port.Candidate, records port.Records, name string) (po
 	return records.Decode(c, data)
 }
 
-// Read never creates a directory, lock or record. Directory locks serialize all
-// readers with publication without needing a writable lock file for inspection.
+// Read never creates a directory, lock or record. Existing private coordination
+// and selected-directory locks serialize readers with publication.
 func (s Store) Read(c port.Candidate) (port.Record, port.Failure) {
-	transaction, failure := s.control(context.Background(), c, false)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s.ctx = ctx
+	transaction, failure := s.control(ctx, c, false)
 	if failure != "" {
 		return port.Record{}, failure
 	}
@@ -358,7 +369,10 @@ func (s Store) Read(c port.Candidate) (port.Record, port.Failure) {
 
 // Commit compares generation and publishes only a complete durable record.
 func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Failure) {
-	transaction, failure := s.control(context.Background(), c, true)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s.ctx = ctx
+	transaction, failure := s.control(ctx, c, true)
 	if failure != "" {
 		return port.Record{}, failure
 	}
@@ -442,12 +456,15 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 // Select atomically verifies the active generation, exact bytes and fingerprint.
 // Its returned string owns the bytes; it never consults checkout request files.
 func (s Store) Select(c port.Candidate, generation string) (port.Frozen, port.Failure) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s.ctx = ctx
 	// Establish existing approval before any enrollment, then recheck it while
-	// holding common exclusion in the required home-before-selected lock order.
+	// holding common exclusion in the required coordination-before-selected lock order.
 	if _, failure := s.selectRecord(c, generation); failure != "" {
 		return port.Frozen{}, failure
 	}
-	transaction, failure := s.control(context.Background(), c, true)
+	transaction, failure := s.control(ctx, c, true)
 	if failure != "" {
 		return port.Frozen{}, failure
 	}

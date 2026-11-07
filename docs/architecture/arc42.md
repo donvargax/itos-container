@@ -355,7 +355,7 @@ must state this in help and security guidance; revisit before egress and credent
    and directory durability. Uncertain publication returns no usable handoff.
    Every new invocation still validates current requests, identities and approval.
 3. **Admit, create and own, preparing.** Slice-16 atomically reserves the validated
-   canonical checkout under account-home exclusion shared with approval publication before registration or
+   canonical checkout under private coordination exclusion shared with approval publication before registration or
    create. Strict ancestor/descendant roots conflict across projects and daemons;
    equal roots and disjoint roots retain concurrency. Legacy registrations without
    admission metadata remain authority. The lock spans short storage transactions,
@@ -529,9 +529,10 @@ primary exit refuses new exec and tears down active exec commands without extend
 lifetime. Exec implementation remains deferred.
 
 Slice-21 retains a location catalog under the effective account home's fixed
-`.local/state/itos-container/coordination` anchor. Its existing home descriptor is
-locked before bootstrap, catalog access and selected-root publication across all
-HOME/XDG selections. Doctor inspects under shared exclusion without writes; approve
+`.local/state/itos-container/coordination` anchor. After validated mkdir bootstrap,
+its private 0600 control.lock inode supplies bounded exclusion for catalog access
+and selected-root publication across HOME/XDG selections; the home is never locked.
+Doctor inspects without writes, taking a shared lock when present; approve
 and validated run enrollment complete durable self-binding and selected-location
 claims before ordinary state writes. Existing reservation completion semantics are
 shared with separation checks, without operation locks or engine calls. The

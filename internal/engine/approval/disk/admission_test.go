@@ -35,7 +35,7 @@ func TestAdmissionPublicationExcludesOtherProjectsUntilDurable(t *testing.T) {
 	if failure := <-done; failure != "" {
 		t.Fatal(failure)
 	}
-	if f != "state.unavailable" || contender != nil {
+	if f != "state.busy" || contender != nil {
 		t.Fatal("publication barrier did not exclude another project", f)
 	}
 	d, f = (Registry{Store: s}).Admission(t.Context(), other)

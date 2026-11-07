@@ -6,7 +6,8 @@ import "context"
 type Account interface{ AccountHome() (string, Failure) }
 
 // Control serializes location publication and worker registration for one UID.
-// A read transaction never creates or synchronizes filesystem state. Writers
+// Lock waits respect the caller deadline and a maximum 10-second call budget;
+// contention returns state.busy. A read transaction never creates or syncs state. Writers
 // require prior consent or independently validated existing approval/ownership.
 type Control interface {
 	Begin(context.Context, Candidate, bool) (ControlTransaction, Failure)

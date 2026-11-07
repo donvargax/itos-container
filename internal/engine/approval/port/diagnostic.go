@@ -67,6 +67,10 @@ func Problems(v View) []Problem {
 	case "state.unavailable":
 		p.Exit = 3
 		p.Message = "Approval state is unavailable"
+	case "state.busy":
+		p.Exit = 75
+		p.Message = "Approval state lock wait exceeded the call budget"
+		p.Fix = "retry after the other control-state operation completes"
 	case "state.write":
 		p.Exit = 75
 		p.Message = "Approval publication could not be confirmed durable"
