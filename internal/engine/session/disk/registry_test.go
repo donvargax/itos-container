@@ -78,6 +78,7 @@ func TestRegistryCheckoutFaultsPreventRegistrationButNotDiscovery(t *testing.T) 
 	for _, fault := range []string{"pin", "inspect", "changed"} {
 		t.Run(fault, func(t *testing.T) {
 			b, _, _ := sf.Fixture()
+			b.Checkout.Root = t.TempDir()
 			id, token := strings.Repeat("b", 64), strings.Repeat("c", 64)
 			key := registryKey(b.Checkout.Root, b.UID) + "/" + id
 			files := &af.Registry{Sessions: map[string]*af.SessionFiles{key: {Data: []byte("original")}}}
@@ -108,6 +109,7 @@ func TestRegistryCheckoutFaultsPreventRegistrationButNotDiscovery(t *testing.T) 
 
 func TestRegistryListClassifiesReadFailuresWithoutWriting(t *testing.T) {
 	b, _, _ := sf.Fixture()
+	b.Checkout.Root = t.TempDir()
 	d := ap.Durable{Frozen: b.Frozen}
 	id := strings.Repeat("b", 64)
 	key := registryKey(b.Checkout.Root, b.UID) + "/" + id
