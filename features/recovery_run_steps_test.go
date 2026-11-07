@@ -512,6 +512,7 @@ func (a *sessionAPI) recoveryCreate(r *http.Request, q sessionRequest, index int
 	host := config["HostConfig"]
 	delete(config, "HostConfig")
 	c := map[string]any{"Id": id, "Name": "/" + r.URL.Query().Get("name"), "Image": config["Image"], "Config": config, "HostConfig": host, "State": map[string]any{"Status": "created", "Running": false, "Pid": 0, "StartedAt": "0001-01-01T00:00:00Z"}, "NetworkSettings": map[string]any{"Networks": map[string]any{"none": map[string]any{}}}, "Mounts": []any{map[string]any{"Type": "bind", "Source": w.doctor.checkout, "Destination": "/workspace", "RW": true, "Propagation": "rprivate"}}}
+	c["Mounts"] = localAnchorMount(object(host))
 	a.local[id], a.observed[id] = c, approvalClone(c)
 	a.created = append(a.created, id)
 	w.recoveryLocalDiscover()

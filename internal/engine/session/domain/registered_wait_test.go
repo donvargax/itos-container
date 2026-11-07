@@ -106,7 +106,7 @@ func TestRegisteredRunWaitsForStopWithinItsExistingTeardownTotal(t *testing.T) {
 			}()
 			synctest.Wait()
 		}
-		runner := Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: id}, Workspace: &f.Workspace{}}
+		runner := Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: id}, Workspace: f.MountWorkspace(b)}
 		start := time.Now()
 		result := runner.Run(t.Context(), approval.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
 		if time.Since(start) != 11*time.Second || result.Outcome != "" || !result.Exited || result.Exit != 7 || result.Cleanup != port.Complete {

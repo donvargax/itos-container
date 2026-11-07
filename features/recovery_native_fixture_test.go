@@ -140,7 +140,19 @@ func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *reco
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	p.cancel = cancel
 	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
-	p.cmd = exec.CommandContext(ctx, trace, append([]string{p.journal, p.pid, state, w.bin}, args...)...)
+	executable := w.bin
+	localRun := w.doctor.real == nil && len(args) > 0 && args[0] == "run"
+	if localRun {
+		executable, err = w.sessionProbeBinary()
+		if err != nil {
+			p.err = err
+			cancel()
+			close(p.done)
+			return p
+		}
+		args = append([]string{"-test.run=^TestLocalRunCommand$", "-test.count=1", "--"}, args...)
+	}
+	p.cmd = exec.CommandContext(ctx, trace, append([]string{p.journal, p.pid, state, executable}, args...)...)
 	p.cmd.WaitDelay = time.Second
 	p.cmd.Dir, p.cmd.Env = w.doctor.checkout, w.env()
 	if w.recoveryLocal != nil && w.recoveryLocal.invocationDir != "" {
@@ -153,6 +165,10 @@ func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *reco
 		p.cmd.Env = setEnv(p.cmd.Env, "SLICE_17_ACCESS_TRACE", "1")
 	}
 	p.cmd.Env = setEnv(p.cmd.Env, "ITOS_ROOT", w.doctor.checkout)
+	if localRun {
+		p.cmd.Env = setEnv(p.cmd.Env, "SLICE_17_LOCAL_RUN", "1")
+		p.cmd.Env = setEnv(p.cmd.Env, "SLICE_17_LOCAL_MOUNT_ROOT", w.doctor.checkout)
+	}
 	p.cmd.Stdout, p.cmd.Stderr = &p.out, &p.errout
 	p.started = time.Now()
 	if err := p.cmd.Start(); err != nil {

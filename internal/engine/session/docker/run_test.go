@@ -55,13 +55,13 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 				w.WriteHeader(400)
 				return
 			}
-			if body.HostConfig == nil || !safeHost(body.HostConfig, b.Checkout.Root) {
+			if body.HostConfig == nil || !safeHost(body.HostConfig, st.RunIntent(b).Anchor.Name) {
 				t.Error("unsafe requested host configuration")
 			}
 			id := strings.Repeat("c", 64)
 			a.resource = &container.InspectResponse{ID: id, Name: "/" + r.URL.Query().Get("name"), Image: b.ImageID, Config: &body.Config, HostConfig: body.HostConfig,
 				State: &container.State{Status: "created"}, NetworkSettings: &container.NetworkSettings{Networks: map[string]*network.EndpointSettings{"none": {}}},
-				Mounts: []container.MountPoint{{Type: mount.TypeBind, Source: b.Checkout.Root, Destination: "/workspace", RW: true, Propagation: mount.PropagationRPrivate}}}
+				Mounts: []container.MountPoint{{Type: mount.TypeVolume, Name: st.RunIntent(b).Anchor.Name, Driver: "local", Destination: "/workspace", RW: true}}}
 			w.WriteHeader(201)
 			_ = json.NewEncoder(w).Encode(map[string]string{"Id": id})
 		case strings.HasSuffix(path, "/json"):
@@ -190,7 +190,7 @@ func TestSDKSignalUsesFullIDAndChecksConnection(t *testing.T) {
 		t.Fatal(f)
 	}
 	defer c.Close()
-	id, f := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), []string{"probe"})
+	id, f := c.CreateRun(ctx, st.RunIntent(b), []string{"probe"})
 	if f != "" {
 		t.Fatal(f)
 	}
@@ -229,10 +229,16 @@ func TestVerifyActualBoundary(t *testing.T) {
 		"root filesystem": func(r *container.InspectResponse) { r.HostConfig.ReadonlyRootfs = false },
 		"bind":            func(r *container.InspectResponse) { r.HostConfig.Binds = []string{"/:/host"} },
 		"source":          func(r *container.InspectResponse) { r.HostConfig.Mounts[0].Source = "/host" },
-		"propagation":     func(r *container.InspectResponse) { r.HostConfig.Mounts[0].BindOptions.Propagation = "shared" },
-		"recursive":       func(r *container.InspectResponse) { r.HostConfig.Mounts[0].BindOptions.NonRecursive = false },
-		"tmpfs":           func(r *container.InspectResponse) { r.HostConfig.Tmpfs = nil },
-		"volume":          func(r *container.InspectResponse) { r.Config.Volumes = map[string]struct{}{"/data": {}} },
+		"anchor subpath":  func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.Subpath = "replacement" },
+		"anchor copy":     func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.NoCopy = false },
+		"propagation": func(r *container.InspectResponse) {
+			r.HostConfig.Mounts[0].BindOptions = &mount.BindOptions{Propagation: "shared"}
+		},
+		"recursive": func(r *container.InspectResponse) {
+			r.HostConfig.Mounts[0].BindOptions = &mount.BindOptions{NonRecursive: false}
+		},
+		"tmpfs":  func(r *container.InspectResponse) { r.HostConfig.Tmpfs = nil },
+		"volume": func(r *container.InspectResponse) { r.Config.Volumes = map[string]struct{}{"/data": {}} },
 		"materialized volume": func(r *container.InspectResponse) {
 			r.Mounts = append(r.Mounts, container.MountPoint{Type: mount.TypeVolume, Destination: "/data"})
 		},
@@ -281,12 +287,15 @@ func TestVerifyActualBoundary(t *testing.T) {
 			}
 			defer c.Close()
 			argv := []string{"probe"}
-			id, f := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), argv)
+			id, f := c.CreateRun(ctx, st.RunIntent(b), argv)
 			if f != "" {
 				t.Fatal(f)
 			}
 			if f = c.VerifyRun(ctx, id, argv); f != "" {
 				t.Fatal("positive control", f)
+			}
+			if o, status := c.Inspect(ctx, id); status != sp.Observed || !o.AnchorExact {
+				t.Fatal("missing exact anchor observation")
 			}
 			a.mu.Lock()
 			a.defect = defect
@@ -300,6 +309,11 @@ func TestVerifyActualBoundary(t *testing.T) {
 			}
 			if f = c.VerifyRun(ctx, id, argv); f != want {
 				t.Fatalf("got %s want %s", f, want)
+			}
+			if strings.HasPrefix(name, "anchor ") {
+				if o, status := c.Inspect(ctx, id); status != sp.Observed || o.AnchorExact {
+					t.Fatal("recovery accepted a different anchor mount")
+				}
 			}
 		})
 	}
@@ -322,7 +336,7 @@ func TestSDKStreamsKeepBinaryBytesSeparateAfterStdinEOF(t *testing.T) {
 		t.Fatal(f)
 	}
 	defer c.Close()
-	id, f := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), []string{"probe"})
+	id, f := c.CreateRun(ctx, st.RunIntent(b), []string{"probe"})
 	if f != "" {
 		t.Fatal(f)
 	}

@@ -99,7 +99,7 @@ func (s offlineStore) observed(i sp.Intent, f sp.Outcome, operation string) (sp.
 	if f != "" {
 		return i, f
 	}
-	return offlineIntent{Intent: i, o: s.o, launch: operation == "intent"}, f
+	return offlineIntent{Intent: i, o: s.o, launch: operation == "intent" || operation == "reserved"}, f
 }
 
 type offlineIntent struct {

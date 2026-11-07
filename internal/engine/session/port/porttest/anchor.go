@@ -8,6 +8,48 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
+// MountWorkspace supplies explicit independent fixture mount observations.
+func MountWorkspace(b port.Binding) *Workspace {
+	return &Workspace{Descriptor: "/proc/123/fd/9", Mounts: map[int]port.MountSource{123: {Device: b.Checkout.Device, Inode: b.Checkout.Inode}}}
+}
+func (w *Workspace) Source() (port.MountSource, port.Outcome) {
+	if w.Closed || !descriptorSource(w.Descriptor) {
+		return port.MountSource{}, port.MountRefused
+	}
+	return port.MountSource{Path: w.Descriptor, Device: w.binding.Checkout.Device, Inode: w.binding.Checkout.Inode}, ""
+}
+func (w *Workspace) Mounted(pid int) (port.MountSource, port.Outcome) {
+	m, ok := w.Mounts[pid]
+	if !ok || pid <= 0 {
+		return port.MountSource{}, port.MountRefused
+	}
+	return m, ""
+}
+func (c *runConnection) AllocateAnchor(ctx context.Context, r port.Record) port.Outcome {
+	c.run.event("anchor allocate")
+	if !r.ValidAnchor(c.binding) || r.Anchor.Stage != "intent" {
+		return port.MountRefused
+	}
+	c.engine.resourcesMu.Lock()
+	defer c.engine.resourcesMu.Unlock()
+	a := AnchorResources{Resources: c.run.Anchors, Created: "2026-11-07T17:00:00Z"}
+	f := a.AllocateAnchor(ctx, r)
+	c.run.Anchors = a.Resources
+	return f
+}
+func (c *runConnection) InspectAnchor(ctx context.Context, name string) (port.AnchorObservation, port.Inspection) {
+	c.run.event("anchor inspect")
+	c.engine.resourcesMu.Lock()
+	defer c.engine.resourcesMu.Unlock()
+	return (&AnchorResources{Resources: c.run.Anchors}).InspectAnchor(ctx, name)
+}
+func (c *runConnection) RemoveAnchor(ctx context.Context, name string) {
+	c.run.event("anchor remove")
+	c.engine.resourcesMu.Lock()
+	defer c.engine.resourcesMu.Unlock()
+	(&AnchorResources{Resources: c.run.Anchors}).RemoveAnchor(ctx, name)
+}
+
 // AnchorResources models engine volume records, not native mounts. Ownership
 // decisions and worker-before-volume teardown belong to the session domain.
 // Tests change Resources only between calls, as with the worker engine fake.
@@ -172,4 +214,13 @@ func descriptorSource(path string) bool {
 	fd, fdError := strconv.ParseUint(parts[4], 10, 64)
 	return pidError == nil && fdError == nil && pid > 0 &&
 		strconv.FormatUint(pid, 10) == parts[2] && strconv.FormatUint(fd, 10) == parts[4]
+}
+
+// RunIntent supplies an independently seeded owned anchor for worker contracts.
+// Allocation itself is exercised by AnchorConnectionContract.
+func RunIntent(b port.Binding) port.Record {
+	r := b.Intent(strings.Repeat("1", 64))
+	r.Schema = 2
+	r.Anchor = port.Anchor{Session: strings.Repeat("2", 64), Name: "itos-container-anchor-" + r.NameToken(), Source: "/proc/123/fd/9", Device: b.Checkout.Device, Inode: b.Checkout.Inode, Created: "2026-11-07T17:00:00Z", Stage: "owned"}
+	return r
 }

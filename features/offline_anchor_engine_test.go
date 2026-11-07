@@ -39,42 +39,51 @@ func (a *offlineAPI) anchorStart(r *http.Request, entry offlineRequest) bool {
 }
 
 func (a *offlineAPI) anchorVolumeAllowed(r *http.Request, entry *offlineRequest) bool {
-	s, w := a.w.anchor, a.w
+	w := a.w
+	volumes := a.anchorVolumes()
 	if r.Method == "POST" && entry.Path == "/volumes/create" {
-		if w.anchors != nil {
-			data, err := os.ReadFile(w.anchors.pidPath)
-			if err != nil {
-				return false
-			}
-			s.pid, err = strconv.Atoi(string(data))
-			if err != nil {
-				return false
+		pid, _ := r.Context().Value(runPeerKey{}).(int)
+		originalID, identityErr := anchorIdentity(w.doctor.checkout)
+		limit := 1
+		if w.offline.isolation != nil || w.hardlinks != nil {
+			limit = 2
+		}
+		if s := w.anchor; s != nil {
+			pid, originalID, identityErr = s.pid, s.originalID, nil
+			if w.anchors != nil {
+				data, err := os.ReadFile(w.anchors.pidPath)
+				if err != nil {
+					return false
+				}
+				pid, err = strconv.Atoi(string(data))
+				if err != nil {
+					return false
+				}
+				s.pid = pid
 			}
 		}
 		name, _ := entry.Body["Name"].(string)
 		labels, options := object(entry.Body["Labels"]), object(entry.Body["DriverOpts"])
-		prefix, token, _ := strings.Cut(name, "itos-container-")
-		// Permit a role prefix without authorizing arbitrary volume names.
-		parts := strings.Split(token, "-")
-		if prefix != "" || !strings.HasPrefix(name, "itos-container-") || len(parts) == 0 || !offlineHex(parts[len(parts)-1]) ||
-			strings.ContainsAny(name, "/.\\") ||
-			len(s.volumes) != 0 || len(a.created) != 0 || r.URL.RawQuery != "" || entry.Body["Driver"] != "local" ||
-			labels["io.itos-container.project"] != w.approval.project || labels["io.itos-container.fingerprint"] != w.approval.fingerprint ||
+		token, validName := strings.CutPrefix(name, "itos-container-anchor-")
+		deviceID, inode, _ := strings.Cut(originalID, ":")
+		session, _ := labels["io.itos-container.session"].(string)
+		if !validName || !offlineHex(token) || len(volumes) >= limit || len(a.created) != len(volumes) || r.URL.RawQuery != "" || entry.Body["Driver"] != "local" || identityErr != nil ||
+			len(labels) != 7 || labels["io.itos-container.intent"] != token || labels["io.itos-container.project"] != w.approval.project || labels["io.itos-container.fingerprint"] != w.approval.fingerprint || labels["io.itos-container.kind"] != "checkout-anchor" || !offlineHex(session) || labels["io.itos-container.device"] != deviceID || labels["io.itos-container.inode"] != inode ||
 			len(options) != 3 || options["type"] != "none" || options["o"] != "bind" {
 			return false
 		}
 		device, _ := options["device"].(string)
-		fd, ok := strings.CutPrefix(device, fmt.Sprintf("/proc/%d/fd/", s.pid))
+		fd, ok := strings.CutPrefix(device, fmt.Sprintf("/proc/%d/fd/", pid))
 		n, err := strconv.Atoi(fd)
 		identity, statErr := anchorIdentity(device)
-		if s.pid <= 0 || !ok || err != nil || n < 0 || fd != strconv.Itoa(n) || statErr != nil || identity != s.originalID {
+		if pid <= 0 || !ok || err != nil || n < 0 || fd != strconv.Itoa(n) || statErr != nil || identity != originalID {
 			return false
 		}
-		s.volumes[name] = &anchorVolume{name: name, labels: labels, options: options}
+		volumes[name] = &anchorVolume{name: name, labels: labels, options: options}
 		return true
 	}
 	name := strings.TrimPrefix(entry.Path, "/volumes/")
-	v := s.volumes[name]
+	v := volumes[name]
 	if v == nil {
 		return false
 	}
@@ -115,11 +124,11 @@ func (a *offlineAPI) anchorInspect(v *anchorVolume) (map[string]any, error) {
 }
 
 func (a *offlineAPI) anchorMount(m map[string]any) bool {
-	if a.w.anchor == nil || m["Target"] != "/workspace" || m["ReadOnly"] == true {
+	if m["Target"] != "/workspace" || m["ReadOnly"] == true {
 		return false
 	}
 	name, _ := m["Source"].(string)
-	v := a.w.anchor.volumes[name]
+	v := a.anchorVolumes()[name]
 	options := object(m["VolumeOptions"])
 	if v == nil || options["NoCopy"] != true || (options["Subpath"] != nil && options["Subpath"] != "") || !offlineEmpty(options["DriverConfig"]) {
 		return false
@@ -131,11 +140,8 @@ func (a *offlineAPI) anchorMount(m map[string]any) bool {
 // Called under the recorder lock, only after identity-checked worker cleanup.
 // These operations are harness cleanup and never added to product observations.
 func (a *offlineAPI) cleanupAnchorVolumes(ctx context.Context) error {
-	if a.w.anchor == nil {
-		return nil
-	}
 	var result error
-	for _, v := range a.w.anchor.volumes {
+	for _, v := range a.anchorVolumes() {
 		path := "/volumes/" + url.PathEscape(v.name)
 		if a.w.doctor.real.read(path, nil, 404) == nil {
 			continue
@@ -162,4 +168,14 @@ func (a *offlineAPI) cleanupAnchorVolumes(ctx context.Context) error {
 		result = errors.Join(result, a.w.doctor.real.read(path, nil, 404))
 	}
 	return result
+}
+
+func (a *offlineAPI) anchorVolumes() map[string]*anchorVolume {
+	if a.w.anchor != nil {
+		return a.w.anchor.volumes
+	}
+	if a.volumes == nil {
+		a.volumes = map[string]*anchorVolume{}
+	}
+	return a.volumes
 }

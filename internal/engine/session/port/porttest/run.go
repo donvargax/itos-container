@@ -11,6 +11,7 @@ import (
 
 // RunEngine is an in-memory lifecycle fake, including explicit boundary faults.
 type RunEngine struct {
+	Anchors map[string]port.AnchorObservation
 	eventMu sync.Mutex
 	*Engine
 	Boundary, AttachFailure, StartFailure, WaitFailure, DrainFailure port.Outcome
@@ -67,6 +68,7 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		c.engine.resourcesMu.Lock()
 		o := c.engine.Resources[id]
 		o.Mounts = true
+		o.AnchorName, o.AnchorExact = r.Anchor.Name, r.Schema == 2
 		c.engine.Resources[id] = o
 		c.engine.resourcesMu.Unlock()
 	}
@@ -211,12 +213,19 @@ func (a runAttachment) Failures() <-chan port.Outcome {
 }
 
 type Workspace struct {
-	Failure port.Outcome
-	Changed bool
-	Closed  bool
+	Descriptor string
+	Mounts     map[int]port.MountSource
+	binding    port.Binding
+	Failure    port.Outcome
+	Changed    bool
+	Closed     bool
 }
 
-func (w *Workspace) Pin(port.Binding) port.Outcome { w.Closed = false; return w.Failure }
+func (w *Workspace) Pin(b port.Binding) port.Outcome {
+	w.Closed = false
+	w.binding = b
+	return w.Failure
+}
 func (w *Workspace) Validate() port.Outcome {
 	if w.Changed || w.Closed {
 		return port.Refused
@@ -238,7 +247,7 @@ func RunEngineContract(t Reporter, open func() (port.RunEngine, port.Binding)) {
 	}
 	defer c.Close()
 	argv := []string{"probe", "", "two words", "$HOME;*", "--", "--json"}
-	id, f := c.CreateRun(ctx, b.Intent("1111111111111111111111111111111111111111111111111111111111111111"), argv)
+	id, f := c.CreateRun(ctx, RunIntent(b), argv)
 	if f != "" {
 		t.Errorf("create: %s", f)
 		return

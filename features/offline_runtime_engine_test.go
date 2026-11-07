@@ -42,6 +42,7 @@ type offlineAPI struct {
 	problem     error
 	connections map[net.Conn]bool
 	identities  map[string]map[string]any
+	volumes     map[string]*anchorVolume
 	// Recovery faults and signal capabilities belong only to the slice-11
 	// fixture. They do not broaden the existing offline runtime scenarios.
 	recovery    bool
@@ -64,7 +65,9 @@ func (w *world) startOfflineAPI() error {
 		return err
 	}
 	a := &offlineAPI{w: w, absent: map[string]bool{}, connections: map[net.Conn]bool{}, identities: map[string]map[string]any{}}
-	a.server = &http.Server{Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second, ConnState: func(c net.Conn, state http.ConnState) {
+	a.server = &http.Server{ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+		return context.WithValue(ctx, runPeerKey{}, runPeerPID(c))
+	}, Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second, ConnState: func(c net.Conn, state http.ConnState) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		switch state {
@@ -208,9 +211,9 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			if observed != nil {
 				a.requests[index].Observation = observed
 			}
-			if entry.Method == "POST" && entry.Path == "/volumes/create" && response.StatusCode == http.StatusCreated && a.w.anchor != nil {
+			if entry.Method == "POST" && entry.Path == "/volumes/create" && response.StatusCode == http.StatusCreated {
 				name, _ := entry.Body["Name"].(string)
-				v := a.w.anchor.volumes[name]
+				v := a.anchorVolumes()[name]
 				if v == nil || !anchorVolumeMatches(v, observed) {
 					a.problem = errors.New("native anchor create reply differs from requested identity")
 				} else {
@@ -253,7 +256,7 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 // mistaken for product-enforced isolation. Only owned IDs may be mutated.
 func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	w := a.w
-	if strings.HasPrefix(entry.Path, "/volumes/") && w.anchor != nil {
+	if strings.HasPrefix(entry.Path, "/volumes/") {
 		return a.anchorVolumeAllowed(r, entry)
 	}
 	if doctorAllowedRequest(doctorRequest{Method: r.Method, Path: r.URL.Path, Query: r.URL.RawQuery}, w.doctor.image, true) ||

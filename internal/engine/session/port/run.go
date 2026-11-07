@@ -57,6 +57,7 @@ type RunEngine interface {
 }
 type RunConnection interface {
 	Connection
+	AnchorConnection
 	CreateRun(context.Context, Record, []string) (string, Outcome)
 	VerifyRun(context.Context, string, []string) Outcome
 	Attach(context.Context, string, Streams) (Attachment, Outcome)

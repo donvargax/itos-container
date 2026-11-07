@@ -75,6 +75,9 @@ func (o *offlineObserver) anchorPublication(r sp.Record) {
 		fault = stage + " " + operation
 	}
 	o.ops.fault = fault
+	if r.Stage == "reserved" {
+		o.ops.fault = strings.Replace(fault, "reserved-record ", "reserved ", 1)
+	}
 	if o.memory != nil {
 		o.memory.Store.Fault = fault
 	}

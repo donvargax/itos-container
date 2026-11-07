@@ -19,7 +19,9 @@ type anchorRecoveryLocal struct {
 	ready, release                          chan struct{}
 	held                                    bool
 	priorDelay                              bool
+	watchStarted                            bool
 	control                                 *world
+	controlStatus                           doctorResult
 	savedWorker                             map[string]any
 	firstVolume                             string
 	reached                                 bool
@@ -44,13 +46,16 @@ func (w *world) anchorRecoveryLocalSteps(sc *godog.ScenarioContext) {
 	w.anchorRecoveryRaceSteps(sc)
 	sc.Step(`^an anchor recovery fixture with phase "([^"]*)" worker "([^"]*)" volume "([^"]*)" completion "([^"]*)" and observed exit "([^"]*)"$`, w.anchorRecoverySeed)
 	sc.Step(`^fresh anchor status processes inspect each local backend in plain and JSON modes$`, func() error {
+		if err := w.anchorRecoveryBeginWatch(); err != nil {
+			return err
+		}
 		w.anchorLocalRecovery.problem = errors.Join(w.recoveryInvocation("status", "--json"), w.recoveryInvocation("status", "--no-json"))
 		return w.anchorRecoveryMemory()
 	})
 	sc.Step(`^each status reports state "([^"]*)" worker "([^"]*)" anchor "([^"]*)" cleanup "([^"]*)" and observed exit "([^"]*)" for the original session$`, w.anchorRecoveryStatus)
 	sc.Step(`^each status retains the original fingerprint and the specified controller candidate and exact retry facts$`, w.anchorRecoveryStatusIdentity)
 	sc.Step(`^anchor status leaves records locks resources and outside sentinels unchanged without opening checkout or descriptor paths$`, func() error {
-		return errors.Join(w.recoveryUnchanged(), w.anchorRecoveryNoReads(), w.anchorRecoveryVolumesUnchanged())
+		return errors.Join(w.anchorRecoveryNoReads(), w.recoveryUnchanged(), w.anchorRecoveryVolumesUnchanged())
 	})
 	sc.Step(`^the legacy session keeps its original result without adopting or inspecting the unrelated volume$`, w.anchorRecoveryLegacy)
 }
@@ -272,4 +277,17 @@ func (w *world) anchorRecoveryLegacy() error {
 		}
 	}
 	return nil
+}
+
+func (w *world) anchorRecoveryBeginWatch() error {
+	if w.anchorLocalRecovery.watchStarted {
+		return nil
+	}
+	w.anchorLocalRecovery.watchStarted = true
+	if w.recoveryLocal.watch != nil {
+		if _, err := w.recoveryLocal.watch.finish(); err != nil {
+			return err
+		}
+	}
+	return w.anchorRecoveryWatch()
 }

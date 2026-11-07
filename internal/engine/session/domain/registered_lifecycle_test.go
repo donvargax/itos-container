@@ -18,7 +18,7 @@ func registeredLifecycleFixture() (Runner, approval.Durable, *f.Registry, *f.Run
 	id, token := strings.Repeat("1", 64), strings.Repeat("2", 64)
 	registry := &f.Registry{Store: store, Project: b.Frozen.Project}
 	run := &f.RunEngine{Engine: engine, Exit: 17}
-	runner := Runner{Store: store, Registry: registry, Engine: run, Workspace: &f.Workspace{},
+	runner := Runner{Store: store, Registry: registry, Engine: run, Workspace: f.MountWorkspace(b),
 		Entropy: &f.EntropySequence{Values: []f.Entropy{{Value: id}, {Value: token}}}}
 	return runner, approval.Durable{Frozen: b.Frozen}, registry, run, id
 }

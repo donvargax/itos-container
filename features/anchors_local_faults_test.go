@@ -113,6 +113,9 @@ func (w *world) anchorRecoveryControlSeed() error {
 }
 
 func (w *world) anchorRecoveryFaultAction() error {
+	if err := w.anchorRecoveryBeginWatch(); err != nil {
+		return err
+	}
 	a := w.anchorLocalRecovery
 	a.problem = errors.Join(a.problem, w.recoveryInvocation("status", "--json"))
 	invoke := func() error {

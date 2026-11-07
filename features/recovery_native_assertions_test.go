@@ -23,10 +23,10 @@ type recoveryProblem struct {
 	Exit                        int
 }
 type recoveryEntry struct {
-	ID, Project, Fingerprint, State, Resource, Controller, Cleanup string
-	WorkloadExit                                                   *int     `json:"workload_exit"`
-	StopCandidate                                                  bool     `json:"stop_candidate"`
-	Retry                                                          []string `json:"retry"`
+	ID, Project, Fingerprint, State, Resource, Controller, Cleanup, Anchor string
+	WorkloadExit                                                           *int     `json:"workload_exit"`
+	StopCandidate                                                          bool     `json:"stop_candidate"`
+	Retry                                                                  []string `json:"retry"`
 }
 
 func recoveryReadReport(p *recoveryProcess) (recoveryReport, error) {
@@ -59,7 +59,15 @@ func recoveryReadReport(p *recoveryProcess) (recoveryReport, error) {
 		return report, errors.New("recovery sessions are not objects")
 	}
 	for _, entry := range entries {
-		if !recoveryExactFields(entry, "id", "project", "fingerprint", "state", "resource", "controller", "cleanup", "workload_exit", "stop_candidate", "retry") {
+		fields := []string{"id", "project", "fingerprint", "state", "resource", "controller", "cleanup", "workload_exit", "stop_candidate", "retry"}
+		if value, exists := entry["anchor"]; exists {
+			var anchor string
+			if json.Unmarshal(value, &anchor) != nil || (anchor != "present" && anchor != "absent" && anchor != "unknown") {
+				return report, errors.New("invalid anchor fact")
+			}
+			fields = append(fields, "anchor")
+		}
+		if !recoveryExactFields(entry, fields...) {
 			return report, errors.New("recovery session has missing or incorrectly named fields")
 		}
 	}

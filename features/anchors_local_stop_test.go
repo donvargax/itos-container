@@ -83,6 +83,7 @@ func (w *world) anchorRecoveryStopSeed(worker, volume, exit, input string) error
 	if err := w.anchorRecoveryWatch(); err != nil {
 		return err
 	}
+	w.anchorLocalRecovery.watchStarted = true
 	if input == "checkout inaccessible" {
 		if err := os.Chmod(root, 0); err != nil {
 			return err
@@ -119,13 +120,16 @@ func (w *world) anchorRecoveryWatch() error {
 }
 
 func (w *world) anchorRecoveryStops() error {
+	if err := w.anchorRecoveryBeginWatch(); err != nil {
+		return err
+	}
 	a := w.anchorLocalRecovery
 	for i := 0; i < 2; i++ {
 		err := w.recoveryTracedInvocation("stop", "--json", w.recoveryLocal.id)
 		a.problem = errors.Join(a.problem, err)
 		if i == 0 {
 			a.firstRequests = len(w.sessionRequests())
-			a.firstRecords, err = doctorTree(filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container"))
+			a.firstRecords, err = doctorTree(filepath.Dir(w.recoveryRecordPath()))
 			a.problem = errors.Join(a.problem, err)
 		}
 	}
@@ -219,7 +223,7 @@ func (w *world) anchorRecoveryReleaseOrder() error {
 }
 func (w *world) anchorRecoveryDurable() error {
 	r := approvalClone(w.anchorLocalRecovery.intent)
-	r["stage"] = "absent"
+	r["stage"], r["container_id"] = "absent", w.session.seedID
 	object(r["anchor"])["stage"] = "absent"
 	if err := recoveryDurableFile(w.sessionRecordPath(), r, w.recoveryLocal.processes); err != nil {
 		return err
@@ -261,7 +265,7 @@ func (w *world) anchorRecoveryRepeated() error {
 			return fmt.Errorf("repeat mutated resources: %s %s", q.Method, q.Path)
 		}
 	}
-	after, err := doctorTree(filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container"))
+	after, err := doctorTree(filepath.Dir(w.recoveryRecordPath()))
 	if err != nil {
 		return err
 	}

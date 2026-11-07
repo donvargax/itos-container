@@ -195,7 +195,7 @@ Feature: Recover owned checkout mount anchors
   # All controller leases are absent: pending rows are stop candidates with the
   # exact retry, and the complete row is not a candidate and has retry null.
   # Today the first Then fails: no anchor observation exists in the public result.
-  @wip @slice-18 @ID-ANCHORS-01 @linux
+  @slice-18 @ID-ANCHORS-01 @linux
   Scenario Outline: Status distinguishes retained anchors from completed cleanup
     Given an anchor recovery fixture with phase "<phase>" worker "<worker>" volume "<volume>" completion "<completion>" and observed exit "<exit>"
     When fresh anchor status processes inspect each local backend in plain and JSON modes
@@ -218,7 +218,7 @@ Feature: Recover owned checkout mount anchors
   # Current input changes happen before checkpointing; the original effective
   # root remains the lookup key. The first Then fails today at anchor release or
   # acceptance of the supported mount-bearing ownership, not an undefined step.
-  @wip @slice-18 @ID-ANCHORS-02 @linux
+  @slice-18 @ID-ANCHORS-02 @linux
   Scenario Outline: Stop releases an owned anchor last and is safe to repeat
     Given an anchor recovery fixture with an owned "<worker>" worker volume "<volume>" observed exit "<exit>" and changed current "<input>"
     When fresh anchor stop processes run twice and status follows through both local backends
@@ -244,7 +244,7 @@ Feature: Recover owned checkout mount anchors
   # or lose removal/absence observations. Clear only the named fault for retry.
   # Today the first Then cannot describe and retain this owned anchor; a generic
   # invalid-state refusal for unsupported records is not the expected temporary.
-  @wip @slice-18 @ID-ANCHORS-03 @linux
+  @slice-18 @ID-ANCHORS-03 @linux
   Scenario Outline: Uncertain worker cleanup retains the source until a fresh retry proves absence
     Given an anchor recovery fixture with worker uncertainty "<fault>" and a retained original owned volume
     When status and stop inspect the uncertainty and a fresh stop retries after the fixture resolves it through both local backends
@@ -265,7 +265,7 @@ Feature: Recover owned checkout mount anchors
   # and do not report that it is still present. Clear the fault and retry from a
   # new process. Every row also runs a fault-free control with the same adapters.
   # The first Then fails today because stop never attempts an owned volume release.
-  @wip @slice-18 @ID-ANCHORS-04 @linux
+  @slice-18 @ID-ANCHORS-04 @linux
   Scenario Outline: Anchor release and completion failures remain recoverable after worker removal
     Given an anchor recovery fixture with a recorded exit of 7 and persistent cleanup fault "<fault>"
     When stop is attempted and a fresh stop retries after clearing the fault through both anchor backends
@@ -301,7 +301,7 @@ Feature: Recover owned checkout mount anchors
   # Same-name replacement changes its concrete tuple, never asks the product to
   # infer identity from identical text. A /proc path may point at an unrelated
   # fixture descriptor; ownership comparison must not dereference it.
-  @wip @slice-18 @ID-ANCHORS-05 @linux
+  @slice-18 @ID-ANCHORS-05 @linux
   Scenario Outline: Foreign unsafe or unsupported anchor evidence grants no cleanup authority
     Given an anchor recovery fixture with defect "<defect>" a safe independent entry and a fault-free anchor control
     When fresh status and stop inspect the defective session and the anchor control runs through both local backends
@@ -335,7 +335,7 @@ Feature: Recover owned checkout mount anchors
   # performs the substitution, checkpoints it, then releases the barrier. A
   # decoder rejecting all new records cannot satisfy reaching this boundary.
   # Today the first Then fails because no anchor release boundary is reached.
-  @wip @slice-18 @ID-ANCHORS-06 @linux
+  @slice-18 @ID-ANCHORS-06 @linux
   Scenario Outline: Stop revalidates anchor authority immediately before release
     Given an anchor recovery fixture with a final-release barrier and substitution "<change>"
     When stop reaches the anchor release barrier and the fixture substitutes authority before releasing it through both local backends
@@ -356,7 +356,7 @@ Feature: Recover owned checkout mount anchors
   # deterministic fake scheduling exercises the same contract. No project lock
   # may prevent B from completing while A remains parked.
   # Today the first Then lacks the serialized anchor release/completion sequence.
-  @wip @slice-18 @ID-ANCHORS-07 @linux
+  @slice-18 @ID-ANCHORS-07 @linux
   Scenario: Concurrent anchor recovery serializes one session without blocking another
     Given disjoint equal-basename anchor recovery fixtures A and B with an A volume-release barrier
     When two fresh A stops overlap at that barrier while B is inspected and stopped before A is released through both local backends
@@ -371,7 +371,7 @@ Feature: Recover owned checkout mount anchors
   # allow the existing fixed 2 s scheduling tolerance, not extra product budget.
   # With no new operation today, the first Then returns early without its fault
   # being exercised or lacks the required temporary anchor result.
-  @wip @slice-18 @ID-ANCHORS-08 @linux
+  @slice-18 @ID-ANCHORS-08 @linux
   Scenario Outline: Anchor operations share recovery's original total budget
     Given an anchor recovery fixture configured to stall "<operation>" after prior delays consume most of the invocation budget
     When the anchor recovery command runs and a fresh stop retries after the stall is cleared through both local backends
@@ -398,7 +398,7 @@ Feature: Recover owned checkout mount anchors
   # This proves mount continuity after loss, not slice-15's network probe matrix.
   # Today the first Then lacks the anchor-aware discovery even if worker discovery
   # already works. After slice-17 it must still fail specifically in recovery.
-  @wip @slice-18 @ID-ANCHORS-09 @engine
+  @slice-18 @ID-ANCHORS-09 @engine
   Scenario: Fresh recovery preserves the anchored checkout after controller loss and path replacement
     Given a CI anchor recovery checkout with the cached image original and replacement nonce trees and a live identity probe
     When run reaches the live probe barrier the fixture replaces the checkout path kills its controller and fresh status and stop processes run
@@ -415,7 +415,7 @@ Feature: Recover owned checkout mount anchors
   # never a shell. Observe both resource absences before harness cleanup.
   # The first Then fails today at recovery of a retained original anchor; no
   # anchor record is not an acceptable substitute for successful anchor cleanup.
-  @wip @slice-18 @ID-ANCHORS-10 @engine
+  @slice-18 @ID-ANCHORS-10 @engine
   Scenario Outline: Run's retry releases its retained native anchor after foreground cleanup fails
     Given a CI anchor recovery checkout with the cached image a marker workload and a worker-removal-only transient fault
     When the anchored workload exits <child> and run returns then fresh processes execute its exact stop retry twice after the fault is cleared
@@ -439,7 +439,7 @@ Feature: Recover owned checkout mount anchors
   # process. Both barriers race process exit/deadline into the Then observations.
   # Today worker-only reconciliation cannot satisfy the first Then's original
   # anchor relationship and last-release observation.
-  @wip @slice-18 @ID-ANCHORS-11 @engine
+  @slice-18 @ID-ANCHORS-11 @engine
   Scenario Outline: Native recovery reconciles uncertain startup without recreating the anchor
     Given a CI anchor recovery checkout with the cached image and a recorder holding the successful "<operation>" response
     When run submits that operation the fixture kills only its controller and fresh status and stop processes recover the session
@@ -460,7 +460,7 @@ Feature: Recover owned checkout mount anchors
   # Fresh recovery must refuse even though the name matches, while a separate
   # valid control still releases its own anchor. The first Then demands that
   # product anchor-release boundary; missing launch is never a passing refusal.
-  @wip @slice-18 @ID-ANCHORS-12 @engine
+  @slice-18 @ID-ANCHORS-12 @engine
   Scenario: A foreign native volume at the recorded anchor name is never removed
     Given a CI anchor recovery checkout with the cached image and a volume-delete-only fault plus an independent valid control
     When run reaches its live barrier stop removes the worker and the fixture substitutes a foreign volume before fresh status and stop inspect it
@@ -474,7 +474,7 @@ Feature: Recover owned checkout mount anchors
   # increasing heartbeat/unchanged volume before releasing A. Product status
   # cannot inspect B's resources through A. Harness removes B only afterward.
   # Today the first Then cannot observe A's serialized last-anchor release.
-  @wip @slice-18 @ID-ANCHORS-13 @engine
+  @slice-18 @ID-ANCHORS-13 @engine
   Scenario: Recovering one native anchor leaves an independent anchored session live
     Given two disjoint equal-basename CI anchor checkouts with the cached image independent inode probes and an A anchor-release barrier
     When both workloads reach their barriers A loses its controller and two fresh A stops overlap while B continues running

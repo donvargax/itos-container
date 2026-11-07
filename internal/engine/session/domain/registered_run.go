@@ -150,11 +150,11 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		}
 		return result
 	}
-	recovery := Recovery{Registry: s.Registry, Engine: s.Engine}
+	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, immediate: result.Outcome == port.MountRefused && result.Started}
 	// The output subscription is independent of termination and removal. A blocked
 	// consumer must never hold the operation lock or prevent owned cleanup.
 	drain := startDrain(teardown, attachment)
-	if !result.Exited && attachment != nil {
+	if !result.Exited && attachment != nil && !recovery.immediate {
 		prepared := recovery.stop(teardown, id, signal, nil, false)
 		if len(prepared.Entries) == 1 && prepared.Entries[0].WorkloadExit != nil {
 			result.Exit, result.Exited = *prepared.Entries[0].WorkloadExit, true
@@ -219,12 +219,13 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 		entry.Close()
 		return nil, nil, "", failure
 	}
-	defer s.Workspace.Close()
 	c, failure := s.Engine.OpenRun(ctx, intent.Binding())
 	if failure != "" {
+		s.Workspace.Close()
 		entry.Close()
 		return nil, nil, "", failure
 	}
+	defer closeAnchorWorkspace(c, s.Workspace)
 	if ctx.Err() != nil {
 		entry.Close()
 		return c, nil, "", startupFailure(ctx)
@@ -275,6 +276,9 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if failure = startupOperation(ctx, "boundary inspection", func(call context.Context) port.Outcome { return c.VerifyRun(call, resource, argv) }); failure != "" {
 		return c, a, "", failure
 	}
+	if failure = verifyAnchor(ctx, intent.Record(), c); failure != "" {
+		return c, a, "", failure
+	}
 	if failure = startupOperation(ctx, "start acknowledgement", func(call context.Context) port.Outcome {
 		if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
 			state.started = true
@@ -288,6 +292,9 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	}
 	if ctx.Err() != nil {
 		return c, a, resource, port.ExecutionFailed
+	}
+	if failure = detectAnchor(ctx, intent, c, s.Workspace); failure != "" {
+		return c, a, resource, failure
 	}
 	r := entry.Record()
 	r.State = "running"
@@ -309,6 +316,10 @@ func createRegistered(ctx context.Context, entry port.Session, c port.RunConnect
 	}
 	r := i.Record()
 	if r.Stage == "reserved" && r.ContainerID == "" {
+		if failure := prepareAnchor(ctx, i, c, workspace, entry.Record().ID); failure != "" {
+			return "", failure
+		}
+		r = i.Record()
 		// Once this durable write succeeds a lost create reply is uncertain.
 		// Stop holds the same operation lock and cannot cancel across this edge.
 		r.Stage = "intent"

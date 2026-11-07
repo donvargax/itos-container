@@ -32,6 +32,9 @@ func (a *sessionAPI) serveOffline(out http.ResponseWriter, request *http.Request
 			"State":           map[string]any{"Status": "created", "Running": false, "Pid": 0, "StartedAt": "0001-01-01T00:00:00Z"},
 			"NetworkSettings": map[string]any{"Networks": map[string]any{"none": map[string]any{}}},
 			"Mounts":          []any{map[string]any{"Type": "bind", "Source": root, "Destination": "/workspace", "RW": true, "Propagation": "rprivate"}}}
+		if mounts, ok := object(host)["Mounts"].([]any); ok && len(mounts) == 1 && object(mounts[0])["Type"] == "volume" {
+			c["Mounts"] = []any{map[string]any{"Type": "volume", "Name": object(mounts[0])["Source"], "Driver": "local", "Source": "/fixture/volume/_data", "Destination": "/workspace", "RW": true, "Propagation": ""}}
+		}
 		a.local[id], a.observed[id] = c, approvalClone(c)
 		a.created = append(a.created, id)
 		if s.anchorFault == "worker create reply lost and name lookup absent" {
@@ -100,7 +103,7 @@ func (a *sessionAPI) serveOffline(out http.ResponseWriter, request *http.Request
 			reply(400, nil)
 			return
 		}
-		c["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
+		c["State"] = map[string]any{"Status": "running", "Running": true, "Pid": 123, "StartedAt": "2026-01-01T00:00:00Z"}
 		_ = a.attached.SetWriteDeadline(time.Now().Add(2 * time.Second))
 		for i, text := range []string{"slice-13-workload-out\n", "slice-13-workload-err\n"} {
 			frame := []byte{byte(i + 1), 0, 0, 0, 0, 0, 0, byte(len(text))}
@@ -109,11 +112,15 @@ func (a *sessionAPI) serveOffline(out http.ResponseWriter, request *http.Request
 		_ = a.attached.Close()
 		reply(204, nil)
 	case entry.Method == "POST" && operation == "wait":
+		c["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
 		exit := 0
 		if s.launch != nil {
 			exit = s.launch.child
 		}
 		reply(200, map[string]any{"StatusCode": exit})
+	case entry.Method == "POST" && operation == "kill":
+		c["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
+		reply(204, nil)
 	case entry.Method == "DELETE" && operation == "":
 		if s.anchorFault == "worker removal fails and full ID remains" || s.anchorFault == "worker removal and absence remain unknown" {
 			reply(503, map[string]any{"message": "slice-17-private-response"})
@@ -154,7 +161,7 @@ func offlineInspectionDefect(c map[string]any, defect string) error {
 	case "different checkout bind source":
 		object(mounts[0])["Source"] = "/other"
 	case "shared bind propagation":
-		object(object(mounts[0])["BindOptions"])["Propagation"] = "shared"
+		object(mounts[0])["BindOptions"] = map[string]any{"Propagation": "shared"}
 	case "missing tmpfs":
 		delete(host, "Tmpfs")
 	case "named volume", "anonymous volume":

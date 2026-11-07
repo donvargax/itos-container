@@ -31,6 +31,7 @@ import (
 // adapter boundaries, never command results, ownership decisions or engine data.
 type publicProbeRequest struct {
 	Args                                                        []string
+	LocalMount                                                  string
 	Fault, Boundary, ID, Ready, Release, Output, Stdout, Stderr string
 }
 
@@ -58,6 +59,9 @@ func TestPublicRecoveryCommand(t *testing.T) {
 	out, errout := open(request.Stdout), open(request.Stderr)
 	service, _ := approvalServices(nil, out, errout)
 	runner, recovery := sessionServices(service)
+	if request.LocalMount != "" {
+		runner.Workspace = &sessiondisk.Workspace{MountStat: localMountStat(request.LocalMount)}
+	}
 	registry := runner.Registry.(sessiondisk.Registry)
 	publicStorage := registry.Storage.(approvaldisk.Registry)
 	store := runner.Store.(sessiondisk.Store)

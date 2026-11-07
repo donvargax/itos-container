@@ -101,7 +101,7 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 		}
 		a.mu.Lock()
 	}
-	if (a.w.session.offline || a.w.anchorLocalRecovery != nil) && strings.HasPrefix(entry.Path, "/volumes") {
+	if (a.w.session.offline || a.w.anchorLocalRecovery != nil || a.w.recoveryLocal != nil && a.w.recoveryLocal.runFixture) && strings.HasPrefix(entry.Path, "/volumes") {
 		a.serveAnchorVolume(out, request, entry, index)
 		return
 	}

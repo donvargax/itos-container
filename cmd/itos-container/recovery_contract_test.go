@@ -28,8 +28,9 @@ import (
 )
 
 // This assembly keeps real preflight, durable storage, signal handling and SDK
-// I/O. Its port decorator shortens only fixture deadlines and observes drain;
-// it never supplies an engine response, worker exit or controller outcome.
+// I/O. Its port decorator shortens fixture deadlines and observes drain. The
+// syscall seam supplies the simulated mount, never an engine response, worker
+// exit or controller outcome.
 func TestForegroundRecoveryCommand(t *testing.T) {
 	output := os.Getenv("SLICE_10_RECOVERY_RESULT")
 	if output == "" {
@@ -53,7 +54,7 @@ func TestForegroundRecoveryCommand(t *testing.T) {
 	runner := session.Runner{
 		Store: sessiondisk.Store{Storage: disk.Storage{Store: service.Store.(disk.Store)}, Codec: codec.JSON{Approval: canonical.JSON{}, Parser: jsonc.Parser{}},
 			Host: host.Process{}, Checkout: &readinessdisk.Checkout{}, Input: source.Input},
-		Engine: engine, Entropy: entropy.Random{}, Workspace: &sessiondisk.Workspace{},
+		Engine: engine, Entropy: entropy.Random{}, Workspace: &sessiondisk.Workspace{MountStat: localMountStat(os.Getenv("SLICE_17_LOCAL_MOUNT_ROOT"))},
 	}
 	command := runcommand.CLI{
 		Approval:  approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}},

@@ -21,6 +21,9 @@ func (w *world) recoveryProbeStart(args ...string) (*recoveryProbe, error) {
 	prefix := filepath.Join(w.dir, "slice-11-probe-"+strconv.Itoa(len(w.recovery.processes)))
 	p := &recoveryProbe{output: prefix + "-code", stdout: prefix + "-stdout", stderr: prefix + "-stderr", ready: prefix + "-ready", release: prefix + "-release"}
 	request := map[string]any{"Args": args, "Fault": w.recoveryLocal.fault, "Boundary": w.recoveryLocal.boundary, "ID": w.recoveryLocal.id, "Ready": p.ready, "Release": p.release, "Output": p.output, "Stdout": p.stdout, "Stderr": p.stderr}
+	if w.doctor.real == nil {
+		request["LocalMount"] = w.doctor.checkout
+	}
 	input := prefix + "-input.json"
 	if err = os.WriteFile(input, approvalJSON(request), 0600); err != nil {
 		return nil, err

@@ -691,7 +691,7 @@ Feature: Hardened offline foreground run
 
   # Current launch has no anchor intent/resource or bound source, so the first
   # Then fails even though its existing worker can run and clean successfully.
-  @wip @slice-17 @ID-OFFLINE-25 @linux
+  @slice-17 @ID-OFFLINE-25 @linux
   Scenario: Run durably owns an inode-bound source before using it and releases it last
     Given a mount-anchor contract fixture with approved settings and a writable checkout
     When the registered run completes through both fake and disk SDK mount-anchor adapters
@@ -712,7 +712,7 @@ Feature: Hardened offline foreground run
   # explicit incomplete-cleanup result; never forgotten or consumed by a worker.
   # Today these publications do not occur and run reaches worker create instead
   # of the first Then's mount-write refusal. Include a separate healthy control.
-  @wip @slice-17 @ID-OFFLINE-26 @linux
+  @slice-17 @ID-OFFLINE-26 @linux
   Scenario Outline: Anchor publication failure prevents worker creation
     Given a mount-anchor contract fixture with persistent publication fault "<fault>"
     When the registered run and its fault-free control execute through both mount-anchor backends
@@ -742,7 +742,7 @@ Feature: Hardened offline foreground run
   # retain intent, not retry allocation or infer absence.
   # Same-name foreign resources are fixture-owned and must remain untouched.
   # Today no source capability is requested/verified, so the first Then fails.
-  @wip @slice-17 @ID-OFFLINE-27 @linux
+  @slice-17 @ID-OFFLINE-27 @linux
   Scenario Outline: Run refuses an unavailable or unverified inode-bound source without fallback
     Given a mount-anchor contract fixture with source fault "<fault>"
     When the registered run and its fault-free control execute through both mount-anchor backends
@@ -782,7 +782,7 @@ Feature: Hardened offline foreground run
   # Current Start only calls ContainerStart and returns; the first Then fails
   # because there is no mounted-identity detector or teardown on its failure.
   # All five detector rows have the committed local red checkpoint above.
-  @wip @slice-17 @ID-OFFLINE-32 @linux
+  @slice-17 @ID-OFFLINE-32 @linux
   Scenario Outline: A post-start anchor detector failure immediately tears down the owned worker
     Given a mount-anchor contract fixture with post-start detector fault "<fault>"
     When the registered run and its fault-free control execute through both mount-anchor backends
@@ -809,7 +809,7 @@ Feature: Hardened offline foreground run
   # original intent even when no worker ID can yet be observed. No second create.
   # Neither row runs a workload or invents its exit. Today no owned anchor can
   # satisfy the first Then, regardless of the existing worker failure handling.
-  @wip @slice-17 @ID-OFFLINE-31 @linux
+  @slice-17 @ID-OFFLINE-31 @linux
   Scenario Outline: Failed startup releases a source only when no worker can still use it
     Given a mount-anchor contract fixture with worker startup fault "<fault>"
     When the registered run and its fault-free control execute through both mount-anchor backends
@@ -832,7 +832,7 @@ Feature: Hardened offline foreground run
   # without durable completion; do not falsely assert the anchor still exists.
   # The first Then fails today: there is no retained mount ownership. Later
   # result assertions also expose ignored anchor-release/publication failures.
-  @wip @slice-17 @ID-OFFLINE-28 @linux
+  @slice-17 @ID-OFFLINE-28 @linux
   Scenario Outline: Incomplete foreground cleanup retains anchor evidence and never claims completion
     Given a mount-anchor contract fixture with a zero-exit workload and cleanup fault "<fault>"
     When the registered run and its fault-free control execute through both mount-anchor backends
@@ -904,7 +904,7 @@ Feature: Hardened offline foreground run
   # validated 2049:7602190. Q-27 keeps the independent probe as anchor proof:
   # a detector refusal after successful start cannot pass, even if teardown
   # beats probe output. Native green for the selected anchor remains pending.
-  @wip @slice-17 @ID-OFFLINE-29 @engine
+  @slice-17 @ID-OFFLINE-29 @engine
   Scenario Outline: Substitution after the final identity check cannot redirect a submitted start
     Given a CI mount-anchor checkout with the cached image original and replacement nonce trees and a reporting probe
     And the native recorder is armed to pause the submitted worker start before daemon source resolution
@@ -944,7 +944,7 @@ Feature: Hardened offline foreground run
   # 3aae532 failed this first Then in both child/result rows with "missing
   # original owned volume and protected recovery evidence after controller
   # exit". Implementation is authorized; native green remains required.
-  @wip @slice-17 @ID-OFFLINE-30 @engine
+  @slice-17 @ID-OFFLINE-30 @engine
   Scenario Outline: Failed worker removal retains the owned volume after run exits
     Given a CI mount-anchor checkout with the cached image and a removal-only transient Engine API fault
     When the anchored workload is released after checkout replacement and exits <child> and the controller returns

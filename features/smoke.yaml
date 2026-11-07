@@ -88,3 +88,7 @@
   scenarios:
     - id: "@ID-RUNEXIT-02"
       why: unknown workload exit remains nonzero after concurrent stop exceeds the stdin probe, with preserved cleanup and drained output
+- file: anchors.feature
+  scenarios:
+    - id: "@ID-ANCHORS-01"
+      why: fresh read-only status accounts independently for worker and anchor cleanup while preserving legacy sessions through both local backends

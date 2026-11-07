@@ -60,12 +60,7 @@ func (w *world) offlineLaunchOrder() error {
 	}
 	id := s.api.created[0]
 	// Ordered real port observations join filesystem durability and SDK calls.
-	sequence := []string{"intent", "open", "validate", "check", "create", "inspect", "save", "verify", "attach", "validate", "check", "verify", "start", "wait"}
-	if s.launch.registered {
-		// Reservation proves no create was issued. The separate durable intent
-		// transition must follow launch validation and precede the create call.
-		sequence = []string{"reserved", "open", "validate", "check", "intent", "create", "inspect", "save", "verify", "attach", "validate", "check", "verify", "start", "wait"}
-	}
+	sequence := []string{"reserved", "open", "validate", "check", "intent", "create", "inspect", "save", "verify", "attach", "validate", "check", "verify", "start", "wait"}
 	next, starts := 0, 0
 	for _, event := range s.create.Trace {
 		if event.Operation == "start" {
@@ -179,7 +174,7 @@ func (w *world) offlineFrozenBoundary() error {
 				return fmt.Errorf("inspection: %w", err)
 			}
 			mounts := q.Response["Mounts"]
-			want := []any{map[string]any{"Type": "bind", "Source": d.checkout, "Destination": "/workspace", "RW": true, "Propagation": "rprivate"}}
+			want := []any{map[string]any{"Type": "volume", "Name": "itos-container-anchor-" + s.token, "Driver": "local", "Source": "/fixture/volume/_data", "Destination": "/workspace", "RW": true, "Propagation": ""}}
 			if !reflect.DeepEqual(mounts, want) || len(object(object(q.Response["NetworkSettings"])["Networks"])) != 1 || object(object(q.Response["NetworkSettings"])["Networks"])["none"] == nil {
 				return fmt.Errorf("inspection has extra mounts or networks")
 			}
@@ -257,9 +252,9 @@ func (w *world) offlineExactConfiguration(config, host map[string]any) error {
 		return fmt.Errorf("checkout is not the only host source")
 	}
 	m := object(mounts[0])
-	options := object(m["BindOptions"])
-	if m["Type"] != "bind" || m["Source"] != d.checkout || m["Target"] != "/workspace" || m["ReadOnly"] == true || options["Propagation"] != "rprivate" || options["NonRecursive"] != true || options["CreateMountpoint"] == true {
-		return fmt.Errorf("checkout bind differs from frozen nonrecursive private writable mount")
+	options := object(m["VolumeOptions"])
+	if m["Type"] != "volume" || m["Source"] != "itos-container-anchor-"+w.session.token || m["Target"] != "/workspace" || m["ReadOnly"] == true || options["NoCopy"] != true || m["BindOptions"] != nil {
+		return fmt.Errorf("checkout source differs from the owned no-copy volume")
 	}
 	return nil
 }
@@ -308,6 +303,13 @@ func (w *world) offlineEffects() error {
 		return fmt.Errorf("unrelated worker changed")
 	}
 	for _, q := range s.api.requests {
+		anchor := "itos-container-anchor-" + s.token
+		if q.Method == "POST" && q.Path == "/volumes/create" && q.Body["Name"] == anchor && q.Body["Driver"] == "local" && object(q.Body["DriverOpts"])["type"] == "none" && object(q.Body["DriverOpts"])["o"] == "bind" {
+			continue
+		}
+		if (q.Method == "GET" || q.Method == "DELETE") && q.Path == "/volumes/"+anchor {
+			continue
+		}
 		if q.Method == "GET" || q.Method == "HEAD" {
 			if doctorAllowedRequest(doctorRequest{Method: q.Method, Path: q.Path, Query: q.Query}, w.doctor.image, true) || q.Path == "/images/"+w.doctor.imageID+"/json" {
 				continue
@@ -324,7 +326,7 @@ func (w *world) offlineEffects() error {
 			if q.Method == "DELETE" && q.Path == "/containers/"+id {
 				allowed = true
 			}
-			for _, operation := range []string{"attach", "start", "wait"} {
+			for _, operation := range []string{"attach", "start", "wait", "kill"} {
 				if q.Method == "POST" && q.Path == "/containers/"+id+"/"+operation {
 					allowed = true
 				}

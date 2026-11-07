@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -41,7 +42,12 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 	observer := &offlineObserver{t: t, request: request, ops: ops}
 	assemble := func(frozen ap.Durable) session.Runner {
 		service := controllerFor()
-		runner := session.Runner{Store: service.Store, Entropy: service.Entropy, Workspace: &sessiondisk.Workspace{}}
+		runner := session.Runner{Store: service.Store, Entropy: service.Entropy, Workspace: &sessiondisk.Workspace{MountStat: func(path string) (fs.FileInfo, error) {
+			if path != "/proc/123/root/workspace" {
+				return nil, os.ErrNotExist
+			}
+			return os.Stat(os.Getenv("ITOS_ROOT"))
+		}}}
 		if request.Backend == "memory" {
 			memory = &fake.RunEngine{Engine: service.Engine.(*fake.Engine)}
 			memory.Exit, _ = strconv.Atoi(request.ChildExit)
@@ -53,7 +59,11 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 					memory.Boundary = sp.IsolationInspection
 				}
 			}
-			observer.memory, observer.space = memory, &fake.Workspace{}
+			binding, failure := memory.Store.Codec.Frozen(frozen.Frozen)
+			if failure != "" && request.Action != "run-cleanup" {
+				t.Fatal(failure)
+			}
+			observer.memory, observer.space = memory, fake.MountWorkspace(binding)
 			runner.Engine, runner.Workspace = memory, observer.space
 		} else {
 			runner.Engine = service.Engine.(sp.RunEngine)

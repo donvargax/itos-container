@@ -152,6 +152,9 @@ func (a *sessionAPI) anchorRecoveryBarrier(request *http.Request, q sessionReque
 }
 
 func (w *world) anchorRecoveryRace() error {
+	if err := w.anchorRecoveryBeginWatch(); err != nil {
+		return err
+	}
 	a := w.anchorLocalRecovery
 	p := w.recoveryStart("stop", "--json", w.recoveryLocal.id)
 	if recoveryBarrier(a.ready, p) {
@@ -191,6 +194,9 @@ func (w *world) anchorRecoveryRace() error {
 }
 
 func (w *world) anchorRecoveryConcurrent() error {
+	if err := w.anchorRecoveryBeginWatch(); err != nil {
+		return err
+	}
 	a := w.anchorLocalRecovery
 	first := w.recoveryStart("stop", "--json", w.recoveryLocal.id)
 	if !recoveryBarrier(a.ready, first) {
@@ -201,7 +207,19 @@ func (w *world) anchorRecoveryConcurrent() error {
 	second := w.recoveryStart("stop", "--json", w.recoveryLocal.id)
 	inspection := w.recoveryStart("status", "--json")
 	c := a.control
-	a.problem = c.recoveryTracedInvocation("stop", "--json", c.recoveryLocal.id)
+	if err := c.anchorRecoveryBeginWatch(); err != nil {
+		close(a.release)
+		return err
+	}
+	a.problem = c.recoveryInvocation("status", "--json")
+	if len(c.recoveryLocal.results) == 1 {
+		a.controlStatus = c.recoveryLocal.results[0]
+		c.recoveryLocal.results = nil
+	}
+	a.problem = errors.Join(a.problem, c.recoveryTracedInvocation("stop", "--json", c.recoveryLocal.id))
+	if a.controlStatus.exit != 0 || !strings.Contains(a.controlStatus.stdout, `"anchor":"present"`) {
+		a.problem = errors.Join(a.problem, fmt.Errorf("B status lost its retained anchor: %+v", a.controlStatus))
+	}
 	if c.session.api.local[c.session.seedID] != nil || c.session.api.volumes[c.anchorLocalRecovery.name] != nil {
 		a.problem = errors.Join(a.problem, fmt.Errorf("B did not complete while A paused"))
 	}
@@ -210,11 +228,18 @@ func (w *world) anchorRecoveryConcurrent() error {
 	// IDs are independently seeded for the two projects. A foreign exact ID
 	// must not acquire authority just because its basename matches.
 	foreign := c.recoveryLocal.id
+	beforeForeign := len(c.sessionRequests())
 	a.problem = errors.Join(a.problem, w.recoveryInvocation("stop", "--json", foreign))
+	if len(c.sessionRequests()) != beforeForeign {
+		a.problem = errors.Join(a.problem, fmt.Errorf("cross-project stop contacted B"))
+	}
 	return w.anchorRecoveryMemory()
 }
 
 func (w *world) anchorRecoveryBudget() error {
+	if err := w.anchorRecoveryBeginWatch(); err != nil {
+		return err
+	}
 	a := w.anchorLocalRecovery
 	command := "stop"
 	if a.fault == "status anchor inspect" {

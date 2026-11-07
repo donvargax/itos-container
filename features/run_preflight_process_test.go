@@ -242,6 +242,16 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 	originalArgs := append([]string{}, args...)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	bin := w.bin
+	if w.doctor.engine.offline != nil && len(args) > 0 && args[0] == "run" {
+		var err error
+		bin, err = w.sessionProbeBinary()
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		args = append([]string{"-test.run=^TestLocalRunCommand$", "-test.count=1", "--"}, args...)
+		env = append(env, "SLICE_17_LOCAL_RUN=1", "SLICE_17_LOCAL_MOUNT_ROOT="+w.doctor.checkout)
+	}
 	r := w.runFixture()
 	if r.mask != "" {
 		helper, err := os.Executable()

@@ -265,7 +265,7 @@ func observeRunExit(t *testing.T, schedule, name string) runExitObservation {
 		journal.add("run-wait-canceled")
 		return 0, sp.ExecutionFailed
 	}}
-	runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: engine, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
+	runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: engine, Workspace: sf.MountWorkspace(m.b), Entropy: &publicMemoryEntropy{}}
 	approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: m.c, Record: ap.Record{Candidate: m.c, Generation: "1"}, Status: "matching"}}
 	var out, errout bytes.Buffer
 	code := (runcommand.CLI{Approval: approval, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "probe"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})

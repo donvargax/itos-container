@@ -199,7 +199,7 @@ func (w *world) offlineNoLaunch() error {
 		}
 	}
 	for _, q := range s.api.requests {
-		if q.Method == "POST" && q.Path != "/containers/create" {
+		if q.Method == "POST" && q.Path != "/containers/create" && q.Path != "/volumes/create" {
 			return fmt.Errorf("refused worker attempted %s", q.Path)
 		}
 	}
@@ -226,6 +226,12 @@ func (w *world) offlineLocalCleanup() error {
 			if removed && q.Status == 404 {
 				absent = true
 			}
+		}
+		if q.Method == "DELETE" && strings.HasPrefix(q.Path, "/volumes/") {
+			if q.Path != "/volumes/itos-container-anchor-"+s.token || !absent || q.Status != 204 || (q.Query != "" && q.Query != "force=false") {
+				return fmt.Errorf("anchor removed without confirmed worker absence")
+			}
+			continue
 		}
 		if q.Method == "DELETE" {
 			if removed || !inspected || q.Path != "/containers/"+id {

@@ -99,7 +99,7 @@ func lifecycleWorkspaceDispatchCase(t *testing.T, signal, backend string) {
 		ctx := &lifecycleDispatchContext{Context: parent, cancel: cancel, signal: signal}
 		bp.Lifetime(ctx) // Capture the opaque lifetime key through its public API.
 		l.registry = lifecycleDispatchRegistry{l.registry, ctx}
-		w := &lifecycleDispatchWorkspace{}
+		w := &lifecycleDispatchWorkspace{Workspace: *sf.MountWorkspace(l.m.b)}
 		l.workspace = w
 		code, diagnostic, _ := l.invoke(ctx) // Also joins dispatched calls before assertions.
 		cancel(nil)
@@ -111,7 +111,7 @@ func lifecycleWorkspaceDispatchCase(t *testing.T, signal, backend string) {
 		}
 	}
 	control := lifecycleLocalFixture(t, backend)
-	w := &lifecycleDispatchWorkspace{}
+	w := &lifecycleDispatchWorkspace{Workspace: *sf.MountWorkspace(control.m.b)}
 	control.workspace = w
 	code, diagnostic, _ := control.invoke(context.Background())
 	if code != 0 || diagnostic != "" || w.pins != 1 || w.closes != 1 || !w.Closed || control.count("create") != 1 || control.count("start") != 1 || control.count("remove") != 1 || len(control.m.e.Resources) != 1 {

@@ -155,6 +155,12 @@ func (f *overlapFixture) complete(r *overlapRun) error {
 		return err
 	}
 	intent["stage"], intent["container_id"] = "absent", r.worker
+	if intent["schema"] == float64(2) {
+		object(intent["anchor"])["stage"] = "absent"
+		if e.Anchor != "absent" {
+			return errors.New("cleanup retained an anchor")
+		}
+	}
 	if err = recoveryDurableFile(r.intent, intent, []*recoveryProcess{r.stop}); err != nil {
 		return err
 	}

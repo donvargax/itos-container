@@ -6,7 +6,8 @@ The coordinator's q-19 and q-27 decisions of 2026-11-06, approximately
 22:55 and 23:50 UTC, select this mechanism and detector; the person reviews
 them later. They override earlier
 slice-17 requirements where they differ. This is an unproven Moby/kernel
-hypothesis, not an implemented capability or a host-support claim.
+hypothesis about native behavior. The combined implementation is described below;
+it is not a host-support claim.
 
 This decision updates arc42's **Building-block view**, **Foreground run and its
 failure paths**, **Recovery**, **Deployment view**, and ownership/evidence
@@ -49,7 +50,7 @@ Once started, the worker's mount retains the original inode for its lifetime.
 The descriptor need not outlive the controller. If worker removal fails, retain
 the original volume and protected ownership; do not require an expired `/proc`
 path or a stopped worker's mount to remain usable. Recovery must not recreate
-the volume from the current checkout pathname. Slice-18 adds recovery's release
+the volume from the current checkout pathname. Slice-18, integrated here under q-36, adds recovery's release
 of the retained volume. Existing recovery must refuse records it cannot account
 for rather than declare their cleanup complete.
 
@@ -118,10 +119,9 @@ red evidence for both OFFLINE-30 removal-retention rows. Each failed at its Then
 with "missing original owned volume and protected recovery evidence after
 controller exit". Implementation of that behavior is authorized. The local
 ownership/fault/detector cases 25–28/31/32 have the red checkpoint recorded below.
-Production implementation and native green remain pending; the current product
-still uses the unsafe pathname mount.
+That checkpoint authorized implementation; native green is still required.
 
-## Local checkpoint and recovery integration gap
+## Historical local checkpoint and recovery integration gap
 
 The local steps are committed in `bb19503`, with contextual preflight diagnostics
 and both-backend assertion reporting corrected in `4c57651`. With `@wip` removed
@@ -162,8 +162,8 @@ an early ownership refusal cannot replace it. No native scenario was run locally
 to reproduce the corresponding engine cases.
 
 Neither weakening or retagging those live scenarios nor implementing slice-18
-without its specification is authorized by the current handoff. The coordinator
-needs to reconcile the slice boundary with the live recovery contract. This does
+without its specification is authorized by that handoff. The coordinator
+needed to reconcile the slice boundary with the live recovery contract. This does
 not reopen q-19's anchor or q-27's detector decisions.
 
 The draft was saved as `/tmp/slice-17-anchor-prototype.patch`, based on `4c57651`,
@@ -171,7 +171,8 @@ then removed from the worktree. It is incomplete: besides the recovery conflict,
 existing adapter/unit fixtures still need the new mount contract and new
 production paths need shared-contract and unit coverage. Do not treat that patch
 as a mergeable implementation or its local green as full regression evidence.
-The committed branch retains the red steps with every slice-17 scenario `@wip`.
+That checkpoint retained every slice-17 scenario as `@wip`; the combined
+implementation below supersedes it.
 
 ## Shared-contract preparation after q-33
 
@@ -192,10 +193,9 @@ or mismatched observation cannot silently become a successful detector result.
 Tests also exercise cancellation, foreign/unrelated resource preservation,
 failed pinning, and rejection of missing controls by the contract oracles.
 
-These contracts currently run against their memory fakes. The disk and SDK
-adapter implementations must run the same contracts when integrated; the
-contracts are preparation, not a product implementation or native proof. No
-slice-17 scenario is activated by this test increment. The saved prototype still
+At this checkpoint these contracts ran against their memory fakes. The disk and SDK
+adapters now run the same contracts in the combined implementation below.
+The test increment itself activated no slice-17 scenario and supplied no native proof. The saved prototype still
 needs the recovery integration and adapter coverage described above before a
 behavior commit, and native green remains the coordinator's CI responsibility.
 
@@ -213,3 +213,49 @@ The native recovery scenarios `ID-ANCHORS-09` through `ID-ANCHORS-13` require
 their own assertion-level CI red evidence before their implementation. Existing
 OFFLINE-29/30 evidence does not substitute for those checks. The accepted spec's
 pre-workload detector wording is updated to q-27; no gate or helper is added.
+
+## Combined implementation and local evidence
+
+Q-37 accepted native run 42400524477 at slice-17's head as assertion-level red
+for all seven rows of ANCHORS-09 through ANCHORS-13. Local steps were committed
+in `8a0bb23`, `4a39085` and `ac433f5` before production changes. At `4a39085`,
+48 of 49 ANCHORS-01 through ANCHORS-08 rows failed their behavior assertions;
+one foreign-user fixture failed setup and was excluded from that evidence.
+After the fixture correction in `ac433f5`, all 18 ANCHORS-05 rows failed their
+Then assertions. Together these runs establish local red for every one of the
+49 rows, without undefined steps or counting setup errors as evidence.
+
+The implementation upgrades only newly launched foreground intents to schema 2.
+It adds the O_PATH descriptor, exact owned local-volume requests, pre-create
+concrete ownership publication, volume mounting with NoCopy, and q-27's host
+stat detector. The source remains open behind the engine operation gate until
+start actually returns, including late returns after a controller deadline.
+A detector failure uses immediate owned SIGKILL/removal and reports refusal.
+
+Foreground and fresh-process recovery share the existing session teardown.
+The protected snapshot and public registration bind the volume to its original
+host user, project, session, operation, daemon and checkout identity. Recovery
+compares the complete observed volume tuple without opening the expired source.
+Only full worker-ID absence, or durably fenced reserved no-create evidence,
+permits release. Independently confirmed volume absence precedes durable
+completion. Unavailable observations and failed writes retain exact retry
+identity; repeated stop reloads and syncs completion. Legacy worker-only records
+retain their original behavior. Status exposes separate worker, anchor and
+cleanup facts and remains read-only.
+
+The disk and Docker SDK adapters run the same anchor contracts as the I/O-free
+fakes. Local scenarios cover both backends, publication faults, uncertain
+worker/volume removal, substituted authority, independent sessions and unchanged
+10-second status / 30-second stop totals. Native feasibility and retained
+isolation still require the coordinator's ordinary CI run; no Docker engine,
+local mutation run or generated proof was used in this implementation session.
+
+With `@wip` removed, the final local selection passes all 74 new rows: 25
+OFFLINE-25/26/27/28/31/32 rows and 49 ANCHORS-01 through ANCHORS-08 rows.
+The affected invocation, foreground-signal and overlap selection passes all
+155 rows. Session/command unit tests, both adapter contracts and the feature
+harness guards also pass. The wider local regression selection exercised
+recovery, lifecycle and exit handling; its old fixture mismatches were corrected
+and rerun without weakening their workload, ownership or cleanup assertions.
+The local HTTP fixture assemblies supply an explicit simulated mounted root;
+native scenarios continue to use the product binary and actual host stat.

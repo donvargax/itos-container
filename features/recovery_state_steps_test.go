@@ -344,7 +344,9 @@ func (w *world) recoveryImmutable() error {
 		return fmt.Errorf("recovery changed unrelated state")
 	}
 	for _, q := range w.session.api.requests {
-		if (!w.recoveryLocal.runFixture && (q.Path == "/containers/create" || strings.HasSuffix(q.Path, "/start"))) || (q.Method == "DELETE" && q.Path != "/containers/"+w.session.seedID) {
+		launch := q.Path == "/containers/create" || strings.HasSuffix(q.Path, "/start")
+		ownedRemoval := q.Path == "/containers/"+w.session.seedID || (w.recoveryLocal.runFixture && q.Path == "/volumes/itos-container-anchor-"+w.session.token && (q.Query == "" || q.Query == "force=false"))
+		if !w.recoveryLocal.runFixture && launch || q.Method == "DELETE" && !ownedRemoval {
 			return fmt.Errorf("recovery launched or removed another resource")
 		}
 	}
@@ -420,7 +422,7 @@ func (w *world) recoveryLocalDurable() error {
 func (w *world) recoveryLocalSignals() error {
 	term, kill, remove := 0, 0, 0
 	for _, q := range w.session.api.requests {
-		if q.Method == "DELETE" {
+		if q.Method == "DELETE" && strings.HasPrefix(q.Path, "/containers/") {
 			remove++
 		}
 		if strings.HasSuffix(q.Path, "/kill") {

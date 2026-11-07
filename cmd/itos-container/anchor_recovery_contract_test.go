@@ -34,9 +34,13 @@ func TestAnchorRecoveryMemory(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) { anchorRecoveryMemoryCase(t, request) })
 }
 func anchorRecoveryMemoryCase(t *testing.T, request map[string]string) {
-	m := publicMemoryFixture(t)
-	id, worker := m.seed("a")
-	token := strings.Repeat("a", 63) + "1"
+	m := publicMemoryFixtureAt(t, request["root"])
+	letter := request["letter"]
+	if letter == "" {
+		letter = "a"
+	}
+	id, worker := m.seed(letter)
+	token := strings.Repeat(letter, 63) + "1"
 	r := m.b.Intent(token)
 	r.Schema, r.Stage, r.ContainerID = 2, "owned", worker
 	r.Anchor = sp.Anchor{Session: id, Name: "itos-container-anchor-" + token, Source: "/proc/2147483647/fd/17", Device: m.b.Checkout.Device, Inode: m.b.Checkout.Inode, Created: "2026-11-07T17:00:00Z", Stage: "owned"}
@@ -94,6 +98,13 @@ func anchorRecoveryMemoryCase(t *testing.T, request map[string]string) {
 	beforeLegacy := append([]byte(nil), l.Data...)
 	service := domain.Recovery{Registry: m.registry, Engine: engine}
 	if request["mode"] == "stop" {
+		code, report := anchorMemoryInvoke(service, "status", id)
+		if code != 0 || len(report.Sessions) != 2 {
+			t.Fatal("control status failed", code, report)
+		}
+		if !bytes.Equal(before, files.Data) || !bytes.Equal(beforeLegacy, l.Data) {
+			t.Fatal("control status wrote state")
+		}
 		anchorRecoveryMemoryStop(t, m, engine, service, id, worker, r, p)
 		return
 	}

@@ -15,6 +15,9 @@ import (
 func (w *world) anchorRecoveryDefectSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^an anchor recovery fixture with defect "([^"]*)" a safe independent entry and a fault-free anchor control$`, w.anchorRecoveryDefectSeed)
 	sc.Step(`^fresh status and stop inspect the defective session and the anchor control runs through both local backends$`, func() error {
+		if err := w.anchorRecoveryBeginWatch(); err != nil {
+			return err
+		}
 		a := w.anchorLocalRecovery
 		a.problem = errors.Join(w.recoveryInvocation("status", "--json"), w.recoveryTracedInvocation("stop", "--json", w.recoveryLocal.id), a.control.recoveryTracedInvocation("stop", "--json", a.control.recoveryLocal.id))
 		return w.anchorRecoveryMemory()
@@ -28,7 +31,7 @@ func (w *world) anchorRecoveryDefectSteps(sc *godog.ScenarioContext) {
 	})
 	sc.Step(`^status retains the safe entry with anchor absent while the defective entry cannot claim completed cleanup$`, w.anchorRecoverySafeEntry)
 	sc.Step(`^protected evidence foreign volumes workers and outside targets remain unchanged without repair or descriptor access$`, func() error {
-		return errors.Join(w.recoveryUnchanged(), w.anchorRecoveryVolumesUnchanged(), w.anchorRecoveryNoReads())
+		return errors.Join(w.anchorRecoveryNoReads(), w.recoveryUnchanged(), w.anchorRecoveryVolumesUnchanged())
 	})
 }
 

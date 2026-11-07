@@ -200,7 +200,7 @@ func anchorRecoveryMemoryFaultCase(t *testing.T, q map[string]string, m publicMe
 	r.ContainerID, r.Stage = worker, "owned"
 	anchorRecoveryMemoryStop(t, m, e, s, id, worker, r, p)
 	if mode == "cleanup" {
-		anchorRecoveryMemoryCase(t, map[string]string{"mode": "stop", "phase": "failed", "worker": "created", "volume": "present", "completion": "pending", "exit": "7"})
+		anchorRecoveryMemoryCase(t, map[string]string{"mode": "stop", "phase": "failed", "worker": "created", "volume": "present", "completion": "pending", "exit": "7", "root": "/independent" + m.c.Root, "letter": "b"})
 	}
 }
 
@@ -323,13 +323,15 @@ func anchorMemoryRace(t *testing.T, q map[string]string, m publicMemory, e *anch
 		<-ready
 		go func() { code, _ := anchorMemoryInvoke(s, "stop", id); done <- code }()
 		synctest.Wait()
-		anchorRecoveryMemoryCase(t, map[string]string{"mode": "stop", "phase": "failed", "worker": "created", "volume": "present", "completion": "pending", "exit": "7"})
+		anchorRecoveryMemoryCase(t, map[string]string{"mode": "stop", "phase": "failed", "worker": "created", "volume": "present", "completion": "pending", "exit": "7", "root": "/independent" + m.c.Root, "letter": "b"})
 		close(release)
+		code, report := anchorMemoryInvoke(s, "stop", strings.Repeat("b", 64))
+		anchorMemoryProblem(t, code, report, 1, "recovery.not-owned")
 		if a, b := <-done, <-done; a != 0 || b != 0 || e.deletions != 1 {
 			t.Fatal("concurrent recovery did not serialize", a, b, e.deletions)
 		}
 	}
-	anchorRecoveryMemoryCase(t, map[string]string{"mode": "stop", "phase": "failed", "worker": "created", "volume": "present", "completion": "pending", "exit": "7"})
+	anchorRecoveryMemoryCase(t, map[string]string{"mode": "stop", "phase": "failed", "worker": "created", "volume": "present", "completion": "pending", "exit": "7", "root": "/independent" + m.c.Root, "letter": "b"})
 }
 
 func anchorMemoryDefect(t *testing.T, q map[string]string, m publicMemory, e *anchorRecoveryMemoryEngine, s domain.Recovery, id, worker string, r sp.Record) {
@@ -417,7 +419,7 @@ func anchorMemoryDefect(t *testing.T, q map[string]string, m publicMemory, e *an
 	if e.deletions != 0 {
 		t.Fatal("defective authority deleted volume")
 	}
-	anchorRecoveryMemoryCase(t, map[string]string{"mode": "stop", "phase": "failed", "worker": "created", "volume": "present", "completion": "pending", "exit": "7"})
+	anchorRecoveryMemoryCase(t, map[string]string{"mode": "stop", "phase": "failed", "worker": "created", "volume": "present", "completion": "pending", "exit": "7", "root": "/independent" + m.c.Root, "letter": "b"})
 }
 
 func anchorMemorySafeEntry(t *testing.T, m publicMemory) string {

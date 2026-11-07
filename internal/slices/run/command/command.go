@@ -212,17 +212,18 @@ func Classify(err error) (int, []cli.Problem) {
 		}
 		code, cause := 75, "temporary"
 		switch run.outcome {
-		case session.Refused, session.Unsafe, session.RegistrationOwnership:
+		case session.Refused, session.Unsafe, session.RegistrationOwnership, session.MountRefused:
 			code, cause = 1, "ownership"
 		case session.Invalid:
 			code, cause = 2, "configuration"
 		case session.IdentityFailed, session.RegistrationInternal, session.Internal:
 			code, cause = 70, "internal"
-		case session.Environment, session.EnvironmentMissing:
+		case session.Environment, session.EnvironmentMissing, session.MountUnavailable:
 			code, cause = 3, "environment"
 		case session.IsolationUnverified:
 			code = 1
 		case session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,
+			session.MountWrite, session.MountUncertain,
 			session.Uncertain, session.Incomplete, session.IsolationInspection, session.ExecutionFailed, session.StreamTimeout, session.EngineLost, session.TeardownTimeout:
 			// Known transient failures retain their temporary classification.
 		default:

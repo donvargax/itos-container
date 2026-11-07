@@ -52,7 +52,11 @@ func (w *world) offlinePublicRecord() ([]byte, error) {
 		return nil, fmt.Errorf("registration changed the workload exit")
 	}
 	if r.Cleanup == "cleanup-complete" {
-		if record["state"] != "stopped" || record["workload_exit"] != float64(s.launch.child) || record["last_problem"] != nil {
+		var expectedExit any = float64(s.launch.child)
+		if s.anchorFixture && r.Workload == nil {
+			expectedExit = nil
+		}
+		if record["state"] != "stopped" || record["workload_exit"] != expectedExit || record["last_problem"] != nil {
 			return nil, fmt.Errorf("completed registration lost its workload and cleanup facts")
 		}
 	} else if record["state"] != "running" && record["state"] != "stopping" && record["state"] != "failed" {

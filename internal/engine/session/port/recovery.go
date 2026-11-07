@@ -64,6 +64,7 @@ type RunRegistry interface {
 }
 
 type RecoveryEntry struct {
+	Anchor        string   `json:"anchor,omitempty"`
 	ID            string   `json:"id"`
 	Project       string   `json:"project"`
 	Fingerprint   string   `json:"fingerprint"`
