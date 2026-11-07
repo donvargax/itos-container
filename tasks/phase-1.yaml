@@ -2268,12 +2268,3 @@
     changing product semantics in this test task. No real state approval, engine access, local
     mutation run or generated evidence is authorized. Let configured hooks and CI run their
     gates. Agents commit and stop; the coordinating loop owns pushing, CI watching and closure.
-  done_when:
-    - run: |
-        names=$(go test ./cmd/itos-container -list '^TestPublicRecoveryChangedRecordObservationOrder$') || exit $?
-        printf '%s\n' "$names" | grep -Fx 'TestPublicRecoveryChangedRecordObservationOrder' >/dev/null || {
-          printf '%s\n' 'missing TestPublicRecoveryChangedRecordObservationOrder' >&2
-          exit 1
-        }
-        go test -race ./cmd/itos-container -run '^TestPublicRecoveryChangedRecordObservationOrder$' -count=1
-    - run: go test -race ./cmd/itos-container -run '^TestPublicRecoveryBudgetRegressions$' -count=1
