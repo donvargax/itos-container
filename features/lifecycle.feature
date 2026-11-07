@@ -83,7 +83,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # - Teardown has a SEPARATE 30 s from the first observed exit, cancellation,
   #   startup timeout or fatal controller/transport failure, whichever occurs first.
   #   It includes reconciliation, signal grace/escalation, stream drain, locks,
-  #   removal, absence confirmation and durable completion, not 30 s per stage.
+  #   removal, absence confirmation, durable completion and diagnostics, not
+  #   30 s per stage. Registered cleanup reserves the final second for reporting;
+  #   exhaustion is separate from the original run cause and workload result.
   #   It must still run when the startup/caller context has expired or cancelled.
   # - Slice-11 gives status one fresh 10 s total and stop one fresh 30 s total,
   #   including lock acquisition and all inspections/mutations; calls cap at
@@ -621,7 +623,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # writable sink distinguishes reserved delivery time from scheduler luck.
   # Blocked-sink rows retain slice-12's existing deadline/exit/recovery controls
   # as regression coverage under the standing coordinator decision.
-  @wip @slice-12 @ID-LIFECYCLE-18 @linux
+  @slice-12 @ID-LIFECYCLE-18 @linux
   Scenario Outline: Cleanup exhaustion leaves time to report its retained session
     Given a lifecycle teardown fixture with observed exit <child> and "<sink>" diagnostic output
     When run exhausts cleanup and its return-time diagnostics are captured through each local backend
@@ -642,7 +644,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Review regression: cleanup timeout is a separate failure, never a replacement
   # for the transport/controller cause. Exercise both termination and removal;
   # only the latter receives a fresh authoritative exit before cleanup stalls.
-  @wip @slice-12 @ID-LIFECYCLE-19 @linux
+  @slice-12 @ID-LIFECYCLE-19 @linux
   Scenario Outline: Cleanup exhaustion preserves the original run failure
     Given a lifecycle teardown fixture with "<cause>" followed by stalled "<phase>"
     When run exhausts cleanup and its return-time diagnostics are captured through each local backend

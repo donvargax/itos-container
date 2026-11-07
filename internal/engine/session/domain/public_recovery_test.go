@@ -455,7 +455,7 @@ func TestRegisteredWaitDoesNotExtendTeardownForUnavailableCompletion(t *testing.
 		runner := domain.Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
 		start := time.Now()
 		result := runner.Run(context.Background(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
-		if time.Since(start) != 40*time.Second || result.Outcome != port.TeardownTimeout || result.Cleanup != port.Incomplete || result.Exited {
+		if time.Since(start) != 39*time.Second || time.Until(result.Deadline) != time.Second || result.Outcome != port.ExecutionFailed || result.Teardown != port.TeardownTimeout || result.Cleanup != port.Incomplete || result.Exited {
 			t.Fatal("unavailable completion extended teardown or erased failure", result, time.Since(start))
 		}
 		if len(engine.Resources) != 1 || registry.Records[result.SessionID].State != "running" || registry.Leases[result.SessionID] || slices.Contains(e.Events, "SIGTERM") {

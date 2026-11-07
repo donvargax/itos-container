@@ -419,6 +419,14 @@ for the same never-restarted primary. The journal still rejects SIGKILL before t
 seconds or after twelve. Controlled-time harness tests cover delayed replies and
 early controller exit; fresh native-engine evidence remains CI-only.
 
+LIFECYCLE-18/19 cover teardown diagnostics and primary-cause preservation through
+both local backends. They freeze output at command return, before disposing of
+abandoned writers, matching main's immediate exit. Checkpoints a020fe5/d606209
+supplied eight assertion-level failures; the two blocked-stderr rows retained
+existing slice-12 behavior. All ten pass after reserving reporting time inside
+the original teardown total and keeping timeout separate from engine/wait loss.
+Decision 0015 records the evidence; no native-engine or mutation run is implied.
+
 ## Tags
 
 | Tag               | Meaning                                                                              |

@@ -29,7 +29,9 @@ type Streams struct {
 }
 
 type RunResult struct {
-	Stream    Outcome
+	Stream Outcome
+	// Teardown retains a cleanup deadline failure separately from the run cause.
+	Teardown  Outcome
 	Operation string
 	Result
 	Exit    int

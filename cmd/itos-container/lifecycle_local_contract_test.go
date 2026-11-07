@@ -86,11 +86,13 @@ func (l *lifecycleLocal) count(name string) int {
 	return n
 }
 func (l *lifecycleLocal) invoke(ctx context.Context) (int, string, string) {
-	var out, errout bytes.Buffer
-	code := l.invokeWithStreams(ctx, &out, &errout)
-	// Collect writes already dispatched by the command without advancing time.
+	var out bytes.Buffer
+	errout := &lifecycleDiagnostic{}
+	code := l.invokeWithStreams(ctx, &out, errout)
+	diagnostic := errout.String()
+	// Dispose of abandoned operations only after recording return-time output.
 	synctest.Wait()
-	return code, errout.String(), out.String()
+	return code, diagnostic, out.String()
 }
 
 func (l *lifecycleLocal) invokeWithStreams(ctx context.Context, out, errout sp.Writer) int {
@@ -351,7 +353,8 @@ func lifecycleLocalCase(t *testing.T, name, arg, signal, backend string) {
 		t.Error("start timeout reset or duplicated launch", elapsed, l.events)
 	}
 	if name == "teardown" {
-		if elapsed != 30*time.Second || out != "available trailing bytes" {
+		// Writable diagnostics complete within the second reserved from cleanup.
+		if elapsed != 29*time.Second || out != "available trailing bytes" {
 			t.Error("teardown lost deadline or trailing bytes", elapsed, out)
 		}
 		found := false

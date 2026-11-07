@@ -110,6 +110,11 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	defer finish()
 	result.Deadline, _ = teardown.Deadline()
 	teardown = context.WithValue(teardown, runGraceKey{}, result.Deadline.Add(-20*time.Second))
+	// Keep the final second of the original total for diagnostic delivery. The
+	// command must be able to report exhaustion before main exits, while an
+	// unread diagnostic sink still cannot extend the thirty-second deadline.
+	teardown, finishCleanup := context.WithDeadline(teardown, result.Deadline.Add(-time.Second))
+	defer finishCleanup()
 	if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && (result.Outcome == "" || result.Outcome == port.ExecutionFailed || result.Outcome == port.Uncertain) {
 		result.Signal = interrupted.Signal
 		result.Outcome = ""
@@ -155,7 +160,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 			result.Cleanup = prepared.Failures[0].Outcome
 			result.Stream = <-drain
 			if budget.Cause(teardown) != nil {
-				result.Outcome = port.TeardownTimeout
+				result.Teardown = port.TeardownTimeout
 			}
 			return result
 		}
@@ -175,7 +180,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	result.Stream = <-drain
 	if budget.Cause(teardown) != nil {
 		result.Cleanup = port.Incomplete
-		result.Outcome = port.TeardownTimeout
+		result.Teardown = port.TeardownTimeout
 	}
 	if result.Stream == port.StreamTimeout {
 		// Preserve the safe typed cause even when the diagnostic pipe is unread.

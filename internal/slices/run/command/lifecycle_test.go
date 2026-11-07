@@ -24,6 +24,11 @@ func TestLifecycleResultPrecedence(t *testing.T) {
 		{"nonzero", session.RunResult{Signal: "SIGINT", Exited: true, Exit: 17, Stream: session.StreamTimeout}, 17, []string{"run.cancelled SIGINT", "workload outcome 17", "run.stream-timeout"}},
 		{"stream failure", session.RunResult{Exited: true, Stream: session.StreamTimeout}, 75, []string{"run.stream-timeout"}},
 		{"lost engine", session.RunResult{Result: session.Result{Outcome: session.EngineLost}}, 75, []string{"run.engine-lost", "unknown"}},
+		{"teardown timeout", session.RunResult{Teardown: session.TeardownTimeout}, 75, []string{"run.teardown-timeout"}},
+		{"lost engine then timeout", session.RunResult{Result: session.Result{Outcome: session.EngineLost}, Teardown: session.TeardownTimeout}, 75, []string{"run.engine-lost", "run.teardown-timeout"}},
+		{"refusal then timeout", session.RunResult{Result: session.Result{Outcome: session.IsolationUnverified}, Teardown: session.TeardownTimeout}, 1, []string{"run.isolation-unverified", "run.teardown-timeout"}},
+		{"interrupt then timeout", session.RunResult{Signal: "SIGTERM", Started: true, Teardown: session.TeardownTimeout}, 143, []string{"run.cancelled SIGTERM", "unknown", "run.teardown-timeout"}},
+		{"exit then timeout", session.RunResult{Exited: true, Exit: 17, Teardown: session.TeardownTimeout}, 17, []string{"run.teardown-timeout"}},
 		{"unknown with cleanup failure", session.RunResult{Signal: "SIGTERM", Started: true, Result: session.Result{Reference: "protected", Cleanup: session.Incomplete}}, 143, []string{"run.cancelled SIGTERM", "unknown", "run.cleanup-temporary"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

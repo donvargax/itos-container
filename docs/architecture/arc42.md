@@ -571,8 +571,10 @@ requests keep their individual deadlines. Pending storage operations retain thei
 locks until they finish, and failed fsync retains visible but uncertain progress.
 Slice-11 supplies fresh 10 s status and 30 s stop totals. Stop may retry bounded
 lock observations within its original total; mutations are never blindly retried. Registered foreground cleanup
-and final drain proceed concurrently. Diagnostic delivery uses only remaining
-teardown time, and protected `last_problem` can retain a typed stream timeout
+and final drain proceed concurrently. Registered run reserves the final second
+of its original 30 s total for diagnostic delivery; cleanup exhaustion cannot
+replace the original run failure. [Decision 0015](../decisions/0015-teardown-diagnostics.md)
+records the split and return-time checks. Protected `last_problem` can retain a typed stream timeout
 even in a completed cleanup tombstone. This records delivery failure without
 changing resource absence or the authoritative workload exit. Open security
 choices follow the charter stop rule, not a blanket reopening of settled limits.

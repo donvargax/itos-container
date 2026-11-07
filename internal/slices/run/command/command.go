@@ -93,6 +93,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 	if result.Outcome != "" {
 		code, _ = Classify(runFailure{result.Outcome, result.Reference, result.SessionID, false})
 	}
+	if result.Teardown != "" && code == 0 {
+		code, _ = Classify(runFailure{result.Teardown, result.Reference, result.SessionID, false})
+	}
 	if result.Stream != "" && code == 0 {
 		code, _ = Classify(runFailure{result.Stream, result.Reference, result.SessionID, false})
 	}
@@ -126,6 +129,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 			} else {
 				ui.Fail(failure, false)
 			}
+		}
+		if result.Teardown != "" {
+			ui.Fail(runFailure{result.Teardown, result.Reference, result.SessionID, false}, false)
 		}
 		if result.Reference != "" && result.Cleanup != session.Complete {
 			ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
