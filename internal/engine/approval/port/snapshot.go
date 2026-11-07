@@ -1,6 +1,9 @@
 package port
 
-import readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
+import (
+	"context"
+	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
+)
 
 // StagedReadiness offers a local checkpoint while keeping the checkout pinned.
 type StagedReadiness interface {
@@ -30,4 +33,13 @@ type PreflightCodec interface {
 type FrozenRecords interface {
 	Records
 	FrozenRecord(Frozen) (Record, Failure)
+}
+
+// ContextReadiness keeps aggregate inspection under the caller's startup scope.
+type ContextReadiness interface {
+	InspectBeforeEngineContext(context.Context, func(readiness.Result) bool) readiness.Result
+}
+type ContextPreflight interface {
+	InspectContext(context.Context) View
+	FreezeContext(context.Context, View) (Frozen, Failure)
 }

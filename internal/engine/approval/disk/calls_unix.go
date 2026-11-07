@@ -15,3 +15,5 @@ func lock(file *os.File, exclusive bool) error {
 func unlock(file *os.File) error { return unix.Flock(int(file.Fd()), unix.LOCK_UN) }
 
 func tryLock(file *os.File) error { return unix.Flock(int(file.Fd()), unix.LOCK_EX|unix.LOCK_NB) }
+
+func trySharedLock(file *os.File) error { return unix.Flock(int(file.Fd()), unix.LOCK_SH|unix.LOCK_NB) }

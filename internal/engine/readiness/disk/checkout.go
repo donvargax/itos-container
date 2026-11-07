@@ -65,6 +65,9 @@ func (c *Checkout) inspect(open func(*os.Root, string) (*os.Root, error)) (port.
 	if failure := c.openGit(open); failure != port.None {
 		return port.CheckoutIdentity{}, failure
 	}
+	if failure := independentFiles(c.root); failure != port.None {
+		return port.CheckoutIdentity{}, failure
+	}
 	device, inode := identity(c.rootInfo)
 	gitDevice, gitInode := identity(c.gitInfo)
 	return port.CheckoutIdentity{Root: c.path, Device: device, Inode: inode, GitDevice: gitDevice, GitInode: gitInode}, port.None
@@ -79,7 +82,8 @@ func (c *Checkout) OpenRoot() (*os.Root, error) {
 	return c.root.OpenRoot(".")
 }
 
-// Unchanged compares fresh path observations with both pinned directories.
+// Unchanged compares fresh identities and rechecks file independence through
+// the pin. A new outside alias need not alter any directory identity or bytes.
 func (c *Checkout) Unchanged() bool {
 	if c.root == nil || c.git == nil {
 		return false
@@ -91,7 +95,7 @@ func (c *Checkout) Unchanged() bool {
 	defer func() { _ = current.Close() }()
 	root, rootErr := current.Stat(".")
 	git, gitErr := current.Lstat(".git")
-	return rootErr == nil && gitErr == nil && os.SameFile(c.rootInfo, root) && os.SameFile(c.gitInfo, git)
+	return rootErr == nil && gitErr == nil && os.SameFile(c.rootInfo, root) && os.SameFile(c.gitInfo, git) && independentFiles(c.root) == port.None
 }
 
 // Close releases all pins; it is safe after a failed Open or an earlier Close.

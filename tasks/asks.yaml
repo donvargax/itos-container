@@ -47,3 +47,75 @@ questions:
     item: "slice-12"
     question: "slice-12: its spec review found a dependency cycle with slice-11 and a scenario needing slice-14; what order?"
     answer: "slice-11 owns the shared engine-side termination contract (SIGTERM once, 10 s grace, revalidate, SIGKILL, as its spec describes) and builds it in internal/engine/session; slice-12 reuses it and now depends on slice-11, so all its integration scenarios activate on merged slice-11. ID-LIFECYCLE-15 moves to slice-15 (isolation retained through controller loss), which depends on slice-12 and slice-14. T-25, the first release, waits for slice-14 and slice-15."
+  - id: q-12
+    item: "slice-14"
+    question: "slice-14: six of seven engine scenarios already pass and the DNS one fails in setup; how to proceed?"
+    answer: "Run 42195113834: accept the six as regression coverage under q-6, each only with a positive control proving its probe can see what it checks, and a comment naming the protection. The DNS scenario failed in setup (the dual-stack control never became ready), which is not red evidence: fix the control, then stop for a new engine run of it. See slice-14-steer.md."
+  - id: q-13
+    item: "slice-14"
+    question: "slice-14: the rerun of ID-OFFLINE-12 at 27a210d failed at its positive control; what next?"
+    answer: "Not red evidence: the positive route control (docker-a) failed, so the denial proves nothing. Fix the control and return blocked for one more engine run; if the CI runner itself is the cause, return blocked with a split proposal. See slice-14-steer.md."
+  - id: q-14
+    item: "slice-14"
+    question: "slice-14: ID-OFFLINE-12 now passes with a working positive control; accept it?"
+    answer: "Yes. Run 42203397615 at d76bf2f: the positive control reaches a resolver where allowed, and the worker finds none. Accept as regression coverage under q-6, turn it live with its comment, and finish the slice."
+  - id: q-15
+    item: "slice-11"
+    question: "slice-11: the engine job passes under setsid; is that the fix?"
+    answer: "No. Run 42218236157 shows a signal reached the step's original process group or session, which setsid only escapes. Find the sender with strace on a run without setsid, fix it in the harness or the product, then drop setsid unless the runner itself is the cause. Cover the new proof gaps too. See slice-11-steer.md."
+  - id: q-16
+    item: "slice-11"
+    question: "slice-11: the signal trace shows no product or harness code signals a group or session; keep setsid?"
+    answer: "Yes. Run 42233015284 traced every process the tests start: the only real signal was one SIGKILL by pidfd to a single recorded controller, never a group, session or -1. The step dies from outside that tree (runner or Docker). Keep setsid with a comment citing that run, drop strace, keep the signal log, and fix the Linux unit failures in session/disk and cmd. See slice-11-steer.md."
+  - id: q-17
+    item: "slice-12"
+    question: "slice-12: engine red evidence for ID-LIFECYCLE-08, 09, 11, 12, 13 and 16 at 9ac4f11?"
+    answer: "Partly. Run 42297748701: 08, 09 and 12 are red at their assertions, and 13's first row (quiet workload and stdin) too; accepted. 11 already passes, and 16 passes alone in run 42298705984 (all four rows): regression coverage under the standing rule. 13's other two rows are not evidence: the harness never reached the streams barrier, its guard measured from an unset start (2562047h), and the third row hung the suite until its 5-minute timeout. Fix the harness so the barrier fails fast and the guard measures from a recorded start, without raising timeouts, then return blocked for a red run of @ID-LIFECYCLE-13 before product code reaches that path. See slice-12-steer.md."
+  - id: q-18
+    item: "slice-12"
+    question: "slice-12: engine red evidence for ID-LIFECYCLE-13's four rows at b4a8478, after the harness repair?"
+    answer: "Yes. Run 42304766391: all four rows fail at their Then steps (quiet and open-stdin rows: cancellation not reported separately; unread stdout: exit 75, expected 17; unread stderr: teardown misses the 30 s bound at the 32 s guard). With q-17, every slice-12 scenario has red or regression evidence: implement the product. See slice-12-steer.md."
+  - id: q-19
+    item: "slice-17"
+    question: "slice-17: which anchor keeps Docker's checkout mount bound to the validated inode, with what privilege and lifetime?"
+    answer: "No new privilege and no new helper. An owned Docker volume (local driver, type none, o=bind) whose device is the controller's O_PATH descriptor for the validated checkout, /proc/<pid>/fd/<n>, held open until ContainerStart returns: dockerd does the bind and the kernel resolves the descriptor to the original inode; the container's mount then retains it for the worker's life. The volume is the durable anchor record, published before create, released last. Verify the mounted /workspace device and inode against the validated identity before releasing the workload. Prove it with a red-then-green native scenario first; if Moby resolves the source by name or rejects the path, stop with that evidence. See slice-17-steer.md."
+  - id: q-20
+    item: "slice-16"
+    question: "slice-16: CI red evidence for ID-OVERLAP-06 and 07 at d790e7a?"
+    answer: "Yes. Run 42307612900: OVERLAP-06's ancestor and descendant rows fail at their Then (the nested contender was created, no run.checkout-overlap) and OVERLAP-07 fails at its Then (both concurrent nested runs created a worker). With the 19 local examples red at their assertions, implement the admission."
+  - id: q-21
+    item: "slice-19"
+    question: "slice-19: CI red evidence for ID-SOCKETS-01 to 03 at dbf75d4?"
+    answer: "No. Run 42308513561: all three fail at their Then steps, but because the product exits 75 (run.execution-unavailable) before the probe reaches its barrier; no socket operation was tried. Make the probe reach its barrier (capture the controller's and engine's reason for the failure), then return blocked for another red run; if the product already refuses checkouts holding sockets, report that with evidence instead. See slice-19-steer.md."
+  - id: q-22
+    item: "slice-17"
+    question: "slice-17: CI red evidence for ID-OFFLINE-29's four rows at 51a9f48?"
+    answer: "Yes. Run 42309692365: all four rows fail at their Then, the worker running in the substituted checkout (inode 7602225/7602226, not the validated 7602190, on Docker 28.0.4). This confirms the substitution race on real Docker. Implement q-19's anchor."
+  - id: q-23
+    item: "slice-12"
+    question: "slice-12: engine green check of the lifecycle scenarios at f75f2c8?"
+    answer: "Not yet. Run 42309496512: 15 of 18 engine cases pass. Still failing: LIFECYCLE-12 (recovery does not report the registered session with its binding and observed state), 13's unread-stdout row (exit 143, expected 17: the observed exit is lost behind the blocked stream) and 13's unread-stderr row (offline recorder refused a mismatched native identity; find whether harness or product). Fix them, then return blocked for another engine run. See slice-12-steer.md."
+  - id: q-24
+    item: "slice-19"
+    question: "slice-19: second CI red run of ID-SOCKETS-01 to 03 at 3b8b9ac?"
+    answer: "No. Run 42311089210 failed the same way, and the new diagnostics show why: the harness's recording proxy cancelled the product's long-lived /containers/<id>/wait (502, recorder transport: context canceled) and then refused its kill (403, unsafe request). Fix the recorder so wait and attach live for the scenario's budget and the run's own kill is allowed, then return blocked for a third red run. See slice-19-steer.md."
+  - id: q-25
+    item: "slice-12"
+    question: "slice-12: second engine green check of the lifecycle scenarios at 41529b1?"
+    answer: "Yes. Run 42312330532: all 18 engine cases pass (117 steps), LIFECYCLE-12 and 13 included. Engine evidence for slice-12 is complete: finish local scenarios 01 to 07 and 10, then push for the code proof."
+  - id: q-26
+    item: "slice-19"
+    question: "slice-19: third CI red run of ID-SOCKETS-01 to 03 at 1662753?"
+    answer: "Partly. Run 42312676619: 01 and 03 are red at their Then (the worker reached every host socket in the checkout); accepted. 02 is not: its worker-private positive control failed in the harness (interrupted system call). Retry EINTR in the probe, then return blocked for a red run of 02 alone. See slice-19-steer.md."
+  - id: q-27
+    item: "slice-17"
+    question: "slice-17: Docker mounts and starts in one operation and inspect gives no inode; which observation and workload release are authorized?"
+    answer: "The descriptor-backed volume (q-19) is the protection; the identity check is a detector. Right after ContainerStart, stat /proc/<State.Pid>/root/workspace from the host and compare device and inode with the validated identity; on mismatch or a failed stat, kill and remove the worker through owned teardown and refuse the run. No gate binary (a new mount). Reword the scenario if it promises release gating. See slice-17-steer.md."
+  - id: q-28
+    item: "slice-16"
+    question: "slice-16: may ID-RECOVERY-25 change so a stop before create records a proven cancellation instead of uncertain cleanup?"
+    answer: "Yes, when cancellation is proven by durable state, never by an engine lookup: run records create-issued under the operation lock before any create, after re-checking for cancellation; a stop holding the lock that finds no create-issued record may record a proven cancellation (stage cancelled, no ID) and the resumed run exits without create. If create may have been issued, it stays recovery.temporary with cleanup unknown, and a scenario keeps that case. Apply attempt 5's saved fix. See slice-16-steer.md."
+  - id: q-29
+    item: "slice-19"
+    question: "slice-19: CI red evidence for ID-SOCKETS-02 at 69b02a8?"
+    answer: "Yes. Run 42323471709: the worker reached host sockets created after launch, with the positive controls passing. With 01 and 03, every slice-19 scenario has red evidence: implement the denial."

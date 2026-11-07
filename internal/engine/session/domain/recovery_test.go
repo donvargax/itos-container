@@ -53,7 +53,7 @@ func TestInterruptForwardingAndEscalation(t *testing.T) {
 					}
 					start := time.Now()
 					r := s.Run(ctx, d, []string{"probe"}, port.Streams{})
-					if r.Outcome != port.ExecutionFailed || !r.Exited || r.Exit != 23 || r.Cleanup != port.Complete {
+					if r.Outcome != "" || r.Signal != signal || !r.Exited || r.Exit != 23 || r.Cleanup != port.Complete {
 						t.Fatal(r, e.Events)
 					}
 					if !slices.Contains(e.Events, signal) || slices.Contains(e.Events, "SIGKILL") != ignore {
@@ -269,7 +269,7 @@ func TestInterruptNeverSignalsForeignOrUnverifiableOwnership(t *testing.T) {
 				}
 			}
 			r := s.Run(ctx, d, []string{"probe"}, port.Streams{})
-			if r.Outcome != port.ExecutionFailed || (fault != "signal" && slices.Contains(e.Events, "SIGTERM")) {
+			if r.Outcome != "" || r.Signal != "SIGTERM" || (fault != "signal" && slices.Contains(e.Events, "SIGTERM")) {
 				t.Fatal(r, e.Events)
 			}
 		})

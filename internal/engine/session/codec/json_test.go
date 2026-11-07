@@ -41,6 +41,8 @@ func TestRecordCodecRequiresEveryTypedFieldAndValidProgress(t *testing.T) {
 	for _, mutate := range []func(*sp.Record){
 		func(r *sp.Record) { r.Project = "../x" }, func(r *sp.Record) { r.Name = "foreign" }, func(r *sp.Record) { r.Generation = "0" }, func(r *sp.Record) { r.Generation = "01" }, func(r *sp.Record) { r.Generation = "invalid" },
 		func(r *sp.Record) { r.Stage = "running" }, func(r *sp.Record) { r.ContainerID = strings.Repeat("2", 64) }, func(r *sp.Record) { r.Stage = "owned" }, func(r *sp.Record) { r.Stage = "absent" },
+		func(r *sp.Record) { r.Stage, r.ContainerID = "reserved", strings.Repeat("2", 64) },
+		func(r *sp.Record) { r.Stage, r.ContainerID = "cancelled", strings.Repeat("2", 64) },
 	} {
 		bad := record
 		mutate(&bad)
@@ -50,10 +52,12 @@ func TestRecordCodecRequiresEveryTypedFieldAndValidProgress(t *testing.T) {
 			t.Fatal("invalid progress accepted", bad)
 		}
 	}
-	for _, stage := range []string{"owned", "absent"} {
+	for _, stage := range []string{"owned", "absent", "reserved", "cancelled"} {
 		valid := record
 		valid.Stage = stage
-		valid.ContainerID = strings.Repeat("2", 64)
+		if stage == "owned" || stage == "absent" {
+			valid.ContainerID = strings.Repeat("2", 64)
+		}
 		raw := codec.Encode(valid)
 		parser.Value = recordValue(t, raw)
 		if got, f := codec.Decode(raw); f != "" || got != valid {

@@ -27,6 +27,7 @@ type localOfflineAPI struct {
 	expected         map[int][]string
 	problem          error
 	recovery         *foregroundRecovery
+	attachBarrier    func(string, string)
 }
 
 func (w *world) localOfflineFixture() {
@@ -98,6 +99,11 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 	case len(parts) == 2 && parts[1] == "json" && r.Method == "GET":
 		_ = json.NewEncoder(out).Encode(resource)
 	case len(parts) == 2 && parts[1] == "attach" && r.Method == "POST":
+		if a.attachBarrier != nil {
+			a.mu.Unlock()
+			a.attachBarrier(token, id)
+			a.mu.Lock()
+		}
 		conn, buf, err := out.(http.Hijacker).Hijack()
 		if err != nil {
 			a.problem = err
@@ -206,7 +212,7 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 	case len(parts) == 2 && parts[1] == "kill" && r.Method == "POST" && a.recovery != nil:
 		a.recovery.signals = append(a.recovery.signals, r.URL.Query().Get("signal"))
 		a.recovery.notified.Do(func() { close(a.recovery.signaled) })
-		if r.URL.Query().Get("signal") == "SIGKILL" || a.recovery.fault == "handled SIGINT" || a.recovery.fault == "handled SIGTERM" {
+		if r.URL.Query().Get("signal") == "SIGKILL" || !strings.HasPrefix(a.recovery.fault, "ignored ") {
 			a.recovery.finish.Do(func() { close(a.recovery.exit) })
 			resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
 			if !a.recovery.trailing {
@@ -224,7 +230,11 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		a.removed[id] = true
 		if a.recovery != nil {
 			a.recovery.finish.Do(func() { close(a.recovery.exit) })
-			_ = a.attached[id].Close()
+		}
+		// Removal ends the resource's attachment even if launch was refused
+		// before start. Otherwise a healthy final drain waits on fixture-only I/O.
+		if conn := a.attached[id]; conn != nil {
+			_ = conn.Close()
 		}
 		out.WriteHeader(204)
 	default:

@@ -5,14 +5,18 @@ import (
 	"context"
 	"errors"
 	approvalport "github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	session "github.com/donvargax/itos-container/internal/engine/session/port"
 	"github.com/donvargax/itos-container/internal/slices/run/port"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/donvargax/itos-container/internal/cli"
 	"github.com/donvargax/itos-container/internal/slices/run/domain"
 )
+
+var errWorkloadExitUnknown = errors.New("workload exit is unknown; cleanup is complete")
 
 // CLI lets Kong retain the first separator and every subsequent literal word.
 type CLI struct {
@@ -55,34 +59,127 @@ func (c CLI) Run(ui *cli.UI) int {
 	if c.Approval == nil || c.Snapshots == nil || c.Runner == nil {
 		return ui.Fail(errors.New("run assembly is incomplete"), false)
 	}
-	frozen, err := domain.Preflight(c.Approval, c.Snapshots)
-	if err != nil {
-		return ui.Fail(err, false)
-	}
 	ctx := c.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	result := c.Runner.Run(ctx, frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
+	if _, ok := context.Cause(ctx).(session.Interrupt); ok {
+		return reportRun(ui, session.RunResult{Signal: context.Cause(ctx).(session.Interrupt).Signal, Deadline: time.Now().Add(30 * time.Second)})
+	}
+	startup, end := budget.Start(ctx, 120*time.Second, "startup")
+	defer end()
+	frozen, err := domain.PreflightContext(startup, c.Approval, c.Snapshots)
+	if err != nil {
+		if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
+			return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+		}
+		var timed budget.Failure
+		if errors.As(err, &timed) {
+			outcome := session.CallTimeout
+			if timed.Phase != "" {
+				outcome = session.StartupTimeout
+			}
+			return reportRun(ui, session.RunResult{Result: session.Result{Outcome: outcome}, Operation: timed.Operation, Deadline: time.Now().Add(30 * time.Second)})
+		}
+		return ui.Fail(err, false)
+	}
+	if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
+		return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+	}
+	result := c.Runner.Run(budget.WithStartup(ctx, startup), frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
+	return reportRun(ui, result)
+}
+
+func reportRun(ui *cli.UI, result session.RunResult) int {
 	code := 0
 	if result.Outcome != "" {
-		code = ui.Fail(runFailure{result.Outcome, result.Reference, false}, false)
+		code, _ = Classify(runFailure{result.Outcome, result.Reference, result.SessionID, false})
 	}
-	if result.Reference != "" && result.Cleanup != session.Complete {
-		cleanupCode := ui.Fail(runFailure{result.Cleanup, result.Reference, true}, false)
-		if code == 0 {
-			code = cleanupCode
+	if result.Teardown != "" && code == 0 {
+		code, _ = Classify(runFailure{result.Teardown, result.Reference, result.SessionID, false})
+	}
+	if result.Stream != "" && code == 0 {
+		code, _ = Classify(runFailure{result.Stream, result.Reference, result.SessionID, false})
+	}
+	if result.Reference != "" && result.Cleanup != session.Complete && code == 0 {
+		code, _ = Classify(runFailure{result.Cleanup, result.Reference, result.SessionID, true})
+	}
+	if result.Signal != "" && !result.Exited {
+		code = 130
+		if result.Signal == "SIGTERM" {
+			code = 143
 		}
 	}
 	if result.Exited && result.Exit != 0 {
-		return result.Exit
+		code = result.Exit
 	}
+	unknownExit := code == 0 && !result.Exited
+	if unknownExit {
+		code, _ = Classify(errWorkloadExitUnknown)
+	}
+	// Diagnostic output is a finite external operation within teardown. Keep
+	// its ten-second call limit even when cleanup leaves more time available.
+	// An abandoned caller-owned writer is neither closed nor joined.
+	ctx := context.Background()
+	if !result.Deadline.IsZero() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, result.Deadline)
+		defer cancel()
+	}
+	_, _ = budget.Call(ctx, "diagnostic output", func(context.Context) struct{} {
+		if result.Signal != "" {
+			ui.Fail(cancelFailure{result.Signal, workloadOutcome(result)}, false)
+		}
+		if result.Stream != "" {
+			ui.Fail(runFailure{result.Stream, result.Reference, result.SessionID, false}, false)
+		}
+		if result.Outcome != "" {
+			failure := runFailure{result.Outcome, result.Reference, result.SessionID, false}
+			if result.Operation != "" {
+				ui.Fail(operationFailure{failure, result.Operation}, false)
+			} else {
+				ui.Fail(failure, false)
+			}
+		}
+		if result.Teardown != "" {
+			ui.Fail(runFailure{result.Teardown, result.Reference, result.SessionID, false}, false)
+		}
+		if result.Reference != "" && result.Cleanup != session.Complete {
+			ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
+		}
+		if unknownExit {
+			ui.Fail(errWorkloadExitUnknown, false)
+		}
+		return struct{}{}
+	})
 	return code
 }
+
+func workloadOutcome(r session.RunResult) string {
+	if r.Exited {
+		return strconv.Itoa(r.Exit)
+	}
+	if !r.Started {
+		return "not-started"
+	}
+	return "unknown"
+}
+
+type operationFailure struct {
+	runFailure
+	operation string
+}
+
+func (f operationFailure) Unwrap() error { return f.runFailure }
+
+type cancelFailure struct{ signal, workload string }
+
+func (cancelFailure) Error() string { return "run cancelled" }
 
 type runFailure struct {
 	outcome   session.Outcome
 	reference string
+	sessionID string
 	cleanup   bool
 }
 
@@ -90,25 +187,67 @@ func (runFailure) Error() string { return "owned run could not be completed" }
 
 // Classify supplies run's stable rules and human guidance to the generic UI.
 func Classify(err error) (int, []cli.Problem) {
+	var timed budget.Failure
+	if errors.As(err, &timed) {
+		rule := "run.call-timeout"
+		if timed.Phase != "" {
+			rule = "run." + timed.Phase + "-timeout"
+		}
+		return 75, []cli.Problem{{Rule: rule, Exit: 75, Message: rule + "; operation " + timed.Operation, Fix: "Inspect protected recovery state before retrying."}}
+	}
+	var cancelled cancelFailure
+	if errors.As(err, &cancelled) {
+		code := 130
+		if cancelled.signal == "SIGTERM" {
+			code = 143
+		}
+		return code, []cli.Problem{{Rule: "run.cancelled", Exit: code, Message: "run.cancelled " + cancelled.signal + "; workload outcome " + cancelled.workload, Fix: "Inspect the retained session if cleanup is incomplete."}}
+	}
 	var run runFailure
 	if errors.As(err, &run) {
+		if run.outcome == session.CheckoutOverlap {
+			guidance := "Finish the other session, or inspect/stop it from its original checkout."
+			return 1, []cli.Problem{{Rule: "run.checkout-overlap", Exit: 1,
+				Message: "run.checkout-overlap: this checkout overlaps another unfinished session; " + guidance, Fix: guidance}}
+		}
 		code, cause := 75, "temporary"
 		switch run.outcome {
-		case session.Refused, session.Unsafe:
+		case session.Refused, session.Unsafe, session.RegistrationOwnership:
 			code, cause = 1, "ownership"
 		case session.Invalid:
 			code, cause = 2, "configuration"
-		case session.IdentityFailed:
+		case session.IdentityFailed, session.RegistrationInternal, session.Internal:
 			code, cause = 70, "internal"
+		case session.Environment, session.EnvironmentMissing:
+			code, cause = 3, "environment"
 		case session.IsolationUnverified:
 			code = 1
+		case session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,
+			session.Uncertain, session.Incomplete, session.IsolationInspection, session.ExecutionFailed, session.StreamTimeout, session.EngineLost, session.TeardownTimeout:
+			// Known transient failures retain their temporary classification.
+		default:
+			if run.cleanup {
+				code, cause = 70, "internal"
+			}
 		}
 		rule := "run." + string(run.outcome)
 		if run.cleanup {
 			rule = "run.cleanup-" + cause
 		}
 		fix := "Have the host user inspect the protected intent and original engine; cleanup is not confirmed."
-		return code, []cli.Problem{{Rule: rule, Exit: code, Message: rule + " " + strconv.QuoteToASCII(run.reference) + ": " + run.Error(), Fix: fix}}
+		message := rule + " " + strconv.QuoteToASCII(run.reference) + ": " + run.Error()
+		var operation operationFailure
+		if errors.As(err, &operation) {
+			message += "; operation " + operation.operation
+		}
+		if run.outcome == session.EngineLost {
+			message += "; workload outcome unknown unless separately observed"
+		}
+		if session.HexID(run.sessionID) {
+			fix = "Use the same effective project: itos container stop " + run.sessionID
+			message += "; " + fix
+		}
+		return code, []cli.Problem{{Rule: rule, Exit: code, Message: message, Fix: fix}}
 	}
 	var approval domain.ApprovalRefusal
 	if errors.As(err, &approval) {
@@ -145,6 +284,11 @@ func Classify(err error) (int, []cli.Problem) {
 		return code, []cli.Problem{{Rule: rule, Exit: code, Message: rule + " " + strconv.QuoteToASCII(snapshot.Reference) + ": " + message + "; " + fix, Fix: fix}}
 	}
 	switch {
+	case errors.Is(err, errWorkloadExitUnknown):
+		return 75, []cli.Problem{{
+			Rule: "run.workload-exit-unknown", Exit: 75,
+			Message: "run.workload-exit-unknown: " + errWorkloadExitUnknown.Error(),
+		}}
 	case errors.Is(err, domain.ErrJSONUnsupported):
 		return cli.CodeUsage, []cli.Problem{{
 			Rule: "run.json-unsupported", Exit: cli.CodeUsage,

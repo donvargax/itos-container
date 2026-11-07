@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"errors"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"time"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -15,9 +17,17 @@ type Runner struct {
 	Engine    port.RunEngine
 	Entropy   port.Entropy
 	Workspace port.Workspace
+	Registry  port.Registry
 }
 
+// waitUnreconciled is provisional, only for a registered stdin-close probe
+// whose operation-lock budget expired. Teardown must settle it before return.
+const waitUnreconciled port.Outcome = "wait-unreconciled"
+
 func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string, streams port.Streams) port.RunResult {
+	if s.Registry != nil {
+		return s.registeredRun(ctx, frozen, argv, streams)
+	}
 	startup, cancel := context.WithTimeout(ctx, 120*time.Second)
 	result, connection, attachment := s.launch(startup, frozen, argv, streams)
 	cancel()
@@ -27,13 +37,17 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	if attachment != nil {
 		defer attachment.Close()
 	}
+	result.Started = result.ID != ""
 	if result.Outcome == "" {
 		// Waiting for the workload is not a startup operation or a lifetime limit.
-		result.Exit, result.Outcome = s.waitRun(ctx, connection, attachment, result.Reference, result.ID)
-		result.Exited = result.Outcome == ""
+		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, connection, attachment, result.Reference, result.ID)
 	}
 	if result.Reference != "" {
 		teardown, end := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		result.Deadline, _ = teardown.Deadline()
+		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && (result.Outcome == "" || result.Outcome == port.ExecutionFailed) {
+			result.Signal, result.Outcome = interrupted.Signal, ""
+		}
 		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && !result.Exited {
 			result.Exit, result.Exited = s.interrupt(teardown, result.Reference, interrupted.Signal)
 			// Launch or wait already supplied the failure. Interruption must not
@@ -55,7 +69,7 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	return result
 }
 
-func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, attachment port.Attachment, reference, id string) (int, port.Outcome) {
+func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, attachment port.Attachment, reference, id string) (int, bool, port.Outcome) {
 	wait, stop := context.WithCancel(ctx)
 	monitored := make(chan port.Outcome, 1)
 	go func() {
@@ -71,7 +85,7 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	stop()
 	failure := <-monitored
 	if outcome == "" || failure != port.StdinClosed || ctx.Err() != nil {
-		return exit, outcome
+		return exit, outcome == "", outcome
 	}
 	// A worker may close stdin on exit while input forwarding is still pending.
 	// Confirm that the exact worker exited before reacquiring its wait response;
@@ -81,25 +95,62 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	// The launch connection retains the startup deadline. Reopen protected
 	// authority and the original daemon within this one reconciliation budget,
 	// independently of elapsed workload time or mutable checkout identity.
-	intent, failure := s.Store.OpenCleanup(probe, reference)
+	var intent port.Intent
+	failure = ""
+	if s.Registry != nil {
+		entry, f := s.Registry.Open(probe, reference, true)
+		if f != "" {
+			if f == port.Incomplete && errors.Is(budget.Cause(probe), context.DeadlineExceeded) && ctx.Err() == nil {
+				return 0, false, waitUnreconciled
+			}
+			return 0, false, port.ExecutionFailed
+		}
+		defer entry.Close()
+		if entry.Record().State == "stopped" {
+			return stoppedRun(entry, id)
+		}
+		if entry.Validate() != "" {
+			return 0, false, port.ExecutionFailed
+		}
+		intent = entry.Intent()
+	} else {
+		intent, failure = s.Store.OpenCleanup(probe, reference)
+	}
 	if failure != "" {
-		return 0, port.ExecutionFailed
+		return 0, false, port.ExecutionFailed
 	}
 	defer intent.Close()
 	fresh, failure := s.Engine.OpenRun(probe, intent.Binding())
 	if failure != "" {
-		return 0, port.ExecutionFailed
+		return 0, false, port.ExecutionFailed
 	}
 	defer fresh.Close()
 	record := intent.Record()
 	if record.Stage != "owned" || record.ContainerID != id || intent.Validate() != "" || fresh.Check(probe) != "" {
-		return 0, port.ExecutionFailed
+		return 0, false, port.ExecutionFailed
 	}
 	o, status := fresh.Inspect(probe, id)
 	if status != port.Observed || o.ID != id || !owns(record, o) || !o.StatePresent || o.Running || o.Status != "exited" {
-		return 0, port.ExecutionFailed
+		return 0, false, port.ExecutionFailed
 	}
-	return fresh.Wait(probe, id)
+	exit, outcome = fresh.Wait(probe, id)
+	return exit, outcome == "", outcome
+}
+
+func stoppedRun(entry port.Session, id string) (int, bool, port.Outcome) {
+	if entry.Validate() != "" {
+		return 0, false, port.ExecutionFailed
+	}
+	r, owned := entry.Record(), entry.Intent().Record()
+	if r.State != "stopped" || owned.Stage != "absent" || owned.ContainerID != id {
+		return 0, false, port.ExecutionFailed
+	}
+	// Stop can finish removal without ever observing a workload exit. Adopt
+	// completion without inventing exit zero or hiding a known nonzero result.
+	if r.WorkloadExit == nil {
+		return 0, false, ""
+	}
+	return *r.WorkloadExit, true, ""
 }
 
 // interrupt reacquires protected authority and a fresh engine connection. The
@@ -243,8 +294,8 @@ func validateLaunch(ctx context.Context, intent port.Intent, connection port.Run
 	if failure := intent.Validate(); failure != "" {
 		return failure
 	}
-	if !workspace.Unchanged() {
-		return port.Refused
+	if failure := workspace.Validate(); failure != "" {
+		return failure
 	}
 	return connection.Check(ctx)
 }

@@ -12,3 +12,5 @@ func lock(*os.File, bool) error { return errors.New("approval storage requires U
 func unlock(*os.File) error     { return nil }
 
 func tryLock(*os.File) error { return errors.New("protected storage requires Unix locking") }
+
+func trySharedLock(*os.File) error { return errors.New("protected storage requires Unix locking") }

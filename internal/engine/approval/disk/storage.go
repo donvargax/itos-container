@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"io"
 	"os"
 	"strings"
@@ -63,7 +64,7 @@ func (s Storage) Open(ctx context.Context, c port.Candidate, collection string, 
 	if exclusive == nil {
 		exclusive = (*os.Root).Link
 	}
-	return &directoryStore{pin: p, ctx: ctx, exclusive: exclusive}, ""
+	return &directoryStore{pin: p, ctx: budget.Lifetime(ctx), exclusive: exclusive}, ""
 }
 func lockBusy(err error) bool { return errors.Is(err, syscall.EWOULDBLOCK) }
 func lockContext(ctx context.Context, file *os.File) error {
@@ -89,6 +90,7 @@ type directoryStore struct {
 	pin       *pin
 	ctx       context.Context
 	exclusive func(*os.Root, string, string) error
+	public    bool
 }
 
 func (d *directoryStore) Close()          { d.pin.close() }
@@ -98,7 +100,7 @@ func recordName(name string) bool {
 }
 func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 	p := d.pin
-	if !recordName(name) {
+	if !recordName(name) && (!d.public || name != "record.json") {
 		return nil, "state.invalid"
 	}
 	if !d.Unchanged() {

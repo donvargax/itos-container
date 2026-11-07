@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 )
 
 type offlineRuntime struct {
+	isolation              *isolationWorld
 	api                    *offlineAPI
 	mode                   string
 	arguments, argv        []string
@@ -38,6 +40,10 @@ var (
 )
 
 func (w *world) offlineFixture(mode string) error {
+	return w.offlineFixtureWithProbe(mode, w.buildOfflineProbe)
+}
+
+func (w *world) offlineFixtureWithProbe(mode string, buildProbe func() error) error {
 	// Guard before even allocating a fixture or reading native-engine inputs.
 	if err := doctorRealGuard(); err != nil {
 		return err
@@ -59,7 +65,7 @@ func (w *world) offlineFixture(mode string) error {
 	if err := w.approvalManifest(); err != nil {
 		return err
 	}
-	if err := w.buildOfflineProbe(); err != nil {
+	if err := buildProbe(); err != nil {
 		return err
 	}
 	// Shell glob candidates and marker names make interpretation observable.
@@ -210,12 +216,28 @@ func (w *world) closeOfflineRuntime() error {
 	// identified worker. This evidence is deliberately not added to the journal.
 	err := a.server.Close()
 	a.closeConnections()
-	return errors.Join(err, a.cleanup())
+	err = errors.Join(err, a.cleanup())
+	if w.offline.isolation != nil {
+		err = errors.Join(err, w.offline.isolation.close())
+	}
+	return err
 }
 
 func (w *world) offlineUnrelated() error {
 	o := w.offline
-	if o.before == nil || o.after == nil || !reflect.DeepEqual(o.before, o.after) {
+	registry, err := w.offlineCompletedRegistryPaths()
+	if err != nil {
+		return err
+	}
+	after := maps.Clone(o.after)
+	for path := range registry {
+		// Only validated additions belong to this run. Existing objects still
+		// have to match, and no other file below sessions is exempted.
+		if _, existed := o.before[path]; !existed {
+			delete(after, path)
+		}
+	}
+	if o.before == nil || o.after == nil || !reflect.DeepEqual(o.before, after) {
 		return fmt.Errorf("offline run changed unrelated checkout or host fixture files")
 	}
 	if o.resourcesBefore == nil || o.resourcesAfter == nil || !reflect.DeepEqual(o.resourcesBefore, o.resourcesAfter) {

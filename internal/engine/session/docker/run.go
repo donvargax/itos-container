@@ -25,7 +25,7 @@ type runConnection struct {
 }
 
 func (e Engine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection, port.Outcome) {
-	c, failure := e.Open(ctx, b)
+	c, failure := e.open(ctx, b, port.EnvironmentMissing)
 	if failure != "" {
 		return nil, failure
 	}
@@ -292,7 +292,10 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 		}
 		return int(status.StatusCode), ""
 	case <-result.Error:
-		return 0, port.ExecutionFailed
+		if ctx.Err() != nil {
+			return 0, port.ExecutionFailed
+		}
+		return 0, port.EngineLost
 	case <-ctx.Done():
 		return 0, port.ExecutionFailed
 	}

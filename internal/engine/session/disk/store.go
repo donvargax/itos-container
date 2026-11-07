@@ -4,6 +4,7 @@ package disk
 import (
 	"bytes"
 	"context"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"strconv"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -40,6 +41,10 @@ func (s Store) identity() (string, string, port.Outcome) {
 	return uid, gid, ""
 }
 func (s Store) acquire(ctx context.Context, project, token string, create, fresh bool) (*intent, port.Outcome) {
+	return s.acquireMissing(ctx, project, token, create, fresh, port.Refused)
+}
+
+func (s Store) acquireMissing(ctx context.Context, project, token string, create, fresh bool, missing port.Outcome) (*intent, port.Outcome) {
 	if !port.HexID(project) || !port.HexID(token) {
 		return nil, port.Invalid
 	}
@@ -53,15 +58,21 @@ func (s Store) acquire(ctx context.Context, project, token string, create, fresh
 		return nil, storageFailure(f, create)
 	}
 	if directory == nil {
-		return nil, port.Refused
+		return nil, missing
 	}
 	if fresh && s.Checkout.Pin(s.Input.Root) != readiness.None {
 		directory.Close()
 		return nil, port.Refused
 	}
-	return &intent{store: s, ctx: ctx, directory: directory, candidate: candidate, name: token + ".json", fresh: fresh}, ""
+	return &intent{store: s, ctx: budget.Lifetime(ctx), directory: directory, candidate: candidate, name: token + ".json", fresh: fresh}, ""
 }
 func (s Store) New(ctx context.Context, durable approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, durable, token, "intent")
+}
+func (s Store) Prepare(ctx context.Context, durable approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, durable, token, "reserved")
+}
+func (s Store) newIntent(ctx context.Context, durable approval.Durable, token, stage string) (port.Intent, port.Outcome) {
 	binding, failure := s.Codec.Frozen(durable.Frozen)
 	if failure != "" {
 		return nil, failure
@@ -85,6 +96,7 @@ func (s Store) New(ctx context.Context, durable approval.Durable, token string) 
 	}
 	t.binding = binding
 	t.record = binding.Intent(token)
+	t.record.Stage = stage
 	if failure = t.validateBinding(); failure != "" {
 		return nil, failure
 	}
@@ -103,11 +115,15 @@ func (s Store) OpenCleanup(ctx context.Context, reference string) (port.Intent, 
 	return s.open(ctx, reference, false)
 }
 func (s Store) open(ctx context.Context, reference string, fresh bool) (port.Intent, port.Outcome) {
+	return s.openMissing(ctx, reference, fresh, port.Refused)
+}
+
+func (s Store) openMissing(ctx context.Context, reference string, fresh bool, missing port.Outcome) (port.Intent, port.Outcome) {
 	project, token, ok := port.ParseReference(reference)
 	if !ok {
 		return nil, port.Invalid
 	}
-	t, failure := s.acquire(ctx, project, token, false, fresh)
+	t, failure := s.acquireMissing(ctx, project, token, false, fresh, missing)
 	if failure != "" {
 		return nil, failure
 	}
@@ -122,7 +138,7 @@ func (s Store) open(ctx context.Context, reference string, fresh bool) (port.Int
 		return nil, storageFailure(f, false)
 	}
 	if data == nil {
-		return nil, port.Refused
+		return nil, missing
 	}
 	record, failure := s.Codec.Decode(data)
 	if failure != "" {
@@ -222,9 +238,7 @@ func (t *intent) Save(next port.Record) port.Outcome {
 	if failure := t.Validate(); failure != "" {
 		return failure
 	}
-	expected := t.record
-	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
-	if next != expected || !port.HexID(next.ContainerID) || (next.Stage != "owned" && next.Stage != "absent") || (t.record.Stage == "absent" && next != t.record) || (t.record.ContainerID != "" && next.ContainerID != t.record.ContainerID) {
+	if !t.record.ValidTransition(next) {
 		return port.Invalid
 	}
 	data := t.store.Codec.Encode(next)
