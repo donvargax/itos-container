@@ -55,6 +55,10 @@ func TestLifecycleTeardownReview(t *testing.T) {
 	for _, backend := range []string{"ports", "protected records"} {
 		t.Run(backend, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
+				if parts[0] == "output" {
+					lifecycleDiagnosticBudget(t, backend, parts)
+					return
+				}
 				lifecycleTeardownReview(t, backend, parts)
 			})
 		})

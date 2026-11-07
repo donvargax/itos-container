@@ -475,6 +475,28 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | SIGINT  | 130    |
       | SIGTERM | 143    |
 
+  # Diagnostic writes are finite external operations too. After the final drain
+  # exhausts its 10 s allowance, an unread diagnostic sink must not consume all
+  # 20 s left in teardown. A slow readable control proves delivery within the
+  # call limit; LIFECYCLE-18 separately checks the shorter remaining total.
+  @wip @slice-12 @ID-LIFECYCLE-24 @linux
+  Scenario Outline: Diagnostic output has a finite call budget within teardown
+    Given a lifecycle output fixture with observed exit <child> and "<sink>" diagnostics after a stalled final drain
+    When run finishes owned cleanup and attempts diagnostics through each local backend
+    Then diagnostic output waits at most 10 seconds within the original teardown deadline
+    And a diagnostic sink writable before its call deadline receives the stream timeout before run returns
+    And the workload exit and durable cleanup failure history survive blocked or late diagnostics
+    And a readable diagnostic control preserves normal completion and unrelated state
+
+    Examples:
+      | child | sink         |
+      | 0     | blocked      |
+      | 17    | blocked      |
+      | 0     | before limit |
+      | 17    | before limit |
+      | 0     | after limit  |
+      | 17    | after limit  |
+
   # Signals after observed primary exit cannot erase 17 or abort recovery. Keep
   # removal unavailable until after the original teardown expires, then retry.
   # Regression attribution: slice-10 supplies exit-17 precedence and repeat

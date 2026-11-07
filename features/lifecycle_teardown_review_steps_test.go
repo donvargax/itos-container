@@ -21,7 +21,10 @@ func (w *world) lifecycleTeardownReviewSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^a lifecycle teardown fixture with "([^"]*)" followed by stalled "([^"]*)"$`, func(cause, phase string) {
 		selection = "loss:" + cause + ":" + phase
 	})
-	sc.Step(`^run exhausts cleanup and its return-time diagnostics are captured through each local backend$`, func() error {
+	sc.Step(`^a lifecycle output fixture with observed exit (\d+) and "([^"]*)" diagnostics after a stalled final drain$`, func(child int, sink string) {
+		selection = "output:" + strconv.Itoa(child) + ":" + sink
+	})
+	run := func() error {
 		bin, err := w.sessionProbeBinary()
 		if err != nil {
 			return err
@@ -40,7 +43,9 @@ func (w *world) lifecycleTeardownReviewSteps(sc *godog.ScenarioContext) {
 			result.exit = 1
 		}
 		return nil
-	})
+	}
+	sc.Step(`^run exhausts cleanup and its return-time diagnostics are captured through each local backend$`, run)
+	sc.Step(`^run finishes owned cleanup and attempts diagnostics through each local backend$`, run)
 	assert := func() error {
 		if result.exit != 0 || !strings.Contains(result.stdout, "--- PASS: TestLifecycleTeardownReview ") {
 			return fmt.Errorf("teardown review contract failed: %s", result.stdout)
@@ -53,6 +58,10 @@ func (w *world) lifecycleTeardownReviewSteps(sc *godog.ScenarioContext) {
 		`the original run failure is reported separately from run.teardown-timeout`,
 		`observed workload exits keep precedence and missing observations remain unknown`,
 		`fresh recovery cleans only the retained owned worker without restarting it`,
+		`diagnostic output waits at most 10 seconds within the original teardown deadline`,
+		`a diagnostic sink writable before its call deadline receives the stream timeout before run returns`,
+		`the workload exit and durable cleanup failure history survive blocked or late diagnostics`,
+		`a readable diagnostic control preserves normal completion and unrelated state`,
 	} {
 		sc.Step("^"+phrase+"$", assert)
 	}
