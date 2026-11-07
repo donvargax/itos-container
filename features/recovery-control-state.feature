@@ -5,8 +5,9 @@ Feature: Recovery refuses worker-exposed control state
   selected recovery state, including after controller loss or state-root changes.
 
   # Authorities: docs/charter.md, container-pilot.md AC-02/06/08/23/28/36,
-  # docs/architecture.md (Slices), arc42 Recovery, recovery.feature, and slice-21's
-  # shared control-state contract. This file specifies slice-23 only.
+  # docs/architecture.md (Slices), arc42 Recovery, recovery.feature, slice-21's
+  # shared control-state contract and slice-22's mount exclusion. This file
+  # specifies slice-23 only.
   # Inspected baselines:
   # main     88da3e19a01a26fa7171bd2bae2950d9cedb492c
   # slice-16 a15e59b96ef0b7f145054cde34dfb3abd6776edb
@@ -17,7 +18,13 @@ Feature: Recovery refuses worker-exposed control state
   # Registry.Open and Session.Validate check selected storage and original
   # ownership, but never another root's reservations. Slice-16 adds admission
   # completion and reserved/cancelled pre-create intents, not this trust check.
-  # Implement against those completed dependencies, not copies of branch code.
+  # Require COMPLETED slice-16, slice-21 AND slice-22 before implementing this
+  # item or collecting its assertion-level red evidence. Slice-21 serializes
+  # publication/registration but leaves refusal of subsequent exposing mounts
+  # to slice-22. Its completed binding alone cannot prove continuous protection.
+  # Implement against completed dependencies, not copies of branch code. The
+  # registry still lists only slice-21; the coordinator must add slice-22 before
+  # dispatch. No dependency is considered complete merely because its spec exists.
   #
   # Required dependency correction, also recorded in slice-22's
   # run-control-state.feature: pinned slice-21 compares a worker equal to or above
@@ -48,14 +55,36 @@ Feature: Recovery refuses worker-exposed control state
   # completion of every reservation. Exposed bytes can never clear a blocker or
   # authorize a resource operation, even when their hashes and labels agree.
   #
-  # A selected root containing recovery evidence without a completed, validated
-  # location binding has unproven separation. Recovery does not enroll it or
-  # manufacture a binding. A pending location claim protects a location against
-  # mounts; it is not proof that preexisting recovery bytes were protected.
-  # Stopping the exposing worker does not authenticate such legacy bytes. This
-  # specifies refusal, not migration, automatic quarantine/repair, or a new way
-  # to approve old records. Unseen pre-upgrade roots and mixed old/new controllers
-  # remain the upgrade limitation explicitly identified by slice-21.
+  # A selected root containing recovery evidence needs a completed, validated
+  # location binding AND independently protected evidence that publication and
+  # mount exclusion covered it before those bytes were first written and have
+  # remained in force. Current separation is necessary but cannot prove that
+  # history. A completed binding created before slice-22's exclusion, or with
+  # unknown protection provenance, remains untrusted legacy evidence even when
+  # its path, UID and inode still match and every exposing W reservation completed.
+  # Never infer provenance from the running binary version, file timestamps,
+  # matching hashes/labels, a marker inside the selected tree or an empty scan.
+  #
+  # The shared catalog contract must distinguish full-exclusion bindings from
+  # pre-exclusion/unknown-origin bindings durably and without trusting selected
+  # recovery bytes. Its protected provenance is established under the shared
+  # transaction before the first recovery publication; only the protocol with
+  # slice-22 mount exclusion may issue it. Preserve old bindings as location
+  # blockers, but never upgrade their protection provenance by rereading/resyncing
+  # them, reapproving, reenrolling or stamping already-existing recovery records.
+  # Use the shared engine contract and fake/disk fixtures, not a recovery-only
+  # catalog or a flag inferred by status/stop. The step handoff must identify the
+  # reviewed writer/reader representation and dependency revisions that supply
+  # this distinction; pinned slice-21's spec does not supply it yet.
+  #
+  # A missing binding or pending claim also leaves old bytes unproven. Recovery
+  # never enrolls, manufactures or upgrades protection evidence. With no known
+  # outstanding exposure, missing historical protection is recovery.temporary
+  # (75), including a structurally valid pre-exclusion binding; it is not a
+  # malformed-record error. W cleanup and upgrading the controller cannot
+  # authenticate these bytes. This specifies refusal, not migration, automatic
+  # quarantine/repair, or a new way to approve old records. Unseen pre-upgrade
+  # roots and mixed old/new controllers remain slice-21's upgrade limitation.
   #
   # Catalog discovery supplies separation evidence only. Public discovery stays
   # within the effective checkout/UID and SELECTED state root; never search other
@@ -103,11 +132,12 @@ Feature: Recovery refuses worker-exposed control state
   # its entries and must not be presented as a successful empty inspection.
   #
   # Reuse recovery's public rules and schema, with these explicit mappings:
-  # known exposure or unsafe path/owner/mode/link -> recovery.unsafe-state (1);
+  # known outstanding exposure or unsafe path/owner/mode/link -> recovery.unsafe-state (1);
   # malformed/inconsistent catalog binding -> recovery.invalid-state (2);
-  # missing required binding/catalog/root, unavailable lookup/read/lock, or
-  # deadline exhaustion -> recovery.temporary (75). These are state failures,
-  # not recovery.environment's engine-environment failure. Usage still wins
+  # missing required binding/catalog/root or full-exclusion provenance,
+  # unavailable lookup/read/lock, or deadline exhaustion -> recovery.temporary (75).
+  # These are state failures, not recovery.environment's engine-environment
+  # failure. Usage still wins
   # before state access. Do not turn failed separation into recovery.not-owned.
   # JSON is one schema-1 object, ok=false, nonempty complete typed problems and
   # sessions:[] for a root refusal. Plain output has the same rule/meaning.
@@ -147,8 +177,8 @@ Feature: Recovery refuses worker-exposed control state
   # account home. Ordinary files have one link; private modes and matching ownership
   # eliminate existing path/mode/foreign-resource refusals as explanations.
   #
-  # In the exposed-legacy cases, P's selected managed tree T intersects W as the
-  # row says but is NOT enrolled. Seed P's otherwise consistent session/index,
+  # In the unbound exposed-legacy cases, P's selected managed tree T intersects W
+  # as the row says but is NOT enrolled. Seed P's consistent session/index,
   # intent/snapshot and matching HTTP worker independently there; do not obtain
   # them through a product launch that the dependencies must already refuse.
   # W is admitted through the product from its separate safe root in When; an
@@ -161,8 +191,10 @@ Feature: Recovery refuses worker-exposed control state
   # ID and completed records. The slice-16 dependency supplies those schemas.
   #
   # Safe controls and discovery-fault cases instead seed a completed original
-  # location binding and intact original recovery authority. Unknown workload
-  # results use null; include a known nonzero result in completion controls.
+  # binding with independently protected full-exclusion provenance predating
+  # the recovery records, except where that evidence is the named defect.
+  # Their original recovery authority is intact. Unknown workload results use
+  # null; include a known nonzero result in completion controls.
   # Use distinct synthetic markers in original snapshots/engine errors; no real
   # credential. Fixtures never execute a checkout helper on the host.
   # All child HOME/XDG/catalog paths must stay under the scenario's private parent.
@@ -171,9 +203,9 @@ Feature: Recovery refuses worker-exposed control state
   # Use production command composition/disk/SDK adapters otherwise. No production
   # testing flag, fake separation verdict or weakened ownership validator.
   # Existing positive recovery fixtures must carry independently seeded safe
-  # location bindings too; preserve their original ownership/refusal assertions.
-  # Keep unbound legacy cases explicit instead of silently enrolling them in a
-  # common setup helper. Do not weaken existing state-inventory checks.
+  # bindings with that provenance too; preserve their ownership/refusal assertions.
+  # Keep unbound AND pre-exclusion bound legacy cases explicit instead of silently
+  # enrolling or upgrading them in a common helper. Do not weaken inventories.
   #
   # No Given invokes a product command or asserts an outcome. When records all
   # results, exits, journals and bounded barrier outcomes, including an unexpected
@@ -193,9 +225,10 @@ Feature: Recovery refuses worker-exposed control state
   #
   # Commit complete definitions red first with @wip retained. Temporarily remove
   # @wip for local assertion-level red, then implement and obtain green. Use a
-  # baseline containing completed slice-16/21 and the containment correction;
-  # document exact revisions. Missing catalog fixtures, setup/undefined-step
-  # failures or already-passing controls are not red evidence. The first failing
+  # baseline containing completed slice-16/21/22, the containment correction and
+  # the shared provenance distinction above; document exact revisions. Missing
+  # catalog/provenance fixtures, setup/undefined-step failures or already-passing
+  # controls are not red evidence. The first failing
   # Then expected from inspected code is stated beside each scenario below.
 
   # The first Then fails today: recovery trusts matching P records, reports them
@@ -280,6 +313,7 @@ Feature: Recovery refuses worker-exposed control state
       | defect                                                  | rule                   | exit |
       | selected recovery tree has no location binding           | recovery.temporary     | 75   |
       | selected recovery tree has only a pending location claim | recovery.temporary     | 75   |
+      | completed binding predates mount exclusion               | recovery.temporary     | 75   |
       | catalog absent beside existing recovery evidence         | recovery.temporary     | 75   |
       | another cataloged tree is missing                        | recovery.temporary     | 75   |
       | another cataloged reservation cannot be read             | recovery.temporary     | 75   |
@@ -336,6 +370,37 @@ Feature: Recovery refuses worker-exposed control state
       | command |
       | status  |
       | stop    |
+
+  # Seed a historical state, not an unsafe launch through the corrected product:
+  # P's completed binding predates mount exclusion; later W used a separate state
+  # root and mounted a checkout containing T, changed P's public workload_exit
+  # from null to 17, then completed every reservation. P and W checkouts are
+  # disjoint; W state and the catalog are outside both and were not exposed.
+  # Given writes the pre-exclusion binding, otherwise consistent original
+  # P snapshot/intent/index and edited public record, plus W's retained absent
+  # intent, stopped record and durable completion certificate. The HTTP fixture
+  # has no W full ID. Keep independent pre/post-edit byte images; fixture fsync
+  # supplies persisted history, not a claim that this product performed cleanup.
+  # No old binary, Docker worker or host checkout helper is executed. Do not
+  # delete P's completed binding or leave an outstanding W blocker to get refusal.
+  # Original P resource bindings still match, and all modes/links are safe.
+  # The first Then fails today: current recovery reports the edited facts or
+  # cleans/syncs P. A current-reservations-only check would also accept these
+  # bytes. Both fresh attempts must refuse the missing historical protection;
+  # the running row guards cleanup and the completed row guards read/sync paths.
+  @wip @slice-23 @ID-RECSTATE-08 @linux @local-engine-fixture
+  Scenario Outline: Completed exposing workers cannot restore authority to pre-exclusion bound records
+    Given a recovery-separation history with P authority "<authority>" bound before mount exclusion and W completed after altering P records
+    When fresh P status and stop inspect that retained bound history twice in "<format>"
+    Then every P command reports recovery.temporary with exit 75 and unproven-protection guidance without trusted entries or an executable retry
+    And independent observations show the completed P binding survives the record edit and all exposing W reservations have durable completion with no W worker remaining
+    And no P invocation connects to an engine rewrites or syncs records upgrades a binding or changes P resources checkout edits or retained W state
+    And no edited workload outcome or synthetic sensitive marker appears in recovery output or new metadata
+
+    Examples:
+      | authority        | format |
+      | running worker   | JSON   |
+      | completed absent | plain  |
 
   # Do not require an unsafe P invocation to succeed during setup. Start W, kill
   # its controller, and recover W using its original safely enrolled root in
