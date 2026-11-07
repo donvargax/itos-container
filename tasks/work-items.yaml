@@ -424,8 +424,8 @@ items:
   - id: T-25
     title: Release a version on each feat or fix once run works
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-14, slice-15]
     kind: task
   - id: slice-13
