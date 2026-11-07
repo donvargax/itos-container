@@ -649,8 +649,8 @@ items:
   - id: T-30
     title: TestPublicRecoveryBudgetRegressions/changed_record passes reliably on Linux CI
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-27
