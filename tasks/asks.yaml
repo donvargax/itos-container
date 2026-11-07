@@ -142,3 +142,4 @@ questions:
   - id: q-35
     item: "slice-21"
     question: "slice-21: lock a private inode instead of the account home (Codex P3), and how to bootstrap it?"
+    answer: "Stop locking the home. mkdir the coordination directory 0700 (EEXIST is fine), open it O_DIRECTORY|O_NOFOLLOW and validate by descriptor (this UID, 0700, no symlink), then flock a private lock file inside it, validated the same way. Bound every lock wait by the 10 s call budget with a typed retryable refusal. Revise CONTROL-10 and control-state.feature:43-54 to match and add a case where another UID locking the home cannot delay doctor, approve or run. No 0700-home requirement. See slice-21-steer.md."
