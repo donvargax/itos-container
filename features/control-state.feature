@@ -464,3 +464,31 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | layout                                         |
       | state path shares only a textual prefix with W |
       | disjoint project paths have equal basenames    |
+
+  # A read-only home descriptor models the locking capability of another UID on
+  # a 0755 home. flock conflicts depend on the inode, not the holder's UID.
+  @wip @slice-21 @ID-CONTROL-12 @local-engine-fixture
+  Scenario Outline: Another UID's home-directory lock cannot delay control commands
+    Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
+    And a readable account home and valid inputs for locked-home "<command>"
+    When P invokes "<command>" while an independent read-only descriptor holds the home lock
+    Then the command makes its expected progress before the home lock is released
+
+    Examples:
+      | command |
+      | doctor  |
+      | approve |
+      | run     |
+
+  @wip @slice-21 @ID-CONTROL-13 @local-engine-fixture
+  Scenario Outline: Contended private coordination locks have a retryable call deadline
+    Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
+    And valid "<command>" inputs and a private coordination lock held by another process
+    When P invokes "<command>" while that private lock remains held
+    Then P reports approval.state.busy with exit 75 within the ten-second call budget without writes or worker creation
+
+    Examples:
+      | command |
+      | doctor  |
+      | approve |
+      | run     |
