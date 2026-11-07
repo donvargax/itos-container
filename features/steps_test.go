@@ -51,9 +51,10 @@ type world struct {
 	loss          *lifecycleLoss
 	overlap       *overlapFixture
 	hardlinks     *hardlinkWorld
+	duringQuiet   func() // Selected independent cases inside a stable quiet-worker lifetime.
 }
 
-func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
+func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w := &world{root: root, bin: bin}
 	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 		return ctx, w.setUp()
@@ -168,6 +169,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.overlapSteps(sc)
 	w.hardlinkSteps(sc)
 	w.runExitSteps(sc)
+	return w
 }
 
 // setUp makes the scenario's scratch folder.
