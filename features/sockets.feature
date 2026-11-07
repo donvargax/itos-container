@@ -159,6 +159,17 @@ Feature: Host Unix sockets in the checkout stay outside the worker boundary
   # Keep all scenarios @wip and stop after that harness repair for a guarded red
   # run of ID-SOCKETS-02 ALONE. Do not implement product denial until its red is
   # attributable too. Local fixture regressions supply no engine red evidence.
+  #
+  # Coordinator decision, 2026-11-07 ~01:30 UTC: run 42323471709 at 69b02a8
+  # supplies ACCEPTED red evidence for ID-SOCKETS-02. The running worker reached
+  # host sockets published after launch (stream, seqpacket and datagram, in
+  # existing and newly nested paths), and all positive controls passed. Together
+  # with run 42312676619 for ID-SOCKETS-01/03, every case now has attributable
+  # red evidence. The preceding instructions to wait for another red run are
+  # superseded: implement denial, then remove @wip and obtain ordinary green CI.
+  # No further red dispatch is needed. The enforcement/startup constraint found
+  # during implementation is recorded for coordinator decision in
+  # docs/plans/checkout-socket-enforcement.md; it does not change these assertions.
 
   # Prepare each operation's listener at both a short root path and a nested
   # checkout path before invoking run. The probe's earliest operations attempt
