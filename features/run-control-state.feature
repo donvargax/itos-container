@@ -18,6 +18,15 @@ Feature: Run keeps every tracked control-state tree outside worker mounts
   # atomic publication/registration exclusion; this item consumes those locations
   # when choosing a mount. Implement against the completed dependencies, not by
   # copying their unfinished code or substituting a second coordination scheme.
+  # Dependency correction REQUIRED: pinned slice-21 control-state.feature:105
+  # compares only worker roots equal to or above a managed tree. It does NOT yet
+  # specify exclusion when W is inside T. The coordinator must have slice-21
+  # extend inspection AND the locked publication recheck to both containment
+  # directions, including worker-first descendant rows in CONTROL-01/02/05 and
+  # the shared fake/disk contracts. Enrollment must refuse before a location
+  # claim or selected-tree write, not wait for a later snapshot to expose W.
+  # EXPOSURE-09 preserves that dependency regression here. Record the corrected
+  # slice-21 revision with red evidence; the pinned spec alone is insufficient.
   # Expected failures below are from inspection, NOT executed red evidence.
   #
   # Admission contract:
@@ -49,7 +58,12 @@ Feature: Run keeps every tracked control-state tree outside worker mounts
   # or frozen snapshot cannot authorize a mount over a newly enrolled location.
   # A publisher holding exclusion completes before the waiting run decides; after
   # publication, the run refuses instead of waiting for persistent state to expire.
-  # If worker admission wins first, slice-21 refuses the exposing publication.
+  # If worker admission wins first, corrected slice-21 must refuse publication
+  # when W equals T, contains T OR is inside T, using the same component comparison
+  # under the same exclusion. This applies before enrolling a prospective tree,
+  # even if no control record is yet within W: later snapshot/intent/recovery
+  # publication must not put records into an already admitted descendant mount.
+  # A slice-22 admission recheck cannot protect a worker that already won admission.
   # Never hold common exclusion across consent, engine I/O, workload lifetime or
   # acquisition of a session operation lock. Preserve the existing startup budget.
   #
@@ -103,9 +117,15 @@ Feature: Run keeps every tracked control-state tree outside worker mounts
   # P's selected tree T is outside P but intersects W as the row says. Ordinary
   # files have independent inodes; API sockets are outside all checkouts. No
   # existing own-state, nested-checkout, hard-link or socket refusal masks exposure.
-  # For the inside-snapshots row, W is T/snapshots/<P-project>, containing P's
-  # valid generation file; its .git and request files are ordinary fixture data.
-  # Create that checkout before calculating its approval, without moving records.
+  # For inside-snapshots placements, W is T/snapshots/<P-project>; its .git and
+  # request files are ordinary fixture data. Create that checkout before
+  # calculating its approval, without moving records. Publication-first histories
+  # leave P's valid generation file there before W attempts admission. In the
+  # worker-first EXPOSURE-09, T initially contains only ordinary fixture directories
+  # and W checkout data, with safe ownership/modes. No P control record, pending
+  # claim or completed T binding exists. W's selected state and the fixed
+  # account-home footprint are both disjoint from T as well as the checkouts.
+  # Calculate <P-project> independently from P's candidate, not by publishing it.
   #
   # Givens only create disposable inputs, independently seeded approvals/bindings
   # when specified, workload plans, faults and barriers. They never run commands
@@ -157,17 +177,18 @@ Feature: Run keeps every tracked control-state tree outside worker mounts
   # absence/completion assertion. No local engine, credentials or host helper runs.
   #
   # Implementer commits complete steps red first with @wip retained. Obtain local
-  # assertion-level red for EXPOSURE-01..06 with @wip removed for the run; obtain
+  # assertion-level red for EXPOSURE-01..06/09 with @wip removed for the run; obtain
   # EXPOSURE-07/08 red only through the coordinator's CI selector. Then implement,
   # remove @wip and require green in the same respective tiers. Controls following
   # a new refusal may already pass; they are not independent red requirements.
 
   # Both operation orders end at the NEW mount refusal. In the worker-first row,
   # When starts W before P has a location claim, attempts P approval (slice-21
-  # must refuse it), completes W with product stop, then approves P and attempts
-  # a fresh W run. Observe original full-ID absence and durable completion before
-  # approval. Do not mistake that earlier, already-specified approval refusal for
-  # this item's red. Without location consumption the FINAL W run still launches.
+  # must refuse it after the correction above), completes W with product stop,
+  # then approves P and attempts a fresh W run. Observe original full-ID absence
+  # and durable completion before approval. Do not mistake that earlier,
+  # already-specified approval refusal for this item's red. Without location
+  # consumption the FINAL W run still launches.
   @wip @slice-22 @ID-EXPOSURE-01 @linux @local-engine-fixture
   Scenario Outline: Either publication order prevents a later mount over approved state
     Given an exposure fixture with unapproved P state beneath W and "<engines>"
@@ -180,6 +201,34 @@ Feature: Run keeps every tracked control-state tree outside worker mounts
       | engines          | order                                                   |
       | shared daemon    | approve P first                                         |
       | distinct daemons | run W then refuse P approval then stop W before approval |
+
+  # Inverse containment, worker first: W occupies the future P snapshot folder
+  # before T is enrolled. The pinned slice-21 predicate allows P approval because
+  # T is above W; a later P run can then write its snapshot into the active mount.
+  # The first Then catches that dependency defect BEFORE any such publication.
+  # With corrected slice-21, that assertion is a passing prerequisite; this item's
+  # red is the final W refusal after product stop, successful P approval and run.
+  # Confirm P's snapshot is inside the SAME original W directory; moving W, using
+  # a different project hash, seeding P records or pre-enrolling T masks the gap.
+  # Histories record full-ID activity and actual enrollment/publication order.
+  # Stop must prove absence and durable completion before any successful P write;
+  # controller exit or a DELETE response alone cannot enable the positive control.
+  @wip @slice-22 @ID-EXPOSURE-09 @linux @local-engine-fixture
+  Scenario Outline: A worker in a future snapshot directory excludes publication until completed
+    Given a descendant exposure fixture with unapproved P and W inside unenrolled T at P snapshot folder on "<engines>"
+    When W starts and fresh P exact-fingerprint approval attempts to enroll T while W remains active
+    Then P reports approval.state.exposed with exit 1 before any location claim or selected-tree write
+    And independent observations show W was admitted before P inspected T and keeps its original full ID activity and ownership
+    And T remains unenrolled with no P approval snapshot or publication temporary and the descendant checkout is unchanged
+    When product stop completes W then fresh P approval and a foreground run finish before a fresh W run is attempted
+    Then the final W run reports run.control-state-exposed with exit 1 and disjoint-checkout guidance before public registration or engine mutation
+    And original W full-ID absence and durable reservation completion precede successful P enrollment approval and snapshot publication inside the original W checkout
+    And P completed its owned foreground run and its retained approval snapshot and location bindings remain unchanged by the final W refusal
+
+    Examples:
+      | engines          |
+      | shared daemon    |
+      | distinct daemons |
 
   # T protects records, not merely live P workers. Histories are product actions;
   # no Given forges completion. All P checkouts are disjoint from W, including
