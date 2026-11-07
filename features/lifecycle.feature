@@ -686,3 +686,14 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | boundary inspection   | SIGINT          |
       | attach establishment  | SIGINT          |
       | start acknowledgement | SIGINT          |
+
+  # Review regression: native wait can stall in a socket identity syscall before
+  # its cancellable request. An exited primary has no recorded exit yet; hold
+  # that recovery wait past teardown and release it only after command return.
+  @wip @slice-12 @ID-LIFECYCLE-21 @linux
+  Scenario: A non-cancellable exit observation cannot extend teardown
+    Given a lifecycle exited worker with an unrecorded exit and a cancellation-ignoring recovery wait
+    When run returns before the pending exit observation is released through each local backend
+    Then run reports its original failure and teardown timeout within 30 seconds with unknown workload outcome and retained recovery
+    And the pending exit observation retains its connection until completion without changing the returned result or recovery record
+    And a healthy foreground wait longer than startup still returns its observed exit and cleans only its owned worker

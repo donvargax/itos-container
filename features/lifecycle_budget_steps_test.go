@@ -14,6 +14,9 @@ import (
 func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 	var name, operation string
 	var result doctorResult
+	sc.Step(`^a lifecycle exited worker with an unrecorded exit and a cancellation-ignoring recovery wait$`, func() {
+		name, operation = "teardown wait", ""
+	})
 	sc.Step(`^a lifecycle launch with a cancellation-ignoring "([^"]*)" interrupted by "([^"]*)"$`, func(op, cause string) {
 		name, operation = "startup lifetime", cause+"|"+op
 	})
@@ -46,6 +49,7 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^run proceeds through the full invocation and controlled time advances through the 120 second startup deadline and the ensuing cleanup through each local backend$`, run)
 	sc.Step(`^run stops waiting and the abandoned checkout operation later finishes through each local backend$`, run)
 	sc.Step(`^run returns before the pending launch operation is released through each local backend$`, run)
+	sc.Step(`^run returns before the pending exit observation is released through each local backend$`, run)
 	assert := func() error {
 		if result.exit != 0 || !strings.Contains(result.stdout, "--- PASS: TestLifecycleBudgetContract ") {
 			return fmt.Errorf("lifecycle budget contract failed: %s", result.stdout)
@@ -66,6 +70,9 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 		`the late completion releases its checkout pins without launching a worker or replacing the result`,
 		`run reports the interruption within its original operation and teardown budgets while retaining the pending connection`,
 		`late launch completion closes its connection and any attachment without resuming launch retrying mutations or changing the returned result`,
+		`run reports its original failure and teardown timeout within 30 seconds with unknown workload outcome and retained recovery`,
+		`the pending exit observation retains its connection until completion without changing the returned result or recovery record`,
+		`a healthy foreground wait longer than startup still returns its observed exit and cleans only its owned worker`,
 	} {
 		sc.Step("^"+phrase+"$", assert)
 	}
