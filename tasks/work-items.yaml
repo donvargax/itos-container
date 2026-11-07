@@ -674,9 +674,13 @@ items:
     title: Stop requesting Bugbot reviews
     phase: 1
     owner: donvargax
+    status: dropped
+    depends_on: []
+    kind: task
+  - id: T-29
+    title: Stop requesting Bugbot reviews
+    phase: 1
+    owner: donvargax
     status: doing
     depends_on: []
     kind: task
-    why: >
-      The person asked on 2026-11-07 to stop Bugbot reviews: push.pr.reviewers drops cursor[bot], so
-      itos review request and push --ready ask and wait for Codex alone.
