@@ -662,3 +662,16 @@ items:
       and a CI runner that has it, or the gVisor runtime, which hosted runners can prove but which
       adds a runtime. Research in docs/plans/checkout-socket-enforcement.md; scenarios ID-SOCKETS-02
       and 03 wait for it. A milestone-2 choice.
+  - id: p1-flaky-equal-basename-stop-scenario
+    title: Native stop confined to one of two equal-basename projects passes reliably
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      main's engine job went red at 8164782 (run 42389951333), a registry-only push, on 'Native stop
+      is confined to one of two equal-basename projects': lstat
+      …/slice-11-project-b/checkout/slice-11-heartbeat.next: no such file or directory, while the
+      run before (db63a37) passed. A flaky engine scenario turns main red at random. Find the race
+      (the heartbeat file's rename, likely) and fix it, never by retrying or widening a timeout.
