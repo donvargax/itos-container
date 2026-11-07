@@ -666,16 +666,10 @@ items:
       Already tracks continuous enforcement against host sockets created or replaced after startup,
       retaining Landlock/gVisor research and runtime scenarios ID-SOCKETS-02/03. Preserve the
       person's q-30 deferral to milestone 2.
-  - id: p1-flaky-equal-basename-stop-scenario
+  - id: T-31
     title: Native stop confined to one of two equal-basename projects passes reliably
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      main's engine job went red at 8164782 (run 42389951333), a registry-only push, on 'Native stop
-      is confined to one of two equal-basename projects': lstat
-      …/slice-11-project-b/checkout/slice-11-heartbeat.next: no such file or directory, while the
-      run before (db63a37) passed. A flaky engine scenario turns main red at random. Find the race
-      (the heartbeat file's rename, likely) and fix it, never by retrying or widening a timeout.
+    kind: task
