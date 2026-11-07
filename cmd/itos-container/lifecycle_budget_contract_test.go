@@ -31,19 +31,33 @@ func TestLifecycleBudgetContract(t *testing.T) {
 	}
 	for _, backend := range []string{"ports", "protected records"} {
 		t.Run(backend, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) { lifecycleBudgetCase(t, name, os.Getenv("SLICE_12_ARGUMENT"), backend) })
+			synctest.Test(t, func(t *testing.T) {
+				if name == "checkout lifetime" {
+					cause, operation, _ := strings.Cut(os.Getenv("SLICE_12_ARGUMENT"), "|")
+					lifecycleCheckoutLifetimeCase(t, cause, operation, backend)
+					return
+				}
+				lifecycleBudgetCase(t, name, os.Getenv("SLICE_12_ARGUMENT"), backend)
+			})
 		})
 	}
 }
 
 type lifecyclePreflightFault struct {
-	stall    string
-	progress time.Duration
-	events   []string
+	stall                       string
+	progress                    time.Duration
+	events                      []string
+	block                       func(string)
+	checkout                    *rf.Checkout
+	pending, closedWhilePending bool
+	closes                      int
 }
 
 func (f *lifecyclePreflightFault) step(name string) {
 	f.events = append(f.events, name)
+	if f.block != nil {
+		f.block(name)
+	}
 	if f.stall == name {
 		time.Sleep(11 * time.Second)
 		return
@@ -61,6 +75,7 @@ func lifecycleBudgetPreflight(l *lifecycleLocal, f *lifecyclePreflightFault) (ru
 	s.Images[rf.Reference] = image
 	e := &rf.Engine{Session: s}
 	checkout := &rf.Checkout{Identity: *af.Ready().Checkout}
+	f.checkout = checkout
 	i := readiness.Inspector{
 		Checkout: lifecycleCheckout{checkout, f}, Engine: lifecycleReadinessEngine{e, f},
 		Policy:     lifecyclePolicy{&pf.Source{Value: pp.Value{Kind: pp.Object, Fields: map[string]pp.Value{"version": {Kind: pp.Number, Number: pp.Decimal{Coefficient: "1", Exponent: "0"}}, "manifest": {Kind: pp.String, Text: "worker.json"}}}}, f},
@@ -91,6 +106,11 @@ func (c lifecycleCheckout) Inspect() (rp.CheckoutIdentity, rp.Failure) {
 func (c lifecycleCheckout) Unchanged() bool {
 	c.f.step("checkout revalidation")
 	return c.Checkout.Unchanged()
+}
+func (c lifecycleCheckout) Close() {
+	c.f.closes++
+	c.f.closedWhilePending = c.f.closedWhilePending || c.f.pending
+	c.Checkout.Close()
 }
 
 type lifecyclePolicy struct {

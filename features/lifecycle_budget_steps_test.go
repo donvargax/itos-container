@@ -16,6 +16,9 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 	var result doctorResult
 	sc.Step(`^a lifecycle contract fixture with a stalled "([^"]*)" and a healthy control$`, func(s string) { name, operation = "call", s })
 	sc.Step(`^a lifecycle contract fixture with 115 seconds of successful preflight and publication progress and delayed launch observations$`, func() { name, operation = "startup", "" })
+	sc.Step(`^a lifecycle checkout with a blocked "([^"]*)" interrupted by "([^"]*)"$`, func(op, cause string) {
+		name, operation = "checkout lifetime", cause+"|"+op
+	})
 	run := func() error {
 		bin, err := w.sessionProbeBinary()
 		if err != nil {
@@ -38,6 +41,7 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 	}
 	sc.Step(`^the real run contract reaches the operation and controlled time advances through its 10 second deadline and the ensuing cleanup through each local backend$`, run)
 	sc.Step(`^run proceeds through the full invocation and controlled time advances through the 120 second startup deadline and the ensuing cleanup through each local backend$`, run)
+	sc.Step(`^run stops waiting and the abandoned checkout operation later finishes through each local backend$`, run)
 	assert := func() error {
 		if result.exit != 0 || !strings.Contains(result.stdout, "--- PASS: TestLifecycleBudgetContract ") {
 			return fmt.Errorf("lifecycle budget contract failed: %s", result.stdout)
@@ -54,6 +58,8 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 		`the pending operation receives only the remaining startup time and cleanup receives its own 30 second budget`,
 		`after the cleanup attempt each run reports "run.startup-timeout" with exit 75 no later than 30 seconds after the original startup deadline`,
 		`delayed replies cannot launch work or replace the reported timeout`,
+		`run returns its bounded interruption result without closing checkout state used by the pending operation`,
+		`the late completion releases its checkout pins without launching a worker or replacing the result`,
 	} {
 		sc.Step("^"+phrase+"$", assert)
 	}
