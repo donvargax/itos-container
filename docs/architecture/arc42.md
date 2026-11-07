@@ -188,7 +188,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/slices/exec` | Deferred | Additional argv only during a live owned foreground session. | Future session contract; cannot extend lifetime or alter frozen permissions. |
 | `internal/engine/policy` | Implemented by slice-1 and slice-5 | Strict offline schema/default/value validation, bounded parsing and typed failures. | Own domain/port, disk and YAML adapters; reusable policy contracts and I/O-free porttest fakes. |
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
-| `internal/engine/readiness` | Implemented prerequisite | Read-only checkout, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
+| `internal/engine/readiness` | Implemented prerequisite, extended by slice-20 | Read-only checkout, regular-file inode independence, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
 | `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
 
@@ -197,6 +197,16 @@ or runtime permission. Doctor composes readiness and approval inspection; readin
 never calls approval, so their composition creates no cycle.
 Typed diagnostic contracts live with the policy, manifest and readiness engine ports;
 doctor and approval share those rule/exit mappings without calling another slice.
+The checkout port recursively requires one filesystem link per regular file,
+including Git, hidden, ignored and untracked entries. Its disk adapter enumerates
+pinned directories, reads link metadata without file contents or symlink traversal,
+and refuses unavailable observations. Each scan, including revalidation, reads
+at most 128 entries per batch and shares a 100,000-entry limit and 10-second
+monotonic deadline across descendants through directory depth 64 (root depth 0).
+Exhaustion refuses safety; time checks between synchronous filesystem calls do
+not preempt a blocked kernel call. Approval does not cache this layout property;
+the [shared-inode decision](../decisions/0013-refuse-shared-checkout-inodes.md)
+extends admission and revalidation without adding link counts to the fingerprint.
 Only cmd binds canonical encoding, effective identity, protected disk storage and
 terminal presentation. The disk store locks pinned project directories, so read-only
 inspection and frozen selection need no lock-file creation. It validates ancestor and
@@ -262,7 +272,7 @@ supply passing evidence. This split changes delivery scope, not the runtime boun
 or the requirement for CI-only real-engine proof.
 
 Each owning engine introduces reusable validation and port contracts with its work item.
-Slice-17's [descriptor-backed anchor decision](../decisions/0013-descriptor-backed-checkout-anchor.md)
+Slice-17's [descriptor-backed anchor decision](../decisions/0014-descriptor-backed-checkout-anchor.md)
 extends the existing session engine ports and adapters, with run remaining the thin
 command consumer. Its selected Docker local volume mechanism is pending native proof
 and implementation; it introduces neither another command nor another controller service.
@@ -303,6 +313,13 @@ settled milestone choices below replacing its open-choice and setup/state assump
 
 Ordinary doctor and approve execute no checkout code, install no hooks, log in
 to no account and pull/build/start no images or sessions. Approval cannot launch work.
+Ordinary inspection refuses multiply linked regular files with
+`doctor.checkout.hardlink` (exit 1, checkout root subject); an unreadable subtree
+or exhausted enumeration budget uses `doctor.checkout.unavailable` (exit 3).
+File-only modes make no layout claim.
+Revalidation after engine inspection and consent detects a newly shared inode;
+late launch validation refuses start while cleanup retains protected ownership.
+Worker-created hard links within the sole checkout mount do not block recovery.
 Init and lifecycle hooks remain deferred. The person never types a hash in the
 terminal flow. A host agent can approve through the optional flag or a faked terminal:
 approval records **what, not who**, and neither path proves human presence. Slice-4
@@ -395,7 +412,7 @@ gate: Docker's start operation also starts the task. A detector failure after
 successful start must fail native acceptance. The selected volume mechanism
 remains unimplemented pending the remaining red checkpoints and native green.
 The source evidence and settled ordering are recorded in the
-[descriptor-anchor decision](../decisions/0013-descriptor-backed-checkout-anchor.md#implementation-checkpoint-and-settled-detector).
+[descriptor-anchor decision](../decisions/0014-descriptor-backed-checkout-anchor.md#implementation-checkpoint-and-settled-detector).
 
 These are T-11's interface meanings, not a storage schema or proof of a transition.
 

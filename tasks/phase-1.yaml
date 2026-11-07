@@ -2172,3 +2172,9 @@
     Commit the spec with docs --item T-26 and header docs: specify T-26, reconcile implemented
     engine status; implement the document in docs --task T-26. Let configured hooks and CI run
     their gates. Agents commit and stop; the loop owns pushing, CI watching and closure.
+- id: T-29
+  type: ci
+  title: Stop requesting Bugbot reviews
+  why: >
+    The person asked on 2026-11-07 to stop Bugbot reviews: push.pr.reviewers drops cursor[bot], so
+    itos review request and push --ready ask and wait for Codex alone.

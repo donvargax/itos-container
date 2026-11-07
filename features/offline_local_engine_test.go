@@ -27,6 +27,7 @@ type localOfflineAPI struct {
 	expected         map[int][]string
 	problem          error
 	recovery         *foregroundRecovery
+	attachBarrier    func(string, string)
 }
 
 func (w *world) localOfflineFixture() {
@@ -98,6 +99,11 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 	case len(parts) == 2 && parts[1] == "json" && r.Method == "GET":
 		_ = json.NewEncoder(out).Encode(resource)
 	case len(parts) == 2 && parts[1] == "attach" && r.Method == "POST":
+		if a.attachBarrier != nil {
+			a.mu.Unlock()
+			a.attachBarrier(token, id)
+			a.mu.Lock()
+		}
 		conn, buf, err := out.(http.Hijacker).Hijack()
 		if err != nil {
 			a.problem = err

@@ -19,6 +19,7 @@ const (
 	CheckoutLayout
 	CheckoutPath
 	CheckoutChanged
+	CheckoutHardlink
 	EngineRemote
 	EngineSelection
 	EngineUntrusted
@@ -53,7 +54,11 @@ type Input struct {
 // Device and inode values are decimal strings to preserve all their bits.
 type CheckoutIdentity struct{ Root, Device, Inode, GitDevice, GitInode string }
 
-// Checkout pins directories before readers use them, then detects substitution.
+// Checkout pins directories before readers use them. Inspect requires every
+// regular file recursively below the root (including Git and ignored files) to
+// have exactly one filesystem link. Unavailable metadata/traversal fails closed.
+// Unchanged rechecks that independence as well as root/Git identity; approval
+// never caches layout safety. Recovery need not re-admit mutable checkout data.
 // Close releases the pin. A failed Pin never leaves a usable pin behind.
 type Checkout interface {
 	Pin(root string) Failure

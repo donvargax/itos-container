@@ -130,3 +130,35 @@ func CheckoutContract(t Reporter, create func() (port.Checkout, port.CheckoutIde
 		t.Errorf("closed checkout claims a stable pin")
 	}
 }
+
+// CheckoutIndependenceContract requires fresh admission and revalidation, with
+// the same assertions on real filesystem layouts and memory-only observations.
+func CheckoutIndependenceContract(t Reporter, create func() (port.Checkout, string, func(string))) {
+	t.Helper()
+	for _, change := range []string{"shared", "unavailable"} {
+		c, root, edit := create()
+		if failure := c.Pin(root); failure != port.None {
+			t.Fatalf("pin = %v", failure)
+		}
+		original, failure := c.Inspect()
+		if failure != port.None || !c.Unchanged() {
+			t.Fatalf("independent checkout refused: %v", failure)
+		}
+		edit(change)
+		if c.Unchanged() {
+			t.Errorf("%s layout retained admission", change)
+		}
+		want := port.CheckoutHardlink
+		if change == "unavailable" {
+			want = port.CheckoutUnavailable
+		}
+		if got, failure := c.Inspect(); failure != want || got != (port.CheckoutIdentity{}) {
+			t.Errorf("%s inspection = %#v, %v", change, got, failure)
+		}
+		edit("independent")
+		if got, failure := c.Inspect(); failure != port.None || got != original || !c.Unchanged() {
+			t.Errorf("independent replacement changed identity or retained refusal: %#v, %v", got, failure)
+		}
+		c.Close()
+	}
+}

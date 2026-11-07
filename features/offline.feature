@@ -463,9 +463,11 @@ Feature: Hardened offline foreground run
   # dockerd performs the bind; the controller gains no CAP_SYS_ADMIN, performs
   # no host mount and starts no new long-lived helper. The kernel must resolve
   # the descriptor to the original inode, never a readlink-derived pathname.
-  # Before releasing the workload, independently verify from the engine side
-  # that mounted /workspace's device/inode match the validated identity. A
-  # mismatch requires owned teardown and refusal, with no pathname fallback.
+  # Q-27 supersedes pre-workload verification: immediately after ContainerStart
+  # returns, inspect State.Pid and stat /proc/<pid>/root/workspace from the host.
+  # Compare device/inode with the validated identity. A mismatch or unavailable
+  # stat requires immediate owned kill/removal and refusal, with no pathname
+  # fallback. The anchor prevents substitution; this check only detects failure.
   # Prove the Moby/kernel hypothesis first in native CI with assertion-level
   # red then green for the post-check substitution. If Moby resolves the device
   # by name or rejects /proc, stop with the evidence; do not select a substitute

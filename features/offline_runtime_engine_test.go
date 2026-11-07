@@ -217,7 +217,7 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	if r.Method == "POST" && entry.Path == "/containers/create" {
 		token := strings.TrimPrefix(r.URL.Query().Get("name"), "itos-container-")
 		limit := 1
-		if w.offline.isolation != nil {
+		if w.offline.isolation != nil || w.hardlinks != nil {
 			limit = 2
 		}
 		if !offlineHex(token) || r.URL.Query().Get("name") != "itos-container-"+token || len(r.URL.Query()) != 1 || len(a.created) >= limit {
