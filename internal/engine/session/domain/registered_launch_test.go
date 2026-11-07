@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -9,6 +10,21 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
+
+func TestRegisteredLaunchCancelledAfterLockAcquisition(t *testing.T) {
+	runner, registry, engine, workspace, id := registeredSessionFixture(t)
+	before := registry.Records[id]
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	registry.AfterOpen = func(string) { cancel() }
+	c, a, worker, failure := runner.registeredLaunch(ctx, id, []string{"probe"}, port.Streams{})
+	if c != nil || a != nil || worker != "" || failure != port.ExecutionFailed {
+		t.Fatal("cancelled lock acquisition advanced launch", worker, failure)
+	}
+	if registry.Locks[id] || registry.Store.Locked || workspace.Closed || len(engine.Events) != 0 || registry.Records[id] != before {
+		t.Fatal("cancelled launch retained authority or entered another startup phase")
+	}
+}
 
 func registeredSessionFixture(t *testing.T) (Runner, *f.Registry, *f.RunEngine, *f.Workspace, string) {
 	t.Helper()

@@ -200,3 +200,47 @@ func TestFiniteRegistryClosesLateSession(t *testing.T) {
 		s.Close()
 	})
 }
+
+type delayedRunEngine struct {
+	port.RunEngine
+	release <-chan struct{}
+	closes  *int
+}
+
+func (e delayedRunEngine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection, port.Outcome) {
+	c, f := e.RunEngine.OpenRun(ctx, b)
+	<-e.release
+	return countedRunConnection{c, e.closes}, f
+}
+
+type countedRunConnection struct {
+	port.RunConnection
+	closes *int
+}
+
+func (c countedRunConnection) Close() { *c.closes++; c.RunConnection.Close() }
+
+func TestFiniteEngineClosesConnectionReturnedAfterDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		b, _, engine := porttest.Fixture()
+		raw := &porttest.RunEngine{Engine: engine}
+		release := make(chan struct{})
+		closes := 0
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		start := time.Now()
+		c, f := (finiteEngine{delayedRunEngine{raw, release, &closes}}).OpenRun(ctx, b)
+		if c != nil || f != port.Incomplete || time.Since(start) != 5*time.Second {
+			t.Error("pending connection escaped its phase deadline", c, f, time.Since(start))
+		}
+		synctest.Wait()
+		if closes != 0 {
+			t.Error("connection closed before acquisition returned")
+		}
+		close(release)
+		synctest.Wait()
+		if closes != 1 || len(raw.Events) != 1 || raw.Events[0] != "open" || len(engine.Resources) != 0 {
+			t.Fatal("late connection leaked, closed repeatedly or launched work", closes, raw.Events)
+		}
+	})
+}
