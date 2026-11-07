@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -20,6 +21,9 @@ type controlFixture struct {
 	err                       error
 	condition                 string
 	reviewBefore, reviewAfter map[string]string
+	traces                    []*recoveryProcess
+	surviving                 map[string]sessionRecord
+	bootstrapBefore           map[string]string
 }
 
 func (w *world) controlSetup(approval, location, engines string) error {
@@ -35,15 +39,21 @@ func (w *world) controlSetup(approval, location, engines string) error {
 	if err != nil {
 		return err
 	}
-	for _, name := range []string{"W", "P"} {
+	names := []string{"W", "P"}
+	if location == "first approval" {
+		names = []string{"P"}
+	}
+	for _, name := range names {
 		p := &world{root: w.root, bin: bin, dir: filepath.Join(base, "fixtures", name)}
 		f.workers.worlds[name] = p
 		if err := os.MkdirAll(p.dir, 0700); err != nil {
 			return err
 		}
-		if err := p.approvalCheckout(); err != nil {
+		if err := p.doctorCheckout(); err != nil {
 			return err
 		}
+		p.approval = &approvalWorld{uid: strconv.Itoa(os.Geteuid()), gid: strconv.Itoa(os.Getegid())}
+		p.doctor.engine = newDoctorAPI(p.doctor.image)
 		if err := p.doctorSentinels(); err != nil {
 			return err
 		}
@@ -79,6 +89,11 @@ func (w *world) controlSetup(approval, location, engines string) error {
 			continue
 		}
 		f.p = p
+		if location == "first approval" {
+			p.doctor.env["HOME"] = f.home
+			delete(p.doctor.env, "XDG_STATE_HOME")
+			return p.approvalOracle()
+		}
 		worker := f.workers.worlds["W"].doctor.checkout
 		switch location {
 		case "equal to W root":
@@ -181,7 +196,10 @@ func (f *controlFixture) unchanged() error {
 }
 
 func (f *controlFixture) inspectionOnly() error {
-	workerPID := f.workers.first.pid()
+	workerPID := -1
+	if f.workers.first != nil {
+		workerPID = f.workers.first.pid()
+	}
 	seen := map[*overlapEngine]bool{}
 	for _, a := range f.workers.engines {
 		if seen[a] {
