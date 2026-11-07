@@ -86,6 +86,14 @@ func (l *lifecycleLocal) count(name string) int {
 	return n
 }
 func (l *lifecycleLocal) invoke(ctx context.Context) (int, string, string) {
+	var out, errout bytes.Buffer
+	code := l.invokeWithStreams(ctx, &out, &errout)
+	// Collect writes already dispatched by the command without advancing time.
+	synctest.Wait()
+	return code, errout.String(), out.String()
+}
+
+func (l *lifecycleLocal) invokeWithStreams(ctx context.Context, out, errout sp.Writer) int {
 	approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: l.m.c, Record: ap.Record{Candidate: l.m.c, Generation: "1"}, Status: "matching"}}
 	runner := domain.Runner{Store: l.store, Registry: lifecycleRegistry{l.registry, l}, Engine: lifecycleEngine{l}, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
 	var selected runport.Approval = lifecycleApproval{approval, l, ctx}
@@ -96,11 +104,7 @@ func (l *lifecycleLocal) invoke(ctx context.Context) (int, string, string) {
 	if snapshots == nil {
 		snapshots = &af.Snapshots{}
 	}
-	var out, errout bytes.Buffer
-	code := (runcommand.CLI{Context: ctx, Approval: selected, Snapshots: snapshots, Runner: runner, Args: []string{"--", "synthetic-sensitive-argv"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
-	// Collect writes already dispatched by the command without advancing time.
-	synctest.Wait()
-	return code, errout.String(), out.String()
+	return (runcommand.CLI{Context: ctx, Approval: selected, Snapshots: snapshots, Runner: runner, Args: []string{"--", "synthetic-sensitive-argv"}}).Run(&cli.UI{Stdout: out, Stderr: errout, Classify: runcommand.Classify})
 }
 
 type lifecycleApproval struct {

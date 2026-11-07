@@ -615,3 +615,44 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | checkout revalidation | SIGINT  |
       | policy read           | SIGINT  |
       | manifest read         | SIGINT  |
+
+  # Review regression: capture diagnostics at command return, before any harness
+  # goroutine flush. The real entry point exits immediately. A briefly delayed
+  # writable sink distinguishes reserved delivery time from scheduler luck.
+  # Blocked-sink rows retain slice-12's existing deadline/exit/recovery controls
+  # as regression coverage under the standing coordinator decision.
+  @wip @slice-12 @ID-LIFECYCLE-18 @linux
+  Scenario Outline: Cleanup exhaustion leaves time to report its retained session
+    Given a lifecycle teardown fixture with observed exit <child> and "<sink>" diagnostic output
+    When run exhausts cleanup and its return-time diagnostics are captured through each local backend
+    Then writable diagnostics contain run.teardown-timeout and the exact retained session retry before run returns
+    And blocked diagnostics cannot extend the original 30 second teardown deadline
+    And observed workload exits keep precedence and missing observations remain unknown
+    And fresh recovery cleans only the retained owned worker without restarting it
+
+    Examples:
+      | child | sink     |
+      | 0     | writable |
+      | 17    | writable |
+      | 0     | delayed  |
+      | 17    | delayed  |
+      | 0     | blocked  |
+      | 17    | blocked  |
+
+  # Review regression: cleanup timeout is a separate failure, never a replacement
+  # for the transport/controller cause. Exercise both termination and removal;
+  # only the latter receives a fresh authoritative exit before cleanup stalls.
+  @wip @slice-12 @ID-LIFECYCLE-19 @linux
+  Scenario Outline: Cleanup exhaustion preserves the original run failure
+    Given a lifecycle teardown fixture with "<cause>" followed by stalled "<phase>"
+    When run exhausts cleanup and its return-time diagnostics are captured through each local backend
+    Then the original run failure is reported separately from run.teardown-timeout
+    And observed workload exits keep precedence and missing observations remain unknown
+    And fresh recovery cleans only the retained owned worker without restarting it
+
+    Examples:
+      | cause                 | phase       |
+      | engine-lost           | termination |
+      | execution-unavailable | termination |
+      | engine-lost           | removal     |
+      | execution-unavailable | removal     |
