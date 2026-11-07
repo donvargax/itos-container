@@ -647,3 +647,18 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: p1-checkout-socket-kernel-enforcement
+    title: Host Unix sockets created during a run are unreachable from the worker
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Deferred from slice-19 by the person (q-30, 2026-11-07): CI showed the worker connects to host
+      Unix sockets in the bind-mounted checkout (runs 42312676619, 42323471709), and the milestone
+      only refuses sockets present at startup. Closing it needs kernel enforcement: Landlock's
+      pathname-socket rule (ABI 9+) through a product init, which needs a new kernel on every host
+      and a CI runner that has it, or the gVisor runtime, which hosted runners can prove but which
+      adds a runtime. Research in docs/plans/checkout-socket-enforcement.md; scenarios ID-SOCKETS-02
+      and 03 wait for it. A milestone-2 choice.
