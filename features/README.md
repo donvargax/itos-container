@@ -192,6 +192,24 @@ syscalls without engine access, including failure, ordering and controller death
 controls do not provide native recovery red or green evidence; the coordinator must
 still dispatch the three pending engine scenarios before their implementation.
 
+Slice-15's pending ID-LIFECYCLE-15 reuses that observer and slice-14's exact probe
+clients and positive controls. One primary waits for atomically published checkout
+challenges independently of stdin/attach. The harness collects a baseline, kills
+only the recorded controller, waits for confirmed death, then generates a fresh
+nonce for the post-loss round. A third round follows fresh status and precedes its
+literal stop retry. Reports bind to the original native full ID and process start
+identity; empty, cached or incomplete reports cannot establish isolation.
+The combined network/DNS control retains the complete slice-14 inventory. Only
+that isolated control reconnects to refresh real Docker DNS aliases for each new
+nonce, retaining its full ID and addresses; its resolver file is restored inside
+the control only. Preservation accounts for its generated endpoint ID/MAC while
+comparing all other resource fields. No subject permission or resolver changes.
+Listener receipts are checked through confirmed product removal. Stop must also
+produce the existing file-fsync/publication/parent-fsync evidence. Local harness
+checks compile the probe and reject invalid evidence without executing it. The
+coordinator must dispatch `red_scenarios=ID-LIFECYCLE-15` at the step commit before
+activation; a complete pass follows the scenario's standing regression decision.
+
 Code proof obtains its listed tests through `tools/bin/scenario-list`. It uses the same
 Gherkin tier/platform selector as execution, before any fixture setup, and preserves
 core itos's TSV files and fingerprints. Thus ordinary Linux proof lists local Engine API
