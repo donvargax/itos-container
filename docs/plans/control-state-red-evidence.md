@@ -95,3 +95,27 @@ Affected approval/session storage, domain, fake, account lookup and command-asse
 unit tests also passed. These local filesystem checks used unremapped host ownership
 and exclusively disposable state plus recording HTTP engines. Configured gates run
 through the feature commit's hooks; fresh changed-code proof remains CI-only.
+
+## CI fixture regressions after integration
+
+At `11b539f`, both doctor harness controls failed before reaching their assertions:
+their worlds omitted the module root, so the isolated session-probe build searched
+for `features/cmd/itos-container`. Each fixture now supplies `moduleRoot()` as the
+scenario harness does. The journal and tree-change assertions are unchanged.
+
+The catalog symlink fixture renamed its original binding to a `-old` filename
+inside the catalog. This also introduced an unknown catalog entry. Depending on
+filesystem directory order, inspection correctly refused that entry as
+`state.invalid` before observing the symlink's `state.path`. The original fixture
+failed 3 of 10 repetitions with temporary state on the checkout filesystem, while
+40 repetitions on `/tmp`'s tmpfs passed. Move the symlink target outside the catalog
+so this row exercises only substitution; the separate unknown-name row continues
+to require `state.invalid`. Production refusal rules and assertions are unchanged.
+
+After these fixture corrections, all `TestDoctor*` controls and all cases of
+`TestControlBindingsRefuseMalformedOrReplacedEvidence` pass. The corrected symlink
+case also passes 40 repetitions on the checkout filesystem. Filesystem checks use
+unremapped ancestor ownership: the agent sandbox otherwise produces unrelated
+`state.unsafe` refusals. All command state is disposable and engine observations
+use recording HTTP fixtures. No real approval state, daemon or mutation proof is
+used by this follow-up.

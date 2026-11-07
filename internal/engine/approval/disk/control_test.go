@@ -264,10 +264,13 @@ func TestControlBindingsRefuseMalformedOrReplacedEvidence(t *testing.T) {
 				}
 				want = "state.unavailable"
 			case "symlink":
-				if err := os.Rename(path, path+"-old"); err != nil {
+				// Keep the target outside the catalog so an unknown entry cannot
+				// mask the symlink refusal in filesystem-dependent listing order.
+				target := filepath.Join(home, "binding-target.json")
+				if err := os.Rename(path, target); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.Symlink(path+"-old", path); err != nil {
+				if err := os.Symlink(target, path); err != nil {
 					t.Fatal(err)
 				}
 				want = "state.path"
