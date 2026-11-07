@@ -272,6 +272,10 @@ supply passing evidence. This split changes delivery scope, not the runtime boun
 or the requirement for CI-only real-engine proof.
 
 Each owning engine introduces reusable validation and port contracts with its work item.
+Slice-17's [descriptor-backed anchor decision](../decisions/0014-descriptor-backed-checkout-anchor.md)
+extends the existing session engine ports and adapters, with run remaining the thin
+command consumer. Its selected Docker local volume mechanism is pending native proof
+and implementation; it introduces neither another command nor another controller service.
 Shared contract suites under its `port/porttest` run unchanged against the in-memory
 fake and adapters wherever applicable. Later consumers reuse those suites, normalized
 values, typed failures and synthetic fixtures without importing
@@ -389,6 +393,27 @@ must state this in help and security guidance; revisit before egress and credent
 
 ### State and result interpretation
 
+Slice-17's selected change to the sequence above is pending native proof. Publish
+an owned local Docker volume before worker creation, using `type=none`, `o=bind`
+and the controller's `/proc/<pid>/fd/<n>` O_PATH descriptor as its device. Keep the
+descriptor open from the final identity check through `ContainerStart`'s return.
+The worker consumes that volume at `/workspace` without copying. The anchor itself
+must prevent substituted-inode execution. Immediately after start returns, inspect
+`State.Pid` and stat `/proc/<pid>/root/workspace` from the host, comparing device and
+inode with the validated identity. Mismatch or unavailable stat triggers immediate
+owned kill/removal and refusal. This detector is not the protection. No raw-path
+fallback, gate binary, extra mount, new controller privilege, host
+mount by the controller or long-lived helper is selected. The native race must
+prove original-inode execution or refusal before this hypothesis is accepted.
+
+The coordinator accepted OFFLINE-29's four native race failures at `51a9f48`
+on Docker 28.0.4. Q-27 settles the detector above without adding a mount/start
+gate: Docker's start operation also starts the task. A detector failure after
+successful start must fail native acceptance. The selected volume mechanism
+remains unimplemented pending the remaining red checkpoints and native green.
+The source evidence and settled ordering are recorded in the
+[descriptor-anchor decision](../decisions/0014-descriptor-backed-checkout-anchor.md#implementation-checkpoint-and-settled-detector).
+
 These are T-11's interface meanings, not a storage schema or proof of a transition.
 
 | State | Meaning and allowed progress |
@@ -442,6 +467,14 @@ within its existing teardown total. Incomplete or conflicting authority and
 forwarding errors still fail.
 See [public session recovery](../decisions/0010-public-session-recovery.md).
 
+For slice-17's planned mount-bearing sessions, the labelled volume and protected
+ownership survive incomplete worker removal. Release the volume only after worker
+absence is confirmed, then durably complete the session. The controller descriptor
+need not survive controller exit; neither its expired `/proc` path nor a stopped
+worker's mount is a recovery source. Slice-18 adds volume release to fresh-process
+recovery. Never recreate the source from the current checkout path, and refuse
+unknown mount-bearing records rather than silently treating them as worker-only.
+
 Fresh recovery discovers registrations through the protected
 `sessions/<lookup>/<id>` index, where lookup hashes the host UID and canonical
 checkout path, independently of mutable Git identity. Each record still binds
@@ -478,6 +511,13 @@ primary exit refuses new exec and tears down active exec commands without extend
 lifetime. Exec implementation remains deferred.
 
 ## Deployment view
+
+The selected slice-17 anchor uses the already trusted native dockerd to perform
+the descriptor-backed bind. It adds one labelled local volume as session control
+infrastructure, not another host-source grant or persistent worker data store.
+The worker mount retains the original inode while the worker lives; no new helper
+has to outlive the controller. This topology remains a hypothesis until guarded
+native red/green evidence establishes it on the actual CI daemon and kernel.
 
 This is a **required target placement**, not a working deployment. The selected host is
 Linux amd64 with native Docker, subject to runtime evidence. The selected engine
