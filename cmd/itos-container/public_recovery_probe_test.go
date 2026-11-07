@@ -80,8 +80,14 @@ func TestPublicRecoveryCommand(t *testing.T) {
 			return sessionOwnerInfo{FileInfo: info, metadata: metadata.Interface()}, nil
 		}
 	}
+	if request.Fault == "public progress replacement" {
+		publicStorage.Stat = publicProgressReplacement(t, publicStorage, request)
+	}
 	store.Storage = intentStorage
 	registry.Store, registry.Storage = store, publicStorage
+	if request.Boundary == "reservation before registration" {
+		registry.Storage = reservationBarrierStorage{RegistryStorage: publicStorage, barrier: &publicBarrier{request: request}}
+	}
 	runner.Store, runner.Registry = store, registry
 	recovery.Registry = registry
 	if request.Fault == "entropy unavailable" {
@@ -114,6 +120,16 @@ func TestPublicRecoveryCommand(t *testing.T) {
 }
 
 type publicUnknownEngine struct{}
+
+type reservationBarrierStorage struct {
+	ap.RegistryStorage
+	barrier *publicBarrier
+}
+
+func (s reservationBarrierStorage) Register(ctx context.Context, c ap.Candidate, id string, data []byte) (ap.ControllerLease, ap.Failure) {
+	s.barrier.wait(ctx, "reservation before registration")
+	return s.RegistryStorage.Register(ctx, c, id, data)
+}
 
 func (publicUnknownEngine) OpenRun(context.Context, sp.Binding) (sp.RunConnection, sp.Outcome) {
 	return nil, "unclassified fixture failure"

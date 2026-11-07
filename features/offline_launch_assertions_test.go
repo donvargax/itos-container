@@ -61,6 +61,11 @@ func (w *world) offlineLaunchOrder() error {
 	id := s.api.created[0]
 	// Ordered real port observations join filesystem durability and SDK calls.
 	sequence := []string{"intent", "open", "validate", "check", "create", "inspect", "save", "verify", "attach", "validate", "check", "verify", "start", "wait"}
+	if s.launch.registered {
+		// Reservation proves no create was issued. The separate durable intent
+		// transition must follow launch validation and precede the create call.
+		sequence = []string{"reserved", "open", "validate", "check", "intent", "create", "inspect", "save", "verify", "attach", "validate", "check", "verify", "start", "wait"}
+	}
 	next, starts := 0, 0
 	for _, event := range s.create.Trace {
 		if event.Operation == "start" {
@@ -73,6 +78,13 @@ func (w *world) offlineLaunchOrder() error {
 			return fmt.Errorf("launch %s failed: %s", event.Operation, event.Failure)
 		}
 		switch event.Operation {
+		case "reserved", "intent":
+			if !reflect.DeepEqual(event.Record, w.sessionExpectedRecord(event.Operation, "")) {
+				return fmt.Errorf("%s lacks exact original binding", event.Operation)
+			}
+			if err := w.sessionDurability(event.Writes, event.Operation, ""); err != nil {
+				return err
+			}
 		case "create":
 			if event.ID != id || !reflect.DeepEqual(event.Record, w.sessionExpectedRecord("intent", "")) {
 				return fmt.Errorf("create lacks exact original intent")

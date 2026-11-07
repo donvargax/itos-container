@@ -69,10 +69,12 @@ Feature: Inspect and stop owned offline sessions
   # Resource is created/running/exited/absent/unknown; controller is present/absent/
   # unknown; cleanup is pending/complete/unknown. State uses arc42's preparing,
   # ready, running, stopping, stopped, failed, interpreting recorded progress with
-  # fresh observations. Run/stop report stopped/complete only after concrete-ID
-  # absence AND durable completion. Read-only status requires both safely loaded
-  # stopped/absent records and fresh concrete-ID absence to report completion;
-  # it reports recorded progress, not proof that an earlier fsync succeeded.
+  # fresh observations. For issued creates, run/stop report stopped/complete only
+  # after concrete-ID absence AND durable completion. Read-only status requires
+  # safely loaded stopped/absent records and fresh concrete-ID absence. A proven
+  # pre-create cancellation instead has a cancelled intent with an empty ID and
+  # stopped progress; status reports its completion without an engine lookup.
+  # Status reports recorded progress, not proof that an earlier fsync succeeded.
   # Unreachable/contradictory observations are failed/unknown, never stopped.
   # An absent controller with pending or unknown cleanup makes stop_candidate
   # true even if the worker is exited or unstarted; otherwise it is false.
@@ -133,13 +135,14 @@ Feature: Inspect and stop owned offline sessions
   # Updates compare the preceding complete bytes; full write, file fsync, atomic
   # publication and parent/new-ancestor fsync precede a successful handoff.
   #
-  # Allocate the public ID and operation token before create. Publish registration
-  # and its lock objects durably, then slice-9's durable intent, before any create.
-  # Registration is initially preparing/null. A crash between those publications
-  # leaves a discoverable entry with a missing intent, never permission to infer
-  # absence or create again. Report invalid-state and preserve it for inspection;
-  # automatic garbage collection/repair is outside this increment. A known complete
-  # intent must remain discoverable if create/start/response/controller is lost.
+  # Allocate the public ID and operation token before create. New runs durably
+  # publish a reserved intent before registration and its lock objects. Registration
+  # is initially preparing/null. Under the session operation lock, run rechecks
+  # cancellation and durably advances reserved to intent before sending create.
+  # Intent means create may have been issued; it never permits inferred absence.
+  # Legacy registrations with missing intents still report invalid-state and are
+  # preserved for inspection, without automatic garbage collection or repair.
+  # The intent remains discoverable if create/start/response/controller is lost.
   # No failure returns an executable retry for an unpublished or invalid ID.
   # Keep old slice-9 intent-only records intact; no automatic migration/adoption of
   # pre-interface artifacts, and no requirement to turn them into public sessions.
@@ -176,16 +179,19 @@ Feature: Inspect and stop owned offline sessions
   # that observation within run's existing 30 s teardown total. Only completed
   # cleanup of the same full worker ID can clear that provisional wait failure;
   # forwarding errors and unavailable or conflicting ownership remain failures.
-  # If stop wins after durable intent publication but before create, durably record
-  # that cleanup began even though no destructive operation is possible. A missing
-  # name and empty concrete ID require recovery.temporary, failed state, unknown
-  # resource/cleanup and an exact retry; they cannot establish successful cleanup.
-  # Retain the intent and registration. Resumed run returns run.cleanup-temporary
-  # with exit 75 and unknown workload exit, without a late create/start or overwrite
-  # of cleanup progress. No absent-ID evidence or completed tombstone is invented.
+  # Coordinator q-28 permits stop to cancel a reserved intent while holding the
+  # operation lock: durably record cancelled with an empty ID, stopped progress
+  # and completed admission. No engine lookup proves or is needed for this case.
+  # Resumed run exits nonzero with unknown workload exit and cannot create/start
+  # or overwrite cancellation. Keep registration and snapshot discoverable.
+  # Once intent records that create may have been issued, an empty concrete ID
+  # and missing name remain recovery.temporary with failed state, unknown resource/
+  # cleanup and an exact retry. RECOVERY-14 retains this uncertain case.
+  # No missing-name observation can establish cancellation or completed cleanup.
   #
-  # Stop validates the original snapshot, actual user/canonical root, pinned local socket
-  # and daemon, then freshly inspects the full resource ID. Revalidate immediately
+  # For an issued create, stop validates the original snapshot, actual user/canonical
+  # root, pinned local socket and daemon, then freshly inspects the full resource ID.
+  # Revalidate immediately
   # before EACH stop/kill/remove, including after grace waits and storage updates.
   # Match name, token/project/fingerprint labels and image ID against trusted
   # ownership, not just an ID-shaped argument. No engine-wide list/prune/adoption.
@@ -554,6 +560,24 @@ Feature: Inspect and stop owned offline sessions
       | remove   | protected record replacement |
       | remove   | protected intent replacement |
 
+  # The run barrier is outside the operation lock, after durable publication but
+  # before any create request. Keep run paused until stop acquires that lock and
+  # returns; allowing create to finish first would test a different ordering.
+  # Coordinator q-28 (2026-11-07): durable pre-create evidence permits terminal
+  # cancellation. Engine absence never proves this; RECOVERY-14 retains the
+  # uncertain create-issued case even when its exact name returns 404.
+  @slice-11 @slice-16 @ID-RECOVERY-25 @linux
+  Scenario: Stop durably cancels a proven pre-create session and prevents a late launch
+    Given a recovery run fixture with a barrier after durable registration and intent publication before any create request
+    And the recovery engine fixture is configured with a missing intent name and no concrete resource ID
+    When run reaches the barrier, an independent JSON stop finishes before run is released and fresh JSON status follows run's exit
+    Then stop and the later status report exit zero state stopped resource absent cleanup complete workload exit null and no retry
+    And stop durably records cancellation with an empty concrete ID and stopped progress before releasing the session operation lock
+    And resumed run returns a nonzero exit with unknown workload exit without overwriting cancellation
+    And no create start stop kill or remove request or engine absence lookup occurs after the pre-create barrier
+    And the cancelled registration and original snapshot remain discoverable with complete cleanup
+
+  # A create-issued intent cannot be cancelled from a missing-name observation.
   @slice-11 @ID-RECOVERY-14 @linux
   Scenario: A delayed uncertain create stays discoverable until its concrete identity can be recovered
     Given a recovery fixture with a registered intent-only operation and a delayed create invisible by name
@@ -588,21 +612,6 @@ Feature: Inspect and stop owned offline sessions
     Then both stops complete with one serialized termination and removal sequence followed by confirmed absence
     And the waiting stop reloads durable completion without a second signal remove or completion rewrite
     And a concurrent status returns a consistent session or recovery.temporary within its budget without writing state
-
-  # The run barrier is outside the operation lock, after durable publication but
-  # before any create request. Keep run paused until stop acquires that lock and
-  # returns; allowing create to finish first would test a different ordering.
-  # The fixture configures a missing exact-name observation, not an absent full ID.
-  @slice-11 @ID-RECOVERY-25 @linux
-  Scenario: Stop before create retains uncertain cleanup and prevents a late launch
-    Given a recovery run fixture with a barrier after durable registration and intent publication before any create request
-    And the recovery engine fixture is configured with a missing intent name and no concrete resource ID
-    When run reaches the barrier, an independent JSON stop finishes before run is released and fresh JSON status follows run's exit
-    Then stop and the later status report recovery.temporary with exit 75 state failed resource unknown cleanup unknown workload exit null and the exact retry argv
-    And stop durably records that cleanup began before releasing the session operation lock
-    And resumed run returns run.cleanup-temporary with exit 75 and unknown workload exit without overwriting cleanup progress
-    And no create start stop kill or remove request occurs and the original intent retains its empty concrete ID without an absent update
-    And the registration and original snapshot remain discoverable without a stopped or complete claim
 
   # These boundaries already have a concrete owned ID. Park run outside the
   # operation lock and let stop finish first, then test run's stale continuation.

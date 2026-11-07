@@ -190,7 +190,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
 | `internal/engine/readiness` | Implemented prerequisite, extended by slice-20 | Read-only checkout, regular-file inode independence, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
-| `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
+| `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, cross-project checkout admission, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
 or runtime permission. Doctor composes readiness and approval inspection; readiness
@@ -350,7 +350,16 @@ must state this in help and security guidance; revisit before egress and credent
    identical records are reused without rewriting; all reuse re-establishes file
    and directory durability. Uncertain publication returns no usable handoff.
    Every new invocation still validates current requests, identities and approval.
-3. **Create and own, preparing.** Persist an intent record with `fsync` before create,
+3. **Admit, create and own, preparing.** Slice-16 atomically reserves the validated
+   canonical checkout under one protected control-root lock before registration or
+   create. Strict ancestor/descendant roots conflict across projects and daemons;
+   equal roots and disjoint roots retain concurrency. Legacy registrations without
+   admission metadata remain authority. The lock spans short storage transactions,
+   never engine calls or session operation locks. See
+   [the admission decision](../decisions/0014-checkout-admission.md).
+   New foreground runs publish a reserved intent before public registration, then
+   clear the pending reservation marker durably before receiving launch authority.
+   Advance the intent with `fsync` under the operation lock before create,
    then create unstarted. Reconcile a lost response using the trusted record plus a
    random name before launch or cleanup, closing the untracked-create window. Names
    or labels alone never authorize adoption or deletion. Durably record concrete
@@ -416,6 +425,23 @@ classified nonzero failure and an unknown child outcome; a dead controller canno
 return a result or run cleanup. Signal delivery is not termination evidence.
 
 ### Recovery
+
+Slice-16 retains registered checkout reservations through controller loss and uncertain cleanup.
+New runs publish a `reserved` intent before registration, and advance it durably to
+`intent` under the operation lock before sending create. Stop can instead durably
+cancel a reserved intent, publish stopped progress and certify completion without
+an engine call or an invented worker ID/exit. Once create may have been sent, only
+durable absent intent and stopped public session, following fresh full-ID absence,
+permit completion certification under the common admission lock. Repeated stop can
+re-establish that evidence for legacy sessions. Existing operation-lock state checks
+fence stale create/start continuations before a nested checkout is readmitted; controller
+lease release is unnecessary. Each same-root session releases independently. Admission
+never contacts another project's daemon and status/stop keep their original scope.
+Admission marks claims pending until public registration succeeds durably. The common
+lock lets admission ignore only a pending claim with an absent public record; that
+publisher cannot still grant launch authority. Active and legacy claims, visible
+registrations, and unreadable or unsafe state retain their conservative rules.
+See [the admission decision](../decisions/0014-checkout-admission.md).
 
 Status inspects owned sessions after partial startup, lost create response, cancellation,
 engine loss or controller interruption. Stop cancels a live owned session or resumes

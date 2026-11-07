@@ -5,6 +5,12 @@ Slice-11 implements the settled recovery contract in
 details reserved to slice-11 in arc42's **Building blocks**, **Recovery** and
 **Decisions** sections; it adds no runtime platform or isolation claim.
 
+Slice-16's [admission decision](0014-checkout-admission.md), following coordinator
+q-28, supersedes this decision's pre-create uncertainty rule. A durable reserved
+intent permits cancellation under the operation lock before create is issued;
+an issued or uncertain create retains the concrete-ID recovery requirements below.
+RECOVERY-25 now covers proven cancellation; RECOVERY-14 retains uncertain create.
+
 Each invocation allocates a cryptographically random 32-byte public ID independently
 of its existing operation token. The seven-field record at
 `sessions/<project>/<id>/record.json` refers to the original protected intent and
@@ -22,21 +28,23 @@ lock identities remain checked; no stale-PID inference or state repair is added.
 
 Status is read-only and has a ten-second invocation budget. Stop has thirty
 seconds total, requests SIGTERM with ten seconds of grace and escalates only
-after fresh ownership and running-state observations. A missing intent name
-without a concrete ID remains uncertain. Cleanup that wins before create is
+after fresh ownership and running-state observations. After create may have been
+issued, a missing intent name without a concrete ID remains uncertain. Cleanup
+that wins before create is
 durable and terminal: resumed run cannot create, start or overwrite that progress.
 
-Completion requires freshly confirmed concrete-ID absence, a durable absent
-intent and a durable stopped session. Repeated stop confirms and syncs existing
+Completion of an issued create requires freshly confirmed concrete-ID absence,
+a durable absent intent and a durable stopped session. Repeated stop confirms and syncs existing
 completion without rewriting it. A later explicit workload observation may fill
 a previously null exit while retaining stopped state; it cannot change a known
 exit. Stop's zero result denotes cleanup, independently of workload success.
 
 Fresh status/stop use the effective checkout and host user to select a project.
 Foreground cleanup retains arc42's existing original-binding rule even if a
-worker changes checkout metadata. Both require the original protected snapshot,
-host identity, pinned socket, daemon and concrete resource ownership. Current
-requests and current approval do not authorize cleanup.
+worker changes checkout metadata. Both require the original protected snapshot
+and host identity. Issued creates also require the pinned socket, daemon and
+concrete resource ownership. Current requests and current approval do not
+authorize cleanup.
 
 Recovery reports schema-1 facts and typed, sorted problems; incomplete run prints
 `itos container stop <actual-id>` with same-project guidance. This supersedes

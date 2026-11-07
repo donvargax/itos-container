@@ -2,6 +2,7 @@ package disk
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -15,6 +16,8 @@ import (
 
 func intentReadFixture() (Store, sp.Binding, *af.Storage, *rf.Checkout) {
 	b, _, _ := sf.Fixture()
+	// The adapter uses host path semantics even with in-memory storage.
+	b.Checkout.Root, _ = filepath.Abs(b.Checkout.Root)
 	storage := &af.Storage{Directories: map[string]*af.Directory{
 		"intents/" + b.Frozen.Project:   {Files: map[string][]byte{}},
 		"snapshots/" + b.Frozen.Project: {Files: map[string][]byte{"1.json": []byte("snapshot")}},

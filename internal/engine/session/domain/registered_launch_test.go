@@ -21,7 +21,7 @@ func registeredSessionFixture(t *testing.T) (Runner, *f.Registry, *f.RunEngine, 
 		t.Fatal(failure)
 	}
 	t.Cleanup(lease.Close)
-	intent, failure := store.New(t.Context(), durable, token)
+	intent, failure := store.Prepare(t.Context(), durable, token)
 	if failure != "" {
 		t.Fatal(failure)
 	}
