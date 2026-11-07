@@ -146,3 +146,4 @@ questions:
   - id: q-36
     item: "slice-17"
     question: "slice-17: its scenarios can't activate without slice-18's recovery, which is specified to follow it; how to break the cycle?"
+    answer: "Merge slice-18 into slice-17: bring slice-18's accepted spec (origin/slice-18, features/anchors.feature) onto slice-17's branch and implement and land both in slice-17's pull request; slice-18 is dropped as merged. Each scenario keeps its red-first evidence; slice-18's engine cases need their CI red run before implementation. See slice-17-steer.md."
