@@ -172,3 +172,30 @@ existing adapter/unit fixtures still need the new mount contract and new
 production paths need shared-contract and unit coverage. Do not treat that patch
 as a mergeable implementation or its local green as full regression evidence.
 The committed branch retains the red steps with every slice-17 scenario `@wip`.
+
+## Shared-contract preparation after q-33
+
+The current handoff permits implementation preparation while gating activation
+on slice-18's specification and integration. That prerequisite is still open:
+the registry makes slice-18 depend on slice-17, so waiting for slice-17 closure
+before preparing the recovery integration cannot satisfy the live contracts.
+The coordinator must arrange that integration; it does not require reconsidering
+q-19 or q-27. The shared `Recovery.stop` path must remain the teardown authority
+for foreground and fresh-process cleanup.
+
+`internal/engine/session/port/porttest/anchor.go` now supplies reusable contracts
+and I/O-free fakes for the already specified anchor ports. They check exact
+volume observations, preservation of an existing same-name volume, confirmed
+absence, descriptor-shaped sources, source lifetime across pathname substitution,
+and mounted identity obtained from an explicitly supplied worker PID. The fake
+keeps worker mount observations independent of the pinned identity, so a missing
+or mismatched observation cannot silently become a successful detector result.
+Tests also exercise cancellation, foreign/unrelated resource preservation,
+failed pinning, and rejection of missing controls by the contract oracles.
+
+These contracts currently run against their memory fakes. The disk and SDK
+adapter implementations must run the same contracts when integrated; the
+contracts are preparation, not a product implementation or native proof. No
+slice-17 scenario is activated by this test increment. The saved prototype still
+needs the recovery integration and adapter coverage described above before a
+behavior commit, and native green remains the coordinator's CI responsibility.
