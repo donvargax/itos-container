@@ -2307,10 +2307,19 @@
     check must pass. Review the diff for all three value changes and no others. CI's actual
     engine run checks the result; the grep check alone proves no runtime duration or scenarios.
 
-    The drafter edits only this ledger entry and commits docs --item T-32. The implementer edits
-    only .github/workflows/ci.yml and commits ci --task T-32. Let configured hooks and CI run their
-    gates; real-engine evidence stays in CI, with no local Docker, approval or mutation run and
-    no generated evidence committed. Agents commit and stop; the coordinating loop owns pushing,
+    The workflow change is committed ci --task T-32. Its CI run exposed stale timeout values in
+    features/engine_workflow_test.go, features/engine_fixture_test.go and
+    features/engine_diagnostics_test.go. Align only those expected values and fixture arguments
+    with the settled 13/8/7-minute budgets, committed test --task T-32. Preserve the exact command
+    and budget assertions, negative controls, diagnostic exit/signal checks and every unrelated
+    limit. The four affected test groups must fail before this repair and pass afterward without
+    engine access. This repairs fixtures for the authorized limits; it adds no further allowance
+    and does not replace or broaden the done_when sanity check.
+
+    Document this repair scope here and align the invocation and budget prose in
+    features/README.md, committed docs --item T-32. Let configured hooks and CI run their gates;
+    real-engine evidence stays in CI, with no local Docker, approval or mutation run and no
+    generated evidence committed. Agents commit and stop; the coordinating loop owns pushing,
     CI watching and closure at the actual pushed head.
   done_when:
     - run: "grep -A1 'name: Engine scenarios' .github/workflows/ci.yml | grep -q 'timeout-minutes: 8' && grep -q -- '-test.timeout=7m' .github/workflows/ci.yml"
