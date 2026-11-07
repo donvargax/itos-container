@@ -475,6 +475,21 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | SIGINT  | 130    |
       | SIGTERM | 143    |
 
+  # Admission completion records owned resource cleanup independently from the
+  # retained output diagnostic (decisions 0014 and 0016). A later invocation must
+  # not mistake the completed session's stream timeout for unresolved ownership.
+  @slice-12 @ID-LIFECYCLE-25 @linux @wip
+  Scenario Outline: Completed cleanup remains admissible after an output timeout
+    Given a lifecycle readmission fixture with observed exit <child> and a stalled final output drain
+    When run finishes cleanup and a fresh run follows the stream timeout through each local backend
+    Then the fresh run launches and cleans its own worker successfully
+    And the original stopped session retains its observed exit and stream timeout without changing its completed cleanup
+
+    Examples:
+      | child |
+      | 0     |
+      | 17    |
+
   # Diagnostic writes are finite external operations too. After the final drain
   # exhausts its 10 s allowance, an unread diagnostic sink must not consume all
   # 20 s left in teardown. A slow readable control proves delivery within the

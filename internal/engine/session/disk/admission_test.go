@@ -285,7 +285,7 @@ func TestAdmissionCompletionRevalidatesAfterAcquiringGlobalLock(t *testing.T) {
 }
 
 func TestAdmissionCertificateCannotHideChangedPublicAuthority(t *testing.T) {
-	for _, fault := range []string{"intent", "state", "problem", "invalid"} {
+	for _, fault := range []string{"intent", "state", "problem", "running stream timeout", "invalid"} {
 		t.Run(fault, func(t *testing.T) {
 			m := newRegistryFixture(t)
 			files := m.seed()
@@ -300,6 +300,9 @@ func TestAdmissionCertificateCannotHideChangedPublicAuthority(t *testing.T) {
 			case "problem":
 				problem := sp.Incomplete
 				r.LastProblem = &problem
+			case "running stream timeout":
+				problem := sp.StreamTimeout
+				r.State, r.LastProblem = "running", &problem
 			}
 			m.codec.Records["changed"] = r
 			files.Data = []byte("changed")
