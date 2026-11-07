@@ -119,3 +119,6 @@ questions:
     item: "slice-19"
     question: "slice-19: CI red evidence for ID-SOCKETS-02 at 69b02a8?"
     answer: "Yes. Run 42323471709: the worker reached host sockets created after launch, with the positive controls passing. With 01 and 03, every slice-19 scenario has red evidence: implement the denial."
+  - id: q-30
+    item: "slice-19"
+    question: "slice-19: which enforcement denies host Unix sockets in the checkout: Landlock with a product init, the gVisor runtime, or defer?"
