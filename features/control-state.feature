@@ -38,6 +38,61 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # Reuse Moby client v0.6.2/api v1.56.1 for existing engine inspection only.
   # Add no dependency, custom lock protocol based on PID/time, or domain import.
   #
+  # Bootstrap and the shared lock:
+  # The account home must already exist. Pin and validate it and its ancestors
+  # without following links, using the existing protected-ancestor rules; the
+  # home itself must belong to the effective UID and forbid other-user writes.
+  # Lock that existing directory descriptor for every common transaction, before
+  # acquiring catalog or selected-root locks. Use the SAME lock inode before,
+  # during and after initialization, across processes and environment selections;
+  # never switch to a newly created coordination directory or lock file. Missing
+  # home or unavailable locking refuses with approval.state.unavailable (3).
+  # Revalidate its pinned identity after locking and before each publication.
+  # Read-only inspection may take a shared descriptor lock without creating state.
+  # No common lock spans consent, engine I/O or acquiring a session operation lock.
+  #
+  # The fixed bootstrap footprint is the account home's .local/state/itos-container
+  # tree, including coordination. Treat it as a prospective protected location
+  # even with no catalog; absence is not permission to bypass initialization.
+  # Under exclusive account-home exclusion, recheck the candidate, selected legacy
+  # state, any existing catalog and every discoverable outstanding reservation
+  # against both this footprint and the selected location BEFORE any mkdir.
+  # The own-checkout, exposure and missing-evidence refusals still apply. Neither
+  # an empty catalog nor a bootstrap retry can erase legacy session evidence.
+  #
+  # Only after consent (or validated existing approval for matching reuse/run),
+  # bootstrap may create missing .local, state, itos-container and coordination
+  # directories along that fixed chain, plus private self-binding publication
+  # files inside coordination. This is the sole exception to claim-before-create:
+  # it permits no approvals, snapshots, intents, sessions or other selected-root
+  # entries yet. It applies even when HOME equals the account home and unset
+  # XDG_STATE_HOME selects the bootstrap tree itself. New directories are owned
+  # 0700 and records 0600 regardless of umask; existing unsafe entries refuse.
+  # Pin/revalidate each created component and fsync it and its parent. Then
+  # atomically publish and fsync a catalog self-binding for the WHOLE fixed tree,
+  # its actual root identity, pinned ancestors and effective UID, including the
+  # coordination directory identity. File fsync, rename and parent fsync must
+  # finish before any ordinary selected-tree write or worker registration.
+  # When selected and fixed trees coincide this one binding serves both roles;
+  # do not require a second claim before creating the catalog that stores it.
+  # Keep the same exclusion through subsequent enrollment/publication as below.
+  #
+  # Failure or controller death during bootstrap grants no approval or worker
+  # launch authority. Retain surviving bootstrap entries; never delete/reset the
+  # tree or change the lock inode to retry. Admission cannot pass an initializing
+  # publisher; after interruption it must complete this same protocol under the
+  # home lock using validated existing approval, or refuse before registration.
+  # A fresh consenting approve revalidates surviving safe directories and bindings
+  # and redoes every required directory/file/parent fsync before proceeding.
+  # A safe directory-only prefix or unpublished private self-binding temp file
+  # is incomplete bootstrap, not a completed catalog or a worker reservation.
+  # Such temp files grant no authority and are retained as non-authoritative
+  # evidence. Malformed final bindings, unsafe entries or session evidence without
+  # a catalog still refuse with the classifications below; retry is not repair.
+  # A visible complete self-binding after uncertain parent fsync must be resynced,
+  # preserving its binding and inode. Doctor may report missing approval for an
+  # otherwise safe bootstrap-only tree, but never completes or fsyncs it.
+  #
   # The shared catalog binds each absolute managed location to its validated
   # filesystem identity and host UID. For an absent tree, a pending claim binds
   # the intended path and pinned existing ancestors; complete its root identity
@@ -86,10 +141,11 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # Do not hold the shared lock while awaiting consent or inspecting an engine.
   #
   # Location enrollment, conflict checking and approval publication serialize
-  # with slice-16's worker registration across state roots and processes. Before
-  # creating any selected managed entry or approval temp file, durably claim its
-  # intended location under that shared exclusion. Keep the claim and exclusion
-  # through approval file fsync, rename and parent fsync. A failed or interrupted
+  # with slice-16's worker registration across state roots and processes. Except
+  # for the fixed bootstrap entries above, before creating any selected managed
+  # entry or approval temp file, durably claim its intended location under that
+  # shared exclusion. Keep the claim and exclusion through approval file fsync,
+  # rename and parent fsync. A failed or interrupted
   # publication must not expose an untracked approval or report success; retain
   # conservative location evidence on uncertain writes. Reuse existing compare-
   # generation and complete-old-or-new approval publication semantics. Retrying
@@ -124,7 +180,8 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # reusable admission below approval/session if needed to avoid a dependency
   # cycle; neither engine nor a slice may import a sibling slice. Only cmd binds
   # adapters. Run the same separation/publication contracts against memory and
-  # disk, including interleavings and write faults. Record the coordination change
+  # disk, including interleavings, bootstrap interruption and write faults.
+  # Record the coordination change
   # and affected arc42 sections in a decision with the implementation, as required
   # by the charter; this draft changes only this feature file.
   #
@@ -142,6 +199,12 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # This exercises inspection of preexisting exposed state, not its authorization.
   # No Given invokes the product or checks an outcome. Fault Givens only install
   # fixture records, fault plans, descriptors and barriers; actions occur in When.
+  # CONTROL-10/11 instead create only P, its ordinary inputs and API fixture,
+  # and a private existing account home outside P. Set child HOME to exactly
+  # that home, REMOVE XDG_STATE_HOME, and leave .local and all managed state
+  # absent. Do not seed a catalog, approval or worker, nor precreate directories
+  # to make a lock available. Fault plans affect only bootstrap operations;
+  # ordinary approval storage and candidate inspection remain healthy.
   #
   # Use a test-only cmd assembly that substitutes the account-home lookup with
   # a temporary host-account-home. Apart from that input and specified faults/
@@ -175,6 +238,13 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # do not whitelist arbitrary changes under a coordination directory. Positive
   # publication assertions independently decode the location bindings and approval,
   # and observe successful file/parent fsync before approval becomes visible.
+  # For bootstrap, observe the home-descriptor lock before the first mkdir, each
+  # new directory/parent fsync, the complete self-binding's file/parent fsync,
+  # and only then the first approvals-directory or approval-temp creation. Record
+  # actual syscall/storage events; a missing event fails Then, never the action.
+  # Bootstrap fault retries keep every surviving directory and completed binding
+  # inode. Fresh-process doctor/retry checks run after the first process exits;
+  # invent neither power-loss evidence nor success from mere file visibility.
   # Refusal needs the exact classified problem and no unauthorized state effects,
   # never just a nonzero exit. Safe controls use the same path and remain separate
   # from W by whole components (work-more versus work, and equal basenames).
@@ -313,6 +383,46 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | cataloged reservation cannot be read                   | approval.state.unavailable | 3    |
       | catalog is absent beside selected legacy session state | approval.state.unavailable | 3    |
       | host account home lookup is unavailable                | approval.state.unavailable | 3    |
+
+  # The default tree contains its own coordination catalog. Today approval
+  # succeeds without a catalog self-binding or account-home exclusion: the first
+  # Then fails on ordering/protection, not on the already-working approval result.
+  # The later doctor and matching-reuse checks are persistence/no-rewrite controls.
+  @wip @slice-21 @ID-CONTROL-10 @local-engine-fixture
+  Scenario: First approval bootstraps the default tree containing its own catalog
+    Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
+    When P consents with its independently calculated exact fingerprint in a fresh process
+    Then P holds account-home exclusion from before the first bootstrap directory through approval publication and completes durable self-binding before any ordinary state write
+    And P reports matching approval with exit 0 and exactly generation 1 beneath the default tree bound in its own catalog
+    And only the fixed bootstrap chain self-binding and P approval were created with private ownership and no engine mutation or checkout execution
+    When the approval process has exited and fresh P doctor and matching approve use the same default layout
+    Then both report matching approval with exit 0 while the completed self-binding and approval keep their bytes identities and generation
+    And the fresh doctor writes nothing and the matching approve uses the same account-home lock without creating a duplicate location binding
+
+  # Faults never target ordinary approval writes. Today's untracked approval
+  # succeeds, so the exact state.write refusal is the first failing Then in
+  # every row. The binding-parent-fsync row leaves a visible complete binding;
+  # retries must resync it without replacement, not treat visibility as durability.
+  @wip @slice-21 @ID-CONTROL-11 @local-engine-fixture
+  Scenario Outline: Failed default-tree bootstrap retains evidence for a safe fresh retry
+    Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
+    And default-tree bootstrap has fault "<fault>" while ordinary approval writes remain healthy
+    When P consents with its independently calculated exact fingerprint in a fresh process
+    Then P reports approval.state.write with exit 75 and no approval directory record or temp file was created
+    And only safe bootstrap entries may remain with no engine mutation or checkout change
+    When the failed process has exited and the fixture clears only the fault before fresh P doctor and exact-fingerprint approval
+    Then doctor reports missing approval with exit 0 and writes nothing before approval completes durable bootstrap and publishes generation 1
+    And the retry preserves surviving bootstrap identities and completed binding bytes while redoing required fsyncs before any ordinary state write
+
+    Examples:
+      | fault                         |
+      | coordination directory create |
+      | coordination directory fsync  |
+      | coordination parent fsync     |
+      | self-binding record write     |
+      | self-binding file fsync       |
+      | self-binding rename           |
+      | self-binding parent fsync     |
 
   # Faults target ONLY the location transaction. P's old approval and its normal
   # store operations remain healthy. Today no location publication occurs, so
