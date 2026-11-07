@@ -182,14 +182,17 @@ func controlFault(e *event) bool {
     switch fault {
     case "coordination directory create": return e.Op == "mkdir" && e.Path == coord
     case "coordination directory fsync": return e.Op == "fsync" && e.Directory && e.Path == coord
-    case "coordination parent fsync": return e.Op == "fsync" && e.Directory && e.Path == filepath.Dir(coord)
+    case "coordination parent fsync":
+        _, err := os.Stat(coord)
+        return err == nil && e.Op == "fsync" && e.Directory && e.Path == filepath.Dir(coord)
     case "self-binding record write", "location record write": return e.Op == "write" && inside
-    case "self-binding file fsync", "location record file fsync": return e.Op == "fsync" && !e.Directory && inside
+    case "self-binding file fsync": return e.Op == "fsync" && !e.Directory && inside
+    case "location record file fsync": return e.Op == "fsync" && !e.Directory && inside && filepath.Base(e.Path) != "self.json"
     case "self-binding rename", "location publication rename": return e.Op == "rename" && inside
     case "self-binding parent fsync", "location parent fsync":
         if e.Op != "fsync" || !e.Directory || e.Path != coord { return false }
         entries, _ := os.ReadDir(coord)
-        for _, entry := range entries { if strings.HasSuffix(entry.Name(), ".json") { return true } }
+        for _, entry := range entries { if strings.HasSuffix(entry.Name(), ".json") && (fault == "self-binding parent fsync" || entry.Name() != "self.json") { return true } }
     case "cataloged reservation cannot be read":
         return e.Op == "read" && strings.Contains(e.Path, "/admission/")
     }

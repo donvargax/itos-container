@@ -24,6 +24,8 @@ type controlFixture struct {
 	traces                    []*recoveryProcess
 	surviving                 map[string]sessionRecord
 	bootstrapBefore           map[string]string
+	publisher                 *recoveryProcess
+	admissionEvents           int
 }
 
 func (w *world) controlSetup(approval, location, engines string) error {
@@ -169,9 +171,9 @@ func (f *controlFixture) inventory() (map[string]string, error) {
 				return nil, err
 			}
 			stat := reflect.Indirect(reflect.ValueOf(info.Sys()))
-			value += fmt.Sprintf(":%v:%v:%v", stat.FieldByName("Dev"), stat.FieldByName("Ino"), stat.FieldByName("Nlink"))
+			value += fmt.Sprintf(":%v:%v", stat.FieldByName("Dev"), stat.FieldByName("Ino"))
 			if !info.IsDir() {
-				value += ":" + info.ModTime().String()
+				value += ":" + fmt.Sprint(stat.FieldByName("Nlink")) + ":" + info.ModTime().String()
 			}
 			result[path] = value
 		}

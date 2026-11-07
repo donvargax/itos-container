@@ -20,6 +20,7 @@ import (
 	policydisk "github.com/donvargax/itos-container/internal/engine/policy/disk"
 	policyyaml "github.com/donvargax/itos-container/internal/engine/policy/yaml"
 	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
+	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	"github.com/donvargax/itos-container/internal/engine/session/presentation"
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
@@ -86,7 +87,7 @@ func controlStateCommand(args []string, in io.Reader, out, errout io.Writer, hom
 	case "run":
 		command.Run.Approval = approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}}
 		command.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: canonical.JSON{}}
-		command.Run.Runner = signals.Runner{Next: runner}
+		command.Run.Runner = signals.Runner{Next: controlPreflightRunner{run: runner.Run}}
 		return command.Run.Run(ui)
 	case "status":
 		command.Status.Service, command.Status.Presentation = recovery, presentation.UI{Out: out, Err: errout}
@@ -100,6 +101,18 @@ func controlStateCommand(args []string, in io.Reader, out, errout io.Writer, hom
 }
 
 type controlApprovalStore struct{ ap.Store }
+
+type controlPreflightRunner struct {
+	run func(context.Context, ap.Durable, []string, sp.Streams) sp.RunResult
+}
+
+func (r controlPreflightRunner) Run(ctx context.Context, frozen ap.Durable, args []string, streams sp.Streams) sp.RunResult {
+	if os.Getenv("SLICE_21_BOUNDARY") == "before admission" {
+		b := publicBarrier{request: publicProbeRequest{Boundary: "before admission", Ready: os.Getenv("SLICE_21_READY"), Release: os.Getenv("SLICE_21_RELEASE")}}
+		b.wait(ctx, "before admission")
+	}
+	return r.run(ctx, frozen, args, streams)
+}
 
 func (s controlApprovalStore) Commit(c ap.Candidate, generation string) (ap.Record, ap.Failure) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
