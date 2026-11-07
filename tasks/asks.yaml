@@ -131,3 +131,6 @@ questions:
     item: "slice-15"
     question: "slice-15: native evidence for ID-LIFECYCLE-15 at e22aa63?"
     answer: "Run 42390615242: it already passes (8 of 8 steps), covered by slice-12's work. Accepted as regression coverage under the standing rule: activate it."
+  - id: q-33
+    item: "slice-17"
+    question: "slice-17: CI red evidence for ID-OFFLINE-30 at 3aae532?"
