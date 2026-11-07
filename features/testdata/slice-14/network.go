@@ -19,12 +19,6 @@ import (
 	"time"
 )
 
-type route struct{ Name, Protocol, Address, Answer string }
-type attempt struct {
-	Name, Protocol, Address, Nonce, Result, Error string
-	Attempted                                     bool
-}
-
 var outputMu sync.Mutex
 
 func receipt(value string) {
@@ -51,20 +45,12 @@ func attempts(c config, phase string) report {
 	if c.Mode == "dns" {
 		r.Values["resolv.conf"] = text("/etc/resolv.conf")
 	}
-	for _, p := range c.Routes {
-		nonce := c.Nonce + "-" + phase + "-" + p.Name
-		a := attempt{Name: p.Name, Protocol: p.Protocol, Address: p.Address, Nonce: nonce, Attempted: true}
-		var e error
+	r.Attempts = routeAttempts(c.Routes, c.Nonce, phase, func(p route, nonce string) (string, error) {
 		if c.Mode == "dns" {
-			a.Result, e = dnsAttempt(c, p, nonce)
-		} else {
-			a.Result, e = exchange(p.Protocol, p.Address, nonce)
+			return dnsAttempt(c, p, nonce)
 		}
-		if e != nil {
-			a.Error = e.Error()
-		}
-		r.Attempts = append(r.Attempts, a)
-	}
+		return exchange(p.Protocol, p.Address, nonce)
+	})
 	return r
 }
 
@@ -147,17 +133,20 @@ func serve(c config) {
 	for _, address := range addresses {
 		must(controlAddressReady(address))
 	}
-	if c.Mode == "dns" {
+	if c.Mode == "dns" || c.Mode == "loss" {
 		// Reproduce the subject's independently captured system resolver targets
 		// in this CONTROL only. The subject and daemon files are never changed.
-		var lines []string
-		for _, a := range c.Resolvers {
-			lines = append(lines, "nameserver "+a)
+		controlResolvers(c)
+		if c.Mode == "loss" {
+			serveDNS(*c.DNS)
+		} else {
+			serveDNS(c)
 		}
-		lines = append(lines, "options attempts:1 timeout:1")
-		must(os.WriteFile("/etc/resolv.conf", []byte(strings.Join(lines, "\n")+"\n"), 0600))
-		serveDNS(c)
-	} else {
+	}
+	if c.Mode != "dns" {
+		if c.Mode == "loss" {
+			c.Routes = c.Network.Routes
+		}
 		seen := map[string]bool{}
 		for _, r := range c.Routes {
 			if r.Answer != "control" {
@@ -173,6 +162,15 @@ func serve(c config) {
 	}
 	emit(report{Kind: "ready", Nonce: c.Nonce, Values: map[string]string{"ipv6-loopback": "ready"}})
 	select {}
+}
+
+func controlResolvers(c config) {
+	var lines []string
+	for _, a := range c.Resolvers {
+		lines = append(lines, "nameserver "+a)
+	}
+	lines = append(lines, "options attempts:1 timeout:1")
+	must(os.WriteFile("/etc/resolv.conf", []byte(strings.Join(lines, "\n")+"\n"), 0600))
 }
 
 func controlAddressReady(address string) error {

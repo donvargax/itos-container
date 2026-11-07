@@ -47,6 +47,7 @@ type world struct {
 	recovery      *recoveryNative
 	recoveryLocal *recoveryLocal
 	lifecycle     *lifecycleNative
+	loss          *lifecycleLoss
 	overlap       *overlapFixture
 	hardlinks     *hardlinkWorld
 	control       *controlFixture
@@ -161,6 +162,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.recoveryLocalSteps(sc)
 	w.offlineIsolationSteps(sc)
 	w.lifecycleNativeSteps(sc)
+	w.lifecycleLossSteps(sc)
 	w.lifecycleLocalSteps(sc)
 	w.overlapSteps(sc)
 	w.hardlinkSteps(sc)

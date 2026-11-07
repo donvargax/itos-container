@@ -463,14 +463,9 @@ items:
     title: Isolation retained through controller loss
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-12, slice-14]
     kind: slice
-    why: >
-      Split from slice-12, 2026-11-06, to break a dependency cycle its spec review found:
-      ID-LIFECYCLE-15 proves network denial still holds after the controller is lost, using
-      slice-14's boundary probes and slice-11's recovery. Its scenario is specified on slice-12's
-      branch and moves here, still @wip.
   - id: p1-mount-bound-to-validated-inode
     title: The checkout mount is bound to the inode that passed validation
     phase: 1
