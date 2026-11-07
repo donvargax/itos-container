@@ -58,6 +58,21 @@ Feature: Refuse checkout files that share writable host inodes
   # running worker is claimed. Overlapping workers and binding the actual mount
   # to the validated root remain slice-16/slice-17's separate requirements.
 
+  # Enumeration is bounded even when every inode is independent. Each full scan,
+  # including Unchanged rechecks, reads batches of at most 128 entries and shares
+  # a 100,000-entry allowance and a 10-second monotonic deadline across the whole
+  # tree. Count every returned entry, including symlinks and directories. The
+  # root is depth zero; allow descendants through directory depth 64. Check time
+  # between filesystem operations; this does not promise to interrupt a blocked
+  # kernel filesystem call. No detached scanner may outlive a refusal.
+  # Exhaustion cannot establish safety: initial inspection reports the existing
+  # doctor.checkout.unavailable (exit 3); revalidation fails closed through its
+  # existing changed/ownership refusal. Never prune or accept a partial scan.
+  # Reuse pinned Go standard-library directory batching and monotonic time;
+  # no library, subprocess, user-configurable limit or production test switch.
+  # Adapter tests exercise exact entry/depth boundaries, cumulative accounting,
+  # bounded reads and deterministic elapsed-time exhaustion without sleeps.
+
   # Fixture and step handoff:
   # Reuse doctor/approval checkout creation, the independent approval oracle,
   # seeded approval state, local owned foreground API, helper sentinels, generic
@@ -323,3 +338,40 @@ Feature: Refuse checkout files that share writable host inodes
   # step. Keep both phases of 03/09: their refusal fails before the fix and their
   # positive control rules out rejecting all checkouts or a nonworking probe.
   # Preserve adjacent doctor/approval/run and foreground recovery scenarios.
+
+  @wip @slice-20 @ID-HARDLINK-10 @linux @local-engine-fixture
+  Scenario Outline: Checkout enumeration refuses excessive size or depth before side effects
+    Given an approval checkout and isolated host state
+    And a local owned foreground Engine API fixture
+    And a seeded matching approval at generation "1"
+    And the checkout enumeration fixture exceeds the "<budget>" budget
+    And the hard-link fixture files are checkpointed
+    When the hard-link fixture invokes "<command>" with valid arguments
+    Then the hard-link command reports "doctor.checkout.unavailable" with exit 3
+    And the Engine API journal is empty
+    And no endpoint connection was attempted
+    And the hard-link fixture trees and link relationships are unchanged
+
+    Examples:
+      | command | budget  |
+      | doctor  | entries |
+      | doctor  | depth   |
+      | approve | depth   |
+      | run     | depth   |
+
+  @wip @slice-20 @ID-HARDLINK-11 @linux @local-engine-fixture
+  Scenario Outline: Checkout revalidation has the same enumeration budgets
+    Given an approval checkout and isolated host state
+    And a local owned foreground Engine API fixture
+    And a seeded matching approval at generation "1"
+    And the hard-link fixture files are checkpointed
+    When "<command>" runs and the checkout exceeds the depth budget before its image response
+    Then the hard-link command reports "doctor.checkout.changed" with exit 1
+    And the checkout budget action reached the image barrier
+    And no engine mutation or image acquisition was attempted
+    And the hard-link fixture trees and link relationships are unchanged
+
+    Examples:
+      | command |
+      | doctor  |
+      | run     |

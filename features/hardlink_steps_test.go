@@ -13,6 +13,7 @@ import (
 )
 
 func (w *world) hardlinkSteps(sc *godog.ScenarioContext) {
+	w.checkoutBudgetSteps(sc)
 	sc.Step(`^the hard-link fixture links "([^"]*)" to an "([^"]*)" name with mode "([^"]*)"$`, w.hardlinkLink)
 	sc.Step(`^an independent hard-link fixture file at "([^"]*)" with mode "([^"]*)"$`, w.hardlinkFile)
 	sc.Step(`^the hard-link fixture files are checkpointed$`, w.hardlinkCheckpoint)
