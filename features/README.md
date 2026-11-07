@@ -27,6 +27,13 @@ release's. Each scenario gets a scratch folder in a temporary directory, runs th
 and reads its exit code, its output and the files it leaves. A step judges the program by its
 command line alone: it never reads its source or calls its code to decide a result.
 
+The ordinary non-engine suite runs four independent scenarios concurrently so real
+filesystem I/O and deadline observations fit the existing ten-minute package budget.
+Each keeps its own processes, state, recording engine and assertions. Compiled test
+helpers are shared only after a serialized build and atomic publication outside the
+scenario checkouts. Engine runs, red-evidence selections and focused harness controls
+remain serial. No scenario deadline or assertion is shortened or omitted.
+
 Commands run in a clean environment: no `GIT_*`, `ITOS_*`, `ITOS_CONTAINER_*`, `GITHUB_*`,
 `GH_*` or `CI` variable of the caller's, no global or system git config, a fixed author, and none
 of the caller's claude, itos or its extensions on the PATH. A `GOCOVERDIR` that exists builds the

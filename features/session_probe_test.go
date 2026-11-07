@@ -185,22 +185,22 @@ func (w *world) sessionProbeBinary() (string, error) {
 	if covered {
 		path += "-cover"
 	}
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	args := []string{"test", "-c", "./cmd/itos-container", "-o", path}
-	if covered {
-		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
-	}
-	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Dir, cmd.Env = w.root, sessionChildEnvironment(os.Environ())
-	data, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("build session test assembly: %w\n%s", err, data)
-	}
-	return path, nil
+	err := cachedFeatureBinary(path, func(output string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		args := []string{"test", "-c", "./cmd/itos-container", "-o", output}
+		if covered {
+			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
+		}
+		cmd := exec.CommandContext(ctx, "go", args...)
+		cmd.Dir, cmd.Env = w.root, sessionChildEnvironment(os.Environ())
+		data, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("build session test assembly: %w\n%s", err, data)
+		}
+		return nil
+	})
+	return path, err
 }
 
 func sessionChildEnvironment(env []string) []string {

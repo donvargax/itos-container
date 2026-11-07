@@ -53,6 +53,8 @@ import (
 
 var scenarios = flag.String("scenarios", "", "run only the live scenarios with a tag this regular expression matches")
 
+const localScenarioWorkers = 4
+
 // stampedVersion is the version the binary under test is stamped with, as a
 // release's build stamps the release's, so a scenario can tell the stamp
 // from the version a build without one says.
@@ -91,11 +93,12 @@ func TestFeatures(t *testing.T) {
 		t.Fatal(err)
 	}
 	if runScenarios(selection, godog.Options{
-		Format:   "pretty",
-		Output:   os.Stdout,
-		Paths:    []string{"."},
-		Strict:   true,
-		TestingT: t,
+		Format:      "pretty",
+		Output:      os.Stdout,
+		Paths:       []string{"."},
+		Strict:      true,
+		TestingT:    t,
+		Concurrency: localScenarioWorkers,
 	}, func(sc *godog.ScenarioContext) { initializeScenario(sc, root, bin) }) != 0 {
 		t.Fatal("a scenario failed")
 	}
@@ -327,7 +330,12 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 	}
 	options.Tags = selection.filter
 	options.Strict = true
-	options.Concurrency = 1
+	// Local fixtures have independent directories, processes and recording
+	// engines. Overlap their real I/O and deadline waits within the suite budget.
+	// Native resources and red-evidence accounting remain strictly serial.
+	if options.Concurrency < 1 || selection.engine || selection.red {
+		options.Concurrency = 1
+	}
 	completed, unsuccessful := 0, false
 	suite := godog.TestSuite{Name: "itos-container", Options: &options, ScenarioInitializer: func(sc *godog.ScenarioContext) {
 		initialize(sc)

@@ -159,3 +159,42 @@ that control; removing this wait would weaken its contract. The supplied log tai
 contains transport wait stacks without identifying the timed-out scenario. No
 real-engine run or timeout-fix claim is made locally; the coordinator needs the
 full failed log and fresh CI evidence. Gates and their limits remain unchanged.
+
+## Full feature-package timeout at 4f2adf1
+
+PR run `42399749023` also failed the ordinary platform feature package at
+600.815 seconds. This is distinct from the five-minute engine-job limit above.
+The unchanged full local suite passes on tmpfs in 410.569 seconds. With temporary
+files on `/var/tmp` (ext4), affinity restricted to two CPUs and `GOMAXPROCS=2`,
+the same suite times out at 600.280 seconds after 808 passing scenario examples,
+without an earlier assertion failure. Its active cleanup example had run for
+only three seconds: serial accumulation of real filesystem I/O and required
+deadline observations exhausts the package budget. Two local workers still
+exhaust that budget while making further progress through recovery; the final
+runner therefore uses four bounded workers.
+
+The runner now overlaps four independent non-engine scenarios, retaining their
+private processes, account homes, state roots, recording engines and assertions.
+Engine and red-evidence runs remain serial. Compiled helpers are built under
+exclusion and atomically published outside the fixture checkouts; incomplete or
+failed builds cannot be reused by a concurrent scenario. Selection, coverage
+collection, syscall observations and every existing timeout stay unchanged.
+
+The final concurrency regression fails against a Go overlay of the original
+runner because local fixtures never overlap (peak one instead of four). The
+overlay adds only the worker-count constant needed to compile the current test.
+It passes with the runner change, including an intentional assertion failure
+that must still fail the suite, exactly-once execution of all six fixtures and
+serial engine/red controls. The concurrency, atomic helper publication/retry
+and selection regressions pass under the race
+detector. These are harness checks, not new product behavior or native-engine
+evidence; the accepted CONTROL red-first evidence above still applies.
+
+The complete `go test ./features -count=1 -json` package now passes in 493.519
+seconds under the same ext4 temporary-file, two-CPU and `GOMAXPROCS=2` conditions.
+All 1,325 scenario examples pass, including the 51 CONTROL examples, along with
+the package's coverage and harness controls. A separate real-fixture selection
+of CONTROL-01/10, OVERLAP-01, APPROVAL-01 and MANIFEST-01 passes under `-race` in
+11.687 seconds. All state is disposable and engines are recording HTTP fixtures.
+No gate or scenario time limit was raised. Native-engine evidence and fresh CI
+at the committed head remain with the coordinator.

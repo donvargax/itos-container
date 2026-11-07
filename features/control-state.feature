@@ -249,7 +249,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # do not whitelist arbitrary changes under a coordination directory. Positive
   # publication assertions independently decode the location bindings and approval,
   # and observe successful file/parent fsync before approval becomes visible.
-  # For bootstrap, observe the home-descriptor lock before the first mkdir, each
+  # For bootstrap, observe private-file exclusion after safe mkdir bootstrap, each
   # new directory/parent fsync, the complete self-binding's file/parent fsync,
   # and only then the first approvals-directory or approval-temp creation. Record
   # actual syscall/storage events; a missing event fails Then, never the action.
