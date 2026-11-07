@@ -2289,5 +2289,31 @@
     Engine scenarios step's timeout-minutes from 5 to 8 in .github/workflows/ci.yml and nothing
     else; p1-engine-suite-within-its-limit brings the suite back under 5 minutes and then restores
     the limit.
+
+    This is a temporary CI allowance for the existing offline owned-run evidence, not a suite
+    speedup, new container behaviour or new support claim. The settled relaxation is limited to
+    the timeout-minutes field immediately below the exact step name Engine scenarios in jobs.engine.
+    Implementation changes that single value from 5 to 8 and no other workflow content. Keep the
+    engine job's ten-minute timeout, the test binary's -test.timeout=5m, fixture preparation,
+    diagnostics and cleanup limits unchanged. Preserve the scenario selection, assertions,
+    environment, compilation command, setsid invocation, logging and exit-status propagation,
+    and the CI job's requirement that the engine job succeed. Add no retries, skips, dependencies,
+    scenarios or proof exceptions. Runtime performance work and restoration of the five-minute
+    step limit stay with the separately recorded follow-up; this change does not prove them.
+
+    Read the complete workflow before implementing. The step includes compilation before the
+    test binary runs, so its elapsed-time limit is distinct from the test-process limit. The
+    supplied done_when command below is a cheap, read-only shell assertion on the workflow; it
+    uses the existing grep available to CI and requires no RTK installation there. Before the
+    work, itos task T-32 exits 1 because the line following the Engine scenarios step name is
+    timeout-minutes: 5, not timeout-minutes: 8. After the one-line implementation it must exit 0.
+    Review the diff as well to confirm that no other workflow value changed. This static check
+    proves the configured step allowance, not runtime duration or passing engine scenarios.
+
+    The drafter edits only this ledger entry and commits docs --item T-32. The implementer edits
+    only .github/workflows/ci.yml and commits ci --task T-32. Let configured hooks and CI run their
+    gates; real-engine evidence stays in CI, with no local Docker, approval or mutation run and
+    no generated evidence committed. Agents commit and stop; the coordinating loop owns pushing,
+    CI watching and closure at the actual pushed head.
   done_when:
     - run: "grep -A1 'name: Engine scenarios' .github/workflows/ci.yml | grep -q 'timeout-minutes: 8'"
