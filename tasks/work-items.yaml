@@ -521,14 +521,15 @@ items:
     status: dropped
     depends_on: []
     kind: idea
-  - id: p2-unknown-workload-exit-nonzero
+  - id: slice-24
     title: run never returns 0 when the workload's exit is unknown
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p2-unknown-workload-exit-nonzero.
       Correctness, this milestone. A read-only security audit of main at 7236d68 (Codex,
       2026-11-06), static, no Docker run; confirm with a scenario before building. stoppedRun
       returns (0, false, "") when cleanup completed but WorkloadExit is unknown
