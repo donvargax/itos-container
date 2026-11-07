@@ -111,3 +111,6 @@ questions:
     item: "slice-17"
     question: "slice-17: Docker mounts and starts in one operation and inspect gives no inode; which observation and workload release are authorized?"
     answer: "The descriptor-backed volume (q-19) is the protection; the identity check is a detector. Right after ContainerStart, stat /proc/<State.Pid>/root/workspace from the host and compare device and inode with the validated identity; on mismatch or a failed stat, kill and remove the worker through owned teardown and refuse the run. No gate binary (a new mount). Reword the scenario if it promises release gating. See slice-17-steer.md."
+  - id: q-28
+    item: "slice-16"
+    question: "slice-16: may ID-RECOVERY-25 change so a stop before create records a proven cancellation instead of uncertain cleanup?"
