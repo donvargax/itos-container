@@ -721,3 +721,18 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | start  | SIGINT          |
       | create | SIGTERM         |
       | start  | SIGTERM         |
+
+  # Review regression: cancellation arrives after the finite-call precheck but
+  # before the workspace operation is dispatched. Exercise both ready select
+  # alternatives; neither may acquire a pin after its caller has been cancelled.
+  @wip @slice-12 @ID-LIFECYCLE-23 @linux
+  Scenario Outline: Cancellation before workspace acquisition prevents late pins
+    Given a lifecycle workspace acquisition interrupted by "<signal>" before adapter dispatch
+    When run returns and all dispatched workspace calls settle through each local backend
+    Then run reports "run.cancelled" with exit <result> and no workspace pin or worker launch occurs after cancellation
+    And the healthy control launches and cleans exactly one owned worker with unchanged unrelated state
+
+    Examples:
+      | signal  | result |
+      | SIGINT  | 130    |
+      | SIGTERM | 143    |

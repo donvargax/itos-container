@@ -14,6 +14,9 @@ import (
 func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 	var name, operation string
 	var result doctorResult
+	sc.Step(`^a lifecycle workspace acquisition interrupted by "([^"]*)" before adapter dispatch$`, func(signal string) {
+		name, operation = "workspace dispatch", signal
+	})
 	sc.Step(`^a lifecycle workspace revalidation blocked before "([^"]*)" and interrupted by "([^"]*)"$`, func(phase, cause string) {
 		name, operation = "workspace revalidation", cause+"|"+phase
 	})
@@ -54,6 +57,7 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^run returns before the pending launch operation is released through each local backend$`, run)
 	sc.Step(`^run returns before the pending exit observation is released through each local backend$`, run)
 	sc.Step(`^run returns before the pending workspace revalidation is released through each local backend$`, run)
+	sc.Step(`^run returns and all dispatched workspace calls settle through each local backend$`, run)
 	assert := func() error {
 		if result.exit != 0 || !strings.Contains(result.stdout, "--- PASS: TestLifecycleBudgetContract ") {
 			return fmt.Errorf("lifecycle budget contract failed: %s", result.stdout)
@@ -61,6 +65,7 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 		return nil
 	}
 	for _, phrase := range []string{
+		`run reports "run.cancelled" with exit (?:130|143) and no workspace pin or worker launch occurs after cancellation`,
 		`run reports the original revalidation timeout or cancellation rather than an ownership refusal within its original budgets`,
 		`no later launch phase runs and the pending workspace remains pinned until its late completion`,
 		`a confirmed workspace substitution still refuses launch while an unchanged workspace launches and cleans normally`,
