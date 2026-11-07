@@ -479,7 +479,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # exhausts its 10 s allowance, an unread diagnostic sink must not consume all
   # 20 s left in teardown. A slow readable control proves delivery within the
   # call limit; LIFECYCLE-18 separately checks the shorter remaining total.
-  @wip @slice-12 @ID-LIFECYCLE-24 @linux
+  # Earlier slice-12 reporting passes both before-limit controls at 5288b60.
+  # The four blocked/after-limit rows fail their finite-call Then there through
+  # both backends: 30 s total when blocked, 20 s + 1 ns when late.
+  @slice-12 @ID-LIFECYCLE-24 @linux
   Scenario Outline: Diagnostic output has a finite call budget within teardown
     Given a lifecycle output fixture with observed exit <child> and "<sink>" diagnostics after a stalled final drain
     When run finishes owned cleanup and attempts diagnostics through each local backend

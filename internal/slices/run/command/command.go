@@ -111,11 +111,16 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 	if result.Exited && result.Exit != 0 {
 		code = result.Exit
 	}
-	// Diagnostics are bounded by the same teardown deadline. No caller-owned
-	// writer is closed and no blocked writer is joined after that deadline.
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
+	// Diagnostic output is a finite external operation within teardown. Keep
+	// its ten-second call limit even when cleanup leaves more time available.
+	// An abandoned caller-owned writer is neither closed nor joined.
+	ctx := context.Background()
+	if !result.Deadline.IsZero() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, result.Deadline)
+		defer cancel()
+	}
+	_, _ = budget.Call(ctx, "diagnostic output", func(context.Context) struct{} {
 		if result.Signal != "" {
 			ui.Fail(cancelFailure{result.Signal, workloadOutcome(result)}, false)
 		}
@@ -136,17 +141,8 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		if result.Reference != "" && result.Cleanup != session.Complete {
 			ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
 		}
-	}()
-	if result.Deadline.IsZero() {
-		<-done
-	} else {
-		ctx, cancel := context.WithDeadline(context.Background(), result.Deadline)
-		defer cancel()
-		select {
-		case <-done:
-		case <-ctx.Done():
-		}
-	}
+		return struct{}{}
+	})
 	return code
 }
 

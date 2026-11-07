@@ -58,24 +58,35 @@ func (w heldDiagnostic) Write(data []byte) (int, error) {
 }
 
 func TestUnreadDiagnosticUsesRemainingTeardown(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		deadline, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		time.Sleep(11 * time.Second)
-		until, _ := deadline.Deadline()
-		release := make(chan struct{})
-		entered := make(chan struct{})
-		done := make(chan int, 1)
-		go func() {
-			done <- reportRun(&cli.UI{Stderr: heldDiagnostic{entered, release}, Classify: Classify}, session.RunResult{Signal: "SIGTERM", Exited: true, Exit: 17, Deadline: until})
-		}()
-		<-entered
-		start := time.Now()
-		code := <-done
-		if code != 17 || time.Since(start) != 19*time.Second {
-			t.Fatal("diagnostic delivery extended teardown", code, time.Since(start))
-		}
-		close(release)
-		synctest.Wait()
-	})
+	for _, tc := range []struct {
+		name          string
+		elapsed, wait time.Duration
+	}{
+		{"call limit", 11 * time.Second, 10 * time.Second},
+		{"remaining teardown", 25 * time.Second, 5 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				deadline, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				time.Sleep(tc.elapsed)
+				until, _ := deadline.Deadline()
+				release := make(chan struct{})
+				entered := make(chan struct{})
+				done := make(chan int, 1)
+				go func() {
+					done <- reportRun(&cli.UI{Stderr: heldDiagnostic{entered, release}, Classify: Classify}, session.RunResult{Signal: "SIGTERM", Exited: true, Exit: 17, Deadline: until})
+				}()
+				<-entered
+				start := time.Now()
+				code := <-done
+				elapsed := time.Since(start)
+				close(release)
+				synctest.Wait()
+				if code != 17 || elapsed != tc.wait {
+					t.Fatal("diagnostic delivery exceeded its call or teardown limit", code, elapsed)
+				}
+			})
+		})
+	}
 }
