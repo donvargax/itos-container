@@ -1,8 +1,7 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue:
-  - T-32
+queue: []
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -654,6 +653,18 @@ items:
       Already tracks continuous enforcement against host sockets created or replaced after startup,
       retaining Landlock/gVisor research and runtime scenarios ID-SOCKETS-02/03. Preserve the
       person's q-30 deferral to milestone 2.
+
+      The person's design, 2026-11-07, for milestone 2: Landlock by default (ABI 9+,
+      LANDLOCK_ACCESS_FS_RESOLVE_UNIX), applied by a small read-only init binary itos-container
+      mounts and runs as the worker's entrypoint before exec'ing the literal argv, as Docker has no
+      Landlock option and the controller cannot restrict a worker the daemon spawns; gVisor (runsc)
+      as the fallback when the kernel lacks ABI 9; on a host with neither, run is allowed only with
+      an explicit approval that records 'late host sockets reachable', shown at approve time and in
+      status. Doctor reports which backend a run would use, and the approval binds it. Proof: the
+      Landlock path is proven locally on the person's machine (Landlock ABI 10 on Linux 7.2) for
+      now, with hosted CI proving the gVisor path; a weakened gate until a new-kernel CI runner
+      exists (record it in weakened-gates.md when built). Amends the spec's no-helper and
+      no-extra-mount rules for the init binary.
   - id: T-31
     title: Native stop confined to one of two equal-basename projects passes reliably
     phase: 1
@@ -678,7 +689,7 @@ items:
   - id: T-32
     title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task

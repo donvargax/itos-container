@@ -129,7 +129,7 @@ for this **CI-only** invocation (the workflow also supplies the fixture environm
 ```sh
 go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
 cd features
-ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$'
+ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$'
 ```
 
 The engine tests run in their own session. Coordinator-reviewed run 42233015284
@@ -152,10 +152,14 @@ while each engine run must still establish its own runtime evidence.
 `TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
 and `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
-The step has a five-minute budget and the job a ten-minute budget. These are test-infrastructure
-budgets, not product startup/resource limits. With no red input the step selects every live
-engine case, independent of smoke selections, changed IDs or a green baseline. A manual red
-list narrows it to the named eligible IDs, live or `@wip`. Pending, undefined, failed or skipped
+T-32 temporarily gives the step an eight-minute budget and the job a thirteen-minute budget.
+The test binary's seven-minute timeout leaves time for Go's panic and goroutine dump before
+the step limit. This coordinator-authorized stopgap is recorded in `weakened-gates.md` until
+`p1-engine-suite-within-its-limit` speeds up the suite and restores the limits. These are
+test-infrastructure budgets, not product startup/resource limits. With no red input the step
+selects every live engine case, independent of smoke selections, changed IDs or a green
+baseline. A manual red list narrows it to the named eligible IDs, live or `@wip`.
+Pending, undefined, failed or skipped
 runtime steps fail; losing selected engine cases also fails. Manual non-engine red runs
 apply the same completion checks.
 
