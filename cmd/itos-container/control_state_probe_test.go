@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	approvalhost "github.com/donvargax/itos-container/internal/engine/approval/host"
 	"io"
 	"os"
@@ -33,6 +34,16 @@ import (
 // Its host port supplies a disposable account home, independently of HOME/XDG.
 // Normal binaries have neither this environment switch nor this assembly.
 func TestMain(m *testing.M) {
+	if os.Getenv("SLICE_21_ACCOUNT_PROBE") == "1" {
+		home, failure := (approvalhost.Process{}).AccountHome()
+		if json.NewEncoder(os.Stdout).Encode(struct {
+			Home    string
+			Failure ap.Failure
+		}{home, failure}) != nil {
+			os.Exit(96)
+		}
+		os.Exit(0)
+	}
 	home := os.Getenv("SLICE_21_ACCOUNT_HOME")
 	cleanup := func() {}
 	if home == "" {

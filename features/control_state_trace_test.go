@@ -49,6 +49,7 @@ func controlTraceSource() string {
                 }`, `
                 if c.fault {
                     regs.Rax = ^uint64(unix.EIO-1)
+                    if c.sync.Op == "account-read" { regs.Rax = 0 }
                     if unix.PtraceSetRegs(tid, &regs) != nil { fail() }
                     c.fault = false
                 }
@@ -150,6 +151,15 @@ func controlPath(tid int, fd, address uint64) string {
 }
 func controlObserve(tid int, r unix.PtraceRegs, root string) *event {
     e := &event{}
+    if os.Getenv("SLICE_21_ACCOUNT_PROBE") == "1" {
+        if r.Orig_rax == unix.SYS_OPENAT && controlPath(tid, r.Rdi, r.Rsi) == "/etc/passwd" {
+            return &event{Path:"/etc/passwd", Op:"account-open"}
+        }
+        if r.Orig_rax == unix.SYS_READ {
+            path, _ := os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", tid, r.Rdi))
+            if path == "/etc/passwd" { return &event{Path:path, Op:"account-read"} }
+        }
+    }
     switch r.Orig_rax {
     case unix.SYS_FSYNC, unix.SYS_FLOCK, unix.SYS_WRITE, unix.SYS_READ:
         e = observe(tid, r.Rdi, root)
@@ -180,6 +190,8 @@ func controlFault(e *event) bool {
     coord := filepath.Join(os.Getenv("SLICE_21_ACCOUNT_HOME"), ".local/state/itos-container/coordination")
     inside := strings.HasPrefix(e.Path, coord+"/") && filepath.Base(e.Path) != "control.lock"
     switch fault {
+    case "account database empty": return e.Op == "account-read"
+    case "account database unreadable": return e.Op == "account-open"
     case "coordination directory create": return e.Op == "mkdir" && e.Path == coord
     case "coordination directory fsync": return e.Op == "fsync" && e.Directory && e.Path == coord
     case "coordination parent fsync":

@@ -35,7 +35,13 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # It is protected control state too. No environment/checkout override, service,
   # privileged helper or worker-visible coordination path is introduced. An
   # unavailable account home refuses with approval.state.unavailable (exit 3).
-  # Reuse pinned Go 1.27.3 os/user.LookupId behind the host adapter, the existing
+  # The Linux host adapter requires a local /etc/passwd record for the effective
+  # UID, with valid numeric IDs and an absolute home. Missing/unreadable evidence
+  # refuses even when os/user could synthesize an account from USER and HOME.
+  # Read the seven colon-separated fields with pinned Go 1.27.3 bufio/strings;
+  # os/user.LookupId cannot prove provenance, and Moby sys/user v0.4.0's parser
+  # ignores numeric conversion errors. Neither meets this fail-closed boundary.
+  # Reuse the existing
   # protected disk primitives, and golang.org/x/sys v0.48.0 descriptor locks.
   # Reuse Moby client v0.6.2/api v1.56.1 for existing engine inspection only.
   # Add no dependency, custom lock protocol based on PID/time, or domain import.
@@ -266,6 +272,20 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # @wip for local assertion-level red, then implement and obtain green. Each
   # scenario's expected first failing Then is documented beside it. An undefined
   # step, setup failure or an already-passing control is not red evidence.
+
+  # The production host observation is tested read-only, without the fixture's
+  # substituted account port. Child-only syscall faults hide account evidence;
+  # no host account file or real control-state folder is changed.
+  @slice-21 @ID-CONTROL-15 @local-engine-fixture @wip
+  Scenario Outline: Environment values cannot replace missing account database evidence
+    Given a read-only production account lookup fixture whose account database is "<database>"
+    When two fresh CGO-disabled account lookups use different HOME USER and LOGNAME values
+    Then both lookups report state.unavailable without selecting a home or creating control state
+
+    Examples:
+      | database   |
+      | empty      |
+      | unreadable |
 
   # Read-only location inspection. Today doctor reports missing/matching and
   # exit 0 because it compares the managed path only with P's disjoint checkout.
