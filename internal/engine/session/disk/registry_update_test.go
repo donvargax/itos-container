@@ -293,6 +293,125 @@ func TestRegistryUnchangedSaveSyncsWithoutPublicationAndCanRetry(t *testing.T) {
 	}
 }
 
+func TestRegistryFailedPublicationPreservesVisibleProgressForRetry(t *testing.T) {
+	for _, fault := range []string{"write", "file fsync", "atomic publication", "parent fsync"} {
+		t.Run(fault, func(t *testing.T) {
+			m := newRegistryFixture(t)
+			files := m.seed()
+			entry, failure := m.registry.Open(t.Context(), m.record.ID, false)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer entry.Close()
+			next := entry.Record()
+			next.State = "running"
+			m.codec.Records["running"] = next
+			m.files.Fault = fault
+			if failure := entry.Save(next); failure != sp.IntentWrite {
+				t.Fatal("failed publication lost its durability failure", failure)
+			}
+			want := m.record
+			if fault == "parent fsync" {
+				// Rename made progress visible even though its durability failed.
+				want = next
+			}
+			if entry.Record() != want || !bytes.Equal(files.Data, m.codec.EncodePublic(want)) || entry.Validate() != "" {
+				t.Fatal("failed publication lost the visible progress needed for retry", entry.Record())
+			}
+			m.files.Fault, m.files.Events = "", nil
+			if failure := entry.Save(next); failure != "" {
+				t.Fatal("publication could not recover after clearing the storage fault", failure)
+			}
+			if entry.Record() != next || !bytes.Equal(files.Data, m.codec.EncodePublic(next)) || entry.Validate() != "" {
+				t.Fatal("publication retry lost progress")
+			}
+			if fault == "parent fsync" {
+				expected := []af.RegistryEvent{
+					{ID: m.record.ID, Operation: "file fsync", Data: files.Data},
+					{ID: m.record.ID, Operation: "parent fsync", Data: files.Data},
+				}
+				if !reflect.DeepEqual(m.files.Events, expected) {
+					t.Fatal("visible progress was republished instead of repairing durability", m.files.Events)
+				}
+			}
+		})
+	}
+}
+
+func TestRegistrySaveAndSyncRevalidateAfterWritingBeforeReleasingAdmission(t *testing.T) {
+	for _, operation := range []string{"save", "sync"} {
+		for _, fault := range []string{"directory changed", "intent unavailable"} {
+			t.Run(operation+"/"+fault, func(t *testing.T) {
+				m := newRegistryFixture(t)
+				if operation == "sync" {
+					m.record.State = "stopped"
+					m.codec.Records["original"] = m.record
+				}
+				files := m.seed()
+				intent := m.binding.Intent(strings.Repeat("c", 64))
+				intent.Stage, intent.ContainerID = "absent", strings.Repeat("e", 64)
+				m.storage.Directories["intents/"+intent.Project].Files[intent.NameToken()+".json"] = m.registry.Store.Codec.Encode(intent)
+				claim := sp.AdmissionRecord{Schema: 1, Root: m.binding.Checkout.Root, ID: m.record.ID, Intent: m.record.Intent}
+				name := admissionName(registryKey(claim.Root, m.binding.UID), claim.ID, m.binding.UID)
+				reservation := m.codec.EncodeAdmission(claim)
+				m.files.Admissions = map[string][]byte{name: reservation}
+				entry, failure := m.registry.Open(t.Context(), m.record.ID, false)
+				if failure != "" {
+					t.Fatal(failure)
+				}
+				defer entry.Close()
+				want := sp.Refused
+				if fault == "intent unavailable" {
+					want = sp.Incomplete
+				}
+				reads := 0
+				m.files.AfterRead = func() {
+					reads++
+					// The first read validates authority; the storage operation's
+					// read then races a change while publication/fsync completes.
+					if reads == 2 {
+						if fault == "directory changed" {
+							files.Changed = true
+						} else {
+							m.storage.Failure = "state.unavailable"
+						}
+					}
+				}
+				if operation == "save" {
+					next := entry.Record()
+					next.State = "stopped"
+					m.codec.Records["stopped"] = next
+					failure = entry.Save(next)
+				} else {
+					failure = entry.Sync()
+				}
+				if failure != want {
+					t.Fatal("completed storage write hid the revalidation failure", failure, want)
+				}
+				if len(m.files.Events) == 0 {
+					t.Fatal("fault occurred before the storage write")
+				}
+				last := m.files.Events[len(m.files.Events)-1]
+				if last.Operation != "parent fsync" || last.Failed {
+					t.Fatal("storage write did not complete before revalidation", m.files.Events)
+				}
+				if !bytes.Equal(m.files.Admissions[name], reservation) {
+					t.Fatal("failed revalidation released the checkout reservation")
+				}
+				m.files.AfterRead, files.Changed, m.storage.Failure = nil, false, ""
+				if failure := entry.Sync(); failure != "" {
+					t.Fatal("unchanged authority could not retry completion", failure)
+				}
+				completed, failure := m.codec.DecodeAdmission(m.files.Admissions[name])
+				claim.Complete = true
+				if failure != "" || completed != claim {
+					t.Fatal("successful retry did not complete the original reservation", completed, failure)
+				}
+			})
+		}
+	}
+}
+
 func TestRegistryIntentSaveRejectsFailedReopenAndPreservesRetry(t *testing.T) {
 	for _, fault := range []string{"unavailable", "unsafe", "missing", "replaced"} {
 		t.Run(fault, func(t *testing.T) {

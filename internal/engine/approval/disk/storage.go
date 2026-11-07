@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"io"
 	"os"
 	"strings"
@@ -63,7 +64,7 @@ func (s Storage) Open(ctx context.Context, c port.Candidate, collection string, 
 	if exclusive == nil {
 		exclusive = (*os.Root).Link
 	}
-	return &directoryStore{pin: p, ctx: ctx, exclusive: exclusive}, ""
+	return &directoryStore{pin: p, ctx: budget.Lifetime(ctx), exclusive: exclusive}, ""
 }
 func lockBusy(err error) bool { return errors.Is(err, syscall.EWOULDBLOCK) }
 func lockContext(ctx context.Context, file *os.File) error {

@@ -47,6 +47,8 @@ type world struct {
 	anchor        *anchorWorld
 	recovery      *recoveryNative
 	recoveryLocal *recoveryLocal
+	lifecycle     *lifecycleNative
+	overlap       *overlapFixture
 	hardlinks     *hardlinkWorld
 }
 
@@ -58,7 +60,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		sessionErr := errors.Join(w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSession())
+		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSession())
 		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
@@ -159,7 +161,11 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.recoveryLocalSteps(sc)
 	w.offlineIsolationSteps(sc)
 	w.anchorSteps(sc)
+	w.lifecycleNativeSteps(sc)
+	w.lifecycleLocalSteps(sc)
+	w.overlapSteps(sc)
 	w.hardlinkSteps(sc)
+	w.runExitSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.

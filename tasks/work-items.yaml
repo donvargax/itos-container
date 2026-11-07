@@ -371,13 +371,9 @@ items:
     title: Budgets, cancellation and loss
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-11]
     kind: slice
-    why: >
-      T-11's stall, signal, engine-loss and controller-kill cases. Waits: 10 s call, 120 s startup,
-      30 s teardown. Signals: forward once, 10 s grace, then SIGKILL; observed exit wins. Controller
-      loss leaves the worker isolated until stop.
   - id: p3-approval-before-egress
     title: Revisit who may approve a sandbox before it can grant network or credentials
     phase: 1
@@ -466,8 +462,8 @@ items:
   - id: slice-15
     title: Isolation retained through controller loss
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-12, slice-14]
     kind: slice
     why: >
@@ -521,22 +517,13 @@ items:
     status: dropped
     depends_on: []
     kind: idea
-  - id: p2-unknown-workload-exit-nonzero
+  - id: slice-24
     title: run never returns 0 when the workload's exit is unknown
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      Correctness, this milestone. A read-only security audit of main at 7236d68 (Codex,
-      2026-11-06), static, no Docker run; confirm with a scenario before building. stoppedRun
-      returns (0, false, "") when cleanup completed but WorkloadExit is unknown
-      (internal/engine/session/domain/run.go:141; internal/slices/run/command/command.go:67), so a
-      concurrent stop that removes an exited worker first makes run report success though the
-      command may have failed; cmd/itos-container/public_recovery_review_test.go:183 expects 0. Keep
-      cleanup completion and workload success apart: unknown exit is nonzero, WorkloadExit stays
-      null.
+    kind: slice
   - id: p3-registration-before-intent
     title: A crash between registration and intent publication leaves no stuck session
     phase: 1
@@ -562,16 +549,9 @@ items:
     title: Run refuses overlapping worker checkouts
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-refuse-overlapping-worker-checkouts.
-      Prevent one worker from replacing another checkout's parent path. Atomically refuse
-      ancestor/descendant overlaps in either launch order, including concurrent launches, while
-      allowing disjoint projects. Keep admission and ownership rules in shared engine packages.
-      Specify black-box scenarios first, with native-engine evidence only in CI. Broken down from
-      null.
   - id: slice-17
     title: Run binds its mount to the validated checkout inode
     phase: 1
@@ -605,8 +585,8 @@ items:
   - id: slice-21
     title: Doctor and approve reject state exposed to another worker
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-16]
     kind: slice
     why: >
@@ -646,21 +626,13 @@ items:
       without authorizing removal from exposed records. Preserve read-only status, ownership-checked
       stop and persistent state protection. Keep each command in its own slice and reusable recovery
       logic in engine packages. Broken down from p2-control-state-outside-every-mount.
-  - id: p1-flaky-recovery-budget-changed-record
+  - id: T-30
     title: TestPublicRecoveryBudgetRegressions/changed_record passes reliably on Linux CI
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      main's CI went red at 78f26bb (run 42313659921, Tests on ubuntu-latest) on a docs-only push:
-      cmd/itos-container/public_recovery_budget_test.go:195 'run repeated cleanup or failed to drain
-      the remaining output' in the changed_record case, while the run before (3931b4c) passed;
-      slice-12's attempt 5 also saw it fail in CI and could not reproduce it locally. A unit test
-      that flakes turns main red at random, and with it the release T-25 needs. Find the race
-      (likely drain versus cleanup ordering under load) and fix it, never by retrying the test or
-      widening its timeout.
+    kind: task
   - id: T-27
     title: Stop requesting Bugbot reviews
     phase: 1
@@ -673,5 +645,31 @@ items:
     phase: 1
     owner: donvargax
     status: done
+    depends_on: []
+    kind: task
+  - id: p1-checkout-socket-kernel-enforcement
+    title: Host Unix sockets created during a run are unreachable from the worker
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Deferred from slice-19 by the person (q-30, 2026-11-07): CI showed the worker connects to host
+      Unix sockets in the bind-mounted checkout (runs 42312676619, 42323471709), and the milestone
+      only refuses sockets present at startup. Closing it needs kernel enforcement: Landlock's
+      pathname-socket rule (ABI 9+) through a product init, which needs a new kernel on every host
+      and a CI runner that has it, or the gVisor runtime, which hosted runners can prove but which
+      adds a runtime. Research in docs/plans/checkout-socket-enforcement.md; scenarios ID-SOCKETS-02
+      and 03 wait for it. A milestone-2 choice.
+
+      Already tracks continuous enforcement against host sockets created or replaced after startup,
+      retaining Landlock/gVisor research and runtime scenarios ID-SOCKETS-02/03. Preserve the
+      person's q-30 deferral to milestone 2.
+  - id: T-31
+    title: Native stop confined to one of two equal-basename projects passes reliably
+    phase: 1
+    owner: null
+    status: todo
     depends_on: []
     kind: task

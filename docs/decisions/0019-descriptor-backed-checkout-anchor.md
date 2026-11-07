@@ -111,8 +111,12 @@ start must fail the native acceptance check, even if the probe produced no
 output before teardown. Stop with evidence if Moby rejects the descriptor or
 resolves it by name; do not change mechanisms.
 
-OFFLINE-29 has accepted red evidence. OFFLINE-30's executable removal-retention
-checkpoint still needs its two assertion-level failures in guarded CI before
-implementing that behavior. The local ownership/fault cases 25–28/31 also need
-their red steps and local evidence. Production implementation and native green
-remain pending; the current product still uses the unsafe pathname mount.
+OFFLINE-29 has accepted red evidence. The coordinator also accepted run
+[42390617135](https://github.com/donvargax/itos-container/actions/runs/42390617135)
+at `3aae532` in q-33 on 2026-11-07, approximately 16:40 UTC, as assertion-level
+red evidence for both OFFLINE-30 removal-retention rows. Each failed at its Then
+with "missing original owned volume and protected recovery evidence after
+controller exit". Implementation of that behavior is authorized. The local
+ownership/fault cases 25–28/31 still need their red steps and local evidence.
+Production implementation and native green remain pending; the current product
+still uses the unsafe pathname mount.

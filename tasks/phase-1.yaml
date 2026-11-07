@@ -2178,3 +2178,104 @@
   why: >
     The person asked on 2026-11-07 to stop Bugbot reviews: push.pr.reviewers drops cursor[bot], so
     itos review request and push --ready ask and wait for Codex alone.
+- id: T-30
+  type: test
+  title: TestPublicRecoveryBudgetRegressions/changed_record passes reliably on Linux CI
+  why: >
+    main's CI went red at 78f26bb (run 42313659921, Tests on ubuntu-latest) on a docs-only push:
+    cmd/itos-container/public_recovery_budget_test.go:195 'run repeated cleanup or failed to drain
+    the remaining output' in the changed_record case, while the run before (3931b4c) passed;
+    slice-12's attempt 5 also saw it fail in CI and could not reproduce it locally. A unit test that
+    flakes turns main red at random, and with it the release T-25 needs. Find and fix the ordering
+    race, never by retrying the test or widening its timeout. This is test maintenance for the
+    existing offline owned-run contract, not a new behaviour or runtime support claim. No scenarios
+    or IDs are added. The drafter changes only this ledger entry; implementation belongs in
+    cmd/itos-container/public_recovery_budget_test.go, committed as test --task T-30.
+
+    Read that entire test, publicMemoryFixture/publicMemoryCommand in public_fake_backend_test.go,
+    recoveryReviewMutations in public_recovery_review_test.go, and the session domain's run.go,
+    registered_run.go and recovery.go. Follow disk/registry.go and approval/port/porttest/registry.go
+    for the operation-lock and byte-validation contract, and session/port/porttest/run.go for
+    engine events. The command test uses production run/stop/status handlers, the session domain,
+    disk registry and codec with in-memory storage and engine fakes inside testing/synctest. It
+    needs neither a subprocess nor Docker to exercise this failure.
+
+    The existing completed snapshot is taken after publicMemoryCommand(stop) returns. Recovery.stop
+    has already closed its session and released the operation lock at that point; run may resume
+    before the stop goroutine clones SessionFiles.Data. The changed-record AfterRead callback adds
+    one ASCII space on the fourth stopped-record read, after run's Open has loaded and validated
+    the original bytes and before stoppedRun's held-session revalidation. If that replacement wins
+    the scheduling race, completed already contains the space. The final append adds a second
+    expected space, rejecting correct unchanged stored bytes. The shared failure message does
+    not establish a drain failure: want is 75 in this case, disabling its drain-event predicate.
+
+    Capture one immutable copy of the completed record and the mutating-engine-event baseline
+    during stop's completion validation, while it still holds the operation lock and before run
+    can resume. The first stopped-record AfterRead observation supplies this boundary with the
+    existing fake; it precedes the fourth-read substitution. Capture the healthy completed cases
+    at that boundary too. Never overwrite these baselines from the stop goroutine after the
+    command returns. Keep result observation separate from fixture state observation, and join
+    the goroutine before final assertions. Use the existing standard-library synctest and channel
+    synchronization; no new dependency, shared fake API or production change is needed.
+
+    Preserve the intentional concurrency: stop holds the operation lock for eleven virtual
+    seconds, outlasting run's ten-second probe but fitting the existing thirty-second teardown.
+    Keep all seven existing budget cases and their exit, diagnostic, elapsed-time, unknown-exit,
+    stopped/absent/complete, retry, resource and no-repeated-cleanup assertions. In changed_record,
+    assert that the substitution actually happened exactly once at held-session revalidation,
+    that run returns 75 with run.execution-unavailable, and that the final record is exactly the
+    immutable pre-substitution bytes plus one space. Do not normalize JSON, trim the space, read
+    the final record back as its own expectation or relax the exact comparison. Healthy cases
+    must preserve their original bytes and required drain event; drain-failure and incomplete-stop
+    cases retain their existing outcomes. Split the combined final condition into record-byte,
+    engine-mutation and applicable drain checks so a failure identifies the violated invariant.
+    Do not require draining in changed_record, where authority revalidation has failed.
+
+    Add TestPublicRecoveryChangedRecordObservationOrder with stop_observer_first and
+    run_observer_first subtests reusing this command fixture and its assertions. Explicit
+    handshakes must exercise both orders of the stop goroutine observing its returned result and
+    run reaching the injected replacement/revalidation; assert that each intended order occurred.
+    The run_observer_first case must let run finish that path before the stop goroutine continues
+    its post-command observation. Capture the baseline under the lock in both cases, retaining
+    the eleven-second overlap. Use controlled scheduling, not extra sleeps, runtime yields,
+    scheduler settings, stress loops, increased counts, retries, skips or a longer timeout.
+
+    A schedule-only reproduction at e5275fe added synctest.Wait() immediately after the competing
+    publicMemoryCommand(stop) call, only for changed record. With run allowed to reach its
+    existing finished-channel wait before the stop observer proceeds, the original assertion
+    failed in one race-enabled execution. Separating its diagnostic showed expected bytes 376
+    versus actual 375, mutation counts 4/4 and no drain event; the required exit and status checks
+    had passed. This was a temporary Go overlay, not a production edit or mutation-proof run.
+    Reproduce that ordering against the old snapshot logic before repairing it, then keep it as
+    the permanent run_observer_first regression. The failure must be the record-byte assertion,
+    not a deadlock, setup error or missing test. The ordinary supplied race-enabled budget check
+    passed once before specification; that is a preservation result, not proof the flake is gone.
+
+    The first check below discovers the new top-level regression before running it, preserving
+    go test's failure status and refusing an empty selection. It fails before implementation with
+    missing TestPublicRecoveryChangedRecordObservationOrder. Test discovery alone is not the
+    ordering proof: the late observer must fail before repair and both orders pass afterward.
+    The second check retains the supplied race-enabled budget selection and count of one; it can
+    expose the flake but is not expected to fail on every pre-work run. Use plain go in ledger
+    commands so the Linux runner needs no RTK installation; agents apply their RTK wrapper locally.
+    Keep these focused checks at the task tier and the deterministic tests in the existing Linux
+    go test ./... CI run. Do not expand the general race tier or edit workflows, hooks, budgets,
+    production locking, port contracts, scenarios or proof configuration to fix a test observer.
+
+    The implementer reports the failing controlled schedule, both passing observation orders,
+    the full budget check and the actual Linux CI result supplied by the coordinator. If this
+    exposes a separate production defect, stop and return it for a behaviour spec instead of
+    changing product semantics in this test task. No real state approval, engine access, local
+    mutation run or generated evidence is authorized. Let configured hooks and CI run their
+    gates. Agents commit and stop; the coordinating loop owns pushing, CI watching and closure.
+- id: T-31
+  type: test
+  title: Native stop confined to one of two equal-basename projects passes reliably
+  why: >
+    main's engine job went red at 8164782 (run 42389951333), a registry-only push, on 'Native stop
+    is confined to one of two equal-basename projects': lstat
+    …/slice-11-project-b/checkout/slice-11-heartbeat.next: no such file or directory, while the run
+    before (db63a37) passed. A flaky engine scenario turns main red at random. Find the race (the
+    heartbeat file's rename, likely) and fix it, never by retrying or widening a timeout.
+  done_when:
+    - run: ITOS_CONTAINER_ENGINE_TESTS=1 go test ./features -count=1 -scenarios='^@ID-RECOVERY-23$'

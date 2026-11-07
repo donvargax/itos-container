@@ -109,6 +109,9 @@ func isolationRegistryFixture(t *testing.T) *isolationWorld {
 	if err := os.RemoveAll(filepath.Dir(filepath.Dir(dir))); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.RemoveAll(filepath.Dir(w.admissionPath(""))); err != nil {
+		t.Fatal(err)
+	}
 	s := &isolationWorld{w: w}
 	var err error
 	s.before, err = s.protected()
@@ -133,6 +136,7 @@ func isolationRegistryFixture(t *testing.T) *isolationWorld {
 				t.Fatal(err)
 			}
 		}
+		seedAdmissionRecord(t, w, id, s.registrationIntent(r), r.absent)
 		if err := s.observeRegistration(r); err != nil {
 			t.Fatal(err)
 		}

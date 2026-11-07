@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"slices"
 	"time"
 
@@ -26,6 +27,8 @@ func recoveryFailure(id string, failure port.Outcome) port.RecoveryResult {
 	return r
 }
 func (s Recovery) Status(ctx context.Context) port.RecoveryResult {
+	s.Registry = finiteRegistry{s.Registry}
+	s.Engine = finiteEngine{s.Engine}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	ids, failure := s.Registry.List(ctx)
@@ -52,7 +55,10 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	}
 	defer entry.Close()
 	e, failure := sessionEntry(entry)
-	if failure == "" {
+	if failure == "" && uncreated(entry) {
+		failure = entry.Validate()
+		e.Resource = "absent"
+	} else if failure == "" {
 		connection, f := s.Engine.OpenRun(ctx, entry.Intent().Binding())
 		failure = f
 		if failure == "" {
@@ -71,7 +77,7 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 			e.State = "running"
 		}
 		if r.State == "stopped" {
-			if e.Resource == "absent" && entry.Intent().Record().Stage == "absent" {
+			if e.Resource == "absent" && entry.Intent().Record().Completed() {
 				e.Cleanup = "complete"
 			} else {
 				failure = port.Incomplete
@@ -106,7 +112,7 @@ func finishEntry(e *port.RecoveryEntry) {
 func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (port.Observation, string, port.Outcome) {
 	// A wait or prior engine call may have exhausted the total. Expired
 	// storage handles cannot distinguish changed ownership from lost time.
-	if ctx.Err() != nil {
+	if budget.Cause(ctx) != nil {
 		return port.Observation{}, "unknown", port.Incomplete
 	}
 	if failure := s.Validate(); failure != "" {
@@ -156,6 +162,8 @@ func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (
 }
 
 func (s Recovery) Stop(ctx context.Context, id string) port.RecoveryResult {
+	s.Registry = finiteRegistry{s.Registry}
+	s.Engine = finiteEngine{s.Engine}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	return s.stop(ctx, id, "SIGTERM", nil, true)
@@ -172,10 +180,15 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	// Controller presence is advisory for explicit cleanup. Original authority
 	// is independently revalidated by stopSession before any mutation.
 	e, _ := sessionEntry(entry)
-	connection, failure := s.Engine.OpenRun(ctx, entry.Intent().Binding())
-	if failure == "" {
-		defer connection.Close()
-		failure = stopSession(ctx, entry, connection, signal, exit, remove)
+	if uncreated(entry) {
+		failure = cancelUncreated(entry)
+	} else {
+		var connection port.RunConnection
+		connection, failure = s.Engine.OpenRun(ctx, entry.Intent().Binding())
+		if failure == "" {
+			defer connection.Close()
+			failure = stopSession(ctx, entry, connection, signal, exit, remove)
+		}
 	}
 	if failure == "" {
 		e.State, e.Resource, e.Cleanup = "stopped", "absent", "complete"
@@ -187,7 +200,7 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 		// Persist uncertainty only for safely held, incomplete sessions. Never
 		// replace a completed tombstone or overwrite substituted authority.
 		r := entry.Record()
-		if ctx.Err() == nil && r.State != "stopped" && retryableRecovery(failure) && entry.Validate() == "" {
+		if budget.Cause(ctx) == nil && r.State != "stopped" && retryableRecovery(failure) && entry.Validate() == "" {
 			r.State, r.LastProblem = "failed", &failure
 			if f := entry.Save(r); f != "" {
 				failure = f
@@ -203,6 +216,29 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	}
 	return r
 }
+
+func uncreated(s port.Session) bool {
+	r := s.Intent().Record()
+	return r.ContainerID == "" && (r.Stage == "reserved" || r.Stage == "cancelled")
+}
+
+func cancelUncreated(s port.Session) port.Outcome {
+	if failure := s.Validate(); failure != "" {
+		return failure
+	}
+	r := s.Record()
+	if r.WorkloadExit != nil {
+		return port.Refused
+	}
+	i := s.Intent().Record()
+	i.Stage = "cancelled"
+	if failure := s.Intent().Save(i); failure != "" {
+		return failure
+	}
+	r.State, r.LastProblem = "stopped", nil
+	return s.Save(r)
+}
+
 func stopSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, exit *int, remove bool) port.Outcome {
 	r := s.Record()
 	o, resource, failure := inspectSession(ctx, s, c)
@@ -212,7 +248,7 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 	// Inspection can consume the remaining total after lock acquisition. Do
 	// not turn that timeout into an ownership refusal by saving with expired
 	// storage authority, or begin another progress write beyond the budget.
-	if ctx.Err() != nil {
+	if budget.Cause(ctx) != nil {
 		return port.Incomplete
 	}
 	// A verified explicit workload result can fill an unknown result even when
@@ -243,6 +279,13 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 	i.ContainerID, i.Stage = o.ID, "owned"
 	if failure = s.Intent().Save(i); failure != "" {
 		return failure
+	}
+	if resource == "exited" && ctx.Value(runGraceKey{}) != nil && s.Record().WorkloadExit == nil {
+		if exit, f := c.Wait(ctx, i.ContainerID); f == "" {
+			if f = recordExit(s, exit); f != "" {
+				return f
+			}
+		}
 	}
 	if resource == "running" {
 		if failure = terminateSession(ctx, s, c, signal); failure != "" {
@@ -284,19 +327,27 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 
 func retryableRecovery(f port.Outcome) bool {
 	switch f {
-	case port.Incomplete, port.Uncertain, port.IntentWrite, port.OwnershipWrite:
+	case port.Incomplete, port.Uncertain, port.IntentWrite, port.OwnershipWrite, port.EnvironmentMissing:
 		return true
 	default:
 		return false
 	}
 }
 func terminateSession(ctx context.Context, s port.Session, c port.RunConnection, signal string) port.Outcome {
-	if failure := recoverySignal(ctx, s, c, signal); failure != "" {
+	deadline, foreground := ctx.Value(runGraceKey{}).(time.Time)
+	// Explicit stop retains slice-11's contract. Foreground run supplies the
+	// cancellation deadline so delivery time cannot restart its grace.
+	failure := recoverySignal(ctx, s, c, signal)
+	if failure != "" && (!foreground || !retryableSignal(failure)) {
 		return failure
 	}
 	grace, end := context.WithTimeout(ctx, 10*time.Second)
+	if foreground {
+		end()
+		grace, end = context.WithDeadline(ctx, deadline)
+	}
+	defer end()
 	exit, failure := c.Wait(grace, s.Intent().Record().ContainerID)
-	end()
 	if failure == "" {
 		return recordExit(s, exit)
 	}
@@ -305,7 +356,19 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 		return failure
 	}
 	if resource != "running" {
+		if foreground && resource == "exited" {
+			if exit, f := c.Wait(ctx, s.Intent().Record().ContainerID); f == "" {
+				return recordExit(s, exit)
+			}
+		}
 		return ""
+	}
+	if foreground {
+		// An early transport error cannot shorten the primary's promised grace.
+		<-grace.Done()
+		if budget.Cause(ctx) != nil {
+			return port.Incomplete
+		}
 	}
 	if failure = recoverySignal(ctx, s, c, "SIGKILL"); failure != "" {
 		return failure
@@ -323,6 +386,7 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 	}
 	return ""
 }
+
 func recoverySignal(ctx context.Context, s port.Session, c port.RunConnection, signal string) port.Outcome {
 	_, resource, failure := inspectSession(ctx, s, c)
 	if failure != "" {
@@ -366,3 +430,11 @@ func finishSession(s port.Session) port.Outcome {
 	r.State, r.LastProblem = "stopped", nil
 	return s.Save(r)
 }
+
+// A lost acknowledgement does not authorize retrying the original signal. Fresh
+// inspection and the original grace deadline decide whether escalation is safe.
+func retryableSignal(f port.Outcome) bool {
+	return retryableRecovery(f) || f == port.ExecutionFailed || f == port.EngineLost
+}
+
+type runGraceKey struct{}

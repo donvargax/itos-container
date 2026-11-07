@@ -90,7 +90,7 @@ func (w *world) recoveryEntry(p *recoveryProcess, state, resource, cleanup strin
 	s := report.Sessions[0]
 	if !offlineHex(r.id) || s.ID != r.id || s.Project != w.approval.project || s.Fingerprint != w.approval.fingerprint ||
 		s.State != state || s.Resource != resource || s.Cleanup != cleanup {
-		return s, errors.New("recovery did not report the registered session with its original binding and observed state")
+		return s, fmt.Errorf("recovery did not report the registered session with its original binding and observed state: binding matches %t, state/resource/cleanup %s/%s/%s, want %s/%s/%s", offlineHex(r.id) && s.ID == r.id && s.Project == w.approval.project && s.Fingerprint == w.approval.fingerprint, s.State, s.Resource, s.Cleanup, state, resource, cleanup)
 	}
 	return s, nil
 }

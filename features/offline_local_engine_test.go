@@ -230,7 +230,11 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		a.removed[id] = true
 		if a.recovery != nil {
 			a.recovery.finish.Do(func() { close(a.recovery.exit) })
-			_ = a.attached[id].Close()
+		}
+		// Removal ends the resource's attachment even if launch was refused
+		// before start. Otherwise a healthy final drain waits on fixture-only I/O.
+		if conn := a.attached[id]; conn != nil {
+			_ = conn.Close()
 		}
 		out.WriteHeader(204)
 	default:

@@ -1,31 +1,9 @@
 package features
 
-import (
-	"context"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"time"
-)
-
 func (w *world) buildOfflineProbe() error {
-	source := filepath.Join(w.dir, "slice-10-probe.go")
-	if err := os.WriteFile(source, []byte(offlineProbeSource), 0600); err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", filepath.Join(w.doctor.checkout, "slice-10-probe"), source)
-	cmd.Dir, cmd.Env = w.root, sessionChildEnvironment(os.Environ())
-	for key, value := range map[string]string{"CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "amd64", "GOFLAGS": "", "GOWORK": "off"} {
-		cmd.Env = setEnv(cmd.Env, key, value)
-	}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("build trusted offline probe: %w\n%s", err, output)
-	}
-	return nil
+	return w.installNativeProbe("slice-10-probe", func(path string) error {
+		return recoveryBuildHelper(w.root, path, offlineProbeSource)
+	})
 }
 
 // Trusted source is compiled by the harness but executed only as explicit worker

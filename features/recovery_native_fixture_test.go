@@ -42,11 +42,21 @@ type recoveryProcess struct {
 }
 
 func (w *world) recoveryNativeFixture(mode string) error {
+	return w.recoveryFixtureWithProbe(mode, w.buildRecoveryProbe)
+}
+
+func (w *world) buildRecoveryProbe() error {
+	return w.installNativeProbe("slice-11-probe", func(path string) error {
+		return recoveryBuildHelper(w.root, path, recoveryWorkerSource)
+	})
+}
+
+func (w *world) recoveryFixtureWithProbe(mode string, buildProbe func() error) error {
 	if err := doctorRealGuard(); err != nil {
 		return err
 	}
 	w.recovery = &recoveryNative{mode: mode}
-	if err := w.offlineFixture("recovery"); err != nil {
+	if err := w.offlineFixtureWithProbe("recovery", buildProbe); err != nil {
 		return err
 	}
 	a := w.offline.api
@@ -57,13 +67,6 @@ func (w *world) recoveryNativeFixture(mode string) error {
 	}
 	a.mu.Unlock()
 	if _, err := w.recoveryTraceBinary(); err != nil {
-		return err
-	}
-	if err := recoveryBuildHelper(w.root, filepath.Join(w.doctor.checkout, "slice-11-probe"), recoveryWorkerSource); err != nil {
-		return err
-	}
-	// Helper source is outside the approval input and never executed on the host.
-	if err := os.Remove(filepath.Join(w.doctor.checkout, "slice-11-probe.go")); err != nil {
 		return err
 	}
 	var err error
@@ -95,6 +98,17 @@ func (w *world) recoveryProtected() (map[string]string, error) {
 		return nil, err
 	}
 	sessions := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions")
+	tree, err := runTree(filepath.Dir(sessions))
+	if err != nil {
+		return nil, err
+	}
+	admission, err := w.currentAdmissionPaths(tree)
+	if err != nil {
+		return nil, err
+	}
+	for path := range admission {
+		delete(all, path)
+	}
 	for path := range all {
 		if path == sessions || path == filepath.Join(sessions, w.recoveryIndexKey()) ||
 			strings.HasPrefix(path, filepath.Join(sessions, w.recoveryIndexKey())+string(os.PathSeparator)) ||
@@ -107,6 +121,10 @@ func (w *world) recoveryProtected() (map[string]string, error) {
 }
 
 func (w *world) recoveryStart(args ...string) *recoveryProcess {
+	return w.recoveryStartWithin(120*time.Second, args...)
+}
+
+func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *recoveryProcess {
 	r := w.recovery
 	p := &recoveryProcess{exit: -1, done: make(chan struct{})}
 	r.processes = append(r.processes, p)
@@ -119,10 +137,11 @@ func (w *world) recoveryStart(args ...string) *recoveryProcess {
 		close(p.done)
 		return p
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	p.cancel = cancel
 	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
 	p.cmd = exec.CommandContext(ctx, trace, append([]string{p.journal, p.pid, state, w.bin}, args...)...)
+	p.cmd.WaitDelay = time.Second
 	p.cmd.Dir, p.cmd.Env = w.doctor.checkout, w.env()
 	if w.recoveryLocal != nil && w.recoveryLocal.invocationDir != "" {
 		p.cmd.Dir = w.recoveryLocal.invocationDir
@@ -338,9 +357,11 @@ func (w *world) recoveryNativePresent(running bool) bool {
 		return false
 	}
 	a := w.offline.api
+	// The independent read must not hold the recorder lock across I/O: delayed
+	// observations must not delay product signals, escalation or journaling.
+	observed, err := a.inspect(id)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	observed, err := a.inspect(id)
 	return err == nil && a.identity(observed, id) == nil && object(observed["State"])["Running"] == running
 }
 
