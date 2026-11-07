@@ -76,3 +76,7 @@
   scenarios:
     - id: "@ID-OVERLAP-01"
       why: nested launches refuse across one or two daemons while disjoint checkout controls remain active
+- file: hardlinks.feature
+  scenarios:
+    - id: "@ID-HARDLINK-03"
+      why: shared Git storage refuses inspection and an independent copy restores readiness with the original approval

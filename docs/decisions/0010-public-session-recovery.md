@@ -5,7 +5,7 @@ Slice-11 implements the settled recovery contract in
 details reserved to slice-11 in arc42's **Building blocks**, **Recovery** and
 **Decisions** sections; it adds no runtime platform or isolation claim.
 
-Slice-16's [admission decision](0013-checkout-admission.md), following coordinator
+Slice-16's [admission decision](0014-checkout-admission.md), following coordinator
 q-28, supersedes this decision's pre-create uncertainty rule. A durable reserved
 intent permits cancellation under the operation lock before create is issued;
 an issued or uncertain create retains the concrete-ID recovery requirements below.

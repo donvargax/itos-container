@@ -188,7 +188,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/slices/exec` | Deferred | Additional argv only during a live owned foreground session. | Future session contract; cannot extend lifetime or alter frozen permissions. |
 | `internal/engine/policy` | Implemented by slice-1 and slice-5 | Strict offline schema/default/value validation, bounded parsing and typed failures. | Own domain/port, disk and YAML adapters; reusable policy contracts and I/O-free porttest fakes. |
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
-| `internal/engine/readiness` | Implemented prerequisite | Read-only checkout, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
+| `internal/engine/readiness` | Implemented prerequisite, extended by slice-20 | Read-only checkout, regular-file inode independence, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
 | `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, cross-project checkout admission, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
 
@@ -197,6 +197,16 @@ or runtime permission. Doctor composes readiness and approval inspection; readin
 never calls approval, so their composition creates no cycle.
 Typed diagnostic contracts live with the policy, manifest and readiness engine ports;
 doctor and approval share those rule/exit mappings without calling another slice.
+The checkout port recursively requires one filesystem link per regular file,
+including Git, hidden, ignored and untracked entries. Its disk adapter enumerates
+pinned directories, reads link metadata without file contents or symlink traversal,
+and refuses unavailable observations. Each scan, including revalidation, reads
+at most 128 entries per batch and shares a 100,000-entry limit and 10-second
+monotonic deadline across descendants through directory depth 64 (root depth 0).
+Exhaustion refuses safety; time checks between synchronous filesystem calls do
+not preempt a blocked kernel call. Approval does not cache this layout property;
+the [shared-inode decision](../decisions/0013-refuse-shared-checkout-inodes.md)
+extends admission and revalidation without adding link counts to the fingerprint.
 Only cmd binds canonical encoding, effective identity, protected disk storage and
 terminal presentation. The disk store locks pinned project directories, so read-only
 inspection and frozen selection need no lock-file creation. It validates ancestor and
@@ -299,6 +309,13 @@ settled milestone choices below replacing its open-choice and setup/state assump
 
 Ordinary doctor and approve execute no checkout code, install no hooks, log in
 to no account and pull/build/start no images or sessions. Approval cannot launch work.
+Ordinary inspection refuses multiply linked regular files with
+`doctor.checkout.hardlink` (exit 1, checkout root subject); an unreadable subtree
+or exhausted enumeration budget uses `doctor.checkout.unavailable` (exit 3).
+File-only modes make no layout claim.
+Revalidation after engine inspection and consent detects a newly shared inode;
+late launch validation refuses start while cleanup retains protected ownership.
+Worker-created hard links within the sole checkout mount do not block recovery.
 Init and lifecycle hooks remain deferred. The person never types a hash in the
 terminal flow. A host agent can approve through the optional flag or a faked terminal:
 approval records **what, not who**, and neither path proves human presence. Slice-4
@@ -339,7 +356,7 @@ must state this in help and security guidance; revisit before egress and credent
    equal roots and disjoint roots retain concurrency. Legacy registrations without
    admission metadata remain authority. The lock spans short storage transactions,
    never engine calls or session operation locks. See
-   [the admission decision](../decisions/0013-checkout-admission.md).
+   [the admission decision](../decisions/0014-checkout-admission.md).
    New foreground runs publish a reserved intent before public registration, then
    clear the pending reservation marker durably before receiving launch authority.
    Advance the intent with `fsync` under the operation lock before create,
@@ -424,7 +441,7 @@ Admission marks claims pending until public registration succeeds durably. The c
 lock lets admission ignore only a pending claim with an absent public record; that
 publisher cannot still grant launch authority. Active and legacy claims, visible
 registrations, and unreadable or unsafe state retain their conservative rules.
-See [the admission decision](../decisions/0013-checkout-admission.md).
+See [the admission decision](../decisions/0014-checkout-admission.md).
 
 Status inspects owned sessions after partial startup, lost create response, cancellation,
 engine loss or controller interruption. Stop cancels a live owned session or resumes
