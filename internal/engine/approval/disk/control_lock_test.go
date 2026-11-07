@@ -304,6 +304,87 @@ func TestControlReadRechecksAbsentLock(t *testing.T) {
 	}
 }
 
+type controlPeerReservations struct {
+	port.Reservations
+	selected string
+	peer     func()
+}
+
+func (r *controlPeerReservations) Roots(ctx context.Context, c port.Candidate, path string) ([]string, port.Failure) {
+	roots, failure := r.Reservations.Roots(ctx, c, path)
+	if path == r.selected && r.peer != nil {
+		peer := r.peer
+		r.peer = nil
+		peer()
+	}
+	return roots, failure
+}
+
+func TestControlPeerPublishesAfterUnlockedInspection(t *testing.T) {
+	for _, kind := range []string{"writer", "existing directory", "reader", "new reservation", "unsafe lock", "replaced directory"} {
+		t.Run(kind, func(t *testing.T) {
+			control, c, reservations, home, selected := controlFixture(t)
+			peer := control
+			path := filepath.Join(home, ".local/state/itos-container/coordination")
+			if kind == "existing directory" || kind == "replaced directory" {
+				if err := os.MkdirAll(path, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var lockInfo os.FileInfo
+			control.Reservations = &controlPeerReservations{Reservations: reservations, selected: selected, peer: func() {
+				tx, f := peer.Begin(t.Context(), c, true)
+				if f != "" {
+					t.Fatal("peer bootstrap:", f)
+				}
+				tx.Close()
+				var err error
+				lockInfo, err = os.Stat(filepath.Join(path, controlLockName))
+				if err != nil {
+					t.Fatal(err)
+				}
+				switch kind {
+				case "new reservation":
+					reservations.RootsByLocation[selected] = []string{filepath.Dir(selected)}
+				case "unsafe lock":
+					if err := os.Chmod(filepath.Join(path, controlLockName), 0644); err != nil {
+						t.Fatal(err)
+					}
+				case "replaced directory":
+					if err := os.Rename(path, path+"-old"); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Mkdir(path, 0700); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}}
+			want := port.Failure("")
+			switch kind {
+			case "reader", "replaced directory":
+				want = "state.path"
+			case "new reservation":
+				want = "state.exposed"
+			case "unsafe lock":
+				want = "state.unsafe"
+			}
+			tx, failure := control.Begin(t.Context(), c, kind != "reader")
+			if tx != nil {
+				tx.Close()
+			}
+			if failure != want {
+				t.Fatalf("writer after peer publication: %s, want %s", failure, want)
+			}
+			if want == "" {
+				after, err := os.Stat(filepath.Join(path, controlLockName))
+				if err != nil || !os.SameFile(lockInfo, after) {
+					t.Fatalf("writer replaced peer lock: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func TestControlBootstrapRechecksReservationsUnderPrivateLock(t *testing.T) {
 	control, c, reservations, _, selected := controlFixture(t)
 	ops := control.Store.operations()

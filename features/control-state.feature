@@ -409,6 +409,12 @@ Feature: Doctor and approve keep control state outside another worker's checkout
     Then both report matching approval with exit 0 while the completed self-binding and approval keep their bytes identities and generation
     And the fresh doctor writes nothing and the matching approve uses the same private coordination lock without creating a duplicate location binding
 
+  @wip @slice-21 @ID-CONTROL-14 @local-engine-fixture
+  Scenario: A first writer joins a private lock created by a peer during unlocked inspection
+    Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
+    When P consents and a peer creates and holds the private lock after P completes unlocked bootstrap inspection
+    Then P joins the peer's exclusion and publishes generation 1 after release without replacing the private lock
+
   # Faults never target ordinary approval writes. Today's untracked approval
   # succeeds, so the exact state.write refusal is the first failing Then in
   # every row. The binding-parent-fsync row leaves a visible complete binding;

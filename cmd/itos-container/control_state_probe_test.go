@@ -89,6 +89,11 @@ func controlStateCommand(args []string, in io.Reader, out, errout io.Writer, hom
 	host := controlAccountHost{Host: service.Host, home: home}
 	service.Host = host
 	service = coordinatedApproval(service, host)
+	if os.Getenv("SLICE_21_BOUNDARY") == "after bootstrap inspection" {
+		store := service.Store.(approvaldisk.Store)
+		store.Control = controlBootstrapProbe{store.Control.(approvaldisk.Control)}
+		service.Store = store
+	}
 	ui := &cli.UI{In: in, Stdout: out, Stderr: errout, Classify: runcommand.Classify}
 	name, _, _ := strings.Cut(parsed.Command(), " ")
 	switch name {
@@ -128,6 +133,34 @@ func controlStateCommand(args []string, in io.Reader, out, errout io.Writer, hom
 }
 
 type controlApprovalStore struct{ ap.Store }
+
+// Pause only a writer's initial reservation read, after the real read returns.
+// The default-tree fixture has one location; a peer can create the lock before
+// this writer leaves its unlocked inspection. All validation remains real.
+type controlBootstrapProbe struct{ approvaldisk.Control }
+
+func (p controlBootstrapProbe) Begin(ctx context.Context, c ap.Candidate, write bool) (ap.ControlTransaction, ap.Failure) {
+	control := p.Control
+	if write {
+		control.Reservations = &controlBootstrapReservations{Reservations: control.Reservations}
+	}
+	return control.Begin(ctx, c, write)
+}
+
+type controlBootstrapReservations struct {
+	ap.Reservations
+	paused bool
+}
+
+func (r *controlBootstrapReservations) Roots(ctx context.Context, c ap.Candidate, path string) ([]string, ap.Failure) {
+	roots, failure := r.Reservations.Roots(ctx, c, path)
+	if !r.paused && failure == "" {
+		r.paused = true
+		b := publicBarrier{request: publicProbeRequest{Boundary: "after bootstrap inspection", Ready: os.Getenv("SLICE_21_READY"), Release: os.Getenv("SLICE_21_RELEASE")}}
+		b.wait(ctx, "after bootstrap inspection")
+	}
+	return roots, failure
+}
 
 type controlPreflightRunner struct {
 	run func(context.Context, ap.Durable, []string, sp.Streams) sp.RunResult

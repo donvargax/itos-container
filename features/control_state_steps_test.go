@@ -8,6 +8,7 @@ import (
 
 func (w *world) controlStateSteps(sc *godog.ScenarioContext) {
 	w.controlLockSteps(sc)
+	w.controlBootstrapRaceSteps(sc)
 	w.controlLifecycleSteps(sc)
 	w.controlBootstrapSteps(sc)
 	w.controlTrackingSteps(sc)
