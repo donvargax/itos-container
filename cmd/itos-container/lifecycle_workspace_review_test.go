@@ -18,7 +18,7 @@ type lifecycleWorkspaceFault struct {
 	pending, closedWhilePending bool
 }
 
-func (w *lifecycleWorkspaceFault) Unchanged() bool {
+func (w *lifecycleWorkspaceFault) Validate() sp.Outcome {
 	w.checks++
 	if w.checks == w.blockAt {
 		w.pending = true
@@ -26,7 +26,7 @@ func (w *lifecycleWorkspaceFault) Unchanged() bool {
 		<-w.release
 		w.pending = false
 	}
-	return w.Workspace.Unchanged()
+	return w.Workspace.Validate()
 }
 func (w *lifecycleWorkspaceFault) Close() {
 	w.closes++

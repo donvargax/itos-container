@@ -294,8 +294,8 @@ func validateLaunch(ctx context.Context, intent port.Intent, connection port.Run
 	if failure := intent.Validate(); failure != "" {
 		return failure
 	}
-	if !workspace.Unchanged() {
-		return port.Refused
+	if failure := workspace.Validate(); failure != "" {
+		return failure
 	}
 	return connection.Check(ctx)
 }

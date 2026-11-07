@@ -45,7 +45,9 @@ type RunResult struct {
 // Workspace pins the approved subdirectory and refuses later substitution.
 type Workspace interface {
 	Pin(Binding) Outcome
-	Unchanged() bool
+	// Validate returns Refused for a confirmed mismatch and Incomplete when the
+	// check could not finish. An interrupted observation is not a substitution.
+	Validate() Outcome
 	Close()
 }
 

@@ -24,8 +24,11 @@ type RunEngine struct {
 	WaitUntilCancel, IgnoreSignal                                    bool
 	SignalFailure                                                    port.Outcome
 	StdinClosed, DrainUntilCancel                                    bool
-	DrainContextErr                                                  error
-	WaitRelease                                                      <-chan struct{}
+	// StdinFailures lets tests order input closure after a lifecycle barrier.
+	// Nil retains the immediate StdinClosed behavior used by stream contracts.
+	StdinFailures   <-chan port.Outcome
+	DrainContextErr error
+	WaitRelease     <-chan struct{}
 }
 type runConnection struct {
 	*memoryConnection
@@ -199,8 +202,13 @@ func (a runAttachment) Drain(ctx context.Context) port.Outcome {
 	}
 	return a.run.DrainFailure
 }
-func (a runAttachment) Close()                        { a.run.event("detach") }
-func (a runAttachment) Failures() <-chan port.Outcome { return a.failures }
+func (a runAttachment) Close() { a.run.event("detach") }
+func (a runAttachment) Failures() <-chan port.Outcome {
+	if a.run.StdinFailures != nil {
+		return a.run.StdinFailures
+	}
+	return a.failures
+}
 
 type Workspace struct {
 	Failure port.Outcome
@@ -209,8 +217,13 @@ type Workspace struct {
 }
 
 func (w *Workspace) Pin(port.Binding) port.Outcome { w.Closed = false; return w.Failure }
-func (w *Workspace) Unchanged() bool               { return !w.Changed && !w.Closed }
-func (w *Workspace) Close()                        { w.Closed = true }
+func (w *Workspace) Validate() port.Outcome {
+	if w.Changed || w.Closed {
+		return port.Refused
+	}
+	return ""
+}
+func (w *Workspace) Close() { w.Closed = true }
 
 // RunEngineContract exercises the same frozen argv, independent observation and
 // stream lifecycle against the memory implementation and the SDK HTTP fixture.

@@ -69,7 +69,9 @@ func publicRecoveryInspectionDeadline(t *testing.T) {
 			time.Sleep(25 * time.Second)
 			locked.Close()
 		}()
+		inspected := make(chan struct{})
 		m.e.BeforeInspect = func() {
+			defer close(inspected)
 			time.Sleep(5 * time.Second)
 			synctest.Wait()
 		}
@@ -85,6 +87,9 @@ func publicRecoveryInspectionDeadline(t *testing.T) {
 		if !bytes.Equal(before, files.Data) || len(m.files.Events) != 0 || !reflect.DeepEqual(m.e.Resources[worker], original) {
 			t.Fatal("expired stop changed protected progress or its worker")
 		}
+		// The bounded controller can return before the expired fake inspection
+		// finishes. Settle that callback before reconfiguring the fresh retry.
+		<-inspected
 		m.e.BeforeInspect = nil
 		r = publicMemoryCommand(t, m.service(), "stop", id, 0)
 		if len(r.Sessions) != 1 || r.Sessions[0].Cleanup != "complete" || r.Sessions[0].WorkloadExit != nil || len(m.e.Resources) != 0 {
@@ -154,6 +159,7 @@ func publicRecoveryStoppedWait(t *testing.T) {
 		m := publicMemoryFixture(t)
 		m.e.StdinClosed, m.e.WaitUntilCancel = true, true
 		stdin := make(chan sp.Outcome, 1)
+		m.e.StdinFailures = stdin
 		id := ""
 		var completed []byte
 		mutations := 0
@@ -180,7 +186,7 @@ func publicRecoveryStoppedWait(t *testing.T) {
 			stdin <- sp.StdinClosed
 			synctest.Wait()
 		}
-		runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: recoveryStdinEngine{m.e, stdin}, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
+		runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
 		approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: m.c, Record: ap.Record{Candidate: m.c, Generation: "1"}, Status: "matching"}}
 		var out, errout bytes.Buffer
 		code := (runcommand.CLI{Approval: approval, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "probe"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
@@ -196,41 +202,6 @@ func publicRecoveryStoppedWait(t *testing.T) {
 		}
 	})
 }
-
-// Keep all engine behavior and attachment draining real to the port fake; only
-// the test-owned stdin event is delayed until its stated concurrent stop barrier.
-type recoveryStdinEngine struct {
-	sp.RunEngine
-	stdin <-chan sp.Outcome
-}
-
-func (e recoveryStdinEngine) OpenRun(ctx context.Context, b sp.Binding) (sp.RunConnection, sp.Outcome) {
-	c, f := e.RunEngine.OpenRun(ctx, b)
-	if c == nil {
-		return nil, f
-	}
-	return recoveryStdinConnection{c, e.stdin}, f
-}
-
-type recoveryStdinConnection struct {
-	sp.RunConnection
-	stdin <-chan sp.Outcome
-}
-
-func (c recoveryStdinConnection) Attach(ctx context.Context, id string, streams sp.Streams) (sp.Attachment, sp.Outcome) {
-	a, f := c.RunConnection.Attach(ctx, id, streams)
-	if a == nil {
-		return nil, f
-	}
-	return recoveryStdinAttachment{a, c.stdin}, f
-}
-
-type recoveryStdinAttachment struct {
-	sp.Attachment
-	stdin <-chan sp.Outcome
-}
-
-func (a recoveryStdinAttachment) Failures() <-chan sp.Outcome { return a.stdin }
 
 func recoveryReviewMutations(e *sf.RunEngine) int {
 	n := 0

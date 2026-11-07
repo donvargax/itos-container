@@ -701,7 +701,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Review regression: a pending workspace identity check supplies no evidence
   # of substitution. Preserve its call/startup timeout or first signal, and keep
   # a completed substitution check's ownership refusal as a separate control.
-  @slice-12 @ID-LIFECYCLE-22 @linux @wip
+  # All eight rows failed at their result assertion on 029a406 with @wip removed:
+  # each returned ownership refusal (1) through both local backends.
+  @slice-12 @ID-LIFECYCLE-22 @linux
   Scenario Outline: Interrupted workspace revalidation preserves its original cause
     Given a lifecycle workspace revalidation blocked before "<phase>" and interrupted by "<cause>"
     When run returns before the pending workspace revalidation is released through each local backend

@@ -205,9 +205,15 @@ func (w finiteWorkspace) Pin(b port.Binding) port.Outcome {
 	}
 	return f
 }
-func (w finiteWorkspace) Unchanged() bool {
-	ok, err := held(w.ctx, w.gate, "workspace revalidation", w.Workspace.Unchanged)
-	return err == nil && ok
+func (w finiteWorkspace) Validate() port.Outcome {
+	f, err := held(w.ctx, w.gate, "workspace revalidation", w.Workspace.Validate)
+	if err != nil {
+		if state, ok := w.ctx.Value(startupKey{}).(*startupState); ok {
+			state.operation = "workspace revalidation"
+		}
+		return port.Incomplete
+	}
+	return f
 }
 func (w finiteWorkspace) Close() {
 	select {

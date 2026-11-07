@@ -40,7 +40,7 @@ func TestFiniteWorkspaceRetainsLatePinUntilRelease(t *testing.T) {
 			t.Fatal("pending pin closed before release")
 		default:
 		}
-		if w.Unchanged() {
+		if w.Validate() != port.Incomplete {
 			t.Fatal("pending pin closed or reused before release")
 		}
 		closedAt := <-workspace.closed

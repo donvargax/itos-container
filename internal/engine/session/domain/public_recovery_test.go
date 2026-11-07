@@ -380,7 +380,8 @@ func TestRegisteredWaitReconcilesConcurrentStop(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				b, store, engine := f.Fixture()
 				registry := &f.Registry{Store: store, Project: b.Frozen.Project}
-				e := &f.RunEngine{Engine: engine, StdinClosed: true, WaitUntilCancel: true, WaitFailure: port.ExecutionFailed}
+				stdin := make(chan port.Outcome, 1)
+				e := &f.RunEngine{Engine: engine, StdinFailures: stdin, WaitUntilCancel: true, WaitFailure: port.ExecutionFailed}
 				known := name == "zero" || name == "nonzero"
 				if known {
 					e.WaitFailure = ""
@@ -415,6 +416,9 @@ func TestRegisteredWaitReconcilesConcurrentStop(t *testing.T) {
 							store.Records[record.Intent] = store.Codec.Encode(i)
 						}
 					}
+					// Reconciliation observes completed stop, including the selected
+					// record fault, only after the pending input actually closes.
+					stdin <- port.StdinClosed
 					synctest.Wait()
 				}
 				runner := domain.Runner{Store: store, Registry: registry, Engine: e, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
@@ -441,7 +445,8 @@ func TestRegisteredWaitDoesNotExtendTeardownForUnavailableCompletion(t *testing.
 	synctest.Test(t, func(t *testing.T) {
 		b, store, engine := f.Fixture()
 		registry := &f.Registry{Store: store, Project: b.Frozen.Project, WaitForLock: true}
-		e := &f.RunEngine{Engine: engine, StdinClosed: true, WaitUntilCancel: true}
+		stdin := make(chan port.Outcome, 1)
+		e := &f.RunEngine{Engine: engine, StdinFailures: stdin, WaitUntilCancel: true}
 		e.After = func(event string) {
 			if event == "wait" {
 				for id := range registry.Records {
@@ -449,6 +454,7 @@ func TestRegisteredWaitDoesNotExtendTeardownForUnavailableCompletion(t *testing.
 					// the stdin probe and the complete teardown budget.
 					registry.Locks[id] = true
 				}
+				stdin <- port.StdinClosed
 				synctest.Wait()
 			}
 		}
