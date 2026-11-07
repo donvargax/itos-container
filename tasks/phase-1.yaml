@@ -2401,51 +2401,49 @@
     from Readlink. This uses the same per-call walk seam and retains the existing link audit
     and error propagation; it neither follows targets nor adds an I/O hook or product rule.
 
-    At b915115, a temporary schedule-only Go overlay placed a callback at doctorTree's walk
-    boundary before entry.Info and invoked the existing recoveryProtected against disposable
-    checkout/host files. In one local execution, the unchanged control passed and the single
-    rename-after-enumeration case failed at the preservation assertion with lstat on the missing
-    slice-11-heartbeat.next. Setup and the forced rename succeeded. No engine, product command
-    or approval was involved, and no implementation or generated proof is committed by this spec.
-    A draft refresh at f54b262 reproduced that failure with per-call walk plumbing through the
-    unchanged collectors and disposable offlineRegistryFixture files. Its unchanged control
-    passed; rename_after_listing failed at the capture assertion with lstat, and
-    rename_with_cached_info failed there with open. Each fault performed exactly one successful
-    rename and advanced the heartbeat from 1 to 2 before the assertion. The temporary Go overlay
-    changed only observation scheduling, leaving the existing late filtering in place; none
-    of that instrumentation is part of this docs commit. Reproduce both controlled failures
-    before repair and keep their ordering as permanent regressions. Missing tests alone are
-    not race evidence.
+    At f0122e818db7bf9120dabdef4e9d995d93a632ee, a single local execution of a temporary
+    observation-only Go overlay reproduced both capture failures. It passed a per-call walker
+    through recoveryProtected, offlineProtected and doctorTree while retaining the existing late
+    deletion and every collector assertion. Disposable offlineRegistryFixture files supplied
+    checkout/host sentinels and protected registration/admission records without a native fixture,
+    product command or approval. The unchanged control passed. rename_after_listing failed at
+    the capture assertion with lstat on slice-11-heartbeat.next; rename_with_cached_info failed
+    there with open on that same path. Each case performed exactly one successful rename and
+    advanced the heartbeat from 1 to 2 before the capture assertion. excluded_info_calls failed
+    with one collector Info call on each exact heartbeat path, despite a successful unchanged
+    snapshot. No implementation or temporary probe is committed by this spec. Reproduce these
+    red assertions before repair and retain the schedules as permanent regressions; missing
+    tests alone are not race evidence.
+
+    In that execution, known-content controls for unrelated .next files, nested heartbeat
+    basenames, both prefix neighbours and children beneath both exact heartbeat directories
+    passed. Both non-excluded disappearance controls preserved ErrNotExist with the exact path
+    and the expected lstat/open operation. Direct doctorTree and offlineProtected controls
+    included both heartbeat keys and detected changes to each. The link controls were checked
+    at 29ab6a2, including the forced Readlink error on the removed link; this refresh did not
+    rerun those controls. These are preservation results, not evidence the observer is repaired
+    or the full permanent regression suite exists. Keep every boundary and link requirement
+    above when implementing it.
 
     The first check below discovers both named regressions before running them, preserves go
-    test's exit status and refuses an empty selection. Before implementation it fails with
-    missing TestRecoveryProtectedHeartbeatRename; both new tests are absent. The two existing
-    registry/admission controls passed in a focused local baseline run; they are preservation
-    checks, not evidence the flake is repaired. At 29ab6a2, re-running the discovery check and
-    the two existing controls confirmed these same results. A temporary observation-only Go
-    overlay at that head retained late deletion and reproduced both capture failures after
-    exactly one rename and heartbeat advancement from 1 to 2. The unchanged control passed;
-    excluded_info_calls failed with one collector Info call on each exact heartbeat path.
-    The link controls above passed, including the forced Readlink error on the removed link.
-    Only per-call walk plumbing and disposable-file probes were overlaid; no implementation
-    or probe is committed. The prefix, directory-descendant, strict-default and link controls
-    preserve existing semantics; the rename and no-inspection controls supply red assertions.
-    This spec does not claim the permanent named regressions exist or pass yet. Keep them in
-    the existing ordinary Linux go test ./... tier; the focused task check needs no engine and
-    no new gate. Commands use plain Go and existing runner shell tools, with no RTK requirement
-    in CI.
+    test's exit status and refuses an empty selection. At f0122e8 it failed with missing
+    TestRecoveryProtectedHeartbeatRename; both new tests remain absent. The separate focused
+    run of TestOfflineRegistryPreservation and TestAdmissionPreservationRequiresExactProtectedBinding
+    passed, including their negative cases. Keep the new tests in the existing ordinary Linux
+    go test ./... tier; the focused task check needs no engine and no new gate. Commands use
+    plain Go and existing runner shell tools, with no RTK requirement in CI.
 
     Retain the supplied RECOVERY-23 command as the second check. It runs only in the existing
     Linux amd64 GitHub Actions engine context with its prepared cached-image inputs and native
     guard; never spoof that context or run it on the agent host. The coordinator's reported
     lstat failure is its pre-work evidence; a flaky native check need not fail on every run.
-    During earlier drafting, itos task T-31 invoked this command locally: with CI and GITHUB_ACTIONS
-    unset, the selection guard refuses before native fixture setup. That invocation supplies
-    neither native red evidence nor a pass; no native scenario was executed. Use itos work show
-    to read the entry, since itos task executes both checks. Require actual selected execution
-    and successful preservation at the pushed head, not a skip or zero selected scenarios. The
-    normal engine suite also covers the neighbouring RECOVERY-21/22 and lifecycle consumers;
-    keep that tier and its budgets unchanged rather than adding repeated native runs.
+    This refresh did not execute the native check. An earlier local invocation was refused by
+    the selection guard before native fixture setup; that refusal supplies neither native red
+    evidence nor a pass. Use itos work show to read the entry, since itos task executes both
+    checks. Require actual selected execution and successful preservation at the pushed head,
+    not a skip or zero selected scenarios. The normal engine suite also covers the neighbouring
+    RECOVERY-21/22 and lifecycle consumers; keep that tier and its budgets unchanged rather than
+    adding repeated native runs.
 
     Report the deterministic failing assertion, passing controlled regression and audit controls,
     and the coordinator's native CI result when available. No local mutation run, generated
