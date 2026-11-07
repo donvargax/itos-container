@@ -115,3 +115,6 @@ questions:
     item: "slice-16"
     question: "slice-16: may ID-RECOVERY-25 change so a stop before create records a proven cancellation instead of uncertain cleanup?"
     answer: "Yes, when cancellation is proven by durable state, never by an engine lookup: run records create-issued under the operation lock before any create, after re-checking for cancellation; a stop holding the lock that finds no create-issued record may record a proven cancellation (stage cancelled, no ID) and the resumed run exits without create. If create may have been issued, it stays recovery.temporary with cleanup unknown, and a scenario keeps that case. Apply attempt 5's saved fix. See slice-16-steer.md."
+  - id: q-29
+    item: "slice-19"
+    question: "slice-19: CI red evidence for ID-SOCKETS-02 at 69b02a8?"
