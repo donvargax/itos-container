@@ -25,21 +25,35 @@ func (w *world) lifecycleSignalAction(signal string, repeat bool) {
 	}
 	w.lifecycleSignal(signal)
 	if repeat {
+		l.aliveBeforeGrace = lifecycleRepeatedSignals(l.run, l.signalled, w.lifecycleSignal, func() bool {
+			return w.recoveryNativePresent(true)
+		})
+	}
+	w.lifecycleCollect()
+	w.lifecycleFreshRecovery(false)
+}
+
+func lifecycleRepeatedSignals(p *recoveryProcess, cancelled time.Time, signal func(string), present func() bool) bool {
+	// Inspect immediately after cancellation, while repeats keep their own
+	// schedule. The independent observer already bounds its request to 5 s.
+	// Its reply may arrive after grace: a running observation of this same,
+	// never-restarted primary still proves it survived the earlier interval.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
 		for _, item := range []struct {
 			after  time.Duration
 			signal string
 		}{{2 * time.Second, "SIGINT"}, {8 * time.Second, "SIGTERM"}} {
-			if !lifecycleUntil(l.run, l.signalled.Add(item.after)) {
+			if !lifecycleUntil(p, cancelled.Add(item.after)) {
 				break
 			}
-			w.lifecycleSignal(item.signal)
+			signal(item.signal)
 		}
-		if lifecycleUntil(l.run, l.signalled.Add(9*time.Second)) {
-			l.aliveBeforeGrace = w.recoveryNativePresent(true) && time.Since(l.signalled) < 10*time.Second
-		}
-	}
-	w.lifecycleCollect()
-	w.lifecycleFreshRecovery(false)
+	}()
+	alive := present()
+	<-done
+	return alive
 }
 
 func lifecycleUntil(p *recoveryProcess, at time.Time) bool {

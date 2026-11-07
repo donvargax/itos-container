@@ -343,9 +343,11 @@ func (w *world) recoveryNativePresent(running bool) bool {
 		return false
 	}
 	a := w.offline.api
+	// The independent read must not hold the recorder lock across I/O: delayed
+	// observations must not delay product signals, escalation or journaling.
+	observed, err := a.inspect(id)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	observed, err := a.inspect(id)
 	return err == nil && a.identity(observed, id) == nil && object(observed["State"])["Running"] == running
 }
 
