@@ -16,7 +16,13 @@ func checkoutSockets(root fs.FS) port.Outcome {
 		if err != nil {
 			return err
 		}
-		if entry.Type()&fs.ModeSocket != 0 {
+		// Type can be zero when directory enumeration does not supply a type.
+		// Inspect metadata before treating an entry as socket-free.
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode()&fs.ModeSocket != 0 {
 			failure = port.IsolationUnverified
 			return fs.SkipAll
 		}

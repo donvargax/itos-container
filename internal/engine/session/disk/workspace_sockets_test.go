@@ -37,6 +37,61 @@ func TestCheckoutSocketScan(t *testing.T) {
 	}
 }
 
+type unknownTypeSocketTree struct {
+	fs.FS
+	infoErr error
+}
+
+func (f unknownTypeSocketTree) ReadDir(name string) ([]fs.DirEntry, error) {
+	entries, err := fs.ReadDir(f.FS, name)
+	for i, entry := range entries {
+		if !entry.IsDir() {
+			entries[i] = unknownTypeSocketEntry{entry, f.infoErr}
+		}
+	}
+	return entries, err
+}
+
+type unknownTypeSocketEntry struct {
+	fs.DirEntry
+	infoErr error
+}
+
+func (unknownTypeSocketEntry) Type() fs.FileMode { return 0 }
+
+func (e unknownTypeSocketEntry) Info() (fs.FileInfo, error) {
+	if e.infoErr != nil {
+		return nil, e.infoErr
+	}
+	return e.DirEntry.Info()
+}
+
+func TestCheckoutSocketScanUnknownType(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mode    fs.FileMode
+		infoErr error
+		want    port.Outcome
+	}{
+		{name: "socket", mode: fs.ModeSocket, want: port.IsolationUnverified},
+		{name: "socket with permissions", mode: fs.ModeSocket | 0777, want: port.IsolationUnverified},
+		{name: "regular file", mode: 0600},
+		{name: "symlink", mode: fs.ModeSymlink},
+		{name: "unreadable metadata", infoErr: fs.ErrPermission, want: port.IsolationInspection},
+		{name: "vanished entry", infoErr: fs.ErrNotExist, want: port.IsolationInspection},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := unknownTypeSocketTree{
+				FS:      fstest.MapFS{".git/nested/entry": {Mode: tc.mode}},
+				infoErr: tc.infoErr,
+			}
+			if got := checkoutSockets(tree); got != tc.want {
+				t.Fatalf("unknown dirent type: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 type unreadableSocketTree struct {
 	fs.FS
 	path string
