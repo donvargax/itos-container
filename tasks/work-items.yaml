@@ -677,3 +677,10 @@ items:
     status: dropped
     depends_on: []
     kind: task
+  - id: T-29
+    title: Stop requesting Bugbot reviews
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
