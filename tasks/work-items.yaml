@@ -525,19 +525,9 @@ items:
     title: run never returns 0 when the workload's exit is unknown
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p2-unknown-workload-exit-nonzero.
-      Correctness, this milestone. A read-only security audit of main at 7236d68 (Codex,
-      2026-11-06), static, no Docker run; confirm with a scenario before building. stoppedRun
-      returns (0, false, "") when cleanup completed but WorkloadExit is unknown
-      (internal/engine/session/domain/run.go:141; internal/slices/run/command/command.go:67), so a
-      concurrent stop that removes an exited worker first makes run report success though the
-      command may have failed; cmd/itos-container/public_recovery_review_test.go:183 expects 0. Keep
-      cleanup completion and workload success apart: unknown exit is nonzero, WorkloadExit stays
-      null.
   - id: p3-registration-before-intent
     title: A crash between registration and intent publication leaves no stuck session
     phase: 1
