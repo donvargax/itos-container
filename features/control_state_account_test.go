@@ -1,11 +1,14 @@
 package features
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -16,6 +19,11 @@ func (w *world) controlAccountSteps(sc *godog.ScenarioContext) {
 			return err
 		}
 		f := w.control
+		binary, err := f.p.controlAccountBinary()
+		if err != nil {
+			return err
+		}
+		f.p.bin = binary
 		f.condition = database
 		f.p.doctor.env["SLICE_21_ACCOUNT_PROBE"] = "1"
 		f.p.doctor.env["SLICE_21_FAULT"] = "account database " + database
@@ -72,4 +80,27 @@ func (w *world) controlAccountSteps(sc *godog.ScenarioContext) {
 		}
 		return f.unchanged()
 	})
+}
+
+// This regression must use the same pure-Go lookup as the release even when
+// the surrounding test suite or race detector enables cgo.
+func (w *world) controlAccountBinary() (string, error) {
+	path := w.bin + "-slice-21-account-cgo0"
+	err := cachedFeatureBinary(path, func(output string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		args := []string{"test", "-c", "./cmd/itos-container", "-o", output}
+		if os.Getenv("GOCOVERDIR") != "" {
+			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
+		}
+		cmd := exec.CommandContext(ctx, "go", args...)
+		cmd.Dir = w.root
+		cmd.Env = setEnv(sessionChildEnvironment(os.Environ()), "CGO_ENABLED", "0")
+		data, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("build pure-Go account probe: %w\n%s", err, data)
+		}
+		return nil
+	})
+	return path, err
 }
