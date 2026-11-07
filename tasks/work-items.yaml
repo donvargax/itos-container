@@ -672,20 +672,13 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-engine-suite-within-its-limit
+  - id: T-33
     title: main's engine scenarios finish well inside the job's 5-minute limit
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      main went red at b2ad2ad (run 42392045565) although all 49 engine scenarios passed (feature
-      test exit status 0): the Engine scenarios step hit its 5-minute timeout-minutes. The suite
-      took 258 s on 2026-11-06 and 277 s on 2026-11-07 (run 42389951333), and every isolation slice
-      adds engine cases, so main will go red more often. Measure each scenario's time, make the slow
-      ones fast (LIFECYCLE-13's first row took 128 s in red), and shard the engine job by feature if
-      the total still nears the limit. Raising the limit is the person's call, not a fix.
+    kind: task
   - id: T-32
     title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
     phase: 1
