@@ -437,6 +437,16 @@ returns, and discard late attachments. All twelve rows pass without native
 engine access; the existing 57 local lifecycle rows also pass. Fresh native
 engine checks and changed-code proof remain the coordinating loop's work.
 
+LIFECYCLE-21 covers an exited worker whose recovery wait ignores cancellation
+before returning an exit code. Checkpoint `0347743` failed at the teardown-bound
+Then on both local backends with `@wip` removed: the controller was still waiting
+at the 31-second guard. The connection wrapper now bounds observation by its
+caller's context while retaining the connection until the adapter finishes.
+The scenario passes, including retained recovery, rejection of the late exit,
+fresh owned cleanup and a healthy 121-second foreground wait. All live local
+lifecycle scenarios pass; native-engine checks and changed-code proof remain
+CI-only and belong to the coordinating loop.
+
 ## Tags
 
 | Tag               | Meaning                                                                              |
