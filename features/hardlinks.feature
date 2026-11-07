@@ -102,7 +102,7 @@ Feature: Refuse checkout files that share writable host inodes
   # as synchronization and no product injection flags. Local API fixtures have
   # no connection to Docker and never execute the supplied workload.
 
-  @wip @slice-20 @ID-HARDLINK-01 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-01 @linux @local-engine-fixture
   Scenario Outline: Doctor refuses multiply linked files anywhere under the checkout
     Given a doctor checkout
     And a local Engine API fixture
@@ -134,7 +134,7 @@ Feature: Refuse checkout files that share writable host inodes
       | src/file.txt                                                         | inside  | 0600 |
 
   # This must fail closed, not silently skip the part that hides a shared inode.
-  @wip @slice-20 @ID-HARDLINK-02 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-02 @linux @local-engine-fixture
   Scenario Outline: An unreadable subtree cannot establish checkout independence
     Given an approval checkout and isolated host state
     And a local owned foreground Engine API fixture
@@ -155,7 +155,7 @@ Feature: Refuse checkout files that share writable host inodes
 
   # The retry also catches overbroad refusal of directories (which normally have
   # several links), read-only regular files, or bytes identical to outside files.
-  @wip @slice-20 @ID-HARDLINK-03 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-03 @linux @local-engine-fixture
   Scenario: An independent copy restores readiness without changing approved settings
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -168,7 +168,7 @@ Feature: Refuse checkout files that share writable host inodes
     And the hard-link copy has identical initial bytes and mode but a different inode and one link
     And the hard-link outside file and approval are unchanged apart from the fixture's removed alias
 
-  @wip @slice-20 @ID-HARDLINK-04 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-04 @linux @local-engine-fixture
   Scenario Outline: Exact consent and a prior approval cannot authorize a shared checkout inode
     Given an approval checkout and isolated host state
     And approval state is "<state>"
@@ -189,7 +189,7 @@ Feature: Refuse checkout files that share writable host inodes
   # No prior approval, so terminal approve must reach its real y/N prompt. The
   # action adds an outside alias without changing bytes, settings or root identity
   # after the review, captures that fixture edit, and answers yes through the PTY.
-  @wip @slice-20 @ID-HARDLINK-05 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-05 @linux @local-engine-fixture
   Scenario: A link added during terminal review invalidates that review
     Given an approval checkout and isolated host state
     And an independent hard-link fixture file at "src/file.txt" with mode "0600"
@@ -203,7 +203,7 @@ Feature: Refuse checkout files that share writable host inodes
 
   # Seed consent before adding the alias. File contents are not part of approval;
   # matching root/.git identities and fingerprints must not bypass fresh checks.
-  @wip @slice-20 @ID-HARDLINK-06 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-06 @linux @local-engine-fixture
   Scenario Outline: Run rechecks hard links added after approval before any startup effect
     Given an approval checkout and isolated host state
     And a local owned foreground Engine API fixture
@@ -227,7 +227,7 @@ Feature: Refuse checkout files that share writable host inodes
   # "add alias" links the existing file outside; "replace with linked inode"
   # installs a different inode with the same bytes/mode and an outside alias.
   # Pause the first image response after local validation; do not re-seed approval.
-  @wip @slice-20 @ID-HARDLINK-07 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-07 @linux @local-engine-fixture
   Scenario Outline: Revalidate file independence after engine inspection
     Given an approval checkout and isolated host state
     And a local owned foreground Engine API fixture
@@ -253,7 +253,7 @@ Feature: Refuse checkout files that share writable host inodes
   # upgrade to run. Add the alias then resume. The API would accept Start; it
   # must record a forbidden attempt rather than enforce the product's decision.
   # Cleanup uses original protected ownership, not another checkout admission.
-  @wip @slice-20 @ID-HARDLINK-08 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-08 @linux @local-engine-fixture
   Scenario: A late hard link prevents start without stranding the owned worker
     Given an approval checkout and isolated host state
     And a local owned foreground Engine API fixture
@@ -291,7 +291,7 @@ Feature: Refuse checkout files that share writable host inodes
   # Independently inspect each live control worker and its mount/UID boundaries,
   # both outside sentinel observations, the checkout edit and final full-ID
   # absence before harness cleanup. No broken probe/engine may count as denial.
-  @wip @slice-20 @ID-HARDLINK-09 @linux @engine
+  @slice-20 @ID-HARDLINK-09 @linux @engine
   Scenario Outline: A shared host file is protected while an independent writable copy remains useful
     Given a CI-only hard-link checkout with a cached native worker and isolated seeded approval
     And the hard-link fixture links "<path>" to an "outside" name with mode "0444"

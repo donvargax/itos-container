@@ -72,3 +72,7 @@
   scenarios:
     - id: "@ID-RECOVERY-08"
       why: run preserves the observed exit and prints a registered stop retry that completes durable cleanup through a fresh process without a Docker daemon
+- file: hardlinks.feature
+  scenarios:
+    - id: "@ID-HARDLINK-03"
+      why: shared Git storage refuses inspection and an independent copy restores readiness with the original approval
