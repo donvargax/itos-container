@@ -135,3 +135,6 @@ questions:
     item: "slice-17"
     question: "slice-17: CI red evidence for ID-OFFLINE-30 at 3aae532?"
     answer: "Yes. Run 42390617135: both rows fail at their Then (missing original owned volume and protected recovery evidence after controller exit). Implement."
+  - id: q-34
+    item: "slice-19"
+    question: "slice-19: CI red evidence for the reworded ID-SOCKETS-01 (12 rows) at f33853b?"
