@@ -9,10 +9,47 @@ import (
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
+func TestPendingAdmissionRequiresPublicRegistrationToBlock(t *testing.T) {
+	for _, state := range []string{"no directory", "no record", "registered", "corrupt", "legacy"} {
+		t.Run(state, func(t *testing.T) {
+			m := newRegistryFixture()
+			claim := sp.AdmissionRecord{Schema: 1, Root: m.binding.Checkout.Root, ID: m.record.ID, Intent: m.record.Intent, Pending: state != "legacy"}
+			name := admissionName(registryKey(claim.Root, m.binding.UID), claim.ID, m.binding.UID)
+			m.files.Admissions = map[string][]byte{name: m.codec.EncodeAdmission(claim)}
+			want := sp.Outcome("")
+			if state != "no directory" && state != "legacy" {
+				files := m.seed()
+				switch state {
+				case "no record":
+					files.Data = nil
+				case "registered":
+					want = sp.CheckoutOverlap
+				case "corrupt":
+					files.Data = []byte("invalid")
+					want = sp.Invalid
+				}
+			}
+			if state == "legacy" {
+				want = sp.CheckoutOverlap
+			}
+			c := ap.Candidate{UID: m.binding.UID, GID: m.binding.GID, Root: claim.Root + "/child"}
+			d, failure := m.files.Admission(t.Context(), c)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer d.Close()
+			if got := m.registry.checkAdmission(t.Context(), c, d); got != want {
+				t.Fatalf("admission = %s, want %s", got, want)
+			}
+		})
+	}
+}
+
 type admissionFaultStorage struct {
 	ap.RegistryStorage
 	fault     string
 	afterOpen func()
+	codec     sp.PublicCodec
 }
 
 func (s admissionFaultStorage) Admission(ctx context.Context, c ap.Candidate) (ap.AdmissionDirectory, ap.Failure) {
@@ -26,12 +63,13 @@ func (s admissionFaultStorage) Admission(ctx context.Context, c ap.Candidate) (a
 	if s.afterOpen != nil {
 		s.afterOpen()
 	}
-	return admissionFaultDirectory{AdmissionDirectory: d, fault: s.fault}, ""
+	return admissionFaultDirectory{AdmissionDirectory: d, fault: s.fault, codec: s.codec}, ""
 }
 
 type admissionFaultDirectory struct {
 	ap.AdmissionDirectory
 	fault string
+	codec sp.PublicCodec
 }
 
 func (d admissionFaultDirectory) Names() ([]string, ap.Failure) {
@@ -50,7 +88,31 @@ func (d admissionFaultDirectory) Publish(name string, old, next []byte) ap.Failu
 	if d.fault == "publish" {
 		return "state.write"
 	}
+	if d.fault == "activation" {
+		r, failure := d.codec.DecodeAdmission(next)
+		if failure == "" && !r.Pending {
+			return "state.write"
+		}
+	}
 	return d.AdmissionDirectory.Publish(name, old, next)
+}
+
+func TestAdmissionActivationFailureRetainsRecoverableRegistrationAndClosesLease(t *testing.T) {
+	m := newRegistryFixture()
+	m.registry.Storage = admissionFaultStorage{RegistryStorage: m.files, fault: "activation", codec: m.codec}
+	lease, failure := m.registry.Register(t.Context(), ap.Durable{Frozen: m.binding.Frozen}, m.record.ID, strings.Repeat("c", 64))
+	if lease != nil || failure != sp.IntentWrite {
+		t.Fatal("undurable activation granted a lease", failure)
+	}
+	index := registryKey(m.binding.Checkout.Root, m.binding.UID)
+	files := m.files.Sessions[index+"/"+m.record.ID]
+	if files == nil || files.Controller || len(files.Data) == 0 {
+		t.Fatal("failed activation lost registration or retained its controller")
+	}
+	r, failure := m.codec.DecodeAdmission(m.files.Admissions[admissionName(index, m.record.ID, m.binding.UID)])
+	if failure != "" || !r.Pending || r.Complete {
+		t.Fatal("failed activation discarded pending evidence", r, failure)
+	}
 }
 func (d admissionFaultDirectory) Sessions() ([]ap.RegisteredSession, ap.Failure) {
 	if d.fault == "sessions" {

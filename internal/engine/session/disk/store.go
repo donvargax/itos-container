@@ -66,6 +66,12 @@ func (s Store) acquireMissing(ctx context.Context, project, token string, create
 	return &intent{store: s, ctx: ctx, directory: directory, candidate: candidate, name: token + ".json", fresh: fresh}, ""
 }
 func (s Store) New(ctx context.Context, durable approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, durable, token, "intent")
+}
+func (s Store) Prepare(ctx context.Context, durable approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, durable, token, "reserved")
+}
+func (s Store) newIntent(ctx context.Context, durable approval.Durable, token, stage string) (port.Intent, port.Outcome) {
 	binding, failure := s.Codec.Frozen(durable.Frozen)
 	if failure != "" {
 		return nil, failure
@@ -89,6 +95,7 @@ func (s Store) New(ctx context.Context, durable approval.Durable, token string) 
 	}
 	t.binding = binding
 	t.record = binding.Intent(token)
+	t.record.Stage = stage
 	if failure = t.validateBinding(); failure != "" {
 		return nil, failure
 	}
@@ -230,9 +237,7 @@ func (t *intent) Save(next port.Record) port.Outcome {
 	if failure := t.Validate(); failure != "" {
 		return failure
 	}
-	expected := t.record
-	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
-	if next != expected || !port.HexID(next.ContainerID) || (next.Stage != "owned" && next.Stage != "absent") || (t.record.Stage == "absent" && next != t.record) || (t.record.ContainerID != "" && next.ContainerID != t.record.ContainerID) {
+	if !t.record.ValidTransition(next) {
 		return port.Invalid
 	}
 	data := t.store.Codec.Encode(next)

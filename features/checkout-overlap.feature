@@ -7,7 +7,7 @@ Feature: Run refuses overlapping worker checkouts
   # Review regression: a registration that never became public cannot send a
   # create. The common admission lock fences that interrupted publisher. A
   # visible registration must instead remain recoverable with product stop.
-  @slice-16 @ID-OVERLAP-11 @bug-16 @linux @wip
+  @slice-16 @ID-OVERLAP-11 @bug-16 @linux
   Scenario Outline: Interrupted registration does not strand a checkout reservation
     Given an overlap fixture interrupted by "<fault>" before any worker create
     When the ancestor registration fails or its controller dies and any visible session is stopped before a descendant run
@@ -22,7 +22,7 @@ Feature: Run refuses overlapping worker checkouts
   # Pre-create evidence must be durable before registration and consumed before
   # sending create. Stop serializes with launch and records cancellation without
   # inventing a container ID or workload exit. A lost create reply remains unknown.
-  @slice-16 @ID-OVERLAP-12 @bug-16 @linux @wip
+  @slice-16 @ID-OVERLAP-12 @bug-16 @linux
   Scenario Outline: Stop cancels a registered session that cannot yet have created a worker
     Given an overlap fixture with a pre-create controller that will be "<controller>"
     When the ancestor pauses before create and product stop completes it before a descendant run
@@ -72,6 +72,13 @@ Feature: Run refuses overlapping worker checkouts
   #   admission serialize so a stale controller cannot launch after release.
   #   A failure before any create may release only when no create was sent and
   #   no continuation can send one; do not infer that from a missing resource.
+  #   New runs publish a reserved intent before public registration. A pending
+  #   reservation without a public record cannot have granted launch authority;
+  #   registration and its discovery serialize under the common lock. A visible
+  #   pre-create session instead needs product stop: durably cancel its intent,
+  #   publish stopped progress and complete admission under the operation lock.
+  #   Advance reserved to intent durably before create; that transition preserves
+  #   uncertainty for lost replies. Cancelled intents are terminal and have no ID.
   #   Preserve unresolved legacy ownership; absence of new admission metadata
   #   cannot establish that existing registered sessions have no conflict.
   # - Shared admission/ownership belongs in internal/engine/session domain/port

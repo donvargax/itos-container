@@ -11,8 +11,8 @@ import (
 )
 
 func TestAdmissionCodecContract(t *testing.T) {
-	for _, complete := range []bool{false, true} {
-		r := sp.AdmissionRecord{Schema: 1, Root: "/work/child", ID: strings.Repeat("a", 64), Intent: sp.Reference(strings.Repeat("b", 64), strings.Repeat("c", 64)), Complete: complete}
+	for _, state := range []string{"pending", "active", "complete"} {
+		r := sp.AdmissionRecord{Schema: 1, Root: "/work/child", ID: strings.Repeat("a", 64), Intent: sp.Reference(strings.Repeat("b", 64), strings.Repeat("c", 64)), Complete: state == "complete", Pending: state == "pending"}
 		data := (JSON{}).EncodeAdmission(r)
 		for name, codec := range map[string]sp.PublicCodec{
 			"fake": &sf.PublicRecords{Admissions: map[string]sp.AdmissionRecord{string(data): r}},
@@ -55,6 +55,7 @@ func TestAdmissionCodecRejectsInvalidAuthority(t *testing.T) {
 	for _, tc := range []struct{ field, raw string }{
 		{"schema", "2"}, {"schema", `"1"`}, {"root", `null`}, {"root", `"relative"`}, {"root", `"/work/../other"`},
 		{"id", `"short"`}, {"id", `0`}, {"intent", `"invalid"`}, {"intent", `null`}, {"complete", `null`}, {"complete", `"false"`}, {"unknown", `true`},
+		{"pending", `false`}, {"pending", `"true"`}, {"pending", `null`},
 	} {
 		t.Run(tc.field+tc.raw, func(t *testing.T) {
 			var fields map[string]json.RawMessage
@@ -78,5 +79,14 @@ func TestAdmissionCodecRejectsInvalidAuthority(t *testing.T) {
 		if _, failure := codec.DecodeAdmission(invalid); failure != sp.Invalid {
 			t.Fatal("invalid representation accepted", failure)
 		}
+	}
+}
+
+func TestAdmissionCodecRefusesCompletedPendingClaim(t *testing.T) {
+	r := sp.AdmissionRecord{Schema: 1, Root: "/work", ID: strings.Repeat("a", 64), Intent: sp.Reference(strings.Repeat("b", 64), strings.Repeat("c", 64)), Pending: true, Complete: true}
+	data := (JSON{}).EncodeAdmission(r)
+	codec := JSON{Parser: &mf.Parser{Value: publicValue(t, data)}}
+	if _, failure := codec.DecodeAdmission(data); failure != sp.Invalid {
+		t.Fatal("pending registration certified complete", failure)
 	}
 }

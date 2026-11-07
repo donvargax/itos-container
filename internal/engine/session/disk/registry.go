@@ -104,6 +104,13 @@ func (s Registry) Register(ctx context.Context, frozen approval.Durable, id, tok
 	if f != "" {
 		return nil, storageFailure(f, true)
 	}
+	pending := port.AdmissionRecord{Schema: 1, Root: c.Root, ID: id, Intent: r.Intent, Pending: true}
+	active := pending
+	active.Pending = false
+	if f = admission.Publish(admissionName(c.Project, id, c.UID), s.Codec.EncodeAdmission(pending), s.Codec.EncodeAdmission(active)); f != "" {
+		lease.Close()
+		return nil, storageFailure(f, true)
+	}
 	return lease, ""
 }
 func (s Registry) List(ctx context.Context) ([]string, port.Outcome) {

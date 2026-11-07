@@ -38,18 +38,19 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		result.Outcome = port.RegistrationInternal
 		return result
 	}
+	// Publish no-create evidence before the public registration can be visible.
+	i, failure := s.Store.Prepare(startup, frozen, token)
+	if failure != "" {
+		result.Outcome = failure
+		return result
+	}
+	i.Close()
 	lease, failure := s.Registry.Register(startup, frozen, id, token)
 	if failure != "" {
 		result.Outcome = registrationFailure(failure)
 		return result
 	}
 	defer lease.Close()
-	i, failure := s.Store.New(startup, frozen, token)
-	if failure != "" {
-		result.Outcome = failure
-		return result
-	}
-	i.Close()
 	if bound, ok := s.Registry.(port.RunRegistry); ok {
 		s.Registry = bound.ForRun(frozen)
 	}
@@ -209,6 +210,14 @@ func createRegistered(ctx context.Context, entry port.Session, c port.RunConnect
 		return "", failure
 	}
 	r := i.Record()
+	if r.Stage == "reserved" && r.ContainerID == "" {
+		// Once this durable write succeeds a lost create reply is uncertain.
+		// Stop holds the same operation lock and cannot cancel across this edge.
+		r.Stage = "intent"
+		if failure := i.Save(r); failure != "" {
+			return "", failure
+		}
+	}
 	if r.Stage != "intent" || r.ContainerID != "" {
 		return "", port.Refused
 	}

@@ -374,7 +374,7 @@ func RegistryLaunchContract(t Reporter, open func() (port.Registry, port.Store, 
 }
 
 func (s *memorySession) completeAdmission() {
-	if s.registry.Admissions != nil && s.record.State == "stopped" && s.intent.Record().Stage == "absent" && port.HexID(s.intent.Record().ContainerID) {
+	if s.registry.Admissions != nil && s.record.State == "stopped" && s.intent.Record().Completed() {
 		s.registry.Admissions.complete(s.registry.Store.Root, s.record.ID)
 	}
 }

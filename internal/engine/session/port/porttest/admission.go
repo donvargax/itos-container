@@ -58,6 +58,7 @@ type AdmissionFixture struct {
 
 func AdmissionContract(t Reporter, open func() AdmissionFixture) {
 	t.Helper()
+	cancelledAdmissionContract(t, open())
 	for _, first := range []int{0, 1} {
 		f := open()
 		ctx := context.Background()
@@ -142,4 +143,44 @@ func AdmissionContract(t Reporter, open func() AdmissionFixture) {
 		return
 	}
 	lease.Close()
+}
+
+func cancelledAdmissionContract(t Reporter, f AdmissionFixture) {
+	t.Helper()
+	ctx := context.Background()
+	id, token := strings.Repeat("a", 64), strings.Repeat("1", 64)
+	i, failure := f.Stores[0].Prepare(ctx, f.Frozen[0], token)
+	if failure != "" {
+		t.Errorf("prepare cancellation contract: %s", failure)
+		return
+	}
+	i.Close()
+	lease, failure := f.Registries[0].Register(ctx, f.Frozen[0], id, token)
+	if failure != "" {
+		t.Errorf("register cancellation contract: %s", failure)
+		return
+	}
+	defer lease.Close()
+	s, failure := f.Registries[0].Open(ctx, id, false)
+	if failure != "" {
+		t.Errorf("open cancellation contract: %s", failure)
+		return
+	}
+	r := s.Intent().Record()
+	r.Stage = "cancelled"
+	if failure = s.Intent().Save(r); failure != "" {
+		t.Errorf("cancel uncreated intent: %s", failure)
+	}
+	p := s.Record()
+	p.State = "stopped"
+	if failure = s.Save(p); failure != "" {
+		t.Errorf("complete cancellation: %s", failure)
+	}
+	s.Close()
+	admitted, failure := f.Registries[1].Register(ctx, f.Frozen[1], strings.Repeat("b", 64), token)
+	if failure != "" {
+		t.Errorf("cancellation with live controller retained overlap: %s", failure)
+		return
+	}
+	admitted.Close()
 }

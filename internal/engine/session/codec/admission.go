@@ -15,7 +15,10 @@ func (j JSON) DecodeAdmission(data []byte) (port.AdmissionRecord, port.Outcome) 
 		return bad()
 	}
 	v, issues := j.Parser.Parse(data, true)
-	if len(issues) != 0 || v.Kind != manifest.Object || len(v.Fields) != 5 {
+	if len(issues) != 0 || v.Kind != manifest.Object || (len(v.Fields) != 5 && len(v.Fields) != 6) {
+		return bad()
+	}
+	if len(v.Fields) == 6 && (v.Fields["pending"].Kind != manifest.Boolean || v.Fields["pending"].Text != "true") {
 		return bad()
 	}
 	if v.Fields["schema"].Kind != manifest.Number || v.Fields["schema"].Text != "1" || v.Fields["complete"].Kind != manifest.Boolean {
@@ -31,7 +34,7 @@ func (j JSON) DecodeAdmission(data []byte) (port.AdmissionRecord, port.Outcome) 
 		return bad()
 	}
 	_, _, valid := port.ParseReference(r.Intent)
-	if !valid || !port.HexID(r.ID) || !path.IsAbs(r.Root) || path.Clean(r.Root) != r.Root {
+	if !valid || !port.HexID(r.ID) || !path.IsAbs(r.Root) || path.Clean(r.Root) != r.Root || (r.Pending && r.Complete) {
 		return bad()
 	}
 	return r, ""

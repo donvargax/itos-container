@@ -93,7 +93,7 @@ type RecoveryPresentation interface {
 }
 
 // AdmissionRecord retains the validated root independently of intent publication.
-// Complete is published only after durable absent intent and stopped session.
+// Complete follows a durable absent or cancelled intent and stopped session.
 // The original seven-field public record remains compatible with old sessions.
 type AdmissionRecord struct {
 	Schema   int    `json:"schema"`
@@ -101,4 +101,7 @@ type AdmissionRecord struct {
 	ID       string `json:"id"`
 	Intent   string `json:"intent"`
 	Complete bool   `json:"complete"`
+	// Pending is cleared durably before Register returns launch authority. A
+	// pending claim without a public record cannot have sent a create request.
+	Pending bool `json:"pending,omitempty"`
 }

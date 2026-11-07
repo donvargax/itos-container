@@ -32,7 +32,7 @@ func (s Registry) reserve(ctx context.Context, c approval.Candidate, r port.Publ
 	if previous != nil {
 		return nil, port.Refused
 	}
-	record := port.AdmissionRecord{Schema: 1, Root: c.Root, ID: r.ID, Intent: r.Intent}
+	record := port.AdmissionRecord{Schema: 1, Root: c.Root, ID: r.ID, Intent: r.Intent, Pending: true}
 	if f = d.Publish(name, nil, s.Codec.EncodeAdmission(record)); f != "" {
 		return nil, storageFailure(f, true)
 	}
@@ -60,7 +60,7 @@ func (s Registry) checkAdmission(ctx context.Context, c approval.Candidate, d ap
 			return port.Invalid
 		}
 		known[index+"/"+r.ID] = r
-		if !r.Complete && domain.NestedCheckouts(c.Root, r.Root) {
+		if !r.Complete && !r.Pending && domain.NestedCheckouts(c.Root, r.Root) {
 			return port.CheckoutOverlap
 		}
 	}
@@ -72,6 +72,13 @@ func (s Registry) checkAdmission(ctx context.Context, c approval.Candidate, d ap
 		return storageFailure(f, false)
 	}
 	for _, raw := range records {
+		claim, knownClaim := known[raw.Index+"/"+raw.ID]
+		// Registration and this scan hold the same lock. Only a pending claim
+		// proves an absent public record never granted launch authority. Retain
+		// active/legacy claims and refuse unsafe or unreadable records above.
+		if raw.Data == nil && knownClaim && claim.Pending {
+			continue
+		}
 		r, failure := s.Codec.DecodePublic(raw.Data)
 		if failure != "" {
 			return failure
@@ -79,9 +86,12 @@ func (s Registry) checkAdmission(ctx context.Context, c approval.Candidate, d ap
 		if r.ID != raw.ID {
 			return port.Invalid
 		}
-		if claim, ok := known[raw.Index+"/"+raw.ID]; ok {
+		if knownClaim {
 			if claim.Intent != r.Intent || (claim.Complete && (r.State != "stopped" || r.LastProblem != nil)) {
 				return port.Invalid
+			}
+			if !claim.Complete && domain.NestedCheckouts(c.Root, claim.Root) {
+				return port.CheckoutOverlap
 			}
 			continue
 		}
@@ -110,7 +120,7 @@ func (s *publicSession) completeAdmission() port.Outcome {
 		return ""
 	}
 	i := s.intent.Record()
-	if i.Stage != "absent" || !port.HexID(i.ContainerID) {
+	if !i.Completed() {
 		// Public progress alone never releases an unresolved reservation.
 		return ""
 	}
@@ -138,6 +148,7 @@ func (s *publicSession) completeAdmission() port.Outcome {
 		}
 		completed = old.Complete
 		old.Complete = false
+		old.Pending = false
 		if old != r {
 			return port.Refused
 		}
