@@ -439,8 +439,9 @@ Feature: Hardened offline foreground run
   # not close this interval. At specification base 7e7acfa, session/docker/run.go
   # still sends binding.Checkout.Root as Source. Workspace pins detect changes
   # but supply no inode-bound source to Docker, and ownership records describe
-  # only the worker. This is still true at the drafter's base 6b0cb03. Native
-  # red evidence is accepted for 29/30 below; local cases still need red steps.
+  # only the worker. This is still true at the drafter's base ba0ba6b. Native
+  # red evidence is accepted for 29/30 below; the local steps and assertion-level
+  # red checkpoint for all 25 rows of 25-28/31/32 are also committed, as below.
   #
   # Authorities: the charter, pilot AC-05/06/07/22/23/25, the offline lifecycle
   # contract, arc42's Foreground run/Recovery, and slice-17's registry brief.
@@ -451,7 +452,9 @@ Feature: Hardened offline foreground run
   # from a trusted disposable fixture, so refusing overlaps cannot satisfy them.
   # Slice-18 owns discovering/releasing retained anchors with fresh status/stop,
   # controller-loss recovery, repeated stop and cross-session recovery conflicts.
-  # Do not add those commands or an unattended restart to this item.
+  # Keep that ownership split and the existing live recovery behavior. The
+  # integration prerequisite below must be resolved before activating anchored
+  # runs; retention alone does not satisfy recovery. No unattended restart.
   #
   # Source and lifetime decisions:
   # Coordinator q-19, 2026-11-06 ~22:55 UTC, and q-27, ~23:50 UTC, supersede
@@ -578,9 +581,10 @@ Feature: Hardened offline foreground run
   # Anchor teardown uses existing run.cleanup-ownership (1) and
   # run.cleanup-temporary (75), separate from observed workload exit. A nonzero
   # workload result wins; zero plus incomplete cleanup is nonzero. Retain the
-  # registered session ID and protected evidence, without claiming fresh-process
-  # anchor recovery has been implemented here. Existing stop guidance is a retry,
-  # not evidence that stop can yet release this new resource (slice-18).
+  # registered session ID and protected evidence. The existing executable stop
+  # retry remains a live contract: new anchor-bearing sessions must not make it
+  # unusable. Q-33 accepts foreground retention's red evidence; it does not waive
+  # that recovery contract or move slice-18's volume release into this item.
   # No raw argv, environment, response body or copied output enters diagnostics
   # or ownership records. Existing prerequisite failures keep their own rules.
   # Calls/startup/teardown keep 10/120/30 s budgets; no new workload lifetime limit.
@@ -594,10 +598,11 @@ Feature: Hardened offline foreground run
   # No new dependency/service or allowlist expansion is selected. OS is a value;
   # retain notices and architecture import boundaries. If an adapter needs a new
   # privilege/topology outside this contract, stop and report that design gap.
-  # In the implementation PR, record a decision naming the arc42 sections
-  # overridden and update Building-block view, Foreground run, Recovery,
-  # Deployment view and the affected ownership/evidence descriptions. Explain
-  # the anchor's concrete protection, lifecycle and remaining slice-18 recovery.
+  # Decision 0019-descriptor-backed-checkout-anchor.md and arc42 already record
+  # the planned mechanism and q-27 detector. In the implementation PR, update
+  # their implementation/evidence status and affected Building-block view,
+  # Foreground run, Recovery, Deployment view and ownership descriptions. Keep
+  # native proof, local contracts and pending slice-18 integration distinct.
   #
   # Supersession is limited to raw checkout-path equality as proof of a source:
   # adapt OFFLINE-01/02/04's local request/inspection oracles and OFFLINE-09's
@@ -606,16 +611,43 @@ Feature: Hardened offline foreground run
   # protected-state denials. Preserve OFFLINE-05 and all unrelated live behavior;
   # do not re-tag live cases or relax them to accept arbitrary protected paths.
   #
-  # Step handoff at 6b0cb03: local cases 25-28/31/32 still need ALL their
-  # mount-anchor definitions. Reuse offline_launch_steps_test.go /
-  # offline_launch_fixture_test.go and cmd/itos-container/offline_contract_test.go
-  # for local registered-run assemblies. Native 29/30 are already defined in
+  # Recovery integration prerequisite, exposed by the discarded implementation
+  # draft recorded in decision 0019 and still open at ba0ba6b:
+  # - Live RECOVERY-21 executes run's printed retry after failed removal;
+  #   RECOVERY-22 discovers/stops a worker after controller death; RECOVERY-23
+  #   requires independent stops to complete only their selected session.
+  # - Live LIFECYCLE-16 reconciles interrupted create/start/removal, and the now
+  #   live LIFECYCLE-15 also requires fresh status/stop after controller loss.
+  # These cases invoke the current run, so their newly created sessions will
+  # carry anchors. Preserving only legacy worker-only records cannot satisfy
+  # them. Nor can refusing every new schema, leaking a volume after reporting
+  # completion, retagging a live case, or restoring the unsafe pathname mount.
+  # Unknown mount-bearing records must still fail closed; that safety rule is
+  # not successful recovery for a valid session created by the same version.
+  # The shared registered runner already uses Recovery.stop for foreground
+  # teardown and concurrent-stop reconciliation. Keep that shared engine path;
+  # do not make a private foreground-only cleanup stand in for fresh recovery.
+  # Existing local regressions include TestLifecycleEngineLossRetainsRecoverableFailure,
+  # TestPublicRecoveryBudgetRegressions and TestRegisteredWaitReconcilesConcurrentStop.
+  # Q-19 assigns recovery's release to slice-18, which has no scenarios yet.
+  # The coordinator must arrange its specification and integration before
+  # anchored runs can be activated with all these live contracts intact. This
+  # prerequisite neither specifies slice-18 implicitly nor authorizes its
+  # implementation here; q-19's anchor and q-27's detector remain settled.
+  # OFFLINE-30 proves retention for that handoff, never fresh-process release.
+  #
+  # Step handoff at ba0ba6b: local cases 25-28/31/32 are defined in
+  # offline_anchor_local_steps_test.go and offline_anchor_local_assertions_test.go,
+  # using offline_launch_fixture_test.go and
+  # cmd/itos-container/offline_contract_test.go for registered-run assemblies.
+  # Native 29/30 are defined in
   # offline_anchor_steps_test.go with offline_anchor_fixture_test.go,
   # offline_anchor_engine_test.go, offline_anchor_assertions_test.go and
   # offline_anchor_retention_test.go. Keep their submitted-start barrier,
   # independent observations and positive controls; their accepted red evidence
-  # does not cover the missing local steps. Feature steps observe subprocess
-  # results/files; they import no production packages.
+  # remains separate from local evidence. No new step phrase or definition is
+  # introduced by this handoff update. Feature steps observe subprocess results
+  # and files; they import no production packages.
   # No Given invokes run/approve or asserts product behavior. Each only prepares
   # disposable files, independent approval seeds, synthetic observations, probes,
   # fault settings and checkpoints. No real state folder or credential is used.
@@ -637,11 +669,20 @@ Feature: Hardened offline foreground run
   # Checkpoints separate fixture replacements from product effects. Observe
   # outcomes, resources and records BEFORE bounded, identity-checked harness
   # cleanup, including after a failed assertion. Harness cleanup is not proof.
-  # Commit complete steps red first with @wip retained. Require local assertion
-  # red/green for 25-28/31/32. The coordinator has accepted guarded CI red for
-  # EVERY row of 29/30 as recorded below; implementation still needs ordinary
-  # green CI at the actual pushed head. Undefined steps, skips or broken controls
-  # provide no red evidence. No local engine or mutation run.
+  # Local steps were committed red first in bb19503, with contextual diagnostics
+  # and both-backend assertion reporting corrected in 4c57651. Decision 0019
+  # records a run with @wip removed only for execution: every one of the 25 rows
+  # of 25-28/31/32 failed at its first Then on both memory and disk/SDK backends,
+  # without undefined steps or setup failures. Missing allocation fails 25/31;
+  # missing publication/source refusal fails 26/27; missing immediate detector
+  # teardown fails 32; missing retained anchor authority fails 28. State ancestry
+  # preflight failures in the restricted filesystem sandbox are not that evidence.
+  # The discarded prototype's local green is not implemented or native proof.
+  # The coordinator has accepted guarded CI red for EVERY row of 29/30 below.
+  # All eight IDs remain @wip pending implementation, local green and ordinary
+  # native green CI at the actual pushed head, with the recovery prerequisite
+  # satisfied. Undefined steps, skips or broken controls provide no evidence.
+  # No local engine or mutation run.
 
   # Current launch has no anchor intent/resource or bound source, so the first
   # Then fails even though its existing worker can run and clean successfully.
@@ -735,7 +776,7 @@ Feature: Hardened offline foreground run
   # failed cleanup retains protected evidence under OFFLINE-28's existing rule.
   # Current Start only calls ContainerStart and returns; the first Then fails
   # because there is no mounted-identity detector or teardown on its failure.
-  # These new steps still require committed assertion-level local red evidence.
+  # All five detector rows have the committed local red checkpoint above.
   @wip @slice-17 @ID-OFFLINE-32 @linux
   Scenario Outline: A post-start anchor detector failure immediately tears down the owned worker
     Given a mount-anchor contract fixture with post-start detector fault "<fault>"
