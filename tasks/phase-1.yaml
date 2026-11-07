@@ -2357,7 +2357,20 @@
     Check the missing-file cause and the offending path, not just an arbitrary non-nil error,
     so a different setup failure cannot satisfy these controls. Cover an unrelated .next file,
     the same heartbeat basename under a nested checkout directory and under the host root,
-    and strict default collectors with no exclusions.
+    and checkout siblings named slice-11-heartbeat.keep and slice-11-heartbeat.next.keep.
+    In separate disposable fixtures, make each exact excluded heartbeat path a directory with
+    a retained child. The existing late deletion omits only that directory's own map entry;
+    its descendants remain audited. The early exclusion must preserve that traversal, never
+    return SkipDir or SkipAll to omit the subtree or the rest of the walk. Require the child
+    and prefix-neighbour entries in the baseline with their known contents and modes, then
+    change each independently and assert the affected entry as well as snapshot inequality.
+    Comparing two empty or identically over-filtered maps is not a preservation control.
+
+    Exercise the strict defaults by calling doctorTree(root) and w.offlineProtected() directly,
+    not only an internal helper with an empty exclusion set. With both heartbeat files present,
+    each default collector must include their exact keys and known contents and detect a change
+    to either. These boundary/default controls preserve behaviour that already works before
+    the repair; the two forced-rename capture failures supply the observer's red evidence.
     Unrelated checkout/host additions, removals, content changes and mode changes must still
     change the captured snapshot; include an approval-file sentinel. Preserve link handling
     without following targets. Keep the existing TestOfflineRegistryPreservation and
@@ -2387,9 +2400,13 @@
     test's exit status and refuses an empty selection. Before implementation it fails with
     missing TestRecoveryProtectedHeartbeatRename; both new tests are absent. The two existing
     registry/admission controls passed in a focused local baseline run; they are preservation
-    checks, not evidence the flake is repaired. Keep the new tests in the existing ordinary
-    Linux go test ./... tier; the focused task check needs no engine and no new gate. Commands
-    use plain Go and existing runner shell tools, with no RTK requirement in CI.
+    checks, not evidence the flake is repaired. At 5875eb3, re-running the discovery check and
+    the two existing controls confirmed these same results. This draft adds explicit prefix,
+    directory-descendant and default-entry-point controls from the current collector's exact
+    map deletions; it does not claim those new tests exist or pass yet. Keep the new tests in
+    the existing ordinary Linux go test ./... tier; the focused task check needs no engine and
+    no new gate. Commands use plain Go and existing runner shell tools, with no RTK requirement
+    in CI.
 
     Retain the supplied RECOVERY-23 command as the second check. It runs only in the existing
     Linux amd64 GitHub Actions engine context with its prepared cached-image inputs and native
