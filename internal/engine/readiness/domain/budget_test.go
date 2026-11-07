@@ -6,6 +6,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	mp "github.com/donvargax/itos-container/internal/engine/manifest/port"
 	manifesttest "github.com/donvargax/itos-container/internal/engine/manifest/port/porttest"
 	policytest "github.com/donvargax/itos-container/internal/engine/policy/port/porttest"
@@ -80,4 +81,72 @@ func TestContextReadinessUsesRealInspection(t *testing.T) {
 	if !r.Ready {
 		t.Fatal(r)
 	}
+}
+
+func TestBoundedEnginePreservesOpenFailure(t *testing.T) {
+	engine := &porttest.Engine{Failure: port.EngineUnavailable}
+	session, failure := (boundedEngine{engine, context.Background()}).Open("local", "checkout", time.Hour)
+	if session != nil || failure != port.EngineUnavailable || engine.Opens != 1 {
+		t.Fatal("failed connection became usable or lost its cause", session, failure, engine.Opens)
+	}
+}
+
+func TestBoundedLegacyEngineReceivesRemainingBudget(t *testing.T) {
+	for _, remaining := range []time.Duration{5 * time.Second, 120 * time.Second} {
+		t.Run(remaining.String(), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, end := budget.Start(context.Background(), remaining, "startup")
+				defer end()
+				session := porttest.HealthySession()
+				engine := &porttest.Engine{Session: session}
+				// Expose the legacy port only, retaining the same in-memory engine.
+				legacy := struct{ port.Engine }{engine}
+				s, failure := (boundedEngine{legacy, ctx}).Open("local", "checkout", time.Hour)
+				if failure != port.None || s == nil {
+					t.Fatal("healthy legacy connection failed", failure)
+				}
+				defer s.Close()
+				if engine.Budget != min(10*time.Second, remaining) || engine.Selection != "local" || engine.Root != "checkout" {
+					t.Fatal("legacy connection lost its selection or finite budget", engine)
+				}
+				if version, f := s.Version(); f != port.None || version != session.VersionData {
+					t.Fatal("establishment expired a healthy session", version, f)
+				}
+			})
+		})
+	}
+}
+
+type delayedReadinessEngine struct {
+	port.Engine
+	release <-chan struct{}
+}
+
+func (e delayedReadinessEngine) Open(selection, root string, limit time.Duration) (port.Session, port.Failure) {
+	s, f := e.Engine.Open(selection, root, limit)
+	<-e.release
+	return s, f
+}
+
+func TestBoundedEngineClosesLateConnection(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, end := budget.Start(context.Background(), 120*time.Second, "startup")
+		defer end()
+		session := porttest.HealthySession()
+		engine := &porttest.Engine{Session: session}
+		release := make(chan struct{})
+		start := time.Now()
+		s, failure := (boundedEngine{delayedReadinessEngine{engine, release}, ctx}).Open("local", "checkout", time.Hour)
+		if s != nil || failure != port.EngineTimeout || time.Since(start) != 10*time.Second {
+			t.Error("late connection extended the call or became usable", s, failure, time.Since(start))
+		}
+		if session.Closed {
+			t.Error("connection closed while acquisition was pending")
+		}
+		close(release)
+		synctest.Wait()
+		if !session.Closed || engine.Opens != 1 {
+			t.Fatal("late connection leaked or acquisition retried", session.Closed, engine.Opens)
+		}
+	})
 }
