@@ -12,12 +12,14 @@ import (
 // Each project has its own selected state and child HOME. Only the synthetic
 // effective account home is common. No Given starts a product command.
 type controlFixture struct {
-	parent, home string
-	p            *world
-	workers      *overlapFixture
-	before       map[string]string
-	results      []doctorResult
-	err          error
+	parent, home              string
+	p                         *world
+	workers                   *overlapFixture
+	before                    map[string]string
+	results                   []doctorResult
+	err                       error
+	condition                 string
+	reviewBefore, reviewAfter map[string]string
 }
 
 func (w *world) controlSetup(approval, location, engines string) error {
@@ -29,8 +31,12 @@ func (w *world) controlSetup(approval, location, engines string) error {
 	if err := os.MkdirAll(f.home, 0700); err != nil {
 		return err
 	}
+	bin, err := w.sessionProbeBinary()
+	if err != nil {
+		return err
+	}
 	for _, name := range []string{"W", "P"} {
-		p := &world{root: w.root, bin: w.bin, dir: filepath.Join(base, "fixtures", name)}
+		p := &world{root: w.root, bin: bin, dir: filepath.Join(base, "fixtures", name)}
 		f.workers.worlds[name] = p
 		if err := os.MkdirAll(p.dir, 0700); err != nil {
 			return err
@@ -53,13 +59,14 @@ func (w *world) controlSetup(approval, location, engines string) error {
 		a := f.workers.engines["W"]
 		if a == nil || engines == "distinct daemons" {
 			var err error
-			a, err = newOverlapEngine(p, "slice-21-daemon-"+name)
+			a, err = newOverlapEngineAt(p, "slice-21-daemon-"+name, filepath.Join(base, name+".sock"))
 			if err != nil {
 				return err
 			}
 		}
 		f.workers.engines[name] = a
 		p.doctor.env["DOCKER_HOST"] = a.endpoint
+		p.doctor.env["SLICE_21_ACCOUNT_HOME"] = f.home
 		p.doctor.engine.info["ID"] = a.metadata.info["ID"]
 		p.doctor.engineID = fmt.Sprint(a.metadata.info["ID"])
 		if name == "W" {

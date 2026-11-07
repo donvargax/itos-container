@@ -7,6 +7,7 @@ import (
 )
 
 func (w *world) controlStateSteps(sc *godog.ScenarioContext) {
+	w.controlLifecycleSteps(sc)
 	sc.Step(`^a control-state fixture with P approval "([^"]*)" and managed location "([^"]*)" relative to W on "([^"]*)"$`, w.controlSetup)
 	sc.Step(`^W starts and a fresh P doctor inspects that location in "([^"]*)"$`, func(format string) {
 		w.control.startWorker()
