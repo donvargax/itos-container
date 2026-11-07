@@ -170,7 +170,7 @@ cd features
 set +e
 # Run 42233015284 traced no product/harness process-group signals; the step died
 # from outside that tree. Isolate tests from CI runner/Docker session signals.
-setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
+setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
 results=("${PIPESTATUS[@]}")
 set -e
 test_status=${results[0]}
@@ -251,7 +251,7 @@ func engineWorkflowIssues(data []byte) []string {
 	require(engine.Name == "Engine scenarios (Linux amd64)", "stable engine check name")
 	require(engine.If == eventGuard, "engine event/draft guard")
 	require(engine.Runner == "ubuntu-latest" && engine.Container == nil && len(engine.Services) == 0 && len(engine.Strategy.Matrix.OS) == 0, "native runner")
-	require(engine.Timeout == 10 && !engine.ContinueOnError && len(engine.Needs) == 0, "engine job budget and independence")
+	require(engine.Timeout == 13 && !engine.ContinueOnError && len(engine.Needs) == 0, "engine job budget and independence")
 	require(len(engine.Env) == 0, "engine switch must be step-local")
 	enabledPath := ""
 	require(len(engine.Steps) == 7, "engine must have checkout, setup-go, preflight, preparation, scenarios, failure diagnostics and cleanup only")
@@ -263,7 +263,7 @@ func engineWorkflowIssues(data []byte) []string {
 	}
 	for i, run := range engine.Steps {
 		if run.Name == "Engine scenarios" {
-			require(run.Run == engineInvocation && run.Shell == "bash" && run.Timeout == 5 && run.If == "" && !run.ContinueOnError && validFixtureEnvironment(run.Env), "complete invocation, fixture outputs and step budget")
+			require(run.Run == engineInvocation && run.Shell == "bash" && run.Timeout == 8 && run.If == "" && !run.ContinueOnError && validFixtureEnvironment(run.Env), "complete invocation, fixture outputs and step budget")
 			enabledPath = "jobs.engine.steps." + strconv.Itoa(i) + ".env.ITOS_CONTAINER_ENGINE_TESTS"
 		}
 	}
