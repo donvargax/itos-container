@@ -566,17 +566,9 @@ items:
     title: Status and stop recover owned checkout mount anchors
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: [slice-17]
     kind: slice
-    why: >
-      Was p1-recover-owned-checkout-mounts.
-      Extend existing recovery to the mount ownership introduced by the launch slice. After
-      controller loss or uncertain startup, retain isolation and release only proven-owned anchors
-      after worker removal is confirmed. Cover repeated stop, foreign-resource refusal and
-      independent sessions with black-box scenarios, using CI for native-engine evidence. Share
-      recovery logic through engine packages without imports between command slices. Broken down
-      from null.
   - id: slice-21
     title: Doctor and approve reject state exposed to another worker
     phase: 1
