@@ -4,6 +4,7 @@ package disk
 import (
 	"bytes"
 	"context"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"strconv"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -63,7 +64,7 @@ func (s Store) acquireMissing(ctx context.Context, project, token string, create
 		directory.Close()
 		return nil, port.Refused
 	}
-	return &intent{store: s, ctx: ctx, directory: directory, candidate: candidate, name: token + ".json", fresh: fresh}, ""
+	return &intent{store: s, ctx: budget.Lifetime(ctx), directory: directory, candidate: candidate, name: token + ".json", fresh: fresh}, ""
 }
 func (s Store) New(ctx context.Context, durable approval.Durable, token string) (port.Intent, port.Outcome) {
 	binding, failure := s.Codec.Frozen(durable.Frozen)

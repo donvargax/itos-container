@@ -116,6 +116,7 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 		var completed []byte
 		mutations := 0
 		signals := 0
+		delayedStopWait := false
 		if name == "changed record" {
 			reads := 0
 			m.files.AfterRead = func() {
@@ -135,13 +136,17 @@ func publicRecoveryDelayedStop(t *testing.T, name string) {
 		}
 		m.e.After = func(event string) {
 			if event == "SIGTERM" {
-				// Hold the real operation-lock contract across run's ten-second
-				// probe; the competing stop still has time to finish its total.
+				// Hold the operation lock across run's ten-second probe using
+				// two healthy finite calls, each below the ten-second cap.
 				signals++
 				if signals == 1 {
-					time.Sleep(11 * time.Second)
+					time.Sleep(6 * time.Second)
 				}
 				return
+			}
+			if event == "wait" && signals == 1 && !delayedStopWait {
+				delayedStopWait = true
+				time.Sleep(5 * time.Second)
 			}
 			if event != "wait" || id != "" {
 				return

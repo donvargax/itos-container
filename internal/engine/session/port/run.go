@@ -10,6 +10,8 @@ const (
 	IsolationInspection Outcome = "isolation-inspection"
 	ExecutionFailed     Outcome = "execution-unavailable"
 	EnvironmentMissing  Outcome = "engine-environment-missing"
+	CallTimeout         Outcome = "call-timeout"
+	StartupTimeout      Outcome = "startup-timeout"
 	TeardownTimeout     Outcome = "teardown-timeout"
 	StreamTimeout       Outcome = "stream-timeout"
 	EngineLost          Outcome = "engine-lost"
@@ -27,7 +29,8 @@ type Streams struct {
 }
 
 type RunResult struct {
-	Stream Outcome
+	Stream    Outcome
+	Operation string
 	Result
 	Exit    int
 	Exited  bool

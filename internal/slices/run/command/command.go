@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	approvalport "github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	session "github.com/donvargax/itos-container/internal/engine/session/port"
 	"github.com/donvargax/itos-container/internal/slices/run/port"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/donvargax/itos-container/internal/cli"
 	"github.com/donvargax/itos-container/internal/slices/run/domain"
@@ -55,15 +57,34 @@ func (c CLI) Run(ui *cli.UI) int {
 	if c.Approval == nil || c.Snapshots == nil || c.Runner == nil {
 		return ui.Fail(errors.New("run assembly is incomplete"), false)
 	}
-	frozen, err := domain.Preflight(c.Approval, c.Snapshots)
-	if err != nil {
-		return ui.Fail(err, false)
-	}
 	ctx := c.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	result := c.Runner.Run(ctx, frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
+	if _, ok := context.Cause(ctx).(session.Interrupt); ok {
+		return reportRun(ui, session.RunResult{Signal: context.Cause(ctx).(session.Interrupt).Signal, Deadline: time.Now().Add(30 * time.Second)})
+	}
+	startup, end := budget.Start(ctx, 120*time.Second, "startup")
+	defer end()
+	frozen, err := domain.PreflightContext(startup, c.Approval, c.Snapshots)
+	if err != nil {
+		if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
+			return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+		}
+		var timed budget.Failure
+		if errors.As(err, &timed) {
+			outcome := session.CallTimeout
+			if timed.Phase != "" {
+				outcome = session.StartupTimeout
+			}
+			return reportRun(ui, session.RunResult{Result: session.Result{Outcome: outcome}, Operation: timed.Operation, Deadline: time.Now().Add(30 * time.Second)})
+		}
+		return ui.Fail(err, false)
+	}
+	if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
+		return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+	}
+	result := c.Runner.Run(budget.WithStartup(ctx, startup), frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
 	return reportRun(ui, result)
 }
 
@@ -99,7 +120,12 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 			ui.Fail(runFailure{result.Stream, result.Reference, result.SessionID, false}, false)
 		}
 		if result.Outcome != "" {
-			ui.Fail(runFailure{result.Outcome, result.Reference, result.SessionID, false}, false)
+			failure := runFailure{result.Outcome, result.Reference, result.SessionID, false}
+			if result.Operation != "" {
+				ui.Fail(operationFailure{failure, result.Operation}, false)
+			} else {
+				ui.Fail(failure, false)
+			}
 		}
 		if result.Reference != "" && result.Cleanup != session.Complete {
 			ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
@@ -128,6 +154,13 @@ func workloadOutcome(r session.RunResult) string {
 	return "unknown"
 }
 
+type operationFailure struct {
+	runFailure
+	operation string
+}
+
+func (f operationFailure) Unwrap() error { return f.runFailure }
+
 type cancelFailure struct{ signal, workload string }
 
 func (cancelFailure) Error() string { return "run cancelled" }
@@ -143,6 +176,14 @@ func (runFailure) Error() string { return "owned run could not be completed" }
 
 // Classify supplies run's stable rules and human guidance to the generic UI.
 func Classify(err error) (int, []cli.Problem) {
+	var timed budget.Failure
+	if errors.As(err, &timed) {
+		rule := "run.call-timeout"
+		if timed.Phase != "" {
+			rule = "run." + timed.Phase + "-timeout"
+		}
+		return 75, []cli.Problem{{Rule: rule, Exit: 75, Message: rule + "; operation " + timed.Operation, Fix: "Inspect protected recovery state before retrying."}}
+	}
 	var cancelled cancelFailure
 	if errors.As(err, &cancelled) {
 		code := 130
@@ -179,6 +220,10 @@ func Classify(err error) (int, []cli.Problem) {
 		}
 		fix := "Have the host user inspect the protected intent and original engine; cleanup is not confirmed."
 		message := rule + " " + strconv.QuoteToASCII(run.reference) + ": " + run.Error()
+		var operation operationFailure
+		if errors.As(err, &operation) {
+			message += "; operation " + operation.operation
+		}
 		if run.outcome == session.EngineLost {
 			message += "; workload outcome unknown unless separately observed"
 		}

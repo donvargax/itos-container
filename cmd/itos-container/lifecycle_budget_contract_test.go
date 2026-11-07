@@ -263,6 +263,12 @@ func lifecycleBudgetCase(t *testing.T, name, operation, backend string) {
 			t.Error("accepted mutation lost original protected identity", r)
 		}
 	}
+	beforeLate := l.count("start")
+	time.Sleep(11 * time.Second)
+	synctest.Wait()
+	if l.count("start") != beforeLate {
+		t.Error("late reply resumed launch")
+	}
 	// The same complete assembly must succeed when only the injected fault clears.
 	control := lifecycleLocalFixture(t, backend)
 	control.approval, control.snapshots = lifecycleBudgetPreflight(control, &lifecyclePreflightFault{})

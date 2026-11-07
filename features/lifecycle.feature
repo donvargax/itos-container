@@ -238,9 +238,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Do not demand artificial red for their existing behavior or stop for another
   # decision; preserve all assertions and verify the complete case at its tier.
   # Native definitions and coordinator red evidence cover 08/09/11/12/13/16.
-  # Local 14 has assertion-level red and green command evidence. The remaining
-  # local @wip cases still need their complete executable step handoff; neither
-  # the native runs nor the drafting assertions provide their local proof.
+  # Local steps are committed at df8b8e6, 9b9ebd3 and e67210a. All 37 local
+  # rows of 01–07, 10 and 14 have passing command evidence; assertion-level red
+  # and verified regressions are recorded in decision 0014. Native proof remains
+  # separate; run 42312330532 at 41529b1 passed all 18 slice-12 engine cases.
 
   # Individual waits: existing generic SDK errors do not identify the timed-out
   # phase; preflight/state waits currently lack the complete shared deadline.
@@ -252,7 +253,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # No authoritative nonzero workload exit is supplied here; LIFECYCLE-03 covers
   # that precedence. Already-bounded calls may pass the cancellation assertion;
   # final timeout classification and the cleanup bound still need their own proof.
-  @wip @slice-12 @ID-LIFECYCLE-01 @linux
+  @slice-12 @ID-LIFECYCLE-01 @linux
   Scenario Outline: A stalled finite operation consumes at most its call budget
     Given a lifecycle contract fixture with a stalled "<operation>" and a healthy control
     When the real run contract reaches the operation and controlled time advances through its 10 second deadline and the ensuing cleanup through each local backend
@@ -277,7 +278,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # launch, then leave attach/start pending across t=120. This catches the old
   # budget starting only after preflight. Repeat with progress/reconnect events;
   # an implementation need not invent retries simply to satisfy a test.
-  @wip @slice-12 @ID-LIFECYCLE-02 @linux
+  @slice-12 @ID-LIFECYCLE-02 @linux
   Scenario: Startup has one deadline beginning before preflight
     Given a lifecycle contract fixture with 115 seconds of successful preflight and publication progress and delayed launch observations
     When run proceeds through the full invocation and controlled time advances through the 120 second startup deadline and the ensuing cleanup through each local backend
@@ -292,7 +293,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Regression attribution: slice-10 preserves observed nonzero exits; slice-11
   # reconciles registered starts through shared stop. Verify the exit-17 row as
   # written, including its separate timeout report, under the standing rule.
-  @wip @slice-12 @ID-LIFECYCLE-03 @linux
+  @slice-12 @ID-LIFECYCLE-03 @linux
   Scenario Outline: A timed-out start is reconciled without inventing a child result
     Given a lifecycle contract fixture with accepted start and a withheld reply followed by "<observation>"
     When the start call expires and run reconciles and cleans through each local backend
@@ -313,7 +314,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Regression attribution: slice-10 supplies the shared teardown total and
   # exit-17 precedence; slice-11 supplies registered cleanup. Preserve passing
   # controls while checking the complete rows under the standing rule.
-  @wip @slice-12 @ID-LIFECYCLE-04 @linux
+  # Both complete rows pass at 41529b1: slice-10 totals/exit precedence,
+  # slice-11 recovery and earlier slice-12 typed teardown reporting.
+  @slice-12 @ID-LIFECYCLE-04 @linux
   Scenario Outline: Drain and cleanup share one teardown deadline
     Given a lifecycle contract fixture with observed exit <child> and slow drain reconciliation removal and completion
     When run begins teardown and controlled time reaches 30 seconds through each local backend
@@ -335,7 +338,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Recheck every row, including the fresh invocation. Cases passing for the
   # right reason are accepted regressions under the standing rule;
   # retain this attribution when turning the complete outline live.
-  @wip @slice-12 @ID-LIFECYCLE-05 @linux
+  # Both status rows pass before this change through slice-11 recovery.
+  # Stop rows were red at their finite-call deadline assertions.
+  @slice-12 @ID-LIFECYCLE-05 @linux
   Scenario Outline: Each explicit recovery invocation has a fresh finite budget
     Given a lifecycle recovery fixture with a protected owned session and stalled "<operation>" observations
     When "<command>" exhausts its recovery budget and a fresh invocation follows after the fault clears through each local backend
@@ -356,7 +361,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Deterministic cancellation before launch, including a phase whose operation
   # has returned just as cancellation becomes observable. No lifecycle hooks exist.
-  @wip @slice-12 @ID-LIFECYCLE-06 @linux
+  @slice-12 @ID-LIFECYCLE-06 @linux
   Scenario Outline: Cancellation prevents the next startup phase
     Given a lifecycle contract fixture with a cancellation barrier "<barrier>"
     When the run contract receives "<signal>" at that barrier and the pending operation returns through each local backend
@@ -379,7 +384,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
 
   # Delay accepted create until after cancellation's first cleanup ends. Name
   # not-found cannot fence that request; preserve slice-9's uncertain-create rule.
-  @wip @slice-12 @ID-LIFECYCLE-07 @linux
+  # Accepted start already passes through slice-11 protected recovery and
+  # the earlier slice-12 cancellation mapping; accepted create was red.
+  @slice-12 @ID-LIFECYCLE-07 @linux
   Scenario Outline: Cancellation cannot forget an accepted create or start
     Given a lifecycle contract fixture with an accepted "<operation>" whose response and observations are withheld
     When run receives SIGTERM in flight and returns before the operation becomes observable and a fresh controller later reconciles it
@@ -450,7 +457,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Fresh full-identity inspection can still establish running before escalation;
   # after escalation it cannot establish a primary exit. Safe mutation authority
   # is available, but authoritative exit and final absence observations are not.
-  @wip @slice-12 @ID-LIFECYCLE-10 @linux
+  # Both rows pass against 41529b1, exercising slice-11 owned termination
+  # and the earlier slice-12 fixed grace/cancellation result implementation.
+  @slice-12 @ID-LIFECYCLE-10 @linux
   Scenario Outline: Lost signal acknowledgement never becomes an observed workload exit
     Given a lifecycle contract fixture with a live owned worker and lost signal acknowledgement and exit observations
     When run receives "<signal>" and controlled time crosses grace and teardown deadlines through each local backend

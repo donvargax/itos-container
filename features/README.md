@@ -395,8 +395,13 @@ exit 17 and LIFECYCLE-09, and assertion-level failures for missing behaviour. Ke
 LIFECYCLE-15 with slice-15. Local `14` now runs the real run command through port
 fakes and protected record adapters over memory storage, with controlled time.
 Both rows failed at their typed stream-timeout assertion before implementation
-and pass afterward. The other local lifecycle scenarios remain pending; native
-signal evidence does not substitute for their command-budget checks.
+and pass afterward. Local 01–07 and 10 now exercise the complete command entry and registered
+recovery with controlled time. The combined 37-row local selection (including 14)
+passes. Step checkpoints df8b8e6, 9b9ebd3 and e67210a preserve red-first
+assertions and verified regressions; decision 0014 records the evidence. Native
+signal evidence remains separate: coordinator run 42312330532 at 41529b1 passed
+all 18 engine cases before these local budget changes. The loop owns fresh CI
+and changed-code proof at the pushed head.
 
 ## Tags
 

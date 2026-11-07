@@ -108,13 +108,15 @@ Feature: Foreground failures retain owned cleanup authority
       | launch | ownership-refused    |
       | wait   | ownership-refused    |
 
+  # Slice-12 replaces OS signal death with the typed 130/143 cancellation result.
+  # The held-inspection barrier, prompt abort and absence of effects remain.
   @slice-10 @ID-OFFLINE-24
   Scenario Outline: Host signals abort preflight before snapshot publication
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
     And the run preflight is held at fresh image inspection
     When the run receives "<signal>" during preflight
-    Then preflight aborts before release without a snapshot or worker
+    Then preflight reports cancellation and aborts before release without a snapshot or worker
 
     Examples:
       | signal  |

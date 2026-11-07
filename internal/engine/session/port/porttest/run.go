@@ -61,9 +61,11 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 	c.run.event("create")
 	id, f := c.Create(ctx, r)
 	if f == "" {
+		c.engine.resourcesMu.Lock()
 		o := c.engine.Resources[id]
 		o.Mounts = true
 		c.engine.Resources[id] = o
+		c.engine.resourcesMu.Unlock()
 	}
 	return id, f
 }
@@ -75,7 +77,9 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 	if c.run.Boundary != "" {
 		return c.run.Boundary
 	}
+	c.engine.resourcesMu.Lock()
 	o, ok := c.engine.Resources[id]
+	c.engine.resourcesMu.Unlock()
 	if !ok || o.Status != "created" || !slices.Equal(c.run.Argv, argv) {
 		return port.IsolationUnverified
 	}
@@ -117,12 +121,14 @@ func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 	if c.run.StartFailure != "" {
 		return c.run.StartFailure
 	}
+	c.engine.resourcesMu.Lock()
 	o := c.engine.Resources[id]
 	o.Status = "running"
 	o.Running = true
 	o.Started = true
 	o.PID = 123
 	c.engine.Resources[id] = o
+	c.engine.resourcesMu.Unlock()
 	if c.run.AfterStart != nil {
 		c.run.AfterStart()
 	}
@@ -136,17 +142,22 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 		case <-ctx.Done():
 		}
 	}
-	if c.run.WaitUntilCancel && c.engine.Resources[id].Running {
+	c.engine.resourcesMu.Lock()
+	running := c.engine.Resources[id].Running
+	c.engine.resourcesMu.Unlock()
+	if c.run.WaitUntilCancel && running {
 		<-ctx.Done()
 	}
 	if ctx.Err() != nil {
 		return 0, port.ExecutionFailed
 	}
+	c.engine.resourcesMu.Lock()
 	o := c.engine.Resources[id]
 	o.Status = "exited"
 	o.Running = false
 	o.PID = 0
 	c.engine.Resources[id] = o
+	c.engine.resourcesMu.Unlock()
 	if c.run.AfterWait != nil {
 		c.run.AfterWait()
 	}
@@ -167,6 +178,8 @@ func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outc
 	if c.run.IgnoreSignal && signal != "SIGKILL" {
 		return ""
 	}
+	c.engine.resourcesMu.Lock()
+	defer c.engine.resourcesMu.Unlock()
 	o := c.engine.Resources[id]
 	o.Running, o.Status, o.PID = false, "exited", 0
 	c.engine.Resources[id] = o

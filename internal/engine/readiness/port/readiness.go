@@ -2,6 +2,7 @@
 package port
 
 import (
+	"context"
 	"time"
 
 	manifest "github.com/donvargax/itos-container/internal/engine/manifest/port"
@@ -115,3 +116,10 @@ type Result struct {
 	Issues   []Issue
 	Ready    bool
 }
+
+// ContextEngine separates establishment from the retained inspection lifetime.
+// Run supplies each finite request context; legacy callers retain Open's total.
+type ContextEngine interface {
+	OpenContext(context.Context, string, string) (Session, Failure)
+}
+type ContextSession interface{ ForContext(context.Context) Session }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"path"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -273,7 +274,7 @@ func (s Store) transaction(ctx context.Context, ref string, fresh bool) (*transa
 	}
 	defer opened.Close()
 	i := opened.(*intent)
-	return &transactionIntent{store: s, ctx: ctx, reference: ref, record: i.record, binding: i.binding, data: bytes.Clone(i.bytes), fresh: fresh}, ""
+	return &transactionIntent{store: s, ctx: budget.Lifetime(ctx), reference: ref, record: i.record, binding: i.binding, data: bytes.Clone(i.bytes), fresh: fresh}, ""
 }
 func (t *transactionIntent) Record() port.Record   { return t.record }
 func (t *transactionIntent) Binding() port.Binding { return t.binding }

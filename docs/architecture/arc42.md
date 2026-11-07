@@ -190,6 +190,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
 | `internal/engine/readiness` | Implemented prerequisite | Read-only checkout, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
+| `internal/engine/budget` | Implemented by slice-12 | Shared phase and finite-operation deadlines, late-result handling and retained handle lifetimes. | Context/time only; typed values in ports, policy in domain. |
 | `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
@@ -307,7 +308,9 @@ must state this in help and security guidance; revisit before egress and credent
 
 ### Foreground run and its failure paths
 
-1. **Preflight, preparing.** Require nonempty executable argv after `--`. Preserve all
+1. **Preflight, preparing.** After validating the invocation, start the single
+   120-second startup deadline before preflight. Capture the first signal through
+   cleanup and diagnostic delivery. Require nonempty executable argv after `--`. Preserve all
    subsequent argument boundaries without an implicit shell or injected agent flags.
    T-11 requires missing/empty-command refusal and wrapper/inherited JSON refusal
    before resources; a workload `--json` remains a literal argument. Then reuse strict
@@ -560,9 +563,14 @@ cannot restart grace; an unavailable acknowledgement never authorizes repeating
 the original signal. Revalidate full ownership again before escalation.
 Observed exit wins and delivery alone never proves termination. Foreground waiting
 has no invented workload lifetime limit. A4 selects pids limit 4096, with no memory or
-CPU quota claim. Parser structural bounds and CI job timeouts are separate. Slice-12
-owns the remaining preflight and finite-call budget implementation. Slice-11
-supplies fresh 10 s status and 30 s stop totals. Registered foreground cleanup
+CPU quota claim. Parser structural bounds and CI job timeouts are separate.
+[Decision 0014](../decisions/0014-controller-operation-budgets.md) implements
+whole-invocation startup and finite-call budgets in the shared budget engine.
+Late results cannot resume launch. Acquired handles retain the phase lifetime;
+requests keep their individual deadlines. Pending storage operations retain their
+locks until they finish, and failed fsync retains visible but uncertain progress.
+Slice-11 supplies fresh 10 s status and 30 s stop totals. Stop may retry bounded
+lock observations within its original total; mutations are never blindly retried. Registered foreground cleanup
 and final drain proceed concurrently. Diagnostic delivery uses only remaining
 teardown time, and protected `last_problem` can retain a typed stream timeout
 even in a completed cleanup tombstone. This records delivery failure without

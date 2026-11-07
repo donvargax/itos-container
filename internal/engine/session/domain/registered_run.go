@@ -5,6 +5,7 @@ import (
 	"time"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
@@ -23,8 +24,15 @@ func registrationFailure(f port.Outcome) port.Outcome {
 	}
 }
 func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv []string, streams port.Streams) port.RunResult {
-	startup, end := context.WithTimeout(ctx, 120*time.Second)
+	s.Registry = finiteRegistry{s.Registry}
+	s.Engine = finiteEngine{s.Engine}
+	startup, end := budget.Startup(ctx)
 	defer end()
+	state := &startupState{}
+	startup = context.WithValue(startup, startupKey{}, state)
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
+	s.Workspace = finiteWorkspace{s.Workspace, startup, gate}
 	result := port.RunResult{}
 	id, failure := s.Entropy.Token()
 	if failure != "" || !port.HexID(id) {
@@ -36,13 +44,43 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		result.Outcome = port.RegistrationInternal
 		return result
 	}
-	lease, failure := s.Registry.Register(startup, frozen, id, token)
+	type leased struct {
+		lease   port.Lease
+		failure port.Outcome
+	}
+	acquired, err := budget.Acquire(startup, "session registration", func(call context.Context) leased {
+		l, f := s.Registry.Register(call, frozen, id, token)
+		return leased{l, f}
+	}, func(r leased) {
+		if r.lease != nil {
+			r.lease.Close()
+		}
+	})
+	lease, failure := acquired.lease, acquired.failure
+	if err != nil {
+		return startupResult(ctx, startup, err, "session registration")
+	}
 	if failure != "" {
 		result.Outcome = registrationFailure(failure)
 		return result
 	}
 	defer lease.Close()
-	i, failure := s.Store.New(startup, frozen, token)
+	type intended struct {
+		intent  port.Intent
+		failure port.Outcome
+	}
+	made, err := budget.Acquire(startup, "intent lock acquisition and intent publication", func(call context.Context) intended { i, f := s.Store.New(call, frozen, token); return intended{i, f} }, func(r intended) {
+		if r.intent != nil {
+			r.intent.Close()
+		}
+	})
+	i, failure := made.intent, made.failure
+	if err != nil {
+		result = startupResult(ctx, startup, err, "intent lock acquisition and intent publication")
+		result.Reference, result.SessionID = port.Reference(frozen.Frozen.Project, token), id
+		result.Cleanup = port.Incomplete
+		return result
+	}
 	if failure != "" {
 		result.Outcome = failure
 		return result
@@ -54,7 +92,10 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	result.Reference, result.SessionID = port.Reference(frozen.Frozen.Project, token), id
 	c, attachment, resource, failure := s.registeredLaunch(startup, id, argv, streams)
 	result.ID, result.Outcome = resource, failure
-	result.Started = attachment != nil
+	result.Started, result.Operation = state.started, state.operation
+	if startup.Err() != nil && failure != port.Refused && failure != port.IsolationUnverified {
+		result.Outcome = startupFailure(startup)
+	}
 	end()
 	if c != nil {
 		defer c.Close()
@@ -69,7 +110,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	defer finish()
 	result.Deadline, _ = teardown.Deadline()
 	teardown = context.WithValue(teardown, runGraceKey{}, result.Deadline.Add(-20*time.Second))
-	if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && (result.Outcome == "" || result.Outcome == port.ExecutionFailed) {
+	if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && (result.Outcome == "" || result.Outcome == port.ExecutionFailed || result.Outcome == port.Uncertain) {
 		result.Signal = interrupted.Signal
 		result.Outcome = ""
 	}
@@ -113,7 +154,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		if len(prepared.Failures) != 0 {
 			result.Cleanup = prepared.Failures[0].Outcome
 			result.Stream = <-drain
-			if teardown.Err() != nil {
+			if budget.Cause(teardown) != nil {
 				result.Outcome = port.TeardownTimeout
 			}
 			return result
@@ -132,7 +173,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		result.Exit, result.Exited = *cleaned.Entries[0].WorkloadExit, true
 	}
 	result.Stream = <-drain
-	if teardown.Err() != nil {
+	if budget.Cause(teardown) != nil {
 		result.Cleanup = port.Incomplete
 		result.Outcome = port.TeardownTimeout
 	}
@@ -162,6 +203,10 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 		return nil, nil, "", launchSuperseded
 	}
 	intent := entry.Intent()
+	if ctx.Err() != nil {
+		entry.Close()
+		return nil, nil, "", startupFailure(ctx)
+	}
 	if failure = s.Workspace.Pin(intent.Binding()); failure != "" {
 		entry.Close()
 		return nil, nil, "", failure
@@ -172,10 +217,17 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 		entry.Close()
 		return nil, nil, "", failure
 	}
+	if ctx.Err() != nil {
+		entry.Close()
+		return c, nil, "", startupFailure(ctx)
+	}
 	resource, failure := createRegistered(ctx, entry, c, s.Workspace, argv)
 	entry.Close()
 	if failure != "" {
 		return c, nil, "", failure
+	}
+	if ctx.Err() != nil {
+		return c, nil, resource, startupFailure(ctx)
 	}
 	// Release the operation lock between create and start. A stop that acquires
 	// it here is terminal; the fresh record below prevents a stale continuation.
@@ -191,12 +243,20 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if intent.Record().ContainerID != resource {
 		return c, nil, "", port.Refused
 	}
-	if failure = c.VerifyRun(ctx, resource, argv); failure != "" {
+	if failure = startupOperation(ctx, "boundary inspection", func(call context.Context) port.Outcome { return c.VerifyRun(call, resource, argv) }); failure != "" {
 		return c, nil, "", failure
 	}
-	a, failure := c.Attach(ctx, resource, streams)
+	var a port.Attachment
+	failure = startupOperation(ctx, "attach establishment", func(call context.Context) port.Outcome {
+		var f port.Outcome
+		a, f = c.Attach(call, resource, streams)
+		return f
+	})
 	if failure != "" {
 		return c, nil, "", failure
+	}
+	if ctx.Err() != nil {
+		return c, a, resource, startupFailure(ctx)
 	}
 	if failure = entry.ValidateLaunch(); failure != "" {
 		return c, a, "", failure
@@ -204,10 +264,18 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if failure = validateLaunch(ctx, intent, c, s.Workspace); failure != "" {
 		return c, a, "", failure
 	}
-	if failure = c.VerifyRun(ctx, resource, argv); failure != "" {
+	if failure = startupOperation(ctx, "boundary inspection", func(call context.Context) port.Outcome { return c.VerifyRun(call, resource, argv) }); failure != "" {
 		return c, a, "", failure
 	}
-	if failure = c.Start(ctx, resource); failure != "" {
+	if failure = startupOperation(ctx, "start acknowledgement", func(call context.Context) port.Outcome {
+		if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
+			state.started = true
+		}
+		return c.Start(call, resource)
+	}); failure != "" {
+		if ctx.Err() != nil {
+			return c, a, resource, failure
+		}
 		return c, a, "", failure
 	}
 	if ctx.Err() != nil {
@@ -235,7 +303,12 @@ func createRegistered(ctx context.Context, entry port.Session, c port.RunConnect
 	if r.Stage != "intent" || r.ContainerID != "" {
 		return "", port.Refused
 	}
-	id, failure := c.CreateRun(ctx, r, argv)
+	var id string
+	failure := startupOperation(ctx, "create response", func(call context.Context) port.Outcome {
+		var f port.Outcome
+		id, f = c.CreateRun(call, r, argv)
+		return f
+	})
 	if failure != "" {
 		return "", failure
 	}

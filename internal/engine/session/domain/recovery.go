@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"slices"
 	"time"
 
@@ -26,6 +27,8 @@ func recoveryFailure(id string, failure port.Outcome) port.RecoveryResult {
 	return r
 }
 func (s Recovery) Status(ctx context.Context) port.RecoveryResult {
+	s.Registry = finiteRegistry{s.Registry}
+	s.Engine = finiteEngine{s.Engine}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	ids, failure := s.Registry.List(ctx)
@@ -106,7 +109,7 @@ func finishEntry(e *port.RecoveryEntry) {
 func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (port.Observation, string, port.Outcome) {
 	// A wait or prior engine call may have exhausted the total. Expired
 	// storage handles cannot distinguish changed ownership from lost time.
-	if ctx.Err() != nil {
+	if budget.Cause(ctx) != nil {
 		return port.Observation{}, "unknown", port.Incomplete
 	}
 	if failure := s.Validate(); failure != "" {
@@ -156,6 +159,8 @@ func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (
 }
 
 func (s Recovery) Stop(ctx context.Context, id string) port.RecoveryResult {
+	s.Registry = finiteRegistry{s.Registry}
+	s.Engine = finiteEngine{s.Engine}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	return s.stop(ctx, id, "SIGTERM", nil, true)
@@ -187,7 +192,7 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 		// Persist uncertainty only for safely held, incomplete sessions. Never
 		// replace a completed tombstone or overwrite substituted authority.
 		r := entry.Record()
-		if ctx.Err() == nil && r.State != "stopped" && retryableRecovery(failure) && entry.Validate() == "" {
+		if budget.Cause(ctx) == nil && r.State != "stopped" && retryableRecovery(failure) && entry.Validate() == "" {
 			r.State, r.LastProblem = "failed", &failure
 			if f := entry.Save(r); f != "" {
 				failure = f
@@ -212,7 +217,7 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 	// Inspection can consume the remaining total after lock acquisition. Do
 	// not turn that timeout into an ownership refusal by saving with expired
 	// storage authority, or begin another progress write beyond the budget.
-	if ctx.Err() != nil {
+	if budget.Cause(ctx) != nil {
 		return port.Incomplete
 	}
 	// A verified explicit workload result can fill an unknown result even when
@@ -330,7 +335,7 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 	if foreground {
 		// An early transport error cannot shorten the primary's promised grace.
 		<-grace.Done()
-		if ctx.Err() != nil {
+		if budget.Cause(ctx) != nil {
 			return port.Incomplete
 		}
 	}

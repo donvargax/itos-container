@@ -481,7 +481,7 @@ func TestRegisteredRunStartupDeadlineCleansCreatedWorker(t *testing.T) {
 		runner := domain.Runner{Store: store, Registry: registry, Engine: runEngine, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
 		start := time.Now()
 		result := runner.Run(context.Background(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
-		if time.Since(start) != 120*time.Second || result.Outcome != port.Incomplete || result.Exited || result.Cleanup != port.Complete || len(engine.Resources) != 0 {
+		if time.Since(start) != 120*time.Second || result.Outcome != port.StartupTimeout || result.Exited || result.Cleanup != port.Complete || len(engine.Resources) != 0 {
 			t.Fatal("startup deadline skipped cleanup or invented a workload result", result, time.Since(start))
 		}
 		record := registry.Records[result.SessionID]

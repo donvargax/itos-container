@@ -84,7 +84,11 @@ func (w *world) foregroundInterruptSteps(sc *godog.ScenarioContext) {
 			signaled = true
 			select {
 			case <-done:
-				aborted = cmd.ProcessState.ExitCode() == -1
+				expected := 130
+				if name == "SIGTERM" {
+					expected = 143
+				}
+				aborted = cmd.ProcessState.ExitCode() == expected && strings.Contains(errout.String(), "run.cancelled "+name) && strings.Contains(errout.String(), "workload outcome not-started")
 			case <-time.After(time.Second):
 			}
 		case <-done:
@@ -95,7 +99,7 @@ func (w *world) foregroundInterruptSteps(sc *godog.ScenarioContext) {
 		w.stdout, w.stderr, w.exit = out.String(), errout.String(), cmd.ProcessState.ExitCode()
 		return nil
 	})
-	sc.Step(`^preflight aborts before release without a snapshot or worker$`, func() error {
+	sc.Step(`^preflight reports cancellation and aborts before release without a snapshot or worker$`, func() error {
 		if !signaled || !aborted {
 			return fmt.Errorf("host signal did not abort the held preflight: %s", w.report())
 		}

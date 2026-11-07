@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"errors"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"time"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -98,7 +100,7 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	if s.Registry != nil {
 		entry, f := s.Registry.Open(probe, reference, true)
 		if f != "" {
-			if f == port.Incomplete && probe.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+			if f == port.Incomplete && errors.Is(budget.Cause(probe), context.DeadlineExceeded) && ctx.Err() == nil {
 				return 0, false, waitUnreconciled
 			}
 			return 0, false, port.ExecutionFailed
