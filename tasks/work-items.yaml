@@ -524,8 +524,8 @@ items:
   - id: slice-24
     title: run never returns 0 when the workload's exit is unknown
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
