@@ -74,3 +74,35 @@ func TestForegroundStartupFailureWinsOverCleanup(t *testing.T) {
 		t.Fatal("started without approval")
 	}
 }
+
+func TestUnknownExitDoesNotReplaceOtherFailures(t *testing.T) {
+	for _, tc := range []struct {
+		outcome session.Outcome
+		cleanup session.Outcome
+		code    int
+		rule    string
+	}{
+		{"", session.Complete, 75, "run.workload-exit-unknown"},
+		{session.ExecutionFailed, session.Complete, 75, "run.execution-unavailable"},
+		{session.IsolationUnverified, session.Complete, 1, "run.isolation-unverified"},
+		{session.Refused, session.Complete, 1, "run.ownership-refused"},
+		{session.EnvironmentMissing, session.Complete, 3, "run.engine-environment-missing"},
+		{"", session.Incomplete, 75, "run.cleanup-temporary"},
+		{"", session.Refused, 1, "run.cleanup-ownership"},
+	} {
+		t.Run(tc.rule, func(t *testing.T) {
+			a := &rf.Approval{View: approval.View{Status: "matching", Inspection: af.Ready(), Candidate: approval.Candidate{Project: "p", Canonical: "selected"}, Record: approval.Record{Generation: "1"}}}
+			// A numeric value without Exited is not an observed child result.
+			r := &rf.Runner{Result: session.RunResult{Result: session.Result{Reference: "intents/safe.json", ID: strings.Repeat("a", 64), Outcome: tc.outcome, Cleanup: tc.cleanup}, Exit: 7}}
+			var out, errout strings.Builder
+			c := command.CLI{Args: []string{"--", "probe"}, Approval: a, Snapshots: &af.Snapshots{}, Runner: r}
+			code := c.Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: command.Classify})
+			if code != tc.code || out.Len() != 0 || !strings.Contains(errout.String(), tc.rule) {
+				t.Fatal(code, out.String(), errout.String())
+			}
+			if tc.rule != "run.workload-exit-unknown" && strings.Contains(errout.String(), "run.workload-exit-unknown") {
+				t.Fatal("unknown-result fallback replaced an existing failure", errout.String())
+			}
+		})
+	}
+}

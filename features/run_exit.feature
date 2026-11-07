@@ -88,7 +88,7 @@ Feature: Distinguish an unknown foreground exit from completed cleanup
   # smoke selection as required by features/README.md; CI owns changed-code proof.
 
   # Immediate reconciliation must separate successful cleanup from workload success.
-  @wip @slice-24 @ID-RUNEXIT-01 @linux
+  @slice-24 @ID-RUNEXIT-01 @linux
   Scenario: Run reports an unknown exit after a concurrent stop has completed
     Given an unknown-exit run fixture with stop completion "before stdin reconciliation"
     When the fixture runs the foreground command and concurrent stop then repeats stop and inspects JSON status
@@ -100,7 +100,7 @@ Feature: Distinguish an unknown foreground exit from completed cleanup
     And observed-exit and forwarding-failure controls retain their specified result precedence
 
   # Retry after probe expiry must not reintroduce zero or discard trailing output.
-  @wip @slice-24 @ID-RUNEXIT-02 @linux
+  @slice-24 @ID-RUNEXIT-02 @linux
   Scenario: Run reports an unknown exit when concurrent stop outlasts the stdin probe
     Given an unknown-exit run fixture with stop completion "after the stdin reconciliation deadline"
     When the fixture runs the foreground command and concurrent stop then repeats stop and inspects JSON status

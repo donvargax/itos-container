@@ -76,3 +76,7 @@
   scenarios:
     - id: "@ID-HARDLINK-03"
       why: shared Git storage refuses inspection and an independent copy restores readiness with the original approval
+- file: run_exit.feature
+  scenarios:
+    - id: "@ID-RUNEXIT-02"
+      why: unknown workload exit remains nonzero after concurrent stop exceeds the stdin probe, with preserved cleanup and drained output
