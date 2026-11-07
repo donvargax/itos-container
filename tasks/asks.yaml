@@ -127,3 +127,6 @@ questions:
     item: "slice-21"
     question: "slice-21: is the local red evidence at 4d64985 enough to implement?"
     answer: "Yes. All 45 examples fail at their behaviour assertions against recording fake engines (docs/plans/control-state-red-evidence.md); none is an engine scenario, so no CI red run is needed. Implement."
+  - id: q-32
+    item: "slice-15"
+    question: "slice-15: native evidence for ID-LIFECYCLE-15 at e22aa63?"
