@@ -563,16 +563,9 @@ items:
     title: Run refuses overlapping worker checkouts
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-refuse-overlapping-worker-checkouts.
-      Prevent one worker from replacing another checkout's parent path. Atomically refuse
-      ancestor/descendant overlaps in either launch order, including concurrent launches, while
-      allowing disjoint projects. Keep admission and ownership rules in shared engine packages.
-      Specify black-box scenarios first, with native-engine evidence only in CI. Broken down from
-      null.
   - id: slice-17
     title: Run binds its mount to the validated checkout inode
     phase: 1
@@ -606,8 +599,8 @@ items:
   - id: slice-21
     title: Doctor and approve reject state exposed to another worker
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-16]
     kind: slice
     why: >

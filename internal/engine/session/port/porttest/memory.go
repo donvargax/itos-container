@@ -89,6 +89,12 @@ func (s *Store) OpenCleanup(ctx context.Context, ref string) (port.Intent, port.
 	return s.open(ctx, ref, false)
 }
 func (s *Store) New(ctx context.Context, d approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, d, token, "intent")
+}
+func (s *Store) Prepare(ctx context.Context, d approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, d, token, "reserved")
+}
+func (s *Store) newIntent(ctx context.Context, d approval.Durable, token, stage string) (port.Intent, port.Outcome) {
 	if !port.HexID(token) || !port.HexID(d.Frozen.Project) {
 		return nil, port.Invalid
 	}
@@ -110,6 +116,7 @@ func (s *Store) New(ctx context.Context, d approval.Durable, token string) (port
 		return nil, failure
 	}
 	r := b.Intent(token)
+	r.Stage = stage
 	if s.UnsafeSnapshot {
 		return nil, port.Unsafe
 	}
@@ -173,9 +180,7 @@ func (i *memoryIntent) Save(next port.Record) port.Outcome {
 	if f := i.Validate(); f != "" {
 		return f
 	}
-	expected := i.record
-	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
-	if next != expected || !port.HexID(next.ContainerID) || (next.Stage != "owned" && next.Stage != "absent") || (i.record.Stage == "absent" && next != i.record) || (i.record.ContainerID != "" && next.ContainerID != i.record.ContainerID) {
+	if !i.record.ValidTransition(next) {
 		return port.Invalid
 	}
 	if next == i.record {

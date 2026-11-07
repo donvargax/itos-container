@@ -55,7 +55,10 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	}
 	defer entry.Close()
 	e, failure := sessionEntry(entry)
-	if failure == "" {
+	if failure == "" && uncreated(entry) {
+		failure = entry.Validate()
+		e.Resource = "absent"
+	} else if failure == "" {
 		connection, f := s.Engine.OpenRun(ctx, entry.Intent().Binding())
 		failure = f
 		if failure == "" {
@@ -74,7 +77,7 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 			e.State = "running"
 		}
 		if r.State == "stopped" {
-			if e.Resource == "absent" && entry.Intent().Record().Stage == "absent" {
+			if e.Resource == "absent" && entry.Intent().Record().Completed() {
 				e.Cleanup = "complete"
 			} else {
 				failure = port.Incomplete
@@ -177,10 +180,15 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	// Controller presence is advisory for explicit cleanup. Original authority
 	// is independently revalidated by stopSession before any mutation.
 	e, _ := sessionEntry(entry)
-	connection, failure := s.Engine.OpenRun(ctx, entry.Intent().Binding())
-	if failure == "" {
-		defer connection.Close()
-		failure = stopSession(ctx, entry, connection, signal, exit, remove)
+	if uncreated(entry) {
+		failure = cancelUncreated(entry)
+	} else {
+		var connection port.RunConnection
+		connection, failure = s.Engine.OpenRun(ctx, entry.Intent().Binding())
+		if failure == "" {
+			defer connection.Close()
+			failure = stopSession(ctx, entry, connection, signal, exit, remove)
+		}
 	}
 	if failure == "" {
 		e.State, e.Resource, e.Cleanup = "stopped", "absent", "complete"
@@ -208,6 +216,29 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	}
 	return r
 }
+
+func uncreated(s port.Session) bool {
+	r := s.Intent().Record()
+	return r.ContainerID == "" && (r.Stage == "reserved" || r.Stage == "cancelled")
+}
+
+func cancelUncreated(s port.Session) port.Outcome {
+	if failure := s.Validate(); failure != "" {
+		return failure
+	}
+	r := s.Record()
+	if r.WorkloadExit != nil {
+		return port.Refused
+	}
+	i := s.Intent().Record()
+	i.Stage = "cancelled"
+	if failure := s.Intent().Save(i); failure != "" {
+		return failure
+	}
+	r.State, r.LastProblem = "stopped", nil
+	return s.Save(r)
+}
+
 func stopSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, exit *int, remove bool) port.Outcome {
 	r := s.Record()
 	o, resource, failure := inspectSession(ctx, s, c)

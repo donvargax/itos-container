@@ -98,8 +98,20 @@ func (s Registry) Register(ctx context.Context, frozen approval.Durable, id, tok
 	}
 	r := port.PublicRecord{Schema: 1, ID: id, Project: c.Project, Intent: port.Reference(c.Project, token), State: "preparing"}
 	c.Project = registryKey(c.Root, c.UID)
+	admission, failure := s.reserve(ctx, c, r)
+	if failure != "" {
+		return nil, failure
+	}
+	defer admission.Close()
 	lease, f := s.Storage.Register(ctx, c, id, s.Codec.EncodePublic(r))
 	if f != "" {
+		return nil, storageFailure(f, true)
+	}
+	pending := port.AdmissionRecord{Schema: 1, Root: c.Root, ID: id, Intent: r.Intent, Pending: true}
+	active := pending
+	active.Pending = false
+	if f = admission.Publish(admissionName(c.Project, id, c.UID), s.Codec.EncodeAdmission(pending), s.Codec.EncodeAdmission(active)); f != "" {
+		lease.Close()
 		return nil, storageFailure(f, true)
 	}
 	return lease, ""
@@ -240,7 +252,10 @@ func (s *publicSession) Save(next port.PublicRecord) port.Outcome {
 		return storageFailure(f, true)
 	}
 	s.record, s.data = clonePublic(next), data
-	return s.Validate()
+	if failure := s.Validate(); failure != "" {
+		return failure
+	}
+	return s.completeAdmission()
 }
 func (s *publicSession) Sync() port.Outcome {
 	if s.readOnly {
@@ -252,7 +267,10 @@ func (s *publicSession) Sync() port.Outcome {
 	if f := s.directory.Sync("record.json", s.data); f != "" {
 		return storageFailure(f, true)
 	}
-	return s.Validate()
+	if failure := s.Validate(); failure != "" {
+		return failure
+	}
+	return s.completeAdmission()
 }
 
 // A public session holds its operation lock while these short intent

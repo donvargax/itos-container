@@ -228,11 +228,11 @@ type lifecycleIntentStore struct {
 	stage string
 }
 
-func (s lifecycleIntentStore) New(ctx context.Context, f ap.Durable, token string) (sp.Intent, sp.Outcome) {
+func (s lifecycleIntentStore) Prepare(ctx context.Context, f ap.Durable, token string) (sp.Intent, sp.Outcome) {
 	if s.stage == "intent lock acquisition" {
 		s.l.event(ctx, s.stage, "")
 	}
-	i, failure := s.Store.New(ctx, f, token)
+	i, failure := s.Store.Prepare(ctx, f, token)
 	if s.stage == "intent publication" {
 		s.l.event(ctx, s.stage, "")
 	}

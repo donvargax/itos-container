@@ -200,6 +200,11 @@ func Classify(err error) (int, []cli.Problem) {
 	}
 	var run runFailure
 	if errors.As(err, &run) {
+		if run.outcome == session.CheckoutOverlap {
+			guidance := "Finish the other session, or inspect/stop it from its original checkout."
+			return 1, []cli.Problem{{Rule: "run.checkout-overlap", Exit: 1,
+				Message: "run.checkout-overlap: this checkout overlaps another unfinished session; " + guidance, Fix: guidance}}
+		}
 		code, cause := 75, "temporary"
 		switch run.outcome {
 		case session.Refused, session.Unsafe, session.RegistrationOwnership:

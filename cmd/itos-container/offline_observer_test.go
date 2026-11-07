@@ -70,6 +70,11 @@ func (s offlineStore) New(ctx context.Context, d ap.Durable, token string) (sp.I
 	return s.observed(i, f, "intent")
 }
 
+func (s offlineStore) Prepare(ctx context.Context, d ap.Durable, token string) (sp.Intent, sp.Outcome) {
+	i, f := s.Store.Prepare(ctx, d, token)
+	return s.observed(i, f, "reserved")
+}
+
 func (s offlineStore) OpenCleanup(ctx context.Context, ref string) (sp.Intent, sp.Outcome) {
 	if s.o.exited && s.o.request.CleanupCause == "internal" {
 		// An unclassified failure from a port, not a fabricated public rule/code.
@@ -125,7 +130,12 @@ func (i offlineIntent) Validate() sp.Outcome {
 func (i offlineIntent) Save(r sp.Record) sp.Outcome {
 	f := i.Intent.Save(r)
 	i.o.record = i.Record()
-	i.o.event(offlineEvent{Operation: "save", Failure: string(f)})
+	operation := "save"
+	if r.Stage == "intent" {
+		// Registered runs publish create issuance separately from reservation.
+		operation = "intent"
+	}
+	i.o.event(offlineEvent{Operation: operation, Failure: string(f)})
 	return f
 }
 

@@ -133,5 +133,6 @@ func offlineRegistryFixture(t *testing.T) (*world, string, map[string]any) {
 			t.Fatal(err)
 		}
 	}
+	seedAdmissionRecord(t, w, id, w.session.reference, true)
 	return w, dir, record
 }

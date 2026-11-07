@@ -76,6 +76,10 @@
   scenarios:
     - id: "@ID-LIFECYCLE-11"
       why: repeated signals preserve the observed workload exit and bounded recovery, then explicit stop confirms durable owned cleanup in the guarded CI engine tier
+- file: checkout-overlap.feature
+  scenarios:
+    - id: "@ID-OVERLAP-01"
+      why: nested launches refuse across one or two daemons while disjoint checkout controls remain active
 - file: hardlinks.feature
   scenarios:
     - id: "@ID-HARDLINK-03"

@@ -15,6 +15,8 @@ const launchSuperseded port.Outcome = "launch-superseded"
 
 func registrationFailure(f port.Outcome) port.Outcome {
 	switch f {
+	case port.CheckoutOverlap:
+		return f
 	case port.Refused, port.Unsafe, port.Invalid:
 		return port.RegistrationOwnership
 	case port.IdentityFailed, port.Internal:
@@ -44,6 +46,28 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		result.Outcome = port.RegistrationInternal
 		return result
 	}
+	// Publish no-create evidence before the public registration can be visible.
+	type intended struct {
+		intent  port.Intent
+		failure port.Outcome
+	}
+	made, err := budget.Acquire(startup, "intent lock acquisition and intent publication", func(call context.Context) intended {
+		i, f := s.Store.Prepare(call, frozen, token)
+		return intended{i, f}
+	}, func(r intended) {
+		if r.intent != nil {
+			r.intent.Close()
+		}
+	})
+	i, failure := made.intent, made.failure
+	if err != nil {
+		return startupResult(ctx, startup, err, "intent lock acquisition and intent publication")
+	}
+	if failure != "" {
+		result.Outcome = failure
+		return result
+	}
+	i.Close()
 	type leased struct {
 		lease   port.Lease
 		failure port.Outcome
@@ -65,27 +89,6 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		return result
 	}
 	defer lease.Close()
-	type intended struct {
-		intent  port.Intent
-		failure port.Outcome
-	}
-	made, err := budget.Acquire(startup, "intent lock acquisition and intent publication", func(call context.Context) intended { i, f := s.Store.New(call, frozen, token); return intended{i, f} }, func(r intended) {
-		if r.intent != nil {
-			r.intent.Close()
-		}
-	})
-	i, failure := made.intent, made.failure
-	if err != nil {
-		result = startupResult(ctx, startup, err, "intent lock acquisition and intent publication")
-		result.Reference, result.SessionID = port.Reference(frozen.Frozen.Project, token), id
-		result.Cleanup = port.Incomplete
-		return result
-	}
-	if failure != "" {
-		result.Outcome = failure
-		return result
-	}
-	i.Close()
 	if bound, ok := s.Registry.(port.RunRegistry); ok {
 		s.Registry = bound.ForRun(frozen)
 	}
@@ -305,6 +308,14 @@ func createRegistered(ctx context.Context, entry port.Session, c port.RunConnect
 		return "", failure
 	}
 	r := i.Record()
+	if r.Stage == "reserved" && r.ContainerID == "" {
+		// Once this durable write succeeds a lost create reply is uncertain.
+		// Stop holds the same operation lock and cannot cancel across this edge.
+		r.Stage = "intent"
+		if failure := i.Save(r); failure != "" {
+			return "", failure
+		}
+	}
 	if r.Stage != "intent" || r.ContainerID != "" {
 		return "", port.Refused
 	}

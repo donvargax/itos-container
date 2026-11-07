@@ -47,7 +47,7 @@ func logFeatureSignals(hostOS string) {
 				syscall.SIGSEGV, syscall.SIGTERM,
 				syscall.Signal(16), syscall.Signal(31): // Linux SIGSTKFLT and SIGSYS.
 				os.Exit(128 + int(number))
-			case syscall.Signal(20), syscall.Signal(21), syscall.Signal(22): // Linux job-control signals.
+			case syscall.Signal(20), syscall.Signal(21), syscall.Signal(22): // Linux SIGTSTP, SIGTTIN, SIGTTOU.
 				// Retain job-control semantics after recording the notification.
 				signal.Reset(sig)
 				self, err := os.FindProcess(os.Getpid())
