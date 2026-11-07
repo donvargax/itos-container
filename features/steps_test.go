@@ -160,6 +160,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.offlineIsolationSteps(sc)
 	w.overlapSteps(sc)
 	w.hardlinkSteps(sc)
+	w.runExitSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.

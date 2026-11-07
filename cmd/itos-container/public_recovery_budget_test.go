@@ -111,6 +111,9 @@ func publicRecoveryDelayedStopOrder(t *testing.T, name, order string) {
 		m := publicMemoryFixture(t)
 		m.e.StdinClosed, m.e.WaitUntilCancel = true, true
 		want := 0
+		if name == "unknown" {
+			want = 75
+		}
 		if name == "nonzero" {
 			m.e.WaitFailure, m.e.Exit, want = "", 7, 7
 		}
@@ -218,7 +221,14 @@ func publicRecoveryDelayedStopOrder(t *testing.T, name, order string) {
 				t.Fatalf("observation order = %v, want %v", observed, wanted)
 			}
 		}
-		if code != want || (want == 75 && !strings.Contains(errout.String(), "run.execution-unavailable")) || (want != 75 && errout.Len() != 0) {
+		if name == "unknown" {
+			if !strings.Contains(errout.String(), "run.workload-exit-unknown") || strings.Contains(errout.String(), "run.execution-unavailable") || strings.Contains(errout.String(), "itos container stop") {
+				t.Fatalf("run lost the unknown workload diagnostic: %s", errout.String())
+			}
+		} else if (want == 75 && !strings.Contains(errout.String(), "run.execution-unavailable")) || (want != 75 && errout.Len() != 0) {
+			t.Fatalf("run lost the competing stop diagnostic: %s", errout.String())
+		}
+		if code != want {
 			t.Fatalf("run lost the competing stop outcome: exit %d, want %d, %s", code, want, errout.String())
 		}
 		m.files.AfterRead = nil
@@ -248,7 +258,7 @@ func publicRecoveryDelayedStopOrder(t *testing.T, name, order string) {
 		if actual := recoveryReviewMutations(m.e); mutations != actual {
 			t.Fatalf("run repeated engine mutation: completed %d, final %d", mutations, actual)
 		}
-		if want != 75 && !slices.Contains(m.e.Events, "drain") {
+		if (want != 75 || name == "unknown") && !slices.Contains(m.e.Events, "drain") {
 			t.Fatal("run failed to drain the remaining output")
 		}
 	})

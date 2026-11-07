@@ -14,6 +14,8 @@ import (
 	"github.com/donvargax/itos-container/internal/slices/run/domain"
 )
 
+var errWorkloadExitUnknown = errors.New("workload exit is unknown; cleanup is complete")
+
 // CLI lets Kong retain the first separator and every subsequent literal word.
 type CLI struct {
 	Context       context.Context        `kong:"-"`
@@ -76,6 +78,9 @@ func (c CLI) Run(ui *cli.UI) int {
 	}
 	if result.Exited && result.Exit != 0 {
 		return result.Exit
+	}
+	if code == 0 && !result.Exited {
+		return ui.Fail(errWorkloadExitUnknown, false)
 	}
 	return code
 }
@@ -165,6 +170,11 @@ func Classify(err error) (int, []cli.Problem) {
 		return code, []cli.Problem{{Rule: rule, Exit: code, Message: rule + " " + strconv.QuoteToASCII(snapshot.Reference) + ": " + message + "; " + fix, Fix: fix}}
 	}
 	switch {
+	case errors.Is(err, errWorkloadExitUnknown):
+		return 75, []cli.Problem{{
+			Rule: "run.workload-exit-unknown", Exit: 75,
+			Message: "run.workload-exit-unknown: " + errWorkloadExitUnknown.Error(),
+		}}
 	case errors.Is(err, domain.ErrJSONUnsupported):
 		return cli.CodeUsage, []cli.Problem{{
 			Rule: "run.json-unsupported", Exit: cli.CodeUsage,

@@ -461,12 +461,18 @@ never span engine calls. A controller-probe error leaves presence unknown and
 does not veto explicit stop; ownership validation remains independent. Expiry
 during stop inspection or either termination wait remains temporary and cannot
 authorize a progress write beyond the total budget. When a concurrent stop completed
-the same worker, run can reconcile completion without an observed exit, preserving null and draining
-remaining output without reporting a spurious wait failure. If the initial stdin
-probe times out on that stop's operation lock, run retries the completion check
+the same worker, run reconciles cleanup independently of the workload result,
+preserving null and draining remaining output. Without an observed exit or another
+failure, run returns wrapper exit 75 and `run.workload-exit-unknown`, explaining
+that the workload exit is unknown and cleanup is complete, with no cleanup retry.
+Stop and status still succeed; no synthetic exit or last problem is persisted.
+If the initial stdin probe times out on that stop's operation lock, run retries
+the completion check
 within its existing teardown total. Incomplete or conflicting authority and
 forwarding errors still fail.
 See [public session recovery](../decisions/0010-public-session-recovery.md).
+[Unknown workload exit](../decisions/0015-unknown-workload-exit.md) corrects the
+earlier concurrent-completion success claim; known nonzero exits retain precedence.
 
 Fresh recovery discovers registrations through the protected
 `sessions/<lookup>/<id>` index, where lookup hashes the host UID and canonical
