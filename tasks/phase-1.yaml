@@ -2178,3 +2178,16 @@
   why: >
     The person asked on 2026-11-07 to stop Bugbot reviews: push.pr.reviewers drops cursor[bot], so
     itos review request and push --ready ask and wait for Codex alone.
+- id: T-30
+  type: test
+  title: TestPublicRecoveryBudgetRegressions/changed_record passes reliably on Linux CI
+  why: >
+    main's CI went red at 78f26bb (run 42313659921, Tests on ubuntu-latest) on a docs-only push:
+    cmd/itos-container/public_recovery_budget_test.go:195 'run repeated cleanup or failed to drain
+    the remaining output' in the changed_record case, while the run before (3931b4c) passed;
+    slice-12's attempt 5 also saw it fail in CI and could not reproduce it locally. A unit test that
+    flakes turns main red at random, and with it the release T-25 needs. Find the race (likely drain
+    versus cleanup ordering under load) and fix it, never by retrying the test or widening its
+    timeout.
+  done_when:
+    - run: rtk proxy go test -race ./cmd/itos-container -run '^TestPublicRecoveryBudgetRegressions$' -count=1
