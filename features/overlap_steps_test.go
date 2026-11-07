@@ -15,6 +15,7 @@ import (
 
 func (w *world) overlapSteps(sc *godog.ScenarioContext) {
 	w.overlapProgressSteps(sc)
+	w.overlapAbandonmentSteps(sc)
 	sc.Step(`^an overlap fixture with descendant "([^"]*)" and "([^"]*)" local engine fixtures$`, func(child, engines string) error { return w.overlapSetup(child, engines, false) })
 	sc.Step(`^an overlap fixture with a pre-create barrier for "([^"]*)" after durable registration and intent publication$`, func(first string) error {
 		if err := w.overlapSetup("child", "shared daemon", false); err != nil {

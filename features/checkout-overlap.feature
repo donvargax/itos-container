@@ -4,6 +4,37 @@ Feature: Run refuses overlapping worker checkouts
   Admit at most one side of a strict ancestor/descendant pair until its owned
   resources are cleaned up, while independent projects can continue running.
 
+  # Review regression: a registration that never became public cannot send a
+  # create. The common admission lock fences that interrupted publisher. A
+  # visible registration must instead remain recoverable with product stop.
+  @slice-16 @ID-OVERLAP-11 @bug-16 @linux @wip
+  Scenario Outline: Interrupted registration does not strand a checkout reservation
+    Given an overlap fixture interrupted by "<fault>" before any worker create
+    When the ancestor registration fails or its controller dies and any visible session is stopped before a descendant run
+    Then the descendant workload starts and the interrupted ancestor has sent no engine mutation
+
+    Examples:
+      | fault                           |
+      | record file fsync               |
+      | session directory fsync         |
+      | reservation before registration |
+
+  # Pre-create evidence must be durable before registration and consumed before
+  # sending create. Stop serializes with launch and records cancellation without
+  # inventing a container ID or workload exit. A lost create reply remains unknown.
+  @slice-16 @ID-OVERLAP-12 @bug-16 @linux @wip
+  Scenario Outline: Stop cancels a registered session that cannot yet have created a worker
+    Given an overlap fixture with a pre-create controller that will be "<controller>"
+    When the ancestor pauses before create and product stop completes it before a descendant run
+    Then the descendant workload starts after durable pre-create cancellation with no invented workload exit
+    When the original pre-create controller is released if still present
+    Then the cancelled ancestor sends no engine mutation while the descendant remains active
+
+    Examples:
+      | controller |
+      | killed     |
+      | resumed    |
+
   # Authorities: docs/charter.md, docs/architecture.md (Slices), arc42 Foreground
   # run and Recovery, offline-run-lifecycle.md (AC-05/06/23/28), and slice-16's
   # settled requirement for atomic refusal in either order, including concurrency.
