@@ -67,10 +67,13 @@ func (t *controlTransaction) Close() {
 	}
 }
 func (t *controlTransaction) Unchanged() bool {
+	return t.pathsUnchanged() && t.lockUnchanged()
+}
+
+// A writer may adopt a peer-created lock after unlocked inspection, but every
+// directory identity pinned by that inspection must still be unchanged.
+func (t *controlTransaction) pathsUnchanged() bool {
 	if !t.home.unchanged() || !accountDirectory(t.home) {
-		return false
-	}
-	if !t.lockUnchanged() {
 		return false
 	}
 	if t.catalog != nil && !t.catalog.unchanged() {
@@ -147,7 +150,7 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 			// No publication/registration can precede the private lock. Check
 			// legacy evidence before mkdir, then re-read after racing creators
 			// converge on the same validated inode.
-			if !t.Unchanged() {
+			if !t.pathsUnchanged() {
 				return nil, "state.path"
 			}
 			if failure = t.openCatalog(true); failure != "" {

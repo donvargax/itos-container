@@ -28,6 +28,10 @@ without following links, validating an owned 0600 regular single-link inode.
 Racing same-user creators converge on that inode. Never replace, unlink or repair
 it on retry. Take its flock before catalog and selected-state locks, revalidate
 the directory and file identities after acquisition and through publication.
+A writer whose initial unlocked inspection finishes after a peer creates the
+lock retains its pinned directory checks, validates and acquires that lock, then
+repeats discovery under exclusion. Only read-only transactions require a lock
+observed absent to remain absent through their return.
 
 Every lock wait is bounded by the 10-second call budget. Contention returns typed,
 retryable approval.state.busy (75); run retains run.call-timeout (75). Neither a

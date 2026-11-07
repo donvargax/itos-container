@@ -198,3 +198,22 @@ of CONTROL-01/10, OVERLAP-01, APPROVAL-01 and MANIFEST-01 passes under `-race` i
 11.687 seconds. All state is disposable and engines are recording HTTP fixtures.
 No gate or scenario time limit was raised. Native-engine evidence and fresh CI
 at the committed head remain with the coordinator.
+
+## Peer-created private lock after unlocked inspection
+
+Review thread PRRT_kwDOVkB0ws6050sF identified a writer rejecting a peer-created
+control.lock as path substitution. Test commit `03ae9e4` adds pending CONTROL-14:
+a consenting writer pauses after real unlocked reservation discovery, then an
+independent process holds a newly created safe private lock. With `@wip` removed,
+both setup/action steps pass and the behavior assertion fails because approval
+returns approval.state.path (1) without attempting that lock.
+
+Writers now revalidate their pinned directories before opening and acquiring the
+peer's validated lock, then repeat inspection under exclusion. Read-only callers
+still require an absent lock to remain absent. CONTROL-14 passes, proving actual
+flock contention, publication after release, generation 1 and the unchanged lock
+inode. The focused disk control tests pass, including new cases for peer
+publication with absent or existing coordination directories, renewed reservation
+checks, unsafe peer locks, replaced directories and read-only refusal. Before the
+fix, the two safe writer cases and renewed reservation/unsafe-lock classifications
+failed with state.path. No real approval state or container daemon is used.

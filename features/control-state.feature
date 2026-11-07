@@ -51,6 +51,8 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # Create control.lock exclusively inside it, accepting EEXIST only after opening
   # without following links and validating an owned 0600 regular single-link inode.
   # Same-user racing creators converge on that private inode; unsafe entries refuse.
+  # If a peer creates the lock during unlocked writer inspection, retain pinned
+  # directory checks, validate/acquire that inode and repeat inspection under it.
   # Take that file's shared/exclusive flock before catalog or selected-root locks.
   # Every wait has the 10 s call deadline, including approval reads and commits;
   # timeout is retryable approval.state.busy (75), or run.call-timeout (75) under
@@ -409,7 +411,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
     Then both report matching approval with exit 0 while the completed self-binding and approval keep their bytes identities and generation
     And the fresh doctor writes nothing and the matching approve uses the same private coordination lock without creating a duplicate location binding
 
-  @wip @slice-21 @ID-CONTROL-14 @local-engine-fixture
+  @slice-21 @ID-CONTROL-14 @local-engine-fixture
   Scenario: A first writer joins a private lock created by a peer during unlocked inspection
     Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
     When P consents and a peer creates and holds the private lock after P completes unlocked bootstrap inspection
