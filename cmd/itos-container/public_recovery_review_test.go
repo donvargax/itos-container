@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -190,8 +191,8 @@ func publicRecoveryStoppedWait(t *testing.T) {
 		approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: m.c, Record: ap.Record{Candidate: m.c, Generation: "1"}, Status: "matching"}}
 		var out, errout bytes.Buffer
 		code := (runcommand.CLI{Approval: approval, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "probe"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
-		if code != 0 || errout.Len() != 0 {
-			t.Fatalf("run misreported completed cleanup as a wait failure: exit %d, %s", code, errout.String())
+		if code != 75 || !strings.Contains(errout.String(), "run.workload-exit-unknown") || strings.Contains(errout.String(), "run.execution-unavailable") || strings.Contains(errout.String(), "itos container stop") {
+			t.Fatalf("run lost the unknown workload result after completed cleanup: exit %d, %s", code, errout.String())
 		}
 		status := publicMemoryCommand(t, m.service(), "status", "", 0)
 		if id == "" || len(status.Sessions) != 1 || status.Sessions[0].State != "stopped" || status.Sessions[0].Cleanup != "complete" || status.Sessions[0].WorkloadExit != nil || status.Sessions[0].Retry != nil || len(m.e.Resources) != 0 {

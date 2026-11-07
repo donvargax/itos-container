@@ -163,6 +163,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.lifecycleLocalSteps(sc)
 	w.overlapSteps(sc)
 	w.hardlinkSteps(sc)
+	w.runExitSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.

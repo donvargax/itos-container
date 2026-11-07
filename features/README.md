@@ -425,7 +425,7 @@ abandoned writers, matching main's immediate exit. Checkpoints a020fe5/d606209
 supplied eight assertion-level failures; the two blocked-stderr rows retained
 existing slice-12 behavior. All ten pass after reserving reporting time inside
 the original teardown total and keeping timeout separate from engine/wait loss.
-Decision 0015 records the evidence; no native-engine or mutation run is implied.
+Decision 0018 records the evidence; no native-engine or mutation run is implied.
 
 LIFECYCLE-20 covers launch operations that ignore cancellation, including a
 socket identity syscall. Step checkpoint `e932db6` supplied assertion-level red

@@ -237,6 +237,15 @@ can settle reconciliation with an unknown exit. Remaining output is drained, kno
 nonzero exits retain their precedence, and null stays null. Contradictory intent
 progress or a different worker ID cannot settle the wait.
 
+Slice-24's [unknown workload exit decision](0015-unknown-workload-exit.md)
+supersedes this section's original successful-run interpretation of concurrent
+completion, including RECOVERY-32 and RECOVERY-35. Successful cleanup with an
+unknown workload exit returns wrapper 75 and `run.workload-exit-unknown` unless
+another failure already determines the result. It does not report a wait or
+cleanup failure, suggest a cleanup retry, or write a synthetic exit/last problem.
+Stop and status still succeed. The red/green account below records slice-11's
+historical correction, not evidence for that superseded exit-zero expectation.
+
 RECOVERY-30/31/32 were committed pending in `a3d3136`. Running them live before
 the fixes failed all three at their Then assertions, with all six setup/action
 steps passing. The observed failures were respectively recovery.not-owned/exit 1

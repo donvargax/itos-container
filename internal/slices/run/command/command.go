@@ -16,6 +16,8 @@ import (
 	"github.com/donvargax/itos-container/internal/slices/run/domain"
 )
 
+var errWorkloadExitUnknown = errors.New("workload exit is unknown; cleanup is complete")
+
 // CLI lets Kong retain the first separator and every subsequent literal word.
 type CLI struct {
 	Context       context.Context        `kong:"-"`
@@ -111,6 +113,10 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 	if result.Exited && result.Exit != 0 {
 		code = result.Exit
 	}
+	unknownExit := code == 0 && !result.Exited
+	if unknownExit {
+		code, _ = Classify(errWorkloadExitUnknown)
+	}
 	// Diagnostic output is a finite external operation within teardown. Keep
 	// its ten-second call limit even when cleanup leaves more time available.
 	// An abandoned caller-owned writer is neither closed nor joined.
@@ -140,6 +146,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		}
 		if result.Reference != "" && result.Cleanup != session.Complete {
 			ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
+		}
+		if unknownExit {
+			ui.Fail(errWorkloadExitUnknown, false)
 		}
 		return struct{}{}
 	})
@@ -275,6 +284,11 @@ func Classify(err error) (int, []cli.Problem) {
 		return code, []cli.Problem{{Rule: rule, Exit: code, Message: rule + " " + strconv.QuoteToASCII(snapshot.Reference) + ": " + message + "; " + fix, Fix: fix}}
 	}
 	switch {
+	case errors.Is(err, errWorkloadExitUnknown):
+		return 75, []cli.Problem{{
+			Rule: "run.workload-exit-unknown", Exit: 75,
+			Message: "run.workload-exit-unknown: " + errWorkloadExitUnknown.Error(),
+		}}
 	case errors.Is(err, domain.ErrJSONUnsupported):
 		return cli.CodeUsage, []cli.Problem{{
 			Rule: "run.json-unsupported", Exit: cli.CodeUsage,

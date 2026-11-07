@@ -1,6 +1,6 @@
 # Reserve teardown reporting time and retain the original cause
 
-This refines arc42's “Bounded operations” and decisions 0013/0014. Registered
+This refines arc42's “Bounded operations” and decisions 0016/0017. Registered
 foreground teardown previously let cleanup consume the complete 30-second total,
 then dispatched diagnostics against an already expired deadline. The command
 could return before writing even to writable stderr; main immediately exits.

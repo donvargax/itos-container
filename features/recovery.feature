@@ -171,9 +171,10 @@ Feature: Inspect and stop owned offline sessions
   # cleanup is terminal, never followed by a late start/recreate. Persist stopping
   # before destructive operations. Preserve original ownership evidence on errors.
   # If stdin closes while run waits and stop has already completed this exact
-  # worker, run adopts completion without a wait failure, drains remaining output
-  # and preserves a null workload exit. A successful reconciliation is not evidence
-  # of exit zero; a recorded nonzero result retains run's exit precedence.
+  # worker, run adopts cleanup completion, drains remaining output and preserves
+  # a null workload exit. Slice-24 requires wrapper exit 75 and
+  # run.workload-exit-unknown for that unknown result; completed cleanup is not
+  # evidence of exit zero. A recorded nonzero result retains run's exit precedence.
   # If stop still holds the lock when stdin reconciliation's 10 s expires, retry
   # that observation within run's existing 30 s teardown total. Only completed
   # cleanup of the same full worker ID can clear that provisional wait failure;
@@ -704,7 +705,7 @@ Feature: Inspect and stop owned offline sessions
   Scenario: Run reconciles concurrent stop completion without inventing a workload exit
     Given a recovery command fixture for "completed stop during stdin closure"
     When the recovery command fixture exercises its configured interruption
-    Then run finishes without a wait failure and status retains stopped cleanup with unknown workload exit and no repeated mutation
+    Then run reports wrapper exit 75 and run.workload-exit-unknown while status retains stopped cleanup with unknown workload exit and no repeated mutation
 
   # Both waits can consume the stop total after lock contention. The controlled
   # clock preserves the real command/record adapters and stateful port contracts.
@@ -725,7 +726,7 @@ Feature: Inspect and stop owned offline sessions
   Scenario: Run reconciles a concurrent stop that outlasts its initial stdin probe
     Given a recovery command fixture for "pending stop during stdin closure"
     When the recovery command fixture exercises its configured interruption
-    Then run finishes without a wait failure and status retains stopped cleanup with unknown workload exit and no repeated mutation
+    Then run reports wrapper exit 75 and run.workload-exit-unknown while status retains stopped cleanup with unknown workload exit and no repeated mutation
 
   # Launch from outside the chmodded checkout with its original effective root.
   # Only the disposable fixture restores permissions after both commands return.

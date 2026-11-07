@@ -61,9 +61,13 @@ func TestUnreadDiagnosticUsesRemainingTeardown(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		elapsed, wait time.Duration
+		result        session.RunResult
+		code          int
 	}{
-		{"call limit", 11 * time.Second, 10 * time.Second},
-		{"remaining teardown", 25 * time.Second, 5 * time.Second},
+		{"call limit", 11 * time.Second, 10 * time.Second, session.RunResult{Signal: "SIGTERM", Exited: true, Exit: 17}, 17},
+		{"remaining teardown", 25 * time.Second, 5 * time.Second, session.RunResult{Signal: "SIGTERM", Exited: true, Exit: 17}, 17},
+		{"unknown exit call limit", 11 * time.Second, 10 * time.Second, session.RunResult{Started: true, Result: session.Result{Cleanup: session.Complete}}, 75},
+		{"unknown exit remaining teardown", 25 * time.Second, 5 * time.Second, session.RunResult{Started: true, Result: session.Result{Cleanup: session.Complete}}, 75},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -71,11 +75,13 @@ func TestUnreadDiagnosticUsesRemainingTeardown(t *testing.T) {
 				defer cancel()
 				time.Sleep(tc.elapsed)
 				until, _ := deadline.Deadline()
+				result := tc.result
+				result.Deadline = until
 				release := make(chan struct{})
 				entered := make(chan struct{})
 				done := make(chan int, 1)
 				go func() {
-					done <- reportRun(&cli.UI{Stderr: heldDiagnostic{entered, release}, Classify: Classify}, session.RunResult{Signal: "SIGTERM", Exited: true, Exit: 17, Deadline: until})
+					done <- reportRun(&cli.UI{Stderr: heldDiagnostic{entered, release}, Classify: Classify}, result)
 				}()
 				<-entered
 				start := time.Now()
@@ -83,7 +89,7 @@ func TestUnreadDiagnosticUsesRemainingTeardown(t *testing.T) {
 				elapsed := time.Since(start)
 				close(release)
 				synctest.Wait()
-				if code != 17 || elapsed != tc.wait {
+				if code != tc.code || elapsed != tc.wait {
 					t.Fatal("diagnostic delivery exceeded its call or teardown limit", code, elapsed)
 				}
 			})
