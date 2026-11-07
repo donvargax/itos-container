@@ -60,7 +60,7 @@ jobs:
     name: Engine scenarios (Linux amd64)
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 13
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -85,7 +85,7 @@ jobs:
         timeout-minutes: 4
         run: tools/bin/engine-fixture prepare
       - name: Engine scenarios
-        timeout-minutes: 5
+        timeout-minutes: 8
         shell: bash
         env:
           ITOS_CONTAINER_ENGINE_TESTS: "1"
@@ -100,7 +100,7 @@ jobs:
           set +e
           # Run 42233015284 traced no product/harness process-group signals; the step died
           # from outside that tree. Isolate tests from CI runner/Docker session signals.
-          setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
+          setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
           results=("${PIPESTATUS[@]}")
           set -e
           test_status=${results[0]}

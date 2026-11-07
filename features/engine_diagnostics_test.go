@@ -122,7 +122,7 @@ cp "$RUNNER_TEMP/program" "$4"
 			program := `#!/bin/bash
 set -euo pipefail
 [[ "$PWD" = "$RUNNER_TEMP/features" ]]
-[[ "$*" = '-test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run ^TestFeatures$' ]]
+[[ "$*" = '-test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run ^TestFeatures$' ]]
 if [[ $(ps -o sid= -p "$$") -ne $$ ]]; then
   printf 'feature test did not get its own session\n' >&2
   exit 32
