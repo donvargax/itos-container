@@ -13,7 +13,12 @@ import (
 func (w *world) checkoutBudgetSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the checkout enumeration fixture exceeds the "([^"]*)" budget$`, w.checkoutOverBudget)
 	sc.Step(`^"([^"]*)" runs and the checkout exceeds the depth budget before its image response$`, w.checkoutBudgetRace)
-	sc.Step(`^the checkout budget action reached the image barrier$`, w.hardlinkReached)
+	sc.Step(`^the checkout budget action reached the image barrier$`, func() error {
+		if !w.hardlinks.reached {
+			return fmt.Errorf("checkout budget action did not reach the image barrier")
+		}
+		return nil
+	})
 }
 
 func (w *world) checkoutOverBudget(kind string) error {

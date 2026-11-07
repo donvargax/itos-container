@@ -200,7 +200,11 @@ doctor and approval share those rule/exit mappings without calling another slice
 The checkout port recursively requires one filesystem link per regular file,
 including Git, hidden, ignored and untracked entries. Its disk adapter enumerates
 pinned directories, reads link metadata without file contents or symlink traversal,
-and refuses unavailable observations. Approval does not cache this layout property;
+and refuses unavailable observations. Each scan, including revalidation, reads
+at most 128 entries per batch and shares a 100,000-entry limit and 10-second
+monotonic deadline across descendants through directory depth 64 (root depth 0).
+Exhaustion refuses safety; time checks between synchronous filesystem calls do
+not preempt a blocked kernel call. Approval does not cache this layout property;
 the [shared-inode decision](../decisions/0013-refuse-shared-checkout-inodes.md)
 extends admission and revalidation without adding link counts to the fingerprint.
 Only cmd binds canonical encoding, effective identity, protected disk storage and
@@ -307,7 +311,8 @@ Ordinary doctor and approve execute no checkout code, install no hooks, log in
 to no account and pull/build/start no images or sessions. Approval cannot launch work.
 Ordinary inspection refuses multiply linked regular files with
 `doctor.checkout.hardlink` (exit 1, checkout root subject); an unreadable subtree
-uses `doctor.checkout.unavailable` (exit 3). File-only modes make no layout claim.
+or exhausted enumeration budget uses `doctor.checkout.unavailable` (exit 3).
+File-only modes make no layout claim.
 Revalidation after engine inspection and consent detects a newly shared inode;
 late launch validation refuses start while cleanup retains protected ownership.
 Worker-created hard links within the sole checkout mount do not block recovery.

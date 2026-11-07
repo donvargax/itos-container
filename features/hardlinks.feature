@@ -339,7 +339,7 @@ Feature: Refuse checkout files that share writable host inodes
   # positive control rules out rejecting all checkouts or a nonworking probe.
   # Preserve adjacent doctor/approval/run and foreground recovery scenarios.
 
-  @wip @slice-20 @ID-HARDLINK-10 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-10 @linux @local-engine-fixture
   Scenario Outline: Checkout enumeration refuses excessive size or depth before side effects
     Given an approval checkout and isolated host state
     And a local owned foreground Engine API fixture
@@ -359,7 +359,7 @@ Feature: Refuse checkout files that share writable host inodes
       | approve | depth   |
       | run     | depth   |
 
-  @wip @slice-20 @ID-HARDLINK-11 @linux @local-engine-fixture
+  @slice-20 @ID-HARDLINK-11 @linux @local-engine-fixture
   Scenario Outline: Checkout revalidation has the same enumeration budgets
     Given an approval checkout and isolated host state
     And a local owned foreground Engine API fixture

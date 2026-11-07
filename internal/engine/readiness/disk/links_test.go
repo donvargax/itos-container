@@ -120,7 +120,7 @@ func TestIndependenceWalkRefusesMissingAndReplacedDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f := independentDirectory(root, "missing", before); f != port.CheckoutUnavailable {
+	if f := newFileScan().inspectDirectory(root, "missing", before, 1, (*os.Root).OpenRoot); f != port.CheckoutUnavailable {
 		t.Fatal(f)
 	}
 	if err := os.Rename(filepath.Join(path, ".git"), filepath.Join(path, ".git-old")); err != nil {
@@ -129,7 +129,7 @@ func TestIndependenceWalkRefusesMissingAndReplacedDirectories(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(path, ".git"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if f := independentDirectory(root, ".git", before); f != port.CheckoutChanged {
+	if f := newFileScan().inspectDirectory(root, ".git", before, 1, (*os.Root).OpenRoot); f != port.CheckoutChanged {
 		t.Fatal(f)
 	}
 	if err := root.Close(); err != nil {
@@ -176,7 +176,7 @@ func TestIndependenceUnavailableObservations(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = root.Close() }()
-	if f := inspectFiles(root, func(r *os.Root, name string) (*os.File, error) {
+	if f := newFileScan().inspectFiles(root, 0, func(r *os.Root, name string) (*os.File, error) {
 		f, err := r.Open(name)
 		if err == nil {
 			err = f.Close()
@@ -189,14 +189,14 @@ func TestIndependenceUnavailableObservations(t *testing.T) {
 	// Lstat fails; no synthetic metadata substitutes for the filesystem.
 	vanished := t.TempDir()
 	mustWrite(t, filepath.Join(vanished, "vanished-entry"))
-	if f := inspectFiles(root, func(*os.Root, string) (*os.File, error) { return os.Open(vanished) }); f != port.CheckoutUnavailable {
+	if f := newFileScan().inspectFiles(root, 0, func(*os.Root, string) (*os.File, error) { return os.Open(vanished) }); f != port.CheckoutUnavailable {
 		t.Fatal("missing file admitted", f)
 	}
 	before, err := root.Lstat(".git")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f := inspectDirectory(root, ".git", before, func(r *os.Root, name string) (*os.Root, error) {
+	if f := newFileScan().inspectDirectory(root, ".git", before, 1, func(r *os.Root, name string) (*os.Root, error) {
 		child, err := r.OpenRoot(name)
 		if err == nil {
 			err = child.Close()
