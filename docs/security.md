@@ -27,10 +27,12 @@ Host sockets created or swapped into the checkout during a run remain reachable.
 A host service listening there can therefore give the worker access to host
 actions or networking even though the worker has no external network interface.
 
-The person's q-30 decision scopes slice-19 to refusing sockets found at startup,
-before creating a worker, including sockets in nested directories and `.git`.
-That refusal is specified but awaits a fresh CI red run and implementation.
-It will not close the race after inspection or provide continuous enforcement.
+Following the person's q-30 decision, run scans the complete pinned checkout
+before creating a worker, including nested directories and `.git`, without
+following symlinks. A live or stale Unix socket causes `run.isolation-unverified`
+(exit 1); an incomplete scan also prevents creation. The scan changes no files
+or sockets. Its CI red was accepted in q-34; runtime green remains required.
+It does not close the race after inspection or provide continuous enforcement.
 Do not treat a socket-free startup check as proof of host IPC isolation.
 
 Continuous enforcement is deferred to milestone 2 under

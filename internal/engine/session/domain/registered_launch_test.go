@@ -124,7 +124,9 @@ func TestRegisteredLaunchRefusesBeforeStartAndReleasesAuthority(t *testing.T) {
 		connected, pinned, owned bool
 	}{
 		{"session unavailable", port.Incomplete, nil, "preparing", false, false, false},
-		{"workspace refused", port.Refused, nil, "preparing", false, false, false},
+		{"workspace refused", port.Refused, nil, "preparing", false, true, false},
+		{"checkout socket", port.IsolationUnverified, nil, "preparing", false, true, false},
+		{"checkout scan unavailable", port.IsolationInspection, nil, "preparing", false, true, false},
 		{"daemon unavailable", port.Incomplete, nil, "preparing", false, true, false},
 		{"create refused", port.Refused, []string{"open", "create"}, "preparing", true, true, false},
 		{"stop won before start", launchSuperseded, []string{"open", "create"}, "stopping", true, true, true},
@@ -139,6 +141,8 @@ func TestRegisteredLaunchRefusesBeforeStartAndReleasesAuthority(t *testing.T) {
 				registry.Failure = port.Incomplete
 			case "workspace refused":
 				workspace.Failure = port.Refused
+			case "checkout socket", "checkout scan unavailable":
+				workspace.Failure = tc.want
 			case "daemon unavailable":
 				engine.Unavailable = true
 			case "create refused":

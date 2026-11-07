@@ -23,12 +23,12 @@ Feature: Checkout Unix sockets have an explicit milestone boundary
   # help that sockets created or swapped in after inspection remain reachable.
   # No polling, kernel bootstrap or alternate runtime is authorized this slice.
   #
-  # Fresh red handoff: prior connectivity reds were accepted for 01/03 in run
+  # Accepted evidence: prior connectivity reds were accepted for 01/03 in run
   # 42312676619 at 1662753 and for 02 in run 42323471709 at 69b02a8. They prove
-  # the gap, but q-30 requires ONE fresh CI red run of reworded ID-SOCKETS-01
-  # before implementing startup refusal. Keep @wip @engine and use README's
-  # guarded red_scenarios route for @ID-SOCKETS-01 alone (all outline rows).
-  # Current product is expected to create/run the worker instead of refusing.
+  # the gap. Coordinator q-34 accepted the fresh reworded ID-SOCKETS-01 red
+  # in run 42391893492 at f33853b on 2026-11-07 ~16:45 UTC: all 12 rows failed
+  # at Then, "socket checkout reached worker creation: exit=0 create requests=1".
+  # Implementation now requires ordinary green CI with no red selector.
   # A fixture error or unrelated startup refusal is not attributable red. Report
   # controller stderr and recorder/engine diagnostics at the Then assertion.
   #
@@ -41,7 +41,7 @@ Feature: Checkout Unix sockets have an explicit milestone boundary
   # Then requires the typed refusal and both zero create requests (including
   # failed requests) and zero recorded full worker IDs. Cleanup is bounded and
   # identity checked after all observations, never evidence of product refusal.
-  @wip @slice-19 @ID-SOCKETS-01 @engine
+  @slice-19 @ID-SOCKETS-01 @engine
   Scenario Outline: Run refuses a checkout containing a Unix socket before creating a worker
     Given a CI socket checkout with a live "<operation>" host socket at "<path>"
     When the product attempts an approved run of the socket checkout

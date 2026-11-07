@@ -36,9 +36,13 @@ func (CLI) Help() string {
 		"    Arguments after -- belong only to the workload.\n" +
 		"    Run the literal command in one approved offline worker; streams remain separate.\n" +
 		"    The worker uses the frozen workspace, host UID:GID and temporary HOME/TMPDIR.\n" +
+		"    A Unix socket anywhere in the checkout, including .git, refuses startup before worker creation.\n" +
+		"    Host sockets created or swapped into the checkout after inspection remain reachable during a run.\n" +
+		"    Such sockets can expose host actions or networking despite the offline network namespace.\n" +
 		"    Exit codes:\n" +
 		"      2  missing command/separator or unsupported JSON request\n" +
 		"      1  approval missing, changed, invalid or superseded; use itos container approve\n" +
+		"      1  isolation unverified, including a checkout Unix socket\n" +
 		"      3  required local environment unavailable\n" +
 		"      75 temporary controller or cleanup failure\n" +
 		"    An observed nonzero workload exit wins over a separate cleanup failure.\n"

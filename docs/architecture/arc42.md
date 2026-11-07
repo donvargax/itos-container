@@ -60,8 +60,9 @@ The person's q-30 decision accepts a first-milestone limit: host Unix sockets
 created or swapped into the checkout after startup inspection remain reachable,
 including during the run. Slice-19 requires only refusal of sockets found before
 create, at any depth including `.git`, without following symlinks outside the
-checkout. This check is not implemented yet and supplies no continuous IPC
-boundary. The [scope decision](../decisions/0019-checkout-socket-milestone-limit.md)
+checkout. The check is implemented, with runtime green evidence still required,
+and supplies no continuous IPC boundary. The
+[scope decision](../decisions/0019-checkout-socket-milestone-limit.md)
 overrides the isolation target here; kernel/runtime enforcement is deferred to
 milestone 2 in [the research handoff](../plans/checkout-socket-enforcement.md).
 
@@ -370,7 +371,10 @@ must state this in help and security guidance; revisit before egress and credent
    `.git`, without following symlinks outside the checkout, with typed isolation
    refusal and no created worker. This is a startup check, not continuous
    enforcement; sockets created or swapped in after inspection remain reachable
-   (q-30). The check awaits fresh ID-SOCKETS-01 red evidence and implementation.
+   (q-30). The session workspace port implements this check during pinning,
+   before the engine create call. Its disk adapter walks the pinned root with
+   standard-library traversal; scan failures release the pin and prevent create.
+   Q-34 accepted all 12 ID-SOCKETS-01 red rows; runtime green remains required.
    Slice-16 atomically reserves the validated
    canonical checkout under one protected control-root lock before registration or
    create. Strict ancestor/descendant roots conflict across projects and daemons;

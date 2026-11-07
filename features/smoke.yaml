@@ -88,3 +88,7 @@
   scenarios:
     - id: "@ID-RUNEXIT-02"
       why: unknown workload exit remains nonzero after concurrent stop exceeds the stdin probe, with preserved cleanup and drained output
+- file: sockets.feature
+  scenarios:
+    - id: "@ID-SOCKETS-01"
+      why: checkout Unix sockets cause typed refusal before any worker create while preserving host listeners in the guarded CI engine tier

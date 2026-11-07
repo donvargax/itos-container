@@ -56,9 +56,9 @@ created or swapped into the writable checkout during a run remain reachable
 from the worker. Such a listener can expose host actions or networking despite
 the worker's offline network namespace. Slice-19 is limited to refusing sockets
 found before worker creation, at any depth including `.git`, without following
-symlinks outside the checkout. That check is specified but not implemented yet
-and cannot close the race after inspection. Continuous enforcement is deferred
-to milestone 2 under `p1-checkout-socket-kernel-enforcement`; see the
+symlinks outside the checkout. The implemented startup check cannot close the
+race after inspection; runtime green evidence is still required. Continuous
+enforcement is deferred to milestone 2 under `p1-checkout-socket-kernel-enforcement`; see the
 [accepted scope decision](../decisions/0019-checkout-socket-milestone-limit.md)
 and [research handoff](checkout-socket-enforcement.md). This is a known gap in
 the isolation target, not a claim that startup scanning establishes it.

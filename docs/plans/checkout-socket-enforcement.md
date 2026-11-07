@@ -20,13 +20,17 @@ reachable. This is a known limit, not a continuous denial claim. State it in
 `docs/security.md`, the pilot threat model and run's help beside the isolation
 properties. Keep the checkout bind, approved image, literal argv and private IPC.
 
-ID-SOCKETS-01 is reworded as refusal; obtain one fresh guarded CI red run of that
-ID before implementing it, then remove its `@wip` and require ordinary green CI.
+ID-SOCKETS-01 is reworded as refusal. Q-34 accepted its fresh guarded CI red;
+startup refusal and the help disclosure are implemented, and its `@wip` is removed.
+Ordinary green CI at the pushed implementation head remains required.
 The outline isolates each socket type and location so a root socket cannot mask
 an incomplete traversal. Require exit 1, the typed diagnostic and no create
 request or worker ID. A different startup failure is not attributable red.
-After that red is accepted, implement the scan and add the help disclosure in
-the behavior commit. No production refusal or help change is present yet.
+The session workspace port checks the complete pinned checkout before create,
+using `fs.WalkDir` over `os.Root.FS`. Traversal follows no symlinks, includes
+`.git`, and checks file types without connecting to, deleting or chmodding any
+socket. An incomplete scan prevents create with `run.isolation-inspection`;
+a found socket returns `run.isolation-unverified`. No scan runs during recovery.
 
 ID-SOCKETS-02 and ID-SOCKETS-03 retain their denial assertions and `@wip` tags,
 but no longer belong to slice-19. They are deferred to milestone 2 under
@@ -39,11 +43,12 @@ The coordinator accepted these engine runs; they were not executed locally:
 | --- | --- | --- |
 | ID-SOCKETS-01 and ID-SOCKETS-03 | [42312676619](https://github.com/donvargax/itos-container/actions/runs/42312676619), `1662753` | The worker connected/sent to host sockets, including all five operations and nested paths. |
 | ID-SOCKETS-02 | [42323471709](https://github.com/donvargax/itos-container/actions/runs/42323471709), `69b02a8` | The worker reached sockets published after launch, with working positive controls. |
+| Reworded ID-SOCKETS-01 (all 12 rows) | [42391893492](https://github.com/donvargax/itos-container/actions/runs/42391893492), `f33853b` | Each Then failed with `socket checkout reached worker creation: exit=0 create requests=1`; accepted by the coordinator in q-34. |
 
 Earlier startup failures and the interrupted private seqpacket control were not
 accepted red evidence. The connectivity reds above remain valid historical
-evidence of the gap. Q-30 nevertheless requires a fresh red of the reworded
-ID-SOCKETS-01 only; the older assertions are not its new refusal assertion.
+evidence of the gap. The fresh refusal red above satisfies q-30's separate
+pre-implementation requirement; the older connectivity assertions do not.
 
 ## Cause in the current product
 
