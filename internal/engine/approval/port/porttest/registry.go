@@ -3,6 +3,7 @@ package porttest
 import (
 	"bytes"
 	"context"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/port"
 	"strings"
 	"sync"
 	"time"
@@ -143,7 +144,7 @@ func (s *Registry) Open(ctx context.Context, c port.Candidate, id string, readOn
 		}
 		s.mu.Lock()
 	}
-	return &registryDirectory{s: s, files: f, id: id, ctx: ctx, readOnly: readOnly}, ""
+	return &registryDirectory{s: s, files: f, id: id, ctx: budget.Lifetime(ctx), readOnly: readOnly}, ""
 }
 
 type registryDirectory struct {

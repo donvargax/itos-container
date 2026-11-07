@@ -70,7 +70,9 @@ func publicRecoveryInspectionDeadline(t *testing.T) {
 			time.Sleep(25 * time.Second)
 			locked.Close()
 		}()
+		inspected := make(chan struct{})
 		m.e.BeforeInspect = func() {
+			defer close(inspected)
 			time.Sleep(5 * time.Second)
 			synctest.Wait()
 		}
@@ -86,6 +88,9 @@ func publicRecoveryInspectionDeadline(t *testing.T) {
 		if !bytes.Equal(before, files.Data) || len(m.files.Events) != 0 || !reflect.DeepEqual(m.e.Resources[worker], original) {
 			t.Fatal("expired stop changed protected progress or its worker")
 		}
+		// The bounded controller can return before the expired fake inspection
+		// finishes. Settle that callback before reconfiguring the fresh retry.
+		<-inspected
 		m.e.BeforeInspect = nil
 		r = publicMemoryCommand(t, m.service(), "stop", id, 0)
 		if len(r.Sessions) != 1 || r.Sessions[0].Cleanup != "complete" || r.Sessions[0].WorkloadExit != nil || len(m.e.Resources) != 0 {
@@ -154,6 +159,8 @@ func publicRecoveryStoppedWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
 		m.e.StdinClosed, m.e.WaitUntilCancel = true, true
+		stdin := make(chan sp.Outcome, 1)
+		m.e.StdinFailures = stdin
 		id := ""
 		var completed []byte
 		mutations := 0
@@ -174,8 +181,10 @@ func publicRecoveryStoppedWait(t *testing.T) {
 			}
 			completed = bytes.Clone(m.files.Sessions[m.index().Project+"/"+id].Data)
 			mutations = recoveryReviewMutations(m.e)
-			// Let stdin's notification cancel the original pending wait before
-			// returning to its fake engine response. No real sleep or engine runs.
+			// The scenario closes stdin after stop completes. Queue that event
+			// only after capturing completion, so an independently cancellable
+			// wait cannot race ahead of the fixture's stop or its audit snapshot.
+			stdin <- sp.StdinClosed
 			synctest.Wait()
 		}
 		runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}

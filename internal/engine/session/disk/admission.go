@@ -87,7 +87,9 @@ func (s Registry) checkAdmission(ctx context.Context, c approval.Candidate, d ap
 			return port.Invalid
 		}
 		if knownClaim {
-			if claim.Intent != r.Intent || (claim.Complete && (r.State != "stopped" || r.LastProblem != nil)) {
+			// Final output may time out after durable owned cleanup. That
+			// diagnostic does not revoke completion or reopen the session.
+			if claim.Intent != r.Intent || (claim.Complete && (r.State != "stopped" || (r.LastProblem != nil && *r.LastProblem != port.StreamTimeout))) {
 				return port.Invalid
 			}
 			if !claim.Complete && domain.NestedCheckouts(c.Root, claim.Root) {

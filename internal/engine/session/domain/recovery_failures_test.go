@@ -196,7 +196,7 @@ func TestRegisteredRunRetainsObservedExitWhenPublicationFails(t *testing.T) {
 	registry := &f.Registry{Store: store, Project: b.Frozen.Project}
 	runEngine := &f.RunEngine{Engine: engine, Exit: 7}
 	runEngine.After = func(event string) {
-		if event == "drain" {
+		if event == "wait" {
 			registry.SaveFailure = port.IntentWrite
 		}
 	}

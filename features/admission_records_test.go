@@ -65,7 +65,9 @@ func (w *world) currentAdmissionPaths(tree map[string]runEntry) (map[string]bool
 			return nil, fmt.Errorf("admission has no original public authority")
 		}
 		var completion *bool
-		if record["state"] != "stopped" || record["last_problem"] != nil {
+		// A stopped session may retain the independently reported output
+		// timeout after resource cleanup and its certificate are complete.
+		if record["state"] != "stopped" || (record["last_problem"] != nil && record["last_problem"] != "stream-timeout") {
 			incomplete := false
 			completion = &incomplete
 		}

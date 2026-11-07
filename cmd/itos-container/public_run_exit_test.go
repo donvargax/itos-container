@@ -79,17 +79,24 @@ func (j *runExitJournal) add(event string) {
 type runExitStorage struct {
 	ap.RegistryStorage
 	journal *runExitJournal
+	mu      sync.Mutex
 	probes  int
 	result  *runExitObservation
 }
 
 func (s *runExitStorage) Open(ctx context.Context, c ap.Candidate, id string, readOnly bool) (ap.SessionDirectory, ap.Failure) {
-	if !readOnly || s.probes >= 2 {
+	if !readOnly {
 		return s.RegistryStorage.Open(ctx, c, id, readOnly)
 	}
+	s.mu.Lock()
 	s.probes++
+	probe := s.probes
+	s.mu.Unlock()
+	if probe > 2 {
+		return s.RegistryStorage.Open(ctx, c, id, readOnly)
+	}
 	name := "probe"
-	if s.probes == 2 {
+	if probe == 2 {
 		name = "reconcile"
 	}
 	s.journal.add(name + "-start")
@@ -205,16 +212,27 @@ func observeRunExit(t *testing.T, schedule, name string) runExitObservation {
 			}
 		}
 	}
+	signals := 0
+	delayedStopWait := false
 	m.e.After = func(event string) {
 		if event == "SIGTERM" {
 			journal.add("stop-locked")
-			close(locked)
-			if schedule == "after the stdin reconciliation deadline" {
-				time.Sleep(11 * time.Second)
+			signals++
+			if signals == 1 {
+				close(locked)
+				if schedule == "after the stdin reconciliation deadline" {
+					// Keep stop's lock across run's probe with two healthy calls,
+					// each inside slice-12's ten-second finite-operation limit.
+					time.Sleep(6 * time.Second)
+				}
 			}
 		}
 		if event == "wait" {
 			journal.add("stop-wait")
+			if schedule == "after the stdin reconciliation deadline" && !delayedStopWait {
+				delayedStopWait = true
+				time.Sleep(5 * time.Second)
+			}
 		}
 	}
 	recoverCommand := func(command string) runExitCommand {

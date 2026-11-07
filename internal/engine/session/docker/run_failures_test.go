@@ -143,8 +143,8 @@ func TestRunWaitRequiresAValidObservedExit(t *testing.T) {
 		{"negative exit", `{"StatusCode":-1}`, 200, 0, sp.ExecutionFailed},
 		{"invalid exit", `{"StatusCode":256}`, 200, 0, sp.ExecutionFailed},
 		{"daemon error", `{"StatusCode":0,"Error":{"Message":"synthetic daemon failure"}}`, 200, 0, sp.ExecutionFailed},
-		{"transport error", `{"message":"synthetic response"}`, 503, 0, sp.ExecutionFailed},
-		{"malformed", `{"StatusCode":`, 200, 0, sp.ExecutionFailed},
+		{"transport error", `{"message":"synthetic response"}`, 503, 0, sp.EngineLost},
+		{"malformed", `{"StatusCode":`, 200, 0, sp.EngineLost},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e, b, _ := sdkHandlerFixture(t, func(w http.ResponseWriter, r *http.Request, _ sp.Binding) {

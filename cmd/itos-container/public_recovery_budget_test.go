@@ -60,11 +60,19 @@ func publicRecoveryTerminationDeadline(t *testing.T, kill bool) {
 		}()
 		waits, writes := 0, 0
 		var progress []byte
+		observed := make(chan struct{})
+		wantWaits := 1
+		if kill {
+			wantWaits = 2
+		}
 		m.e.After = func(event string) {
 			if event != "wait" {
 				return
 			}
 			waits++
+			if waits == wantWaits {
+				defer close(observed)
+			}
 			progress, writes = bytes.Clone(files.Data), len(m.files.Events)
 			if kill && waits == 2 {
 				// SIGKILL has been requested but its wait response stalls through
@@ -75,16 +83,18 @@ func publicRecoveryTerminationDeadline(t *testing.T, kill bool) {
 		}
 		start := time.Now()
 		r := publicMemoryCommand(t, m.service(), "stop", id, 75)
-		if time.Since(start) != 30*time.Second || len(r.Problems) != 1 || r.Problems[0].Rule != "recovery.temporary" || len(r.Sessions) != 1 {
-			t.Fatal("termination lost its original deadline or temporary cause", r, time.Since(start))
+		elapsed := time.Since(start)
+		// The bounded controller can return before the abandoned fake wait.
+		// Preserve its return time, then join the callback and settle the adapter
+		// before reading its observations or reconfiguring a fresh retry.
+		<-observed
+		synctest.Wait()
+		if elapsed != 30*time.Second || len(r.Problems) != 1 || r.Problems[0].Rule != "recovery.temporary" || len(r.Sessions) != 1 {
+			t.Fatal("termination lost its original deadline or temporary cause", r, elapsed)
 		}
 		e := r.Sessions[0]
 		if e.State != "failed" || e.Resource != "unknown" || e.Cleanup != "unknown" || e.WorkloadExit != nil || !slices.Equal(e.Retry, []string{"itos", "container", "stop", id}) {
 			t.Fatal("termination timeout invented completion or lost the retry", e)
-		}
-		wantWaits := 1
-		if kill {
-			wantWaits = 2
 		}
 		if waits != wantWaits || !slices.Contains(m.e.Events, "SIGTERM") || slices.Contains(m.e.Events, "SIGKILL") != kill ||
 			!bytes.Equal(progress, files.Data) || writes != len(m.files.Events) || len(m.e.Resources) != 1 {
@@ -110,6 +120,8 @@ func publicRecoveryDelayedStopOrder(t *testing.T, name, order string) {
 	synctest.Test(t, func(t *testing.T) {
 		m := publicMemoryFixture(t)
 		m.e.StdinClosed, m.e.WaitUntilCancel = true, true
+		stdin := make(chan sp.Outcome, 1)
+		m.e.StdinFailures = stdin
 		want := 0
 		if name == "unknown" {
 			want = 75
@@ -134,6 +146,7 @@ func publicRecoveryDelayedStopOrder(t *testing.T, name, order string) {
 		var replacementReads []int
 		mutations := 0
 		signals := 0
+		delayedStopWait := false
 		reads := 0
 		m.files.AfterRead = func() {
 			for _, files := range m.files.Sessions {
@@ -162,13 +175,18 @@ func publicRecoveryDelayedStopOrder(t *testing.T, name, order string) {
 		}
 		m.e.After = func(event string) {
 			if event == "SIGTERM" {
-				// Hold the real operation-lock contract across run's ten-second
-				// probe; the competing stop still has time to finish its total.
+				// Hold the operation lock across run's ten-second probe using
+				// two healthy finite calls, each below the ten-second cap.
 				signals++
 				if signals == 1 {
-					time.Sleep(11 * time.Second)
+					stdin <- sp.StdinClosed
+					time.Sleep(6 * time.Second)
 				}
 				return
+			}
+			if event == "wait" && signals == 1 && !delayedStopWait {
+				delayedStopWait = true
+				time.Sleep(5 * time.Second)
 			}
 			if event != "wait" || id != "" {
 				return

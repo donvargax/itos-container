@@ -292,7 +292,10 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 		}
 		return int(status.StatusCode), ""
 	case <-result.Error:
-		return 0, port.ExecutionFailed
+		if ctx.Err() != nil {
+			return 0, port.ExecutionFailed
+		}
+		return 0, port.EngineLost
 	case <-ctx.Done():
 		return 0, port.ExecutionFailed
 	}

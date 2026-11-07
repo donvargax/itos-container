@@ -117,6 +117,15 @@ func AdmissionContract(t Reporter, open func() AdmissionFixture) {
 				s.Close()
 				return
 			}
+			// A diagnostic written after owned cleanup does not revoke its
+			// completion certificate or release another session's reservation.
+			problem := port.StreamTimeout
+			p.LastProblem = &problem
+			if failure = s.Save(p); failure != "" {
+				t.Errorf("completed stream diagnostic: %s", failure)
+				s.Close()
+				return
+			}
 			s.Close()
 			if n == 0 {
 				if _, failure = f.Registries[other].Register(ctx, f.Frozen[other], strings.Repeat("b", 64), token); failure != port.CheckoutOverlap {

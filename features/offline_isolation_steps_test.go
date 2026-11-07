@@ -1,10 +1,8 @@
 package features
 
-import "github.com/cucumber/godog"
-
 // All native access is behind isolationFixture's independent CI guard. These
 // bindings leave @wip in place for the coordinator's first native dispatch.
-func (w *world) offlineIsolationSteps(sc *godog.ScenarioContext) {
+func (w *world) offlineIsolationSteps(sc lifecycleStepRegistrar) {
 	for _, step := range []struct{ phrase, mode string }{
 		{`a CI offline checkout with the cached image and identity capability and setuid probes`, "identity"},
 		{`a CI offline checkout with the cached image and a filesystem probe`, "filesystem"},
@@ -62,13 +60,20 @@ func (w *world) offlineIsolationSteps(sc *godog.ScenarioContext) {
 		{`the DNS probes actually execute and the product confirms owned cleanup`, "complete"},
 		{`the trailing workload frame is delivered and the descendant no longer runs`, "descendant"},
 		{`native Docker confirms the exact worker ID absent while the unrelated same-image worker remains`, "native-absence"},
-		{`checkout edits approvals snapshots and unrelated resources remain intact`, "preserved"},
 		{`native Docker still observes the exact stopped worker and its protected ownership record before harness cleanup`, "retained"},
 		{`the diagnostic carries the registered session ID and exact executable stop retry without the synthetic body marker or a stopped-success claim`, "safe-diagnostic"},
 		{`the checkout edit and unrelated resources remain intact`, "preserved"},
 	} {
 		sc.Step("^"+step.phrase+"$", func() error { return w.isolationCheck(step.check) })
 	}
+	// This phrase is shared with lifecycle loss. Register it once and retain
+	// each fixture's independent preservation observations.
+	sc.Step(`^checkout edits approvals snapshots and unrelated resources remain intact$`, func() error {
+		if w.lifecycle != nil {
+			return w.lifecyclePreserved()
+		}
+		return w.isolationCheck("preserved")
+	})
 	sc.Step(`^every first-instruction and running worker attempt is denied with no matching listener receipt$`, func() error {
 		if err := w.isolationCheck("route-denials"); err != nil {
 			return err

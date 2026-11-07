@@ -53,7 +53,7 @@ func (j JSON) DecodePublic(data []byte) (port.PublicRecord, port.Outcome) {
 	}
 	if r.LastProblem != nil {
 		switch *r.LastProblem {
-		case port.Unsafe, port.Invalid, port.Refused, port.Uncertain, port.Incomplete, port.Environment, port.EnvironmentMissing, port.Internal, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.ExecutionFailed, port.IsolationInspection, port.IsolationUnverified:
+		case port.TeardownTimeout, port.StreamTimeout, port.EngineLost, port.Unsafe, port.Invalid, port.Refused, port.Uncertain, port.Incomplete, port.Environment, port.EnvironmentMissing, port.Internal, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.ExecutionFailed, port.IsolationInspection, port.IsolationUnverified:
 		default:
 			return bad()
 		}
