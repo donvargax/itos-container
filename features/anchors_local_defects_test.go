@@ -58,7 +58,19 @@ func (w *world) anchorRecoveryDefectSeed(defect string) error {
 		w.approval.uid = strconv.Itoa(os.Geteuid())
 		next := filepath.Dir(filepath.Dir(w.recoveryRecordPath()))
 		if old != next {
-			if err := os.Rename(old, next); err != nil {
+			if err := os.MkdirAll(next, 0700); err != nil {
+				return err
+			}
+			entries, err := os.ReadDir(old)
+			if err != nil {
+				return err
+			}
+			for _, entry := range entries {
+				if err := os.Rename(filepath.Join(old, entry.Name()), filepath.Join(next, entry.Name())); err != nil {
+					return err
+				}
+			}
+			if err := os.Remove(old); err != nil {
 				return err
 			}
 		}

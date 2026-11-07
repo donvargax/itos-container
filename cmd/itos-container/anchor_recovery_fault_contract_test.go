@@ -3,13 +3,16 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
+	af "github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
 	"github.com/donvargax/itos-container/internal/engine/session/domain"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	"github.com/donvargax/itos-container/internal/engine/session/presentation"
@@ -330,6 +333,7 @@ func anchorMemoryRace(t *testing.T, q map[string]string, m publicMemory, e *anch
 }
 
 func anchorMemoryDefect(t *testing.T, q map[string]string, m publicMemory, e *anchorRecoveryMemoryEngine, s domain.Recovery, id, worker string, r sp.Record) {
+	oldIndex := m.index().Project
 	fault := q["fault"]
 	v := e.volumes.Resources[r.Anchor.Name]
 	dir := m.storage.Directories["intents/"+m.c.Project]
@@ -385,12 +389,65 @@ func anchorMemoryDefect(t *testing.T, q map[string]string, m publicMemory, e *an
 		t.Fatal("unknown anchor defect", fault)
 	}
 	e.volumes.Resources[r.Anchor.Name] = v
+	if oldIndex != m.index().Project {
+		for key, files := range m.files.Sessions {
+			delete(m.files.Sessions, key)
+			m.files.Sessions[strings.Replace(key, oldIndex, m.index().Project, 1)] = files
+		}
+	}
+	safe := anchorMemorySafeEntry(t, m)
 	for _, command := range []string{"status", "stop"} {
 		actual, report := anchorMemoryInvoke(s, command, id)
 		anchorMemoryProblem(t, actual, report, code, rule)
+		if command == "status" {
+			found := false
+			for _, entry := range report.Sessions {
+				if entry["id"] == safe {
+					found = true
+					if entry["anchor"] != "absent" || entry["cleanup"] != "complete" {
+						t.Error("safe independent entry lost", entry)
+					}
+				}
+			}
+			if !found {
+				t.Error("safe independent entry omitted")
+			}
+		}
 	}
 	if e.deletions != 0 {
 		t.Fatal("defective authority deleted volume")
 	}
 	anchorRecoveryMemoryCase(t, map[string]string{"mode": "stop", "phase": "failed", "worker": "created", "volume": "present", "completion": "pending", "exit": "7"})
+}
+
+func anchorMemorySafeEntry(t *testing.T, m publicMemory) string {
+	t.Helper()
+	var settings map[string]any
+	if err := json.Unmarshal([]byte(m.c.Canonical), &settings); err != nil {
+		t.Fatal(err)
+	}
+	checkout := settings["checkout"].(map[string]any)
+	checkout["inode"] = fmt.Sprint(checkout["inode"]) + "1"
+	host := settings["host"].(map[string]any)
+	host["uid"], host["gid"] = m.host.UID, m.host.GID
+	manifest := settings["manifest"].(map[string]any)
+	manifest["containerUser"], manifest["remoteUser"] = m.host.UID, m.host.UID
+	settings["engine"].(map[string]any)["id"] = m.e.DaemonID
+	hash := func(value any) string { data, _ := json.Marshal(value); return fmt.Sprintf("%x", sha256.Sum256(data)) }
+	project := hash(map[string]any{"schema": 1, "uid": m.host.UID, "checkout": checkout})
+	fingerprint := "sha256:" + hash(settings)
+	data, _ := json.Marshal(map[string]any{"schema": 1, "project": project, "generation": "2", "fingerprint": fingerprint, "settings": settings})
+	b, f := m.registry.Store.Codec.Snapshot(data)
+	if f != "" {
+		t.Fatal("safe independent snapshot fixture", f)
+	}
+	m.storage.Directories["snapshots/"+project] = &af.Directory{Files: map[string][]byte{"2.json": data}}
+	id, token, worker := strings.Repeat("c", 64), strings.Repeat("c", 63)+"1", strings.Repeat("c", 63)+"2"
+	r := b.Intent(token)
+	r.Schema, r.Stage, r.ContainerID = 2, "absent", worker
+	r.Anchor = sp.Anchor{Session: id, Name: "itos-container-anchor-" + token, Source: "/proc/2147483646/fd/9", Device: b.Checkout.Device, Inode: b.Checkout.Inode, Created: "2026-11-07T16:00:00Z", Stage: "absent"}
+	m.storage.Directories["intents/"+project] = &af.Directory{Files: map[string][]byte{token + ".json": m.registry.Store.Codec.Encode(r)}}
+	p := sp.PublicRecord{Schema: 1, ID: id, Project: project, Intent: sp.Reference(project, token), State: "stopped"}
+	m.files.Sessions[m.index().Project+"/"+id] = &af.SessionFiles{Data: m.registry.Codec.EncodePublic(p)}
+	return id
 }
