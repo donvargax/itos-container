@@ -83,6 +83,13 @@ func TestOfflineRecorderStreamsWaitUntilExitOrCancellation(t *testing.T) {
 			if response.StatusCode != http.StatusOK {
 				t.Fatal("wait acknowledgement status", response.StatusCode)
 			}
+			a := w.offline.api
+			a.mu.Lock()
+			premature := len(a.requests) != 1 || !a.requests[0].Replied.IsZero() || a.requests[0].Observation != nil
+			a.mu.Unlock()
+			if premature {
+				t.Fatal("wait acknowledgement was recorded as a completed workload result")
+			}
 			if cancelWait {
 				cancel()
 				select {
@@ -90,7 +97,26 @@ func TestOfflineRecorderStreamsWaitUntilExitOrCancellation(t *testing.T) {
 				case <-time.After(time.Second):
 					t.Fatal("scenario cancellation did not reach the pending wait")
 				}
-				return
+				deadline := time.NewTimer(time.Second)
+				defer deadline.Stop()
+				tick := time.NewTicker(time.Millisecond)
+				defer tick.Stop()
+				for {
+					a.mu.Lock()
+					entry := a.requests[0]
+					a.mu.Unlock()
+					if entry.Cancelled {
+						if !entry.Replied.IsZero() || entry.Observation != nil || entry.Diagnostic == "" {
+							t.Fatal("cancelled wait was recorded as a completed workload result", entry)
+						}
+						return
+					}
+					select {
+					case <-deadline.C:
+						t.Fatal("recorder did not journal the cancelled wait")
+					case <-tick.C:
+					}
+				}
 			}
 			body := make(chan string, 1)
 			go func() {
@@ -108,6 +134,7 @@ func TestOfflineRecorderStreamsWaitUntilExitOrCancellation(t *testing.T) {
 				t.Fatal("recorder ended wait before workload exit", got)
 			case <-time.After(11 * time.Second):
 			}
+			exited := time.Now()
 			close(finish)
 			select {
 			case got := <-body:
@@ -117,11 +144,11 @@ func TestOfflineRecorderStreamsWaitUntilExitOrCancellation(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal("workload exit never reached the client")
 			}
-			a := w.offline.api
 			a.mu.Lock()
 			defer a.mu.Unlock()
 			if len(a.requests) != 1 || a.requests[0].Status != http.StatusOK ||
-				a.requests[0].Observation["StatusCode"] != float64(7) || a.requests[0].Diagnostic != "" {
+				a.requests[0].Observation["StatusCode"] != float64(7) || a.requests[0].Diagnostic != "" ||
+				a.requests[0].Cancelled || a.requests[0].Replied.Before(exited) || a.requests[0].Replied.After(time.Now()) {
 				t.Fatal("streaming lost the wait journal", a.requests)
 			}
 		})

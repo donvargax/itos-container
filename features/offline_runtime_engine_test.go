@@ -186,15 +186,19 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 				response.Body = &offlineWaitBody{ReadCloser: response.Body, record: func(data []byte, err error) {
 					a.mu.Lock()
 					defer a.mu.Unlock()
+					a.requests[index].Cancelled = request.Context().Err() != nil
 					if err == nil {
 						err = json.Unmarshal(data, &a.requests[index].Observation)
 					}
 					if err != nil {
 						a.requests[index].Diagnostic = "recorder wait stream: " + err.Error()
-						a.requests[index].Cancelled = request.Context().Err() != nil
 						if !a.recovery || request.Context().Err() == nil {
 							a.problem = errors.New("offline native recorder wait stream failed")
 						}
+					} else if !a.requests[index].Cancelled {
+						// Recovery needs the completed reply as evidence that an exit
+						// came from wait, not from successful removal alone.
+						a.requests[index].Replied = time.Now()
 					}
 				}}
 				return nil
