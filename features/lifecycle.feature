@@ -595,7 +595,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Regression for abandoned filesystem calls: the pending operation really
   # resumes after the command returns. Policy and manifest readers borrow the
   # same checkout pin. A late pin must also be released after interruption.
-  @slice-12 @ID-LIFECYCLE-17 @linux @wip
+  @slice-12 @ID-LIFECYCLE-17 @linux
   Scenario Outline: Interrupted checkout operations finish safely after run returns
     Given a lifecycle checkout with a blocked "<operation>" interrupted by "<cause>"
     When run stops waiting and the abandoned checkout operation later finishes through each local backend

@@ -403,6 +403,22 @@ signal evidence remains separate: coordinator run 42312330532 at 41529b1 passed
 all 18 engine cases before these local budget changes. The loop owns fresh CI
 and changed-code proof at the pushed head.
 
+Review regression LIFECYCLE-17 covers interrupted checkout pinning, inspection,
+revalidation and borrowed policy/manifest reads through the same command assembly.
+Its ten rows failed at checkout lifetime assertions after the step checkpoint
+`c274c49`, with `@wip` removed locally: pending reads lost their pins and late pins
+were never released. They pass with closure serialized behind those operations;
+the combined local lifecycle selection now has 47 passing rows. The controller
+still returns at cancellation or its ten-second call bound, before the blocked
+operation is released. Late completion cannot resume launch.
+
+LIFECYCLE-09's independent liveness read starts immediately after cancellation,
+with repeated signals still scheduled at two and eight seconds. Observer I/O does
+not hold the request recorder's lock, and a delayed running reply remains evidence
+for the same never-restarted primary. The journal still rejects SIGKILL before ten
+seconds or after twelve. Controlled-time harness tests cover delayed replies and
+early controller exit; fresh native-engine evidence remains CI-only.
+
 ## Tags
 
 | Tag               | Meaning                                                                              |

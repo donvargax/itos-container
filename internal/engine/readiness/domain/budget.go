@@ -14,24 +14,29 @@ import (
 // observation receives its own finite budget. Legacy doctor inspection keeps its
 // existing port contract; run opts into these whole-invocation bounds.
 func (i Inspector) InspectBeforeEngineContext(ctx context.Context, input port.Input, check func(port.Result) bool) port.Result {
-	i.Checkout = boundedCheckout{i.Checkout, ctx}
-	i.Policy = boundedPolicy{i.Policy, ctx}
-	i.Files = boundedFiles{i.Files, ctx}
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
+	i.Checkout = boundedCheckout{i.Checkout, ctx, gate}
+	i.Policy = boundedPolicy{i.Policy, ctx, gate}
+	i.Files = boundedFiles{i.Files, ctx, gate}
 	i.Engine = boundedEngine{i.Engine, ctx}
 	return i.InspectBeforeEngine(input, check)
 }
 
 type boundedCheckout struct {
 	port.Checkout
-	ctx context.Context
+	ctx  context.Context
+	gate chan struct{}
 }
 type boundedPolicy struct {
 	pp.Source
-	ctx context.Context
+	ctx  context.Context
+	gate chan struct{}
 }
 type boundedFiles struct {
 	mp.Files
-	ctx context.Context
+	ctx  context.Context
+	gate chan struct{}
 }
 type boundedEngine struct {
 	port.Engine
@@ -43,14 +48,17 @@ type boundedSession struct {
 }
 
 func (b boundedCheckout) Pin(root string) port.Failure {
-	v, err := budget.Call(b.ctx, "checkout pin", func(context.Context) port.Failure { return b.Checkout.Pin(root) })
+	v, err := checkoutCall(b.ctx, b.gate, "checkout pin", func() port.Failure { return b.Checkout.Pin(root) })
 	if err != nil {
+		// InspectBeforeEngine defers Close only after a successful Pin. A late
+		// pin still owns resources and must release them after it finishes.
+		b.Close()
 		return port.CheckoutUnavailable
 	}
 	return v
 }
 func (b boundedCheckout) Unchanged() bool {
-	v, err := budget.Call(b.ctx, "checkout revalidation", func(context.Context) bool { return b.Checkout.Unchanged() })
+	v, err := checkoutCall(b.ctx, b.gate, "checkout revalidation", b.Checkout.Unchanged)
 	if err != nil {
 		return false
 	}
@@ -64,21 +72,21 @@ func (b boundedSession) Unchanged() bool {
 	return v
 }
 func (b boundedCheckout) Inspect() (port.CheckoutIdentity, port.Failure) {
-	a, c, err := budget.Call2(b.ctx, "checkout inspection", func(context.Context) (port.CheckoutIdentity, port.Failure) { return b.Checkout.Inspect() })
+	a, c, err := checkoutCall2(b.ctx, b.gate, "checkout inspection", b.Checkout.Inspect)
 	if err != nil {
 		return port.CheckoutIdentity{}, port.CheckoutUnavailable
 	}
 	return a, c
 }
 func (b boundedPolicy) Read() (pp.Value, []pp.Issue) {
-	a, c, err := budget.Call2(b.ctx, "policy read", func(context.Context) (pp.Value, []pp.Issue) { return b.Source.Read() })
+	a, c, err := checkoutCall2(b.ctx, b.gate, "policy read", b.Source.Read)
 	if err != nil {
 		return pp.Value{}, nil
 	}
 	return a, c
 }
 func (b boundedFiles) Read(path string) ([]byte, mp.Failure) {
-	a, c, err := budget.Call2(b.ctx, "manifest read", func(context.Context) ([]byte, mp.Failure) { return b.Files.Read(path) })
+	a, c, err := checkoutCall2(b.ctx, b.gate, "manifest read", func() ([]byte, mp.Failure) { return b.Files.Read(path) })
 	if err != nil {
 		return nil, mp.Path
 	}
