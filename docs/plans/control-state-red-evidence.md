@@ -217,3 +217,26 @@ publication with absent or existing coordination directories, renewed reservatio
 checks, unsafe peer locks, replaced directories and read-only refusal. Before the
 fix, the two safe writer cases and renewed reservation/unsafe-lock classifications
 failed with state.path. No real approval state or container daemon is used.
+
+## Run/stop cancellation journal ordering
+
+The supplied CI failure observed probe-start before run-wait-canceled. The finite
+wait adapter intentionally returns on cancellation without waiting for its
+underlying goroutine; the fixture journal recorded cancellation in that later
+goroutine. Parallel scenario execution made the missing synchronization visible.
+Fifty ordinary fixture repetitions did not reproduce it, so a fake-time regression
+delays that goroutine by one millisecond. Both stop schedules then fail the event
+ordering assertion before the fixture fix.
+
+The fixture now acknowledges the canceled wait in its journal before allowing
+its storage probe to proceed. The wait remains bounded by the probe's context.
+Production run behavior, scenario assertions, time budgets and the parallel
+runner are unchanged. Both deterministic schedules pass twenty repetitions under
+the race detector. The scheduling delay and drain use only synctest time, never
+wall-clock sleeps or a real engine.
+
+The complete `go test ./features -count=1 -json` run passes in 158.304 seconds:
+all 1,326 scenario examples, including both RUNEXIT schedules and all 52 CONTROL
+examples, plus the package's harness controls. Configured commit hooks pass lint
+and vulnerability checks. The coordinator still owns push, fresh changed-code
+proof, CI watching and closure; no local mutation or generated proof was run.

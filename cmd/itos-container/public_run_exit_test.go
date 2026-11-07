@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -53,7 +54,7 @@ func TestPublicRunExitContract(t *testing.T) {
 	results := map[string]runExitObservation{}
 	for _, name := range []string{"unknown", "zero", "seven", "seventy-five", "unknown-drain", "seven-drain"} {
 		synctest.Test(t, func(t *testing.T) {
-			results[name] = observeRunExit(t, schedule, name)
+			results[name] = observeRunExit(t, schedule, name, nil)
 		})
 	}
 	data, err := json.Marshal(results)
@@ -61,6 +62,28 @@ func TestPublicRunExitContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Printf("SLICE_24_RESULT=%s\n", data)
+}
+
+func TestRunExitCancellationJournalOrdering(t *testing.T) {
+	for _, schedule := range []string{"before stdin reconciliation", "after the stdin reconciliation deadline"} {
+		t.Run(schedule, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				// The finite wait wrapper may return before the canceled adapter
+				// goroutine runs again. Force that scheduling gap in fake time.
+				r := observeRunExit(t, schedule, "unknown", func() { time.Sleep(time.Millisecond) })
+				time.Sleep(2 * time.Millisecond)
+				synctest.Wait()
+				previous := -1
+				for _, event := range []string{"stdin-closed", "run-wait-canceled", "probe-start", "drain", "run-returned"} {
+					index := slices.Index(r.Events, event)
+					if index <= previous {
+						t.Fatalf("missing or out-of-order %q in %v", event, r.Events)
+					}
+					previous = index
+				}
+			})
+		})
+	}
 }
 
 // The journal also makes the lock/probe ordering observable; elapsed time alone
@@ -78,15 +101,24 @@ func (j *runExitJournal) add(event string) {
 
 type runExitStorage struct {
 	ap.RegistryStorage
-	journal *runExitJournal
-	mu      sync.Mutex
-	probes  int
-	result  *runExitObservation
+	journal  *runExitJournal
+	canceled <-chan struct{}
+	mu       sync.Mutex
+	probes   int
+	result   *runExitObservation
 }
 
 func (s *runExitStorage) Open(ctx context.Context, c ap.Candidate, id string, readOnly bool) (ap.SessionDirectory, ap.Failure) {
 	if !readOnly {
 		return s.RegistryStorage.Open(ctx, c, id, readOnly)
+	}
+	// The finite adapter can return on cancellation before its underlying Wait
+	// goroutine is scheduled. Fence the fixture's journal observation before
+	// recording reconciliation, without changing the production wait contract.
+	select {
+	case <-s.canceled:
+	case <-ctx.Done():
+		return nil, "state.busy"
 	}
 	s.mu.Lock()
 	s.probes++
@@ -173,12 +205,13 @@ func (a *runExitAttachment) Drain(ctx context.Context) sp.Outcome {
 	return a.Attachment.Drain(ctx)
 }
 
-func observeRunExit(t *testing.T, schedule, name string) runExitObservation {
+func observeRunExit(t *testing.T, schedule, name string, afterCancel func()) runExitObservation {
 	t.Helper()
 	m := publicMemoryFixture(t)
 	var result runExitObservation
 	journal := &runExitJournal{}
-	storage := &runExitStorage{RegistryStorage: m.files, journal: journal, result: &result}
+	canceled := make(chan struct{})
+	storage := &runExitStorage{RegistryStorage: m.files, journal: journal, canceled: canceled, result: &result}
 	m.registry.Storage = storage
 	switch name {
 	case "zero":
@@ -262,7 +295,11 @@ func observeRunExit(t *testing.T, schedule, name string) runExitObservation {
 		journal.add("stdin-closed")
 		attachment.failures <- sp.StdinClosed
 		<-ctx.Done()
+		if afterCancel != nil {
+			afterCancel()
+		}
 		journal.add("run-wait-canceled")
+		close(canceled)
 		return 0, sp.ExecutionFailed
 	}}
 	runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: engine, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
