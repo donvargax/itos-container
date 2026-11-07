@@ -2,14 +2,43 @@ package command
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/donvargax/itos-container/internal/cli"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	session "github.com/donvargax/itos-container/internal/engine/session/port"
 )
+
+func TestLifecycleFailureClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name, rule, message string
+		failure             error
+		code                int
+	}{
+		{"call timeout", "run.call-timeout", "run.call-timeout; operation session registration", budget.Failure{Operation: "session registration"}, 75},
+		{"startup timeout", "run.startup-timeout", "run.startup-timeout; operation intent publication", budget.Failure{Phase: "startup", Operation: "intent publication"}, 75},
+		{"teardown timeout", "run.teardown-timeout", "run.teardown-timeout; operation resource removal", budget.Failure{Phase: "teardown", Operation: "resource removal"}, 75},
+		{"interrupt", "run.cancelled", "run.cancelled SIGINT; workload outcome not-started", cancelFailure{"SIGINT", "not-started"}, 130},
+		{"terminate", "run.cancelled", "run.cancelled SIGTERM; workload outcome unknown", cancelFailure{"SIGTERM", "unknown"}, 143},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Formatting exercises the error's safe fallback message as well as
+			// unwrapping; classification must retain only the typed diagnostic.
+			failure := fmt.Errorf("controller: %w", tc.failure)
+			code, problems := Classify(failure)
+			if code != tc.code || len(problems) != 1 || problems[0].Rule != tc.rule || problems[0].Exit != tc.code || problems[0].Message != tc.message || problems[0].Fix == "" {
+				t.Fatal("wrapped lifecycle failure lost its classification or guidance", code, problems)
+			}
+			if _, ok := tc.failure.(cancelFailure); ok && failure.Error() != "controller: run cancelled" {
+				t.Fatal("cancellation fallback changed", failure)
+			}
+		})
+	}
+}
 
 func TestLifecycleResultPrecedence(t *testing.T) {
 	for _, tc := range []struct {

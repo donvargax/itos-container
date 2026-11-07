@@ -46,3 +46,36 @@ func TestStartupOperationBoundaries(t *testing.T) {
 		}
 	})
 }
+
+func TestStartupFailureRecognizesAnInheritedDeadline(t *testing.T) {
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	if got := startupFailure(ctx); got != port.StartupTimeout {
+		t.Fatal("untyped parent deadline lost the startup timeout", got)
+	}
+}
+
+func TestStartupResultRetainsTimeoutKindAndOperation(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		failure   budget.Failure
+		outcome   port.Outcome
+		operation string
+	}{
+		{"phase", budget.Failure{Phase: "startup", Operation: "session registration"}, port.StartupTimeout, "session registration"},
+		{"phase without operation", budget.Failure{Phase: "startup"}, port.StartupTimeout, "intent publication"},
+		{"call", budget.Failure{Operation: "session registration"}, port.CallTimeout, "session registration"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancelCause(context.Background())
+				cancel(tc.failure)
+				result := startupResult(ctx, ctx, context.Cause(ctx), "intent publication")
+				want := port.RunResult{Result: port.Result{Outcome: tc.outcome}, Operation: tc.operation, Deadline: time.Now().Add(30 * time.Second)}
+				if result != want {
+					t.Fatal("timeout lost its cause, operation or fresh teardown deadline", result)
+				}
+			})
+		})
+	}
+}
