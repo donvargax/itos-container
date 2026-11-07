@@ -99,3 +99,19 @@ questions:
     item: "slice-19"
     question: "slice-19: second CI red run of ID-SOCKETS-01 to 03 at 3b8b9ac?"
     answer: "No. Run 42311089210 failed the same way, and the new diagnostics show why: the harness's recording proxy cancelled the product's long-lived /containers/<id>/wait (502, recorder transport: context canceled) and then refused its kill (403, unsafe request). Fix the recorder so wait and attach live for the scenario's budget and the run's own kill is allowed, then return blocked for a third red run. See slice-19-steer.md."
+  - id: q-25
+    item: "slice-12"
+    question: "slice-12: second engine green check of the lifecycle scenarios at 41529b1?"
+    answer: "Yes. Run 42312330532: all 18 engine cases pass (117 steps), LIFECYCLE-12 and 13 included. Engine evidence for slice-12 is complete: finish local scenarios 01 to 07 and 10, then push for the code proof."
+  - id: q-26
+    item: "slice-19"
+    question: "slice-19: third CI red run of ID-SOCKETS-01 to 03 at 1662753?"
+    answer: "Partly. Run 42312676619: 01 and 03 are red at their Then (the worker reached every host socket in the checkout); accepted. 02 is not: its worker-private positive control failed in the harness (interrupted system call). Retry EINTR in the probe, then return blocked for a red run of 02 alone. See slice-19-steer.md."
+  - id: q-27
+    item: "slice-17"
+    question: "slice-17: Docker mounts and starts in one operation and inspect gives no inode; which observation and workload release are authorized?"
+    answer: "The descriptor-backed volume (q-19) is the protection; the identity check is a detector. Right after ContainerStart, stat /proc/<State.Pid>/root/workspace from the host and compare device and inode with the validated identity; on mismatch or a failed stat, kill and remove the worker through owned teardown and refuse the run. No gate binary (a new mount). Reword the scenario if it promises release gating. See slice-17-steer.md."
+  - id: q-28
+    item: "slice-16"
+    question: "slice-16: may ID-RECOVERY-25 change so a stop before create records a proven cancellation instead of uncertain cleanup?"
+    answer: "Yes, when cancellation is proven by durable state, never by an engine lookup: run records create-issued under the operation lock before any create, after re-checking for cancellation; a stop holding the lock that finds no create-issued record may record a proven cancellation (stage cancelled, no ID) and the resumed run exits without create. If create may have been issued, it stays recovery.temporary with cleanup unknown, and a scenario keeps that case. Apply attempt 5's saved fix. See slice-16-steer.md."
