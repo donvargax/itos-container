@@ -2283,11 +2283,53 @@
   type: ci
   title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
   why: >
-    Stopgap, recorded as a weakened gate: the engine suite now runs 300-335 s against the step's
-    5-minute timeout-minutes, so about half of today's pull request runs (slice-19, slice-21) and
-    one main run failed on the limit with every scenario passing, which blocks landing. Raise the
-    Engine scenarios step's timeout-minutes from 5 to 8 in .github/workflows/ci.yml and nothing
-    else; p1-engine-suite-within-its-limit brings the suite back under 5 minutes and then restores
-    the limit.
+    The coordinator authorized this stopgap, recorded in weakened-gates.md: the engine suite
+    now runs 300-335 s against two five-minute limits, blocking slice-19 and slice-21. Those
+    slices are held until this lands. The allowance is temporary until
+    p1-engine-suite-within-its-limit lands to speed up the suite and restore the limits.
+
+    Change exactly three values in .github/workflows/ci.yml. Raise the Engine scenarios step's
+    timeout-minutes from 5 to 8 and its test binary's -test.timeout from 5m to 7m. Both must move
+    for the allowance to take effect. Keep the Go timeout below the step limit so its panic and
+    goroutine dump can appear before the runner kills the step. Raise jobs.engine's
+    timeout-minutes from 10 to 13 to cover setup plus the eight-minute step. These settled
+    values supersede the earlier single-value scope. Preserve all other workflow content,
+    including fixture preparation, diagnostics and cleanup limits, scenario selection,
+    assertions, environment, compilation, setsid, logging, exit-status propagation and the
+    requirement that the engine job succeed. No retries, skips, dependencies, scenarios or
+    proof exceptions are added. This allowance supplies no suite speedup or new support claim.
+
+    Use exactly the combined grep command below as the done_when sanity check, with existing
+    runner tools and no RTK requirement. Remove the scoped awk check; YAML parsing and
+    hypothetical duplicate steps are outside this task. Before implementation the command
+    exits 1 because the step still has timeout-minutes: 5; the test-timeout grep also fails on
+    its own because the binary still uses -test.timeout=5m. After implementation the combined
+    check must pass. Review the diff for all three value changes and no others. CI's actual
+    engine run checks the result; the grep check alone proves no runtime duration or scenarios.
+
+    The workflow change is committed ci --task T-32. Its CI run exposed stale timeout values in
+    features/engine_workflow_test.go, features/engine_fixture_test.go and
+    features/engine_diagnostics_test.go. Align only those expected values and fixture arguments
+    with the settled 13/8/7-minute budgets, committed test --task T-32. Preserve the exact command
+    and budget assertions, negative controls, diagnostic exit/signal checks and every unrelated
+    limit. The four affected test groups must fail before this repair and pass afterward without
+    engine access. This repairs fixtures for the authorized limits; it adds no further allowance
+    and does not replace or broaden the done_when sanity check.
+
+    Document this repair scope here and align the invocation and budget prose in
+    features/README.md, committed docs --item T-32. Let configured hooks and CI run their gates;
+    real-engine evidence stays in CI, with no local Docker, approval or mutation run and no
+    generated evidence committed. Agents commit and stop; the coordinating loop owns pushing,
+    CI watching and closure at the actual pushed head.
+- id: T-33
+  type: test
+  title: main's engine scenarios finish well inside the job's 5-minute limit
+  why: >
+    main went red at b2ad2ad (run 42392045565) although all 49 engine scenarios passed (feature test
+    exit status 0): the Engine scenarios step hit its 5-minute timeout-minutes. The suite took 258 s
+    on 2026-11-06 and 277 s on 2026-11-07 (run 42389951333), and every isolation slice adds engine
+    cases, so main will go red more often. Measure each scenario's time, make the slow ones fast
+    (LIFECYCLE-13's first row took 128 s in red), and shard the engine job by feature if the total
+    still nears the limit. Raising the limit is the person's call, not a fix.
   done_when:
-    - run: "grep -A1 'name: Engine scenarios' .github/workflows/ci.yml | grep -q 'timeout-minutes: 8'"
+    - run: env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 timeout --signal=TERM --kill-after=5s 240s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m

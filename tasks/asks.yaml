@@ -151,3 +151,7 @@ questions:
     item: "slice-17"
     question: "slice-17: CI red evidence for ID-ANCHORS-09 to 13?"
     answer: "Yes. Run 42400524477: all seven rows fail at their Then steps (recovery neither accounts for nor releases the original anchor). Finish ANCHORS-01 to 08's local red, then implement."
+  - id: q-38
+    item: "slice-17"
+    question: "slice-17: ADR 0019 says fresh-process anchor recovery belongs to slice-18; is that conflict still open?"
+    answer: "No. q-36 merged slice-18 into slice-17, so fresh-process recovery is this slice's scope and 60b81ed implements it. Update ADR 0019 to match, read CI run 42410829045 at 60b81ed, and treat a job dying near 600 s as go test's default timeout to fix by speeding the slow package, never by raising it. See slice-17-steer.md."
