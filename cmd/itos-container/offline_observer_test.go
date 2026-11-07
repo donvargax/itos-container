@@ -39,6 +39,7 @@ type offlineObserver struct {
 	events  []offlineEvent
 	checks  int
 	exited  bool
+	drained chan struct{}
 }
 
 func (o *offlineObserver) event(e offlineEvent) {
@@ -183,6 +184,7 @@ func (c offlineConnection) Attach(ctx context.Context, id string, streams sp.Str
 	if f != "" {
 		return a, f
 	}
+	c.o.drained = make(chan struct{})
 	return offlineAttachment{Attachment: a, o: c.o}, f
 }
 
@@ -233,5 +235,6 @@ type offlineAttachment struct {
 func (a offlineAttachment) Drain(ctx context.Context) sp.Outcome {
 	f := a.Attachment.Drain(ctx)
 	a.o.event(offlineEvent{Operation: "drain", Failure: string(f)})
+	close(a.o.drained)
 	return f
 }
