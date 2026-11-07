@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	mp "github.com/donvargax/itos-container/internal/engine/manifest/port"
 	mf "github.com/donvargax/itos-container/internal/engine/manifest/port/porttest"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
@@ -88,5 +89,32 @@ func TestAdmissionCodecRefusesCompletedPendingClaim(t *testing.T) {
 	codec := JSON{Parser: &mf.Parser{Value: publicValue(t, data)}}
 	if _, failure := codec.DecodeAdmission(data); failure != sp.Invalid {
 		t.Fatal("pending registration certified complete", failure)
+	}
+}
+
+func TestAdmissionCodecRejectsInvalidParsedObject(t *testing.T) {
+	r := sp.AdmissionRecord{Schema: 1, Root: "/work", ID: strings.Repeat("a", 64), Intent: sp.Reference(strings.Repeat("b", 64), strings.Repeat("c", 64))}
+	data := (JSON{}).EncodeAdmission(r)
+	for _, fault := range []string{"parser issue", "non-object", "missing field", "excess fields"} {
+		t.Run(fault, func(t *testing.T) {
+			parser := &mf.Parser{Value: publicValue(t, data)}
+			switch fault {
+			case "parser issue":
+				parser.Issues = []mp.Issue{{Kind: mp.Syntax}}
+			case "non-object":
+				parser.Value.Kind = mp.Array
+			case "missing field":
+				delete(parser.Value.Fields, "complete")
+			case "excess fields":
+				parser.Value.Fields["pending"] = mp.Value{Kind: mp.Boolean, Text: "true"}
+				parser.Value.Fields["unknown"] = mp.Value{Kind: mp.Boolean, Text: "true"}
+			}
+			if value, failure := (JSON{Parser: parser}).DecodeAdmission(data); failure != sp.Invalid || value != (sp.AdmissionRecord{}) {
+				t.Fatal("invalid parsed admission acquired authority", value, failure)
+			}
+			if len(parser.Calls) != 1 || !parser.Calls[0].Strict {
+				t.Fatal("admission did not use strict parsing", parser.Calls)
+			}
+		})
 	}
 }
