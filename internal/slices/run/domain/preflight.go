@@ -1,7 +1,9 @@
 package domain
 
 import (
+	"context"
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/slices/run/port"
 	"strings"
 )
@@ -21,7 +23,23 @@ func (SnapshotRefusal) Error() string { return "run snapshot publication refused
 
 // Preflight returns usable input only after atomic selection and durable storage.
 func Preflight(a port.Approval, snapshots approval.Snapshots) (approval.Durable, error) {
-	view := a.Inspect()
+	return PreflightContext(context.Background(), a, snapshots)
+}
+
+func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.Snapshots) (approval.Durable, error) {
+	var view approval.View
+	if contextual, ok := a.(approval.ContextPreflight); ok {
+		view = contextual.InspectContext(ctx)
+	} else {
+		var err error
+		view, err = budget.Call(ctx, "preflight engine inspection", func(context.Context) approval.View { return a.Inspect() })
+		if err != nil {
+			return approval.Durable{}, err
+		}
+	}
+	if ctx.Err() != nil {
+		return approval.Durable{}, context.Cause(ctx)
+	}
 	if strings.HasPrefix(string(view.Failure), "identity.") || hasIssues(view) {
 		return approval.Durable{}, Prerequisite{view}
 	}
@@ -34,7 +52,20 @@ func Preflight(a port.Approval, snapshots approval.Snapshots) (approval.Durable,
 	if !view.Inspection.Ready {
 		return approval.Durable{}, ApprovalRefusal{Reason: "invalid"}
 	}
-	frozen, failure := a.Freeze(view)
+	var frozen approval.Frozen
+	var failure approval.Failure
+	if contextual, ok := a.(approval.ContextPreflight); ok {
+		frozen, failure = contextual.FreezeContext(ctx, view)
+	} else {
+		var err error
+		frozen, failure, err = budget.Call2(ctx, "approval selection", func(context.Context) (approval.Frozen, approval.Failure) { return a.Freeze(view) })
+		if err != nil {
+			return approval.Durable{}, err
+		}
+	}
+	if ctx.Err() != nil {
+		return approval.Durable{}, context.Cause(ctx)
+	}
 	if failure != "" {
 		reason := string(failure)
 		if strings.HasPrefix(reason, "state.") {
@@ -42,7 +73,10 @@ func Preflight(a port.Approval, snapshots approval.Snapshots) (approval.Durable,
 		}
 		return approval.Durable{}, ApprovalRefusal{Reason: reason}
 	}
-	durable, failure := snapshots.Publish(frozen)
+	durable, failure, err := budget.Call2(ctx, "frozen snapshot publication", func(context.Context) (approval.Durable, approval.Failure) { return snapshots.Publish(frozen) })
+	if err != nil {
+		return durable, err
+	}
 	if failure != "" {
 		return approval.Durable{}, SnapshotRefusal{Failure: failure, Reference: durable.Reference}
 	}

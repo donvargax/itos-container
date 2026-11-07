@@ -24,7 +24,7 @@ func TestOfflineIsolationProbeCompilesWithoutEngine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &world{root: root, doctor: &doctorWorld{checkout: t.TempDir()}}
+	w := &world{root: root, dir: t.TempDir(), doctor: &doctorWorld{checkout: t.TempDir()}}
 	if err = w.buildIsolationProbe(); err != nil {
 		t.Fatal(err)
 	}

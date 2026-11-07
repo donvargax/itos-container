@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/domain"
@@ -107,8 +108,12 @@ func TestRegisteredRunPreservesPrecreateStopResult(t *testing.T) {
 			}
 			runner := domain.Runner{Store: store, Registry: registry, Engine: runEngine,
 				Entropy: &f.EntropySequence{Values: []f.Entropy{{Value: id}, {Value: token}}}, Workspace: &f.Workspace{}}
+			started := time.Now()
 			result := runner.Run(t.Context(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
-			want := port.RunResult{SessionID: id, Reference: ref, Cleanup: port.Incomplete}
+			if result.Deadline.Before(started.Add(30*time.Second)) || result.Deadline.After(time.Now().Add(30*time.Second)) {
+				t.Fatal("resumed run lost its thirty-second teardown deadline", result.Deadline)
+			}
+			want := port.RunResult{SessionID: id, Reference: ref, Cleanup: port.Incomplete, Deadline: result.Deadline}
 			if fault == "" {
 				want.Cleanup, want.Outcome = port.Complete, port.Incomplete
 			}

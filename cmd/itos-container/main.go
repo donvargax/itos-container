@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -149,7 +150,10 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		c.Run.Approval = approvaldomain.Preflight{Service: service, Local: service.Readiness.(approvalport.StagedReadiness), Canonical: approvalcanonical.JSON{}}
 		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}
 		runner, _ := sessionServices(service)
-		c.Run.Runner = signals.Runner{Next: runner}
+		c.Run.Runner = runner
+		interrupts, release := signals.Capture(context.Background())
+		defer release()
+		c.Run.Context = interrupts
 		ui.Classify = runcommand.Classify
 		c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
 		return c.Run.Run(ui)

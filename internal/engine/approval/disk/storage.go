@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 )
 
 // Storage exposes the existing protected directory machinery through a port.
@@ -78,7 +79,7 @@ func (s Storage) Open(ctx context.Context, c port.Candidate, collection string, 
 		exclusive = (*os.Root).Link
 	}
 	success = true
-	return &directoryStore{pin: p, ctx: ctx, exclusive: exclusive, control: transaction, releaseControl: create}, ""
+	return &directoryStore{pin: p, ctx: budget.Lifetime(ctx), exclusive: exclusive, control: transaction, releaseControl: create}, ""
 }
 func lockBusy(err error) bool { return errors.Is(err, syscall.EWOULDBLOCK) }
 func lockContext(ctx context.Context, file *os.File) error {

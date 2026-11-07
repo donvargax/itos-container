@@ -68,10 +68,7 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the foreground recovery command preserves both trailing streams and the interrupted exit$`, func() error {
 		f := w.doctor.engine.offline.recovery
 		want := f.exitCode
-		if want == 0 {
-			want = 75
-		}
-		if w.exit != want || w.stdout != recoveryTailOut || !strings.HasPrefix(w.stderr, recoveryTailErr) {
+		if w.exit != want || !strings.Contains(w.stderr, "run.cancelled") || w.stdout != recoveryTailOut || !strings.HasPrefix(w.stderr, recoveryTailErr) {
 			return fmt.Errorf("interrupted exit lost trailing stdout/stderr or worker status: %s", w.report())
 		}
 		return nil
@@ -118,7 +115,7 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 			valid = valid && f.elapsed >= 100*time.Millisecond && f.graceBudget > 9*time.Second && f.graceBudget <= 10*time.Second
 		}
 		a.mu.Unlock()
-		if !valid || w.exit != 75 {
+		if !valid || w.exit != 0 || !strings.Contains(w.stderr, "run.cancelled") || !strings.Contains(w.stderr, signal) {
 			return fmt.Errorf("interrupt did not forward/escalate and return failure: signals=%v elapsed=%v %s", f.signals, f.elapsed, w.report())
 		}
 		return w.localOfflineOwned()

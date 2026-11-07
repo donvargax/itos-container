@@ -12,7 +12,7 @@ import (
 func TestPendingAdmissionRequiresPublicRegistrationToBlock(t *testing.T) {
 	for _, state := range []string{"no directory", "no record", "registered", "corrupt", "legacy"} {
 		t.Run(state, func(t *testing.T) {
-			m := newRegistryFixture()
+			m := newRegistryFixture(t)
 			claim := sp.AdmissionRecord{Schema: 1, Root: m.binding.Checkout.Root, ID: m.record.ID, Intent: m.record.Intent, Pending: state != "legacy"}
 			name := admissionName(registryKey(claim.Root, m.binding.UID), claim.ID, m.binding.UID)
 			m.files.Admissions = map[string][]byte{name: m.codec.EncodeAdmission(claim)}
@@ -98,7 +98,7 @@ func (d admissionFaultDirectory) Publish(name string, old, next []byte) ap.Failu
 }
 
 func TestAdmissionActivationFailureRetainsRecoverableRegistrationAndClosesLease(t *testing.T) {
-	m := newRegistryFixture()
+	m := newRegistryFixture(t)
 	m.registry.Storage = admissionFaultStorage{RegistryStorage: m.files, fault: "activation", codec: m.codec}
 	lease, failure := m.registry.Register(t.Context(), ap.Durable{Frozen: m.binding.Frozen}, m.record.ID, strings.Repeat("c", 64))
 	if lease != nil || failure != sp.IntentWrite {
@@ -127,7 +127,7 @@ func (d admissionFaultDirectory) Unchanged() bool {
 func TestAdmissionFailuresDoNotGrantRegistration(t *testing.T) {
 	for _, fault := range []string{"open", "names", "read", "publish", "sessions", "changed", "invalid claim", "wrong claim name", "overlap", "invalid legacy", "wrong legacy ID", "missing legacy intent", "wrong legacy index"} {
 		t.Run(fault, func(t *testing.T) {
-			m := newRegistryFixture()
+			m := newRegistryFixture(t)
 			m.registry.Storage = admissionFaultStorage{RegistryStorage: m.files, fault: fault}
 			want := sp.Incomplete
 			switch fault {
@@ -182,7 +182,7 @@ func TestAdmissionFailuresDoNotGrantRegistration(t *testing.T) {
 func TestAdmissionCompletionRequiresMatchingReservationAndDurability(t *testing.T) {
 	for _, fault := range []string{"", "open", "read", "publish", "invalid claim", "different claim", "validation"} {
 		t.Run(fault, func(t *testing.T) {
-			m := newRegistryFixture()
+			m := newRegistryFixture(t)
 			m.seed()
 			r := m.binding.Intent(strings.Repeat("c", 64))
 			r.Stage, r.ContainerID = "absent", strings.Repeat("e", 64)
@@ -238,7 +238,7 @@ func TestAdmissionCompletionRequiresMatchingReservationAndDurability(t *testing.
 }
 
 func TestAdmissionScanPreservesLegacyRootsAndReadFailures(t *testing.T) {
-	m := newRegistryFixture()
+	m := newRegistryFixture(t)
 	m.seed()
 	c := ap.Candidate{UID: m.binding.UID, GID: m.binding.GID, Root: m.binding.Checkout.Root + "/child", Project: m.binding.Frozen.Project}
 	d, f := m.files.Admission(t.Context(), c)
@@ -261,7 +261,7 @@ func TestAdmissionScanPreservesLegacyRootsAndReadFailures(t *testing.T) {
 	}
 }
 func TestAdmissionCompletionRevalidatesAfterAcquiringGlobalLock(t *testing.T) {
-	m := newRegistryFixture()
+	m := newRegistryFixture(t)
 	files := m.seed()
 	r := m.binding.Intent(strings.Repeat("c", 64))
 	r.Stage, r.ContainerID = "absent", strings.Repeat("e", 64)
@@ -285,9 +285,9 @@ func TestAdmissionCompletionRevalidatesAfterAcquiringGlobalLock(t *testing.T) {
 }
 
 func TestAdmissionCertificateCannotHideChangedPublicAuthority(t *testing.T) {
-	for _, fault := range []string{"intent", "state", "problem", "invalid"} {
+	for _, fault := range []string{"intent", "state", "problem", "running stream timeout", "invalid"} {
 		t.Run(fault, func(t *testing.T) {
-			m := newRegistryFixture()
+			m := newRegistryFixture(t)
 			files := m.seed()
 			r := m.record
 			r.State = "stopped"
@@ -300,6 +300,9 @@ func TestAdmissionCertificateCannotHideChangedPublicAuthority(t *testing.T) {
 			case "problem":
 				problem := sp.Incomplete
 				r.LastProblem = &problem
+			case "running stream timeout":
+				problem := sp.StreamTimeout
+				r.State, r.LastProblem = "running", &problem
 			}
 			m.codec.Records["changed"] = r
 			files.Data = []byte("changed")
@@ -328,7 +331,7 @@ func (d admissionFaultDirectory) Sync(name string, expected []byte) ap.Failure {
 	return d.AdmissionDirectory.Sync(name, expected)
 }
 func TestAdmissionRepeatedCompletionPreservesCertificateAndSyncFailure(t *testing.T) {
-	m := newRegistryFixture()
+	m := newRegistryFixture(t)
 	m.seed()
 	r := m.binding.Intent(strings.Repeat("c", 64))
 	r.Stage, r.ContainerID = "absent", strings.Repeat("e", 64)

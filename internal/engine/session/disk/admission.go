@@ -101,7 +101,9 @@ func (s Registry) reservationRoots(ctx context.Context, c approval.Candidate, d 
 			return nil, "state.invalid"
 		}
 		if knownClaim {
-			if claim.Intent != r.Intent || (claim.Complete && (r.State != "stopped" || r.LastProblem != nil)) {
+			// Final output may time out after durable owned cleanup. That
+			// diagnostic does not revoke completion or reopen the session.
+			if claim.Intent != r.Intent || (claim.Complete && (r.State != "stopped" || (r.LastProblem != nil && *r.LastProblem != port.StreamTimeout))) {
 				return nil, "state.invalid"
 			}
 			if !claim.Complete {

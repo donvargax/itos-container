@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"errors"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"time"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -35,12 +37,17 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	if attachment != nil {
 		defer attachment.Close()
 	}
+	result.Started = result.ID != ""
 	if result.Outcome == "" {
 		// Waiting for the workload is not a startup operation or a lifetime limit.
 		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, connection, attachment, result.Reference, result.ID)
 	}
 	if result.Reference != "" {
 		teardown, end := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		result.Deadline, _ = teardown.Deadline()
+		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && (result.Outcome == "" || result.Outcome == port.ExecutionFailed) {
+			result.Signal, result.Outcome = interrupted.Signal, ""
+		}
 		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && !result.Exited {
 			result.Exit, result.Exited = s.interrupt(teardown, result.Reference, interrupted.Signal)
 			// Launch or wait already supplied the failure. Interruption must not
@@ -93,7 +100,7 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	if s.Registry != nil {
 		entry, f := s.Registry.Open(probe, reference, true)
 		if f != "" {
-			if f == port.Incomplete && probe.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+			if f == port.Incomplete && errors.Is(budget.Cause(probe), context.DeadlineExceeded) && ctx.Err() == nil {
 				return 0, false, waitUnreconciled
 			}
 			return 0, false, port.ExecutionFailed
@@ -287,8 +294,8 @@ func validateLaunch(ctx context.Context, intent port.Intent, connection port.Run
 	if failure := intent.Validate(); failure != "" {
 		return failure
 	}
-	if !workspace.Unchanged() {
-		return port.Refused
+	if failure := workspace.Validate(); failure != "" {
+		return failure
 	}
 	return connection.Check(ctx)
 }

@@ -4,6 +4,7 @@ package docker
 import (
 	"context"
 	"errors"
+	budgetdomain "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"io/fs"
 	"net"
 	"net/http"
@@ -30,6 +31,22 @@ func (Engine) Open(selection, checkout string, budget time.Duration) (port.Sessi
 }
 
 func openEngine(selection, checkout string, budget time.Duration, newClient func(...client.Opt) (*client.Client, error)) (port.Session, port.Failure) {
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	return openContext(ctx, ctx, cancel, selection, checkout, newClient)
+}
+
+func (Engine) OpenContext(call context.Context, selection, checkout string) (port.Session, port.Failure) {
+	lifetime, cancel := context.WithCancel(budgetdomain.Lifetime(call))
+	return openContext(call, lifetime, cancel, selection, checkout, client.New)
+}
+
+func openContext(call, ctx context.Context, cancel context.CancelFunc, selection, checkout string, newClient func(...client.Opt) (*client.Client, error)) (port.Session, port.Failure) {
+	success := false
+	defer func() {
+		if !success {
+			cancel()
+		}
+	}()
 	path, failure := socketPath(selection, checkout)
 	if failure != port.None {
 		return nil, failure
@@ -38,7 +55,6 @@ func openEngine(selection, checkout string, budget time.Duration, newClient func
 	if err != nil || info.Mode()&os.ModeSocket == 0 {
 		return nil, port.EngineUnavailable
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	transport := &http.Transport{DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", path)
 	}}
@@ -53,7 +69,7 @@ func openEngine(selection, checkout string, budget time.Duration, newClient func
 		return nil, port.EngineSelection
 	}
 	s := &session{api: api, ctx: ctx, cancel: cancel, transport: transport, path: path, selected: selection, checkout: checkout, socket: info}
-	_, err = api.Ping(ctx, client.PingOptions{NegotiateAPIVersion: true})
+	_, err = api.Ping(call, client.PingOptions{NegotiateAPIVersion: true})
 	if err != nil {
 		failure = s.failure(err, port.EngineInspect)
 		if guard.httpFailure {
@@ -69,6 +85,7 @@ func openEngine(selection, checkout string, budget time.Duration, newClient func
 		s.Close()
 		return nil, port.EngineChanged
 	}
+	success = true
 	return s, port.None
 }
 
@@ -184,4 +201,12 @@ func (t *onceFailed) RoundTrip(request *http.Request) (*http.Response, error) {
 		t.httpFailure = true
 	}
 	return response, err
+}
+
+// A request view shares the pinned socket/client, but never owns their closure.
+func (s *session) ForContext(ctx context.Context) port.Session {
+	view := *s
+	view.ctx = ctx
+	view.cancel = func() {}
+	return &view
 }

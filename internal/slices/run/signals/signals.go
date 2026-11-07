@@ -12,9 +12,8 @@ import (
 	"github.com/donvargax/itos-container/internal/slices/run/port"
 )
 
-// Runner installs signal handling only at the owned-launch handoff. Preflight
-// retains the normal host signal disposition so an abort cannot be swallowed
-// by inspection or snapshot publication, which have no owned worker to recover.
+// Runner supports callers already at the frozen handoff. The command assembly
+// uses Capture before preflight and retains it through diagnostic delivery.
 type Runner struct{ Next port.Runner }
 
 func (r Runner) Run(ctx context.Context, frozen approval.Durable, argv []string, streams session.Streams) session.RunResult {

@@ -301,3 +301,78 @@ func TestStdinClosureDoesNotEndOutputDrain(t *testing.T) {
 		})
 	}
 }
+
+type blockedStreamWriter struct {
+	entered, release chan struct{}
+	once             sync.Once
+}
+
+func (w *blockedStreamWriter) Write(p []byte) (int, error) {
+	w.once.Do(func() { close(w.entered) })
+	<-w.release
+	return len(p), nil
+}
+
+func TestSDKDetachReleasesEngineWhileCallerOutputIsBlocked(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	id := strings.Repeat("c", 64)
+	peerClosed := make(chan struct{})
+	e, b, _ := sdkHandlerFixture(t, func(w http.ResponseWriter, r *http.Request, _ sp.Binding) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/attach"):
+			conn := hijackRunStream(t, w)
+			if conn == nil {
+				return
+			}
+			defer func() { _ = conn.Close() }()
+			deadline, _ := ctx.Deadline()
+			_ = conn.SetDeadline(deadline)
+			writeFrame(conn, 1, []byte("blocked output"))
+			if _, err := io.Copy(io.Discard, conn); err == nil {
+				close(peerClosed)
+			}
+		case strings.HasSuffix(r.URL.Path, "/wait"):
+			select {
+			case <-peerClosed:
+				_, _ = io.WriteString(w, `{"StatusCode":17}`)
+			case <-r.Context().Done():
+			}
+		default:
+			t.Error("unexpected detach fixture request", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	})
+	c, failure := e.OpenRun(ctx, b)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer c.Close()
+	input, writer := io.Pipe()
+	defer func() { _ = input.Close(); _ = writer.Close() }()
+	output := &blockedStreamWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	defer close(output.release)
+	a, failure := c.Attach(ctx, id, sp.Streams{In: input, Out: output})
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer a.Close()
+	select {
+	case <-output.entered:
+	case <-ctx.Done():
+		t.Fatal("fixture never blocked caller output")
+	}
+	detached := make(chan struct{})
+	go func() { a.Close(); close(detached) }()
+	select {
+	case <-detached:
+	case <-ctx.Done():
+		t.Fatal("detach waited for caller output")
+	}
+	if exit, failure := c.Wait(ctx, id); exit != 17 || failure != "" {
+		t.Fatal("owned stream closure did not release the authoritative exit", exit, failure)
+	}
+	if _, err := writer.Write([]byte("caller still owns input")); err != nil {
+		t.Fatal("detach closed caller-owned input", err)
+	}
+}
