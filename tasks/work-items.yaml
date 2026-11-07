@@ -1,7 +1,8 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue: []
+queue:
+  - T-32
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -424,8 +425,8 @@ items:
   - id: T-25
     title: Release a version on each feat or fix once run works
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-14, slice-15]
     kind: task
   - id: slice-13
@@ -566,17 +567,9 @@ items:
     title: Status and stop recover owned checkout mount anchors
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: [slice-17]
     kind: slice
-    why: >
-      Was p1-recover-owned-checkout-mounts.
-      Extend existing recovery to the mount ownership introduced by the launch slice. After
-      controller loss or uncertain startup, retain isolation and release only proven-owned anchors
-      after worker removal is confirmed. Cover repeated stop, foreign-resource refusal and
-      independent sessions with black-box scenarios, using CI for native-engine evidence. Share
-      recovery logic through engine packages without imports between command slices. Broken down
-      from null.
   - id: slice-21
     title: Doctor and approve reject state exposed to another worker
     phase: 1
@@ -682,3 +675,10 @@ items:
       adds engine cases, so main will go red more often. Measure each scenario's time, make the slow
       ones fast (LIFECYCLE-13's first row took 128 s in red), and shard the engine job by feature if
       the total still nears the limit. Raising the limit is the person's call, not a fix.
+  - id: T-32
+    title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task

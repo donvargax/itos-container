@@ -2279,3 +2279,15 @@
     heartbeat file's rename, likely) and fix it, never by retrying or widening a timeout.
   done_when:
     - run: ITOS_CONTAINER_ENGINE_TESTS=1 go test ./features -count=1 -scenarios='^@ID-RECOVERY-23$'
+- id: T-32
+  type: ci
+  title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
+  why: >
+    Stopgap, recorded as a weakened gate: the engine suite now runs 300-335 s against the step's
+    5-minute timeout-minutes, so about half of today's pull request runs (slice-19, slice-21) and
+    one main run failed on the limit with every scenario passing, which blocks landing. Raise the
+    Engine scenarios step's timeout-minutes from 5 to 8 in .github/workflows/ci.yml and nothing
+    else; p1-engine-suite-within-its-limit brings the suite back under 5 minutes and then restores
+    the limit.
+  done_when:
+    - run: "grep -A1 'name: Engine scenarios' .github/workflows/ci.yml | grep -q 'timeout-minutes: 8'"
