@@ -50,9 +50,14 @@ func (w *world) controlTrackingSteps(sc *godog.ScenarioContext) {
 		f.results = nil
 		f.p.doctor.env["SLICE_21_ACCOUNT_HOME"] = "unavailable"
 		for _, mode := range []string{"--policy-only", "--manifest-only"} {
+			lookupLog := filepath.Join(f.parent, "slice-21-home-lookups"+mode)
+			f.p.doctor.env["SLICE_21_LOOKUP_LOG"] = lookupLog
 			p := f.traceCommand("doctor", mode, "--json")
 			p.wait()
 			f.err = errors.Join(f.err, p.err)
+			if _, err := os.Lstat(lookupLog); !errors.Is(err, os.ErrNotExist) {
+				f.err = errors.Join(f.err, errors.New("file-only doctor resolved the account home"))
+			}
 			events, err := controlEvents(p.journal)
 			f.err = errors.Join(f.err, err)
 			for _, e := range events {

@@ -122,7 +122,7 @@ func (f *controlFixture) bootstrapOrdering() error {
 				locked = false
 			}
 		}
-		if (e.Op == "mkdir" || e.Op == "create" || e.Op == "rename" || e.Op == "write") && e.Phase == "begin" && strings.HasPrefix(e.Path, f.fixedRoot()+"/") && !locked {
+		if (e.Op == "mkdir" || e.Op == "create" || e.Op == "rename" || e.Op == "write" || e.Op == "fsync") && e.Phase == "begin" && strings.HasPrefix(e.Path, f.fixedRoot()+"/") && !locked {
 			return errors.New("managed-state mutation occurred outside account-home exclusion")
 		}
 		if e.Phase == "end" && e.Success && e.Op == "mkdir" {
@@ -130,6 +130,7 @@ func (f *controlFixture) bootstrapOrdering() error {
 				return errors.New("bootstrap directory was created before account-home exclusion")
 			}
 			created[e.Path] = true
+			dirSynced[e.Path], dirSynced[filepath.Dir(e.Path)] = false, false
 		}
 		if e.Phase == "end" && e.Success && e.Op == "fsync" {
 			if e.Directory {
@@ -147,7 +148,7 @@ func (f *controlFixture) bootstrapOrdering() error {
 		if e.Op == "rename" && e.Phase == "end" && e.Success && e.Path == filepath.Join(f.coordination(), "self.json") {
 			bound = fileSynced
 		}
-		if e.Phase == "begin" && (e.Op == "mkdir" || e.Op == "create") && strings.Contains(e.Path, "/approvals/") {
+		if e.Phase == "begin" && (e.Op == "mkdir" || e.Op == "create") && (e.Path == filepath.Join(f.fixedRoot(), "approvals") || strings.Contains(e.Path, "/approvals/")) {
 			ordinary = true
 			if !locked || !durable {
 				return errors.New("ordinary approval storage preceded durable catalog self-binding under the home lock")

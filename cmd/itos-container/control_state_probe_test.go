@@ -43,6 +43,14 @@ type controlAccountHost struct {
 }
 
 func (h controlAccountHost) AccountHome() (string, ap.Failure) {
+	if path := os.Getenv("SLICE_21_LOOKUP_LOG"); path != "" {
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			return "", "state.unavailable"
+		}
+		_, _ = file.WriteString("account-home lookup\n")
+		_ = file.Close()
+	}
 	if h.home == "unavailable" {
 		return "", "state.unavailable"
 	}
