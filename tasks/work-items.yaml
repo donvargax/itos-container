@@ -662,6 +662,10 @@ items:
       and a CI runner that has it, or the gVisor runtime, which hosted runners can prove but which
       adds a runtime. Research in docs/plans/checkout-socket-enforcement.md; scenarios ID-SOCKETS-02
       and 03 wait for it. A milestone-2 choice.
+
+      Already tracks continuous enforcement against host sockets created or replaced after startup,
+      retaining Landlock/gVisor research and runtime scenarios ID-SOCKETS-02/03. Preserve the
+      person's q-30 deferral to milestone 2.
   - id: p1-flaky-equal-basename-stop-scenario
     title: Native stop confined to one of two equal-basename projects passes reliably
     phase: 1
