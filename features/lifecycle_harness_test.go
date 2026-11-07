@@ -20,7 +20,7 @@ import (
 
 func TestLifecycleNativeStepsDefined(t *testing.T) {
 	// Parse and register only: no Before/Given/When or native setup executes.
-	// LIFECYCLE-15 deliberately remains slice-15's unimplemented scenario.
+	// Slice-15's transferred case has its own definition-completeness check.
 	definitions := &lifecycleDefinitions{t: t}
 	(&world{}).lifecycleNativeSteps(definitions)
 	(&world{}).offlineIsolationSteps(definitions)

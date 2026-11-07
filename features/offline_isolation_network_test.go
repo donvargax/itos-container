@@ -40,7 +40,7 @@ func (s *isolationWorld) prepareNetwork() error {
 	if err = os.WriteFile(filepath.Join(s.controlDir, "slice-14-probe"), b, 0755); err != nil {
 		return err
 	}
-	if s.mode == "dns" {
+	if s.mode == "dns" || s.mode == "loss" {
 		c, err := s.controlCreate(s.controlDir, []string{"/workspace/slice-14-probe", "resolver-plan"}, w.approval.uid+":"+w.approval.gid, "none", nil, nil, true)
 		if err != nil {
 			return err
@@ -75,9 +75,12 @@ func (s *isolationWorld) prepareNetwork() error {
 		return err
 	}
 	s.networkID = n.ID
-	if s.mode == "network" {
+	switch s.mode {
+	case "loss":
+		err = s.lossRoutes()
+	case "network":
 		err = s.networkRoutes()
-	} else {
+	default:
 		err = s.dnsRoutes()
 	}
 	if err != nil {
@@ -86,13 +89,20 @@ func (s *isolationWorld) prepareNetwork() error {
 	controlConfig := s.config
 	// Only the isolated control receives TLS private material. It is newly
 	// generated test material, never an operator trust root or credential.
-	if s.mode == "dns" {
+	if s.mode == "dns" || s.mode == "loss" {
 		controlConfig.Cert, controlConfig.Key, err = isolationCertificate()
 		if err != nil {
 			return err
 		}
 		s.config.CA = controlConfig.Cert
 		controlConfig.CA = controlConfig.Cert
+		if s.mode == "loss" {
+			// Keep the subject's nested DNS plan free of the control key too.
+			s.config.DNS.CA = controlConfig.Cert
+			dns := *s.config.DNS
+			dns.Cert, dns.Key = controlConfig.Cert, controlConfig.Key
+			controlConfig.DNS = &dns
+		}
 	}
 	if err = os.WriteFile(filepath.Join(s.controlDir, "config.json"), approvalJSON(controlConfig), 0600); err != nil {
 		return err
@@ -111,7 +121,7 @@ func (s *isolationWorld) prepareNetwork() error {
 		// Docker also makes its generated resolv.conf read-only with the root.
 		// Only the DNS control rewrites its own resolver file to reproduce the
 		// worker's observed targets; it needs a writable disposable root for that.
-		h.ReadonlyRootfs = s.mode != "dns"
+		h.ReadonlyRootfs = s.mode != "dns" && s.mode != "loss"
 		// Host IPv6 defaults need not enable the control's loopback interface.
 		// These settings belong only to its private namespace, never the worker
 		// or runner. Keep every IPv6 route and require a usable dual-stack control.

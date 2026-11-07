@@ -463,14 +463,9 @@ items:
     title: Isolation retained through controller loss
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-12, slice-14]
     kind: slice
-    why: >
-      Split from slice-12, 2026-11-06, to break a dependency cycle its spec review found:
-      ID-LIFECYCLE-15 proves network denial still holds after the controller is lost, using
-      slice-14's boundary probes and slice-11's recovery. Its scenario is specified on slice-12's
-      branch and moves here, still @wip.
   - id: p1-mount-bound-to-validated-inode
     title: The checkout mount is bound to the inode that passed validation
     phase: 1
@@ -662,16 +657,28 @@ items:
       and a CI runner that has it, or the gVisor runtime, which hosted runners can prove but which
       adds a runtime. Research in docs/plans/checkout-socket-enforcement.md; scenarios ID-SOCKETS-02
       and 03 wait for it. A milestone-2 choice.
-  - id: p1-flaky-equal-basename-stop-scenario
+
+      Already tracks continuous enforcement against host sockets created or replaced after startup,
+      retaining Landlock/gVisor research and runtime scenarios ID-SOCKETS-02/03. Preserve the
+      person's q-30 deferral to milestone 2.
+  - id: T-31
     title: Native stop confined to one of two equal-basename projects passes reliably
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: p1-engine-suite-within-its-limit
+    title: main's engine scenarios finish well inside the job's 5-minute limit
     phase: 1
     owner: null
     status: todo
     depends_on: []
     kind: idea
     why: >
-      main's engine job went red at 8164782 (run 42389951333), a registry-only push, on 'Native stop
-      is confined to one of two equal-basename projects': lstat
-      …/slice-11-project-b/checkout/slice-11-heartbeat.next: no such file or directory, while the
-      run before (db63a37) passed. A flaky engine scenario turns main red at random. Find the race
-      (the heartbeat file's rename, likely) and fix it, never by retrying or widening a timeout.
+      main went red at b2ad2ad (run 42392045565) although all 49 engine scenarios passed (feature
+      test exit status 0): the Engine scenarios step hit its 5-minute timeout-minutes. The suite
+      took 258 s on 2026-11-06 and 277 s on 2026-11-07 (run 42389951333), and every isolation slice
+      adds engine cases, so main will go red more often. Measure each scenario's time, make the slow
+      ones fast (LIFECYCLE-13's first row took 128 s in red), and shard the engine job by feature if
+      the total still nears the limit. Raising the limit is the person's call, not a fix.

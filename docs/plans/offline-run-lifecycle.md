@@ -7,9 +7,10 @@ Read it with the [architecture and Slices rules](../architecture.md),
 take precedence. This document supplies planning cases for later behaviour specs;
 it implements no commands, scenario steps, configuration or engine client.
 
-Container commands and isolation are **not implemented**. The existing count, version
-and completion entry point supplies no runtime proof. Linux amd64 with native Docker
-is the first target, contingent on passing runtime evidence, not a supported-host claim.
+At T-11's writing, container commands and isolation were **not implemented**. The
+count, version and completion entry point supplies no runtime proof. Linux amd64
+with native Docker is the first target, contingent on passing runtime evidence,
+not a supported-host claim.
 The scope is one approved foreground worker, no network, credentials or ingress, and
 the checkout as its only host filesystem mount. Proxy/egress work, accounts, network
 Git, LAN publishing, Compose, other hosts, remote engines and linked worktrees remain
@@ -21,6 +22,18 @@ marks a security detail the person must settle; the named questions are collecte
 [Security decisions](#security-decisions) and repeated at their points of impact.
 Completing T-11 neither approves those questions nor makes runtime implementation
 ready to start. Existing sibling items are dependencies, not evidence of consent.
+
+For controller loss, the later settled contract in
+[features/lifecycle.feature](../../features/lifecycle.feature) supersedes the original
+planning blockers below. Under A3, a surviving worker stays isolated until explicit
+stop; no watchdog, liveness lease or automatic kill/restart is authorized. The person's
+q-11 assigns the existing ID-LIFECYCLE-15 to slice-15 after slice-12 and slice-14,
+preserving one copy and its comments. It is now live: q-32 accepts all eight steps
+passing in native CI run 42390615242 at
+`e22aa6366a7bf024322d8b59f2b9f112c4cb26dd` as regression coverage of slice-12's
+behavior. This is passing evidence, not assertion-level red. See the
+[evidence and activation checks](../../features/README.md#the-ci-engine-tier);
+ordinary CI at the actual pushed head, including required proof, still gates closure.
 
 Later commands must each own a vertical slice under the current Slices rules: thin
 handlers delegate to domains, domains reach the world through ports and use fakes in
@@ -203,13 +216,15 @@ that a process did not launch. Required observations are:
 | Workload handles a signal | Observe its handler and resulting termination or continued execution; use the settled grace/escalation policy, never infer termination from handler output. |
 | Workload ignores a signal | Apply the settled bounded stop/escalation policy; confirm termination/removal or retain recovery information. No unbounded wait or invented child status. |
 | Repeated cancellation, including during cleanup | Do not restart setup, duplicate unsafe cleanup or discard ownership evidence. Complete or interrupt cleanup according to the settled policy and preserve a retry if incomplete. |
-| Uncatchable controller loss | No cleanup handler can run in a dead controller. Isolation must remain closed and later reconciliation must be possible; do not promise instantaneous removal or claim the workload stopped without observation. |
+| Uncatchable controller loss | No cleanup handler can run in a dead controller. Under settled A3, a surviving worker stays isolated until explicit stop. Status identifies the owned stop candidate; stop revalidates ownership and confirms removal. Never claim a workload exit from controller death or cleanup success. |
 
 Normal cancellation attempts owned cleanup. Unavailable or interrupted cleanup retains
-recovery information. Whether and how a worker must stop when its controller dies is
-**blocked — Cancellation and controller loss**; no watchdog, lease or restart design is
-selected. Actual signal, interruption and retained-isolation observations require CI
-on the target engine. Local fake tests prove controller decisions only.
+recovery information. Controller death does not trigger automatic worker termination:
+the settled A3 policy requires retained isolation and permits explicit owned stop,
+without a watchdog, lease or restart. ID-LIFECYCLE-15 exercises the merged recovery
+and termination contract with slice-14's independent boundary probes and controls.
+Actual signal, interruption and retained-isolation observations require CI on the
+target engine. Local fake tests prove controller decisions only.
 
 ## Workload exits
 
@@ -300,10 +315,12 @@ logging; there is no promise to redact arbitrary workload text or copy it into r
 
 **Blocked — Safe recovery; Crash-safe ownership:** settle protection of records,
 identity checks at mutation time, concurrent run/stop/status, uncertain creates and
-safe retries. Do not choose locking or reconciliation rules by example. **Blocked —
-Cancellation and controller loss; Offline boundary:** forced controller death cannot
-execute cleanup; retained isolation and eventual reconciliation need independent CI
-evidence, while whether/how the worker must stop remains a security decision.
+safe retries. Do not choose locking or reconciliation rules by example. For the settled
+controller-loss case, consume slice-11's recovery and shared termination contract
+through merged slice-12; retained-isolation evidence uses slice-14's probes and
+controls. Forced controller death cannot execute cleanup. The same surviving worker
+must retain its boundary until explicit stop, with fresh post-loss observations and
+confirmed owned removal as ID-LIFECYCLE-15 requires.
 
 ## Acceptance scenarios
 
@@ -314,11 +331,11 @@ the subject behaviour as a Given. When a case needs a live/interrupted session, 
 Action performs that lifecycle. A harness can prepare a trusted recorded-resource
 fixture directly for recovery cases, subject to the settled state format.
 
-The current binary has no run command. An unknown-command failure, undefined step or
-failed setup is not red behaviour evidence. Refusal assertions must identify the
-specific problem/diagnostic **and** absence of side effects; absence alone passes on
-the current binary. Expected-failure cells below name the behaviour assertion that a
-broken implementation must fail, not a setup failure to count as evidence.
+At T-11's writing the binary had no run command. An unknown-command failure,
+undefined step or failed setup is not red behaviour evidence. Refusal assertions must
+identify the specific problem/diagnostic **and** absence of side effects; absence alone
+passes on that baseline binary. Expected-failure cells below name the behaviour
+assertion that a broken implementation must fail, not a setup failure to count as evidence.
 
 Use these evidence tiers:
 
@@ -382,7 +399,7 @@ they cannot count as enforcement.
 | Zero/nonzero exit and successful cleanup (AC-22) | Separate fixed-exit workloads, zero and 17, with checkout/state marker writes. | Invoke each run and await completion. | Return 0 and 17 respectively; owned ephemeral resources absent; checkout/state markers preserved. | CI runtime; local domain result/cleanup fakes. | Exact result plus independent absence/preserved files fail if nonzero is erased, zero reported early or cleanup deletes persistent state. |
 | Zero/nonzero exit and failed cleanup (AC-22, AC-23) | Same two fixed-exit workloads; trusted removal fault yields a known transient engine failure. | Run each; inspect result, diagnostic and recovery state; restore engine and invoke printed stop. | Nonzero 17 is preserved; zero becomes wrapper 75 for this transient cause; separate cleanup diagnostic, session ID and concrete retry; stop removes only owned ephemeral resources. | CI runtime; local domain classification fakes for other wrapper causes. Blocked on Safe recovery. | Result precedence, actionable retry and retained identity fail if cleanup replaces 17, zero is returned or recovery is discarded. |
 | Engine loss leaves unknown workload result (AC-22, AC-23) | Workload barrier before exit observation and trusted engine-disconnect fault. | Run, disconnect before result can be observed, then inspect retained state; restore engine and invoke status/stop. | Surviving controller reports temporary failure for the injected cause, unknown child outcome and recovery; never synthesizes zero/nonzero child exit; safe cleanup reconciles resources. | CI runtime; local domain unknown-result fake. Blocked on Safe recovery; Cancellation and controller loss. | Explicit unknown result and nonzero wrapper failure fail if engine loss is misreported as workload termination/success. |
-| Forced controller loss retains isolation (AC-23, AC-10/AC-11 offline) | Running-boundary probe and trusted controller kill barrier; working network controls; marker edits/state. | Start run, kill controller uncatchably, observe worker/resources, then invoke status and stop. | No promise of immediate cleanup; isolation stays closed until confirmed removal; workload stopping follows the person's loss policy; recovery preserves edits/state and never restarts work. | CI runtime; blocked on Cancellation and controller loss; Offline boundary; Safe recovery. | Denied access after loss with positive controls, settled stopping behaviour and eventual owned cleanup fail if controller death opens access or loses recovery. |
+| Forced controller loss retains isolation (AC-23, AC-10/AC-11 offline) | Running-boundary probe and trusted controller kill barrier; working network controls; marker edits/state. | Start run, kill controller uncatchably, observe fresh rounds from the same worker before and after status, then invoke its exact stop retry. | The surviving worker stays isolated until explicit stop; owned removal preserves edits/state and unknown workload history without restart or synthetic success. | CI runtime; live ID-LIFECYCLE-15 in slice-15 after merged slice-12 and slice-14. Accepted regression under q-32. | Denied access after loss with positive controls, unchanged worker identity and eventual owned cleanup fail if controller death opens access or loses recovery. |
 | Interrupted or unavailable cleanup (AC-23) | Workload exits with markers; barriers before removal and before absence confirmation. | Run; interrupt cleanup or make engine unavailable at each barrier; later restore access and invoke status and printed stop. | Incomplete state retained; no false stopped/absent claim, bounded failure, session-specific retry; later cleanup finishes without losing markers. | CI runtime; local domain state/engine fakes. Blocked on Safe recovery; Cancellation and controller loss; Resource and wait budgets. | Recoverable incomplete status and eventual confirmed removal fail if interruption drops ownership or unavailability is treated as absence. |
 | Bounded teardown and recovery (AC-22, AC-23) | Trusted faults separately stall signal delivery, stop, removal and absence inspection, with retryable responses and person-set budgets; marker workload/state. | Run and cancel or finish the workload as appropriate; measure teardown, then invoke status/stop under the recovery fault variants. | Each attempt ends within its settled total budget despite retries; incomplete cleanup retains a specific diagnostic and usable recovery reference; no unknown resource is declared absent. | CI runtime; local domain controlled-time engine/state fakes. Blocked on Resource and wait budgets; Cancellation and controller loss; Safe recovery. | Per-attempt elapsed bounds and retained evidence fail if a stalled call, retry or repeated cancellation resets teardown/recovery indefinitely. |
 | Repeated stop, absent and stopped resources (AC-23) | Trusted owned-record fixtures for absent worker, stopped worker and partial creation including temporary storage; persistent markers. | Invoke status and stop, then stop again. | Confirmed-absent resources are harmless; remaining ephemeral resources removed; persistent state unchanged; repetition safe without restarting work. | CI runtime; local domain cleanup fake. Blocked on Safe recovery; Crash-safe ownership. | Idempotent cleanup and preserved persistent markers fail if absence is fatal, stopped workers leak or a retry restarts/deletes state. |
@@ -417,11 +434,13 @@ alone pushes, watches the actual head and closes the item once required checks p
 
 ## Security decisions
 
-These are named unresolved questions, not invented decision numbers or approved
-designs. The person must settle them through the appropriate specifications before
-dependent runtime work proceeds. Listing a sibling item does not declare its work
-finished. No default timeout, resource limit, selected library, network-service
-dependency, security exception or stronger support claim is authorized by this spec.
+These record T-11's named questions, not invented decision numbers or approved
+designs. Controller loss is now settled as described above; the remaining entries
+retain their original planning scope. The person must settle them through the
+appropriate specifications before dependent runtime work proceeds. Listing a sibling
+item does not declare its work finished. No default timeout, resource limit, selected
+library, network-service dependency, security exception or stronger support claim is
+authorized by this spec.
 
 | Question | Required decision | Blocks |
 | --- | --- | --- |
@@ -431,7 +450,7 @@ dependency, security exception or stronger support claim is authorized by this s
 | Offline boundary | Settle enforcement and independent verification before the first worker process, including IPv4/IPv6, gateway/private routes, DNS and no publishing. Determine how closure persists through setup failure, interruption and controller loss; no topology selected here. | Ready state and every isolation claim; First-instruction IPv4/IPv6, DNS denial, Non-root writable boundary, Setup failure and Forced controller loss cases. |
 | Crash-safe ownership | Settle durable ownership before execution and reconciliation when create succeeded but its response or durable record was lost. Define sufficient trusted evidence to distinguish owned, absent, foreign and uncertain resources without deletion by name/label alone. | Any resource creation/launch and recovery after partial startup; Ownership write fails, Create response lost, Cancellation in partial startup and Repeated stop cases. |
 | Resource and wait budgets | Settle resource limits and finite per-call/startup/teardown/recovery budgets, retry accounting, stalled operations, setup/attach and stream backpressure. Do not infer a maximum workload duration. | All bounded waits and timeout classifications; Bounded startup/calls/retries, ignoring-workload, Interrupted cleanup and recovery cases. |
-| Cancellation and controller loss | Settle platform cancellation outcomes, signal targets/forwarding/escalation/grace, repeated cancellation, signal-derived status representation and precedence where no nonzero child exit is observed. Decide whether/how the workload stops on controller loss and how that is evidenced. | Cancellation/timeout result mappings and loss transitions; all cancellation, handler/ignoring-workload, Create interruption, Engine loss, Forced controller loss and Interrupted cleanup cases. |
+| Cancellation and controller loss | The original cancellation questions concern platform outcomes, signal targets/forwarding/escalation/grace, repetition and result precedence. Controller loss is settled by A3: retained isolation until explicit owned stop, with ID-LIFECYCLE-15's independent post-loss evidence accepted as regression coverage under q-32. | Original cancellation/timeout and loss cases follow their later lifecycle specs. Controller loss no longer blocks slice-15; its required dependencies are slice-12 and slice-14. |
 | Safe recovery | Settle protected recovery fields/storage, safe session-ID rendering, redaction, unknown-outcome reporting, ownership revalidation and concurrency among run/status/stop. Specify the status/stop interfaces and safe interrupted/repeated cleanup before promising an executable retry. Distinguish metadata from slice-4's trusted effective snapshot. | Cleanup completion, failed-state reporting and actionable recovery; cleanup-failure precedence, engine/controller loss, Repeated stop, Foreign ownership, Two independent projects and Sensitive markers cases. |
 
 Security choices remain with the person. Completion of this documentation is not a

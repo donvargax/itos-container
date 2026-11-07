@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -18,6 +19,8 @@ import (
 
 type config struct {
 	Nonce, Previous, Mode string
+	HostNonce             string
+	Network, DNS          *config
 	Status                int
 	Files, Sockets        map[string]string
 	HostPID               int
@@ -35,7 +38,9 @@ type report struct {
 	Error              string
 }
 
-func emit(r report) { _ = json.NewEncoder(os.Stdout).Encode(r) }
+var reportOutput io.Writer = os.Stdout
+
+func emit(r report) { _ = json.NewEncoder(reportOutput).Encode(r) }
 func must(err error) {
 	if err != nil {
 		emit(report{Kind: "error", Error: err.Error()})
@@ -120,6 +125,8 @@ func main() {
 	must(json.NewDecoder(f).Decode(&c))
 	must(f.Close())
 	switch os.Args[1] {
+	case "loss":
+		loss(os.Args[2])
 	case "identity":
 		identity(c)
 	case "filesystem":
@@ -143,6 +150,17 @@ func main() {
 		emit(attempts(c, "running"))
 		loopback(c)
 	case "control":
+		if c.Mode == "loss" {
+			must(controlAddressReady("fd14:14::2"))
+			// Docker can regenerate the control's resolver file on reconnect.
+			// Restore only this isolated control's independently captured plan.
+			controlResolvers(c)
+			if os.Args[5] == "network" {
+				c = *c.Network
+			} else {
+				c = *c.DNS
+			}
+		}
 		c.Nonce = os.Args[3]
 		emit(attempts(c, os.Args[4]))
 	case "serve":
@@ -271,7 +289,11 @@ func host(c config) {
 	}
 	r["sentinel-attempt"] = "true"
 	env := text(fmt.Sprintf("/proc/%d/environ", c.HostPID))
-	r["sentinel-match"] = strconv.FormatBool(start(c.HostPID) == c.HostStart && strings.Contains(env, "SLICE_14_SENTINEL="+c.Nonce))
+	nonce := c.HostNonce
+	if nonce == "" {
+		nonce = c.Nonce
+	}
+	r["sentinel-match"] = strconv.FormatBool(start(c.HostPID) == c.HostStart && strings.Contains(env, "SLICE_14_SENTINEL="+nonce))
 	emit(report{Kind: "host", Nonce: c.Nonce, Values: r})
 }
 
