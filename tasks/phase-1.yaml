@@ -2327,7 +2327,7 @@
     features/recovery_preservation_test.go for their regressions. Keep recovery_native_steps_test.go,
     recovery_native_assertions_test.go and all feature text unchanged. Do not change cmd/internal,
     production locking or stop behaviour, workflow limits, test selection, hooks or proof settings.
-    T-32 and p1-engine-suite-within-its-limit own the separate engine-duration work. If inspection
+    T-32's temporary limit allowance and T-33's engine-duration work stay separate. If inspection
     exposes a product defect, return it for a behaviour spec instead of fixing it inside this task.
 
     Add TestRecoveryProtectedHeartbeatRename using disposable files and the real recovery
@@ -2350,6 +2350,17 @@
     callbacks or handshakes, never sleeps, scheduling hints, retries, stress loops or an
     increased count to seek a passing schedule. Any seam must leave the ordinary native path
     using WalkDir.
+
+    Include an excluded_info_calls control in TestRecoveryProtectedHeartbeatRename with both
+    exact heartbeat files present. A per-call wrapper delegates to WalkDir, delivers both real
+    entries to the collector and counts their Info calls while returning the real metadata.
+    Preserve each entry's Name, Type and IsDir; the wrapper must not filter entries itself.
+    Require each entry to be delivered exactly once and each collector Info count to be zero,
+    alongside successful capture and the known retained checkout/host sentinels. Count calls
+    even if the collector discards their results or errors. This fails under the current late
+    deletion and rejects inspecting an excluded entry before dropping it from the map; capture
+    success alone cannot establish that inspection was avoided. Keep fixture metadata reads
+    used to arrange the cached-info rename separate from these collector-call counts.
 
     Add TestRecoveryProtectedSnapshotBoundaries with a healthy control and fault controls that
     retain the audit. Deleting a non-excluded entry after enumeration must still return its
@@ -2380,6 +2391,16 @@
     observation. The existing separate worker-edit, snapshot and native-resource assertions remain
     authoritative for the data the collector already exempts.
 
+    Make the link preservation control explicit in TestRecoveryProtectedSnapshotBoundaries.
+    A retained, non-excluded checkout symlink points to a disposable directory outside both
+    walked roots. Require its baseline entry to contain the known link mode, owner and literal
+    target, with no captured descendants below the link or target. Changing only an outside
+    target's child must leave the snapshot unchanged; retargeting the link must change its
+    exact entry and the snapshot. Also delete that link after enumeration, delivering its
+    cached symlink FileInfo to the collector: require ErrNotExist with the link's exact path
+    from Readlink. This uses the same per-call walk seam and retains the existing link audit
+    and error propagation; it neither follows targets nor adds an I/O hook or product rule.
+
     At b915115, a temporary schedule-only Go overlay placed a callback at doctorTree's walk
     boundary before entry.Info and invoked the existing recoveryProtected against disposable
     checkout/host files. In one local execution, the unchanged control passed and the single
@@ -2400,10 +2421,16 @@
     test's exit status and refuses an empty selection. Before implementation it fails with
     missing TestRecoveryProtectedHeartbeatRename; both new tests are absent. The two existing
     registry/admission controls passed in a focused local baseline run; they are preservation
-    checks, not evidence the flake is repaired. At 5875eb3, re-running the discovery check and
-    the two existing controls confirmed these same results. This draft adds explicit prefix,
-    directory-descendant and default-entry-point controls from the current collector's exact
-    map deletions; it does not claim those new tests exist or pass yet. Keep the new tests in
+    checks, not evidence the flake is repaired. At 29ab6a2, re-running the discovery check and
+    the two existing controls confirmed these same results. A temporary observation-only Go
+    overlay at that head retained late deletion and reproduced both capture failures after
+    exactly one rename and heartbeat advancement from 1 to 2. The unchanged control passed;
+    excluded_info_calls failed with one collector Info call on each exact heartbeat path.
+    The link controls above passed, including the forced Readlink error on the removed link.
+    Only per-call walk plumbing and disposable-file probes were overlaid; no implementation
+    or probe is committed. The prefix, directory-descendant, strict-default and link controls
+    preserve existing semantics; the rename and no-inspection controls supply red assertions.
+    This spec does not claim the permanent named regressions exist or pass yet. Keep them in
     the existing ordinary Linux go test ./... tier; the focused task check needs no engine and
     no new gate. Commands use plain Go and existing runner shell tools, with no RTK requirement
     in CI.
