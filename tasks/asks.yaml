@@ -123,3 +123,6 @@ questions:
     item: "slice-19"
     question: "slice-19: which enforcement denies host Unix sockets in the checkout: Landlock with a product init, the gVisor runtime, or defer?"
     answer: "Defer (the person, 2026-11-07). For this milestone: refuse at startup a checkout that holds any Unix socket, with no worker created; document plainly that sockets created or swapped in during a run stay reachable; move ID-SOCKETS-02 and 03 out of slice-19 to p1-checkout-socket-kernel-enforcement, keeping the Landlock and gVisor research for milestone 2. See slice-19-steer.md."
+  - id: q-31
+    item: "slice-21"
+    question: "slice-21: is the local red evidence at 4d64985 enough to implement?"
