@@ -131,6 +131,7 @@ func lifecycleTeardownReview(t *testing.T, backend string, parts []string) {
 	elapsed, atReturn := time.Since(began), w.String()
 	close(release)
 	// Only dispose of abandoned test writers after freezing the observation.
+	time.Sleep(w.delay)
 	synctest.Wait()
 	if began.IsZero() || opens == 0 || elapsed > 30*time.Second || code != want {
 		t.Errorf("teardown result: exit %d, want %d; elapsed %s; %s", code, want, elapsed, atReturn)
