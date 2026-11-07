@@ -131,6 +131,10 @@ func (s *socketWorld) completeReports() (err error) {
 }
 
 func (s *socketWorld) hostControls() error {
+	return s.hostControlsFor(socketPhases(s.config.Mode))
+}
+
+func (s *socketWorld) hostControlsFor(phases []string) error {
 	if s.fixtureErr != nil {
 		return fmt.Errorf("socket fixture/control failure (not product red evidence): %w", s.fixtureErr)
 	}
@@ -150,11 +154,11 @@ func (s *socketWorld) hostControls() error {
 			receipts[r.Nonce] = r.Target
 		}
 	}
-	if len(s.controls) != 4 || len(receipts) == 0 {
+	if len(s.controls) != 2*len(phases) || len(receipts) == 0 {
 		return errors.New("missing before/after host controls or listener receipts")
 	}
 	i := 0
-	for _, phase := range socketPhases(s.config.Mode) {
+	for _, phase := range phases {
 		for _, edge := range []string{"before", "after"} {
 			name := phase + "-" + edge
 			r := s.controls[i]

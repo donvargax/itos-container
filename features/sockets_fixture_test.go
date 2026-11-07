@@ -93,6 +93,10 @@ func buildSocketProbe(root, output string) error {
 }
 
 func (w *world) socketFixture(mode string) error {
+	return w.socketFixtureTargets(mode, socketTargets(mode))
+}
+
+func (w *world) socketFixtureTargets(mode string, targets []socketTarget) error {
 	if err := doctorRealGuard(); err != nil {
 		return err
 	}
@@ -109,7 +113,7 @@ func (w *world) socketFixture(mode string) error {
 	if err = w.offlineFixture("sockets"); err != nil {
 		return err
 	}
-	s := &socketWorld{w: w, config: socketConfig{Nonce: isolationNonce(), Mode: mode, Root: "/workspace", Targets: socketTargets(mode)},
+	s := &socketWorld{w: w, config: socketConfig{Nonce: isolationNonce(), Mode: mode, Root: "/workspace", Targets: targets},
 		original: map[string]sessionRecord{}, publications: map[string]socketIdentity{}}
 	w.sockets = s
 	s.probe = filepath.Join(w.dir, "slice-19-probe")
