@@ -207,6 +207,13 @@ comparing all other resource fields. No subject permission or resolver changes.
 Listener receipts are checked through confirmed product removal. Stop must also
 produce the existing file-fsync/publication/parent-fsync evidence. Local harness
 checks compile the probe and reject invalid evidence without executing it.
+Within each network or DNS phase, independent route clients run concurrently;
+the complete report still waits for every attempt and preserves inventory order.
+Client deadlines, per-attempt nonces, before/after controls and the ordering of
+phases and controller-loss rounds are unchanged. This avoids accumulating each
+route's denial wait inside the five-minute CI step. `TestIsolationRouteAttempts`
+exercises only the scheduler with in-memory clients and virtual time on the host;
+the real probe and clients still run only in the guarded engine tier.
 The coordinator's guarded `red_scenarios=ID-LIFECYCLE-15` dispatch
 [42390615242](https://github.com/donvargax/itos-container/actions/runs/42390615242)
 at `e22aa6366a7bf024322d8b59f2b9f112c4cb26dd` passed all eight steps. Under q-32

@@ -136,7 +136,7 @@ func (w *world) compileIsolationProbe(output string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	base := filepath.Join(w.root, "features", "testdata", "slice-14")
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", output, filepath.Join(base, "probe.go"), filepath.Join(base, "network.go"), filepath.Join(base, "dns.go"), filepath.Join(base, "dns_wire.go"), filepath.Join(base, "loss.go"))
+	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", output, filepath.Join(base, "probe.go"), filepath.Join(base, "network.go"), filepath.Join(base, "route_attempts.go"), filepath.Join(base, "dns.go"), filepath.Join(base, "dns_wire.go"), filepath.Join(base, "loss.go"))
 	cmd.Dir, cmd.Env = w.root, sessionChildEnvironment(os.Environ())
 	for k, v := range map[string]string{"CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "amd64", "GOFLAGS": "", "GOWORK": "off"} {
 		cmd.Env = setEnv(cmd.Env, k, v)

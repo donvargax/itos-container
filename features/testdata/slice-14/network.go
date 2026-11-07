@@ -19,12 +19,6 @@ import (
 	"time"
 )
 
-type route struct{ Name, Protocol, Address, Answer string }
-type attempt struct {
-	Name, Protocol, Address, Nonce, Result, Error string
-	Attempted                                     bool
-}
-
 var outputMu sync.Mutex
 
 func receipt(value string) {
@@ -51,20 +45,12 @@ func attempts(c config, phase string) report {
 	if c.Mode == "dns" {
 		r.Values["resolv.conf"] = text("/etc/resolv.conf")
 	}
-	for _, p := range c.Routes {
-		nonce := c.Nonce + "-" + phase + "-" + p.Name
-		a := attempt{Name: p.Name, Protocol: p.Protocol, Address: p.Address, Nonce: nonce, Attempted: true}
-		var e error
+	r.Attempts = routeAttempts(c.Routes, c.Nonce, phase, func(p route, nonce string) (string, error) {
 		if c.Mode == "dns" {
-			a.Result, e = dnsAttempt(c, p, nonce)
-		} else {
-			a.Result, e = exchange(p.Protocol, p.Address, nonce)
+			return dnsAttempt(c, p, nonce)
 		}
-		if e != nil {
-			a.Error = e.Error()
-		}
-		r.Attempts = append(r.Attempts, a)
-	}
+		return exchange(p.Protocol, p.Address, nonce)
+	})
 	return r
 }
 
