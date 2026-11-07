@@ -2303,12 +2303,15 @@
 
     Read the complete workflow before implementing. The step includes compilation before the
     test binary runs, so its elapsed-time limit is distinct from the test-process limit. The
-    supplied done_when command below is a cheap, read-only shell assertion on the workflow; it
-    uses the existing grep available to CI and requires no RTK installation there. Before the
-    work, itos task T-32 exits 1 because the line following the Engine scenarios step name is
-    timeout-minutes: 5, not timeout-minutes: 8. After the one-line implementation it must exit 0.
-    Review the diff as well to confirm that no other workflow value changed. This static check
-    proves the configured step allowance, not runtime duration or passing engine scenarios.
+    supplied grep check is retained. Add a scoped, exact-value awk check because the grep alone
+    also accepts timeout-minutes: 80 or an eight-minute step in another job. The second check
+    requires exactly one step named Engine scenarios inside jobs.engine, with the immediately
+    following line exactly timeout-minutes: 8 at its existing indentation. Both are cheap,
+    read-only shell assertions using tools already on the CI runner, with no RTK requirement.
+    Before the work, both checks fail and itos task T-32 exits 1 because that step still has
+    timeout-minutes: 5. After the one-line implementation both checks must pass. Review the diff
+    as well to confirm that no other workflow value changed. These static checks prove the
+    configured step allowance, not runtime duration or passing engine scenarios.
 
     The drafter edits only this ledger entry and commits docs --item T-32. The implementer edits
     only .github/workflows/ci.yml and commits ci --task T-32. Let configured hooks and CI run their
@@ -2317,3 +2320,11 @@
     CI watching and closure at the actual pushed head.
   done_when:
     - run: "grep -A1 'name: Engine scenarios' .github/workflows/ci.yml | grep -q 'timeout-minutes: 8'"
+    - run: >-
+        awk '/^  engine:$/ { in_engine = 1; next }
+        in_engine && /^  [^ ]/ { in_engine = 0 }
+        in_engine && /^      - name: Engine scenarios$/ {
+          count++;
+          if ((getline) != 1 || $0 != "        timeout-minutes: 8") bad = 1;
+        }
+        END { exit !(count == 1 && !bad) }' .github/workflows/ci.yml
