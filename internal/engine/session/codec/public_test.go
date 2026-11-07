@@ -112,7 +112,9 @@ func publicValue(t *testing.T, data []byte) mp.Value {
 	value := mp.Value{Kind: mp.Object, Fields: map[string]mp.Value{}}
 	for name, raw := range fields {
 		v := mp.Value{Kind: mp.Number, Text: string(raw)}
-		if string(raw) == "null" {
+		if string(raw) == "true" || string(raw) == "false" {
+			v.Kind = mp.Boolean
+		} else if string(raw) == "null" {
 			v.Kind = mp.Null
 		} else if raw[0] == '"' {
 			v.Kind = mp.String

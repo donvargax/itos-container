@@ -258,6 +258,18 @@ func (w *world) recoverySeed(phase, resource, exit string) error {
 			return err
 		}
 	}
+	if phase == "stopped" {
+		// A current completed session includes its admission completion proof.
+		// Explicit pre-upgrade ownership stays in OVERLAP-08's legacy fixture.
+		path := w.admissionPath(l.id)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			return err
+		}
+		claim := map[string]any{"schema": 1, "root": w.doctor.checkout, "id": l.id, "intent": w.session.reference, "complete": true}
+		if err := os.WriteFile(path, approvalJSON(claim), 0600); err != nil {
+			return err
+		}
+	}
 	w.sessionReplacement()
 	return w.recoveryCapture()
 }
@@ -277,7 +289,18 @@ func (w *world) recoveryCapture() error {
 	}
 	w.recoveryLocal.before = all
 	w.recoveryLocal.immutable = map[string]string{}
+	tree, err := runTree(w.doctor.host)
+	if err != nil {
+		return err
+	}
+	admission, err := w.currentAdmissionPaths(tree)
+	if err != nil {
+		return err
+	}
 	for path, value := range all {
+		if admission[path] {
+			continue
+		}
 		if w.recoveryLocal.runFixture && strings.HasPrefix(path, filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")) {
 			rel, _ := filepath.Rel(filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container"), path)
 			if rel == "sessions" || strings.HasPrefix(rel, "sessions/") || rel == "intents" || strings.HasPrefix(rel, "intents/") || rel == "snapshots" {
