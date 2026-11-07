@@ -46,7 +46,7 @@ func (w *world) controlSetup(approval, location, engines string) error {
 		names = []string{"P"}
 	}
 	for _, name := range names {
-		p := &world{root: w.root, bin: bin, dir: filepath.Join(base, "fixtures", name)}
+		p := &world{root: w.root, bin: bin, dir: filepath.Join(base, "fixtures", name), control: f}
 		f.workers.worlds[name] = p
 		if err := os.MkdirAll(p.dir, 0700); err != nil {
 			return err

@@ -99,6 +99,9 @@ func (w *world) sessionFixture(real bool, umask string) error {
 	if err := w.approvalSeed("1", false); err != nil {
 		return err
 	}
+	if err := w.seedControlLocations(); err != nil {
+		return err
+	}
 	s.reference = filepath.ToSlash(filepath.Join("intents", w.approval.project, s.token+".json"))
 	for name, text := range map[string]string{
 		filepath.Join(w.doctor.checkout, "edit.txt"):    "retain checkout edit",

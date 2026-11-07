@@ -1,10 +1,12 @@
 # Slice-21 red-first handoff
 
-Slice-21 is **not implemented**. This branch contains committed step definitions
-for all eleven IDs in [control-state.feature](../../features/control-state.feature),
-with all scenarios still `@wip`. No production coordination, account-home lookup,
-catalog, exposure refusal or bootstrap protocol has been added. There is no green
-scenario evidence, CI result or runtime-isolation claim for this item.
+Coordinator q-31 (2026-11-07, approximately 16:25 UTC) accepted the red evidence
+below and authorized implementation. All 45 examples use recording HTTP engine
+fixtures, not `@engine`; no CI red run is required. The production change and
+[architecture decision](../decisions/0015-control-state-publication.md) implement
+the common account-home transaction, durable catalog and separation checks. All
+45 examples now pass locally with `@wip` removed. CI proof and closure remain with
+the coordinating loop; this adds no runtime-isolation claim.
 
 ## Executed red evidence
 
@@ -49,12 +51,12 @@ ownership would cause an unrelated protected-path refusal. All product commands
 used disposable fixture state and recording Unix HTTP Engine API servers, never
 a real daemon or the person's approval state.
 
-## Test assembly and remaining work
+## Test assembly and implementation
 
 `cmd/itos-container/control_state_probe_test.go` supplies a temporary account-home
-host port in the test executable. That method is intentionally unused by the
-baseline production code. The same host is supplied to the existing public
-recovery test assembly. `features/control_state_trace_test.go` extends the existing
+host port in the test executable. The production account-home port now consumes that observation. The same
+isolated account lookup is supplied to the other approval, run and public
+recovery test assemblies. `features/control_state_trace_test.go` extends the existing
 child-only syscall observer to record directory creation, locks, publication and
 fsync, and inject only the specified filesystem failures. No production testing
 flag was introduced.
@@ -62,18 +64,34 @@ flag was introduced.
 The binding oracle currently represents schema 1 with `uid`, `path`, `complete`
 and ordered `ancestors` entries (`path`, `device`, `inode`). `self.json` binds the
 fixed tree including its coordination-directory identity; other filenames hash
-the JSON-encoded absolute managed path. These are fixture protocol choices, not
-an implemented storage format. The behavioral scenarios remain authoritative.
+the JSON-encoded absolute managed path. The implementation uses this binding format and validates its identities,
+required fields and unique keys. The behavioral scenarios remain authoritative.
 
-Implementation still needs the shared ports, I/O-free fake and disk contracts;
-effective-account lookup; stable account-home descriptor exclusion; conservative
-legacy reservation discovery; durable self-binding and pending/completed location
-claims; and atomic approval/registration integration. Before wiring that lookup,
-isolate the existing approval/run harnesses too: their child HOME values alone
-must never select the person's real account-home anchor.
+Shared memory/disk contracts now cover read-only inspection, exposure, publication
+failure/retry, retained protection, cross-root exclusion and replacement. Adapter
+tests cover bootstrap filesystem failures, malformed bindings and account lookup.
+The previously skipped positive controls, post-recovery publication, retry durability,
+read-only inspection and no-rewrite observations now run successfully.
 
-The later assertions have not yet run against an implementation. Validate their
-positive controls and retry observations while implementing; do not treat skipped
-steps as passing evidence. Complete green evidence, the required architecture
-decision and arc42 updates, and the feature commit remain outstanding. The loop
-still owns pushing, CI proof and item closure.
+Neighboring fixtures now provide disposable account homes and independently seeded
+catalogs when their premise is current approved session state. Multi-project fixtures
+share one account home. CONTROL retains its explicit missing-catalog and legacy
+fixtures. The plain diagnostic observer recognizes doctor's existing CLI prefix
+without relaxing exact rule/message/fix checks. An occupied-public-ID fixture now
+uses valid completed ownership, keeping its assertion focused on collision at
+registration instead of malformed-state rejection during inspection.
+
+No local mutation run or generated proof evidence is committed. The loop owns the
+actual pushed-head CI proof, push, review and closure.
+
+The final affected-scenario run passed all 560 selected examples (including all
+45 CONTROL examples), with the observer controls included:
+
+```sh
+go test ./features -count=1 -run='TestControlStateTrace|TestFeatures' -scenarios='^@ID-(CONTROL|APPROVAL|OVERLAP|RUN|RECOVERY|DOCTOR)-'
+```
+
+Affected approval/session storage, domain, fake, account lookup and command-assembly
+unit tests also passed. These local filesystem checks used unremapped host ownership
+and exclusively disposable state plus recording HTTP engines. Configured gates run
+through the feature commit's hooks; fresh changed-code proof remains CI-only.

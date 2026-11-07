@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	approvalhost "github.com/donvargax/itos-container/internal/engine/approval/host"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -31,10 +33,26 @@ import (
 // Its host port supplies a disposable account home, independently of HOME/XDG.
 // Normal binaries have neither this environment switch nor this assembly.
 func TestMain(m *testing.M) {
-	if home := os.Getenv("SLICE_21_ACCOUNT_HOME"); home != "" && (len(os.Args) < 2 || !strings.HasPrefix(os.Args[1], "-test.")) {
-		os.Exit(controlStateCommand(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, home))
+	home := os.Getenv("SLICE_21_ACCOUNT_HOME")
+	cleanup := func() {}
+	if home == "" {
+		var err error
+		home, err = os.MkdirTemp("", "slice-21-account-")
+		if err != nil {
+			os.Exit(96)
+		}
+		cleanup = func() { _ = os.RemoveAll(home) }
 	}
-	os.Exit(m.Run())
+	accountLookup = controlAccountHost{Host: approvalhost.Process{}, home: filepath.Clean(home)}
+	if home := os.Getenv("SLICE_21_ACCOUNT_HOME"); home != "" && (len(os.Args) < 2 || !strings.HasPrefix(os.Args[1], "-test.")) {
+		if os.Getenv("SLICE_21_BOUNDARY") != "" {
+			os.Exit(controlStateCommand(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, home))
+		}
+		os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	}
+	code := m.Run()
+	cleanup()
+	os.Exit(code)
 }
 
 type controlAccountHost struct {
@@ -70,6 +88,7 @@ func controlStateCommand(args []string, in io.Reader, out, errout io.Writer, hom
 	service, view := approvalServices(in, out, errout)
 	host := controlAccountHost{Host: service.Host, home: home}
 	service.Host = host
+	service = coordinatedApproval(service, host)
 	ui := &cli.UI{In: in, Stdout: out, Stderr: errout, Classify: runcommand.Classify}
 	name, _, _ := strings.Cut(parsed.Command(), " ")
 	switch name {

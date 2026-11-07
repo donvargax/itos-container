@@ -132,7 +132,22 @@ func (w *world) recoveryRunSteps(sc *godog.ScenarioContext) {
 			if err := os.MkdirAll(dir, 0700); err != nil {
 				return err
 			}
-			if err := os.WriteFile(filepath.Join(dir, "record.json"), []byte("existing-public-registration"), 0600); err != nil {
+			// Occupy the public ID with valid completed ownership. A malformed
+			// public record now correctly refuses earlier control-state inspection.
+			record := map[string]any{"schema": 1, "id": w.recoveryLocal.id, "project": w.approval.project, "intent": w.session.reference, "state": "stopped", "workload_exit": nil, "last_problem": nil}
+			if err := os.WriteFile(filepath.Join(dir, "record.json"), approvalJSON(record), 0600); err != nil {
+				return err
+			}
+			for _, name := range []string{"controller.lock", "operation.lock"} {
+				if err := os.WriteFile(filepath.Join(dir, name), nil, 0600); err != nil {
+					return err
+				}
+			}
+			if err := writeManifestFixture(w.sessionRecordPath(), approvalJSON(w.sessionExpectedRecord("cancelled", "")), 0600); err != nil {
+				return err
+			}
+			claim := map[string]any{"schema": 1, "root": w.doctor.checkout, "id": w.recoveryLocal.id, "intent": w.session.reference, "complete": true}
+			if err := writeManifestFixture(w.admissionPath(w.recoveryLocal.id), approvalJSON(claim), 0600); err != nil {
 				return err
 			}
 		}

@@ -41,78 +41,115 @@ func (s Registry) reserve(ctx context.Context, c approval.Candidate, r port.Publ
 }
 
 func (s Registry) checkAdmission(ctx context.Context, c approval.Candidate, d approval.AdmissionDirectory) port.Outcome {
-	names, f := d.Names()
-	if f != "" {
-		return storageFailure(f, false)
+	roots, failure := s.reservationRoots(ctx, c, d)
+	if failure != "" {
+		return storageFailure(failure, false)
 	}
-	known := map[string]port.AdmissionRecord{}
-	for _, name := range names {
-		data, f := d.Read(name)
-		if f != "" {
-			return storageFailure(f, false)
-		}
-		r, failure := s.Codec.DecodeAdmission(data)
-		if failure != "" {
-			return failure
-		}
-		index := registryKey(r.Root, c.UID)
-		if name != admissionName(index, r.ID, c.UID) {
-			return port.Invalid
-		}
-		known[index+"/"+r.ID] = r
-		if !r.Complete && !r.Pending && domain.NestedCheckouts(c.Root, r.Root) {
+	for _, root := range roots {
+		if domain.NestedCheckouts(c.Root, root) {
 			return port.CheckoutOverlap
 		}
 	}
-	// Old public registrations are authority even without new metadata. Read
-	// their original intent/snapshot without opening mutable checkout paths,
-	// acquiring operation locks or contacting any other daemon.
+	return ""
+}
+
+// reservationRoots is shared by admission and control-state separation. Pending
+// claims with no public record prove that launch authority was never granted;
+// every other unresolved claim survives controller loss and uncertain cleanup.
+func (s Registry) reservationRoots(ctx context.Context, c approval.Candidate, d approval.AdmissionDirectory) ([]string, approval.Failure) {
+	names, f := d.Names()
+	if f != "" {
+		return nil, f
+	}
+	known := map[string]port.AdmissionRecord{}
+	var roots []string
+	if len(names) > 0 {
+		roots = []string{}
+	}
+	for _, name := range names {
+		data, f := d.Read(name)
+		if f != "" {
+			return nil, f
+		}
+		r, failure := s.Codec.DecodeAdmission(data)
+		if failure != "" {
+			return nil, "state.invalid"
+		}
+		index := registryKey(r.Root, c.UID)
+		if name != admissionName(index, r.ID, c.UID) {
+			return nil, "state.invalid"
+		}
+		known[index+"/"+r.ID] = r
+		if !r.Complete && !r.Pending {
+			roots = append(roots, r.Root)
+		}
+	}
 	records, f := d.Sessions()
 	if f != "" {
-		return storageFailure(f, false)
+		return nil, f
+	}
+	if len(records) > 0 && roots == nil {
+		roots = []string{}
 	}
 	for _, raw := range records {
 		claim, knownClaim := known[raw.Index+"/"+raw.ID]
-		// Registration and this scan hold the same lock. Only a pending claim
-		// proves an absent public record never granted launch authority. Retain
-		// active/legacy claims and refuse unsafe or unreadable records above.
 		if raw.Data == nil && knownClaim && claim.Pending {
 			continue
 		}
 		r, failure := s.Codec.DecodePublic(raw.Data)
-		if failure != "" {
-			return failure
-		}
-		if r.ID != raw.ID {
-			return port.Invalid
+		if failure != "" || r.ID != raw.ID {
+			return nil, "state.invalid"
 		}
 		if knownClaim {
 			if claim.Intent != r.Intent || (claim.Complete && (r.State != "stopped" || r.LastProblem != nil)) {
-				return port.Invalid
+				return nil, "state.invalid"
 			}
-			if !claim.Complete && domain.NestedCheckouts(c.Root, claim.Root) {
-				return port.CheckoutOverlap
+			if !claim.Complete {
+				roots = append(roots, claim.Root)
 			}
 			continue
 		}
 		i, failure := s.Store.transaction(ctx, r.Intent, false)
 		if failure != "" {
-			return failure
+			switch failure {
+			case port.Unsafe, port.Refused:
+				return nil, "state.unsafe"
+			case port.Invalid:
+				return nil, "state.invalid"
+			default:
+				return nil, "state.unavailable"
+			}
 		}
 		root := i.Binding().Checkout.Root
 		if registryKey(root, c.UID) != raw.Index {
-			return port.Invalid
+			return nil, "state.invalid"
 		}
-		// No certificate means no completion evidence established by admission.
-		// Legacy stop can durably re-confirm cleanup and publish that certificate.
-		if domain.NestedCheckouts(c.Root, root) {
-			return port.CheckoutOverlap
-		}
+		roots = append(roots, root)
 	}
 	if !d.Unchanged() {
-		return port.Unsafe
+		return nil, "state.path"
 	}
-	return ""
+	return roots, ""
+}
+
+// Reservations reads all projects and daemons through the shared protected
+// location port. It never opens worker-controlled checkouts or operation locks.
+type Reservations struct {
+	Locations approval.Locations
+	Store     Store
+	Codec     port.PublicCodec
+}
+
+func (s Reservations) Roots(ctx context.Context, c approval.Candidate, path string) ([]string, approval.Failure) {
+	d, f := s.Locations.Inspect(ctx, c, path)
+	if f != "" {
+		return nil, f
+	}
+	defer d.Close()
+	store := s.Store
+	store.Storage = s.Locations.At(path)
+	registry := Registry{Store: store, Codec: s.Codec}
+	return registry.reservationRoots(ctx, c, d)
 }
 
 func (s *publicSession) completeAdmission() port.Outcome {

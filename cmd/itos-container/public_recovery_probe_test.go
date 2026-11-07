@@ -58,7 +58,9 @@ func TestPublicRecoveryCommand(t *testing.T) {
 	out, errout := open(request.Stdout), open(request.Stderr)
 	service, _ := approvalServices(nil, out, errout)
 	if home := os.Getenv("SLICE_21_ACCOUNT_HOME"); home != "" {
-		service.Host = controlAccountHost{Host: service.Host, home: home}
+		host := controlAccountHost{Host: service.Host, home: home}
+		service.Host = host
+		service = coordinatedApproval(service, host)
 	}
 	runner, recovery := sessionServices(service)
 	registry := runner.Registry.(sessiondisk.Registry)

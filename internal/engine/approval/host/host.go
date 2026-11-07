@@ -1,9 +1,13 @@
-// Package host observes effective process and socket identities without NSS.
+// Package host observes effective process and socket identities and the effective account home.
 package host
 
 import (
 	"fmt"
 	"os"
+	"os/user"
+	"path/filepath"
+
+	"github.com/donvargax/itos-container/internal/engine/approval/port"
 	"reflect"
 	"strconv"
 	"strings"
@@ -16,6 +20,7 @@ type Process struct{ ops *operations }
 type operations struct {
 	geteuid, getegid func() int
 	lstat            func(string) (os.FileInfo, error)
+	lookup           func(string) (*user.User, error)
 }
 
 func (p Process) operations() operations {
@@ -54,4 +59,19 @@ func (p Process) Socket(endpoint string) string {
 		return ""
 	}
 	return fmt.Sprint(dev.Interface(), ":", ino.Interface())
+}
+
+// AccountHome resolves the effective UID through the host account database. HOME,
+// USER and LOGNAME cannot select the common coordination anchor.
+func (p Process) AccountHome() (string, port.Failure) {
+	uid, _ := p.Identity()
+	lookup := p.operations().lookup
+	if lookup == nil {
+		lookup = user.LookupId
+	}
+	account, err := lookup(uid)
+	if err != nil || account == nil || account.Uid != uid || !filepath.IsAbs(account.HomeDir) {
+		return "", "state.unavailable"
+	}
+	return filepath.Clean(account.HomeDir), ""
 }

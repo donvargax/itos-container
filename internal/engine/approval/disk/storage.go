@@ -30,6 +30,20 @@ func (s Storage) Open(ctx context.Context, c port.Candidate, collection string, 
 	if ctx.Err() != nil {
 		return nil, "state.unavailable"
 	}
+	transaction := port.ControlTransaction(localTransaction{})
+	if create {
+		var failure port.Failure
+		transaction, failure = s.Store.control(ctx, c, true)
+		if failure != "" {
+			return nil, failure
+		}
+	}
+	success := false
+	defer func() {
+		if !success {
+			transaction.Close()
+		}
+	}()
 	store := s.Store
 	ops := store.operations()
 	if s.IO.Create != nil {
@@ -63,7 +77,8 @@ func (s Storage) Open(ctx context.Context, c port.Candidate, collection string, 
 	if exclusive == nil {
 		exclusive = (*os.Root).Link
 	}
-	return &directoryStore{pin: p, ctx: ctx, exclusive: exclusive}, ""
+	success = true
+	return &directoryStore{pin: p, ctx: ctx, exclusive: exclusive, control: transaction, releaseControl: create}, ""
 }
 func lockBusy(err error) bool { return errors.Is(err, syscall.EWOULDBLOCK) }
 func lockContext(ctx context.Context, file *os.File) error {
@@ -86,14 +101,23 @@ func lockContext(ctx context.Context, file *os.File) error {
 }
 
 type directoryStore struct {
-	pin       *pin
-	ctx       context.Context
-	exclusive func(*os.Root, string, string) error
-	public    bool
+	pin            *pin
+	ctx            context.Context
+	exclusive      func(*os.Root, string, string) error
+	public         bool
+	control        port.ControlTransaction
+	releaseControl bool
 }
 
-func (d *directoryStore) Close()          { d.pin.close() }
-func (d *directoryStore) Unchanged() bool { return d.ctx.Err() == nil && d.pin.unchanged() }
+func (d *directoryStore) Close() {
+	d.pin.close()
+	if d.control != nil {
+		d.control.Close()
+	}
+}
+func (d *directoryStore) Unchanged() bool {
+	return d.ctx.Err() == nil && d.pin.unchanged() && (d.control == nil || d.control.Unchanged())
+}
 func recordName(name string) bool {
 	return strings.HasSuffix(name, ".json") && len(name) > 5 && strings.Trim(strings.TrimSuffix(name, ".json"), "0123456789abcdef") == ""
 }
@@ -144,6 +168,11 @@ func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 	return data, ""
 }
 func (d *directoryStore) Publish(name string, previous, next []byte) port.Failure {
+	// Initial intent publication ends the common transaction before its caller
+	// can perform engine I/O. The selected directory remains independently pinned.
+	if d.releaseControl && d.control != nil {
+		defer func() { d.control.Close(); d.control = nil }()
+	}
 	if len(next) == 0 || len(next) > 1024*1024 {
 		return "state.invalid"
 	}

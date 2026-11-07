@@ -17,9 +17,16 @@ func (w *world) doctorCheckout() error {
 	d := &doctorWorld{checkout: filepath.Join(w.dir, "checkout"), host: filepath.Join(w.dir, "host"), recorder: filepath.Join(w.dir, "recorder"),
 		image: doctorImage, imageID: doctorImageID, engineID: "engine-A", api: "1.56", env: map[string]string{}}
 	w.doctor = d
+	if !strings.Contains(filepath.Base(w.bin), "-session-probe") {
+		binary, err := w.sessionProbeBinary()
+		if err != nil {
+			return err
+		}
+		w.bin = binary
+	}
 	d.cwd = d.checkout
 	d.manifest = map[string]any{"image": d.image, "containerUser": strconv.Itoa(os.Geteuid()), "remoteUser": strconv.Itoa(os.Geteuid())}
-	for key, name := range map[string]string{"HOME": "home", "USERPROFILE": "home", "XDG_CONFIG_HOME": "config", "XDG_STATE_HOME": "state", "XDG_CACHE_HOME": "cache", "XDG_DATA_HOME": "data", "DOCKER_CONFIG": "docker", "PATH": "bin"} {
+	for key, name := range map[string]string{"HOME": "home", "USERPROFILE": "home", "XDG_CONFIG_HOME": "config", "XDG_STATE_HOME": "state", "XDG_CACHE_HOME": "cache", "XDG_DATA_HOME": "data", "DOCKER_CONFIG": "docker", "PATH": "bin", "SLICE_21_ACCOUNT_HOME": "account-home"} {
 		dir := filepath.Join(d.host, name)
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return err
@@ -250,7 +257,7 @@ func (w *world) doctorCredentialSentinels() error {
 }
 
 func (w *world) doctorHostState() error {
-	for _, name := range []string{"home/.local/state/itos-container/approvals/existing.json", "state/itos-container/sessions/existing.json", "config/itos-container/approvals.json"} {
+	for _, name := range []string{"home/.local/state/itos-container/approvals/existing.json", "state/unrelated-sessions/existing.json", "config/itos-container/approvals.json"} {
 		if err := writeManifestFixture(filepath.Join(w.doctor.host, name), []byte(`{"synthetic":"preserve"}`), 0600); err != nil {
 			return err
 		}

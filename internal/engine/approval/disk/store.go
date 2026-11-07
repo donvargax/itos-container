@@ -2,6 +2,7 @@
 package disk
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -20,6 +21,7 @@ import (
 type Store struct {
 	StateHome, Home string
 	Records         port.Records
+	Control         port.Control
 	ops             *operations
 }
 type operations struct {
@@ -337,16 +339,30 @@ func (p *pin) readNamed(c port.Candidate, records port.Records, name string) (po
 // Read never creates a directory, lock or record. Directory locks serialize all
 // readers with publication without needing a writable lock file for inspection.
 func (s Store) Read(c port.Candidate) (port.Record, port.Failure) {
+	transaction, failure := s.control(context.Background(), c, false)
+	if failure != "" {
+		return port.Record{}, failure
+	}
+	defer transaction.Close()
 	p, failure := s.pin(c, false)
 	if failure != "" || p == nil {
 		return port.Record{}, failure
 	}
 	defer p.close()
-	return p.read(c, s.Records)
+	record, failure := p.read(c, s.Records)
+	if failure == "" && !transaction.Unchanged() {
+		return port.Record{}, "state.path"
+	}
+	return record, failure
 }
 
 // Commit compares generation and publishes only a complete durable record.
 func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Failure) {
+	transaction, failure := s.control(context.Background(), c, true)
+	if failure != "" {
+		return port.Record{}, failure
+	}
+	defer transaction.Close()
 	p, failure := s.pin(c, true)
 	if failure != "" {
 		return port.Record{}, failure
@@ -360,6 +376,9 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 		return port.Record{}, "approve.conflict"
 	}
 	if generation != "" && old.Canonical == c.Canonical {
+		if !transaction.Unchanged() {
+			return port.Record{}, "state.path"
+		}
 		return old, ""
 	}
 	n := uint64(0)
@@ -379,7 +398,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 	if ops.beforePublish != nil {
 		ops.beforePublish()
 	}
-	if !p.unchanged() {
+	if !p.unchanged() || !transaction.Unchanged() {
 		return port.Record{}, "state.path"
 	}
 	var nonce [16]byte
@@ -405,7 +424,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 	if ops.closeFile(file) != nil {
 		return port.Record{}, "state.write"
 	}
-	if !p.unchanged() {
+	if !p.unchanged() || !transaction.Unchanged() {
 		return port.Record{}, "state.path"
 	}
 	if ops.rename(p.root(), name, "current.json") != nil {
@@ -414,7 +433,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 	if ops.syncParent(p.dir) != nil {
 		return port.Record{}, "state.write"
 	}
-	if !p.unchanged() {
+	if !p.unchanged() || !transaction.Unchanged() {
 		return port.Record{}, "state.path"
 	}
 	return record, ""
@@ -423,6 +442,23 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 // Select atomically verifies the active generation, exact bytes and fingerprint.
 // Its returned string owns the bytes; it never consults checkout request files.
 func (s Store) Select(c port.Candidate, generation string) (port.Frozen, port.Failure) {
+	// Establish existing approval before any enrollment, then recheck it while
+	// holding common exclusion in the required home-before-selected lock order.
+	if _, failure := s.selectRecord(c, generation); failure != "" {
+		return port.Frozen{}, failure
+	}
+	transaction, failure := s.control(context.Background(), c, true)
+	if failure != "" {
+		return port.Frozen{}, failure
+	}
+	defer transaction.Close()
+	frozen, failure := s.selectRecord(c, generation)
+	if failure == "" && !transaction.Unchanged() {
+		return port.Frozen{}, "state.path"
+	}
+	return frozen, failure
+}
+func (s Store) selectRecord(c port.Candidate, generation string) (port.Frozen, port.Failure) {
 	p, failure := s.pin(c, false)
 	if failure != "" {
 		return port.Frozen{}, failure
@@ -485,4 +521,17 @@ func (ops operations) privateDirectory(parent *os.Root, name string, expected os
 		return nil, "state.path"
 	}
 	return latest, ""
+}
+
+// Uncoordinated stores are primitives used beneath the common transaction and
+// by isolated storage contracts. Production assembly always supplies Control.
+type localTransaction struct{}
+
+func (localTransaction) Close()          {}
+func (localTransaction) Unchanged() bool { return true }
+func (s Store) control(ctx context.Context, c port.Candidate, write bool) (port.ControlTransaction, port.Failure) {
+	if s.Control == nil {
+		return localTransaction{}, ""
+	}
+	return s.Control.Begin(ctx, c, write)
 }

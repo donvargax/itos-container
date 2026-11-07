@@ -9,11 +9,13 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # approval.feature, and slice-21's dependency on slice-16.
   # Draft baseline: main 88da3e19a01a26fa7171bd2bae2950d9cedb492c and
   # slice-16 21b35193274064b26f0277d0f73c2eb42a0fa992. Read that branch's
-  # checkout-overlap.feature and docs/decisions/0013-checkout-admission.md before
+  # checkout-overlap.feature and docs/decisions/0014-checkout-admission.md before
   # implementing. Its admission lock is per selected state root; approval's
   # Store.Read/Commit currently check only the candidate checkout, never another
   # project's reservation. Its preparing, pending and completion rules still hold.
-  # These are expected failures from inspection, not executed red evidence.
+  # Coordinator q-31 accepts the executed red evidence recorded at 4d64985:
+  # all 45 examples failed at behavior assertions against local recording engines.
+  # No @engine scenarios or CI red run are required for this item.
   #
   # Scope and shared contract:
   # Extend shared admission to track protected control-state locations across
@@ -256,7 +258,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
 
   # Read-only location inspection. Today doctor reports missing/matching and
   # exit 0 because it compares the managed path only with P's disjoint checkout.
-  @wip @slice-21 @ID-CONTROL-01 @local-engine-fixture
+  @slice-21 @ID-CONTROL-01 @local-engine-fixture
   Scenario Outline: Doctor refuses prospective and existing state inside another worker checkout
     Given a control-state fixture with P approval "<approval>" and managed location "<location>" relative to W on "<engines>"
     When W starts and a fresh P doctor inspects that location in "<format>"
@@ -275,7 +277,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
 
   # Publication and the matching fast path both need inspection. Today approve
   # either writes into W's checkout or returns matching without checking W.
-  @wip @slice-21 @ID-CONTROL-02 @local-engine-fixture
+  @slice-21 @ID-CONTROL-02 @local-engine-fixture
   Scenario Outline: Consent cannot publish or reuse worker-exposed approval
     Given a control-state fixture with P approval "<approval>" and managed location "<location>" relative to W on "<engines>"
     When W starts and P approve receives its independently calculated exact fingerprint in "<format>"
@@ -294,7 +296,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # Reuse slice-16's completion semantics, including retained controller-loss
   # evidence. Today none of these reservations is consulted by doctor/approve.
   # The post-recovery success is a control, not a second red requirement.
-  @wip @slice-21 @ID-CONTROL-03 @local-engine-fixture
+  @slice-21 @ID-CONTROL-03 @local-engine-fixture
   Scenario Outline: Separation remains unproven until every exposing reservation is completed
     Given a control-state fixture whose W reservation will be "<condition>" and whose P managed location is below W
     When W reaches that condition and P invokes "<command>" with valid approval inputs from a different state root
@@ -315,7 +317,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
 
   # No catalog lock may span the terminal wait. Today W can start while the
   # review is open and the resumed approval still writes into its checkout.
-  @wip @slice-21 @ID-CONTROL-04 @local-engine-fixture
+  @slice-21 @ID-CONTROL-04 @local-engine-fixture
   Scenario: A worker admitted during terminal review invalidates the proposed state location
     Given a control-state review fixture with an absent P approval and a prospective location below W
     When P shows its terminal review and W starts from another state root before the fixture answers yes
@@ -326,7 +328,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # Pause AFTER final input reinspection, BEFORE entering the shared publication
   # transaction. This defeats a check added only to Service.Inspect. Today
   # Store.Commit publishes without consulting W even after W has registered.
-  @wip @slice-21 @ID-CONTROL-05 @local-engine-fixture
+  @slice-21 @ID-CONTROL-05 @local-engine-fixture
   Scenario Outline: Publication rechecks separation after another process wins worker admission
     Given a control-state fixture configured to pause P publication after final reinspection with "<engines>"
     When P pauses at that barrier and W becomes durably admitted from another state root before P resumes
@@ -346,7 +348,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # Observe the actual cross-process lock attempt; cancel W while P is still
   # held, then release P.
   # Today W registers/creates while P is paused under only its project lock.
-  @wip @slice-21 @ID-CONTROL-06 @local-engine-fixture
+  @slice-21 @ID-CONTROL-06 @local-engine-fixture
   Scenario: A publishing approval excludes concurrent worker registration across state roots
     Given a control-state fixture configured to pause P inside publication before its first selected-tree mutation
     When an independent W run finishes preflight before P holds publication and then attempts admission from another state root
@@ -361,7 +363,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # tree. Today's commands ignore each defect and succeed. The final file-only
   # calls are unchanged-scope controls. Inject the unreadable-reservation error
   # after successful metadata checks; unsafe permissions are a different case.
-  @wip @slice-21 @ID-CONTROL-07 @local-engine-fixture
+  @slice-21 @ID-CONTROL-07 @local-engine-fixture
   Scenario Outline: Unverifiable shared location tracking refuses inspection and publication
     Given a control-state fixture with shared tracking defect "<defect>" outside P active approval record
     When fresh P doctor and exact-fingerprint approve inspect the defect as JSON
@@ -388,7 +390,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # succeeds without a catalog self-binding or account-home exclusion: the first
   # Then fails on ordering/protection, not on the already-working approval result.
   # The later doctor and matching-reuse checks are persistence/no-rewrite controls.
-  @wip @slice-21 @ID-CONTROL-10 @local-engine-fixture
+  @slice-21 @ID-CONTROL-10 @local-engine-fixture
   Scenario: First approval bootstraps the default tree containing its own catalog
     Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
     When P consents with its independently calculated exact fingerprint in a fresh process
@@ -403,7 +405,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # succeeds, so the exact state.write refusal is the first failing Then in
   # every row. The binding-parent-fsync row leaves a visible complete binding;
   # retries must resync it without replacement, not treat visibility as durability.
-  @wip @slice-21 @ID-CONTROL-11 @local-engine-fixture
+  @slice-21 @ID-CONTROL-11 @local-engine-fixture
   Scenario Outline: Failed default-tree bootstrap retains evidence for a safe fresh retry
     Given a first-approval control-state fixture with HOME equal to the account home and XDG_STATE_HOME unset and no state directories
     And default-tree bootstrap has fault "<fault>" while ordinary approval writes remain healthy
@@ -427,7 +429,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # Faults target ONLY the location transaction. P's old approval and its normal
   # store operations remain healthy. Today no location publication occurs, so
   # these injected failures cannot prevent a successful untracked approval.
-  @wip @slice-21 @ID-CONTROL-08 @local-engine-fixture
+  @slice-21 @ID-CONTROL-08 @local-engine-fixture
   Scenario Outline: Approval cannot precede durable protection of its state location
     Given a safe control-state publication fixture with prior P approval and location fault "<fault>"
     When P consents to changed settings while the location fault is active
@@ -447,7 +449,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # successful approval (which already works). Today no shared location record
   # is published. Child HOME is deliberately distinct from the fixture's fixed
   # account home, and both roots must remain discoverable after process exit.
-  @wip @slice-21 @ID-CONTROL-09 @local-engine-fixture
+  @slice-21 @ID-CONTROL-09 @local-engine-fixture
   Scenario Outline: Safe independent state roots stay tracked across environment selections
     Given safe independent control-state projects with "<layout>" and one preexisting matching approval
     When an unrelated W worker stays active while fresh approval processes use distinct XDG state homes and different child HOME values

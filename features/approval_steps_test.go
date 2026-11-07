@@ -11,7 +11,15 @@ import (
 
 func (w *world) approvalSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^an approval checkout and isolated host state$`, w.approvalCheckout)
-	sc.Step(`^a seeded matching approval at generation "([^"]*)"$`, func(g string) error { return w.approvalSeed(g, false) })
+	sc.Step(`^a seeded matching approval at generation "([^"]*)"$`, func(g string) error {
+		if err := w.approvalSeed(g, false); err != nil {
+			return err
+		}
+		if w.doctor.engine.offline != nil {
+			return w.seedControlLocations()
+		}
+		return nil
+	})
 	sc.Step(`^a seeded prior approval at generation "([^"]*)" with a different application environment and workspace$`, func(g string) error { return w.approvalSeed(g, true) })
 	sc.Step(`^the approval manifest omits both users$`, func() error { return w.doctorUsers("omitted", "omitted") })
 	sc.Step(`^misleading USER, LOGNAME, UID, GID, SUDO_UID and SUDO_GID fixture values$`, func() {

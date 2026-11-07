@@ -84,6 +84,9 @@ func (w *world) runSnapshotPath() string {
 	return filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(w.approval.record))), "snapshots", w.approval.project, w.approval.generation+".json")
 }
 func (w *world) runCheckpoint() error {
+	if err := w.seedControlLocations(); err != nil {
+		return err
+	}
 	r := w.runFixture()
 	var err error
 	r.before, err = runTree(w.dir)

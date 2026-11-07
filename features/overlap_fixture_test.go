@@ -86,6 +86,10 @@ func (w *world) overlapSetup(child, engines string, native bool) error {
 		}
 		p.doctor.checkout, p.doctor.cwd = paths[name], paths[name]
 		p.doctor.env["XDG_STATE_HOME"], p.doctor.env["ITOS_ROOT"] = state, paths[name]
+		p.doctor.env["SLICE_21_ACCOUNT_HOME"] = filepath.Join(base, "control", "account-home")
+		if err := os.MkdirAll(p.doctor.env["SLICE_21_ACCOUNT_HOME"], 0700); err != nil {
+			return err
+		}
 		p.recovery = &recoveryNative{mode: "overlap"}
 		p.recoveryLocal = &recoveryLocal{}
 		if !native {
