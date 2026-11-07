@@ -690,7 +690,7 @@ items:
   - id: T-32
     title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
