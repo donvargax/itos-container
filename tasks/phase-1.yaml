@@ -2321,5 +2321,3 @@
     real-engine evidence stays in CI, with no local Docker, approval or mutation run and no
     generated evidence committed. Agents commit and stop; the coordinating loop owns pushing,
     CI watching and closure at the actual pushed head.
-  done_when:
-    - run: "grep -A1 'name: Engine scenarios' .github/workflows/ci.yml | grep -q 'timeout-minutes: 8' && grep -q -- '-test.timeout=7m' .github/workflows/ci.yml"

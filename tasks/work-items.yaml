@@ -691,6 +691,6 @@ items:
     title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
