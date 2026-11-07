@@ -18,8 +18,17 @@ func (w *world) anchorOriginal() error {
 		return fmt.Errorf("run did not reach the submitted-start barrier (exit %d, stderr %q)", o.exit, o.stderr)
 	}
 	if len(s.reports) == 0 {
+		// Q-27's detector runs after start. A detector refusal is evidence that
+		// the anchor failed, not green proof even if teardown beat probe output.
+		if o.api != nil {
+			for _, q := range o.api.requests {
+				if q.Method == "POST" && strings.HasSuffix(q.Path, "/start") && q.Status >= 200 && q.Status < 300 {
+					return errors.New("anchor detector refused after successful native start")
+				}
+			}
+		}
 		if o.exit != 1 || len(o.stdout) != 0 || !strings.Contains(string(o.stderr), "run.mount-refused") {
-			return fmt.Errorf("missing original-inode execution or explicit pre-workload mount refusal (exit %d, stderr %q)", o.exit, o.stderr)
+			return fmt.Errorf("missing original-inode execution or explicit mount refusal (exit %d, stderr %q)", o.exit, o.stderr)
 		}
 		for _, root := range []string{s.original, s.replacement} {
 			if _, err := os.Stat(filepath.Join(root, "subdir", "slice-17-edit")); !os.IsNotExist(err) {
@@ -146,7 +155,7 @@ func (w *world) anchorOneCheck(check string) error {
 		if w.offline.resourcesBefore == nil || !reflect.DeepEqual(w.offline.resourcesBefore, w.offline.resourcesAfter) {
 			return errors.New("native anchor run changed unrelated engine resources or image references")
 		}
-		if len(s.reports) != 0 && w.offline.exit != 0 {
+		if len(s.reports) != 0 && w.offline.exit != s.child {
 			return fmt.Errorf("completed anchored workload returned %d: %s", w.offline.exit, w.offline.stderr)
 		}
 		after, err := anchorTree(s.replacement)

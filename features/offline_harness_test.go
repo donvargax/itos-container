@@ -42,7 +42,7 @@ func TestOfflineRuntimeStepDefinitions(t *testing.T) {
 		for _, scenario := range feature.Pickles {
 			selected := false
 			for _, tag := range scenario.Tags {
-				selected = selected || tag.Name == "@ID-OFFLINE-06" || tag.Name == "@ID-OFFLINE-07" || tag.Name == "@ID-OFFLINE-13" || tag.Name == "@ID-OFFLINE-29" || tag.Name == "@slice-14"
+				selected = selected || tag.Name == "@ID-OFFLINE-06" || tag.Name == "@ID-OFFLINE-07" || tag.Name == "@ID-OFFLINE-13" || tag.Name == "@ID-OFFLINE-29" || tag.Name == "@ID-OFFLINE-30" || tag.Name == "@slice-14"
 			}
 			if !selected {
 				continue
@@ -61,7 +61,7 @@ func TestOfflineRuntimeStepDefinitions(t *testing.T) {
 			}
 		}
 	}
-	if checked != 22 {
+	if checked != 24 {
 		t.Fatalf("checked %d offline runtime cases", checked)
 	}
 }

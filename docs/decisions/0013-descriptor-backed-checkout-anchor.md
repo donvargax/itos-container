@@ -2,8 +2,9 @@
 
 ## Authority and status
 
-The coordinator's q-19 decision of 2026-11-06, approximately 22:55 UTC,
-selects this mechanism; the person reviews it later. It overrides earlier
+The coordinator's q-19 and q-27 decisions of 2026-11-06, approximately
+22:55 and 23:50 UTC, select this mechanism and detector; the person reviews
+them later. They override earlier
 slice-17 requirements where they differ. This is an unproven Moby/kernel
 hypothesis, not an implemented capability or a host-support claim.
 
@@ -24,15 +25,23 @@ or a persistent worker data volume.
 Dockerd performs the bind. The controller gains no capability, performs no
 host mount and starts no new long-lived helper. The kernel must follow the
 descriptor link to its pinned inode, rather than resolve a pathname obtained
-by reading that link. Before releasing the workload, the controller must
-verify from the engine side that the mounted workspace's device and inode
-equal the validated identity. Mismatch or unavailable proof means owned
-teardown and refusal, never a checkout-path fallback.
+by reading that link. This anchor prevents substitution; the following check
+detects an anchor failure and does not provide the protection itself.
+
+Immediately after `ContainerStart` returns, inspect the container's `State.Pid`
+and stat `/proc/<pid>/root/workspace` from the host. Compare its device and inode
+with the validated identity. The worker runs as the host UID with
+no-new-privileges. If the stat cannot be made or the identity differs, kill and
+remove the worker immediately through owned teardown and report a mount refusal.
+There is no checkout-path fallback. A detector failure is evidence against the
+anchor hypothesis, not an acceptable native green result on supported Docker.
 
 Durable intent precedes volume allocation. Independent inspection of the
 volume's identity, labels and exact options precedes durable concrete ownership
 and worker creation. Creating a local volume does not itself establish the
-backing mount, so mounted-inode verification belongs before workload release.
+backing mount; Docker establishes it during start. The descriptor remains open
+through that call. The detector runs immediately afterwards, without a gate
+binary, extra worker mount, capability or helper.
 The volume is the durable anchor record and is released last, after confirmed
 worker removal. No name-only absence authorizes release.
 
@@ -67,7 +76,7 @@ passes its device argument to `unix.Mount`. This does not pin the CI daemon's
 version or prove that its whole execution path, confinement and kernel accept
 the descriptor source. Record the actual server version with the native result.
 
-## Implementation checkpoint and unresolved verification step
+## Implementation checkpoint and settled detector
 
 The coordinator accepted run
 [42309692365](https://github.com/donvargax/itos-container/actions/runs/42309692365)
@@ -78,9 +87,8 @@ pathname race; it supplies no green evidence for the descriptor-backed volume.
 
 Source inspection of that daemon version leaves the selected anchor intact:
 its [local driver](https://github.com/moby/moby/blob/v28.0.4/volume/local/local_unix.go#L115-L167)
-passes a `type=none` device unchanged to the mount library. A separate launch
-ordering question remains before this can be implemented with the required
-verification:
+passes a `type=none` device unchanged to the mount library. The source evidence
+behind q-27 is:
 
 - With copying disabled, [container creation](https://github.com/moby/moby/blob/v28.0.4/daemon/create_unix.go#L71-L86)
   skips volume population. Volume allocation and inspection are not mounted-inode proof.
@@ -94,10 +102,17 @@ verification:
 - [Pause](https://github.com/moby/moby/blob/v28.0.4/daemon/pause.go#L21-L29)
   requires an already-running task. Starting then pausing cannot close this gap.
 
-The missing specification is the authorized engine-side identity observation
-and workload-release mechanism. This checkpoint selects none and does not
-weaken the verification requirement, change the volume mechanism or establish
-that Moby rejects the descriptor. A native workload probe can prove what ran,
-but cannot replace the product's required check before release. Production
-anchor implementation and native green remain pending that clarification;
-the current product still uses the unsafe pathname mount.
+Q-27 settles this ordering: Docker has no hook between mount and task start,
+and an added gate binary would require a forbidden extra mount. The anchor
+must ensure that the worker never runs in a substituted checkout; the host
+stat detects a failure immediately after start. The native workload probe
+independently proves which inode executed. A detector refusal after successful
+start must fail the native acceptance check, even if the probe produced no
+output before teardown. Stop with evidence if Moby rejects the descriptor or
+resolves it by name; do not change mechanisms.
+
+OFFLINE-29 has accepted red evidence. OFFLINE-30's executable removal-retention
+checkpoint still needs its two assertion-level failures in guarded CI before
+implementing that behavior. The local ownership/fault cases 25–28/31 also need
+their red steps and local evidence. Production implementation and native green
+remain pending; the current product still uses the unsafe pathname mount.

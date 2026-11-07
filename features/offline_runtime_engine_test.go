@@ -98,7 +98,7 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 		entry.Status = http.StatusForbidden
 	}
 	a.requests[index] = entry
-	failRemove := allowed && a.failRemove && entry.Method == http.MethodDelete
+	failRemove := allowed && a.failRemove && entry.Method == http.MethodDelete && strings.HasPrefix(entry.Path, "/containers/")
 	fault := allowed && a.removalFault(entry)
 	if failRemove || fault {
 		a.requests[index].Status = http.StatusServiceUnavailable
@@ -268,7 +268,7 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		case "wait":
 			return len(r.URL.Query()) == 1 && r.URL.Query().Get("condition") == "not-running"
 		case "kill":
-			return a.recovery && len(r.URL.Query()) == 1 &&
+			return (a.recovery || w.anchor != nil) && len(r.URL.Query()) == 1 &&
 				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL")
 		case "stop":
 			return a.recovery && len(r.URL.Query()) == 2 && r.URL.Query().Get("signal") == "SIGTERM" && r.URL.Query().Get("t") == "10"

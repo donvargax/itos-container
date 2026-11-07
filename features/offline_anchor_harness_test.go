@@ -14,9 +14,11 @@ import (
 
 func TestAnchorFixtureGuard(t *testing.T) {
 	t.Setenv("ITOS_CONTAINER_ENGINE_TESTS", "0")
-	w := &world{}
-	if err := w.anchorFixture(); err == nil || w.doctor != nil || w.anchor != nil {
-		t.Fatal("anchor fixture initialized outside the CI engine tier")
+	for _, fixture := range []func(*world) error{(*world).anchorFixture, (*world).anchorRetentionFixture} {
+		w := &world{}
+		if err := fixture(w); err == nil || w.doctor != nil || w.anchor != nil {
+			t.Fatal("anchor fixture initialized outside the CI engine tier")
+		}
 	}
 }
 
@@ -118,9 +120,51 @@ func TestAnchorOracleRejectsEarlyRefusalAndMissingWorkload(t *testing.T) {
 		}
 	}
 	w.offline.exit = 1
+	w.offline.api = &offlineAPI{requests: []offlineRequest{{Method: "POST", Path: "/containers/owned/start", Status: 204}}}
+	if w.anchorOriginal() == nil {
+		t.Fatal("post-start detector refusal passed as anchor safety without probe output")
+	}
+	w.offline.api = nil
 	w.offline.stdout = []byte("workload escaped before refusal")
 	if w.anchorOriginal() == nil {
 		t.Fatal("workload output before refusal passed")
+	}
+}
+
+func TestAnchorRetentionOracleRejectsMissingEvidence(t *testing.T) {
+	w := &world{anchor: &anchorWorld{reached: true}}
+	if err := w.anchorRetained(); err == nil || !strings.Contains(err.Error(), "missing original owned volume") {
+		t.Fatalf("missing anchor did not reach the retention assertion: %v", err)
+	}
+	w.anchor.volumes = map[string]*anchorVolume{"owned": {name: "owned"}}
+	if err := w.anchorRetained(); err == nil || !strings.Contains(err.Error(), "missing original owned volume") {
+		t.Fatalf("volume name alone passed without protected records: %v", err)
+	}
+}
+
+func TestAnchorRetentionInventoryExcludesOnlyExactOwnedResources(t *testing.T) {
+	before := map[string]string{"/containers/json?all=1": `{"Id":"unrelated"}`, "/volumes": `{"Name":"other"}`, "/images/json?all=1": "immutable"}
+	after := map[string]string{"/containers/json?all=1": `{"Id":"unrelated"}` + "\n" + `{"Id":"owned"}`, "/volumes": `{"Name":"other"}` + "\n" + `{"Name":"anchor"}`, "/images/json?all=1": "immutable"}
+	if err := anchorUnrelatedResources(before, after, "owned", "anchor"); err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []struct{ path, value string }{
+		{"/containers/json?all=1", `{"Id":"owned"}`},
+		{"/containers/json?all=1", after["/containers/json?all=1"] + "\n" + `{"Id":"extra"}`},
+		{"/volumes", `{"Name":"other"}`},
+		{"/volumes", after["/volumes"] + "\n" + `{"Name":"anchor"}`},
+		{"/volumes", "invalid"},
+		{"/images/json?all=1", "changed"},
+	} {
+		original := after[change.path]
+		after[change.path] = change.value
+		if err := anchorUnrelatedResources(before, after, "owned", "anchor"); err == nil {
+			t.Fatalf("lost/extra/changed resource passed: %s", change.path)
+		}
+		after[change.path] = original
+	}
+	if anchorUnrelatedResources(nil, after, "owned", "anchor") == nil || anchorUnrelatedResources(before, nil, "owned", "anchor") == nil {
+		t.Fatal("missing native inventory passed")
 	}
 }
 

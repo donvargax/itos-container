@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"syscall"
 )
 
@@ -17,10 +18,19 @@ type report struct {
 }
 
 func main() {
+	exit := 0
+	if len(os.Args) > 1 {
+		value, err := strconv.Atoi(os.Args[1])
+		if err != nil || value < 0 || value > 255 {
+			os.Exit(91)
+		}
+		exit = value
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(91)
 	}
+	os.Exit(exit)
 }
 
 func run() error {

@@ -500,7 +500,17 @@ Feature: Hardened offline foreground run
   # Retain existing refusal when identity replacement is observed BEFORE the
   # final launch check (OFFLINE-05). For the post-check substitutions below,
   # the already submitted start must use the pinned ORIGINAL inode or refuse
-  # without releasing the workload, with owned teardown and no path fallback.
+  # without executing in a substituted checkout, with owned teardown and no
+  # path fallback. Q-27 (2026-11-06 ~23:50 UTC) settles the detector: immediately
+  # after ContainerStart returns, inspect State.Pid and stat the host path
+  # /proc/<pid>/root/workspace. Compare device/inode with the validated identity.
+  # A mismatch or unavailable stat means immediate owned kill/removal and mount
+  # refusal. The descriptor-backed volume prevents substitution; this check
+  # detects a failed anchor and cannot precede the first workload instruction.
+  # No gate binary, extra mount, privilege or long-lived helper is authorized.
+  # A detector refusal after successful start must fail native acceptance, even
+  # if teardown precedes probe output. Stop with evidence if Moby rejects the
+  # /proc source or resolves it by name; do not select another mechanism.
   # Do not repair, reapprove, copy or restore the substituted checkout path.
   # A healthy no-substitution control must work through its own anchor; always
   # refusing is not an implementation of this capability.
@@ -513,8 +523,8 @@ Feature: Hardened offline foreground run
   # operation identity. Reuse the existing 256-bit entropy and protected-store
   # rules. Independently observe the allocated volume's concrete identity,
   # labels and exact options, then durably publish ownership BEFORE worker
-  # create. Verify the mounted backing inode before workload release; a local
-  # volume allocation alone has not yet established that mount.
+  # create. Detect a mounted backing-inode mismatch immediately after start as
+  # specified above; volume allocation alone has not yet established that mount.
   # Record the relationship to the worker intent/full ID when one exists.
   # A returned source string or create response alone is never ownership proof.
   #
@@ -780,7 +790,7 @@ Feature: Hardened offline foreground run
     Given a CI mount-anchor checkout with the cached image original and replacement nonce trees and a reporting probe
     And the native recorder is armed to pause the submitted worker start before daemon source resolution
     When run reaches that barrier and the fixture makes "<replacement>" before forwarding the unchanged start request
-    Then the worker executes in the original checkout inode and approved subdirectory or run refuses before releasing the workload
+    Then the worker executes in the original checkout inode and approved subdirectory or run refuses without executing in a substituted checkout
     And the independently observed protected anchor was owned before use and the worker has exactly the original nonrecursive checkout host source
     And any started worker cannot read the replacement nonce nested host sentinel or anchor control records
     And each started worker fails every append rename and unlink attempt against the actual anchor control records while the same operations succeed on worker-local controls

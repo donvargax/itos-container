@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,6 +28,7 @@ type anchorVolume struct {
 	observed        map[string]any
 	beforeWorker    bool
 	absent          bool
+	retained        map[string]any
 }
 
 type anchorWorld struct {
@@ -43,6 +45,12 @@ type anchorWorld struct {
 	reports                           []anchorReport
 	nested, nestedOK                  bool
 	err                               error
+	retention                         bool
+	child                             int
+	workerAfter                       map[string]any
+	retainedRecords                   map[string]sessionRecord
+	originalBefore, protectedBefore   map[string]string
+	protectedAfter                    map[string]string
 }
 
 func anchorIdentity(path string) (string, error) {
@@ -213,7 +221,7 @@ func (w *world) anchorExecute(replacement string) {
 	s, o := w.anchor, w.offline
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, w.bin, "run", "--", "/workspace/slice-17-probe")
+	cmd := exec.CommandContext(ctx, w.bin, "run", "--", "/workspace/slice-17-probe", strconv.Itoa(s.child))
 	cmd.Dir, cmd.Env = w.doctor.checkout, w.env()
 	for k, v := range w.doctor.env {
 		cmd.Env = setEnv(cmd.Env, k, v)
@@ -262,7 +270,7 @@ func (w *world) anchorExecute(replacement string) {
 			reports := anchorReports(out.bytes())
 			if len(reports) > 0 && !ready {
 				ready = true
-				if replacement == "" {
+				if replacement == "" || s.retention {
 					s.records, err = w.anchorRecords()
 					s.err = errors.Join(s.err, err)
 				}
@@ -272,6 +280,16 @@ func (w *world) anchorExecute(replacement string) {
 					s.err = errors.Join(s.err, err)
 				}
 				o.api.mu.Unlock()
+				if s.retention {
+					s.originalBefore, err = anchorTree(s.original)
+					s.err = errors.Join(s.err, err)
+					s.protectedBefore, err = w.anchorSelectedRecords()
+					s.err = errors.Join(s.err, err)
+					if replacement != "" {
+						s.err = errors.Join(s.err, w.anchorSubstitute(replacement))
+					}
+					s.reached = true
+				}
 				paths := make([]string, 0, len(s.records))
 				for path := range s.records {
 					paths = append(paths, path)
@@ -303,9 +321,25 @@ func (w *world) anchorExecute(replacement string) {
 	s.err = errors.Join(s.err, err)
 	for _, v := range s.volumes {
 		v.absent = w.doctor.real.read("/volumes/"+v.name, nil, 404) == nil
+		if s.retention && !v.absent {
+			v.retained, err = o.api.anchorInspect(v)
+			s.err = errors.Join(s.err, err)
+		}
 	}
 	value, readErr := os.ReadFile(filepath.Join(s.original, "slice-17-nested", "marker"))
 	s.nestedOK = readErr == nil && string(value) == s.nonce
+	if s.retention {
+		s.retainedRecords, err = w.anchorRecords()
+		s.err = errors.Join(s.err, err)
+		s.protectedAfter, err = w.anchorSelectedRecords()
+		s.err = errors.Join(s.err, err)
+		o.api.mu.Lock()
+		if len(o.api.created) == 1 && !o.api.absent[o.api.created[0]] {
+			s.workerAfter, err = o.api.inspect(o.api.created[0])
+			s.err = errors.Join(s.err, err)
+		}
+		o.api.mu.Unlock()
+	}
 }
 
 func anchorReports(data []byte) []anchorReport {
