@@ -278,6 +278,11 @@ Slice-17's [descriptor-backed anchor decision](../decisions/0019-descriptor-back
 extends the existing session engine ports and adapters, with run remaining the thin
 command consumer. Its selected Docker local volume mechanism is pending native proof
 and implementation; it introduces neither another command nor another controller service.
+Coordinator q-36 combines slice-18's accepted anchor recovery specification with
+slice-17 in one pull request. The run, status and stop consumers share the session
+engine; recovery completion requires confirmed worker and anchor absence. This
+resolves delivery ordering only: both specifications retain their separate red-first
+evidence requirements and remain pending implementation and native green.
 Shared contract suites under its `port/porttest` run unchanged against the in-memory
 fake and adapters wherever applicable. Later consumers reuse those suites, normalized
 values, typed failures and synthetic fixtures without importing

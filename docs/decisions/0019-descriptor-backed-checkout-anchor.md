@@ -175,12 +175,11 @@ The committed branch retains the red steps with every slice-17 scenario `@wip`.
 
 ## Shared-contract preparation after q-33
 
-The current handoff permits implementation preparation while gating activation
-on slice-18's specification and integration. That prerequisite is still open:
+The handoff at that checkpoint permitted implementation preparation while gating
+activation on slice-18's specification and integration. At that point:
 the registry makes slice-18 depend on slice-17, so waiting for slice-17 closure
 before preparing the recovery integration cannot satisfy the live contracts.
-The coordinator must arrange that integration; it does not require reconsidering
-q-19 or q-27. The shared `Recovery.stop` path must remain the teardown authority
+Q-36 below now arranges that integration without reconsidering q-19 or q-27. The shared `Recovery.stop` path must remain the teardown authority
 for foreground and fresh-process cleanup.
 
 `internal/engine/session/port/porttest/anchor.go` now supplies reusable contracts
@@ -199,3 +198,18 @@ contracts are preparation, not a product implementation or native proof. No
 slice-17 scenario is activated by this test increment. The saved prototype still
 needs the recovery integration and adapter coverage described above before a
 behavior commit, and native green remains the coordinator's CI responsibility.
+
+## Combined integration under q-36
+
+The coordinator's 2026-11-07 decision at approximately 18:00 UTC resolves the
+ordering cycle described above: merge slice-18's accepted `features/anchors.feature`
+(commit `769ff5c`) into slice-17 and implement both in one pull request. This
+supersedes the separate delivery ordering, not q-19's mechanism or q-27's
+post-start detector. Recovery shares the session engine and releases the anchor
+only after confirmed worker absence; completion accounts for both resources.
+The coordinator owns consolidation of the registry.
+
+The native recovery scenarios `ID-ANCHORS-09` through `ID-ANCHORS-13` require
+their own assertion-level CI red evidence before their implementation. Existing
+OFFLINE-29/30 evidence does not substitute for those checks. The accepted spec's
+pre-workload detector wording is updated to q-27; no gate or helper is added.

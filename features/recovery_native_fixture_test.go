@@ -149,6 +149,9 @@ func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *reco
 	for key, value := range w.doctor.env {
 		p.cmd.Env = setEnv(p.cmd.Env, key, value)
 	}
+	if w.anchors != nil {
+		p.cmd.Env = setEnv(p.cmd.Env, "SLICE_17_ACCESS_TRACE", "1")
+	}
 	p.cmd.Env = setEnv(p.cmd.Env, "ITOS_ROOT", w.doctor.checkout)
 	p.cmd.Stdout, p.cmd.Stderr = &p.out, &p.errout
 	p.started = time.Now()
@@ -376,13 +379,14 @@ func (w *world) closeRecoveryNative() error {
 		}
 		p.wait()
 	}
+	anchorErr := w.closeAnchorsForeign()
 	if r.second != nil {
 		other := r.second
-		err := errors.Join(other.closeRecoveryNative(), other.closeOfflineRuntime(), other.closeSession())
+		err := errors.Join(anchorErr, other.closeRecoveryNative(), other.closeOfflineRuntime(), other.closeAnchor(), other.closeSession())
 		other.closeDoctor()
 		return err
 	}
-	return nil
+	return anchorErr
 }
 
 // Only a product worker executes this trusted static probe. Heartbeats are

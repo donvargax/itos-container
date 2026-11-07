@@ -480,6 +480,24 @@ CI-only and belong to the coordinating loop.
 
 ## Tags
 
+Slice-17 includes slice-18's accepted `anchors.feature` under coordinator q-36.
+The seven native rows in `ID-ANCHORS-09` through `ID-ANCHORS-13` have registered
+steps and remain `@wip` for their own guarded CI red dispatch. They use actual
+product processes, the native request recorder, independently inspected volumes,
+and the existing file/publication fsync observer. The trusted worker probe reports
+inode, nonce, progress and denied control-record reads after controller loss.
+Successful create/start responses and last-volume deletion have bounded barriers;
+foreign-volume substitution occurs only after independently confirmed worker absence.
+The recorder never fabricates successful native resource operations.
+
+`TestAnchorRecovery*` checks registration, CI-only guards, probe compilation,
+barriers and rejection of missing/incorrect observations without an engine.
+These are harness checks, not native red evidence. The coordinator must obtain
+assertion-level red for every row before recovery implementation; OFFLINE-29/30's
+accepted red does not cover them. Dispatch individual IDs if needed to stay within
+the existing engine-job budget. Local `ID-ANCHORS-01` through `08` still require
+their step checkpoint and assertion-level red; no anchor scenario is activated here.
+
 | Tag               | Meaning                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------ |
 | `@phase-<n>`      | The phase a scenario belongs to.                                                     |

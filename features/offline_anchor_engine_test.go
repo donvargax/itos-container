@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -40,6 +41,16 @@ func (a *offlineAPI) anchorStart(r *http.Request, entry offlineRequest) bool {
 func (a *offlineAPI) anchorVolumeAllowed(r *http.Request, entry *offlineRequest) bool {
 	s, w := a.w.anchor, a.w
 	if r.Method == "POST" && entry.Path == "/volumes/create" {
+		if w.anchors != nil {
+			data, err := os.ReadFile(w.anchors.pidPath)
+			if err != nil {
+				return false
+			}
+			s.pid, err = strconv.Atoi(string(data))
+			if err != nil {
+				return false
+			}
+		}
 		name, _ := entry.Body["Name"].(string)
 		labels, options := object(entry.Body["Labels"]), object(entry.Body["DriverOpts"])
 		prefix, token, _ := strings.Cut(name, "itos-container-")

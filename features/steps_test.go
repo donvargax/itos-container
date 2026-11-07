@@ -45,6 +45,7 @@ type world struct {
 	session       *sessionWorld
 	offline       *offlineRuntime
 	anchor        *anchorWorld
+	anchors       *anchorRecoveryWorld
 	recovery      *recoveryNative
 	recoveryLocal *recoveryLocal
 	lifecycle     *lifecycleNative
@@ -162,6 +163,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.recoveryLocalSteps(sc)
 	w.offlineIsolationSteps(sc)
 	w.anchorSteps(sc)
+	w.anchorRecoverySteps(sc)
 	w.lifecycleNativeSteps(sc)
 	w.lifecycleLossSteps(sc)
 	w.lifecycleLocalSteps(sc)

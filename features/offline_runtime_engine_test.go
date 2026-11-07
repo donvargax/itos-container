@@ -146,6 +146,9 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 	if !a.anchorStart(request, entry) {
 		return
 	}
+	if a.anchorsBefore(out, request, entry, index) {
+		return
+	}
 	// ReverseProxy relays the attach upgrade in both directions and preserves
 	// half-close, rather than buffering the upgraded stream as an HTTP body.
 	proxy := &httputil.ReverseProxy{
@@ -220,6 +223,7 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 				}
 			}
 			a.mu.Unlock()
+			a.anchorsResponse(request, entry, response.StatusCode)
 			if a.lifecycle != nil {
 				a.lifecycle.response(request, entry, response.StatusCode)
 			}

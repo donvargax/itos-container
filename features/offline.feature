@@ -452,9 +452,9 @@ Feature: Hardened offline foreground run
   # from a trusted disposable fixture, so refusing overlaps cannot satisfy them.
   # Slice-18 owns discovering/releasing retained anchors with fresh status/stop,
   # controller-loss recovery, repeated stop and cross-session recovery conflicts.
-  # Keep that ownership split and the existing live recovery behavior. The
-  # integration prerequisite below must be resolved before activating anchored
-  # runs; retention alone does not satisfy recovery. No unattended restart.
+  # Coordinator q-36 merges slice-18 into slice-17 to resolve the integration
+  # cycle. Implement features/anchors.feature here with its own red evidence
+  # before activating anchored runs. Preserve live recovery; no unattended restart.
   #
   # Source and lifetime decisions:
   # Coordinator q-19, 2026-11-06 ~22:55 UTC, and q-27, ~23:50 UTC, supersede
@@ -583,8 +583,9 @@ Feature: Hardened offline foreground run
   # workload result wins; zero plus incomplete cleanup is nonzero. Retain the
   # registered session ID and protected evidence. The existing executable stop
   # retry remains a live contract: new anchor-bearing sessions must not make it
-  # unusable. Q-33 accepts foreground retention's red evidence; it does not waive
-  # that recovery contract or move slice-18's volume release into this item.
+  # unusable. Q-33 accepts foreground retention's red evidence. Q-36 brings
+  # slice-18's accepted recovery specification and implementation into this item;
+  # it does not waive recovery's separate local and native red-first evidence.
   # No raw argv, environment, response body or copied output enters diagnostics
   # or ownership records. Existing prerequisite failures keep their own rules.
   # Calls/startup/teardown keep 10/120/30 s budgets; no new workload lifetime limit.
@@ -612,7 +613,7 @@ Feature: Hardened offline foreground run
   # do not re-tag live cases or relax them to accept arbitrary protected paths.
   #
   # Recovery integration prerequisite, exposed by the discarded implementation
-  # draft recorded in decision 0019 and still open at ba0ba6b:
+  # draft recorded in decision 0019, now scheduled together under q-36:
   # - Live RECOVERY-21 executes run's printed retry after failed removal;
   #   RECOVERY-22 discovers/stops a worker after controller death; RECOVERY-23
   #   requires independent stops to complete only their selected session.
@@ -629,18 +630,15 @@ Feature: Hardened offline foreground run
   # do not make a private foreground-only cleanup stand in for fresh recovery.
   # Existing local regressions include TestLifecycleEngineLossRetainsRecoverableFailure,
   # TestPublicRecoveryBudgetRegressions and TestRegisteredWaitReconcilesConcurrentStop.
-  # Q-19 assigns recovery's release to slice-18, which has no scenarios yet.
-  # The coordinator must arrange its specification and integration before
-  # anchored runs can be activated with all these live contracts intact. This
-  # prerequisite neither specifies slice-18 implicitly nor authorizes its
-  # implementation here; q-19's anchor and q-27's detector remain settled.
-  # The registry also makes slice-18 depend on slice-17. Waiting for slice-17
-  # to close before specifying and integrating slice-18 would make this a
-  # circular prerequisite. Leave that scheduling/integration change to the
-  # coordinating loop; do not edit the registry, absorb slice-18's scope or
-  # weaken a live recovery assertion to break the cycle. Q-33 authorizes anchor
-  # implementation from the accepted red evidence now; the integration
-  # prerequisite gates activation, not preparation of that implementation.
+  # Q-36 merges slice-18's reviewed features/anchors.feature (769ff5c) into this
+  # branch and authorizes both specifications in this one pull request. This
+  # supersedes the earlier separate-delivery prerequisite and scope prohibition.
+  # Keep all IDs, live regressions and the shared Recovery.stop authority.
+  # Slice-18's local and native cases still require their own step checkpoint
+  # and assertion-level red before implementation. Commit native steps @wip and
+  # return blocked for the coordinator's guarded CI red dispatch of 09-13.
+  # The coordinating loop consolidates the registry; do not edit it by hand.
+  # Q-19's descriptor anchor and q-27's post-start detector remain settled.
   # OFFLINE-30 proves retention for that handoff, never fresh-process release.
   #
   # Step handoff at ba0ba6b: local cases 25-28/31/32 are defined in
