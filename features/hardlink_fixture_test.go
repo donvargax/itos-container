@@ -11,17 +11,17 @@ import (
 )
 
 type hardlinkWorld struct {
-	path, alias, closed, command string
-	initial, linked, outside     hardlinkEntry
-	before, hidden               map[string]hardlinkEntry
-	identity                     map[string]any
-	results                      []doctorResult
-	journals                     [][]doctorRequest
-	connections                  []int64
-	reached                      bool
-	ownedErr                     error
-	native                       []hardlinkNativeResult
-	resources                    map[string]string
+	path, alias, closed, command   string
+	initial, linked, outside, copy hardlinkEntry
+	before, hidden                 map[string]hardlinkEntry
+	identity                       map[string]any
+	results                        []doctorResult
+	journals                       [][]doctorRequest
+	connections                    []int64
+	reached                        bool
+	ownedErr                       error
+	native                         []hardlinkNativeResult
+	resources                      map[string]string
 }
 
 type hardlinkEntry struct {
@@ -264,7 +264,12 @@ func (w *world) hardlinkCopy() error {
 		return err
 	}
 	// Copy the initial bytes, including after the deliberately unsafe red run.
-	return writeManifestFixture(h.path, []byte(h.initial.Data), h.initial.Mode.Perm())
+	if err := writeManifestFixture(h.path, []byte(h.initial.Data), h.initial.Mode.Perm()); err != nil {
+		return err
+	}
+	var err error
+	h.copy, err = hardlinkObserve(h.path)
+	return err
 }
 
 func (w *world) hardlinkCopyIndependent() error {

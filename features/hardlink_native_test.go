@@ -26,6 +26,7 @@ type hardlinkNativeResult struct {
 	id               string
 	absent, released bool
 	err              error
+	tree             map[string]hardlinkEntry
 }
 
 func (w *world) hardlinkNativeSteps(sc *godog.ScenarioContext) {
@@ -156,6 +157,8 @@ func (w *world) hardlinkNativeRun() (hardlinkNativeResult, error) {
 		r.err = errors.Join(r.err, ctx.Err())
 	}
 	r.outside, r.outsideErr = hardlinkObserve(h.alias)
+	r.tree, err = hardlinkTree(w.dir, "")
+	r.err = errors.Join(r.err, err)
 	a.mu.Lock()
 	r.requests = append([]offlineRequest{}, a.requests[start:]...)
 	if r.id != "" {
@@ -195,7 +198,7 @@ func (w *world) hardlinkNativeRefused(rule string, code int) error {
 	if len(r.requests) != 0 {
 		return fmt.Errorf("shared checkout reached native engine: %v", r.requests)
 	}
-	return nil
+	return hardlinkEqual(w.hardlinks.before, r.tree)
 }
 func (w *world) hardlinkNativeOutside() error {
 	for i, r := range w.hardlinks.native {
@@ -256,7 +259,7 @@ func (w *world) hardlinkNativeEdits() error {
 	if err != nil {
 		return err
 	}
-	if target.Data != "slice-20 overwritten through original inode\n" || target.Mode.Perm() != 0600 || target.Inode == w.hardlinks.outside.Inode {
+	if target.Data != "slice-20 overwritten through original inode\n" || target.Mode.Perm() != 0600 || target.Inode == w.hardlinks.outside.Inode || target.Inode != w.hardlinks.copy.Inode || target.Device != w.hardlinks.copy.Device {
 		return fmt.Errorf("probe did not overwrite independent target")
 	}
 	first, err := hardlinkObserve(filepath.Join(w.doctor.checkout, "slice-20-edit"))
@@ -284,10 +287,11 @@ func (w *world) hardlinkNativeAbsent() error {
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(record.Bytes, `"stage":"absent"`) {
+	if !recoveryJSONEqual(record.Bytes, w.sessionExpectedRecord("absent", r.id)) {
 		return fmt.Errorf("protected native cleanup not complete")
 	}
-	return nil
+	_, err = w.offlineCompletedRegistryPaths()
+	return err
 }
 func (w *world) hardlinkNativePreserved() error {
 	if err := w.approvalRecordUnchanged(); err != nil {
@@ -305,6 +309,53 @@ func (w *world) hardlinkNativePreserved() error {
 			if strings.HasPrefix(req.Path, "/images/") && req.Method != "GET" || strings.HasPrefix(req.Path, "/build") {
 				return fmt.Errorf("native image acquisition attempted")
 			}
+		}
+	}
+	return w.hardlinkNativeTreePreserved()
+}
+
+func (w *world) hardlinkNativeTreePreserved() error {
+	h := w.hardlinks
+	allowed, err := w.offlineCompletedRegistryPaths()
+	if err != nil {
+		return err
+	}
+	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
+	intent := filepath.Join(state, w.session.reference)
+	for _, path := range []string{intent, filepath.Join(filepath.Dir(intent), ".lock"), w.sessionSnapshotPath(), filepath.Join(w.doctor.checkout, "slice-20-edit"), filepath.Join(w.doctor.checkout, "slice-20-edit-alias")} {
+		allowed[path] = true
+	}
+	// Only ancestors of the exact validated additions can change directory
+	// timestamps/link counts. Existing records still have to match byte for byte.
+	parents := map[string]bool{filepath.Dir(h.path): true}
+	for path := range allowed {
+		for parent := filepath.Dir(path); parent != w.dir && strings.HasPrefix(parent, w.dir+string(os.PathSeparator)); parent = filepath.Dir(parent) {
+			parents[parent], allowed[parent] = true, true
+		}
+	}
+	got := h.native[1].tree
+	for path, want := range h.before {
+		actual, exists := got[path]
+		if !exists {
+			return fmt.Errorf("native run removed unrelated entry %s", path)
+		}
+		if path == h.path {
+			want = h.copy
+			want.Data, want.Mode, want.Modified = "slice-20 overwritten through original inode\n", 0600, actual.Modified
+		}
+		if path == h.alias {
+			want.Links = "1"
+		}
+		if want.Mode.IsDir() && parents[path] {
+			actual.Modified, actual.Links = want.Modified, want.Links
+		}
+		if actual != want {
+			return fmt.Errorf("native run changed unrelated entry %s", path)
+		}
+	}
+	for path := range got {
+		if _, existed := h.before[path]; !existed && !allowed[path] {
+			return fmt.Errorf("unexpected native addition %s", path)
 		}
 	}
 	return nil

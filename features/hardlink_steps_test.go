@@ -1,6 +1,7 @@
 package features
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -302,8 +303,25 @@ func (w *world) hardlinkCleanup() error {
 	if err != nil {
 		return err
 	}
-	_, err = w.localRegistryPaths(tree)
-	return err
+	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.recoveryIndexKey())
+	count := 0
+	for path, e := range tree {
+		if filepath.Base(path) != "record.json" || filepath.Dir(filepath.Dir(path)) != root {
+			continue
+		}
+		count++
+		var record map[string]any
+		if err := json.Unmarshal([]byte(e.Data), &record); err != nil {
+			return err
+		}
+		if record["state"] != "stopped" || record["workload_exit"] != nil || record["last_problem"] != nil || record["project"] != w.approval.project || !offlineHex(fmt.Sprint(record["id"])) {
+			return fmt.Errorf("late refusal left incomplete protected registration: %v", record)
+		}
+	}
+	if count != 1 {
+		return fmt.Errorf("missing completed public registration")
+	}
+	return nil
 }
 
 func (w *world) hardlinkCheckoutUnchanged() error {
