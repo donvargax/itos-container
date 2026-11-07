@@ -76,3 +76,7 @@
   scenarios:
     - id: "@ID-LIFECYCLE-11"
       why: repeated signals preserve the observed workload exit and bounded recovery, then explicit stop confirms durable owned cleanup in the guarded CI engine tier
+- file: hardlinks.feature
+  scenarios:
+    - id: "@ID-HARDLINK-03"
+      why: shared Git storage refuses inspection and an independent copy restores readiness with the original approval

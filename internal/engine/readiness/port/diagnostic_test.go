@@ -25,6 +25,17 @@ func TestProblemsEmpty(t *testing.T) {
 	}
 }
 
+func TestHardlinkDiagnosticNamesOnlyTheCheckout(t *testing.T) {
+	root := "/checkout"
+	got := port.Problems(port.Result{Issues: []port.Issue{{Kind: port.CheckoutHardlink, Subject: root}}})
+	want := []port.Problem{{Rule: "doctor.checkout.hardlink", Exit: 1, Path: &root,
+		Message: "Checkout contains hard links that share file inodes",
+		Fix:     "prepare an independent checkout without shared file inodes"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("hard-link prerequisite = %#v, want %#v", got, want)
+	}
+}
+
 func TestProblemsPreservesDiagnostics(t *testing.T) {
 	result := port.Result{
 		Policy: &policy.Result{Issues: []policy.Issue{

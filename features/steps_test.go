@@ -47,6 +47,7 @@ type world struct {
 	recovery      *recoveryNative
 	recoveryLocal *recoveryLocal
 	lifecycle     *lifecycleNative
+	hardlinks     *hardlinkWorld
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
@@ -159,6 +160,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.offlineIsolationSteps(sc)
 	w.lifecycleNativeSteps(sc)
 	w.lifecycleLocalSteps(sc)
+	w.hardlinkSteps(sc)
 }
 
 // setUp makes the scenario's scratch folder.

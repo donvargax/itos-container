@@ -17,6 +17,8 @@ type Checkout struct {
 	Roots           []string
 	Inspections     int
 	Revalidations   int
+	LinkCounts      map[string]uint64
+	Unreadable      bool
 }
 
 func (c *Checkout) Pin(root string) port.Failure {
@@ -32,11 +34,25 @@ func (c *Checkout) Inspect() (port.CheckoutIdentity, port.Failure) {
 	if c.InspectFailure != port.None {
 		return port.CheckoutIdentity{}, c.InspectFailure
 	}
+	if failure := c.independence(); failure != port.None {
+		return port.CheckoutIdentity{}, failure
+	}
 	return c.Identity, port.None
+}
+func (c *Checkout) independence() port.Failure {
+	if c.Unreadable {
+		return port.CheckoutUnavailable
+	}
+	for _, links := range c.LinkCounts {
+		if links != 1 {
+			return port.CheckoutHardlink
+		}
+	}
+	return port.None
 }
 func (c *Checkout) Unchanged() bool {
 	c.Revalidations++
-	return c.Opened && !c.Changed
+	return c.Opened && !c.Changed && c.independence() == port.None
 }
 func (c *Checkout) Close() { c.Opened = false }
 

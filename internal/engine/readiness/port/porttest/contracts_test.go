@@ -17,3 +17,16 @@ func TestCheckoutContract(t *testing.T) {
 		return c, identity, func() { c.Changed = true }
 	})
 }
+
+func TestCheckoutIndependenceContract(t *testing.T) {
+	CheckoutIndependenceContract(t, func() (port.Checkout, string, func(string)) {
+		c := &Checkout{Identity: port.CheckoutIdentity{Root: "/checkout"}, LinkCounts: map[string]uint64{"nested/file": 1}}
+		return c, c.Identity.Root, func(change string) {
+			c.Unreadable = change == "unavailable"
+			c.LinkCounts["nested/file"] = 1
+			if change == "shared" {
+				c.LinkCounts["nested/file"] = 2
+			}
+		}
+	})
+}

@@ -511,18 +511,9 @@ items:
     title: Hard links to files outside the checkout are refused
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-hard-links-outside-checkout.
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. Checkout validation
-      (internal/engine/readiness/disk/checkout.go:129) rejects symlinks and git indirections but not
-      shared inodes; a local git clone hard-links .git/objects with its source, so the worker can
-      chmod and overwrite a shared object and change the source repository outside the mount.
-      Require independent inodes (refuse hard-linked layouts, or materialise copies or reflinks) and
-      keep that through the run.
   - id: p2-control-state-outside-every-mount
     title: Control state never lies inside any worker's checkout
     phase: 1
