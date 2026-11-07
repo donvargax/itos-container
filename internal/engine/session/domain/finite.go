@@ -182,10 +182,15 @@ func (e finiteEngine) OpenRun(ctx context.Context, b port.Binding) (port.RunConn
 	if r.c == nil {
 		return nil, r.f
 	}
-	return finiteConnection{r.c}, r.f
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
+	return finiteConnection{r.c, gate}, r.f
 }
 
-type finiteConnection struct{ port.RunConnection }
+type finiteConnection struct {
+	port.RunConnection
+	gate chan struct{}
+}
 
 type finiteWorkspace struct {
 	port.Workspace
@@ -215,28 +220,33 @@ func (w finiteWorkspace) Close() {
 }
 
 func (c finiteConnection) Check(ctx context.Context) port.Outcome {
-	f, err := budget.Call(ctx, "engine inspection", c.RunConnection.Check)
+	f, err := connectionCall(ctx, c.gate, "engine inspection", c.RunConnection.Check)
 	if err != nil {
 		return port.Incomplete
 	}
 	return f
 }
 func (c finiteConnection) Inspect(ctx context.Context, id string) (port.Observation, port.Inspection) {
-	o, f, err := budget.Call2(ctx, "resource inspection", func(call context.Context) (port.Observation, port.Inspection) {
-		return c.RunConnection.Inspect(call, id)
+	type result struct {
+		o port.Observation
+		f port.Inspection
+	}
+	r, err := connectionCall(ctx, c.gate, "resource inspection", func(call context.Context) result {
+		o, f := c.RunConnection.Inspect(call, id)
+		return result{o, f}
 	})
 	if err != nil {
 		return port.Observation{}, port.Unavailable
 	}
-	return o, f
+	return r.o, r.f
 }
 func (c finiteConnection) Signal(ctx context.Context, id, signal string) port.Outcome {
-	f, err := budget.Call(ctx, "signal delivery", func(call context.Context) port.Outcome { return c.RunConnection.Signal(call, id, signal) })
+	f, err := connectionCall(ctx, c.gate, "signal delivery", func(call context.Context) port.Outcome { return c.RunConnection.Signal(call, id, signal) })
 	if err != nil {
 		return port.Incomplete
 	}
 	return f
 }
 func (c finiteConnection) Remove(ctx context.Context, id string) {
-	_, _ = budget.Call(ctx, "resource removal", func(call context.Context) bool { c.RunConnection.Remove(call, id); return true })
+	_, _ = connectionCall(ctx, c.gate, "resource removal", func(call context.Context) bool { c.RunConnection.Remove(call, id); return true })
 }

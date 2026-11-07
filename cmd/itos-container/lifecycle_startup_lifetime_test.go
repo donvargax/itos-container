@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -14,6 +15,9 @@ import (
 // Create has already been accepted; attach has already acquired a handle. Start
 // is held before its request, so cancellation must prevent that late mutation.
 type lifecycleLaunchFault struct {
+	// The port fake shares its engine journal across connections. Synchronize
+	// completed fake calls with fresh recovery opens while a reply is withheld.
+	mu                          sync.Mutex
 	operation                   string
 	entered, release            chan struct{}
 	pending, closedWhilePending bool
@@ -37,6 +41,8 @@ type lifecycleLaunchEngine struct {
 }
 
 func (e *lifecycleLaunchEngine) OpenRun(ctx context.Context, b sp.Binding) (sp.RunConnection, sp.Outcome) {
+	e.f.mu.Lock()
+	defer e.f.mu.Unlock()
 	c, f := e.RunEngine.OpenRun(ctx, b)
 	if c == nil || e.opened {
 		return c, f
@@ -51,17 +57,23 @@ type lifecycleLaunchConnection struct {
 }
 
 func (c lifecycleLaunchConnection) CreateRun(ctx context.Context, r sp.Record, argv []string) (string, sp.Outcome) {
+	c.f.mu.Lock()
 	id, f := c.RunConnection.CreateRun(ctx, r, argv)
+	c.f.mu.Unlock()
 	c.f.block("create response")
 	return id, f
 }
 func (c lifecycleLaunchConnection) VerifyRun(ctx context.Context, id string, argv []string) sp.Outcome {
+	c.f.mu.Lock()
 	f := c.RunConnection.VerifyRun(ctx, id, argv)
+	c.f.mu.Unlock()
 	c.f.block("boundary inspection")
 	return f
 }
 func (c lifecycleLaunchConnection) Attach(ctx context.Context, id string, streams sp.Streams) (sp.Attachment, sp.Outcome) {
+	c.f.mu.Lock()
 	a, f := c.RunConnection.Attach(ctx, id, streams)
+	c.f.mu.Unlock()
 	c.f.block("attach establishment")
 	if a == nil {
 		return nil, f

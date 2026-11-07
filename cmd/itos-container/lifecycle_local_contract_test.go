@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -51,6 +52,7 @@ type lifecycleLocal struct {
 	store               sp.Store
 	registry            sp.Registry
 	engine              sp.RunEngine
+	eventMu             sync.Mutex
 	events              []lifecycleEvent
 	hook                func(context.Context, string)
 	hidden, unknownExit bool
@@ -72,12 +74,16 @@ func lifecycleLocalFixture(t *testing.T, backend string) *lifecycleLocal {
 }
 func (l *lifecycleLocal) event(ctx context.Context, name, target string) {
 	d, _ := ctx.Deadline()
+	l.eventMu.Lock()
 	l.events = append(l.events, lifecycleEvent{name, target, time.Now(), time.Until(d)})
+	l.eventMu.Unlock()
 	if l.hook != nil {
 		l.hook(ctx, name)
 	}
 }
 func (l *lifecycleLocal) count(name string) int {
+	l.eventMu.Lock()
+	defer l.eventMu.Unlock()
 	n := 0
 	for _, e := range l.events {
 		if e.name == name {

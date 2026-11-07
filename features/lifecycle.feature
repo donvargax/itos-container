@@ -664,7 +664,7 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Create is accepted before its reply stalls; attach holds a late handle;
   # start stalls before issuing its request. Preserve the connection until the
   # operation actually finishes, with no subsequent launch or repeated mutation.
-  @wip @slice-12 @ID-LIFECYCLE-20 @linux
+  @slice-12 @ID-LIFECYCLE-20 @linux
   Scenario Outline: Non-cancellable launch operations cannot extend the controller wait
     Given a lifecycle launch with a cancellation-ignoring "<operation>" interrupted by "<cause>"
     When run returns before the pending launch operation is released through each local backend

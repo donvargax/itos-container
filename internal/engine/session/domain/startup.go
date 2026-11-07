@@ -18,7 +18,10 @@ type startupState struct {
 
 // Finite launch calls share the original phase deadline. Cancellation is checked
 // between successful operations too: a returned handle never authorizes the next
-// phase after a signal. The state records only safe operation names.
+// phase after a signal. fn uses finiteConnection's independently bounded calls;
+// those retain pending adapter state and dispose of late acquired handles. Keep
+// result assignment here on the controller goroutine. The state records only
+// safe operation names.
 func startupOperation(ctx context.Context, name string, fn func(context.Context) port.Outcome) port.Outcome {
 	if budget.Cause(ctx) != nil {
 		return startupFailure(ctx)

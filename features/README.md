@@ -427,6 +427,16 @@ existing slice-12 behavior. All ten pass after reserving reporting time inside
 the original teardown total and keeping timeout separate from engine/wait loss.
 Decision 0015 records the evidence; no native-engine or mutation run is implied.
 
+LIFECYCLE-20 covers launch operations that ignore cancellation, including a
+socket identity syscall. Step checkpoint `e932db6` supplied assertion-level red
+for all twelve rows on both local backends with `@wip` removed for the run.
+The controller exceeded its call, startup or cancellation plus teardown bound;
+late attach results also leaked their handles. Finite connection calls now end
+the controller wait independently, retain the connection until the operation
+returns, and discard late attachments. All twelve rows pass without native
+engine access; the existing 57 local lifecycle rows also pass. Fresh native
+engine checks and changed-code proof remain the coordinating loop's work.
+
 ## Tags
 
 | Tag               | Meaning                                                                              |
