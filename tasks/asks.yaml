@@ -151,3 +151,6 @@ questions:
     item: "slice-17"
     question: "slice-17: CI red evidence for ID-ANCHORS-09 to 13?"
     answer: "Yes. Run 42400524477: all seven rows fail at their Then steps (recovery neither accounts for nor releases the original anchor). Finish ANCHORS-01 to 08's local red, then implement."
+  - id: q-38
+    item: "slice-17"
+    question: "slice-17: ADR 0019 says fresh-process anchor recovery belongs to slice-18; is that conflict still open?"
