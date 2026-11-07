@@ -2321,3 +2321,15 @@
     real-engine evidence stays in CI, with no local Docker, approval or mutation run and no
     generated evidence committed. Agents commit and stop; the coordinating loop owns pushing,
     CI watching and closure at the actual pushed head.
+- id: T-33
+  type: test
+  title: main's engine scenarios finish well inside the job's 5-minute limit
+  why: >
+    main went red at b2ad2ad (run 42392045565) although all 49 engine scenarios passed (feature test
+    exit status 0): the Engine scenarios step hit its 5-minute timeout-minutes. The suite took 258 s
+    on 2026-11-06 and 277 s on 2026-11-07 (run 42389951333), and every isolation slice adds engine
+    cases, so main will go red more often. Measure each scenario's time, make the slow ones fast
+    (LIFECYCLE-13's first row took 128 s in red), and shard the engine job by feature if the total
+    still nears the limit. Raising the limit is the person's call, not a fix.
+  done_when:
+    - run: env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 timeout --signal=TERM --kill-after=5s 240s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
