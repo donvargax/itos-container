@@ -92,7 +92,7 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 	// Every request, even a refused start/acquisition, is recorded before dispatch.
 	a.requests = append(a.requests, entry)
 	index := len(a.requests) - 1
-	if a.w.session.offline && strings.HasPrefix(entry.Path, "/volumes") {
+	if (a.w.session.offline || a.w.anchorLocalRecovery != nil) && strings.HasPrefix(entry.Path, "/volumes") {
 		a.serveAnchorVolume(out, entry, index)
 		return
 	}

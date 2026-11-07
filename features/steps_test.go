@@ -36,22 +36,23 @@ type world struct {
 	deadline       time.Duration
 	timedOut       bool
 
-	stdin         string // the text the run reads from its standard input, "" for none
-	policy        *policyWorld
-	manifest      *manifestWorld
-	doctor        *doctorWorld
-	approval      *approvalWorld
-	run           *runWorld
-	session       *sessionWorld
-	offline       *offlineRuntime
-	anchor        *anchorWorld
-	anchors       *anchorRecoveryWorld
-	recovery      *recoveryNative
-	recoveryLocal *recoveryLocal
-	lifecycle     *lifecycleNative
-	loss          *lifecycleLoss
-	overlap       *overlapFixture
-	hardlinks     *hardlinkWorld
+	stdin               string // the text the run reads from its standard input, "" for none
+	policy              *policyWorld
+	manifest            *manifestWorld
+	doctor              *doctorWorld
+	approval            *approvalWorld
+	run                 *runWorld
+	session             *sessionWorld
+	offline             *offlineRuntime
+	anchor              *anchorWorld
+	anchors             *anchorRecoveryWorld
+	anchorLocalRecovery *anchorRecoveryLocal
+	recovery            *recoveryNative
+	recoveryLocal       *recoveryLocal
+	lifecycle           *lifecycleNative
+	loss                *lifecycleLoss
+	overlap             *overlapFixture
+	hardlinks           *hardlinkWorld
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
