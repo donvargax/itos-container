@@ -276,7 +276,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # The production host observation is tested read-only, without the fixture's
   # substituted account port. Child-only syscall faults hide account evidence;
   # no host account file or real control-state folder is changed.
-  @slice-21 @ID-CONTROL-15 @local-engine-fixture @wip
+  @slice-21 @ID-CONTROL-15 @local-engine-fixture
   Scenario Outline: Environment values cannot replace missing account database evidence
     Given a read-only production account lookup fixture whose account database is "<database>"
     When two fresh CGO-disabled account lookups use different HOME USER and LOGNAME values

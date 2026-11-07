@@ -11,8 +11,23 @@ The approval engine owns the account-home observation and common control transac
 ports, whole-component exposure decision, persistent location bindings, and protected
 disk adapter. The session engine supplies reservation validation through an approval
 port. Only cmd connects those adapters. The slices retain their existing thin handlers.
-No dependency changes: use the pinned Go os/user.LookupId and existing x/sys descriptor
-locks, protected directory primitives and JSON encoding.
+No dependency changes: use pinned Go's bufio/strings for local account records and
+existing x/sys descriptor locks, protected directory primitives and JSON encoding.
+
+Review PRRT_kwDOVkB0ws606rqO supersedes the original os/user.LookupId choice and
+clarifies arc42's **Recovery** account-home source. In the CGO-disabled Linux release,
+LookupId can return Current's USER/HOME-derived result when the UID is missing from
+the account database. Its result alone cannot prove the shared anchor's provenance.
+The host adapter instead reads `/etc/passwd` directly and requires a complete
+seven-field local record for the effective UID, a valid numeric GID and an absolute
+home. Ignore comments, unrelated rows and NIS directives; absent or unreadable
+evidence returns state.unavailable. NSS-only accounts are refused, not assigned an
+environment-selected anchor. No process environment is changed or subprocess used.
+
+The reviewed [Moby sys/user v0.4.0 parser](https://github.com/moby/sys/blob/user/v0.4.0/user/user.go)
+silently ignores numeric conversion errors, so it does not meet this boundary's
+fail-closed requirements. A small standard-library field reader avoids that
+dependency and preserves the spec's no-new-dependency constraint.
 
 Resolve the effective UID's account home independently of HOME, USER, LOGNAME and
 XDG_STATE_HOME. Pin its existing directory and ancestors, verify ownership and writes,

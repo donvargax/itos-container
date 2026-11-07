@@ -2,15 +2,16 @@
 package host
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
-	"os/user"
 	"path/filepath"
-
-	"github.com/donvargax/itos-container/internal/engine/approval/port"
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/donvargax/itos-container/internal/engine/approval/port"
 )
 
 // Process contains no environment-based identity fallback. Its zero value uses
@@ -20,14 +21,17 @@ type Process struct{ ops *operations }
 type operations struct {
 	geteuid, getegid func() int
 	lstat            func(string) (os.FileInfo, error)
-	lookup           func(string) (*user.User, error)
+	openAccount      func() (io.ReadCloser, error)
 }
 
 func (p Process) operations() operations {
 	if p.ops != nil {
 		return *p.ops
 	}
-	return operations{geteuid: os.Geteuid, getegid: os.Getegid, lstat: os.Lstat}
+	return operations{
+		geteuid: os.Geteuid, getegid: os.Getegid, lstat: os.Lstat,
+		openAccount: func() (io.ReadCloser, error) { return os.Open("/etc/passwd") },
+	}
 }
 
 // Identity returns decimal effective IDs; unavailable platforms return empty IDs.
@@ -61,17 +65,30 @@ func (p Process) Socket(endpoint string) string {
 	return fmt.Sprint(dev.Interface(), ":", ino.Interface())
 }
 
-// AccountHome resolves the effective UID through the host account database. HOME,
-// USER and LOGNAME cannot select the common coordination anchor.
+// AccountHome requires a local account record for the effective UID. os/user's
+// pure-Go Current/LookupId can synthesize a record from USER and HOME, so it is
+// not evidence for the common coordination anchor. NSS-only accounts fail closed.
 func (p Process) AccountHome() (string, port.Failure) {
 	uid, _ := p.Identity()
-	lookup := p.operations().lookup
-	if lookup == nil {
-		lookup = user.LookupId
-	}
-	account, err := lookup(uid)
-	if err != nil || account == nil || account.Uid != uid || !filepath.IsAbs(account.HomeDir) {
+	if uid == "" {
 		return "", "state.unavailable"
 	}
-	return filepath.Clean(account.HomeDir), ""
+	file, err := p.operations().openAccount()
+	if err != nil {
+		return "", "state.unavailable"
+	}
+	defer func() { _ = file.Close() }()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		fields := strings.Split(strings.TrimSpace(scanner.Text()), ":")
+		if len(fields) != 7 || fields[0] == "" || strings.ContainsAny(fields[0][:1], "#+-") || fields[2] != uid {
+			continue
+		}
+		if _, err := strconv.ParseUint(fields[3], 10, 32); err != nil || !filepath.IsAbs(fields[5]) || strings.ContainsRune(fields[5], 0) {
+			return "", "state.unavailable"
+		}
+		return filepath.Clean(fields[5]), ""
+	}
+	// EOF without a record and all read/scanner failures lack account evidence.
+	return "", "state.unavailable"
 }

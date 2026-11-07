@@ -199,6 +199,12 @@ of CONTROL-01/10, OVERLAP-01, APPROVAL-01 and MANIFEST-01 passes under `-race` i
 No gate or scenario time limit was raised. Native-engine evidence and fresh CI
 at the committed head remain with the coordinator.
 
+The engine timeout discussion above is historical. The coordinator's
+2026-11-07 20:40 UTC decision accepts T-32's landed limits: 8 minutes for the
+engine step, 7 minutes for the test process and 13 minutes for the job. The
+existing main merges through `9d4c91d` already include those limits. No old-run
+log or timeout change is required from slice-21; the loop judges the fresh run.
+
 ## Peer-created private lock after unlocked inspection
 
 Review thread PRRT_kwDOVkB0ws6050sF identified a writer rejecting a peer-created
@@ -240,3 +246,41 @@ all 1,326 scenario examples, including both RUNEXIT schedules and all 52 CONTROL
 examples, plus the package's harness controls. Configured commit hooks pass lint
 and vulnerability checks. The coordinator still owns push, fresh changed-code
 proof, CI watching and closure; no local mutation or generated proof was run.
+
+## Account-database provenance (PRRT_kwDOVkB0ws606rqO)
+
+Test commits `7c7b1b8` and `c049376` add pending CONTROL-15. The read-only test
+entry point calls the production host adapter, without the usual substituted
+account home. Its executable explicitly uses CGO_ENABLED=0, matching the release.
+A child-only syscall observer makes `/etc/passwd` empty or unreadable; two fresh
+processes per example use different HOME, USER and LOGNAME values. No host account
+file changes, real approval command, daemon or real control-state write occurs.
+
+With `@wip` removed on `c049376`, both examples fail at the behavior assertion:
+the lookup selects an unproven home with no failure instead of state.unavailable.
+All four setup/action steps pass; two assertions fail, with no undefined steps.
+The observer confirms the account-file faults before checking the result.
+
+The host adapter now reads the fixed local account database directly and requires
+a complete effective-UID record with valid numeric IDs and an absolute home.
+NSS-only or otherwise unavailable local evidence refuses without consulting an
+environment fallback. The feature spec, decision 0019 and arc42 record this source
+and the standard-library choice; no dependency or account-environment mutation is
+introduced.
+
+Both CONTROL-15 examples pass after implementation, as do all 54 CONTROL examples
+and the syscall observer controls:
+
+```sh
+go test ./features -count=1 -run='TestControlStateTrace|TestFeatures' -scenarios='^@ID-CONTROL-'
+go test ./internal/engine/approval/host ./cmd/itos-container -count=1
+CGO_ENABLED=0 go test ./internal/engine/approval/host -count=1
+```
+
+Adapter cases cover a valid local record despite conflicting environment values,
+effective-UID selection, incomplete/invalid records, NIS directives, scanner/read
+failures and descriptor closure. Command disk contracts require unremapped host
+ownership; the sandboxed attempt reported unrelated ownership refusals, and the
+same tests pass with unremapped ownership. CONTROL uses disposable state and local
+recording HTTP fixtures. Fresh changed-code proof and pushed-head CI remain the
+coordinator's responsibility; no mutation or coverage evidence was generated locally.

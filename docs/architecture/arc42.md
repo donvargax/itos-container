@@ -529,8 +529,11 @@ primary exit refuses new exec and tears down active exec commands without extend
 lifetime. Exec implementation remains deferred.
 
 Slice-21 retains a location catalog under the effective account home's fixed
-`.local/state/itos-container/coordination` anchor. After validated mkdir bootstrap,
-its private 0600 control.lock inode supplies bounded exclusion for catalog access
+`.local/state/itos-container/coordination` anchor. The Linux host adapter requires
+the effective UID's local `/etc/passwd` record; it refuses missing or unreadable
+account evidence, including NSS-only accounts in the CGO-disabled release.
+HOME, USER and LOGNAME cannot supply a fallback account home. After validated mkdir
+bootstrap, its private 0600 control.lock inode supplies bounded exclusion for catalog access
 and selected-root publication across HOME/XDG selections; the home is never locked.
 Doctor inspects without writes, taking a shared lock when present; approve
 and validated run enrollment complete durable self-binding and selected-location
