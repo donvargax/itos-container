@@ -37,6 +37,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	input := prefix + "-input.json"
 	request := map[string]string{"Action": action, "Backend": s.backend, "Reference": reference, "Token": s.token, "Fault": s.fault, "Umask": s.umask, "Output": output, "Checkpoint": selected, "Journal": s.journal}
 	request["Boundary"] = s.boundary
+	request["AnchorFault"], request["AnchorFixture"] = s.anchorFault, strconv.FormatBool(s.anchorFixture)
 	if s.launch != nil {
 		request["LaunchBarrier"], request["ReplacedPath"] = s.launch.barrier, s.launch.replaced
 		request["CleanupCause"], request["ChildExit"] = s.launch.cause, strconv.Itoa(s.launch.child)

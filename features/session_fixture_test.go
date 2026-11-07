@@ -27,6 +27,7 @@ type sessionResult struct {
 	CleanupCode                                       int
 	SessionID                                         string
 	PublicRecords                                     map[string][]byte
+	Started                                           bool
 }
 
 type sessionEvent struct {
@@ -65,6 +66,8 @@ type sessionWorld struct {
 	boundary                                                string
 	offlineControl                                          *world
 	launch                                                  *offlineLaunchWorld
+	anchorFault                                             string
+	anchorFixture                                           bool
 }
 
 func (w *world) sessionFixture(real bool, umask string) error {

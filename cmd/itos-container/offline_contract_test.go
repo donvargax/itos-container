@@ -75,6 +75,9 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 		}
 		runner.Store = offlineStore{Store: runner.Store, o: observer}
 		runner.Engine = offlineEngine{RunEngine: runner.Engine, o: observer}
+		if request.AnchorFixture == "true" {
+			runner.Workspace = &anchorWorkspace{Workspace: runner.Workspace, observer: observer}
+		}
 		return runner
 	}
 	if request.Action == "run-cleanup" {
@@ -91,6 +94,7 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 			actual := assemble(frozen).Run(ctx, frozen, argv, streams)
 			result.Outcome, result.Cleanup, result.Reference, result.ID = string(actual.Outcome), string(actual.Cleanup), actual.Reference, actual.ID
 			result.SessionID = actual.SessionID
+			result.Started = actual.Started
 			if actual.Exited {
 				result.Workload = &actual.Exit
 			}

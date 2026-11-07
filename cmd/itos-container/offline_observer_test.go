@@ -26,20 +26,25 @@ type offlineEvent struct {
 	Status                 sp.Inspection
 	Exit                   int
 	Writes                 []sessionContractEvent
+	Anchor                 sp.AnchorObservation
+	Source                 sp.MountSource
 }
 
 type offlineObserver struct {
-	t       *testing.T
-	request sessionContractRequest
-	ops     *sessionContractIO
-	memory  *fake.RunEngine
-	space   *fake.Workspace
-	record  sp.Record
-	binding sp.Binding
-	events  []offlineEvent
-	checks  int
-	exited  bool
-	drained chan struct{}
+	t                 *testing.T
+	request           sessionContractRequest
+	ops               *sessionContractIO
+	memory            *fake.RunEngine
+	space             *fake.Workspace
+	record            sp.Record
+	binding           sp.Binding
+	events            []offlineEvent
+	checks            int
+	exited            bool
+	drained           chan struct{}
+	anchorInspections int
+	detector          bool
+	removed           bool
 }
 
 func (o *offlineObserver) event(e offlineEvent) {
@@ -128,6 +133,7 @@ func (i offlineIntent) Validate() sp.Outcome {
 }
 
 func (i offlineIntent) Save(r sp.Record) sp.Outcome {
+	i.o.anchorPublication(r)
 	f := i.Intent.Save(r)
 	i.o.record = i.Record()
 	operation := "save"
@@ -171,6 +177,9 @@ func (c offlineConnection) Check(ctx context.Context) sp.Outcome {
 }
 
 func (c offlineConnection) CreateRun(ctx context.Context, r sp.Record, argv []string) (string, sp.Outcome) {
+	if c.o.memory != nil && c.o.request.AnchorFault == "worker create reply lost and name lookup absent" {
+		c.o.memory.Fault, c.o.memory.Following = "delayed create", "explicit not-found"
+	}
 	id, f := c.RunConnection.CreateRun(ctx, r, argv)
 	c.o.event(offlineEvent{Operation: "create", ID: id, Failure: string(f), Argv: slices.Clone(argv)})
 	return id, f
@@ -178,11 +187,26 @@ func (c offlineConnection) CreateRun(ctx context.Context, r sp.Record, argv []st
 
 func (c offlineConnection) Inspect(ctx context.Context, id string) (sp.Observation, sp.Inspection) {
 	o, status := c.RunConnection.Inspect(ctx, id)
+	if c.o.detector {
+		c.o.detector = false
+		switch c.o.request.AnchorFault {
+		case "post-start inspection unavailable":
+			o, status = sp.Observation{}, sp.Unavailable
+		case "post-start inspection has no live init PID":
+			o.PID = 0
+		}
+	}
+	if c.o.removed && c.o.request.AnchorFault == "worker removal and absence remain unknown" {
+		o, status = sp.Observation{}, sp.Unavailable
+	}
 	c.o.event(offlineEvent{Operation: "inspect", ID: id, Observation: o, Status: status})
 	return o, status
 }
 
 func (c offlineConnection) VerifyRun(ctx context.Context, id string, argv []string) sp.Outcome {
+	if c.o.memory != nil && c.o.request.AnchorFault == "owned unstarted worker fails boundary inspection" {
+		c.o.memory.Boundary = sp.IsolationUnverified
+	}
 	f := c.RunConnection.VerifyRun(ctx, id, argv)
 	c.o.event(offlineEvent{Operation: "verify", ID: id, Failure: string(f), Argv: slices.Clone(argv)})
 	return f
@@ -201,6 +225,7 @@ func (c offlineConnection) Attach(ctx context.Context, id string, streams sp.Str
 func (c offlineConnection) Start(ctx context.Context, id string) sp.Outcome {
 	f := c.RunConnection.Start(ctx, id)
 	c.o.event(offlineEvent{Operation: "start", ID: id, Failure: string(f)})
+	c.o.detector = f == "" && c.o.request.AnchorFixture == "true"
 	return f
 }
 
@@ -223,17 +248,22 @@ func (c offlineConnection) Wait(ctx context.Context, id string) (int, sp.Outcome
 	}
 	if f == "" {
 		c.o.exited = true
+		if c.o.memory != nil && (c.o.request.AnchorFault == "worker removal fails and full ID remains" || c.o.request.AnchorFault == "worker removal and absence remain unknown") {
+			c.o.memory.Following = "still present"
+		}
 	}
 	return exit, f
 }
 
 func (c offlineConnection) Remove(ctx context.Context, id string) {
 	c.RunConnection.Remove(ctx, id)
+	c.o.removed = true
 	c.o.event(offlineEvent{Operation: "remove", ID: id})
 }
 
 func (c offlineConnection) RemoveRun(ctx context.Context, id string) {
 	c.RunConnection.RemoveRun(ctx, id)
+	c.o.removed = true
 	c.o.event(offlineEvent{Operation: "remove", ID: id})
 }
 

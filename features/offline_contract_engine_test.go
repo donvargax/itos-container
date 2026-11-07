@@ -34,6 +34,10 @@ func (a *sessionAPI) serveOffline(out http.ResponseWriter, request *http.Request
 			"Mounts":          []any{map[string]any{"Type": "bind", "Source": root, "Destination": "/workspace", "RW": true, "Propagation": "rprivate"}}}
 		a.local[id], a.observed[id] = c, approvalClone(c)
 		a.created = append(a.created, id)
+		if s.anchorFault == "worker create reply lost and name lookup absent" {
+			reply(503, map[string]any{"message": "lost create response"})
+			return
+		}
 		reply(201, map[string]any{"Id": id})
 		return
 	}
@@ -45,6 +49,9 @@ func (a *sessionAPI) serveOffline(out http.ResponseWriter, request *http.Request
 			if candidate["Name"] == "/"+id {
 				c = candidate
 			}
+		}
+		if s.anchorFault == "worker create reply lost and name lookup absent" {
+			c = nil
 		}
 	}
 	if c == nil {
@@ -108,6 +115,10 @@ func (a *sessionAPI) serveOffline(out http.ResponseWriter, request *http.Request
 		}
 		reply(200, map[string]any{"StatusCode": exit})
 	case entry.Method == "DELETE" && operation == "":
+		if s.anchorFault == "worker removal fails and full ID remains" || s.anchorFault == "worker removal and absence remain unknown" {
+			reply(503, map[string]any{"message": "slice-17-private-response"})
+			return
+		}
 		if s.launch != nil && s.launch.faultActive && s.launch.cause == "temporary" {
 			reply(503, map[string]any{"message": "slice-13-private-response"})
 			return

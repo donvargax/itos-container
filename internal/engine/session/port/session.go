@@ -35,6 +35,7 @@ type Result struct {
 }
 
 type Record struct {
+	Anchor         Anchor `json:"anchor,omitzero"`
 	Schema         int    `json:"schema"`
 	Project        string `json:"project"`
 	Generation     string `json:"generation"`

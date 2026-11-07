@@ -12,6 +12,7 @@ import (
 
 func (w *world) offlineLocalSteps(sc *godog.ScenarioContext) {
 	w.offlineLaunchSteps(sc)
+	w.anchorLocalSteps(sc)
 	sc.Step(`^an offline run contract fixture whose pre-start inspection has "([^"]*)"$`, func(defect string) error { return w.offlineLocalFixture(defect, false) })
 	sc.Step(`^an offline run contract fixture with persistent owned-record fsync failure$`, func() error { return w.offlineLocalFixture("", true) })
 	sc.Step(`^the offline contract attempts launch through both fake and disk SDK adapters$`, func() error { return w.offlineLocalRun(false) })
