@@ -351,6 +351,22 @@ func fixtureGuardIssues(driver, checks string) []string {
 		{"prepare", `printf 'image=%s\nimage_id=%s\nuid=%s\ngid=%s\n'`},
 		{"cached_fixture", `d image inspect "$reference"`},
 		{"cached_fixture", `validate_cached `},
+		{"inspect_image", `message=$(cat `},
+		{"remove_image_ref", `ref=$(cat `},
+		{"remove_image_ref", `repository=$(cat `},
+		{"remove_image_ref", `built=$(cat `},
+		{"remove_image_ref", `observed=$(jq `},
+		{"remove_image_ref", `base=$(cat `},
+		{"remove_image_ref", `registry=$(cat `},
+		{"remove_image_ref", `d image rm `},
+		{"remove_container", `name=$(cat `},
+		{"remove_container", `expected=$(cat `},
+		{"remove_container", `cid=$(cat `},
+		{"remove_container", `message=$(cat `},
+		{"remove_container", `observed=$(jq `},
+		{"remove_container", `printf '%s\n' "$observed" >`},
+		{"remove_container", `d container rm `},
+		{"cleanup", `recorded=$(cat `},
 		{"validate_manifest", `header_data=$(cat `},
 		{"validate_manifest", `actual=$(sha256sum `},
 		{"validate_manifest", `manifest_observation `},
@@ -366,10 +382,10 @@ func fixtureGuardIssues(driver, checks string) []string {
 		body := strings.ReplaceAll(fixtureFunction(source, rule.function), "\\\n", "")
 		found := false
 		for _, line := range strings.Split(body, "\n") {
-			line = strings.TrimSpace(line)
+			line = strings.TrimSpace(strings.SplitN(line, " # ", 2)[0])
 			if strings.HasPrefix(line, rule.prefix) {
 				found = true
-				if !strings.Contains(line, "|| fail ") {
+				if !regexp.MustCompile(`\|\| fail(_manifest_read)? `).MatchString(line) {
 					issues = append(issues, "unguarded "+rule.function+": "+rule.prefix)
 				}
 			}
@@ -378,10 +394,28 @@ func fixtureGuardIssues(driver, checks string) []string {
 			issues = append(issues, "missing executable "+rule.function+": "+rule.prefix)
 		}
 	}
+	bounded := fixtureFunction(driver, "bounded_cleanup")
+	finish := fixtureFunction(driver, "finish_preparation")
+	if strings.Contains(bounded, "set -e") || !strings.Contains(bounded, `|| result=$?`) ||
+		!strings.Contains(finish, `local result=$?`) || !strings.Contains(finish, `bounded_cleanup || printf`) || !strings.Contains(finish, `exit "$result"`) {
+		issues = append(issues, "cleanup must preserve original preparation status")
+	}
 	prepare := fixtureFunction(driver, "prepare")
+	if strings.Count(prepare, `>>"$GITHUB_OUTPUT"`) != 1 {
+		issues = append(issues, "exactly one final fixture output publication")
+	}
 	if strings.Count(prepare, `cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid"`) != 2 ||
 		strings.LastIndex(prepare, "cached_fixture ") > strings.Index(prepare, "printf 'image=") {
 		issues = append(issues, "publish only after both cache checks and cleanup")
+	}
+	remaining := prepare
+	for _, call := range []string{"digest=$(validate_manifest ", "remove_image_ref tag", "remove_image_ref reference", "if inspect_image ", "d image pull ", "cached_fixture ", "validate_smoke ", "remove_container smoke", "remove_container registry", "cached_fixture ", "printf 'image="} {
+		at := strings.Index(remaining, call)
+		if at < 0 {
+			issues = append(issues, "missing or out-of-order preparation call: "+call)
+			break
+		}
+		remaining = remaining[at+len(call):]
 	}
 	if !strings.Contains(driver, `source "${BASH_SOURCE[0]%/*}/../lib/engine-fixture-checks.sh"`) {
 		issues = append(issues, "production must source shared validators")
@@ -401,45 +435,46 @@ func fixtureGuardIssues(driver, checks string) []string {
 	return issues
 }
 
+func requireFixture(t *testing.T, ok bool, format string, args ...any) {
+	t.Helper()
+	if !ok {
+		t.Fatalf(format, args...)
+	}
+}
+
 func TestEngineFixturePostPushDiagnostics(t *testing.T) {
 	driverBytes, err := os.ReadFile("../tools/bin/engine-fixture")
-	if err != nil {
-		t.Fatal(err)
-	}
+	requireFixture(t, err == nil, "%v", err)
 	driver := string(driverBytes)
 	// Assert the old, executable predicate before trying to load the new library.
 	if issues := fixtureGuardIssues(driver, ""); len(issues) > 0 && issues[0] == "manifest predicate can fail without fail() diagnostics" {
 		t.Fatal(issues[0])
 	}
 	checksBytes, err := os.ReadFile("../tools/lib/engine-fixture-checks.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
+	requireFixture(t, err == nil, "%v", err)
 	checks := string(checksBytes)
-	if issues := fixtureGuardIssues(driver, checks); len(issues) != 0 {
-		t.Fatal(strings.Join(issues, "\n"))
-	}
+	issues := fixtureGuardIssues(driver, checks)
+	requireFixture(t, len(issues) == 0, "%s", strings.Join(issues, "\n"))
 	for _, tc := range []struct{ name, old, replacement string }{
 		{"unguarded push", `d image push "$tag" || fail`, `d image push "$tag" # || fail`},
 		{"unguarded cache inspect", `>"$state/cached-image.json" || fail`, `>"$state/cached-image.json" # || fail`},
 		{"unguarded validator", `digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built") || fail`, `digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built") # || fail`},
+		{"unguarded owned removal", `d image rm "$ref" || fail`, `d image rm "$ref" # || fail`},
+		{"unguarded ownership read", `base=$(cat "$state/base.iid") || fail`, `base=$(cat "$state/base.iid") # || fail`},
+		{"early output publication", `remove_container registry || fail`, `printf 'image=bad' >>"$GITHUB_OUTPUT"; remove_container registry || fail`},
+		{"cleanup overwrites status", `exit "$result"`, `exit 1`},
+		{"unguarded smoke state", `"$file" >/dev/null 2>&1 || fail "smoke state:`, `"$file" >/dev/null 2>&1 # || fail "smoke state:`},
 		{"lost observation", `mediaType:`, `unusedMediaType:`},
 		{"unused observation string", `mediaType:`, `unusedMediaType:`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			brokenDriver := strings.ReplaceAll(driver, tc.old, tc.replacement)
 			brokenChecks := strings.ReplaceAll(checks, tc.old, tc.replacement)
-			// Remove the commented tail as Bash does; it cannot be a guard.
-			brokenDriver = regexp.MustCompile(`(?m) # \|\| fail[^\n]*`).ReplaceAllString(brokenDriver, "")
 			if tc.name == "unused observation string" {
 				brokenChecks += "\n# mediaType: is only a comment\nunused='mediaType:'\n"
 			}
-			if brokenDriver == driver && brokenChecks == checks {
-				t.Fatal("negative control changed no source")
-			}
-			if len(fixtureGuardIssues(brokenDriver, brokenChecks)) == 0 {
-				t.Fatal("accepted missing executable guard/observation")
-			}
+			requireFixture(t, brokenDriver != driver || brokenChecks != checks, "negative control changed no source")
+			requireFixture(t, len(fixtureGuardIssues(brokenDriver, brokenChecks)) != 0, "accepted missing executable guard/observation")
 		})
 	}
 }
@@ -453,18 +488,14 @@ func runFixtureValidator(t *testing.T, function string, args ...string) (string,
 	var stdout, stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
-	if ctx.Err() != nil {
-		t.Fatal("validator exceeded five seconds")
-	}
+	requireFixture(t, ctx.Err() == nil, "validator exceeded five seconds")
 	return stdout.String(), stderr.String(), err
 }
 
 func fixtureResponseFile(t *testing.T, name, data string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	requireFixture(t, os.WriteFile(path, []byte(data), 0o600) == nil, "cannot write %s", path)
 	return path
 }
 
@@ -513,36 +544,43 @@ func TestEngineFixtureManifestValidation(t *testing.T) {
 			id := strings.ReplaceAll(tc.id, "DIGEST", digest)
 			stdout, stderr, err := runFixtureValidator(t, "validate_manifest", fixtureResponseFile(t, "manifest.json", tc.body), fixtureResponseFile(t, "headers", header), id)
 			if tc.diagnostic == "" {
-				if err != nil || strings.TrimSpace(stdout) != digest {
-					t.Fatalf("valid manifest rejected: %v stdout=%s stderr=%s", err, stdout, stderr)
-				}
-			} else if err == nil || !strings.Contains(stderr, "engine-fixture: "+tc.diagnostic) || stdout != "" {
-				t.Fatalf("invalid manifest lacks failure diagnostic %q: %v stdout=%s stderr=%s", tc.diagnostic, err, stdout, stderr)
+				requireFixture(t, err == nil && strings.TrimSpace(stdout) == digest, "valid manifest rejected: %v stdout=%s stderr=%s", err, stdout, stderr)
+			} else {
+				requireFixture(t, err != nil && strings.Contains(stderr, "engine-fixture: "+tc.diagnostic) && stdout == "", "invalid manifest lacks failure diagnostic %q: %v stdout=%s stderr=%s", tc.diagnostic, err, stdout, stderr)
 			}
 			var summary map[string]json.RawMessage
 			for _, line := range strings.Split(stderr, "\n") {
 				if strings.HasPrefix(line, "manifest observation: ") {
-					if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "manifest observation: ")), &summary); err != nil {
-						t.Fatalf("unescaped manifest observation: %s", line)
-					}
+					requireFixture(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "manifest observation: ")), &summary) == nil, "unescaped manifest observation: %s", line)
 				}
 			}
 			for _, field := range []string{"schemaVersion", "mediaType", "hasManifests", "configDigest", "builtID", "advertisedDigest", "measuredDigest"} {
-				if _, ok := summary[field]; !ok {
-					t.Errorf("missing %s observation: %s", field, stderr)
+				requireFixture(t, summary[field] != nil, "missing %s observation: %s", field, stderr)
+			}
+			requireFixture(t, string(summary["builtID"]) == strconv.Quote(id) && string(summary["measuredDigest"]) == strconv.Quote(digest), "summary lost independently measured identities: %s", stderr)
+			if tc.diagnostic == "" || tc.name == "wrong config" {
+				wantConfig := built
+				if tc.name == "wrong config" {
+					wantConfig = other
 				}
+				requireFixture(t, string(summary["schemaVersion"]) == "2" && string(summary["hasManifests"]) == "false" && string(summary["configDigest"]) == strconv.Quote(wantConfig) && string(summary["advertisedDigest"]) == strconv.Quote(digest), "summary lost observed manifest fields: %s", stderr)
 			}
-			if string(summary["builtID"]) != strconv.Quote(id) || string(summary["measuredDigest"]) != strconv.Quote(digest) {
-				t.Errorf("summary lost independently measured identities: %s", stderr)
-			}
-			if len(stderr) > 2400 || strings.ContainsRune(stderr, '\x1b') {
-				t.Errorf("unbounded or unescaped diagnostics (%d bytes)", len(stderr))
-			}
-			if (tc.name == "malformed" || tc.name == "empty") && !strings.Contains(stderr, "invalid JSON") {
-				t.Errorf("missing invalid JSON fallback: %s", stderr)
-			}
+			requireFixture(t, tc.name != "empty manifests" || string(summary["hasManifests"]) == "true", "summary hid manifests key: %s", stderr)
+			requireFixture(t, len(stderr) <= 2400 && !strings.ContainsRune(stderr, '\x1b'), "unbounded or unescaped diagnostics (%d bytes)", len(stderr))
+			requireFixture(t, (tc.name != "malformed" && tc.name != "empty") || strings.Contains(stderr, "invalid JSON"), "missing invalid JSON fallback: %s", stderr)
 		})
 	}
+
+	t.Run("missing captured files", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "absent")
+		for _, tc := range []struct{ manifest, headers, stage string }{
+			{fixtureResponseFile(t, "manifest.json", manifest), missing, "manifest header read"},
+			{missing, fixtureResponseFile(t, "headers", "Docker-Content-Digest: "+other+"\r\n"), "manifest byte hashing"},
+		} {
+			stdout, stderr, err := runFixtureValidator(t, "validate_manifest", tc.manifest, tc.headers, built)
+			requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: "+tc.stage) && strings.Contains(stderr, "manifest observation:"), "read failure lost stage/observation: %v %s", err, stderr)
+		}
+	})
 
 	reference := "127.0.0.1:1234/fixture@" + other
 	cached := `[{"Id":"` + built + `","RepoDigests":["` + reference + `"],"Os":"linux","Architecture":"amd64","Config":{"User":"1001:1002","Entrypoint":[],"Volumes":{},"Labels":{}}}]`
@@ -556,6 +594,10 @@ func TestEngineFixtureManifestValidation(t *testing.T) {
 		{"cache root", cached, "1001:1002", "0:1002"},
 		{"cache gid", cached, "1001:1002", "1001:1003"},
 		{"cache entrypoint", cached, `"Entrypoint":[]`, `"Entrypoint":["/bin/sh"]`},
+		{"cache entrypoint type", cached, `"Entrypoint":[]`, `"Entrypoint":false`},
+		{"cache volumes type", cached, `"Volumes":{}`, `"Volumes":false`},
+		{"cache labels type", cached, `"Labels":{}`, `"Labels":false`},
+		{"cache extra inspection", cached, cached, cached + "\n" + cached},
 		{"cache volumes", cached, `"Volumes":{}`, `"Volumes":{"/data":{}}`},
 		{"cache metadata", cached, `"Labels":{}`, `"Labels":{"devcontainer.metadata":"{}"}`},
 		{"cache malformed", cached, cached, "{"},
@@ -564,13 +606,13 @@ func TestEngineFixtureManifestValidation(t *testing.T) {
 		{"smoke exit", smoke, `"ExitCode":0`, `"ExitCode":1`},
 		{"smoke OOM", smoke, "false", "true"},
 		{"smoke error", smoke, `"Error":""`, `"Error":"synthetic error"`},
+		{"smoke extra inspection", smoke, smoke, smoke + "\n" + smoke},
+		{"smoke missing OOM", smoke, `"OOMKilled":false`, `"unused":false`},
+		{"smoke exit type", smoke, `"ExitCode":0`, `"ExitCode":"0"`},
 		{"smoke malformed", smoke, smoke, "{"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			body := tc.source
-			if tc.old != "" {
-				body = strings.ReplaceAll(body, tc.old, tc.replacement)
-			}
+			body := strings.ReplaceAll(tc.source, tc.old, tc.replacement)
 			file := fixtureResponseFile(t, "inspection.json", body)
 			function, args, diagnostic := "validate_cached", []string{file, reference, built, "1001", "1002"}, "cached validation"
 			if strings.HasPrefix(tc.name, "smoke") {
@@ -578,18 +620,14 @@ func TestEngineFixtureManifestValidation(t *testing.T) {
 			}
 			_, stderr, err := runFixtureValidator(t, function, args...)
 			if tc.old == "" {
-				if err != nil {
-					t.Fatalf("valid inspection rejected: %v %s", err, stderr)
-				}
-			} else if err == nil || !strings.Contains(stderr, "engine-fixture: "+diagnostic) || !strings.Contains(stderr, "observed=") {
-				t.Fatalf("inspection failure missing observation: %v %s", err, stderr)
+				requireFixture(t, err == nil, "valid inspection rejected: %v %s", err, stderr)
+			} else {
+				requireFixture(t, err != nil && strings.Contains(stderr, "engine-fixture: "+diagnostic) && strings.Contains(stderr, "observed="), "inspection failure missing observation: %v %s", err, stderr)
 			}
 		})
 	}
 	for _, output := range []string{"", "uid=0 gid=1002\nT-20-engine-fixture-ok\n", "uid=1001 gid=1002\nwrong marker\n"} {
 		_, stderr, err := runFixtureValidator(t, "validate_smoke", fixtureResponseFile(t, "smoke.json", smoke), fixtureResponseFile(t, "smoke.out", output), "1001", "1002")
-		if err == nil || !strings.Contains(stderr, "engine-fixture: smoke output") || !strings.Contains(stderr, "observed=") {
-			t.Fatalf("smoke output failure missing observation: %v %s", err, stderr)
-		}
+		requireFixture(t, err != nil && strings.Contains(stderr, "engine-fixture: smoke output") && strings.Contains(stderr, "observed="), "smoke output failure missing observation: %v %s", err, stderr)
 	}
 }
