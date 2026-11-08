@@ -74,6 +74,13 @@ GOCOVERDIR=$d go test ./features -count=1           # non-engine coverage in exi
 itos tests smoke run scenario                      # eligible smoke IDs; engine IDs explicitly skip
 ```
 
+Run the full feature suite without `-race`. A full-package race run consumed
+22 GB and starved the machine on 2026-11-08. Limit race detection to the changed
+tests with an explicit `-run` selection; for changed production packages, select
+only those packages. A test killed at the memory limit needs its memory use
+fixed, not a higher limit. Do not repeat the historical full-feature race command
+recorded in ADR 0019.
+
 `-scenarios` takes a regular expression over each effective tag, `@` included. Godog's
 pinned Gherkin parser supplies inheritance from Feature, Rule, Scenario Outline and Examples;
 each outline row is selected independently. The expression is intersected with the selected

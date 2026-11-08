@@ -348,8 +348,33 @@ run uses disposable state with host ownership. The filesystem sandbox's remapped
 ancestor ownership first caused `state.unsafe` refusals, which are not detector
 behavior evidence and were not worked around by weakening state validation.
 
+The coordinator subsequently reported that a full-package race run consumed
+22 GB and starved the machine on 2026-11-08. Do not repeat the historical command
+above. Run the complete feature suite without the race detector and limit race
+detection to explicitly selected changed tests or changed production packages.
+A memory-limit kill requires reducing test memory use, never raising the limit.
+
 Ordinary CI at the pushed head still has to confirm the timeout is gone. No
 native-engine or mutation evidence is supplied by these local runs.
+
+## Verification after the memory-limit instruction
+
+At `8b341d8`, the interrupted worker stash's implementation is already present
+in `62796a9`; no second restoration is needed. The later README-only stash adds
+the coordinator's memory restriction and is incorporated here, without dropping
+either stash. The three supplied CI failures pass again at this head:
+`TestFeatureBinaryPublishesOnceAfterBuild`, `TestFeatureBinaryFailedBuildIsNotCached`
+and `TestFeatureConcurrency`. A race run selecting only those tests also passes
+in 1.057 seconds.
+
+With `ITOS_CONTAINER_ENGINE_TESTS=0`, the complete non-race feature package
+passes in 131.901 seconds, including all 1,348 local scenarios in 116.10 seconds.
+This run uses host-visible ownership and disposable fixtures. The initial
+filesystem-sandbox run exposed `/` and `/tmp` as UID 65534 and failed protected
+state checks; it supplies no product behavior evidence. State validation, test
+assertions, timeouts and memory limits remain unchanged. No native engine or
+local mutation run was made. The short-lived workload conflict below remains
+unresolved; these passing tests do not establish success for that ordering.
 
 ## Short-lived workload conflict exposed by review
 
