@@ -97,6 +97,10 @@ func anchorRecoveryMemoryCase(t *testing.T, request map[string]string) {
 	before := append([]byte(nil), files.Data...)
 	beforeLegacy := append([]byte(nil), l.Data...)
 	service := domain.Recovery{Registry: m.registry, Engine: engine}
+	if request["mode"] == "no-create" {
+		anchorRecoveryMemoryNoCreate(t, request, m, engine, service, id, worker, r, p)
+		return
+	}
 	if request["mode"] == "stop" {
 		code, report := anchorMemoryInvoke(service, "status", id)
 		if code != 0 || len(report.Sessions) != 2 {

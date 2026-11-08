@@ -44,6 +44,7 @@ func (w *world) anchorRecoveryLocalSteps(sc *godog.ScenarioContext) {
 	w.anchorRecoveryFaultSteps(sc)
 	w.anchorRecoveryDefectSteps(sc)
 	w.anchorRecoveryRaceSteps(sc)
+	w.anchorRecoveryNoCreateSteps(sc)
 	sc.Step(`^an anchor recovery fixture with phase "([^"]*)" worker "([^"]*)" volume "([^"]*)" completion "([^"]*)" and observed exit "([^"]*)"$`, w.anchorRecoverySeed)
 	sc.Step(`^fresh anchor status processes inspect each local backend in plain and JSON modes$`, func() error {
 		if err := w.anchorRecoveryBeginWatch(); err != nil {

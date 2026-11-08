@@ -485,3 +485,19 @@ Feature: Recover owned checkout mount anchors
     And B retains its original worker volume ownership and offline boundary and each status lists only its own session and anchor
     And A cannot stop B's ID and neither repeated stop nor harness observations remove any unrelated native resource
     And native anchor recovery preserves original edits replacement trees approvals snapshots and unrelated resources before harness cleanup
+
+  # A reserved or cancelled intent with no worker ID proves create was never
+  # issued. Cleanup must still release its allocated anchor; later status must
+  # retain that worker fact while independently inspecting the original volume.
+  @slice-17 @ID-ANCHORS-14 @linux @wip
+  Scenario Outline: Cancelling an anchored launch before worker creation remains complete in status
+    Given an anchor recovery fixture with an allocated volume and a no-create "<stage>" intent
+    When fresh anchor stop processes run twice and status follows through both local backends
+    Then both stops and subsequent status report stopped worker absent anchor absent cleanup complete and unknown workload exit
+    And the no-create intent is durably cancelled with one owned anchor release and no worker lookup or mutation
+    And anchor recovery preserves checkout edits approvals snapshots replacements and unrelated resources without reading current inputs
+
+    Examples:
+      | stage     |
+      | reserved  |
+      | cancelled |
