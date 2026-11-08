@@ -814,6 +814,24 @@ Feature: Hardened offline foreground run
   # Record the unobserved detector durably and expose it through fresh status.
   # For a running worker hold a pidfd, re-inspect its full ID and same init PID,
   # then stat; never accept a recycled PID's otherwise matching workspace.
+  # Q-41 requires safe controller diagnostics before the next native attempt.
+  # A fake engine supplies the worker; syscall failures use the disk adapter.
+  # These local cases prove diagnostic delivery, never the Moby/kernel hypothesis.
+  @slice-17 @ID-OFFLINE-35 @linux @wip
+  Scenario Outline: Mount refusals expose the failed observation without leaking payloads
+    Given an anchor diagnostic fixture with "<fault>" failure
+    When the registered command encounters that mount observation failure
+    Then the mount refusal identifies "<check>" and the expected identity with the observed identity or syscall errno
+    And diagnostic detail preserves refusal and immediate owned cleanup without private error paths or workload arguments
+
+    Examples:
+      | fault       | check             |
+      | device      | mounted-identity  |
+      | inode       | mounted-identity  |
+      | stat        | mounted-stat      |
+      | pidfd       | pidfd-open        |
+      | invalid PID | worker-init-pid   |
+
   @slice-17 @ID-OFFLINE-33
   Scenario Outline: Short-lived workers retain their exit without claiming mount verification
     Given an anchor detector fixture with exit <exit> at "<checkpoint>"
