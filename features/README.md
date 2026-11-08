@@ -309,6 +309,23 @@ smoke, with a separate 30-second cleanup attempt on failure. It performs these c
 5. Remove the smoke container and registry, discarding registry tmpfs, then inspect the cached
    digest again. Only then publish `image`, `image_id`, `uid` and `gid` as step outputs.
 
+T-34 makes failures from the push through output publication name their stage and expected
+and observed values. The shared [validation functions](../tools/lib/engine-fixture-checks.sh)
+check captured manifest bytes/headers, cached-image inspection and smoke state/output in both
+preparation and ordinary regression tests. Each manifest observation contains `schemaVersion`,
+`mediaType`, `hasManifests`, `configDigest`, the raw `--iidfile` value as `builtID`, and the
+advertised and measured manifest digests. Selected values are bounded and escaped; missing,
+wrong-type and invalid JSON observations remain visible without dumping image configurations.
+Read/hash failures report unavailable observations and retain the failing stage. An observation
+rendering failure also rejects the response.
+
+The diagnostic checkpoint does not identify the runner failure or change the builder/push
+strategy. The coordinator must obtain diagnostic CI evidence before choosing a repair and
+retain the actual pushed SHA, server/API/platform, pins, manifest/config identities, cold-pull,
+cache and smoke results, and both cleanup verdicts. Completion still requires preparation,
+the complete live engine scenario selection and final cleanup to pass on that runner.
+Captured-response tests and source guard checks supply no native-engine evidence.
+
 The Engine scenarios step receives these fixture inputs beside its tier switch and the
 optional `ITOS_CONTAINER_RED_SCENARIOS` selector described below:
 
@@ -335,6 +352,9 @@ after failures/cancellation and removes the remaining derived image references o
 Each attempt has a 30-second bound. Cleanup verifies recorded container IDs, names, image IDs
 and attempt labels before removal; interrupted creates can be recovered by their recorded
 unique names plus image and label. Image removal requires the recorded config identity.
+Every removal operation explicitly checks its own failures, including calls inside conditional
+cleanup paths where Bash disables implicit `errexit`. Cleanup attempts all recorded resources
+and retains the original preparation status if bounded cleanup also fails.
 Cleanup is idempotent, preserves an earlier failure and fails an otherwise successful job
 when incomplete. It never prunes, removes shared pinned inputs, or deletes checkout files.
 A killed runner cannot promise cleanup: that run is incomplete, not evidence.
