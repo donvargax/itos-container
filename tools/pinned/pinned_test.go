@@ -1,0 +1,135 @@
+package pinned_test
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+// Exercise the actual downloader with curl and a local release server. Only
+// platform/release metadata is replaced in the disposable launcher; repository
+// pins, the real tool cache and external release services are never touched.
+func TestPinnedDownload(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		statuses  []int
+		corrupt   bool
+		wantExit  int
+		wantCalls int32
+		wantText  string
+	}{
+		{"transient gateway timeout", []int{504, 200}, false, 7, 2, "an argument with spaces\n"},
+		{"exhausted gateway timeout", []int{504}, false, 2, 4, "pinned: cannot fetch"},
+		{"missing release", []int{404}, false, 2, 1, "pinned: cannot fetch"},
+		{"bad checksum after retry", []int{504, 200}, true, 2, 2, "SHA-256 did not match the pinned release"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			archive := toolArchive(t)
+			body := archive
+			if tc.corrupt {
+				body = append(bytes.Clone(archive), []byte("corrupt release")...)
+			}
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				i := int(calls.Add(1)) - 1
+				status := tc.statuses[min(i, len(tc.statuses)-1)]
+				w.WriteHeader(status)
+				if status == http.StatusOK {
+					_, _ = w.Write(body)
+				}
+			}))
+			defer server.Close()
+			root, launcher := fixtureLauncher(t, server.URL, archive)
+			run := func() (int, string) {
+				ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctx, "sh", launcher, "golangci-lint", "an argument with spaces")
+				// The fixture server must remain local even on a host with proxies.
+				cmd.Env = append(os.Environ(), "NO_PROXY=*", "no_proxy=*")
+				output, err := cmd.CombinedOutput()
+				if ctx.Err() != nil || cmd.ProcessState == nil {
+					t.Fatalf("launcher did not finish: %v\n%s", err, output)
+				}
+				return cmd.ProcessState.ExitCode(), string(output)
+			}
+			exit, output := run()
+			if exit != tc.wantExit || !strings.Contains(output, tc.wantText) {
+				t.Fatalf("exit %d, want %d and %q:\n%s", exit, tc.wantExit, tc.wantText, output)
+			}
+			if got := calls.Load(); got != tc.wantCalls {
+				t.Fatalf("download attempts = %d, want %d", got, tc.wantCalls)
+			}
+			if tc.wantExit == 7 {
+				// The tool's nonzero exit and exact argv survive both the first
+				// download and a cache hit with the release server unavailable.
+				server.Close()
+				exit, output = run()
+				if exit != 7 || output != tc.wantText || calls.Load() != tc.wantCalls {
+					t.Fatalf("cached tool: exit %d, calls %d, output %q", exit, calls.Load(), output)
+				}
+			} else if _, err := os.Stat(filepath.Join(root, ".tools")); !os.IsNotExist(err) {
+				t.Fatalf("failed download published a tool cache: %v", err)
+			}
+		})
+	}
+}
+
+func fixtureLauncher(t *testing.T, url string, archive []byte) (string, string) {
+	t.Helper()
+	source, err := os.ReadFile("../bin/pinned")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(source)
+	start := strings.Index(script, `case "$(uname -s)-$(uname -m)" in`)
+	end := strings.Index(script, "\ndir=$root/.tools/$tool-$version")
+	if start < 0 || end <= start {
+		t.Fatal("cannot locate launcher release metadata")
+	}
+	metadata := fmt.Sprintf("version=fixture\nasset=fixture.tar.gz\nmember=golangci-lint\nexe=\nurl=%s\nsum=%x\n", url, sha256.Sum256(archive))
+	script = script[:start] + metadata + script[end:]
+	root := t.TempDir()
+	dir := filepath.Join(root, "tools", "bin")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	launcher := filepath.Join(dir, "pinned")
+	if err := os.WriteFile(launcher, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return root, launcher
+}
+
+func toolArchive(t *testing.T) []byte {
+	t.Helper()
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	tw := tar.NewWriter(gz)
+	body := []byte("#!/bin/sh\nprintf '%s\\n' \"$1\"\nexit 7\n")
+	if err := tw.WriteHeader(&tar.Header{Name: "golangci-lint", Mode: 0o755, Size: int64(len(body))}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return archive.Bytes()
+}
