@@ -20,7 +20,21 @@ func (w *Workspace) HoldProcess(pid int) (port.Process, port.Outcome) {
 	if pid <= 0 {
 		return nil, port.MountRefused
 	}
+	if w.AbsentProcesses[pid] {
+		return nil, port.ProcessAbsent
+	}
 	return &Process{}, ""
+}
+
+// ProcessAbsenceContract distinguishes a missing process from other failures
+// without supplying a handle or claiming the container has exited.
+func ProcessAbsenceContract(t Reporter, w port.ProcessWorkspace, pid int) {
+	t.Helper()
+	for range 2 {
+		if p, failure := w.HoldProcess(pid); p != nil || failure != port.ProcessAbsent {
+			t.Errorf("absent process acquisition: %v %s", p, failure)
+		}
+	}
 }
 
 // ProcessContract checks that the same reference observes exit and that a

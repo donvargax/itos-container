@@ -213,12 +213,13 @@ func (a runAttachment) Failures() <-chan port.Outcome {
 }
 
 type Workspace struct {
-	Descriptor string
-	Mounts     map[int]port.MountSource
-	binding    port.Binding
-	Failure    port.Outcome
-	Changed    bool
-	Closed     bool
+	AbsentProcesses map[int]bool
+	Descriptor      string
+	Mounts          map[int]port.MountSource
+	binding         port.Binding
+	Failure         port.Outcome
+	Changed         bool
+	Closed          bool
 }
 
 func (w *Workspace) Pin(b port.Binding) port.Outcome {

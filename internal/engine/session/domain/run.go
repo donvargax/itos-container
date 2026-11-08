@@ -30,7 +30,12 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 		return s.registeredRun(ctx, frozen, argv, streams)
 	}
 	startup, cancel := context.WithTimeout(ctx, 120*time.Second)
+	state := &startupState{}
+	startup = context.WithValue(startup, startupKey{}, state)
 	result, connection, attachment := s.launch(startup, frozen, argv, streams)
+	if state.detectorExit != nil {
+		result.Exit, result.Exited = *state.detectorExit, true
+	}
 	cancel()
 	if connection != nil {
 		defer connection.Close()
@@ -39,7 +44,7 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 		defer attachment.Close()
 	}
 	result.Started = result.ID != ""
-	if result.Outcome == "" {
+	if result.Outcome == "" && !result.Exited {
 		// Waiting for the workload is not a startup operation or a lifetime limit.
 		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, connection, attachment, result.Reference, result.ID)
 	}

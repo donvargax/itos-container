@@ -42,7 +42,7 @@ type noProcessWorkspace struct{ port.AnchorWorkspace }
 
 func TestAnchorDetectorProcessRaces(t *testing.T) {
 	for _, name := range []string{"healthy", "exited", "never started", "paused", "missing state", "invalid pid", "no process port", "open failed", "nil process", "exit during open", "pid changed", "fresh inspect unavailable", "fresh inspect foreign", "process exited before stat", "same pid reused", "process error", "stat failed while running", "exit during stat", "process error after stat", "wrong device", "wrong inode"} {
-		t.Run(name, func(t *testing.T) {
+		test := func(t *testing.T) {
 			runner, frozen, registry, engine, id := registeredLifecycleFixture()
 			w := &detectorWorkspace{Workspace: runner.Workspace.(*f.Workspace), process: &f.Process{}}
 			expectedMount := w.Mounts[123]
@@ -107,6 +107,7 @@ func TestAnchorDetectorProcessRaces(t *testing.T) {
 				}
 				if inspections == 2 && name == "same pid reused" {
 					w.process.Ended = true
+					engine.WaitUntilCancel = true
 				}
 			}
 			switch name {
@@ -158,7 +159,8 @@ func TestAnchorDetectorProcessRaces(t *testing.T) {
 			} else if result.MountDiagnostic != (port.MountDiagnostic{}) {
 				t.Fatal("successful or exited worker retained a refusal diagnostic", result)
 			}
-		})
+		}
+		t.Run(name, func(t *testing.T) { synctest.Test(t, test) })
 	}
 }
 

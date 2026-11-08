@@ -22,5 +22,7 @@ type Process interface {
 }
 
 type ProcessWorkspace interface {
+	// HoldProcess returns ProcessAbsent only for observed process absence;
+	// all other acquisition errors remain refusals.
 	HoldProcess(int) (Process, Outcome)
 }

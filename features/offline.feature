@@ -811,6 +811,8 @@ Feature: Hardened offline foreground run
 
   # Q-41 requires safe controller diagnostics before the next native attempt.
   # A fake engine supplies the worker; syscall failures use the disk adapter.
+  # The absent-pidfd row keeps the engine worker running throughout bounded
+  # exit reconciliation; no engine exit observation can justify success.
   # These local cases prove diagnostic delivery, never the Moby/kernel hypothesis.
   @slice-17 @ID-OFFLINE-35 @linux
   Scenario Outline: Mount refusals expose the failed observation without leaking payloads
@@ -854,7 +856,7 @@ Feature: Hardened offline foreground run
   # validate owned exited state. A still-running or changed worker, unavailable
   # wait or deadline cannot supply exit evidence. Ordinary syscall failures do
   # not authorize waiting; preserve immediate refusal and PID-reuse guards.
-  @slice-17 @ID-OFFLINE-36 @wip
+  @slice-17 @ID-OFFLINE-36
   Scenario Outline: Kernel exit preceding Docker state publication retains the workload result
     Given an anchor detector fixture with exit <exit> at "<checkpoint>"
     When the registered command runs and fresh status reads its completed record

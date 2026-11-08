@@ -12,6 +12,7 @@ import (
 type startupKey struct{}
 type startupState struct {
 	mountDiagnostic port.MountDiagnostic
+	detectorExit    *int
 	operation       string
 	started         bool
 	failure         port.Outcome

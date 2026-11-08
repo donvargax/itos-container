@@ -2,6 +2,9 @@ package domain
 
 import (
 	"context"
+	"time"
+
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
@@ -100,6 +103,10 @@ func detectAnchor(ctx context.Context, i port.Intent, c port.RunConnection, work
 	if inspected == "" && detectorExited(fresh) {
 		return port.DetectorExited, ""
 	}
+	if failure == port.ProcessAbsent && inspected == "" && fresh.Running && fresh.PID == o.PID {
+		d.Check, d.Reason, d.System = "pidfd-open", "inspected process is absent", mountSystemDetail(workspace)
+		return detectorAfterExit(ctx, r, c, d, true)
+	}
 	if failure != "" || p == nil {
 		d.System = mountSystemDetail(workspace)
 		return refuse("pidfd-open", "process reference unavailable; worker exit not confirmed")
@@ -113,7 +120,7 @@ func detectAnchor(ctx context.Context, i port.Intent, c port.RunConnection, work
 	}
 	if exited, f := p.Exited(); f != "" || exited {
 		d.Check, d.Reason, d.System = "pidfd-before-stat", "held process is exited or unavailable", mountSystemDetail(p)
-		return detectorAfterExit(ctx, r, c, d)
+		return detectorAfterExit(ctx, r, c, d, exited && f == "")
 	}
 	mounted, failure := w.Mounted(o.PID)
 	// Save the stat diagnostic before any later observation can replace it.
@@ -127,7 +134,7 @@ func detectAnchor(ctx context.Context, i port.Intent, c port.RunConnection, work
 		if failure == "" {
 			d.Check, d.Reason, d.System = "pidfd-after-stat", "held process is exited or unavailable", mountSystemDetail(p)
 		}
-		return detectorAfterExit(ctx, r, c, d)
+		return detectorAfterExit(ctx, r, c, d, exited && processFailure == "")
 	}
 	if mounted.Device != r.Anchor.Device || mounted.Inode != r.Anchor.Inode {
 		d.ObservedDevice, d.ObservedInode = mounted.Device, mounted.Inode
@@ -154,10 +161,26 @@ func detectorExited(o port.Observation) bool {
 	return !o.Running && o.Started && o.Status == "exited"
 }
 
-func detectorAfterExit(ctx context.Context, r port.Record, c port.RunConnection, d port.MountDiagnostic) (string, port.Outcome) {
+func detectorAfterExit(ctx context.Context, r port.Record, c port.RunConnection, d port.MountDiagnostic, processExited bool) (string, port.Outcome) {
+	// Kernel process absence can precede Docker's state publication. Bound the
+	// entire reconciliation, including its fresh owned inspections, to one call.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	o, failure := inspectDetector(ctx, r, c)
 	if failure == "" && detectorExited(o) {
 		return port.DetectorExited, ""
+	}
+	if failure == "" && processExited && o.Running && o.PID == d.PID {
+		exit, waited := c.Wait(ctx, r.ContainerID)
+		if waited == "" && budget.Cause(ctx) == nil {
+			o, failure = inspectDetector(ctx, r, c)
+			if failure == "" && detectorExited(o) && budget.Cause(ctx) == nil {
+				if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
+					state.detectorExit = &exit
+				}
+				return port.DetectorExited, ""
+			}
+		}
 	}
 	d.Reason += "; worker exit not confirmed"
 	recordMountDiagnostic(ctx, d)

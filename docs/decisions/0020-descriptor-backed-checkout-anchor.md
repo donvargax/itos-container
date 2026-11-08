@@ -49,6 +49,11 @@ exit through the ordinary engine wait and teardown. A fresh full-ID inspection
 must establish exit if pidfd acquisition, process observation or stat fails.
 Neither PID disappearance alone nor a permission/transport error establishes
 exit. Record `not observed: worker exited`; do not claim mount verification.
+If kernel process absence arrives before Docker publishes the exit, reconcile
+the same owned full ID through a not-running wait and fresh exited inspection
+within one ten-second call budget. Keep that wait's real exit result instead of
+reacquiring it. Changed PID/ownership, failed confirmation or expiry still
+refuses; other syscall errors do not authorize this wait.
 The descriptor volume remains the protection, and its native proof requirement
 is unchanged. No helper, extra mount or new privilege is introduced.
 
@@ -519,3 +524,43 @@ is blocked on that evidence: inspect the new `check`, identity and errno fields
 in the native failures. If they show Moby refusing the `/proc` device or resolving
 it by pathname, stop with that evidence as q-19 requires. Do not infer a new
 anchor mechanism, privilege, host mount, helper or support claim from local green.
+
+## Docker exit publication lag after q-41
+
+The coordinator's saved report of 2026-11-08, approximately 08:25 UTC, identifies
+the diagnostic failures from [run 42461978939](https://github.com/donvargax/itos-container/actions/runs/42461978939)
+at `1852dcec38301a3765ba9632820eb95b9045bf41`: `pidfd-open` and one
+`pidfd-before-stat` refusal, with worker exit not yet confirmed. It reports no
+device/inode mismatch. The public job API confirms the engine job failed and
+the Ubuntu tests passed. The GitHub app required reauthentication and the public
+log endpoint returned 403 in this session, so the coordinator's saved diagnostic
+report is the source for the failure details, not an independently fetched log.
+
+Kernel exit and Docker state publication are separate observations. The previous
+detector inspected once after a failed pidfd open or ended process and refused
+while Docker still reported running. The disk adapter now distinguishes ESRCH
+from other acquisition errors. Only that process absence, or a successfully
+observed ended pidfd, admits bounded exit reconciliation. The same owned full ID
+and unchanged PID are required before waiting. A successful wait must be followed
+by a fresh owned exited-state inspection within the same budget. Retain the exit
+for ordinary teardown and status; a second wait cannot discard a known result.
+
+Step commit `37f8302` adds ID-OFFLINE-36. With `@wip` removed locally, all six rows
+failed at the workload-result Then with `short-lived result lost`: exits 0 and 7
+before pidfd acquisition, before stat and during stat. The fixture keeps Docker
+inspections running until its independent exit notification is consumed. All six
+pass after the fix, along with OFFLINE-33/34/35. OFFLINE-35's missing-PID control
+still has a running engine worker throughout reconciliation and retains its
+refusal and immediate owned cleanup assertions.
+
+Controlled-time domain regressions cover the ten-second bound, wait failure,
+continued running state, changed PID, foreign or unavailable final inspection,
+missing started proof and retained exit through both runner routes. A shared
+process-absence contract runs against the memory fake and Linux disk adapter.
+The changed session packages, process contract and selected OFFLINE-36 scenarios
+pass targeted race detection. The full engine-disabled feature suite passes
+without race detection in 169.674 seconds with host UID ownership. Its initial
+sandboxed attempt refused remapped fixture ownership as `state.unsafe`; no
+ownership check or memory limit was changed. Native acceptance and fresh
+changed-code proof remain CI obligations; these local results do not settle the
+descriptor volume's Moby/kernel hypothesis.

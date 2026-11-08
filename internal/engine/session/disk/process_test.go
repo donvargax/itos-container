@@ -47,9 +47,7 @@ func TestWorkerProcessContract(t *testing.T) {
 		}
 	})
 	// A reaped PID cannot produce a new live reference.
-	if p, failure := (&Workspace{}).HoldProcess(child.Process.Pid); p != nil || failure != port.MountRefused {
-		t.Fatal(p, failure)
-	}
+	f.ProcessAbsenceContract(t, &Workspace{}, child.Process.Pid)
 }
 
 func TestWorkerProcessRefusesInvalidReferences(t *testing.T) {

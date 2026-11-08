@@ -19,6 +19,9 @@ func (w *Workspace) HoldProcess(pid int) (port.Process, port.Outcome) {
 	fd, err := openPIDFD(pid)
 	if err != nil {
 		w.mountError = mountSystemError(err)
+		if errors.Is(err, syscall.ESRCH) {
+			return nil, port.ProcessAbsent
+		}
 		return nil, port.MountRefused
 	}
 	return &workerProcess{file: os.NewFile(uintptr(fd), "worker pidfd"), signal: signalPIDFD}, ""

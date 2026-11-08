@@ -33,6 +33,10 @@ func TestPublicAnchorDiagnosticContract(t *testing.T) {
 		t.Skip("anchor diagnostic feature subprocess only")
 	}
 	m := publicMemoryFixture(t)
+	// This row describes a failed observation of a still-running worker, not
+	// delayed publication of a real exit. The fake must not manufacture an exit
+	// when reconciliation waits for the engine's independent confirmation.
+	m.e.WaitUntilCancel = mode == "pidfd"
 	w := &diagnosticWorkspace{Workspace: &disk.Workspace{}, anchor: sf.MountWorkspace(m.b), mode: mode}
 	w.MountStat = func(path string) (fs.FileInfo, error) {
 		return nil, &os.PathError{Op: "stat", Path: "SYNTHETIC_PRIVATE_PATH", Err: syscall.EACCES}

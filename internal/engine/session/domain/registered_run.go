@@ -96,6 +96,9 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	c, attachment, resource, failure := s.registeredLaunch(startup, id, argv, streams)
 	result.ID, result.Outcome = resource, failure
 	result.Started, result.Operation = state.started, state.operation
+	if state.detectorExit != nil {
+		result.Exit, result.Exited = *state.detectorExit, true
+	}
 	if result.Outcome != "" {
 		result.MountDiagnostic = state.mountDiagnostic
 	}
@@ -109,7 +112,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	if attachment != nil {
 		defer attachment.Close()
 	}
-	if result.Outcome == "" {
+	if result.Outcome == "" && !result.Exited {
 		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, c, attachment, id, result.ID)
 	}
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
