@@ -19,6 +19,27 @@ scanner and proves every supported combination before claiming that protection. 
 check commands can execute programs, so run them only in an environment appropriate to that
 trust. itos's hooks and commit rules are workflow controls, not a security sandbox.
 
+## Checkout Unix sockets: known milestone limit
+
+The writable checkout bind exposes host pathname Unix sockets to the worker.
+Network mode `none` and a private IPC namespace do not prevent this access.
+Host sockets created or swapped into the checkout during a run remain reachable.
+A host service listening there can therefore give the worker access to host
+actions or networking even though the worker has no external network interface.
+
+Following the person's q-30 decision, run scans the complete pinned checkout
+before creating a worker, including nested directories and `.git`, without
+following symlinks. A live or stale Unix socket causes `run.isolation-unverified`
+(exit 1); an incomplete scan also prevents creation. The scan changes no files
+or sockets. Its CI red was accepted in q-34; runtime green remains required.
+It does not close the race after inspection or provide continuous enforcement.
+Do not treat a socket-free startup check as proof of host IPC isolation.
+
+Continuous enforcement is deferred to milestone 2 under
+`p1-checkout-socket-kernel-enforcement`; see the
+[decision](decisions/0019-checkout-socket-milestone-limit.md) and
+[Landlock/gVisor research](plans/checkout-socket-enforcement.md).
+
 ## Approval boundary
 
 [Slice-4's approval scenarios](../features/approval.feature) exercise the implemented

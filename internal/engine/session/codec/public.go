@@ -17,7 +17,17 @@ func (j JSON) DecodePublic(data []byte) (port.PublicRecord, port.Outcome) {
 		return bad()
 	}
 	v, issues := j.Parser.Parse(data, true)
-	if len(issues) != 0 || v.Kind != manifest.Object || len(v.Fields) != 7 {
+	if len(issues) != 0 || v.Kind != manifest.Object {
+		return bad()
+	}
+	fields := 7
+	if detector, ok := v.Fields["mount_detector"]; ok {
+		if detector.Kind != manifest.String || detector.Text == "" || !port.ValidDetector(detector.Text) {
+			return bad()
+		}
+		fields++
+	}
+	if len(v.Fields) != fields {
 		return bad()
 	}
 	for _, name := range []string{"id", "project", "intent", "state"} {

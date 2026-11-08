@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -333,7 +334,9 @@ func (w *world) sessionRequests() []sessionRequest {
 	if w.session == nil {
 		return nil
 	}
-	return w.session.api.requests
+	w.session.api.mu.Lock()
+	defer w.session.api.mu.Unlock()
+	return slices.Clone(w.session.api.requests)
 }
 func (w *world) recoveryImmutable() error {
 	before := w.recoveryLocal.immutable
@@ -344,7 +347,9 @@ func (w *world) recoveryImmutable() error {
 		return fmt.Errorf("recovery changed unrelated state")
 	}
 	for _, q := range w.session.api.requests {
-		if (!w.recoveryLocal.runFixture && (q.Path == "/containers/create" || strings.HasSuffix(q.Path, "/start"))) || (q.Method == "DELETE" && q.Path != "/containers/"+w.session.seedID) {
+		launch := q.Path == "/containers/create" || strings.HasSuffix(q.Path, "/start")
+		ownedRemoval := q.Path == "/containers/"+w.session.seedID || (w.recoveryLocal.runFixture && q.Path == "/volumes/itos-container-anchor-"+w.session.token && (q.Query == "" || q.Query == "force=false"))
+		if !w.recoveryLocal.runFixture && launch || q.Method == "DELETE" && !ownedRemoval {
 			return fmt.Errorf("recovery launched or removed another resource")
 		}
 	}
@@ -415,12 +420,16 @@ func (w *world) recoveryLocalDurable() error {
 		exit, _ = strconv.Atoi(w.recoveryLocal.exit)
 	}
 	want := map[string]any{"schema": 1, "id": w.recoveryLocal.id, "project": w.approval.project, "intent": w.session.reference, "state": "stopped", "workload_exit": exit, "last_problem": nil}
+	if w.recoveryLocal.runFixture && exit != nil {
+		// This HTTP worker remains live until Wait, after the guarded detector.
+		want["mount_detector"] = "verified"
+	}
 	return recoveryDurableFile(w.recoveryRecordPath(), want, w.recoveryLocal.processes)
 }
 func (w *world) recoveryLocalSignals() error {
 	term, kill, remove := 0, 0, 0
 	for _, q := range w.session.api.requests {
-		if q.Method == "DELETE" {
+		if q.Method == "DELETE" && strings.HasPrefix(q.Path, "/containers/") {
 			remove++
 		}
 		if strings.HasSuffix(q.Path, "/kill") {

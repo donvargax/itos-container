@@ -35,6 +35,7 @@ type Result struct {
 }
 
 type Record struct {
+	Anchor         Anchor `json:"anchor,omitzero"`
 	Schema         int    `json:"schema"`
 	Project        string `json:"project"`
 	Generation     string `json:"generation"`
@@ -103,14 +104,16 @@ type Store interface {
 func (r Record) ValidTransition(next Record) bool {
 	expected := r
 	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
-	if next != expected || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
+	expected.Schema, expected.Anchor = next.Schema, next.Anchor
+	if next != expected || !r.anchorTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
 		return false
 	}
 	switch r.Stage {
 	case "reserved":
-		return next.ContainerID == "" && (next.Stage == "reserved" || next.Stage == "intent" || next.Stage == "cancelled")
+		return next.ContainerID == "" && (next.Stage == "reserved" || next.Stage == "intent" || next.Stage == "cancelled") &&
+			(next.Schema == 1 || next.Stage == "reserved" || (next.Stage == "intent" && next.Anchor.Stage == "owned") || next.Stage == "cancelled")
 	case "cancelled", "absent":
-		return next == r
+		return next.Stage == r.Stage && next.ContainerID == r.ContainerID && (next == r || r.Schema == 2 && r.anchorTransition(next))
 	default:
 		return HexID(next.ContainerID) && (next.Stage == "owned" || next.Stage == "absent")
 	}
@@ -118,7 +121,7 @@ func (r Record) ValidTransition(next Record) bool {
 
 // Completed includes cancellation proven before create, never an unknown create.
 func (r Record) Completed() bool {
-	return (r.Stage == "absent" && HexID(r.ContainerID)) || (r.Stage == "cancelled" && r.ContainerID == "")
+	return (r.Schema == 1 || r.Anchor.Stage == "absent") && ((r.Stage == "absent" && HexID(r.ContainerID)) || (r.Stage == "cancelled" && r.ContainerID == ""))
 }
 
 type Intent interface {
@@ -130,6 +133,8 @@ type Intent interface {
 }
 
 type Observation struct {
+	AnchorName                  string
+	AnchorExact                 bool
 	ID, Name, ImageID           string
 	Token, Project, Fingerprint string
 	StatePresent                bool

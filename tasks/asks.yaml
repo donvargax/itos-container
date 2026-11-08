@@ -143,3 +143,35 @@ questions:
     item: "slice-21"
     question: "slice-21: lock a private inode instead of the account home (Codex P3), and how to bootstrap it?"
     answer: "Stop locking the home. mkdir the coordination directory 0700 (EEXIST is fine), open it O_DIRECTORY|O_NOFOLLOW and validate by descriptor (this UID, 0700, no symlink), then flock a private lock file inside it, validated the same way. Bound every lock wait by the 10 s call budget with a typed retryable refusal. Revise CONTROL-10 and control-state.feature:43-54 to match and add a case where another UID locking the home cannot delay doctor, approve or run. No 0700-home requirement. See slice-21-steer.md."
+  - id: q-36
+    item: "slice-17"
+    question: "slice-17: its scenarios can't activate without slice-18's recovery, which is specified to follow it; how to break the cycle?"
+    answer: "Merge slice-18 into slice-17: bring slice-18's accepted spec (origin/slice-18, features/anchors.feature) onto slice-17's branch and implement and land both in slice-17's pull request; slice-18 is dropped as merged. Each scenario keeps its red-first evidence; slice-18's engine cases need their CI red run before implementation. See slice-17-steer.md."
+  - id: q-37
+    item: "slice-17"
+    question: "slice-17: CI red evidence for ID-ANCHORS-09 to 13?"
+    answer: "Yes. Run 42400524477: all seven rows fail at their Then steps (recovery neither accounts for nor releases the original anchor). Finish ANCHORS-01 to 08's local red, then implement."
+  - id: q-38
+    item: "slice-17"
+    question: "slice-17: ADR 0019 says fresh-process anchor recovery belongs to slice-18; is that conflict still open?"
+    answer: "No. q-36 merged slice-18 into slice-17, so fresh-process recovery is this slice's scope and 60b81ed implements it. Update ADR 0019 to match, read CI run 42410829045 at 60b81ed, and treat a job dying near 600 s as go test's default timeout to fix by speeding the slow package, never by raising it. See slice-17-steer.md."
+  - id: q-39
+    item: "slice-17"
+    question: "slice-17: a workload that exits before the post-start stat can't be verified; refuse it (q-27) or keep its result?"
+    answer: "Keep its result. The detector checks the anchor, it is not the protection. While the worker runs: pidfd for State.Pid, a fresh inspect confirming the same PID, then stat /proc/<pid>/root/workspace; mismatch means teardown and refusal. If the worker already exited (before or between inspect and stat): return its real exit status, record the detector as not observed, tear down normally, claim no verification. Another stat failure while running stays a refusal. Regressions for exit 0 and nonzero in both windows and the PID-reuse guard; update ADR 0019. See slice-17-steer.md."
+  - id: q-40
+    item: "T-33"
+    question: "T-33: which native engine scenarios make the suite slow, and how to fix it?"
+    answer: "Run 42457394504: LIFECYCLE-13 row 1 takes 128 s (it waits out the real 120 s startup budget) and LIFECYCLE-09's four rows about 12 s each (the real 10 s grace); everything else is under 6 s. Shorten the product's call, startup and grace budgets for the harness through a test-only seam (a build tag or fixture config, never a user-settable variable), keep assertions relative to the budget used, then restore the 5-minute limits. See T-33-steer.md."
+  - id: q-41
+    item: "slice-17"
+    question: "slice-17: what failed natively in run 42459248613?"
+    answer: "The full log is at .git/itos/loop/slice-17-run-42459248613-engine.log. Even fault-free native controls fail, and the product reports only run.mount-refused, so on Docker 28 the anchor or the post-start detector refuses ordinary runs. Make run.mount-refused carry its reason (the check, expected and observed device:inode, or the stat or pidfd errno), show it in the harness output, and return blocked for a native run; if Moby resolves the path by name or refuses it, stop with the evidence (q-19)."
+  - id: q-42
+    item: "slice-17"
+    question: "slice-17: the post-start stat finds no /workspace in a live worker's root (it changed root or namespaces); refuse or record?"
+    answer: "Record, as q-39 reasons: the anchor is the protection. On ENOENT, ESRCH or EACCES from the stat, poll the pidfd: exited means q-39's exited path; alive means record the detector as not observed (worker root changed) and continue. Refuse only on a device:inode mismatch, or when a live worker's root still shows /workspace but it can't be read. Add a regression for a live worker that chroots or unshares before the stat."
+  - id: q-43
+    item: "T-34"
+    question: "T-34: what does the CI runner's fixture manifest look like now?"
+    answer: "Run 42497992377: the built image ID equals the manifest digest (sha256:af908c… for both), so the runner's Docker uses the containerd image store, where image IDs are manifest digests. Accept either store and log which: graph driver (built ID equals .config.digest) or containerd (built ID equals the manifest digest, with .config.digest checked against the daemon's config). Keep the bytes, single-manifest and cold-reference checks. See T-34-steer.md."

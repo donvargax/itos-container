@@ -90,13 +90,17 @@ func TestFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runScenarios(selection, godog.Options{
-		Format:   "pretty",
-		Output:   os.Stdout,
-		Paths:    []string{"."},
-		Strict:   true,
-		TestingT: t,
-	}, func(sc *godog.ScenarioContext) { initializeScenario(sc, root, bin) }) != 0 {
+	if runFeatureScenarios(selection, godog.Options{
+		Format:      "pretty",
+		Output:      os.Stdout,
+		Paths:       []string{"."},
+		Strict:      true,
+		TestingT:    t,
+		Concurrency: 4,
+	}, func(sc *godog.ScenarioContext, duringQuiet func()) {
+		w := initializeScenario(sc, root, bin)
+		w.duringQuiet = duringQuiet
+	}) != 0 {
 		t.Fatal("a scenario failed")
 	}
 }
@@ -327,7 +331,14 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 	}
 	options.Tags = selection.filter
 	options.Strict = true
-	options.Concurrency = 1
+	// Local worlds own their processes, state and endpoints. Overlap their
+	// real deadline waits, without changing those deadlines or the selected set.
+	// Native resource audits and red evidence retain their serial ordering.
+	if selection.engine || selection.red || options.Concurrency < 1 {
+		options.Concurrency = 1
+	} else {
+		options.Concurrency = min(options.Concurrency, 4)
+	}
 	completed, unsuccessful := 0, false
 	suite := godog.TestSuite{Name: "itos-container", Options: &options, ScenarioInitializer: func(sc *godog.ScenarioContext) {
 		initialize(sc)

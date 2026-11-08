@@ -31,6 +31,8 @@ type lossRound struct {
 	released, collected time.Time
 	reports             []isolationReport
 	boundary            map[string]any
+	anchor              map[string]any
+	intent              sessionRecord
 	pid                 int
 	start               string
 	snapshot            sessionRecord

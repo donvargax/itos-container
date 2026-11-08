@@ -150,11 +150,20 @@ func (f *overlapFixture) complete(r *overlapRun) error {
 		exit = *e.WorkloadExit
 	}
 	public := map[string]any{"schema": 1, "id": r.id, "project": r.w.approval.project, "intent": filepath.ToSlash(strings.TrimPrefix(r.intent, filepath.Join(r.w.doctor.env["XDG_STATE_HOME"], "itos-container")+string(os.PathSeparator))), "state": "stopped", "workload_exit": exit, "last_problem": nil}
+	if e.MountDetector != "" {
+		public["mount_detector"] = e.MountDetector
+	}
 	intent, err := sessionDecodeRecord(r.owned.Bytes)
 	if err != nil {
 		return err
 	}
 	intent["stage"], intent["container_id"] = "absent", r.worker
+	if intent["schema"] == float64(2) {
+		object(intent["anchor"])["stage"] = "absent"
+		if e.Anchor != "absent" {
+			return errors.New("cleanup retained an anchor")
+		}
+	}
 	if err = recoveryDurableFile(r.intent, intent, []*recoveryProcess{r.stop}); err != nil {
 		return err
 	}

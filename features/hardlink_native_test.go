@@ -233,19 +233,20 @@ func (w *world) hardlinkNativeBoundary() error {
 	if !ok {
 		return fmt.Errorf("missing native mount observations")
 	}
-	binds := 0
+	anchors := 0
 	for _, entry := range mounts {
 		m := object(entry)
-		if m["Type"] == "bind" {
-			binds++
-			if m["Source"] != w.doctor.checkout || m["Destination"] != "/workspace" || m["RW"] != true {
+		if m["Type"] == "volume" {
+			anchors++
+			name, _ := m["Name"].(string)
+			if w.offline.api.anchorVolumes()[name] == nil || m["Driver"] != "local" || m["Destination"] != "/workspace" || m["RW"] != true {
 				return fmt.Errorf("wrong checkout mount")
 			}
 		} else if m["Type"] != "tmpfs" {
 			return fmt.Errorf("unexpected native mount")
 		}
 	}
-	if binds != 1 {
+	if anchors != 1 {
 		return fmt.Errorf("worker lacks sole checkout host mount")
 	}
 	return w.hardlinkIdentity()

@@ -168,6 +168,10 @@ items:
       unrestricted-push and automatic three-platform claims with the implemented CI policy. T-9's
       completed refresh predates this change. Defer unless it blocks the charter's configuration,
       doctor and approval step.
+
+      Already covers hook registration and verification instructions. Include the reported unset
+      core.hooksPath and missing pre-commit/commit-msg hooks in that verification, confirming how
+      subsequent commits enforce configured gates.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -424,9 +428,9 @@ items:
   - id: T-25
     title: Release a version on each feat or fix once run works
     phase: 1
-    owner: null
-    status: todo
-    depends_on: [slice-14, slice-15]
+    owner: donvargax
+    status: doing
+    depends_on: [slice-14, slice-15, slice-17, slice-19]
     kind: task
   - id: slice-13
     title: Launch and cleanup contract
@@ -486,18 +490,9 @@ items:
     title: Host Unix sockets under the checkout are not reachable from the worker
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-host-sockets-in-checkout.
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. The whole checkout is
-      bind-mounted (docker/run.go:64) and network none does not isolate filesystem Unix sockets, so
-      a tmux server, SSH control socket or other host service with its socket under the checkout is
-      reachable from /workspace as the host UID: host command execution or network access without
-      another mount. A startup scan is not enough, as host processes can create sockets later; deny
-      connecting to host sockets, or expose a materialised checkout with no host IPC objects.
   - id: slice-20
     title: Hard links to files outside the checkout are refused
     phase: 1
@@ -551,32 +546,16 @@ items:
     title: Run binds its mount to the validated checkout inode
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-launch-with-inode-bound-checkout.
-      Close the gap between final validation and Docker resolving the mount pathname. Provide a
-      protected inode-bound source through engine ports and adapters, record its ownership before
-      use, and cover normal teardown and failure retention. Preserve checkout edits and the
-      sole-host-mount contract. Require CI red/green scenarios for substitution after the final
-      identity check; update affected architecture sections and record the decision. Broken down
-      from null.
   - id: slice-18
     title: Status and stop recover owned checkout mount anchors
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: [slice-17]
     kind: slice
-    why: >
-      Was p1-recover-owned-checkout-mounts.
-      Extend existing recovery to the mount ownership introduced by the launch slice. After
-      controller loss or uncertain startup, retain isolation and release only proven-owned anchors
-      after worker removal is confirmed. Cover repeated stop, foreign-resource refusal and
-      independent sessions with black-box scenarios, using CI for native-engine evidence. Share
-      recovery logic through engine packages without imports between command slices. Broken down
-      from null.
   - id: slice-21
     title: Doctor and approve reject state exposed to another worker
     phase: 1
@@ -661,24 +640,50 @@ items:
       Already tracks continuous enforcement against host sockets created or replaced after startup,
       retaining Landlock/gVisor research and runtime scenarios ID-SOCKETS-02/03. Preserve the
       person's q-30 deferral to milestone 2.
+
+      The person's design, 2026-11-07, for milestone 2: Landlock by default (ABI 9+,
+      LANDLOCK_ACCESS_FS_RESOLVE_UNIX), applied by a small read-only init binary itos-container
+      mounts and runs as the worker's entrypoint before exec'ing the literal argv, as Docker has no
+      Landlock option and the controller cannot restrict a worker the daemon spawns; gVisor (runsc)
+      as the fallback when the kernel lacks ABI 9; on a host with neither, run is allowed only with
+      an explicit approval that records 'late host sockets reachable', shown at approve time and in
+      status. Doctor reports which backend a run would use, and the approval binds it. Proof: the
+      Landlock path is proven locally on the person's machine (Landlock ABI 10 on Linux 7.2) for
+      now, with hosted CI proving the gVisor path; a weakened gate until a new-kernel CI runner
+      exists (record it in weakened-gates.md when built). Amends the spec's no-helper and
+      no-extra-mount rules for the init binary.
   - id: T-31
     title: Native stop confined to one of two equal-basename projects passes reliably
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
-  - id: p1-engine-suite-within-its-limit
+  - id: T-33
     title: main's engine scenarios finish well inside the job's 5-minute limit
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
-    kind: idea
-    why: >
-      main went red at b2ad2ad (run 42392045565) although all 49 engine scenarios passed (feature
-      test exit status 0): the Engine scenarios step hit its 5-minute timeout-minutes. The suite
-      took 258 s on 2026-11-06 and 277 s on 2026-11-07 (run 42389951333), and every isolation slice
-      adds engine cases, so main will go red more often. Measure each scenario's time, make the slow
-      ones fast (LIFECYCLE-13's first row took 128 s in red), and shard the engine job by feature if
-      the total still nears the limit. Raising the limit is the person's call, not a fix.
+    kind: task
+  - id: T-32
+    title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-35
+    title: The feature suite stays within a few GB, with or without the race detector
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-34
+    title: Engine fixture preparation passes again on today's CI runners
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task

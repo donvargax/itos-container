@@ -23,10 +23,11 @@ type recoveryProblem struct {
 	Exit                        int
 }
 type recoveryEntry struct {
-	ID, Project, Fingerprint, State, Resource, Controller, Cleanup string
-	WorkloadExit                                                   *int     `json:"workload_exit"`
-	StopCandidate                                                  bool     `json:"stop_candidate"`
-	Retry                                                          []string `json:"retry"`
+	ID, Project, Fingerprint, State, Resource, Controller, Cleanup, Anchor string
+	MountDetector                                                          string   `json:"mount_detector,omitempty"`
+	WorkloadExit                                                           *int     `json:"workload_exit"`
+	StopCandidate                                                          bool     `json:"stop_candidate"`
+	Retry                                                                  []string `json:"retry"`
 }
 
 func recoveryReadReport(p *recoveryProcess) (recoveryReport, error) {
@@ -59,11 +60,30 @@ func recoveryReadReport(p *recoveryProcess) (recoveryReport, error) {
 		return report, errors.New("recovery sessions are not objects")
 	}
 	for _, entry := range entries {
-		if !recoveryExactFields(entry, "id", "project", "fingerprint", "state", "resource", "controller", "cleanup", "workload_exit", "stop_candidate", "retry") {
+		fields := []string{"id", "project", "fingerprint", "state", "resource", "controller", "cleanup", "workload_exit", "stop_candidate", "retry"}
+		if value, exists := entry["anchor"]; exists {
+			var anchor string
+			if json.Unmarshal(value, &anchor) != nil || (anchor != "present" && anchor != "absent" && anchor != "unknown") {
+				return report, errors.New("invalid anchor fact")
+			}
+			fields = append(fields, "anchor")
+		}
+		if !recoverySessionFields(entry, fields...) {
 			return report, errors.New("recovery session has missing or incorrectly named fields")
 		}
 	}
 	return report, nil
+}
+
+func recoverySessionFields(object map[string]json.RawMessage, fields ...string) bool {
+	if value, exists := object["mount_detector"]; exists {
+		var detector string
+		if json.Unmarshal(value, &detector) != nil || (detector != "verified" && detector != "not observed: worker exited" && detector != "not observed: worker root changed" && detector != "refused") {
+			return false
+		}
+		fields = append(fields, "mount_detector")
+	}
+	return recoveryExactFields(object, fields...)
 }
 
 func recoveryExactFields(object map[string]json.RawMessage, fields ...string) bool {
@@ -199,7 +219,7 @@ func (w *world) recoveryCompleted() error {
 		return err
 	}
 	if s.Retry != nil || s.StopCandidate || (r.mode == "retry" && (s.WorkloadExit == nil || *s.WorkloadExit != 7)) ||
-		(r.mode == "loss" && s.WorkloadExit != nil && *s.WorkloadExit == 0) {
+		(r.mode == "loss" && s.WorkloadExit != nil && *s.WorkloadExit == 0) || s.Anchor != "absent" {
 		return errors.New("cleanup success replaced workload knowledge or retained a pending retry")
 	}
 	if r.mode != "retry" {
@@ -214,6 +234,7 @@ func (w *world) recoveryCompleted() error {
 	}
 	a := w.offline.api
 	a.mu.Lock()
+	anchorErr := w.anchorReleased(a.requests)
 	removed, confirmed := false, false
 	for _, request := range a.requests {
 		if request.Method == "DELETE" && request.Path == "/containers/"+r.worker && request.Status == 204 {
@@ -224,6 +245,9 @@ func (w *world) recoveryCompleted() error {
 		}
 	}
 	a.mu.Unlock()
+	if anchorErr != nil {
+		return anchorErr
+	}
 	if !removed || !confirmed {
 		return errors.New("product did not remove its full ID and freshly confirm absence")
 	}
@@ -238,6 +262,9 @@ func (w *world) recoveryCompleted() error {
 	}
 	record := map[string]any{"schema": 1, "id": r.id, "project": w.approval.project, "intent": w.session.reference,
 		"state": "stopped", "workload_exit": exit, "last_problem": nil}
+	if s.MountDetector != "" {
+		record["mount_detector"] = s.MountDetector
+	}
 	return recoveryDurableFile(filepath.Join(state, "sessions", w.recoveryIndexKey(), r.id, "record.json"), record, r.stops)
 }
 
@@ -293,9 +320,19 @@ func (w *world) recoveryPreserved() error {
 	if err != nil {
 		return err
 	}
+	resources, err = w.recoveryWithoutRetainedAnchor(resources)
+	if err != nil {
+		return err
+	}
 	owned := []string{r.worker}
 	if r.second != nil {
 		owned = append(owned, r.second.recovery.worker)
+		// Project B remains live. Check its full anchor tuple before excluding
+		// that one owned resource from A's unrelated-resource comparison.
+		resources, err = r.second.recoveryWithoutRetainedAnchor(resources)
+		if err != nil {
+			return err
+		}
 	}
 	if !reflect.DeepEqual(recoveryWithoutWorkers(resources, owned), recoveryWithoutWorkers(w.offline.resourcesBefore, owned)) {
 		return errors.New("recovery changed unrelated native containers, images, networks or volumes")
@@ -334,6 +371,9 @@ func (w *world) recoveryOneLaunch() error {
 	if a.problem != nil {
 		return a.problem
 	}
+	if err := w.anchorRevalidated(a.requests); err != nil {
+		return err
+	}
 	creates, starts, removes := 0, 0, 0
 	for _, request := range a.requests {
 		transient := r.mode == "retry" && request.Method == "DELETE" && request.Status == 503
@@ -348,6 +388,9 @@ func (w *world) recoveryOneLaunch() error {
 			starts++
 		}
 		if request.Method == "DELETE" {
+			if strings.HasPrefix(request.Path, "/volumes/") {
+				continue // The original anchor tuple and worker absence were checked above.
+			}
 			if request.Path != "/containers/"+r.worker {
 				return errors.New("recovery attempted to remove a different native resource")
 			}

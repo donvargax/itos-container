@@ -201,7 +201,8 @@ func (t *intent) validateBinding() port.Outcome {
 	}
 	expected := b.Intent(t.record.NameToken())
 	expected.Stage, expected.ContainerID = t.record.Stage, t.record.ContainerID
-	if t.record != expected {
+	expected.Schema, expected.Anchor = t.record.Schema, t.record.Anchor
+	if t.record != expected || !t.record.ValidAnchor(b) {
 		return port.Invalid
 	}
 	uid, gid, failure := t.store.identity()
