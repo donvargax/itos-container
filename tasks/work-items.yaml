@@ -676,8 +676,8 @@ items:
   - id: T-33
     title: main's engine scenarios finish well inside the job's 5-minute limit
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-32
