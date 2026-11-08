@@ -162,3 +162,4 @@ questions:
   - id: q-40
     item: "T-33"
     question: "T-33: which native engine scenarios make the suite slow, and how to fix it?"
+    answer: "Run 42457394504: LIFECYCLE-13 row 1 takes 128 s (it waits out the real 120 s startup budget) and LIFECYCLE-09's four rows about 12 s each (the real 10 s grace); everything else is under 6 s. Shorten the product's call, startup and grace budgets for the harness through a test-only seam (a build tag or fixture config, never a user-settable variable), keep assertions relative to the budget used, then restore the 5-minute limits. See T-33-steer.md."
