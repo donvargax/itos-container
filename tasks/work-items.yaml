@@ -429,7 +429,7 @@ items:
     title: Release a version on each feat or fix once run works
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-14, slice-15, slice-17, slice-19]
     kind: task
   - id: slice-13
