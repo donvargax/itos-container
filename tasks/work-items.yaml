@@ -686,3 +686,18 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: p1-feature-suite-race-memory
+    title: The feature suite under the race detector stays within a few GB
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Measured 2026-11-08 by the loop's memory sampler: an implementer's go test -race ./features
+      -count=1 -json (1,348 scenarios, one process) grew features.test from 0.3 GB to 12.6 GB in a
+      minute and to 22 GB the next, leaving 1.5 GB of 31 GB free and pushing 3.5 GB into swap; the
+      day before, the same pressure got the loop killed. The race detector multiplies memory, but 22
+      GB also points at state kept across scenarios (buffers, fixtures, goroutines) that a long
+      suite accumulates. Find what grows per scenario (a heap profile across the suite) and release
+      it, so a full race run fits comfortably; until then agents race only the packages they change.
