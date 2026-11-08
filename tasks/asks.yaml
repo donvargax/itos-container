@@ -159,3 +159,6 @@ questions:
     item: "slice-17"
     question: "slice-17: a workload that exits before the post-start stat can't be verified; refuse it (q-27) or keep its result?"
     answer: "Keep its result. The detector checks the anchor, it is not the protection. While the worker runs: pidfd for State.Pid, a fresh inspect confirming the same PID, then stat /proc/<pid>/root/workspace; mismatch means teardown and refusal. If the worker already exited (before or between inspect and stat): return its real exit status, record the detector as not observed, tear down normally, claim no verification. Another stat failure while running stays a refusal. Regressions for exit 0 and nonzero in both windows and the PID-reuse guard; update ADR 0019. See slice-17-steer.md."
+  - id: q-40
+    item: "T-33"
+    question: "T-33: which native engine scenarios make the suite slow, and how to fix it?"
