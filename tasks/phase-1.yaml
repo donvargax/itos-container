@@ -2134,13 +2134,25 @@
     These are build tools under tools/, using the existing release-library exception in
     docs/architecture.md, not container commands or new slice/engine production packages.
 
-    release-notes also calls tools/bin/pinned git-cliff, whose case is missing here. Copy only
-    that case from the same template revision, including git-cliff 2.14.2, its four Linux/macOS
+    release-notes also calls tools/bin/pinned git-cliff, whose case is missing here. Adapt only
+    that case from the same template revision, keeping git-cliff 2.14.2, its four Linux/macOS
     archive targets and SHA-256 values, archive/member names and checksum-before-extraction
     contract. Its source comments describe verification against the upstream .sha512 files.
-    Preserve --path and all current GoReleaser, itos-cc and linter pins/checksums; copying the
-    template's old itos-cc case would regress T-4. git-cliff is the maintained existing upstream
-    notes renderer, not a new parser to write; run it with --offline and its copied cliff.toml.
+    Use this repository's GitHub binary asset API route, not the template's browser download
+    route. Commit 17fced5 switched the existing tools after repeated browser-route HTTP 504s;
+    tools/testdata/architecture/README.md records that evidence. Pin asset IDs 573483509 for
+    linux-amd64 (x86_64-unknown-linux-gnu), 573483780 for linux-arm64
+    (aarch64-unknown-linux-gnu), 573484837 for darwin-amd64 (x86_64-apple-darwin), and 573487203
+    for darwin-arm64 (aarch64-apple-darwin). The release API at
+    https://api.github.com/repos/orhun/git-cliff/releases/tags/v2.14.2 was read on 2026-11-08;
+    all four asset names and SHA-256 digests match the pinned template case. Fetch from
+    https://api.github.com/repos/orhun/git-cliff/releases/assets/$asset_id through the existing
+    application/octet-stream request, bounded retries and checksum verification. Keep the
+    archive git-cliff-$version-$target.tar.gz and member git-cliff-$version/git-cliff. Do not
+    replace the shared downloader or add a browser-route fallback. Preserve --path, separate
+    stdout/stderr, atomic cache publication and all current GoReleaser, itos-cc and linter
+    pins/checksums; copying the template's old itos-cc case would regress T-4. Use git-cliff,
+    the existing upstream notes renderer, with --offline and its copied cliff.toml.
     Releases run on Linux; adding Windows git-cliff or another library/service is unnecessary.
     The helper tests use standard Go and the existing release fixtures. For the workflow test,
     reuse go.yaml.in/yaml/v4 v4.0.0 already pinned in go.mod; add no dependency or tool upgrade.
@@ -2215,6 +2227,14 @@
     moved-build tests, adapting first-release expectations to the settled bootstrap rule.
     Assert exit 1 for module-major refusal and exit 2 for shallow history or Git/Go read errors,
     all with empty stdout, so a failed version calculation supplies no publishable output.
+    Add TestGitCliffPin in tools/pinned/pinned_test.go to assert the actual launcher's four
+    platform mappings, including the version, archive target/name, member, SHA-256 and API
+    asset ID/URL. Inspect the selected metadata without fetching four platform archives;
+    the expected digests are the template's, independently matched against the release API.
+    Keep TestPinnedDownload and TestPinnedAssetRedirect unchanged and run them as neighbouring
+    checks for retries, media-type negotiation, redirects, checksum rejection, cache reuse,
+    exact argv/exit propagation and --path output. The new pin test must fail at the missing
+    git-cliff metadata assertion before adding the case, then pass with all four verified pins.
     Commit these tests with compiling failing stubs before implementing the new tools; record
     assertion failures, not undefined symbols or missing-package errors, then all passing.
 
@@ -2224,10 +2244,12 @@
     has no git-cliff case. The fourth fails because release-version does not exist; after the
     tools arrive it runs the workflow's actual version command at the candidate HEAD, then
     builds both real programs and runs them against a full local no-tags clone with the current
-    pinned launcher and cliff configuration. This proves first-version and actual notes
-    generation without publishing. Pass the scratch version output's last and next directly
-    to the notes program and compare the What changed section's commit links against git
-    rev-list for its range; one project link alone would not prove every commit was included.
+    pinned launcher and cliff configuration. Assert that the clone has the candidate HEAD,
+    complete history and no tags before running either helper. This proves first-version and
+    actual notes generation without publishing. Pass the scratch version output's last and
+    next directly to the notes program and compare the What changed section's commit links
+    against git rev-list for its range; one project link alone would not prove every commit
+    was included.
     Check the source and scratch HEAD, refs, status and tracked diffs are unchanged. Then
     reproduce the workflow's Tag-before-Notes order: create v0.1.0 only as a fixture tag in
     that disposable clone, snapshot its state again, and rerun notes with the same empty last
@@ -2236,9 +2258,9 @@
     otherwise the first published notes could omit the whole history while a tagless dry
     run passes. Only the fixture setup creates that tag; neither release helper may do so.
     The drafter reran all four checks on 2026-11-08 at
-    b8c3af4fbcf86308db41d6d9245f68b0de08a0cd and observed the failures above. That source had
-    no reachable release tag, 27 feats, 50 fixes and no breaking commits;
-    these observations explain the expected first version, never become constants in the tools.
+    55ebd658f08764a90dbc55cf626de3e1719c25db and observed the failures above. A separate
+    disposable clone of that source preserved its candidate HEAD. Historical commit counts
+    and candidate SHAs are observations, never constants in the tools.
 
     Keep the YAML/Go fixture checks at the cheap task and existing Linux go test ./... tiers.
     The integrated dry run is also a focused task check; the pinned git-cliff cache avoids
@@ -2255,10 +2277,11 @@
     or tests. A memory-limit kill is a test-resource failure, not permission to raise the limit.
 
     Implementation paths are the two tools and their test files/config, tools/bin/pinned,
-    tools/release/workflow_test.go, the two workflows and the two release-guidance documents
-    named above. Leave .goreleaser.yaml, internal/release, production slices, gates, proof
-    configuration, registry owners/statuses and other tasks intact. Commit red tests/stubs as
-    test --item T-25, tooling/workflow work as ci --task T-25 and guidance as docs --item T-25.
+    tools/pinned/pinned_test.go, tools/release/workflow_test.go, the two workflows and the two
+    release-guidance documents named above. Leave .goreleaser.yaml, internal/release, production
+    slices, gates, proof configuration, registry owners/statuses and other tasks intact.
+    Commit red tests/stubs as test --item T-25, tooling/workflow work as ci --task T-25 and
+    guidance as docs --item T-25.
     The spec is docs --item T-25. Run gates through their hooks and CI; make no local mutation
     run or generated evidence. No proof.code path needs an edit here. Agents commit and stop;
     the coordinating loop owns push, CI watching, the real release and closure.
@@ -2292,9 +2315,16 @@
         assert 'TestReleaseHistory' in listed.stdout.splitlines(), 'release-history test selection is empty'
         subprocess.run(['go', 'test', './tools/bin/release-version', './tools/bin/release-notes', './internal/release/...', '-count=1'], check=True)
         PY
-    - run: >-
+    - run: |
         version=$(tools/bin/pinned git-cliff --version) &&
-        test "$version" = 'git-cliff 2.14.2'
+        test "$version" = 'git-cliff 2.14.2' &&
+        python3 - <<'PY'
+        import subprocess
+        command = ['go', 'test', './tools/pinned']
+        listed = subprocess.run(command + ['-list', '^TestGitCliffPin$'], check=True, text=True, capture_output=True)
+        assert 'TestGitCliffPin' in listed.stdout.splitlines(), 'git-cliff pin test selection is empty'
+        subprocess.run(command + ['-run', '^(TestGitCliffPin|TestPinnedDownload|TestPinnedAssetRedirect)$', '-count=1'], check=True)
+        PY
     - run: |
         python3 - <<'PY'
         from pathlib import Path
@@ -2326,6 +2356,9 @@
             run(['go', 'build', '-o', str(notes), './tools/bin/release-notes'])
             repo = temp / 'history'
             run(['git', 'clone', '--quiet', '--no-hardlinks', '--no-tags', str(root), str(repo)])
+            assert run(['git', 'rev-parse', 'HEAD'], repo) == before[0], 'scratch clone is not the candidate HEAD'
+            assert run(['git', 'rev-parse', '--is-shallow-repository'], repo).strip() == 'false', 'scratch history is shallow'
+            assert not run(['git', 'tag', '--list'], repo).strip(), 'scratch history contains tags'
             for name in ('tools/bin/pinned', 'tools/bin/release-notes/cliff.toml'):
                 destination = repo / name
                 destination.parent.mkdir(parents=True, exist_ok=True)
