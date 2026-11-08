@@ -130,6 +130,12 @@ func detectAnchor(ctx context.Context, i port.Intent, c port.RunConnection, work
 	// Check the held process again: a numeric PID reused during stat must not
 	// supply either a verified mount or a mismatch attributed to this worker.
 	exited, processFailure := p.Exited()
+	// A live worker may change its root or namespaces before this detector.
+	// The descriptor-backed volume is the protection; lack of a visible root
+	// cannot verify the mount, but must not discard the workload's real result.
+	if failure == port.MountRootUnavailable && !exited && processFailure == "" {
+		return port.DetectorRootChanged, ""
+	}
 	if failure != "" || exited || processFailure != "" {
 		if failure == "" {
 			d.Check, d.Reason, d.System = "pidfd-after-stat", "held process is exited or unavailable", mountSystemDetail(p)

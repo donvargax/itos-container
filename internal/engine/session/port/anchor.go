@@ -11,6 +11,10 @@ const (
 	MountUnavailable Outcome = "mount-unavailable"
 	MountRefused     Outcome = "mount-refused"
 	MountUncertain   Outcome = "mount-uncertain"
+	// MountRootUnavailable reports ENOENT, ESRCH or EACCES from the worker's
+	// proc-root stat. The caller must check its held process before interpreting
+	// this as a changed root; it does not establish exit or a verified mount.
+	MountRootUnavailable Outcome = "mount-root-unavailable"
 )
 
 // Anchor is protected authority for one descriptor-backed local volume. The

@@ -5,13 +5,14 @@ package port
 const ProcessAbsent Outcome = "process-absent"
 
 const (
-	DetectorVerified = "verified"
-	DetectorExited   = "not observed: worker exited"
-	DetectorRefused  = "refused"
+	DetectorVerified    = "verified"
+	DetectorExited      = "not observed: worker exited"
+	DetectorRootChanged = "not observed: worker root changed"
+	DetectorRefused     = "refused"
 )
 
 func ValidDetector(value string) bool {
-	return value == "" || value == DetectorVerified || value == DetectorExited || value == DetectorRefused
+	return value == "" || value == DetectorVerified || value == DetectorExited || value == DetectorRootChanged || value == DetectorRefused
 }
 
 // Process holds a stable reference to the inspected worker init process.

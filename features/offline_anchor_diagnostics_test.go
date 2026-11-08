@@ -51,7 +51,7 @@ func (w *world) anchorDiagnosticSteps(sc *godog.ScenarioContext) {
 		case "device", "inode":
 			want = append(want, "observed="+result.Observed)
 		case "stat":
-			want = append(want, "errno=13", "permission denied")
+			want = append(want, "errno=5", "input/output error")
 		case "pidfd":
 			want = append(want, "errno=3", "no such process")
 		case "invalid PID":

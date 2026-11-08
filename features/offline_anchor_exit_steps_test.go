@@ -102,7 +102,7 @@ func (w *world) anchorExitSteps(sc *godog.ScenarioContext) {
 		return runExitOrder(runExitObservation{Events: result.Events}, "inspect:123", "engine-exit-wait", "inspect:0")
 	})
 	sc.Step(`^the detector observes a live held process after the changed root stat before normal workload wait$`, func() error {
-		return runExitOrder(runExitObservation{Events: result.Events}, "changed-root-stat", "held-process-live", "pidfd-close", "normal-workload-wait", "child-exit:"+strconv.Itoa(exit))
+		return runExitOrder(runExitObservation{Events: result.Events}, "held-process-live-before-stat", "changed-root-stat", "held-process-live-after-stat", "pidfd-close", "normal-workload-wait", "child-exit:"+strconv.Itoa(exit))
 	})
 	sc.Step(`^the detector awaits the unreaped child's engine exit notification with status (\d+)$`, func(n int) error {
 		return runExitOrder(runExitObservation{Events: result.Events}, "child-unreaped", "engine-exit-wait", "child-exit:"+strconv.Itoa(n), "inspect:0")
@@ -121,12 +121,12 @@ func (w *world) anchorExitSteps(sc *godog.ScenarioContext) {
 	})
 }
 
-// Public schema 1 retains its seven legacy fields and permits only q-39's
+// Public schema 1 retains its seven legacy fields and permits only q-39/q-42's
 // named detector fact. Unknown fields and unknown detector values still fail.
 func publicRecordShape(record map[string]any) bool {
 	fields := 7
 	if value, exists := record["mount_detector"]; exists {
-		if value != "verified" && value != "not observed: worker exited" && value != "refused" {
+		if value != "verified" && value != "not observed: worker exited" && value != "not observed: worker root changed" && value != "refused" {
 			return false
 		}
 		fields++
@@ -139,7 +139,7 @@ func publicRecordShape(record map[string]any) bool {
 	return len(record) == fields
 }
 
-// Completed native runs may be too short for observation. Both outcomes must
+// Completed native runs may exit or change root before observation. Outcomes must
 // be recorded explicitly; a missing/refused detector never proves healthy run.
 func completedDetector(data string, want map[string]any) bool {
 	var record map[string]any
@@ -147,7 +147,7 @@ func completedDetector(data string, want map[string]any) bool {
 		return false
 	}
 	detector := record["mount_detector"]
-	if detector != "verified" && detector != "not observed: worker exited" {
+	if detector != "verified" && detector != "not observed: worker exited" && detector != "not observed: worker root changed" {
 		return false
 	}
 	want["mount_detector"] = detector

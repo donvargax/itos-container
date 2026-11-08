@@ -82,3 +82,29 @@ func TestCheckoutDescriptorErrorsRetainSafeDiagnostic(t *testing.T) {
 		t.Fatal("descriptor stat error lost", failure, w.MountError())
 	}
 }
+
+func TestMountedRootErrorClassification(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want port.Outcome
+	}{
+		{syscall.ENOENT, port.MountRootUnavailable},
+		{syscall.ESRCH, port.MountRootUnavailable},
+		{syscall.EACCES, port.MountRootUnavailable},
+		{syscall.EIO, port.MountRefused},
+		{syscall.EPERM, port.MountRefused},
+		{errors.New("unknown stat failure"), port.MountRefused},
+	} {
+		t.Run(tc.err.Error(), func(t *testing.T) {
+			w := &Workspace{MountStat: func(path string) (fs.FileInfo, error) {
+				if path != "/proc/123/root/workspace" {
+					t.Fatalf("stat path = %q", path)
+				}
+				return nil, &os.PathError{Op: "stat", Path: path, Err: tc.err}
+			}}
+			if mount, outcome := w.Mounted(123); mount != (port.MountSource{}) || outcome != tc.want || w.MountError() != mountSystemError(tc.err) {
+				t.Fatal(mount, outcome, w.MountError())
+			}
+		})
+	}
+}

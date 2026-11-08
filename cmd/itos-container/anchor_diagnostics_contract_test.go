@@ -39,7 +39,9 @@ func TestPublicAnchorDiagnosticContract(t *testing.T) {
 	m.e.WaitUntilCancel = mode == "pidfd"
 	w := &diagnosticWorkspace{Workspace: &disk.Workspace{}, anchor: sf.MountWorkspace(m.b), mode: mode}
 	w.MountStat = func(path string) (fs.FileInfo, error) {
-		return nil, &os.PathError{Op: "stat", Path: "SYNTHETIC_PRIVATE_PATH", Err: syscall.EACCES}
+		// Q-42 treats EACCES as a possibly changed live root. EIO remains an
+		// unreadable workspace and must retain the immediate-refusal control.
+		return nil, &os.PathError{Op: "stat", Path: "SYNTHETIC_PRIVATE_PATH", Err: syscall.EIO}
 	}
 	j := &runExitJournal{}
 	m.e.After = j.add

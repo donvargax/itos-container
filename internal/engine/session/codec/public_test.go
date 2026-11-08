@@ -13,7 +13,7 @@ import (
 )
 
 func TestPublicCodecContract(t *testing.T) {
-	for _, result := range []string{"unknown", "observed", sp.DetectorVerified, sp.DetectorExited, sp.DetectorRefused} {
+	for _, result := range []string{"unknown", "observed", sp.DetectorVerified, sp.DetectorExited, sp.DetectorRootChanged, sp.DetectorRefused} {
 		t.Run(result, func(t *testing.T) {
 			record := sp.PublicRecord{Schema: 1, ID: strings.Repeat("a", 64), Project: strings.Repeat("b", 64),
 				Intent: sp.Reference(strings.Repeat("b", 64), strings.Repeat("c", 64)), State: "failed"}

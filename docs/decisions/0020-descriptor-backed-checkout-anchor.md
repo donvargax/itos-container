@@ -40,8 +40,16 @@ requiring the same live init PID before statting `/proc/<pid>/root/workspace`.
 Compare device and inode with the validated identity. The held process is checked
 on both sides of stat so a recycled numeric PID cannot supply mount authority.
 The worker runs as the host UID with no-new-privileges. An identity mismatch or
-an unavailable stat while the worker still runs requires immediate owned
-kill/removal and mount refusal, with no checkout-path fallback.
+an unreadable workspace outside q-42's root-change errors requires immediate
+owned kill/removal and mount refusal, with no checkout-path fallback.
+
+Q-42 (2026-11-08, approximately 09:45 UTC) refines unavailable stat: ENOENT,
+ESRCH and EACCES require polling the held pidfd. An exited process follows
+q-39 below. A still-live process may have changed its root or namespaces;
+continue with `not observed: worker root changed` in the durable record and
+JSON/text status. This records an unobserved mount, not proof of why stat failed
+or a verified identity. Other stat failures and failed process observations
+still refuse. No engine wait is used to turn an arbitrary stat error into exit.
 
 Q-39 (2026-11-08, approximately 06:35 UTC) refines q-27: if the owned worker has
 already exited before inspection, pidfd acquisition or stat, retain its real
@@ -286,8 +294,9 @@ Q-39 settles this conflict: the detector is evidence about the anchor, not the
 protection. A completed workload retains its actual exit while its record and
 fresh JSON/text status explicitly state that the mount was not observed.
 
-The optional `mount_detector` progress field has exactly three values:
-`verified`, `not observed: worker exited`, and `refused`. It is persisted before
+The optional `mount_detector` progress field has four values after q-42:
+`verified`, `not observed: worker exited`, `not observed: worker root changed`,
+and `refused`. It is persisted before
 normal wait or immediate teardown and cannot be changed or removed afterwards.
 Legacy seven-field public records remain readable; missing detector data never
 means verified. Readers unaware of the new field reject it under their strict
@@ -601,3 +610,41 @@ engine-disabled feature suite passes without race detection in 171.348 seconds,
 using disposable fixtures with normal host ownership. Native engine acceptance
 and fresh changed-code proof remain the coordinator's CI work at the pushed
 head; no local engine or mutation run supplies that evidence.
+
+## Live worker root changes under q-42
+
+Q-42 also covers workers that change their root or namespaces while remaining
+alive. The earlier unreaped-process correction only handled exited workers.
+Step commit `f95f9aa` adds OFFLINE-38's six local rows: ENOENT, ESRCH and EACCES
+during stat, each followed by actual workload exit zero or seven. The fixture
+keeps a real local child alive through the production pidfd adapter and models
+the changed-root syscall result through the disk stat seam. It performs no
+chroot, namespace change, privileged operation or native container execution.
+With `@wip` removed before implementation, all six rows failed their first Then
+because run returned mount refusal instead of the workload result.
+
+The disk adapter now identifies exactly those three errors. The detector polls
+its held process after stat: observed exit retains q-39's bounded reconciliation;
+a live process records `not observed: worker root changed` and waits normally.
+Failed process observation, other stat errors, PID changes and device/inode
+mismatches retain refusal. The public record and JSON/text status accept the
+new unobserved value without granting ownership or claiming mount verification.
+
+OFFLINE-35's generic stat-failure diagnostic control now supplies EIO instead of
+EACCES, because q-42 explicitly changes EACCES handling. It still requires the
+exact errno, immediate owned teardown and private-payload exclusion. The native
+record readers recognize only the newly specified detector value in addition
+to the existing values; their resource and ownership assertions are unchanged.
+
+The public job metadata for run 42468606027 at `2ad7081` reports engine and Linux
+tests successful and the `ci` job failed. The coordinator supplies its HTTP 504
+failure during pinned-linter acquisition. Those results predate this q-42
+change; native acceptance and changed-code proof remain required at the next
+pushed head.
+
+All six OFFLINE-38 rows now pass. The full engine-disabled feature suite passes
+without race detection in 172.562 seconds. Targeted race checks pass for the
+changed session domain, disk adapter, codec and command fixture. The fixture
+records separate live-process events before and after stat, so its ordered
+assertion cannot mistake the first poll for the second. No native engine or
+local mutation run was made.

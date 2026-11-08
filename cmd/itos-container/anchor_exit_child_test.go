@@ -93,7 +93,11 @@ func (p *anchorExitChildProcess) Exited() (bool, sp.Outcome) {
 	}
 	exited, failure := p.Process.Exited()
 	if strings.HasPrefix(p.w.mode, "root changed ") && !exited && failure == "" {
-		p.w.journal.add("held-process-live")
+		if p.w.mounted {
+			p.w.journal.add("held-process-live-after-stat")
+		} else {
+			p.w.journal.add("held-process-live-before-stat")
+		}
 	}
 	return exited, failure
 }

@@ -908,7 +908,7 @@ Feature: Hardened offline foreground run
   # local child stays alive behind its production pidfd. The disk stat seam
   # supplies each errno; the engine wait later releases the child and returns
   # its actual exit. This proves detector handling, not native chroot support.
-  @slice-17 @ID-OFFLINE-38 @linux @wip
+  @slice-17 @ID-OFFLINE-38 @linux
   Scenario Outline: A live worker with a changed root retains its result without mount verification
     Given an anchor detector fixture with exit <exit> at "root changed <error>"
     When the registered command runs and fresh status reads its completed record

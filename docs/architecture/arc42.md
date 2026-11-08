@@ -449,8 +449,12 @@ must prevent substituted-inode execution. Immediately after start returns, inspe
 `State.Pid`, hold a pidfd and re-inspect the same owned full ID and live PID before
 statting `/proc/<pid>/root/workspace` from the host. Check the held process on both
 sides of stat and compare device/inode with the validated identity. A mismatch or
-unavailable stat while the worker still runs triggers immediate owned kill/removal
-and refusal. Under q-39, an independently confirmed exited worker retains its
+an unreadable workspace outside q-42's root-change errors triggers immediate owned
+kill/removal and refusal. Under q-42, ENOENT, ESRCH or EACCES requires polling the
+held pidfd: an exited worker follows q-39, while a live worker continues with
+`mount_detector` recorded and shown in JSON/text status as
+`not observed: worker root changed`. A failed process observation still refuses.
+Under q-39, an independently confirmed exited worker retains its
 real wait result and normal cleanup, with `mount_detector` recorded and shown in
 JSON/text status as `not observed: worker exited`. Only an actual identity match
 on the guarded live process records `verified`; refusals record `refused`.
@@ -458,7 +462,7 @@ When kernel process absence precedes Docker's exit publication, reconcile the
 same owned full ID with an engine not-running wait and fresh exited inspection
 within one ten-second call budget. Retain that observed exit without a second
 wait. Process absence alone, changed identity, wait failure or expiry grants no
-success; an ordinary syscall error still refuses without this wait.
+success; other syscall errors still refuse without this wait.
 Legacy records have no detector observation and never imply verification. This detector is not the protection. No raw-path
 fallback, gate binary, extra mount, new controller privilege, host
 mount by the controller or long-lived helper is selected. The native race must

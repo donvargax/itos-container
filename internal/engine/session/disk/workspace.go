@@ -1,12 +1,14 @@
 package disk
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
@@ -153,6 +155,9 @@ func (w *Workspace) Mounted(pid int) (port.MountSource, port.Outcome) {
 	info, err := stat(fmt.Sprintf("/proc/%d/root/workspace", pid))
 	if err != nil || !info.IsDir() {
 		w.mountError = mountSystemError(err)
+		if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ESRCH) || errors.Is(err, syscall.EACCES) {
+			return port.MountSource{}, port.MountRootUnavailable
+		}
 		return port.MountSource{}, port.MountRefused
 	}
 	device, inode, ok := mountIdentity(info)

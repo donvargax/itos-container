@@ -102,6 +102,7 @@ type anchorExitWorkspace struct {
 	started, exited bool
 	exitPending     bool
 	child           *anchorExitChild
+	mounted         bool
 }
 
 func (w *anchorExitWorkspace) exit() {
@@ -142,6 +143,7 @@ func (p *anchorExitProcess) Exited() (bool, sp.Outcome) {
 func (p *anchorExitProcess) Close() { p.w.journal.add("pidfd-close") }
 
 func (w *anchorExitWorkspace) Mounted(pid int) (sp.MountSource, sp.Outcome) {
+	w.mounted = true
 	w.journal.add("mounted-stat")
 	if w.child != nil {
 		if !strings.HasPrefix(w.mode, "root changed ") {

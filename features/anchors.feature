@@ -28,8 +28,10 @@ Feature: Recover owned checkout mount anchors
   #   volume ownership is durable before worker create. Q-27 selects detection
   #   immediately after ContainerStart returns. Q-39 refines it: hold a pidfd,
   #   re-inspect the same live PID, then stat /proc/<pid>/root/workspace against
-  #   the validated device/inode. Mismatch or unavailable stat while still running
-  #   requires immediate owned kill/removal and refusal. Confirmed exit before
+  #   the validated device/inode. Mismatch or other unreadable workspace requires
+  #   immediate owned kill/removal and refusal. Under q-42, ENOENT, ESRCH or EACCES
+  #   followed by a live held pidfd instead records "not observed: worker root changed"
+  #   and continues without claiming verification. Confirmed exit before
   #   observation retains the actual wait result with mount_detector recorded
   #   and shown in status as "not observed: worker exited", never verified.
   #   The descriptor-backed volume prevents substitution; this detector cannot

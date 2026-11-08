@@ -78,7 +78,7 @@ func recoveryReadReport(p *recoveryProcess) (recoveryReport, error) {
 func recoverySessionFields(object map[string]json.RawMessage, fields ...string) bool {
 	if value, exists := object["mount_detector"]; exists {
 		var detector string
-		if json.Unmarshal(value, &detector) != nil || (detector != "verified" && detector != "not observed: worker exited" && detector != "refused") {
+		if json.Unmarshal(value, &detector) != nil || (detector != "verified" && detector != "not observed: worker exited" && detector != "not observed: worker root changed" && detector != "refused") {
 			return false
 		}
 		fields = append(fields, "mount_detector")

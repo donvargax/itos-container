@@ -41,7 +41,7 @@ func (w *detectorWorkspace) Mounted(pid int) (port.MountSource, port.Outcome) {
 type noProcessWorkspace struct{ port.AnchorWorkspace }
 
 func TestAnchorDetectorProcessRaces(t *testing.T) {
-	for _, name := range []string{"healthy", "exited", "never started", "paused", "missing state", "invalid pid", "no process port", "open failed", "nil process", "exit during open", "pid changed", "fresh inspect unavailable", "fresh inspect foreign", "process exited before stat", "same pid reused", "process error", "stat failed while running", "exit during stat", "process error after stat", "wrong device", "wrong inode"} {
+	for _, name := range []string{"healthy", "exited", "never started", "paused", "missing state", "invalid pid", "no process port", "open failed", "nil process", "exit during open", "pid changed", "fresh inspect unavailable", "fresh inspect foreign", "process exited before stat", "same pid reused", "process error", "stat failed while running", "root changed", "root unavailable after exit", "root unavailable with process error", "exit during stat", "process error after stat", "wrong device", "wrong inode"} {
 		test := func(t *testing.T) {
 			runner, frozen, registry, engine, id := registeredLifecycleFixture()
 			w := &detectorWorkspace{Workspace: runner.Workspace.(*f.Workspace), process: &f.Process{}}
@@ -60,9 +60,11 @@ func TestAnchorDetectorProcessRaces(t *testing.T) {
 			}
 			want := port.DetectorRefused
 			switch name {
+			case "root changed":
+				want = port.DetectorRootChanged
 			case "healthy":
 				want = port.DetectorVerified
-			case "exited", "exit during open", "process exited before stat", "exit during stat":
+			case "exited", "exit during open", "process exited before stat", "exit during stat", "root unavailable after exit":
 				want = port.DetectorExited
 			}
 			engine.AfterStart = func() {
@@ -123,6 +125,13 @@ func TestAnchorDetectorProcessRaces(t *testing.T) {
 				w.open = func() { change(func(o *port.Observation) { o.PID++ }) }
 			case "process error":
 				w.process.Failure = port.MountRefused
+			case "root changed":
+				w.statFailure = port.MountRootUnavailable
+			case "root unavailable after exit":
+				w.statFailure, w.stat = port.MountRootUnavailable, exit
+			case "root unavailable with process error":
+				w.statFailure = port.MountRootUnavailable
+				w.stat = func() { w.process.Failure = port.MountRefused }
 			case "stat failed while running":
 				w.statFailure = port.MountRefused
 			case "exit during stat":
@@ -148,7 +157,7 @@ func TestAnchorDetectorProcessRaces(t *testing.T) {
 					"never started": "worker-init-pid", "paused": "worker-init-pid", "invalid pid": "worker-init-pid",
 					"no process port": "pidfd-open", "open failed": "pidfd-open", "nil process": "pidfd-open",
 					"pid changed": "worker-pid-recheck", "fresh inspect unavailable": "worker-inspect", "fresh inspect foreign": "worker-ownership",
-					"same pid reused": "pidfd-before-stat", "process error": "pidfd-before-stat", "stat failed while running": "mounted-stat",
+					"same pid reused": "pidfd-before-stat", "process error": "pidfd-before-stat", "stat failed while running": "mounted-stat", "root unavailable with process error": "mounted-stat",
 					"process error after stat": "pidfd-after-stat", "wrong device": "mounted-identity", "wrong inode": "mounted-identity",
 				}
 				if result.MountDiagnostic.Check != checks[name] || result.MountDiagnostic.ExpectedDevice != expectedMount.Device || result.MountDiagnostic.ExpectedInode != expectedMount.Inode {
