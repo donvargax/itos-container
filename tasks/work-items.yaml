@@ -694,8 +694,8 @@ items:
   - id: T-35
     title: The feature suite stays within a few GB, with or without the race detector
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-34
