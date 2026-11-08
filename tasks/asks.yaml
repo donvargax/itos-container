@@ -171,3 +171,6 @@ questions:
     item: "slice-17"
     question: "slice-17: the post-start stat finds no /workspace in a live worker's root (it changed root or namespaces); refuse or record?"
     answer: "Record, as q-39 reasons: the anchor is the protection. On ENOENT, ESRCH or EACCES from the stat, poll the pidfd: exited means q-39's exited path; alive means record the detector as not observed (worker root changed) and continue. Refuse only on a device:inode mismatch, or when a live worker's root still shows /workspace but it can't be read. Add a regression for a live worker that chroots or unshares before the stat."
+  - id: q-43
+    item: "T-34"
+    question: "T-34: what does the CI runner's fixture manifest look like now?"
