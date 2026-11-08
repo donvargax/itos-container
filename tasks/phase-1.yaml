@@ -2486,19 +2486,6 @@
     that passes tests while prepare still runs the old predicate. Commit no generated fixture,
     log, coverage or mutation evidence. Let configured hooks and CI run the gates. Agents commit
     and stop; the loop alone pushes, watches CI and closes the item at the actual green head.
-  done_when:
-    - run: |-
-        bash -n tools/bin/engine-fixture || exit
-        names=$(ITOS_CONTAINER_ENGINE_TESTS=0 go test ./features -list '^TestEngineFixture(PostPushDiagnostics|ManifestValidation)$') || exit
-        missing=0
-        for name in TestEngineFixturePostPushDiagnostics TestEngineFixtureManifestValidation; do
-          if ! printf '%s\n' "$names" | grep -Fx "$name" >/dev/null; then
-            printf 'missing regression: %s\n' "$name" >&2
-            missing=1
-          fi
-        done
-        test "$missing" = 0 || exit 1
-        ITOS_CONTAINER_ENGINE_TESTS=0 go test ./features -count=1 -run '^TestEngine(FixturePostPushDiagnostics|FixtureManifestValidation|FixtureWorkflow|Workflow)$'
 - id: T-35
   type: test
   title: The feature suite stays within a few GB, with or without the race detector

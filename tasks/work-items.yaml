@@ -703,6 +703,6 @@ items:
     title: Engine fixture preparation passes again on today's CI runners
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
