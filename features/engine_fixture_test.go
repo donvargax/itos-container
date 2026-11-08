@@ -1,13 +1,20 @@
 package features
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -305,4 +312,284 @@ func fixtureHelperIssues(script string) []string {
 		}
 	}
 	return issues
+}
+
+// Source checks describe executable call sites, not diagnostic words anywhere in
+// the file. They deliberately do not execute the engine driver or a fake Docker.
+func fixtureFunction(script, name string) string {
+	match := regexp.MustCompile(`(?ms)^` + regexp.QuoteMeta(name) + `\(\) \{\n(.*?)^\}`).FindStringSubmatch(script)
+	if len(match) != 2 {
+		return ""
+	}
+	return match[1]
+}
+
+func fixtureGuardIssues(driver, checks string) []string {
+	var issues []string
+	// This must be the first check: on the old helper it identifies the silent
+	// predicate itself, rather than complaining that a new helper is absent.
+	if regexp.MustCompile(`(?ms)^  jq -e --arg id "\$built" .*?"\$state/manifest.json" >/dev/null\n`).MatchString(fixtureFunction(driver, "prepare")) {
+		issues = append(issues, "manifest predicate can fail without fail() diagnostics")
+	}
+	for _, rule := range []struct{ function, prefix string }{
+		{"prepare", `d image push "$tag"`},
+		{"prepare", `curl --fail --silent --show-error --noproxy '*' --proto '=http' --max-time 10`},
+		{"prepare", `digest=$(validate_manifest `},
+		{"prepare", `remove_image_ref tag`},
+		{"prepare", `remove_image_ref reference`},
+		{"prepare", `d image pull --platform linux/amd64 "$reference"`},
+		{"prepare", `cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid"`},
+		{"prepare", `printf '%s\n' "$reference" >"$state/reference"`},
+		{"prepare", `printf '%s\n' "$smoke_name" >"$state/smoke.intent"`},
+		{"prepare", `d container create --name "$smoke_name"`},
+		{"prepare", `smoke_id=$(cat "$state/smoke.cid")`},
+		{"prepare", `timeout --signal=TERM --kill-after=1s 9s`},
+		{"prepare", `d container inspect "$smoke_id"`},
+		{"prepare", `validate_smoke `},
+		{"prepare", `remove_container smoke`},
+		{"prepare", `remove_container registry`},
+		{"prepare", `printf 'image=%s\nimage_id=%s\nuid=%s\ngid=%s\n'`},
+		{"cached_fixture", `d image inspect "$reference"`},
+		{"cached_fixture", `validate_cached `},
+		{"validate_manifest", `header_data=$(cat `},
+		{"validate_manifest", `actual=$(sha256sum `},
+		{"validate_manifest", `manifest_observation `},
+		{"validate_manifest", `jq -e -s --arg id "$built" `},
+		{"validate_cached", `jq -e -s --arg ref `},
+		{"validate_smoke", `jq -e -s `},
+		{"validate_smoke", `observed=$(cat `},
+	} {
+		source := driver
+		if strings.HasPrefix(rule.function, "validate_") {
+			source = checks
+		}
+		body := strings.ReplaceAll(fixtureFunction(source, rule.function), "\\\n", "")
+		found := false
+		for _, line := range strings.Split(body, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, rule.prefix) {
+				found = true
+				if !strings.Contains(line, "|| fail ") {
+					issues = append(issues, "unguarded "+rule.function+": "+rule.prefix)
+				}
+			}
+		}
+		if !found {
+			issues = append(issues, "missing executable "+rule.function+": "+rule.prefix)
+		}
+	}
+	prepare := fixtureFunction(driver, "prepare")
+	if strings.Count(prepare, `cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid"`) != 2 ||
+		strings.LastIndex(prepare, "cached_fixture ") > strings.Index(prepare, "printf 'image=") {
+		issues = append(issues, "publish only after both cache checks and cleanup")
+	}
+	if !strings.Contains(driver, `source "${BASH_SOURCE[0]%/*}/../lib/engine-fixture-checks.sh"`) {
+		issues = append(issues, "production must source shared validators")
+	}
+	observation := fixtureFunction(checks, "manifest_observation")
+	// Only a printed jq object in the called summary function counts. A comment,
+	// an unused shell string or a different function cannot supply these fields.
+	match := regexp.MustCompile(`(?s)summary=\$\(jq .*?'(.*?)' "\$manifest" 2>/dev/null\)`).FindStringSubmatch(observation)
+	for _, field := range []string{"schemaVersion", "mediaType", "hasManifests", "configDigest", "builtID", "advertisedDigest", "measuredDigest"} {
+		if len(match) != 2 || !regexp.MustCompile(`\b`+field+`:`).MatchString(match[1]) {
+			issues = append(issues, "missing manifest observation "+field)
+		}
+	}
+	if !strings.Contains(observation, `printf 'manifest observation: %s\n' "$summary" >&2 || fail `) {
+		issues = append(issues, "manifest summary must be printed with failure propagation")
+	}
+	return issues
+}
+
+func TestEngineFixturePostPushDiagnostics(t *testing.T) {
+	driverBytes, err := os.ReadFile("../tools/bin/engine-fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	driver := string(driverBytes)
+	// Assert the old, executable predicate before trying to load the new library.
+	if issues := fixtureGuardIssues(driver, ""); len(issues) > 0 && issues[0] == "manifest predicate can fail without fail() diagnostics" {
+		t.Fatal(issues[0])
+	}
+	checksBytes, err := os.ReadFile("../tools/lib/engine-fixture-checks.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checks := string(checksBytes)
+	if issues := fixtureGuardIssues(driver, checks); len(issues) != 0 {
+		t.Fatal(strings.Join(issues, "\n"))
+	}
+	for _, tc := range []struct{ name, old, replacement string }{
+		{"unguarded push", `d image push "$tag" || fail`, `d image push "$tag" # || fail`},
+		{"unguarded cache inspect", `>"$state/cached-image.json" || fail`, `>"$state/cached-image.json" # || fail`},
+		{"unguarded validator", `digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built") || fail`, `digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built") # || fail`},
+		{"lost observation", `mediaType:`, `unusedMediaType:`},
+		{"unused observation string", `mediaType:`, `unusedMediaType:`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			brokenDriver := strings.ReplaceAll(driver, tc.old, tc.replacement)
+			brokenChecks := strings.ReplaceAll(checks, tc.old, tc.replacement)
+			// Remove the commented tail as Bash does; it cannot be a guard.
+			brokenDriver = regexp.MustCompile(`(?m) # \|\| fail[^\n]*`).ReplaceAllString(brokenDriver, "")
+			if tc.name == "unused observation string" {
+				brokenChecks += "\n# mediaType: is only a comment\nunused='mediaType:'\n"
+			}
+			if brokenDriver == driver && brokenChecks == checks {
+				t.Fatal("negative control changed no source")
+			}
+			if len(fixtureGuardIssues(brokenDriver, brokenChecks)) == 0 {
+				t.Fatal("accepted missing executable guard/observation")
+			}
+		})
+	}
+}
+
+func runFixtureValidator(t *testing.T, function string, args ...string) (string, string, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	argv := append([]string{"-euo", "pipefail", "-c", `source "$1"; shift; "$@"`, "T-34", "../tools/lib/engine-fixture-checks.sh", function}, args...)
+	cmd := exec.CommandContext(ctx, "bash", argv...)
+	var stdout, stderr strings.Builder
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		t.Fatal("validator exceeded five seconds")
+	}
+	return stdout.String(), stderr.String(), err
+}
+
+func fixtureResponseFile(t *testing.T, name, data string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestEngineFixtureManifestValidation(t *testing.T) {
+	built := "sha256:" + strings.Repeat("a", 64)
+	other := "sha256:" + strings.Repeat("b", 64)
+	manifest := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"` + built + `"}}`
+	for _, tc := range []struct{ name, body, header, id, diagnostic string }{
+		{"OCI image", manifest, "", built, ""},
+		{"Docker v2", strings.ReplaceAll(manifest, "application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json"), "", built, ""},
+		{"schema", strings.ReplaceAll(manifest, `"schemaVersion":2`, `"schemaVersion":1`), "", built, "manifest validation"},
+		{"schema type", strings.ReplaceAll(manifest, `"schemaVersion":2`, `"schemaVersion":"2"`), "", built, "manifest validation"},
+		{"media", strings.ReplaceAll(manifest, "application/vnd.oci.image.manifest.v1+json", "unknown"), "", built, "manifest validation"},
+		{"media type", strings.ReplaceAll(manifest, `"application/vnd.oci.image.manifest.v1+json"`, `[]`), "", built, "manifest validation"},
+		{"missing media", strings.ReplaceAll(manifest, `"mediaType":`, `"unused":`), "", built, "manifest validation"},
+		{"OCI index", strings.ReplaceAll(manifest, "application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.index.v1+json"), "", built, "manifest validation"},
+		{"Docker list", strings.ReplaceAll(manifest, "application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json"), "", built, "manifest validation"},
+		{"empty manifests", strings.ReplaceAll(manifest, `"config":`, `"manifests":[],"config":`), "", built, "manifest validation"},
+		{"null manifests", strings.ReplaceAll(manifest, `"config":`, `"manifests":null,"config":`), "", built, "manifest validation"},
+		{"missing config", strings.ReplaceAll(manifest, `"config":`, `"unused":`), "", built, "manifest validation"},
+		{"missing config digest", strings.ReplaceAll(manifest, `"digest":`, `"unused":`), "", built, "manifest validation"},
+		{"config type", strings.ReplaceAll(manifest, `{"digest":"`+built+`"}`, `false`), "", built, "manifest validation"},
+		{"config digest type", strings.ReplaceAll(manifest, `"`+built+`"`, `123`), "", built, "manifest validation"},
+		{"wrong config", strings.ReplaceAll(manifest, built, other), "", built, "manifest validation"},
+		{"malformed", "{", "", built, "manifest JSON"},
+		{"empty", "", "", built, "manifest JSON"},
+		{"array", "[]", "", built, "manifest validation"},
+		{"null", "null", "", built, "manifest validation"},
+		{"multiple documents", manifest + "\n" + manifest, "", built, "manifest JSON"},
+		{"absent header", manifest, "HTTP/1.1 200 OK\r\n\r\n", built, "manifest header"},
+		{"duplicate header", manifest, "Docker-Content-Digest: DIGEST\r\nDocker-Content-Digest: DIGEST\r\n", built, "manifest header"},
+		{"malformed header", manifest, "Docker-Content-Digest: invalid\r\n", built, "manifest header"},
+		{"digest byte mismatch", manifest, "Docker-Content-Digest: " + other + "\r\n", built, "manifest bytes"},
+		{"config as manifest", manifest, "Docker-Content-Digest: " + built + "\r\n", built, "manifest bytes"},
+		{"manifest as built", manifest, "", "DIGEST", "manifest identity"},
+		{"invalid built", manifest, "", "bad-id", "built identity"},
+		{"escaped bounded observation", strings.ReplaceAll(manifest, "application/vnd.oci.image.manifest.v1+json", `line\n\u001b`+strings.Repeat("x", 5000)), "", built, "manifest validation"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			digest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(tc.body)))
+			header := tc.header
+			if header == "" {
+				header = "HTTP/1.1 200 OK\r\nDocker-Content-Digest: DIGEST\r\n\r\n"
+			}
+			header = strings.ReplaceAll(header, "DIGEST", digest)
+			id := strings.ReplaceAll(tc.id, "DIGEST", digest)
+			stdout, stderr, err := runFixtureValidator(t, "validate_manifest", fixtureResponseFile(t, "manifest.json", tc.body), fixtureResponseFile(t, "headers", header), id)
+			if tc.diagnostic == "" {
+				if err != nil || strings.TrimSpace(stdout) != digest {
+					t.Fatalf("valid manifest rejected: %v stdout=%s stderr=%s", err, stdout, stderr)
+				}
+			} else if err == nil || !strings.Contains(stderr, "engine-fixture: "+tc.diagnostic) || stdout != "" {
+				t.Fatalf("invalid manifest lacks failure diagnostic %q: %v stdout=%s stderr=%s", tc.diagnostic, err, stdout, stderr)
+			}
+			var summary map[string]json.RawMessage
+			for _, line := range strings.Split(stderr, "\n") {
+				if strings.HasPrefix(line, "manifest observation: ") {
+					if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "manifest observation: ")), &summary); err != nil {
+						t.Fatalf("unescaped manifest observation: %s", line)
+					}
+				}
+			}
+			for _, field := range []string{"schemaVersion", "mediaType", "hasManifests", "configDigest", "builtID", "advertisedDigest", "measuredDigest"} {
+				if _, ok := summary[field]; !ok {
+					t.Errorf("missing %s observation: %s", field, stderr)
+				}
+			}
+			if string(summary["builtID"]) != strconv.Quote(id) || string(summary["measuredDigest"]) != strconv.Quote(digest) {
+				t.Errorf("summary lost independently measured identities: %s", stderr)
+			}
+			if len(stderr) > 2400 || strings.ContainsRune(stderr, '\x1b') {
+				t.Errorf("unbounded or unescaped diagnostics (%d bytes)", len(stderr))
+			}
+			if (tc.name == "malformed" || tc.name == "empty") && !strings.Contains(stderr, "invalid JSON") {
+				t.Errorf("missing invalid JSON fallback: %s", stderr)
+			}
+		})
+	}
+
+	reference := "127.0.0.1:1234/fixture@" + other
+	cached := `[{"Id":"` + built + `","RepoDigests":["` + reference + `"],"Os":"linux","Architecture":"amd64","Config":{"User":"1001:1002","Entrypoint":[],"Volumes":{},"Labels":{}}}]`
+	smoke := `[{"State":{"Status":"exited","ExitCode":0,"OOMKilled":false,"Error":""}}]`
+	for _, tc := range []struct{ name, source, old, replacement string }{
+		{"cache valid", cached, "", ""},
+		{"cache identity", cached, built, other},
+		{"cache reference", cached, reference, "elsewhere@" + other},
+		{"cache OS", cached, "linux", "windows"},
+		{"cache architecture", cached, "amd64", "arm64"},
+		{"cache root", cached, "1001:1002", "0:1002"},
+		{"cache gid", cached, "1001:1002", "1001:1003"},
+		{"cache entrypoint", cached, `"Entrypoint":[]`, `"Entrypoint":["/bin/sh"]`},
+		{"cache volumes", cached, `"Volumes":{}`, `"Volumes":{"/data":{}}`},
+		{"cache metadata", cached, `"Labels":{}`, `"Labels":{"devcontainer.metadata":"{}"}`},
+		{"cache malformed", cached, cached, "{"},
+		{"smoke valid", smoke, "", ""},
+		{"smoke status", smoke, "exited", "running"},
+		{"smoke exit", smoke, `"ExitCode":0`, `"ExitCode":1`},
+		{"smoke OOM", smoke, "false", "true"},
+		{"smoke error", smoke, `"Error":""`, `"Error":"synthetic error"`},
+		{"smoke malformed", smoke, smoke, "{"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := tc.source
+			if tc.old != "" {
+				body = strings.ReplaceAll(body, tc.old, tc.replacement)
+			}
+			file := fixtureResponseFile(t, "inspection.json", body)
+			function, args, diagnostic := "validate_cached", []string{file, reference, built, "1001", "1002"}, "cached validation"
+			if strings.HasPrefix(tc.name, "smoke") {
+				function, args, diagnostic = "validate_smoke", []string{file, fixtureResponseFile(t, "smoke.out", "uid=1001 gid=1002\nT-20-engine-fixture-ok\n"), "1001", "1002"}, "smoke state"
+			}
+			_, stderr, err := runFixtureValidator(t, function, args...)
+			if tc.old == "" {
+				if err != nil {
+					t.Fatalf("valid inspection rejected: %v %s", err, stderr)
+				}
+			} else if err == nil || !strings.Contains(stderr, "engine-fixture: "+diagnostic) || !strings.Contains(stderr, "observed=") {
+				t.Fatalf("inspection failure missing observation: %v %s", err, stderr)
+			}
+		})
+	}
+	for _, output := range []string{"", "uid=0 gid=1002\nT-20-engine-fixture-ok\n", "uid=1001 gid=1002\nwrong marker\n"} {
+		_, stderr, err := runFixtureValidator(t, "validate_smoke", fixtureResponseFile(t, "smoke.json", smoke), fixtureResponseFile(t, "smoke.out", output), "1001", "1002")
+		if err == nil || !strings.Contains(stderr, "engine-fixture: smoke output") || !strings.Contains(stderr, "observed=") {
+			t.Fatalf("smoke output failure missing observation: %v %s", err, stderr)
+		}
+	}
 }
