@@ -184,3 +184,40 @@ func toolArchive(t *testing.T) []byte {
 	}
 	return archive.Bytes()
 }
+
+// Read the actual launcher's selected metadata before its cache/download branch.
+// Only uname's value is substituted; every release field comes from the script.
+func TestGitCliffPin(t *testing.T) {
+	source, err := os.ReadFile("../bin/pinned")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(source)
+	end := strings.Index(script, "\ndir=$root/.tools/$tool-$version")
+	if end < 0 {
+		t.Fatal("cannot locate launcher metadata boundary")
+	}
+	script = strings.Replace(script[:end], `"$(uname -s)-$(uname -m)"`, `"$T25_PLATFORM"`, 1)
+	script += `
+printf '%s\n' "$version" "$target" "$asset" "$member" "$sum" "$asset_id" "$url" "$exe"
+`
+	for _, tc := range []struct{ platform, target, sum, assetID string }{
+		{"Linux-x86_64", "x86_64-unknown-linux-gnu", "24f397c733add5390fdceee3a2088588ab0d5f944ce00d34cb7029b888cf2db4", "573483509"},
+		{"Linux-aarch64", "aarch64-unknown-linux-gnu", "69e208f6e4baef3a0f9b759d5f44223aa9336b86c691072a3d0c98d35a816e69", "573483780"},
+		{"Darwin-x86_64", "x86_64-apple-darwin", "4e647d2deb152aca1e987f225cf42b080b991dd98f3bce4027ef95446d982ac3", "573484837"},
+		{"Darwin-arm64", "aarch64-apple-darwin", "a0be97e237d440d34c5e508ec21d070b2c85cbb8be48a46a56f9a4e8bd247f05", "573487203"},
+	} {
+		t.Run(tc.platform, func(t *testing.T) {
+			cmd := exec.Command("sh", "-s", "--", "git-cliff")
+			cmd.Stdin = strings.NewReader(script)
+			cmd.Env = append(os.Environ(), "T25_PLATFORM="+tc.platform)
+			got, err := cmd.CombinedOutput()
+			want := strings.Join([]string{"2.14.2", tc.target,
+				"git-cliff-2.14.2-" + tc.target + ".tar.gz", "git-cliff-2.14.2/git-cliff",
+				tc.sum, tc.assetID, "https://api.github.com/repos/orhun/git-cliff/releases/assets/" + tc.assetID, "", ""}, "\n")
+			if err != nil || string(got) != want {
+				t.Fatalf("git-cliff metadata missing or incorrect: %v\ngot %q\nwant %q", err, got, want)
+			}
+		})
+	}
+}
