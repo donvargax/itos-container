@@ -1,6 +1,7 @@
 package features
 
 import (
+	"maps"
 	"os"
 	"slices"
 	"strconv"
@@ -19,6 +20,7 @@ type engineWorkflow struct {
 
 type workflowJob struct {
 	Env             map[string]string `yaml:"env"`
+	Permissions     map[string]string `yaml:"permissions"`
 	Container       any               `yaml:"container"`
 	Services        map[string]any    `yaml:"services"`
 	ContinueOnError bool              `yaml:"continue-on-error"`
@@ -28,6 +30,7 @@ type workflowJob struct {
 		} `yaml:"matrix"`
 	} `yaml:"strategy"`
 	Name    string         `yaml:"name"`
+	Uses    string         `yaml:"uses"`
 	If      string         `yaml:"if"`
 	Needs   []string       `yaml:"needs"`
 	Runner  string         `yaml:"runs-on"`
@@ -80,6 +83,49 @@ func TestEngineWorkflow(t *testing.T) {
 		name, issue   string
 		breakWorkflow func(*engineWorkflow)
 	}{
+		{"missing ordinary job", "four ordinary jobs", func(w *engineWorkflow) { delete(w.Jobs, "platform-macos") }},
+		{"extra engine job", "four ordinary jobs", func(w *engineWorkflow) { w.Jobs["extra-engine"] = w.Jobs["engine"] }},
+		{"renamed release job", "four ordinary jobs", func(w *engineWorkflow) {
+			w.Jobs["publish"] = w.Jobs["release"]
+			delete(w.Jobs, "release")
+		}},
+		{"release without engine dependency", "release prerequisites", func(w *engineWorkflow) {
+			j := w.Jobs["release"]
+			j.Needs = []string{"ci", "platform"}
+			w.Jobs["release"] = j
+		}},
+		{"release with manual dependency", "release prerequisites", func(w *engineWorkflow) {
+			j := w.Jobs["release"]
+			j.Needs = append(j.Needs, "platform-macos")
+			w.Jobs["release"] = j
+		}},
+		{"release after failed prerequisites", "release guard", func(w *engineWorkflow) {
+			j := w.Jobs["release"]
+			j.If = strings.ReplaceAll(j.If, "success()", "always()")
+			w.Jobs["release"] = j
+		}},
+		{"release on pull requests", "release guard", func(w *engineWorkflow) {
+			j := w.Jobs["release"]
+			j.If = strings.ReplaceAll(j.If, "'push'", "'pull_request'")
+			w.Jobs["release"] = j
+		}},
+		{"release on another branch", "release guard", func(w *engineWorkflow) {
+			j := w.Jobs["release"]
+			j.If = strings.ReplaceAll(j.If, "refs/heads/main", "refs/heads/other")
+			w.Jobs["release"] = j
+		}},
+		{"wrong release workflow", "release callee", func(w *engineWorkflow) {
+			j := w.Jobs["release"]
+			j.Uses = "./.github/workflows/other.yml"
+			w.Jobs["release"] = j
+		}},
+		{"missing release permission", "release permissions", func(w *engineWorkflow) { delete(w.Jobs["release"].Permissions, "attestations") }},
+		{"excess release permission", "release permissions", func(w *engineWorkflow) { w.Jobs["release"].Permissions["packages"] = "write" }},
+		{"ordinary write permission", "preserve inherited read permissions", func(w *engineWorkflow) {
+			j := w.Jobs["platform"]
+			j.Permissions = map[string]string{"contents": "write"}
+			w.Jobs["platform"] = j
+		}},
 		{"lost dependency", "ci dependency", func(w *engineWorkflow) { j := w.Jobs["ci"]; j.Needs = nil; w.Jobs["ci"] = j }},
 		{"ignored preflight failure", "preflight", func(w *engineWorkflow) {
 			changeStep(w, "engine", "Docker server preflight", func(s *workflowStep) { s.ContinueOnError = true })
@@ -212,7 +258,23 @@ func engineWorkflowIssues(data []byte) []string {
 			issues = append(issues, issue)
 		}
 	}
-	require(len(workflow.Jobs) == 5, "preserve four ordinary jobs and add exactly one engine job")
+	require(slices.Equal(slices.Sorted(maps.Keys(workflow.Jobs)), []string{
+		"ci", "engine", "platform", "platform-macos", "platform-windows", "release",
+	}), "preserve four ordinary jobs, exactly one engine job and the named release job")
+	release := workflow.Jobs["release"]
+	needs := slices.Clone(release.Needs)
+	slices.Sort(needs)
+	require(slices.Equal(needs, []string{"ci", "engine", "platform"}), "release prerequisites")
+	require(release.If == "${{ success() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}", "release guard")
+	require(release.Uses == "./.github/workflows/release.yml", "release callee")
+	require(maps.Equal(release.Permissions, map[string]string{
+		"contents": "write", "id-token": "write", "attestations": "write",
+	}), "release permissions")
+	for name, job := range workflow.Jobs {
+		if name != "release" {
+			require(len(job.Permissions) == 0, "preserve inherited read permissions for "+name)
+		}
+	}
 	require(len(workflow.On) == 3 && workflow.On["pull_request"].Kind != 0 && workflow.On["push"].Kind != 0 && workflow.On["workflow_dispatch"].Kind != 0, "event triggers")
 	var push struct {
 		Branches []string `yaml:"branches"`

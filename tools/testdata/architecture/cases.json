@@ -938,5 +938,241 @@
     "Import": "$module/internal/slices/count/port",
     "Kind": "lint",
     "Rule": "version-tests"
+  },
+  {
+    "Name": "release-version-library-probe.go",
+    "File": "tools/bin/release-version/probe.go",
+    "Import": "$module/internal/release",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-version-library-probe_test.go",
+    "File": "tools/bin/release-version/probe_test.go",
+    "Import": "$module/internal/release",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-version-library-external_test.go",
+    "File": "tools/bin/release-version/suite_test.go",
+    "Import": "$module/internal/release",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Files": {
+      "tools/bin/release-version/base.go": "package helper\n"
+    },
+    "Source": "package helper_test\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-version-test-support-probe_test.go",
+    "File": "tools/bin/release-version/probe_test.go",
+    "Import": "$module/internal/release/releasetest",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release/releasetest\"\n"
+  },
+  {
+    "Name": "release-version-test-support-external_test.go",
+    "File": "tools/bin/release-version/suite_test.go",
+    "Import": "$module/internal/release/releasetest",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Files": {
+      "tools/bin/release-version/base.go": "package helper\n"
+    },
+    "Source": "package helper_test\nimport _ \"$module/internal/release/releasetest\"\n"
+  },
+  {
+    "Name": "release-version-refuse-production-support",
+    "File": "tools/bin/release-version/probe.go",
+    "Import": "$module/internal/release/releasetest",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release/releasetest\"\n"
+  },
+  {
+    "Name": "release-version-refuse-other-internal",
+    "File": "tools/bin/release-version/probe.go",
+    "Import": "$module/internal/version",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/version\"\n"
+  },
+  {
+    "Name": "release-version-refuse-test-other-internal",
+    "File": "tools/bin/release-version/probe_test.go",
+    "Import": "$module/internal/version",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/version\"\n"
+  },
+  {
+    "Name": "release-version-refuse-nested-release",
+    "File": "tools/bin/release-version/probe.go",
+    "Import": "$module/internal/release/nested",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release/nested\"\n"
+  },
+  {
+    "Name": "release-version-refuse-nested-support",
+    "File": "tools/bin/release-version/probe_test.go",
+    "Import": "$module/internal/release/releasetest/nested",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release/releasetest/nested\"\n"
+  },
+  {
+    "Name": "release-version-nested-helper",
+    "File": "tools/bin/release-version/nested/probe.go",
+    "Import": "$module/internal/release",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-notes-library-probe.go",
+    "File": "tools/bin/release-notes/probe.go",
+    "Import": "$module/internal/release",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-notes-library-probe_test.go",
+    "File": "tools/bin/release-notes/probe_test.go",
+    "Import": "$module/internal/release",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-notes-library-external_test.go",
+    "File": "tools/bin/release-notes/suite_test.go",
+    "Import": "$module/internal/release",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Files": {
+      "tools/bin/release-notes/base.go": "package helper\n"
+    },
+    "Source": "package helper_test\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-notes-test-support-probe_test.go",
+    "File": "tools/bin/release-notes/probe_test.go",
+    "Import": "$module/internal/release/releasetest",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release/releasetest\"\n"
+  },
+  {
+    "Name": "release-notes-test-support-external_test.go",
+    "File": "tools/bin/release-notes/suite_test.go",
+    "Import": "$module/internal/release/releasetest",
+    "Kind": "allow",
+    "Rule": "toplevel",
+    "Files": {
+      "tools/bin/release-notes/base.go": "package helper\n"
+    },
+    "Source": "package helper_test\nimport _ \"$module/internal/release/releasetest\"\n"
+  },
+  {
+    "Name": "release-notes-refuse-production-support",
+    "File": "tools/bin/release-notes/probe.go",
+    "Import": "$module/internal/release/releasetest",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release/releasetest\"\n"
+  },
+  {
+    "Name": "release-notes-refuse-other-internal",
+    "File": "tools/bin/release-notes/probe.go",
+    "Import": "$module/internal/version",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/version\"\n"
+  },
+  {
+    "Name": "release-notes-refuse-test-other-internal",
+    "File": "tools/bin/release-notes/probe_test.go",
+    "Import": "$module/internal/version",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/version\"\n"
+  },
+  {
+    "Name": "release-notes-refuse-nested-release",
+    "File": "tools/bin/release-notes/probe.go",
+    "Import": "$module/internal/release/nested",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release/nested\"\n"
+  },
+  {
+    "Name": "release-notes-refuse-nested-support",
+    "File": "tools/bin/release-notes/probe_test.go",
+    "Import": "$module/internal/release/releasetest/nested",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release/releasetest/nested\"\n"
+  },
+  {
+    "Name": "release-notes-nested-helper",
+    "File": "tools/bin/release-notes/nested/probe.go",
+    "Import": "$module/internal/release",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-refuse-tools/other-probe.go",
+    "File": "tools/other/probe.go",
+    "Import": "$module/internal/release",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-refuse-tools/other-probe_test.go",
+    "File": "tools/other/probe_test.go",
+    "Import": "$module/internal/release",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-refuse-tools/release-probe.go",
+    "File": "tools/release/probe.go",
+    "Import": "$module/internal/release",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-refuse-tools/release-probe_test.go",
+    "File": "tools/release/probe_test.go",
+    "Import": "$module/internal/release",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-refuse-tools/bin/release-other-probe.go",
+    "File": "tools/bin/release-other/probe.go",
+    "Import": "$module/internal/release",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "release-refuse-tools/bin/release-other-probe_test.go",
+    "File": "tools/bin/release-other/probe_test.go",
+    "Import": "$module/internal/release",
+    "Kind": "graph",
+    "Rule": "toplevel",
+    "Source": "package helper\nimport _ \"$module/internal/release\"\n"
   }
 ]
