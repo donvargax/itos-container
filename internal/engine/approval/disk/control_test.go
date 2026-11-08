@@ -100,7 +100,7 @@ func TestProtectedControlContract(t *testing.T) {
 	})
 }
 func TestControlAccountAndPrerequisites(t *testing.T) {
-	for _, kind := range []string{"lookup", "relative account", "root account", "missing home", "unsafe home", "missing account port", "missing reservations port", "relative selection", "own selection", "own anchor", "reservation read"} {
+	for _, kind := range []string{"lookup", "relative account", "root account", "missing home", "unsafe home", "home stat failure", "missing account port", "missing reservations port", "relative selection", "own selection", "own anchor", "reservation read"} {
 		t.Run(kind, func(t *testing.T) {
 			control, c, r, home, _ := controlFixture(t)
 			want := port.Failure("state.unavailable")
@@ -117,6 +117,11 @@ func TestControlAccountAndPrerequisites(t *testing.T) {
 				if err := os.Chmod(home, 0770); err != nil {
 					t.Fatal(err)
 				}
+				want = "state.unsafe"
+			case "home stat failure":
+				ops := control.Store.operations()
+				ops.statFile = func(*os.File) (os.FileInfo, error) { return nil, os.ErrPermission }
+				control.Store.ops = &ops
 				want = "state.unsafe"
 			case "missing account port":
 				control.Account = nil
@@ -197,7 +202,7 @@ func TestControlBootstrapWriteFaultsRetainSafeRetry(t *testing.T) {
 	}
 }
 func TestControlBindingsRefuseMalformedOrReplacedEvidence(t *testing.T) {
-	for _, kind := range []string{"json", "unknown field", "duplicate uid", "duplicate ancestor", "missing complete", "trailing data", "schema", "uid", "relative path", "noncanonical path", "empty ancestors", "wrong ancestor path", "bad device", "bad inode", "changed device", "changed inode", "incomplete self", "short complete", "missing root", "symlink", "hardlink", "mode", "unknown name", "missing self", "oversized", "read failure"} {
+	for _, kind := range []string{"json", "unknown field", "duplicate uid", "duplicate ancestor", "missing complete", "trailing data", "schema", "uid", "relative path", "noncanonical path", "mismatched name", "empty ancestors", "wrong ancestor path", "bad device", "bad inode", "changed device", "changed inode", "incomplete self", "short complete", "missing root", "symlink", "hardlink", "mode", "unknown name", "missing self", "oversized", "read failure"} {
 		t.Run(kind, func(t *testing.T) {
 			control, c, _, home, selected := controlFixture(t)
 			tx, f := control.Begin(t.Context(), c, true)
@@ -240,6 +245,8 @@ func TestControlBindingsRefuseMalformedOrReplacedEvidence(t *testing.T) {
 				b.Path = "relative"
 			case "noncanonical path":
 				b.Path += "/../itos-container"
+			case "mismatched name":
+				b.Path += "-other"
 			case "empty ancestors":
 				b.Ancestors = nil
 			case "wrong ancestor path":
@@ -301,7 +308,7 @@ func TestControlBindingsRefuseMalformedOrReplacedEvidence(t *testing.T) {
 				want = "state.unavailable"
 			}
 			switch kind {
-			case "schema", "uid", "relative path", "noncanonical path", "empty ancestors", "wrong ancestor path", "bad device", "bad inode", "changed device", "changed inode", "incomplete self", "short complete":
+			case "schema", "uid", "relative path", "noncanonical path", "mismatched name", "empty ancestors", "wrong ancestor path", "bad device", "bad inode", "changed device", "changed inode", "incomplete self", "short complete":
 				data, _ = json.Marshal(b)
 			}
 			switch kind {

@@ -1,0 +1,180 @@
+package disk
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/donvargax/itos-container/internal/engine/approval/port"
+)
+
+func TestControlRetryCompletesPendingLocation(t *testing.T) {
+	control, c, _, home, selected := controlFixture(t)
+	ops := control.Store.operations()
+	mkdir := ops.mkdir
+	ops.mkdir = func(root *os.Root, name string, mode os.FileMode) error {
+		if filepath.Join(root.Name(), name) == selected {
+			return os.ErrPermission
+		}
+		return mkdir(root, name, mode)
+	}
+	control.Store.ops = &ops
+	tx, failure := control.Begin(t.Context(), c, true)
+	if tx != nil {
+		tx.Close()
+		t.Fatal("interrupted enrollment returned publication authority")
+	}
+	if failure != "state.write" {
+		t.Fatalf("initial enrollment: %s, want state.write", failure)
+	}
+	path := filepath.Join(home, ".local/state/itos-container/coordination", locationName(selected))
+	readBinding := func() locationBinding {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var binding locationBinding
+		if err := json.Unmarshal(data, &binding); err != nil {
+			t.Fatal(err)
+		}
+		return binding
+	}
+	pending := readBinding()
+	if pending.Complete || pending.Path != selected || len(pending.Ancestors) == 0 {
+		t.Fatal("interruption did not retain the pending location claim")
+	}
+	if _, err := os.Stat(selected); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("selected tree exists despite failed mkdir: %v", err)
+	}
+	control.Store.ops = nil
+	tx, failure = control.Begin(t.Context(), c, true)
+	if failure != "" {
+		t.Fatal("retry", failure)
+	}
+	tx.Close()
+	complete := readBinding()
+	if !complete.Complete || complete.Path != pending.Path || complete.UID != pending.UID || len(complete.Ancestors) <= len(pending.Ancestors) {
+		t.Fatal("successful retry left the selected location incomplete")
+	}
+	if !reflect.DeepEqual(complete.Ancestors[:len(pending.Ancestors)], pending.Ancestors) {
+		t.Fatal("retry changed the pending claim's bound ancestors")
+	}
+	tx, failure = control.Begin(t.Context(), c, false)
+	if failure != "" {
+		t.Fatal("completed location could not be inspected", failure)
+	}
+	tx.Close()
+}
+
+func TestControlRetryRefusesSelectedBindingSyncFailure(t *testing.T) {
+	control, c, _, home, selected := controlFixture(t)
+	tx, failure := control.Begin(t.Context(), c, true)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	tx.Close()
+	before := controlSnapshot(t, filepath.Dir(home))
+	ops := control.Store.operations()
+	syncFile := ops.syncFile
+	ops.syncFile = func(file *os.File) error {
+		if filepath.Base(file.Name()) == locationName(selected) {
+			return os.ErrPermission
+		}
+		return syncFile(file)
+	}
+	control.Store.ops = &ops
+	tx, failure = control.Begin(t.Context(), c, true)
+	if tx != nil {
+		tx.Close()
+		t.Fatal("failed location resync returned publication authority")
+	}
+	if failure != "state.write" {
+		t.Fatalf("retry: %s, want state.write", failure)
+	}
+	if after := controlSnapshot(t, filepath.Dir(home)); after != before {
+		t.Fatal("failed resync changed retained control state")
+	}
+}
+
+func TestAdmissionRefusesExposedControlState(t *testing.T) {
+	control, c, reservations, home, selected := controlFixture(t)
+	tx, failure := control.Begin(t.Context(), c, true)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	tx.Close()
+	reservations.RootsByLocation[selected] = []string{filepath.Dir(selected)}
+	before := controlSnapshot(t, filepath.Dir(home))
+	store := control.Store
+	store.Control = control
+	directory, failure := (Registry{Store: store}).Admission(t.Context(), c)
+	if directory != nil {
+		directory.Close()
+		t.Fatal("exposed control state returned an admission directory")
+	}
+	if failure != "state.exposed" {
+		t.Fatalf("admission: %s, want state.exposed", failure)
+	}
+	if after := controlSnapshot(t, filepath.Dir(home)); after != before {
+		t.Fatal("refused admission wrote state")
+	}
+}
+
+func TestControlProspectiveRequiresAnExistingNonRootAncestor(t *testing.T) {
+	store, c, _ := diskFixture(t)
+	// A unique absent child of / has no pinnable ancestor other than / itself.
+	path := "/" + strings.ReplaceAll(strings.TrimPrefix(store.StateHome, "/"), "/", "-") + "-absent"
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("fixture path is not absent: %v", err)
+	}
+	p, failure := store.prospective(c, path, 1)
+	if p != nil {
+		p.close()
+		t.Fatal("missing top-level location acquired a pin")
+	}
+	if failure != "state.unavailable" {
+		t.Fatalf("prospective location: %s, want state.unavailable", failure)
+	}
+}
+
+func TestControlInspectionRefusesLostOrRepeatedCatalog(t *testing.T) {
+	for _, kind := range []string{"closed descriptor", "replaced directory", "already bound location"} {
+		t.Run(kind, func(t *testing.T) {
+			control, c, reservations, _, _ := controlFixture(t)
+			tx, failure := control.Begin(t.Context(), c, true)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer tx.Close()
+			transaction := tx.(*controlTransaction)
+			want := port.Failure("state.invalid")
+			switch kind {
+			case "closed descriptor":
+				if err := transaction.catalog.dir.Close(); err != nil {
+					t.Fatal(err)
+				}
+				want = "state.unavailable"
+			case "replaced directory":
+				path := transaction.catalog.path
+				if err := os.Rename(path, path+"-old"); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(path, 0700); err != nil {
+					t.Fatal(err)
+				}
+				want = "state.path"
+			case "already bound location":
+				// An inspection must not silently overwrite a binding retained
+				// in its transaction. A fresh inspection explicitly clears them.
+			}
+			if failure := transaction.inspect(t.Context(), reservations); failure != want {
+				t.Fatalf("catalog inspection: %s, want %s", failure, want)
+			}
+		})
+	}
+}
