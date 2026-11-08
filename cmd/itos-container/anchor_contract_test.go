@@ -14,6 +14,13 @@ type anchorWorkspace struct {
 	observer *offlineObserver
 }
 
+func (w *anchorWorkspace) HoldProcess(pid int) (sp.Process, sp.Outcome) {
+	if actual, ok := w.Workspace.(sp.ProcessWorkspace); ok {
+		return actual.HoldProcess(pid)
+	}
+	return nil, sp.MountRefused
+}
+
 func (w *anchorWorkspace) Source() (sp.MountSource, sp.Outcome) {
 	s, f := sp.MountSource{}, sp.MountUnavailable
 	if actual, ok := w.Workspace.(sp.AnchorWorkspace); ok {

@@ -50,6 +50,7 @@ func TestRegistryContractWithStorageFakes(t *testing.T) {
 		progress := initial
 		exit := 7
 		progress.State, progress.WorkloadExit = "failed", &exit
+		progress.MountDetector = sp.DetectorExited
 		m.codec.Records = map[string]sp.PublicRecord{"initial": initial, "progress": progress}
 		return m.registry, m.registry.Store, ap.Durable{Frozen: m.binding.Frozen}
 	})

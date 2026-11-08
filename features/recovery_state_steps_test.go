@@ -420,6 +420,10 @@ func (w *world) recoveryLocalDurable() error {
 		exit, _ = strconv.Atoi(w.recoveryLocal.exit)
 	}
 	want := map[string]any{"schema": 1, "id": w.recoveryLocal.id, "project": w.approval.project, "intent": w.session.reference, "state": "stopped", "workload_exit": exit, "last_problem": nil}
+	if w.recoveryLocal.runFixture && exit != nil {
+		// This HTTP worker remains live until Wait, after the guarded detector.
+		want["mount_detector"] = "verified"
+	}
 	return recoveryDurableFile(w.recoveryRecordPath(), want, w.recoveryLocal.processes)
 }
 func (w *world) recoveryLocalSignals() error {

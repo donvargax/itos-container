@@ -109,7 +109,7 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 func sessionEntry(s port.Session) (port.RecoveryEntry, port.Outcome) {
 	r := s.Record()
 	controller, failure := s.Controller()
-	e := port.RecoveryEntry{ID: r.ID, Project: r.Project, Fingerprint: s.Intent().Record().Fingerprint, State: r.State, Resource: "unknown", Controller: controller, Cleanup: "unknown", WorkloadExit: r.WorkloadExit}
+	e := port.RecoveryEntry{ID: r.ID, Project: r.Project, Fingerprint: s.Intent().Record().Fingerprint, State: r.State, Resource: "unknown", Controller: controller, Cleanup: "unknown", WorkloadExit: r.WorkloadExit, MountDetector: r.MountDetector}
 	if s.Intent().Record().Schema == 2 {
 		e.Anchor = "unknown"
 	}

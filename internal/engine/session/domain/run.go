@@ -300,7 +300,7 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 	result.Outcome = connection.Start(ctx, id)
 	if result.Outcome == "" {
 		result.ID = id
-		result.Outcome = detectAnchor(ctx, intent, connection, s.Workspace)
+		_, result.Outcome = detectAnchor(ctx, intent, connection, s.Workspace)
 	}
 	return result, connection, attachment
 }

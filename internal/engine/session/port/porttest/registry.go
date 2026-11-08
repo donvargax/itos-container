@@ -217,6 +217,7 @@ func (s *memorySession) Save(r port.PublicRecord) port.Outcome {
 		return s.registry.SaveFailure
 	}
 	if r.ID != s.record.ID || r.Schema != s.record.Schema || r.Project != s.record.Project || r.Intent != s.record.Intent ||
+		!port.ValidDetector(r.MountDetector) || (s.record.MountDetector != "" && r.MountDetector != s.record.MountDetector) ||
 		(s.record.State == "stopped" && (r.State != "stopped" || (r.LastProblem != nil && *r.LastProblem != port.StreamTimeout))) || (s.record.WorkloadExit != nil && (r.WorkloadExit == nil || *r.WorkloadExit != *s.record.WorkloadExit)) {
 		return port.Refused
 	}
@@ -292,8 +293,16 @@ func RegistryContract(t Reporter, open func() (port.Registry, port.Store, approv
 	n := 7
 	r.WorkloadExit = &n
 	r.State = "failed"
+	r.MountDetector = port.DetectorExited
 	if f = s.Save(r); f != "" {
 		t.Errorf("progress %s", f)
+	}
+	for _, changed := range []string{"", port.DetectorVerified, port.DetectorRefused} {
+		next := s.Record()
+		next.MountDetector = changed
+		if failure := s.Save(next); failure != port.Refused || s.Record().MountDetector != port.DetectorExited {
+			t.Errorf("detector observation was rewritten to %q: %s", changed, failure)
+		}
 	}
 	n = 1
 	if result := s.Record(); result.WorkloadExit == nil || *result.WorkloadExit != 7 {
@@ -307,6 +316,9 @@ func RegistryContract(t Reporter, open func() (port.Registry, port.Store, approv
 		return
 	}
 	defer s.Close()
+	if s.Record().MountDetector != port.DetectorExited {
+		t.Errorf("fresh recovery lost detector observation")
+	}
 	if state, f := s.Controller(); state != "absent" || f != "" {
 		t.Errorf("released controller %s %s", state, f)
 	}

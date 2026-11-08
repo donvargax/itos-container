@@ -26,9 +26,12 @@ Feature: Recover owned checkout mount anchors
   #   the descriptor until ContainerStart returns; dockerd binds the inode.
   # - Volume intent is durable before allocation; independently verified concrete
   #   volume ownership is durable before worker create. Q-27 selects detection
-  #   immediately after ContainerStart returns: inspect State.Pid and stat
-  #   /proc/<pid>/root/workspace against the validated device/inode. Mismatch or
-  #   unavailable stat requires immediate owned kill/removal and run refusal.
+  #   immediately after ContainerStart returns. Q-39 refines it: hold a pidfd,
+  #   re-inspect the same live PID, then stat /proc/<pid>/root/workspace against
+  #   the validated device/inode. Mismatch or unavailable stat while still running
+  #   requires immediate owned kill/removal and refusal. Confirmed exit before
+  #   observation retains the actual wait result with mount_detector recorded
+  #   and shown in status as "not observed: worker exited", never verified.
   #   The descriptor-backed volume prevents substitution; this detector cannot
   #   precede the first workload instruction. Detector failure fails native
   #   acceptance; no gate binary, extra mount or fallback is authorized.

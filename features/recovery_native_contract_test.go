@@ -10,11 +10,17 @@ func TestRecoveryReportEvidence(t *testing.T) {
 	entry := map[string]any{"id": strings.Repeat("a", 64), "project": strings.Repeat("b", 64),
 		"fingerprint": "sha256:" + strings.Repeat("c", 64), "state": "stopped", "resource": "absent", "controller": "absent",
 		"cleanup": "complete", "workload_exit": nil, "stop_candidate": false, "retry": nil}
-	for _, fault := range []string{"", "missing unknown exit", "missing retry", "missing controller", "extra field", "wrong casing", "trailing object", "null problems", "failed process"} {
+	for _, fault := range []string{"", "verified", "not observed: worker exited", "refused", "invalid detector", "empty detector", "missing unknown exit", "missing retry", "missing controller", "extra field", "wrong casing", "trailing object", "null problems", "failed process"} {
 		t.Run(fault, func(t *testing.T) {
 			session := approvalClone(entry)
 			report := map[string]any{"schema": 1, "ok": true, "problems": []any{}, "sessions": []any{session}}
 			switch fault {
+			case "verified", "not observed: worker exited", "refused":
+				session["mount_detector"] = fault
+			case "invalid detector":
+				session["mount_detector"] = true
+			case "empty detector":
+				session["mount_detector"] = ""
 			case "missing unknown exit":
 				delete(session, "workload_exit")
 			case "missing retry":
@@ -43,7 +49,7 @@ func TestRecoveryReportEvidence(t *testing.T) {
 				p.exit = 75
 			}
 			_, err = recoveryReadReport(p)
-			if (err == nil) != (fault == "") {
+			if (err == nil) != (fault == "" || fault == "verified" || fault == "not observed: worker exited" || fault == "refused") {
 				t.Fatalf("result control %q: %v", fault, err)
 			}
 		})

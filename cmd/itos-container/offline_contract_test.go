@@ -42,7 +42,7 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 	observer := &offlineObserver{t: t, request: request, ops: ops}
 	assemble := func(frozen ap.Durable) session.Runner {
 		service := controllerFor()
-		runner := session.Runner{Store: service.Store, Entropy: service.Entropy, Workspace: &sessiondisk.Workspace{MountStat: func(path string) (fs.FileInfo, error) {
+		runner := session.Runner{Store: service.Store, Entropy: service.Entropy, Workspace: &sessiondisk.Workspace{ProcessOpen: localProcessOpen, MountStat: func(path string) (fs.FileInfo, error) {
 			if path != "/proc/123/root/workspace" {
 				return nil, os.ErrNotExist
 			}

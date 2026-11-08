@@ -293,16 +293,21 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if ctx.Err() != nil {
 		return c, a, resource, port.ExecutionFailed
 	}
-	if failure = detectAnchor(ctx, intent, c, s.Workspace); failure != "" {
+	detector, failure := detectAnchor(ctx, intent, c, s.Workspace)
+	r := entry.Record()
+	r.MountDetector = detector
+	if failure == "" {
+		r.State = "running"
+	}
+	saved := entry.Save(r)
+	if failure != "" {
 		return c, a, resource, failure
 	}
-	r := entry.Record()
-	r.State = "running"
-	if failure = entry.Save(r); failure != "" {
+	if saved != "" {
 		if ctx.Err() != nil {
 			return c, a, resource, port.ExecutionFailed
 		}
-		return c, a, resource, failure
+		return c, a, resource, saved
 	}
 	return c, a, resource, ""
 }

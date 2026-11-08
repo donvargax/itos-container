@@ -150,6 +150,9 @@ func (f *overlapFixture) complete(r *overlapRun) error {
 		exit = *e.WorkloadExit
 	}
 	public := map[string]any{"schema": 1, "id": r.id, "project": r.w.approval.project, "intent": filepath.ToSlash(strings.TrimPrefix(r.intent, filepath.Join(r.w.doctor.env["XDG_STATE_HOME"], "itos-container")+string(os.PathSeparator))), "state": "stopped", "workload_exit": exit, "last_problem": nil}
+	if e.MountDetector != "" {
+		public["mount_detector"] = e.MountDetector
+	}
 	intent, err := sessionDecodeRecord(r.owned.Bytes)
 	if err != nil {
 		return err

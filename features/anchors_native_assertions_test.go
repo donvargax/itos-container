@@ -42,7 +42,7 @@ func (w *world) anchorsEntry(p *recoveryProcess, code int) (anchorRecoveryEntry,
 	}
 	var fields map[string]json.RawMessage
 	_ = json.Unmarshal(report.Sessions[0], &fields)
-	if !recoveryExactFields(fields, "id", "project", "fingerprint", "state", "resource", "anchor", "controller", "cleanup", "workload_exit", "stop_candidate", "retry") {
+	if !recoverySessionFields(fields, "id", "project", "fingerprint", "state", "resource", "anchor", "controller", "cleanup", "workload_exit", "stop_candidate", "retry") {
 		return entry, errors.New("status/stop did not account for the original anchor in its public result")
 	}
 	if entry.Anchor != "present" && entry.Anchor != "absent" && entry.Anchor != "unknown" {

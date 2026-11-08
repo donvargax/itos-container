@@ -8,8 +8,9 @@ the original number.
 
 The coordinator's q-19 and q-27 decisions of 2026-11-06, approximately
 22:55 and 23:50 UTC, select this mechanism and detector; the person reviews
-them later. They override earlier
-slice-17 requirements where they differ. This is an unproven Moby/kernel
+them later. Q-39 of 2026-11-08 refines short-lived workload observation as
+described below. These decisions override earlier slice-17 requirements where
+they differ. This is an unproven Moby/kernel
 hypothesis about native behavior. The combined implementation is described below;
 it is not a host-support claim.
 
@@ -33,13 +34,23 @@ descriptor link to its pinned inode, rather than resolve a pathname obtained
 by reading that link. This anchor prevents substitution; the following check
 detects an anchor failure and does not provide the protection itself.
 
-Immediately after `ContainerStart` returns, inspect the container's `State.Pid`
-and stat `/proc/<pid>/root/workspace` from the host. Compare its device and inode
-with the validated identity. The worker runs as the host UID with
-no-new-privileges. If the stat cannot be made or the identity differs, kill and
-remove the worker immediately through owned teardown and report a mount refusal.
-There is no checkout-path fallback. A detector failure is evidence against the
-anchor hypothesis, not an acceptable native green result on supported Docker.
+Immediately after `ContainerStart` returns, inspect the container's `State.Pid`.
+For a running worker, hold a pidfd and freshly inspect the owned full ID again,
+requiring the same live init PID before statting `/proc/<pid>/root/workspace`.
+Compare device and inode with the validated identity. The held process is checked
+on both sides of stat so a recycled numeric PID cannot supply mount authority.
+The worker runs as the host UID with no-new-privileges. An identity mismatch or
+an unavailable stat while the worker still runs requires immediate owned
+kill/removal and mount refusal, with no checkout-path fallback.
+
+Q-39 (2026-11-08, approximately 06:35 UTC) refines q-27: if the owned worker has
+already exited before inspection, pidfd acquisition or stat, retain its real
+exit through the ordinary engine wait and teardown. A fresh full-ID inspection
+must establish exit if pidfd acquisition, process observation or stat fails.
+Neither PID disappearance alone nor a permission/transport error establishes
+exit. Record `not observed: worker exited`; do not claim mount verification.
+The descriptor volume remains the protection, and its native proof requirement
+is unchanged. No helper, extra mount or new privilege is introduced.
 
 Durable intent precedes volume allocation. Independent inspection of the
 volume's identity, labels and exact options precedes durable concrete ownership
@@ -262,29 +273,37 @@ and rerun without weakening their workload, ownership or cleanup assertions.
 The local HTTP fixture assemblies supply an explicit simulated mounted root;
 native scenarios continue to use the product binary and actual host stat.
 
-## Short-lived workload conflict found in PR 13
+## Short-lived workload resolution under q-39
 
-Review thread `PRRT_kwDOVkB0ws606Rfz` identifies a real consequence of q-27:
-a successful workload can exit before the post-start inspect, leaving no live
-init PID for `/proc/<pid>/root/workspace`. It can also exit between inspect and
-stat. The existing detector refuses these cases and invokes owned teardown,
-as q-27 requires when that stat cannot be made. This conflicts with the
-foreground contract's successful-exit preservation for ordinary short commands.
+Review thread `PRRT_kwDOVkB0ws606Rfz` correctly identified that the initial
+q-27 implementation turned ordinary short-lived results into mount refusals.
+Q-39 settles this conflict: the detector is evidence about the anchor, not the
+protection. A completed workload retains its actual exit while its record and
+fresh JSON/text status explicitly state that the mount was not observed.
 
-The volume's options and labels prove its requested source and ownership; they
-do not observe the inode actually mounted in a worker which has already exited.
-Neither a successful engine wait nor an exited state supplies that observation.
-Returning success from either would silently waive q-27. The trusted native
-race probe waits for a harness release and therefore does not resolve this
-ordinary-workload race. Retrying the workload would execute it twice and is not
-authorized either.
+The optional `mount_detector` progress field has exactly three values:
+`verified`, `not observed: worker exited`, and `refused`. It is persisted before
+normal wait or immediate teardown and cannot be changed or removed afterwards.
+Legacy seven-field public records remain readable; missing detector data never
+means verified. Readers unaware of the new field reject it under their strict
+schema rather than silently interpreting it. Engine ownership remains in the
+schema-2 intent; no new field grants mutation authority.
 
-The implementer leaves the detector intact and the review thread unresolved.
-The coordinator must reconcile short-lived success with q-27's mandatory stat
-and refusal rule before this item can be complete; this document selects no
-new helper, privilege, mount, or detector fallback. A regression scenario must
-cover exit before inspection and exit between inspection and stat once that
-behavior is settled.
+The red step commit `01adcce` adds OFFLINE-33's four rows (exit 0/7 before
+inspection and between inspect and stat) and OFFLINE-34's PID-reuse guard.
+With `@wip` removed locally, all five failed at their first Then: short exits
+returned mount refusal, and the reused-PID fixture accepted an unguarded stat.
+The implemented scenarios pass through the registered command, durable record,
+and fresh JSON/text status. Additional tests cover pidfd failures, fresh
+inspection failures, exit around acquisition/stat, live-worker stat errors,
+identity mismatches and late-handle cleanup. The process-reference contract runs
+against the I/O-free fake and a real local child process, without a container.
+
+The supplied concurrent-stop CI failure was a fixture scheduling race. The
+finite wait wrapper may return on cancellation before its inner Wait goroutine
+journals cancellation. The fixture now holds its probe checkpoint until that
+observation is published. Its existing event-order and deadline assertions are
+unchanged; no production timeout or check is relaxed.
 
 ## Native mount oracle review and local validation
 
@@ -407,3 +426,24 @@ verified, or explicitly settle the unavailable-observation result. A regression
 should cover exit zero and nonzero both before inspect and between inspect/stat,
 with a healthy control and retained mismatch refusal; any native rows require
 their own CI assertion-level red before implementation.
+
+## Q-39 local verification
+
+After the red checkpoint, OFFLINE-33/34 pass with `@wip` removed. The complete
+engine-disabled `go test ./features -count=1` passes in 180.816 seconds, including
+all 1,353 live local scenario rows. No full-feature race run was made.
+
+The command assembly suite passes with normal host ownership and disposable
+state. Session domain, disk, fake ports, codec and presentation tests pass under
+`-race`; the pidfd adapter and fake share the process-reference contract. Focused
+race runs also pass for short-lived exit and PID-reuse fixtures, strict recovery
+record/status oracles, and the concurrent-stop fixture (20 repetitions of the
+before-reconciliation schedule and three of the after-deadline schedule).
+
+Synthetic Engine API fixtures now explicitly supply the process reference for
+their synthetic PID, alongside their existing mount-stat seam. Native assemblies
+use real pidfds. Exact record/status oracles recognize only the specified optional
+detector values; their ownership, preservation and unknown-field refusals remain.
+The native engine suite and fresh changed-code proof still belong to CI at the
+actual pushed head. No native engine, local mutation run, or new support claim
+is part of this local verification.

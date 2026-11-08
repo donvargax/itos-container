@@ -17,13 +17,16 @@ type Workspace struct {
 	// MountStat is an adapter syscall seam; production uses os.Stat. It never
 	// chooses the pathname, which must come from the freshly inspected init PID.
 	MountStat func(string) (fs.FileInfo, error)
-	source    *os.File
-	binding   port.Binding
-	roots     []*os.Root
-	names     []string
-	infos     []fs.FileInfo
-	rootInfo  fs.FileInfo
-	ops       *workspaceOperations
+	// ProcessOpen is the pidfd syscall seam for synthetic Engine API fixtures.
+	// Production leaves it nil and holds a kernel reference to the init process.
+	ProcessOpen func(int) (port.Process, port.Outcome)
+	source      *os.File
+	binding     port.Binding
+	roots       []*os.Root
+	names       []string
+	infos       []fs.FileInfo
+	rootInfo    fs.FileInfo
+	ops         *workspaceOperations
 }
 
 // Preserve real pinned handles while making failures between inspection and

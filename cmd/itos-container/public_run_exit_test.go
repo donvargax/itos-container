@@ -78,10 +78,11 @@ func (j *runExitJournal) add(event string) {
 
 type runExitStorage struct {
 	ap.RegistryStorage
-	journal *runExitJournal
-	mu      sync.Mutex
-	probes  int
-	result  *runExitObservation
+	journal      *runExitJournal
+	mu           sync.Mutex
+	probes       int
+	result       *runExitObservation
+	waitCanceled <-chan struct{}
 }
 
 func (s *runExitStorage) Open(ctx context.Context, c ap.Candidate, id string, readOnly bool) (ap.SessionDirectory, ap.Failure) {
@@ -94,6 +95,15 @@ func (s *runExitStorage) Open(ctx context.Context, c ap.Candidate, id string, re
 	s.mu.Unlock()
 	if probe > 2 {
 		return s.RegistryStorage.Open(ctx, c, id, readOnly)
+	}
+	// The finite engine wrapper can return on cancellation before its inner
+	// Wait goroutine records that cancellation. Hold this fixture checkpoint
+	// until that observation is published, so the intended schedule does not
+	// depend on which goroutine the scheduler wakes first.
+	select {
+	case <-s.waitCanceled:
+	case <-ctx.Done():
+		return nil, "state.unavailable"
 	}
 	name := "probe"
 	if probe == 2 {
@@ -109,6 +119,38 @@ func (s *runExitStorage) Open(ctx context.Context, c ap.Candidate, id string, re
 		s.journal.add(name + "-acquired")
 	}
 	return d, f
+}
+
+func TestRunExitProbeWaitsForCancellationObservation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := publicMemoryFixture(t)
+		id, _ := m.seed("a")
+		ack := make(chan struct{})
+		j := &runExitJournal{}
+		var result runExitObservation
+		s := &runExitStorage{RegistryStorage: m.files, journal: j, result: &result, waitCanceled: ack}
+		done := make(chan struct{})
+		go func() {
+			d, failure := s.Open(context.Background(), m.c, id, true)
+			if failure != "" {
+				t.Error(failure)
+			}
+			if d != nil {
+				d.Close()
+			}
+			close(done)
+		}()
+		synctest.Wait()
+		if len(j.events) != 0 {
+			t.Fatalf("probe ran before wait observation: %v", j.events)
+		}
+		j.add("run-wait-canceled")
+		close(ack)
+		<-done
+		if fmt.Sprint(j.events) != "[run-wait-canceled probe-start probe-acquired]" {
+			t.Fatal(j.events)
+		}
+	})
 }
 
 type runExitEngine struct {
@@ -178,7 +220,8 @@ func observeRunExit(t *testing.T, schedule, name string) runExitObservation {
 	m := publicMemoryFixture(t)
 	var result runExitObservation
 	journal := &runExitJournal{}
-	storage := &runExitStorage{RegistryStorage: m.files, journal: journal, result: &result}
+	waitCanceled := make(chan struct{})
+	storage := &runExitStorage{RegistryStorage: m.files, journal: journal, result: &result, waitCanceled: waitCanceled}
 	m.registry.Storage = storage
 	switch name {
 	case "zero":
@@ -263,6 +306,7 @@ func observeRunExit(t *testing.T, schedule, name string) runExitObservation {
 		attachment.failures <- sp.StdinClosed
 		<-ctx.Done()
 		journal.add("run-wait-canceled")
+		close(waitCanceled)
 		return 0, sp.ExecutionFailed
 	}}
 	runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: engine, Workspace: sf.MountWorkspace(m.b), Entropy: &publicMemoryEntropy{}}

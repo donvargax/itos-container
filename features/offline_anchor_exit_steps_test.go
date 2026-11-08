@@ -108,3 +108,36 @@ func (w *world) anchorExitSteps(sc *godog.ScenarioContext) {
 		return runExitOrder(runExitObservation{Events: result.Events}, "pidfd-close", "SIGKILL", "remove", "anchor remove")
 	})
 }
+
+// Public schema 1 retains its seven legacy fields and permits only q-39's
+// named detector fact. Unknown fields and unknown detector values still fail.
+func publicRecordShape(record map[string]any) bool {
+	fields := 7
+	if value, exists := record["mount_detector"]; exists {
+		if value != "verified" && value != "not observed: worker exited" && value != "refused" {
+			return false
+		}
+		fields++
+	}
+	for _, name := range []string{"schema", "id", "project", "intent", "state", "workload_exit", "last_problem"} {
+		if _, exists := record[name]; !exists {
+			return false
+		}
+	}
+	return len(record) == fields
+}
+
+// Completed native runs may be too short for observation. Both outcomes must
+// be recorded explicitly; a missing/refused detector never proves healthy run.
+func completedDetector(data string, want map[string]any) bool {
+	var record map[string]any
+	if json.Unmarshal([]byte(data), &record) != nil {
+		return false
+	}
+	detector := record["mount_detector"]
+	if detector != "verified" && detector != "not observed: worker exited" {
+		return false
+	}
+	want["mount_detector"] = detector
+	return recoveryJSONEqual(data, want)
+}

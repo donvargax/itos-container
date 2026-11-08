@@ -60,7 +60,7 @@ func TestPublicRecoveryCommand(t *testing.T) {
 	service, _ := approvalServices(nil, out, errout)
 	runner, recovery := sessionServices(service)
 	if request.LocalMount != "" {
-		runner.Workspace = &sessiondisk.Workspace{MountStat: localMountStat(request.LocalMount)}
+		runner.Workspace = &sessiondisk.Workspace{ProcessOpen: localProcessOpen, MountStat: localMountStat(request.LocalMount)}
 	}
 	registry := runner.Registry.(sessiondisk.Registry)
 	publicStorage := registry.Storage.(approvaldisk.Registry)

@@ -24,6 +24,7 @@ type recoveryProblem struct {
 }
 type recoveryEntry struct {
 	ID, Project, Fingerprint, State, Resource, Controller, Cleanup, Anchor string
+	MountDetector                                                          string   `json:"mount_detector,omitempty"`
 	WorkloadExit                                                           *int     `json:"workload_exit"`
 	StopCandidate                                                          bool     `json:"stop_candidate"`
 	Retry                                                                  []string `json:"retry"`
@@ -67,11 +68,22 @@ func recoveryReadReport(p *recoveryProcess) (recoveryReport, error) {
 			}
 			fields = append(fields, "anchor")
 		}
-		if !recoveryExactFields(entry, fields...) {
+		if !recoverySessionFields(entry, fields...) {
 			return report, errors.New("recovery session has missing or incorrectly named fields")
 		}
 	}
 	return report, nil
+}
+
+func recoverySessionFields(object map[string]json.RawMessage, fields ...string) bool {
+	if value, exists := object["mount_detector"]; exists {
+		var detector string
+		if json.Unmarshal(value, &detector) != nil || (detector != "verified" && detector != "not observed: worker exited" && detector != "refused") {
+			return false
+		}
+		fields = append(fields, "mount_detector")
+	}
+	return recoveryExactFields(object, fields...)
 }
 
 func recoveryExactFields(object map[string]json.RawMessage, fields ...string) bool {
@@ -246,6 +258,9 @@ func (w *world) recoveryCompleted() error {
 	}
 	record := map[string]any{"schema": 1, "id": r.id, "project": w.approval.project, "intent": w.session.reference,
 		"state": "stopped", "workload_exit": exit, "last_problem": nil}
+	if s.MountDetector != "" {
+		record["mount_detector"] = s.MountDetector
+	}
 	return recoveryDurableFile(filepath.Join(state, "sessions", w.recoveryIndexKey(), r.id, "record.json"), record, r.stops)
 }
 

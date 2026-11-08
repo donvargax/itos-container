@@ -10,7 +10,7 @@ Feature: Hardened offline foreground run
   Slice-13 owns the launch and cleanup contract (01/04/05/15).
   Slice-14 owns native isolation and teardown proof (08/09/10/11/12/14/16).
   Slice-17 owns inode-bound checkout sources and their foreground lifetime
-  (25-32); slice-18 owns their recovery by fresh status/stop processes.
+  (25-34); slice-18's recovery is integrated here under q-36.
 
   # Authorities: docs/charter.md, docs/plans/offline-run-lifecycle.md (AC-07/08,
   # offline AC-10/11, AC-21/22/23/25/37), docs/architecture.md (Slices), and
@@ -507,16 +507,22 @@ Feature: Hardened offline foreground run
   # the already submitted start must use the pinned ORIGINAL inode or refuse
   # without executing in a substituted checkout, with owned teardown and no
   # path fallback. Q-27 (2026-11-06 ~23:50 UTC) settles the detector: immediately
-  # after ContainerStart returns, inspect State.Pid and stat the host path
-  # /proc/<pid>/root/workspace. Compare device/inode with the validated identity.
+  # after ContainerStart returns, inspect State.Pid. Q-39 (2026-11-08 ~06:35 UTC)
+  # refines this: hold a pidfd, freshly confirm the same live PID via full-ID
+  # inspect, then stat /proc/<pid>/root/workspace and compare device/inode.
+  # Check the held process around stat so numeric PID reuse cannot verify a mount.
   # The worker runs as the host UID with no-new-privileges. Use the PID from
   # fresh inspection of the owned full ID, never a cached PID, the controller's
   # own /workspace, a volume mountpoint or the current checkout pathname.
-  # A mismatch or unavailable stat means immediate owned kill/removal and mount
-  # refusal. The descriptor-backed volume prevents substitution; this check
+  # A mismatch or unavailable stat while the worker still runs means immediate
+  # owned kill/removal and mount refusal. The descriptor-backed volume prevents
+  # substitution; this check
   # detects a failed anchor and cannot precede the first workload instruction.
-  # Unavailable inspection or an unusable init PID also leaves the stat unmade
-  # and requires the same refusal. Do not wait for normal workload completion
+  # If fresh owned inspection establishes that the worker exited before the
+  # observation, retain its actual wait result and tear down normally. Persist
+  # mount_detector as "not observed: worker exited" and show it in status; never
+  # claim verification. Unavailable inspection or an unusable PID while the worker
+  # still runs requires refusal. Do not wait for normal workload completion
   # or a graceful-stop interval before attempting owned kill/removal. Preserve
   # the existing bounded calls/teardown and ownership checks for every mutation.
   # No gate binary, extra mount, privilege or long-lived helper is authorized.
@@ -572,9 +578,10 @@ Feature: Hardened offline foreground run
   # anchor intent/ownership publication failure, run.mount-unavailable (3) for
   # an unsupported/unavailable anchoring facility, run.mount-refused (1) for
   # unsafe/mismatched source identity, and run.mount-uncertain (75) when source
-  # allocation cannot be settled. Q-27 detector failures, including an unmade
-  # stat, report run.mount-refused with classification 1; preserve any actually
-  # observed nonzero workload exit separately under the existing result rule.
+  # allocation cannot be settled. Q-27/q-39 detector failures, including an unmade
+  # stat while the worker still runs, report run.mount-refused with classification
+  # 1; preserve any actually observed nonzero workload exit separately under the
+  # existing result rule.
   # A post-start refusal never claims that the worker did not execute. State
   # the cause and safe corrective guidance; never suggest falling back to a
   # path, weakening isolation or auto-approving.
@@ -684,9 +691,10 @@ Feature: Hardened offline foreground run
   # preflight failures in the restricted filesystem sandbox are not that evidence.
   # The discarded prototype's local green is not implemented or native proof.
   # The coordinator has accepted guarded CI red for EVERY row of 29/30 below.
-  # All eight IDs remain @wip pending implementation, local green and ordinary
-  # native green CI at the actual pushed head, with the recovery prerequisite
-  # satisfied. Undefined steps, skips or broken controls provide no evidence.
+  # That checkpoint kept all eight IDs @wip. The combined q-36 implementation
+  # subsequently activated them after local green; ordinary native green CI
+  # at the actual pushed head remains required. Undefined steps, skips or broken
+  # controls provide no evidence.
   # No local engine or mutation run.
 
   # Current launch has no anchor intent/resource or bound source, so the first
@@ -806,7 +814,7 @@ Feature: Hardened offline foreground run
   # Record the unobserved detector durably and expose it through fresh status.
   # For a running worker hold a pidfd, re-inspect its full ID and same init PID,
   # then stat; never accept a recycled PID's otherwise matching workspace.
-  @wip @slice-17 @ID-OFFLINE-33
+  @slice-17 @ID-OFFLINE-33
   Scenario Outline: Short-lived workers retain their exit without claiming mount verification
     Given an anchor detector fixture with exit <exit> at "<checkpoint>"
     When the registered command runs and fresh status reads its completed record
@@ -821,7 +829,7 @@ Feature: Hardened offline foreground run
       | 0    | between inspect and stat |
       | 7    | between inspect and stat |
 
-  @wip @slice-17 @ID-OFFLINE-34
+  @slice-17 @ID-OFFLINE-34
   Scenario: A fresh inspection prevents a reused init PID from verifying the mount
     Given an anchor detector fixture with exit 0 at "PID reused"
     When the registered command runs and fresh status reads its completed record

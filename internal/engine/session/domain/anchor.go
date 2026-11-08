@@ -64,21 +64,67 @@ func verifyAnchor(ctx context.Context, r port.Record, c port.RunConnection) port
 	return ""
 }
 
-func detectAnchor(ctx context.Context, i port.Intent, c port.RunConnection, workspace port.Workspace) port.Outcome {
+func detectAnchor(ctx context.Context, i port.Intent, c port.RunConnection, workspace port.Workspace) (string, port.Outcome) {
 	r := i.Record()
-	o, status := c.Inspect(ctx, r.ContainerID)
-	if status != port.Observed || o.ID != r.ContainerID || !owns(r, o) || !o.StatePresent || !o.Running || o.PID <= 0 {
-		return port.MountRefused
+	o, failure := inspectDetector(ctx, r, c)
+	if failure != "" {
+		return port.DetectorRefused, failure
+	}
+	if detectorExited(o) {
+		return port.DetectorExited, ""
 	}
 	w, ok := workspace.(port.AnchorWorkspace)
-	if !ok {
-		return port.MountRefused
+	pw, processOK := workspace.(port.ProcessWorkspace)
+	if !ok || !processOK || !o.Running || o.PID <= 0 {
+		return port.DetectorRefused, port.MountRefused
+	}
+	p, failure := pw.HoldProcess(o.PID)
+	if p != nil {
+		defer p.Close()
+	}
+	// A failed pidfd open may mean the worker just exited. Only a fresh owned
+	// full-ID observation can establish that; an arbitrary syscall error cannot.
+	fresh, inspected := inspectDetector(ctx, r, c)
+	if inspected == "" && detectorExited(fresh) {
+		return port.DetectorExited, ""
+	}
+	if failure != "" || p == nil || inspected != "" || !fresh.Running || fresh.PID != o.PID {
+		return port.DetectorRefused, port.MountRefused
+	}
+	if exited, f := p.Exited(); f != "" || exited {
+		return detectorAfterExit(ctx, r, c)
 	}
 	mounted, failure := w.Mounted(o.PID)
-	if failure != "" || mounted.Device != r.Anchor.Device || mounted.Inode != r.Anchor.Inode {
-		return port.MountRefused
+	// Check the held process again: a numeric PID reused during stat must not
+	// supply either a verified mount or a mismatch attributed to this worker.
+	exited, processFailure := p.Exited()
+	if failure != "" || exited || processFailure != "" {
+		return detectorAfterExit(ctx, r, c)
 	}
-	return ""
+	if mounted.Device != r.Anchor.Device || mounted.Inode != r.Anchor.Inode {
+		return port.DetectorRefused, port.MountRefused
+	}
+	return port.DetectorVerified, ""
+}
+
+func inspectDetector(ctx context.Context, r port.Record, c port.RunConnection) (port.Observation, port.Outcome) {
+	o, status := c.Inspect(ctx, r.ContainerID)
+	if status != port.Observed || o.ID != r.ContainerID || !owns(r, o) || !o.StatePresent {
+		return port.Observation{}, port.MountRefused
+	}
+	return o, ""
+}
+
+func detectorExited(o port.Observation) bool {
+	return !o.Running && o.Started && o.Status == "exited"
+}
+
+func detectorAfterExit(ctx context.Context, r port.Record, c port.RunConnection) (string, port.Outcome) {
+	o, failure := inspectDetector(ctx, r, c)
+	if failure == "" && detectorExited(o) {
+		return port.DetectorExited, ""
+	}
+	return port.DetectorRefused, port.MountRefused
 }
 
 // A deadline may end the controller's wait before the engine's actual start

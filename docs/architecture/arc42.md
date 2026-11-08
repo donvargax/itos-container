@@ -446,9 +446,15 @@ and the controller's `/proc/<pid>/fd/<n>` O_PATH descriptor as its device. Keep 
 descriptor open from the final identity check through `ContainerStart`'s return.
 The worker consumes that volume at `/workspace` without copying. The anchor itself
 must prevent substituted-inode execution. Immediately after start returns, inspect
-`State.Pid` and stat `/proc/<pid>/root/workspace` from the host, comparing device and
-inode with the validated identity. Mismatch or unavailable stat triggers immediate
-owned kill/removal and refusal. This detector is not the protection. No raw-path
+`State.Pid`, hold a pidfd and re-inspect the same owned full ID and live PID before
+statting `/proc/<pid>/root/workspace` from the host. Check the held process on both
+sides of stat and compare device/inode with the validated identity. A mismatch or
+unavailable stat while the worker still runs triggers immediate owned kill/removal
+and refusal. Under q-39, an independently confirmed exited worker retains its
+real wait result and normal cleanup, with `mount_detector` recorded and shown in
+JSON/text status as `not observed: worker exited`. Only an actual identity match
+on the guarded live process records `verified`; refusals record `refused`.
+Legacy records have no detector observation and never imply verification. This detector is not the protection. No raw-path
 fallback, gate binary, extra mount, new controller privilege, host
 mount by the controller or long-lived helper is selected. The native race must
 prove original-inode execution or refusal before this hypothesis is accepted.
