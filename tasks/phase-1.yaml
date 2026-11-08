@@ -2495,10 +2495,11 @@
     minute and to 22 GB the next, leaving 1.5 GB of 31 GB free and pushing 3.5 GB into swap; the day
     before, the same pressure got the loop killed. The race detector multiplies memory, but 22 GB
     also points at state kept across scenarios (buffers, fixtures, goroutines) that a long suite
-    accumulates. Find what grows per scenario (a heap profile across the suite) and release it, so a
-    full race run fits comfortably; until then agents race only the packages they change. Worse than
-    first measured (2026-11-08 06:10 UTC): without -race too, a full go test ./features run grew
-    features.test to 9.3 GB anonymous RSS, and the loop's 10 GB per-agent memory cap OOM-killed it.
+    accumulates. Find what grows per scenario (a heap profile across the suite) and release it.
+    Validate the full suite without -race and the repaired path with focused race tests only,
+    including after the repair. A measurement at 2026-11-08 06:10 UTC was worse: without -race,
+    a full go test ./features run grew features.test to 9.3 GB anonymous RSS, and the loop's
+    10 GB per-agent memory cap OOM-killed it.
     So agents cannot currently run the full feature suite inside a sane limit; the growth is in the
     suite, not only in the race detector. Profile the heap across the suite and release what each
     scenario keeps.
@@ -2574,13 +2575,28 @@
     workload tests lifetime, not an exact heap size or collector timing; the whole-suite RSS
     check independently holds the real workload to its budget.
 
+    Use runtime.MemStats.HeapAlloc after runtime.GC at both observation points; compare the
+    signed difference so a smaller second sample cannot underflow into a failure. TotalAlloc
+    measures allocation churn and cannot stand in for live heap. Append the observation After
+    hook after initializeScenario has registered its cleanup: godog v0.16.0 runs these hooks
+    in registration order, before storing the final step result. Earlier step results still
+    retain their matched handlers during both samples. Do not move either sample after
+    runScenarios returns. Save only scalar counters, heap measurements and scratch path strings
+    for later assertions, never a collection of worlds, payloads or closures capturing them.
+    Keep the small failure/cleanup-error fixtures as subtests of TestFeatureMemoryRetention
+    so the exact-name check exercises them in both modes. Their expected godog failures must
+    be asserted by the parent test without marking that parent failed through TestingT;
+    retain and check their diagnostic output, suite result and cleanup observations.
+
     Commit that regression red first in test --item T-35 before the repair. Both ordinary and
     focused race runs must fail at the retained-heap/lifetime assertion before implementation
     and pass afterward. Missing-test discovery, compilation, setup failure, a race report or
     OOM does not replace that assertion-level red. The second check below first requires the
     exact test name so Go's successful 'no tests to run' result cannot satisfy it, then runs
     only that test with and without -race, holding both invocations to the same 4 GiB RSS
-    ceiling. Keep this bounded check at the task tier; do not
+    ceiling. On the red checkpoint, run each of those two focused invocations separately:
+    the check stops at the first nonzero invocation and cannot by itself supply both reds.
+    Keep this bounded check at the task tier; do not
     broaden the repository's general race tier. Let the existing Linux test job run the full
     suite and the configured hooks/CI run their gates.
 
@@ -2596,6 +2612,13 @@
     heap profile or diagnosis of its cause. The exact-test discovery check exits 1 today
     because TestFeatureMemoryRetention does not exist; the implementer still owes its red
     assertion and the full passing measurement. Do not repeat an unguarded failing baseline.
+
+    Rechecking at 3c35b35dd54d4fa5fb3ce65c24e1d453be00e5e4 on Linux amd64 with Go
+    go1.27.3-X:nodwarf5 confirms exit 1 at missing-test discovery. Only this ledger changed
+    since the measured baseline above; the harness and task workload are identical. That
+    earlier guarded budget failure is retained as baseline evidence, not rerun or relabeled
+    as a completed RSS check. These drafter checks supply neither a heap profile nor
+    assertion-level regression red.
 
     Report the retaining path, before/after heap and RSS measurements, assertion-level red
     and green for the focused regression, full non-engine execution counts and any remaining
