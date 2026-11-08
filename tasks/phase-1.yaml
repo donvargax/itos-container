@@ -2171,6 +2171,13 @@
     the settled first version v0.1.0 for an untagged history with a feat, fix or breaking change;
     an untagged history with none of those releases nothing. This bootstrap rule takes priority
     over the template helper's untagged fix/major arithmetic and must be explained in the notes.
+    For every releasable untagged history, including fix-only and breaking-only histories, the
+    exact stdout is last=, next=0.1.0, bump=minor and range=HEAD, each on its own line with a
+    final newline. Here bump describes the selected version, not the commit's ordinary bump.
+    An untagged history with nothing releasable prints last=, next=, bump=none and range=HEAD
+    in that same format. Bootstrap notes must still list every breaking change and upgrading
+    instruction, explaining why the initial version is 0.1.0 rather than claiming those
+    commits produced a patch or major version. Cover these cases in the helper tests.
     After a release, a breaking header of any type or a BREAKING-CHANGE/BREAKING CHANGE footer
     in the last paragraph takes major precedence, then feat minor, then fix patch. Preserve the
     inherited BinaryMoved patch for linked modules or the Go toolchain when none of those
@@ -2206,6 +2213,8 @@
     and unchanged refs, not just exit success. Keep fixture dependencies local and GOTOOLCHAIN
     local; no socket or approval state is involved. Preserve notes rendering, full-footer and
     moved-build tests, adapting first-release expectations to the settled bootstrap rule.
+    Assert exit 1 for module-major refusal and exit 2 for shallow history or Git/Go read errors,
+    all with empty stdout, so a failed version calculation supplies no publishable output.
     Commit these tests with compiling failing stubs before implementing the new tools; record
     assertion failures, not undefined symbols or missing-package errors, then all passing.
 
@@ -2216,8 +2225,13 @@
     tools arrive it runs the workflow's actual version command at the candidate HEAD, then
     builds both real programs and runs them against a full local no-tags clone with the current
     pinned launcher and cliff configuration. This proves first-version and actual notes
-    generation without publishing, checking the source and scratch refs are unchanged.
-    The current source has no reachable release tag, 25 feats, 43 fixes and no breaking commits;
+    generation without publishing. Pass the scratch version output's last and next directly
+    to the notes program and compare the What changed section's commit links against git
+    rev-list for its range; one project link alone would not prove every commit was included.
+    Check the source and scratch HEAD, refs, status and tracked diffs are unchanged.
+    The drafter reran all four checks on 2026-11-08 at
+    dedb8c2b3227460be268bf6cfbb68a1c7eebb7c8 and observed the failures above. That source had
+    no reachable release tag, 25 feats, 43 fixes and no breaking commits;
     these observations explain the expected first version, never become constants in the tools.
 
     Keep the YAML/Go fixture checks at the cheap task and existing Linux go test ./... tiers.
@@ -2228,8 +2242,10 @@
     range=HEAD. Its source-history run accepts a later tagged history while the no-tags clone
     keeps checking bootstrap, so a later release does not stale this check. Never create a real
     tag as a dry run. The outer loop alone verifies the pushed main run, dependency results
-    and eventual release/assets; local
-    dry-run success is not publication evidence and main may advance before that run.
+    and eventual release/assets; local dry-run success is not publication evidence and main
+    may advance before that run. Do not run the whole features package with -race; a full
+    feature-suite run uses no race detector, and any race run is limited to changed packages
+    or tests. A memory-limit kill is a test-resource failure, not permission to raise the limit.
 
     Implementation paths are the two tools and their test files/config, tools/bin/pinned,
     tools/release/workflow_test.go, the two workflows and the two release-guidance documents
@@ -2275,7 +2291,7 @@
     - run: |
         python3 - <<'PY'
         from pathlib import Path
-        import shutil, subprocess, tempfile
+        import re, shutil, subprocess, tempfile
         root = Path.cwd()
         assert (root / 'tools/bin/release-version/main.go').is_file(), 'missing version program for dry run'
         assert (root / 'tools/bin/release-notes/main.go').is_file(), 'missing notes program for dry run'
@@ -2284,7 +2300,7 @@
         def state(cwd):
             return tuple(run(['git', *args], cwd) for args in (
                 ['rev-parse', 'HEAD'], ['for-each-ref', '--format=%(refname) %(objectname)'],
-                ['status', '--porcelain', '--untracked-files=all']))
+                ['status', '--porcelain', '--untracked-files=all'], ['diff', '--binary', 'HEAD']))
         before = state(root)
         candidate = run(['go', 'run', './tools/bin/release-version'])
         fields = dict(line.split('=', 1) for line in candidate.splitlines())
@@ -2313,11 +2329,16 @@
             snapshot = state(repo)
             output = run([str(version)], repo)
             assert output == 'last=\nnext=0.1.0\nbump=minor\nrange=HEAD\n', output
-            rendered = run([str(notes), '-version', '0.1.0', '-from', '', '-itos', shutil.which('itos') or 'itos'], repo)
+            bootstrap = dict(line.split('=', 1) for line in output.splitlines())
+            rendered = run([str(notes), '-version', bootstrap['next'], '-from', bootstrap['last'],
+                            '-itos', shutil.which('itos') or 'itos'], repo)
             for text in ('# itos-container 0.1.0\n', '## What changed', '## Upgrading',
                          '`itos-container --version`', '-R donvargax/itos-container'):
                 assert text in rendered, 'release notes lack ' + text
-            assert 'https://github.com/donvargax/itos-container/commit/' in rendered, 'notes lack project commit links'
+            changed = rendered.split('## What changed\n', 1)[1].split('## Upgrading\n', 1)[0]
+            linked = set(re.findall(r'https://github\.com/donvargax/itos-container/commit/([0-9a-f]{40})', changed))
+            expected = set(run(['git', 'rev-list', bootstrap['range']], repo).splitlines())
+            assert linked == expected, f'notes commit range differs: missing={expected - linked}, extra={linked - expected}'
             assert 'https://github.com/donvargax/itos-template/commit/' not in rendered, 'notes still link template commits'
             assert state(repo) == snapshot, 'dry run changed scratch HEAD, refs or working files'
             print(output, end='')
