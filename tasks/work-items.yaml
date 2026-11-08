@@ -716,7 +716,7 @@ items:
   - id: T-34
     title: Engine fixture preparation passes again on today's CI runners
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
