@@ -289,8 +289,13 @@ func (r *overlapRun) active() bool {
 	if r.w.offline.api.identity(observed, r.worker) != nil || object(observed["State"])["Running"] != true {
 		return false
 	}
-	mounts, _ := observed["Mounts"].([]any)
-	if len(mounts) != 1 || object(mounts[0])["Source"] != r.w.doctor.checkout || object(mounts[0])["Destination"] != "/workspace" {
+	a := r.w.offline.api
+	a.mu.Lock()
+	anchor, err := a.observeMountAnchor(observed)
+	a.mu.Unlock()
+	record, recordErr := sessionReadRecord(r.intent)
+	view := &isolationRun{id: r.worker, sessionID: r.id, requests: []offlineRequest{{Method: "POST", Path: "/containers/" + r.worker + "/start", Observation: observed, Anchor: anchor, Record: record}}}
+	if err != nil || recordErr != nil || (&isolationWorld{w: r.w}).mountBoundary(view) != nil {
 		return false
 	}
 	data, err := os.ReadFile(filepath.Join(r.w.doctor.checkout, r.marker))
@@ -414,6 +419,12 @@ func (f *overlapFixture) preserved() error {
 		var owned []string
 		for _, r := range f.runs {
 			owned = append(owned, r.worker)
+		}
+		for _, w := range f.worlds {
+			resources, err = w.recoveryWithoutRetainedAnchor(resources)
+			if err != nil {
+				return err
+			}
 		}
 		if !reflect.DeepEqual(recoveryWithoutWorkers(resources, owned), recoveryWithoutWorkers(f.resources, owned)) {
 			return errors.New("overlap operation changed unrelated native resources")

@@ -21,20 +21,18 @@ func (w *world) recoveryProbeStart(args ...string) (*recoveryProbe, error) {
 	prefix := filepath.Join(w.dir, "slice-11-probe-"+strconv.Itoa(len(w.recovery.processes)))
 	p := &recoveryProbe{output: prefix + "-code", stdout: prefix + "-stdout", stderr: prefix + "-stderr", ready: prefix + "-ready", release: prefix + "-release"}
 	request := map[string]any{"Args": args, "Fault": w.recoveryLocal.fault, "Boundary": w.recoveryLocal.boundary, "ID": w.recoveryLocal.id, "Ready": p.ready, "Release": p.release, "Output": p.output, "Stdout": p.stdout, "Stderr": p.stderr}
+	if w.doctor.real == nil {
+		request["LocalMount"] = w.doctor.checkout
+	}
 	input := prefix + "-input.json"
 	if err = os.WriteFile(input, approvalJSON(request), 0600); err != nil {
 		return nil, err
 	}
-	original := w.bin
-	w.bin = bin
-	w.doctor.env["SLICE_11_REQUEST"] = input
 	arguments := []string{"-test.run=^TestPublicRecoveryCommand$", "-test.count=1"}
 	if cover := os.Getenv("GOCOVERDIR"); cover != "" {
 		arguments = append(arguments, "-test.gocoverdir="+cover)
 	}
-	p.process = w.recoveryStart(arguments...)
-	w.bin = original
-	delete(w.doctor.env, "SLICE_11_REQUEST")
+	p.process = w.recoveryStartConfigured(120*time.Second, bin, map[string]string{"SLICE_11_REQUEST": input}, arguments...)
 	return p, nil
 }
 func (w *world) recoveryProbeWait(p *recoveryProbe) error {

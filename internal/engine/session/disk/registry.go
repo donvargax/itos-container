@@ -232,6 +232,7 @@ func (s *publicSession) Save(next port.PublicRecord) port.Outcome {
 		return failure
 	}
 	if next.Schema != s.record.Schema || next.ID != s.record.ID || next.Project != s.record.Project || next.Intent != s.record.Intent ||
+		(s.record.MountDetector != "" && next.MountDetector != s.record.MountDetector) ||
 		(s.record.State == "stopped" && (next.State != "stopped" || (next.LastProblem != nil && *next.LastProblem != port.StreamTimeout))) ||
 		(s.record.WorkloadExit != nil && (next.WorkloadExit == nil || *next.WorkloadExit != *s.record.WorkloadExit)) {
 		return port.Refused

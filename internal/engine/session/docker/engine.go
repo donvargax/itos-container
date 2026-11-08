@@ -169,6 +169,11 @@ func (c *connection) Inspect(ctx context.Context, id string) (port.Observation, 
 	}
 	observed := port.Observation{ID: r.ID, Name: strings.TrimPrefix(r.Name, "/"), ImageID: r.Image, Token: r.Config.Labels["io.itos-container.intent"], Project: r.Config.Labels["io.itos-container.project"], Fingerprint: r.Config.Labels["io.itos-container.fingerprint"], StatePresent: r.State != nil}
 	observed.Mounts, observed.Volumes = len(r.Mounts) != 0, len(r.Config.Volumes) != 0
+	if r.HostConfig != nil && len(r.HostConfig.Mounts) == 1 {
+		m := r.HostConfig.Mounts[0]
+		observed.AnchorName = m.Source
+		observed.AnchorExact = safeAnchorMount(m, m.Source) && safeMounts(r.Mounts, m.Source)
+	}
 	if r.State != nil {
 		observed.Status = string(r.State.Status)
 		observed.Running = r.State.Running

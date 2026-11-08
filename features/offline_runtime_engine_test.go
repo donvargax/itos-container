@@ -23,6 +23,7 @@ import (
 type offlineRequest struct {
 	Method, Path, Query string
 	Body, Observation   map[string]any
+	Anchor              map[string]any
 	Record              sessionRecord
 	Status              int
 	Cancelled           bool
@@ -44,6 +45,7 @@ type offlineAPI struct {
 	problem     error
 	connections map[net.Conn]bool
 	identities  map[string]map[string]any
+	volumes     map[string]*anchorVolume
 	// Recovery faults belong only to the slice-11 fixture. Owned teardown is
 	// allowed for every run after the same full-ID and identity checks.
 	recovery    bool
@@ -66,7 +68,9 @@ func (w *world) startOfflineAPI() error {
 		return err
 	}
 	a := &offlineAPI{w: w, absent: map[string]bool{}, connections: map[net.Conn]bool{}, identities: map[string]map[string]any{}}
-	a.server = &http.Server{Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second, ConnState: func(c net.Conn, state http.ConnState) {
+	a.server = &http.Server{ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+		return context.WithValue(ctx, runPeerKey{}, runPeerPID(c))
+	}, Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second, ConnState: func(c net.Conn, state http.ConnState) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		switch state {
@@ -103,7 +107,7 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 		entry.Diagnostic = "recorder refused unsafe request"
 	}
 	a.requests[index] = entry
-	failRemove := allowed && a.failRemove && entry.Method == http.MethodDelete
+	failRemove := allowed && a.failRemove && entry.Method == http.MethodDelete && strings.HasPrefix(entry.Path, "/containers/")
 	fault := allowed && a.removalFault(entry)
 	if failRemove || fault {
 		a.requests[index].Status = http.StatusServiceUnavailable
@@ -146,6 +150,12 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 		case <-request.Context().Done():
 			return
 		}
+	}
+	if !a.anchorStart(request, entry) {
+		return
+	}
+	if a.anchorsBefore(out, request, entry, index) {
+		return
 	}
 	// ReverseProxy relays the attach upgrade in both directions and preserves
 	// half-close. Use the bare transport, without the inspection client's timeout:
@@ -237,7 +247,22 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 					a.requests[index].State = state
 				}
 			}
+			if entry.Method == "POST" && entry.Path == "/volumes/create" && response.StatusCode == http.StatusCreated {
+				name, _ := entry.Body["Name"].(string)
+				v := a.anchorVolumes()[name]
+				if v == nil || !anchorVolumeMatches(v, observed) {
+					a.problem = errors.New("native anchor create reply differs from requested identity")
+				} else {
+					// The create reply is not the independent ownership observation.
+					v.observed, err = a.anchorInspect(v)
+					if err != nil {
+						a.problem = err
+					}
+					v.beforeWorker = len(a.created) == 0
+				}
+			}
 			a.mu.Unlock()
+			a.anchorsResponse(request, entry, response.StatusCode)
 			if a.lifecycle != nil {
 				a.lifecycle.response(request, entry, response.StatusCode)
 			}
@@ -297,6 +322,9 @@ func (b *offlineWaitBody) Close() error {
 // mistaken for product-enforced isolation. Only owned IDs may be mutated.
 func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	w := a.w
+	if strings.HasPrefix(entry.Path, "/volumes/") {
+		return a.anchorVolumeAllowed(r, entry)
+	}
 	if doctorAllowedRequest(doctorRequest{Method: r.Method, Path: r.URL.Path, Query: r.URL.RawQuery}, w.doctor.image, true) ||
 		(r.Method == "GET" && entry.Path == "/images/"+w.doctor.imageID+"/json" && r.URL.RawQuery == "") {
 		return true
@@ -314,6 +342,9 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		w.session.reference = "intents/" + w.approval.project + "/" + token + ".json"
 		var err error
 		entry.Record, err = sessionReadRecord(w.sessionRecordPath())
+		if err == nil {
+			entry.Anchor, err = a.observeCreateAnchor(entry.Body)
+		}
 		if err != nil {
 			a.problem = err
 		}
@@ -358,6 +389,11 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 			}
 			return true
 		case "start":
+			entry.Anchor, err = a.observeMountAnchor(observed)
+			if err != nil {
+				a.problem = err
+				return false
+			}
 			return r.URL.RawQuery == "" && a.safeObserved(observed)
 		case "kill":
 			return len(r.URL.Query()) == 1 && len(r.URL.Query()["signal"]) == 1 &&
@@ -428,6 +464,11 @@ func (a *offlineAPI) safeCreate(body map[string]any) bool {
 				return false
 			}
 			temps++
+		case "volume":
+			if !a.anchorMount(m) {
+				return false
+			}
+			binds++
 		default:
 			return false
 		}
@@ -535,6 +576,9 @@ func (a *offlineAPI) cleanup() error {
 			continue
 		}
 		result = errors.Join(result, a.w.doctor.real.read("/containers/"+id+"/json", nil, 404))
+	}
+	if result == nil {
+		result = a.cleanupAnchorVolumes(ctx)
 	}
 	return result
 }

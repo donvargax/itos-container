@@ -36,22 +36,25 @@ type world struct {
 	deadline       time.Duration
 	timedOut       bool
 
-	stdin         string // the text the run reads from its standard input, "" for none
-	policy        *policyWorld
-	manifest      *manifestWorld
-	doctor        *doctorWorld
-	approval      *approvalWorld
-	run           *runWorld
-	session       *sessionWorld
-	offline       *offlineRuntime
-	sockets       *socketWorld
-	recovery      *recoveryNative
-	recoveryLocal *recoveryLocal
-	lifecycle     *lifecycleNative
-	loss          *lifecycleLoss
-	overlap       *overlapFixture
-	hardlinks     *hardlinkWorld
-	duringQuiet   func() // Selected independent cases inside a stable quiet-worker lifetime.
+	stdin               string // the text the run reads from its standard input, "" for none
+	policy              *policyWorld
+	manifest            *manifestWorld
+	doctor              *doctorWorld
+	approval            *approvalWorld
+	run                 *runWorld
+	session             *sessionWorld
+	offline             *offlineRuntime
+	sockets             *socketWorld
+	anchor              *anchorWorld
+	anchors             *anchorRecoveryWorld
+	anchorLocalRecovery *anchorRecoveryLocal
+	recovery            *recoveryNative
+	recoveryLocal       *recoveryLocal
+	lifecycle           *lifecycleNative
+	loss                *lifecycleLoss
+	overlap             *overlapFixture
+	hardlinks           *hardlinkWorld
+	duringQuiet         func() // Selected independent cases inside a stable quiet-worker lifetime.
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
@@ -59,10 +62,11 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 		return ctx, w.setUp()
 	})
+	sc.StepContext().After(w.reportMountDiagnosticFailure)
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeSockets(), w.closeSession())
+		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession())
 		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
@@ -167,6 +171,8 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w.recoveryNativeSteps(sc)
 	w.recoveryLocalSteps(sc)
 	w.offlineIsolationSteps(sc)
+	w.anchorSteps(sc)
+	w.anchorRecoverySteps(sc)
 	w.socketSteps(sc)
 	w.lifecycleNativeSteps(sc)
 	w.lifecycleLossSteps(sc)
@@ -453,7 +459,12 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err := w.startLocalCommand(cmd)
+	if err == nil {
+		err = cmd.Wait()
+	}
+	unlock := w.lockLocalAPI()
+	defer unlock()
 	w.timedOut = errors.Is(ctx.Err(), context.DeadlineExceeded)
 	w.stdout, w.stderr = stdout.String(), stderr.String()
 	var exit *exec.ExitError
@@ -466,6 +477,33 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 		return fmt.Errorf("running %s: %w", program, err)
 	}
 	return nil
+}
+
+// A subprocess/HTTP exchange is not Go memory synchronization. Guard child
+// startup and result publication with the same locks as the fixture handlers.
+// Session handlers may call doctor handlers, so acquire their locks in that order.
+func (w *world) lockLocalAPI() func() {
+	if w.session != nil && w.session.api != nil {
+		w.session.api.mu.Lock()
+	}
+	if w.doctor != nil && w.doctor.engine != nil {
+		w.doctor.engine.mu.Lock()
+	}
+	return func() {
+		if w.doctor != nil && w.doctor.engine != nil {
+			w.doctor.engine.mu.Unlock()
+		}
+		if w.session != nil && w.session.api != nil {
+			w.session.api.mu.Unlock()
+		}
+	}
+}
+
+func (w *world) startLocalCommand(cmd *exec.Cmd) error {
+	unlock := w.lockLocalAPI()
+	defer unlock()
+	// Release before waiting: the running child must be able to contact the API.
+	return cmd.Start()
 }
 
 // Fixture steps.

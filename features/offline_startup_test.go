@@ -11,6 +11,30 @@ import (
 
 // Only a disposable HTTP server is used here, never a native engine. Model the
 // engine's inspected representation independently of the product create body.
+func offlineStartupWorld(t *testing.T, native http.Handler) *world {
+	t.Helper()
+	var w *world
+	var volume map[string]any
+	w = offlineRecorderWorld(t, http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/volumes/itos-container-anchor-"+w.session.token {
+			_ = json.NewEncoder(out).Encode(volume)
+			return
+		}
+		native.ServeHTTP(out, r)
+	}))
+	name := "itos-container-anchor-" + w.session.token
+	labels := approvalClone(w.sessionLabels())
+	labels["io.itos-container.session"], labels["io.itos-container.kind"] = strings.Repeat("c", 64), "checkout-anchor"
+	labels["io.itos-container.device"], labels["io.itos-container.inode"] = "2049", "42"
+	options := map[string]any{"type": "none", "o": "bind", "device": "/proc/123/fd/7"}
+	volume = map[string]any{
+		"Name": name, "Driver": "local", "Scope": "local", "CreatedAt": "2026-11-07T00:00:00Z",
+		"Mountpoint": "/var/lib/docker/volumes/" + name + "/_data", "Labels": labels, "Options": options,
+	}
+	w.offline.api.volumes = map[string]*anchorVolume{name: {name: name, labels: approvalClone(labels), options: approvalClone(options), observed: approvalClone(volume)}}
+	return w
+}
+
 func offlineStartupInspection(w *world, id string) map[string]any {
 	return map[string]any{
 		"Id": id, "Name": "/itos-container-" + w.session.token, "Image": w.doctor.imageID,
@@ -19,8 +43,8 @@ func offlineStartupInspection(w *world, id string) map[string]any {
 		"HostConfig": map[string]any{
 			"NetworkMode": "none", "ReadonlyRootfs": true,
 			"CapDrop": []any{"ALL"}, "SecurityOpt": []any{"no-new-privileges=true"},
-			"Mounts": []any{map[string]any{"Type": "bind", "Source": w.doctor.checkout, "Target": "/workspace",
-				"BindOptions": map[string]any{"NonRecursive": true, "Propagation": "rprivate"}}},
+			"Mounts": []any{map[string]any{"Type": "volume", "Source": "itos-container-anchor-" + w.session.token, "Target": "/workspace",
+				"VolumeOptions": map[string]any{"NoCopy": true}}},
 			"Tmpfs": map[string]any{"/tmp": "rw,nosuid,nodev,mode=1777"},
 		},
 	}
@@ -33,7 +57,7 @@ func TestOfflineRecorderStartsNormalizedInspections(t *testing.T) {
 			id := strings.Repeat("a", 64)
 			var w *world
 			forwarded := make(chan struct{}, 1)
-			w = offlineRecorderWorld(t, http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
+			w = offlineStartupWorld(t, http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
 				if r.Method == "GET" && r.URL.Path == "/containers/"+id+"/json" {
 					observed := offlineStartupInspection(w, id)
 					object(observed["HostConfig"])["SecurityOpt"] = options
@@ -77,7 +101,7 @@ func TestSocketStartupFailureDistinguishesRecorderRefusal(t *testing.T) {
 func TestSocketStartupFailureIncludesControllerAndEngineDiagnostics(t *testing.T) {
 	id := strings.Repeat("a", 64)
 	var w *world
-	w = offlineRecorderWorld(t, http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
+	w = offlineStartupWorld(t, http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			observed := offlineStartupInspection(w, id)
 			object(observed["HostConfig"])["SecurityOpt"] = []any{"no-new-privileges"}

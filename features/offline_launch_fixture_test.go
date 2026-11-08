@@ -18,6 +18,8 @@ type offlineTrace struct {
 	Observation            sessionMemoryObservation
 	Status, Exit           int
 	Writes                 []sessionEvent
+	Anchor                 map[string]any
+	Source                 map[string]any
 }
 
 type offlineLaunchWorld struct {

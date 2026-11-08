@@ -29,7 +29,8 @@ type Streams struct {
 }
 
 type RunResult struct {
-	Stream Outcome
+	MountDiagnostic MountDiagnostic
+	Stream          Outcome
 	// Teardown retains a cleanup deadline failure separately from the run cause.
 	Teardown  Outcome
 	Operation string
@@ -61,6 +62,7 @@ type RunEngine interface {
 }
 type RunConnection interface {
 	Connection
+	AnchorConnection
 	CreateRun(context.Context, Record, []string) (string, Outcome)
 	VerifyRun(context.Context, string, []string) Outcome
 	Attach(context.Context, string, Streams) (Attachment, Outcome)

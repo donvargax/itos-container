@@ -37,6 +37,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	input := prefix + "-input.json"
 	request := map[string]string{"Action": action, "Backend": s.backend, "Reference": reference, "Token": s.token, "Fault": s.fault, "Umask": s.umask, "Output": output, "Checkpoint": selected, "Journal": s.journal}
 	request["Boundary"] = s.boundary
+	request["AnchorFault"], request["AnchorFixture"] = s.anchorFault, strconv.FormatBool(s.anchorFixture)
 	if s.launch != nil {
 		request["LaunchBarrier"], request["ReplacedPath"] = s.launch.barrier, s.launch.replaced
 		request["CleanupCause"], request["ChildExit"] = s.launch.cause, strconv.Itoa(s.launch.child)
@@ -79,7 +80,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 		return result, err
 	}
 	defer func() { _ = stdin.Close() }()
-	if err := cmd.Start(); err != nil {
+	if err := w.startLocalCommand(cmd); err != nil {
 		return result, err
 	}
 	done := make(chan error, 1)
@@ -185,22 +186,24 @@ func (w *world) sessionProbeBinary() (string, error) {
 	if covered {
 		path += "-cover"
 	}
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	args := []string{"test", "-c", "./cmd/itos-container", "-o", path}
-	if covered {
-		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
-	}
-	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Dir, cmd.Env = w.root, sessionChildEnvironment(os.Environ())
-	data, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("build session test assembly: %w\n%s", err, data)
-	}
-	return path, nil
+	// Portable manifest/approval fixtures also use this assembly. Their suite
+	// path need not have an extension, while Windows executable lookup needs one.
+	path += ".exe"
+	return featureBinary(path, func(target string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		args := []string{"test", "-c", "./cmd/itos-container", "-o", target}
+		if covered {
+			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
+		}
+		cmd := exec.CommandContext(ctx, "go", args...)
+		cmd.Dir, cmd.Env = w.root, sessionChildEnvironment(os.Environ())
+		data, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("build session test assembly: %w\n%s", err, data)
+		}
+		return nil
+	})
 }
 
 func sessionChildEnvironment(env []string) []string {

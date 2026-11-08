@@ -36,7 +36,7 @@ func (w *lifecycleWorkspaceFault) Close() {
 
 func lifecycleWorkspaceRevalidationCase(t *testing.T, cause, phase, backend string) {
 	l := lifecycleLocalFixture(t, backend)
-	w := &lifecycleWorkspaceFault{blockAt: 1, entered: make(chan struct{}), release: make(chan struct{})}
+	w := &lifecycleWorkspaceFault{Workspace: *sf.MountWorkspace(l.m.b), blockAt: 1, entered: make(chan struct{}), release: make(chan struct{})}
 	if phase == "start" {
 		w.blockAt = 2
 	}
@@ -109,7 +109,9 @@ func lifecycleWorkspaceRevalidationCase(t *testing.T, cause, phase, backend stri
 	// port. A completed mismatch must still refuse; an unchanged pin must run.
 	for _, changed := range []bool{false, true} {
 		control := lifecycleLocalFixture(t, backend)
-		control.workspace = &sf.Workspace{Changed: changed}
+		space := sf.MountWorkspace(control.m.b)
+		space.Changed = changed
+		control.workspace = space
 		code, diagnostic, _ := control.invoke(context.Background())
 		if changed {
 			if code != 1 || !strings.Contains(diagnostic, "run.ownership") || control.count("create") != 0 || control.count("start") != 0 {

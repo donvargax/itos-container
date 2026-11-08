@@ -63,7 +63,8 @@ Feature: Inspect and stop owned offline sessions
   # JSON contract: {schema:1, ok:bool, problems:[], sessions:[]} for both commands.
   # Stop's successful sessions array contains its one session. Status sorts by ID.
   # Each validated entry has id, project, fingerprint, state, resource, controller,
-  # cleanup, workload_exit, stop_candidate and retry. Project/fingerprint come from
+  # cleanup, workload_exit, stop_candidate and retry, plus optional mount_detector
+  # as specified by q-39 below. Project/fingerprint come from
   # the original binding, never current requests. workload_exit is an observed
   # integer or null; a resource's running=false/default ExitCode is not observation.
   # Resource is created/running/exited/absent/unknown; controller is present/absent/
@@ -114,7 +115,10 @@ Feature: Inspect and stop owned offline sessions
   #
   # Protected record choice: sessions/<lookup>/<id>/record.json beside approvals,
   # snapshots and intents under the existing state root. A schema-1 record has
-  # exactly schema, id, project, intent, state, workload_exit and last_problem.
+  # schema, id, project, intent, state, workload_exit and last_problem. Q-39 adds
+  # optional mount_detector: verified, not observed: worker exited, or refused.
+  # Once recorded it is immutable and appears in JSON/text status. Missing legacy
+  # data never claims verification. No other fields or detector values are valid.
   # intent is the exact relative intents/<project>/<token>.json reference; state
   # is one of the six lifecycle values; workload_exit is null or integer 0..255;
   # last_problem is null or a typed failure identifier, never arbitrary text.

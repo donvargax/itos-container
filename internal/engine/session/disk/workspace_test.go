@@ -163,3 +163,34 @@ func TestWorkspacePinClosesHandlesOnChildFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkspacePinClosesHandleOnRootStatFailure(t *testing.T) {
+	b := port.Binding{Workspace: "/workspace"}
+	b.Checkout.Root = t.TempDir()
+	var opened *os.Root
+	w := &Workspace{ops: &workspaceOperations{openRoot: func(path string) (*os.Root, error) {
+		if path != b.Checkout.Root {
+			t.Fatalf("opened different checkout: %s", path)
+		}
+		root, err := os.OpenRoot(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		opened = root
+		// Fail the stat on the real descriptor after the root open succeeds.
+		if err := root.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return root, nil
+	}}}
+	t.Cleanup(w.Close)
+	if failure := w.Pin(b); failure != port.Refused {
+		t.Fatal("unreadable root acquired authority", failure)
+	}
+	if opened == nil || len(w.roots) != 0 || w.Validate() != port.Refused {
+		t.Fatal("failed root stat retained workspace authority")
+	}
+	if source, failure := w.Source(); failure != port.MountRefused || source != (port.MountSource{}) {
+		t.Fatal("failed root stat supplied a mount source", source, failure)
+	}
+}

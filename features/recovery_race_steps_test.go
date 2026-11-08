@@ -102,8 +102,9 @@ func (w *world) recoveryRaceSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^stop is attempted, the fault is cleared, a same-named foreign worker is seeded and a fresh process retries stop$`, func() error {
 		l := w.recoveryLocal
 		if l.fault == "controller death after removal" {
+			ready := l.afterRemoveReady
 			p := w.recoveryStart("stop", "--json", l.id)
-			l.barrierReached = recoveryBarrier(l.afterRemoveReady, p)
+			l.barrierReached = recoveryBarrier(ready, p)
 			if l.barrierReached {
 				if err := p.killController(); err != nil {
 					return err

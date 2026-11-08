@@ -110,9 +110,6 @@ func (a *sessionAPI) serveRecovery(out http.ResponseWriter, r *http.Request, q s
 		_ = buffer.Flush()
 	case len(parts) == 2 && parts[1] == "start" && q.Method == "POST" && l.runFixture:
 		c["State"] = map[string]any{"Status": "running", "Running": true, "Pid": 123, "StartedAt": "2026-01-01T00:00:00Z"}
-		if !l.keepRunning {
-			a.recoveryExit(c)
-		}
 		status = 204
 	case len(parts) == 2 && parts[1] == "kill" && q.Method == "POST":
 		signal := r.URL.Query().Get("signal")
@@ -125,6 +122,9 @@ func (a *sessionAPI) serveRecovery(out http.ResponseWriter, r *http.Request, q s
 		}
 		status = 204
 	case len(parts) == 2 && parts[1] == "wait" && q.Method == "POST":
+		if l.runFixture && !l.keepRunning {
+			a.recoveryExit(c)
+		}
 		if object(c["State"])["Running"] == true {
 			a.mu.Unlock()
 			select {

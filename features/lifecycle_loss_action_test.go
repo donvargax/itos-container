@@ -170,7 +170,14 @@ func (w *world) lossObserveWorker(r *lossRound) error {
 	}
 	a.mu.Lock()
 	err = a.identity(observed, w.recovery.worker)
+	if err == nil {
+		r.anchor, err = a.observeMountAnchor(observed)
+	}
 	a.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	r.intent, err = sessionReadRecord(w.sessionRecordPath())
 	if err != nil {
 		return err
 	}

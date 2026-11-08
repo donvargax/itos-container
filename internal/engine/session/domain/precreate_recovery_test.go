@@ -107,7 +107,7 @@ func TestRegisteredRunPreservesPrecreateStopResult(t *testing.T) {
 				writes, syncs, intentEvents = registry.Writes, registry.Syncs, len(store.Events)
 			}
 			runner := domain.Runner{Store: store, Registry: registry, Engine: runEngine,
-				Entropy: &f.EntropySequence{Values: []f.Entropy{{Value: id}, {Value: token}}}, Workspace: &f.Workspace{}}
+				Entropy: &f.EntropySequence{Values: []f.Entropy{{Value: id}, {Value: token}}}, Workspace: f.MountWorkspace(b)}
 			started := time.Now()
 			result := runner.Run(t.Context(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
 			if result.Deadline.Before(started.Add(30*time.Second)) || result.Deadline.After(time.Now().Add(30*time.Second)) {

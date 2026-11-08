@@ -17,13 +17,14 @@ const (
 
 // PublicRecord contains progress only. Its intent supplies the original authority.
 type PublicRecord struct {
-	Schema       int      `json:"schema"`
-	ID           string   `json:"id"`
-	Project      string   `json:"project"`
-	Intent       string   `json:"intent"`
-	State        string   `json:"state"`
-	WorkloadExit *int     `json:"workload_exit"`
-	LastProblem  *Outcome `json:"last_problem"`
+	MountDetector string   `json:"mount_detector,omitempty"`
+	Schema        int      `json:"schema"`
+	ID            string   `json:"id"`
+	Project       string   `json:"project"`
+	Intent        string   `json:"intent"`
+	State         string   `json:"state"`
+	WorkloadExit  *int     `json:"workload_exit"`
+	LastProblem   *Outcome `json:"last_problem"`
 }
 
 type PublicCodec interface {
@@ -64,6 +65,8 @@ type RunRegistry interface {
 }
 
 type RecoveryEntry struct {
+	MountDetector string   `json:"mount_detector,omitempty"`
+	Anchor        string   `json:"anchor,omitempty"`
 	ID            string   `json:"id"`
 	Project       string   `json:"project"`
 	Fingerprint   string   `json:"fingerprint"`

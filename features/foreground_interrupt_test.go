@@ -58,7 +58,9 @@ func (w *world) foregroundInterruptSteps(sc *godog.ScenarioContext) {
 	})
 	var aborted, signaled bool
 	sc.Step(`^the run preflight is held at fresh image inspection$`, func() {
+		w.doctor.engine.mu.Lock()
 		w.doctor.engine.paused = true
+		w.doctor.engine.mu.Unlock()
 	})
 	sc.Step(`^the run receives "([^"]*)" during preflight$`, func(name string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

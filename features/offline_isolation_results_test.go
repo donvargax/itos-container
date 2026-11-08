@@ -18,6 +18,9 @@ func isolationRecord(run *isolationRun, stage string) error {
 	}
 	expected := approvalClone(run.expected)
 	expected["stage"] = stage
+	if expected["schema"] == float64(2) {
+		object(expected["anchor"])["stage"] = stage
+	}
 	if run.record.Mode != 0600 || run.record.UID != expected["uid"] || !reflect.DeepEqual(actual, expected) {
 		return errors.New("protected record lacks the exact original ownership and completion state")
 	}
@@ -180,6 +183,17 @@ func (s *isolationWorld) preserved() error {
 			}
 		}
 		after["/containers/json?all=1"] = strings.Join(keep, "\n")
+		anchor := object(s.runs[1].expected["anchor"])
+		name, _ := anchor["name"].(string)
+		v := s.w.offline.api.anchorVolumes()[name]
+		if v == nil || !anchorVolumeMatches(v, v.observed) {
+			return errors.New("retained anchor lacks independent original ownership")
+		}
+		var observed map[string]any
+		if s.w.doctor.real.read("/volumes/"+name, &observed, 200) != nil || !anchorVolumeMatches(v, observed) {
+			return errors.New("retained anchor changed after failed worker removal")
+		}
+		after = anchorsWithoutVolume(after, name)
 	}
 	if before == nil || after == nil || !reflect.DeepEqual(before, after) {
 		return errors.New("unrelated resources, networks, persistent volumes or image references changed")
