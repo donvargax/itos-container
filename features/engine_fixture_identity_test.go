@@ -44,6 +44,16 @@ func testFixtureImageStores(t *testing.T, built, other, manifest string) {
 				})
 			}
 		}
+		for _, body := range []string{
+			strings.ReplaceAll(manifest, `"schemaVersion":2`, `"schemaVersion":1`),
+			strings.ReplaceAll(manifest, "application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.index.v1+json"),
+			strings.ReplaceAll(manifest, `"config":`, `"manifests":[],"config":`),
+			strings.ReplaceAll(manifest, `{"digest":"`+built+`"}`, `null`),
+		} {
+			digest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(body)))
+			stdout, stderr, err := runFixtureValidator(t, "validate_manifest", fixtureResponseFile(t, "manifest.json", body), fixtureResponseFile(t, "headers", "Docker-Content-Digest: "+digest+"\r\n"), digest, built)
+			requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: manifest validation"), "containerd identity bypassed manifest validation: %v %s", err, stderr)
+		}
 	})
 
 	t.Run("daemon export config", func(t *testing.T) {
@@ -61,9 +71,23 @@ func testFixtureImageStores(t *testing.T, built, other, manifest string) {
 			stdout, stderr, err := runFixtureValidator(t, "daemon_config_path", fixtureResponseFile(t, "export.json", body))
 			requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: daemon export"), "invalid export accepted or undiagnosed: %v %s %s", err, stdout, stderr)
 		}
-		for _, body := range []string{config + " ", strings.ReplaceAll(config, "amd64", "arm64"), strings.ReplaceAll(config, "linux", "windows"), strings.ReplaceAll(config, `{"User":"1001:1002"}`, `null`), "{", "", config + config} {
-			stdout, stderr, err := runFixtureValidator(t, "daemon_config_digest", fixtureResponseFile(t, "config.json", body), "blobs/sha256/"+hex)
-			requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: daemon config"), "invalid raw config accepted or undiagnosed: %v %s %s", err, stdout, stderr)
+		stdout, stderr, err := runFixtureValidator(t, "daemon_config_digest", fixtureResponseFile(t, "config.json", config+" "), "blobs/sha256/"+hex)
+		requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: daemon config bytes"), "raw config byte mismatch accepted: %v %s", err, stderr)
+		for _, body := range []string{strings.ReplaceAll(config, "amd64", "arm64"), strings.ReplaceAll(config, "linux", "windows"), strings.ReplaceAll(config, `{"User":"1001:1002"}`, `null`), "{", "", config + config} {
+			member := fmt.Sprintf("blobs/sha256/%x", sha256.Sum256([]byte(body)))
+			stdout, stderr, err := runFixtureValidator(t, "daemon_config_digest", fixtureResponseFile(t, "config.json", body), member)
+			requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: daemon config validation"), "invalid raw config accepted or undiagnosed: %v %s %s", err, stdout, stderr)
+		}
+		missing := filepath.Join(t.TempDir(), "absent")
+		for _, tc := range []struct {
+			function, diagnostic string
+			args                 []string
+		}{
+			{"daemon_config_path", "daemon export metadata", []string{missing}},
+			{"daemon_config_digest", "daemon config hashing", []string{missing, "blobs/sha256/" + hex}},
+		} {
+			stdout, stderr, err := runFixtureValidator(t, tc.function, tc.args...)
+			requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: "+tc.diagnostic), "missing export file lost diagnostic: %v %s", err, stderr)
 		}
 	})
 
