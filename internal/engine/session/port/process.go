@@ -1,5 +1,9 @@
 package port
 
+// ProcessAbsent means the inspected PID no longer names a process. It is a
+// reason to reconcile with the engine, never proof of the owned worker's exit.
+const ProcessAbsent Outcome = "process-absent"
+
 const (
 	DetectorVerified = "verified"
 	DetectorExited   = "not observed: worker exited"

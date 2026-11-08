@@ -86,6 +86,9 @@ func (w *world) anchorExitSteps(sc *godog.ScenarioContext) {
 			if e == "pidfd-close" {
 				closes++
 			}
+			if e == "pidfd-open-absent" {
+				opens-- // Failed acquisition creates no handle to release.
+			}
 			if e == "SIGKILL" || e == "SIGTERM" {
 				return fmt.Errorf("signaled exited worker: %v", result.Events)
 			}
@@ -94,6 +97,9 @@ func (w *world) anchorExitSteps(sc *godog.ScenarioContext) {
 			return fmt.Errorf("process handle lifetime: %v", result.Events)
 		}
 		return nil
+	})
+	sc.Step(`^the detector awaits the engine exit notification before accepting the unobserved result$`, func() error {
+		return runExitOrder(runExitObservation{Events: result.Events}, "inspect:123", "engine-exit-wait", "inspect:0")
 	})
 	sc.Step(`^the detector pins the inspected PID and refuses its changed identity before reading any mount$`, func() error {
 		if result.Run.Exit == 0 || !strings.Contains(result.Run.Stderr, "run.mount-refused") || slices.Contains(result.Events, "mounted-stat") {

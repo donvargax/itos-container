@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/cli"
@@ -81,6 +82,7 @@ type anchorExitWorkspace struct {
 	mode            string
 	journal         *runExitJournal
 	started, exited bool
+	exitPending     bool
 }
 
 func (w *anchorExitWorkspace) exit() {
@@ -93,6 +95,11 @@ func (w *anchorExitWorkspace) exit() {
 
 func (w *anchorExitWorkspace) HoldProcess(pid int) (sp.Process, sp.Outcome) {
 	w.journal.add("pidfd-open:" + strconv.Itoa(pid))
+	if w.mode == "before pidfd open with delayed engine exit" {
+		w.exited, w.exitPending = true, true
+		w.journal.add("pidfd-open-absent")
+		return nil, sp.ProcessAbsent
+	}
 	if w.mode == "PID reused" {
 		for id, o := range w.engine.Resources {
 			o.PID = 456
@@ -104,11 +111,20 @@ func (w *anchorExitWorkspace) HoldProcess(pid int) (sp.Process, sp.Outcome) {
 
 type anchorExitProcess struct{ w *anchorExitWorkspace }
 
-func (p *anchorExitProcess) Exited() (bool, sp.Outcome) { return p.w.exited, "" }
-func (p *anchorExitProcess) Close()                     { p.w.journal.add("pidfd-close") }
+func (p *anchorExitProcess) Exited() (bool, sp.Outcome) {
+	if p.w.mode == "before stat with delayed engine exit" {
+		p.w.exited, p.w.exitPending = true, true
+	}
+	return p.w.exited, ""
+}
+func (p *anchorExitProcess) Close() { p.w.journal.add("pidfd-close") }
 
 func (w *anchorExitWorkspace) Mounted(pid int) (sp.MountSource, sp.Outcome) {
 	w.journal.add("mounted-stat")
+	if w.mode == "during stat with delayed engine exit" {
+		w.exited, w.exitPending = true, true
+		return sp.MountSource{}, sp.MountRefused
+	}
 	if w.mode == "between inspect and stat" {
 		w.exit()
 		return sp.MountSource{}, sp.MountRefused
@@ -140,4 +156,20 @@ func (c anchorExitConnection) Inspect(ctx context.Context, id string) (sp.Observ
 		c.w.journal.add("inspect:" + strconv.Itoa(o.PID))
 	}
 	return o, s
+}
+
+func (c anchorExitConnection) Wait(ctx context.Context, id string) (int, sp.Outcome) {
+	if c.w.exitPending {
+		c.w.journal.add("engine-exit-wait")
+		c.w.exitPending = false
+		c.w.exit()
+	}
+	return c.RunConnection.Wait(ctx, id)
+}
+
+func (w *anchorExitWorkspace) MountError() sp.MountSystemError {
+	if strings.HasPrefix(w.mode, "before pidfd open") {
+		return sp.MountSystemError{Errno: 3, Message: "no such process"}
+	}
+	return sp.MountSystemError{}
 }

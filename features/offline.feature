@@ -847,6 +847,31 @@ Feature: Hardened offline foreground run
       | 0    | between inspect and stat |
       | 7    | between inspect and stat |
 
+  # Docker can still report running after the kernel has reported process
+  # absence. Q-39 requires the real result, not an immediate mount refusal.
+  # The fixture keeps inspections running until an exact-ID engine wait yields
+  # the exit. Reconcile within the existing 10-second call budget, then freshly
+  # validate owned exited state. A still-running or changed worker, unavailable
+  # wait or deadline cannot supply exit evidence. Ordinary syscall failures do
+  # not authorize waiting; preserve immediate refusal and PID-reuse guards.
+  @slice-17 @ID-OFFLINE-36 @wip
+  Scenario Outline: Kernel exit preceding Docker state publication retains the workload result
+    Given an anchor detector fixture with exit <exit> at "<checkpoint>"
+    When the registered command runs and fresh status reads its completed record
+    Then the command returns workload exit <exit> without a mount refusal and completes owned cleanup
+    And the durable record and JSON and text status report "not observed: worker exited" for the mount detector
+    And the detector releases every process handle and never signals the exited worker
+    And the detector awaits the engine exit notification before accepting the unobserved result
+
+    Examples:
+      | exit | checkpoint                                    |
+      | 0    | before pidfd open with delayed engine exit     |
+      | 7    | before pidfd open with delayed engine exit     |
+      | 0    | before stat with delayed engine exit           |
+      | 7    | before stat with delayed engine exit           |
+      | 0    | during stat with delayed engine exit           |
+      | 7    | during stat with delayed engine exit           |
+
   @slice-17 @ID-OFFLINE-34
   Scenario: A fresh inspection prevents a reused init PID from verifying the mount
     Given an anchor detector fixture with exit 0 at "PID reused"
