@@ -687,7 +687,7 @@ items:
     depends_on: []
     kind: task
   - id: p1-feature-suite-race-memory
-    title: The feature suite under the race detector stays within a few GB
+    title: The feature suite stays within a few GB, with or without the race detector
     phase: 1
     owner: null
     status: todo
@@ -701,3 +701,9 @@ items:
       GB also points at state kept across scenarios (buffers, fixtures, goroutines) that a long
       suite accumulates. Find what grows per scenario (a heap profile across the suite) and release
       it, so a full race run fits comfortably; until then agents race only the packages they change.
+
+      Worse than first measured (2026-11-08 06:10 UTC): without -race too, a full go test ./features
+      run grew features.test to 9.3 GB anonymous RSS, and the loop's 10 GB per-agent memory cap
+      OOM-killed it. So agents cannot currently run the full feature suite inside a sane limit; the
+      growth is in the suite, not only in the race detector. Profile the heap across the suite and
+      release what each scenario keeps.
