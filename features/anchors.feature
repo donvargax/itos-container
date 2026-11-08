@@ -489,7 +489,7 @@ Feature: Recover owned checkout mount anchors
   # A reserved or cancelled intent with no worker ID proves create was never
   # issued. Cleanup must still release its allocated anchor; later status must
   # retain that worker fact while independently inspecting the original volume.
-  @slice-17 @ID-ANCHORS-14 @linux @wip
+  @slice-17 @ID-ANCHORS-14 @linux
   Scenario Outline: Cancelling an anchored launch before worker creation remains complete in status
     Given an anchor recovery fixture with an allocated volume and a no-create "<stage>" intent
     When fresh anchor stop processes run twice and status follows through both local backends

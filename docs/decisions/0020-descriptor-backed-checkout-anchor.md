@@ -447,3 +447,37 @@ detector values; their ownership, preservation and unknown-field refusals remain
 The native engine suite and fresh changed-code proof still belong to CI at the
 actual pushed head. No native engine, local mutation run, or new support claim
 is part of this local verification.
+
+## No-create status review correction
+
+PR thread `PRRT_kwDOVkB0ws60-04h` exposed a schema-2 recovery defect. After
+stop cancelled a launch before worker creation and released its anchor, status
+looked up the never-created worker by name and reported uncertainty. A validated
+reserved or cancelled intent with no worker ID already proves worker absence.
+Status now preserves that fact for either schema and still independently opens
+the original engine and inspects the anchor for schema 2. Unavailable or foreign
+anchor observations cannot claim complete cleanup. Unsafe session evidence
+cannot supply the no-create fact; uncertain create intents retain their existing
+inspection and refusal behavior. Status remains read-only.
+
+The red step commit `a5bf597` adds ID-ANCHORS-14 with reserved and cancelled
+rows. With `@wip` removed, both rows failed at their first Then through the
+memory and disk/SDK backends: stop succeeded but subsequent status returned 75
+with worker unknown and cleanup unknown. They pass after the correction,
+including repeated stop, exact durable cancellation, one original anchor release,
+no worker lookup and preservation of unrelated resources. The shared completion
+oracle now expects a cancelled intent with an empty worker ID for these rows;
+created-worker cases still require their recorded full ID and absent stage.
+
+Focused domain cases cover retained and absent anchors, foreign or unavailable
+observations, engine connection failure and unsafe session evidence. The session
+domain and the no-create command regression pass under targeted race detection.
+The full engine-disabled feature suite passes without race detection in 175.378
+seconds. No full-feature race run or local mutation run was made.
+
+The supplied CI report for run 42459248613 at `8e6655a` lists native scenario
+failures but supplies no assertion diagnostics. That head already includes
+q-39's short-lived workload correction. This status fix does not establish a
+cause or resolution for those native failures; the coordinator must supply the
+first failing assertions or full engine log to continue that diagnosis. Native
+engine execution and fresh changed-code proof remain CI responsibilities.

@@ -32,7 +32,7 @@ func (w *world) anchorRecoveryNoCreateDurable() error {
 	a := w.anchorLocalRecovery
 	deletes, inspections := 0, 0
 	for _, q := range w.sessionRequests() {
-		if strings.HasPrefix(q.Path, "/containers/") && !strings.Contains(q.Path, strings.Repeat("c", 63)+"2") {
+		if strings.HasPrefix(q.Path, "/containers/") && (q.Method != "GET" || q.Path != "/containers/"+strings.Repeat("c", 63)+"2/json") {
 			return fmt.Errorf("no-create session contacted a worker: %s %s", q.Method, q.Path)
 		}
 		if q.Path == "/volumes/"+a.name {
@@ -47,12 +47,5 @@ func (w *world) anchorRecoveryNoCreateDurable() error {
 	if deletes != 1 || inspections == 0 || w.session.api.volumes[a.name] != nil {
 		return fmt.Errorf("missing independent anchor cleanup: deletes=%d inspections=%d", deletes, inspections)
 	}
-	r := approvalClone(a.intent)
-	r["stage"] = "cancelled"
-	object(r["anchor"])["stage"] = "absent"
-	if err := recoveryDurableFile(w.sessionRecordPath(), r, w.recoveryLocal.processes); err != nil {
-		return err
-	}
-	p := map[string]any{"schema": 1, "id": w.recoveryLocal.id, "project": w.approval.project, "intent": w.session.reference, "state": "stopped", "workload_exit": nil, "last_problem": nil}
-	return errors.Join(recoveryDurableFile(w.recoveryRecordPath(), p, w.recoveryLocal.processes), w.anchorRecoveryRepeated())
+	return w.anchorRecoveryRepeated()
 }

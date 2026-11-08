@@ -3,10 +3,24 @@ package main
 import (
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/donvargax/itos-container/internal/engine/session/domain"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 )
+
+func TestAnchorRecoveryNoCreate(t *testing.T) {
+	for _, stage := range []string{"reserved", "cancelled"} {
+		t.Run(stage, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				anchorRecoveryMemoryCase(t, map[string]string{
+					"mode": "no-create", "fault": stage, "phase": "preparing",
+					"worker": "absent", "volume": "present", "completion": "pending", "exit": "unknown",
+				})
+			})
+		})
+	}
+}
 
 func anchorRecoveryMemoryNoCreate(t *testing.T, q map[string]string, m publicMemory, e *anchorRecoveryMemoryEngine, s domain.Recovery, id, worker string, r sp.Record, p sp.PublicRecord) {
 	t.Helper()
@@ -37,9 +51,9 @@ func anchorRecoveryMemoryNoCreate(t *testing.T, q map[string]string, m publicMem
 	if !found || e.inspections != inspections+1 || e.deletions != 1 {
 		t.Error("missing session or independent anchor inspection/release", report, e.inspections, e.deletions)
 	}
-	for _, event := range m.e.Events {
-		if strings.Contains(event, worker) || strings.Contains(event, r.Name) {
-			t.Error("no-create recovery looked up a worker", event)
+	for _, event := range m.e.Engine.Events {
+		if event.Method != "INFO" && (event.Method != "INSPECT" || event.Target != strings.Repeat("c", 63)+"2") {
+			t.Error("no-create recovery looked up or mutated a worker", event)
 		}
 	}
 	want := r

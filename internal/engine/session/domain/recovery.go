@@ -57,17 +57,23 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	defer entry.Close()
 	e, failure := sessionEntry(entry)
 	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
-	if failure == "" && uncreated(entry) && entry.Intent().Record().Schema == 1 {
+	noCreate := uncreated(entry)
+	if failure == "" && noCreate {
 		failure = entry.Validate()
-		e.Resource = "absent"
-	} else if failure == "" {
+		if failure == "" {
+			e.Resource = "absent"
+		}
+	}
+	// Validated no-create evidence proves worker absence for either schema.
+	// An anchored session still needs an independent volume observation.
+	if failure == "" && (!noCreate || entry.Intent().Record().Schema == 2) {
 		connection, f := s.Engine.OpenRun(ctx, entry.Intent().Binding())
 		failure = f
 		if failure == "" {
 			defer connection.Close()
-			var observation port.Observation
-			observation, e.Resource, failure = inspectSession(ctx, entry, connection)
-			_ = observation
+			if !noCreate {
+				_, e.Resource, failure = inspectSession(ctx, entry, connection)
+			}
 			if entry.Intent().Record().Schema == 2 {
 				_, anchorFailure := inspectRecoveryAnchor(ctx, entry.Intent(), connection)
 				if anchorFailure != "" {

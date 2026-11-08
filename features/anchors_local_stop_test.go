@@ -224,6 +224,9 @@ func (w *world) anchorRecoveryReleaseOrder() error {
 func (w *world) anchorRecoveryDurable() error {
 	r := approvalClone(w.anchorLocalRecovery.intent)
 	r["stage"], r["container_id"] = "absent", w.session.seedID
+	if w.anchorLocalRecovery.mode == "no-create" {
+		r["stage"], r["container_id"] = "cancelled", ""
+	}
 	object(r["anchor"])["stage"] = "absent"
 	if err := recoveryDurableFile(w.sessionRecordPath(), r, w.recoveryLocal.processes); err != nil {
 		return err
