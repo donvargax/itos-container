@@ -2228,10 +2228,16 @@
     generation without publishing. Pass the scratch version output's last and next directly
     to the notes program and compare the What changed section's commit links against git
     rev-list for its range; one project link alone would not prove every commit was included.
-    Check the source and scratch HEAD, refs, status and tracked diffs are unchanged.
+    Check the source and scratch HEAD, refs, status and tracked diffs are unchanged. Then
+    reproduce the workflow's Tag-before-Notes order: create v0.1.0 only as a fixture tag in
+    that disposable clone, snapshot its state again, and rerun notes with the same empty last
+    and next=0.1.0. Require identical notes and unchanged state from that new snapshot. The
+    notes helper must exclude the tag it is documenting when resolving an empty -from;
+    otherwise the first published notes could omit the whole history while a tagless dry
+    run passes. Only the fixture setup creates that tag; neither release helper may do so.
     The drafter reran all four checks on 2026-11-08 at
-    dedb8c2b3227460be268bf6cfbb68a1c7eebb7c8 and observed the failures above. That source had
-    no reachable release tag, 25 feats, 43 fixes and no breaking commits;
+    b8c3af4fbcf86308db41d6d9245f68b0de08a0cd and observed the failures above. That source had
+    no reachable release tag, 27 feats, 50 fixes and no breaking commits;
     these observations explain the expected first version, never become constants in the tools.
 
     Keep the YAML/Go fixture checks at the cheap task and existing Linux go test ./... tiers.
@@ -2240,8 +2246,9 @@
     the first real tag the implementer must report the fourth check's actual candidate HEAD,
     last/next/bump/range and unchanged refs; expect empty last, next=0.1.0, bump=minor and
     range=HEAD. Its source-history run accepts a later tagged history while the no-tags clone
-    keeps checking bootstrap, so a later release does not stale this check. Never create a real
-    tag as a dry run. The outer loop alone verifies the pushed main run, dependency results
+    keeps checking bootstrap, so a later release does not stale this check. The fixture tag
+    disappears with its temporary clone; never create a source-repository or remote tag as a
+    dry run. The outer loop alone verifies the pushed main run, dependency results
     and eventual release/assets; local dry-run success is not publication evidence and main
     may advance before that run. Do not run the whole features package with -race; a full
     feature-suite run uses no race detector, and any race run is limited to changed packages
@@ -2330,8 +2337,9 @@
             output = run([str(version)], repo)
             assert output == 'last=\nnext=0.1.0\nbump=minor\nrange=HEAD\n', output
             bootstrap = dict(line.split('=', 1) for line in output.splitlines())
-            rendered = run([str(notes), '-version', bootstrap['next'], '-from', bootstrap['last'],
-                            '-itos', shutil.which('itos') or 'itos'], repo)
+            notes_args = [str(notes), '-version', bootstrap['next'], '-from', bootstrap['last'],
+                          '-itos', shutil.which('itos') or 'itos']
+            rendered = run(notes_args, repo)
             for text in ('# itos-container 0.1.0\n', '## What changed', '## Upgrading',
                          '`itos-container --version`', '-R donvargax/itos-container'):
                 assert text in rendered, 'release notes lack ' + text
@@ -2341,8 +2349,12 @@
             assert linked == expected, f'notes commit range differs: missing={expected - linked}, extra={linked - expected}'
             assert 'https://github.com/donvargax/itos-template/commit/' not in rendered, 'notes still link template commits'
             assert state(repo) == snapshot, 'dry run changed scratch HEAD, refs or working files'
+            run(['git', '-c', 'tag.gpgSign=false', 'tag', 'v' + bootstrap['next'], 'HEAD'], repo)
+            tagged = state(repo)
+            assert run(notes_args, repo) == rendered, 'local release tag changed bootstrap notes or their range'
+            assert state(repo) == tagged, 'notes changed the tagged fixture HEAD, refs or working files'
             print(output, end='')
-            print('Both release programs ran; notes name itos-container; no refs changed.')
+            print('Both release programs ran; notes match before and after the fixture tag; helpers changed no refs.')
         assert state(root) == before, 'dry run changed source HEAD, refs or working files'
         PY
 - id: T-26
