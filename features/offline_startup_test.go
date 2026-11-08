@@ -31,7 +31,7 @@ func offlineStartupWorld(t *testing.T, native http.Handler) *world {
 		"Name": name, "Driver": "local", "Scope": "local", "CreatedAt": "2026-11-07T00:00:00Z",
 		"Mountpoint": "/var/lib/docker/volumes/" + name + "/_data", "Labels": labels, "Options": options,
 	}
-	w.offline.api.volumes = map[string]*anchorVolume{name: {name: name, labels: approvalClone(labels), options: approvalClone(options)}}
+	w.offline.api.volumes = map[string]*anchorVolume{name: {name: name, labels: approvalClone(labels), options: approvalClone(options), observed: approvalClone(volume)}}
 	return w
 }
 

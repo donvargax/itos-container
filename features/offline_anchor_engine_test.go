@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -80,7 +81,8 @@ func (a *offlineAPI) anchorVolumeAllowed(r *http.Request, entry *offlineRequest)
 			return false
 		}
 		volumes[name] = &anchorVolume{name: name, labels: labels, options: options}
-		return true
+		entry.Record, err = sessionReadRecord(filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "intents", w.approval.project, token+".json"))
+		return err == nil
 	}
 	name := strings.TrimPrefix(entry.Path, "/volumes/")
 	v := volumes[name]
@@ -104,11 +106,15 @@ func (a *offlineAPI) anchorVolumeAllowed(r *http.Request, entry *offlineRequest)
 		}
 	}
 	entry.Observation = observed
-	return true
+	token, _ := v.labels["io.itos-container.intent"].(string)
+	entry.Record, err = sessionReadRecord(filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "intents", w.approval.project, token+".json"))
+	return err == nil
 }
 
 func anchorVolumeMatches(v *anchorVolume, observed map[string]any) bool {
-	return observed != nil && observed["Name"] == v.name && observed["Driver"] == "local" &&
+	created, _ := observed["CreatedAt"].(string)
+	return observed != nil && observed["Name"] == v.name && observed["Driver"] == "local" && observed["Scope"] == "local" && created != "" &&
+		(v.observed == nil || v.observed["CreatedAt"] == created) &&
 		reflect.DeepEqual(observed["Labels"], v.labels) && reflect.DeepEqual(observed["Options"], v.options)
 }
 
@@ -145,8 +151,25 @@ func (a *offlineAPI) anchorMount(m map[string]any) bool {
 	if v == nil || options["NoCopy"] != true || (options["Subpath"] != nil && options["Subpath"] != "") || !offlineEmpty(options["DriverConfig"]) {
 		return false
 	}
-	_, err := a.anchorInspect(v)
-	return err == nil
+	// Judge captured evidence without querying a volume which successful
+	// teardown has already deleted. Live create/start independently inspect it.
+	return anchorVolumeMatches(v, v.observed)
+}
+
+func (a *offlineAPI) observeCreateAnchor(body map[string]any) (map[string]any, error) {
+	mounts, _ := object(body["HostConfig"])["Mounts"].([]any)
+	for _, value := range mounts {
+		m := object(value)
+		if m["Type"] == "volume" {
+			name, _ := m["Source"].(string)
+			v := a.anchorVolumes()[name]
+			if v == nil {
+				return nil, errors.New("create references an unrecorded anchor")
+			}
+			return a.anchorInspect(v)
+		}
+	}
+	return nil, nil // Original direct-bind requests remain eligible for red evidence.
 }
 
 // Called under the recorder lock, only after identity-checked worker cleanup.

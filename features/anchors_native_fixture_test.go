@@ -295,7 +295,7 @@ func main(){
    r.Controls[phase]=err==nil&&readErr==nil&&string(got)==r.Nonce
    if phase=="before" { for _,path:=range append([]string{"/workspace/slice-17-replacement","/workspace/slice-17-nested/marker"},targets...){_,err:=os.ReadFile(path);r.Denied[path]=err!=nil} }
   }
-  if err:=os.WriteFile("slice-17-recovery-edit",[]byte(strconv.Itoa(n)+":"+r.Nonce),0600);err!=nil{r.Error=err.Error()}
+  if n==1 { if err:=os.WriteFile("slice-17-recovery-edit",[]byte(strconv.Itoa(n)+":"+r.Nonce),0600);err!=nil{r.Error=err.Error()} }
   data,_=json.Marshal(r)
   if os.WriteFile("slice-17-recovery-report.next",data,0600)!=nil{os.Exit(96)}
   if os.Rename("slice-17-recovery-report.next","slice-17-recovery-report")!=nil{os.Exit(96)}

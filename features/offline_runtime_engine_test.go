@@ -342,6 +342,9 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		w.session.reference = "intents/" + w.approval.project + "/" + token + ".json"
 		var err error
 		entry.Record, err = sessionReadRecord(w.sessionRecordPath())
+		if err == nil {
+			entry.Anchor, err = a.observeCreateAnchor(entry.Body)
+		}
 		if err != nil {
 			a.problem = err
 		}

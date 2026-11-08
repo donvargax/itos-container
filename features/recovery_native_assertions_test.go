@@ -219,7 +219,7 @@ func (w *world) recoveryCompleted() error {
 		return err
 	}
 	if s.Retry != nil || s.StopCandidate || (r.mode == "retry" && (s.WorkloadExit == nil || *s.WorkloadExit != 7)) ||
-		(r.mode == "loss" && s.WorkloadExit != nil && *s.WorkloadExit == 0) {
+		(r.mode == "loss" && s.WorkloadExit != nil && *s.WorkloadExit == 0) || s.Anchor != "absent" {
 		return errors.New("cleanup success replaced workload knowledge or retained a pending retry")
 	}
 	if r.mode != "retry" {
@@ -234,6 +234,7 @@ func (w *world) recoveryCompleted() error {
 	}
 	a := w.offline.api
 	a.mu.Lock()
+	anchorErr := w.anchorReleased(a.requests)
 	removed, confirmed := false, false
 	for _, request := range a.requests {
 		if request.Method == "DELETE" && request.Path == "/containers/"+r.worker && request.Status == 204 {
@@ -244,6 +245,9 @@ func (w *world) recoveryCompleted() error {
 		}
 	}
 	a.mu.Unlock()
+	if anchorErr != nil {
+		return anchorErr
+	}
 	if !removed || !confirmed {
 		return errors.New("product did not remove its full ID and freshly confirm absence")
 	}
@@ -316,9 +320,19 @@ func (w *world) recoveryPreserved() error {
 	if err != nil {
 		return err
 	}
+	resources, err = w.recoveryWithoutRetainedAnchor(resources)
+	if err != nil {
+		return err
+	}
 	owned := []string{r.worker}
 	if r.second != nil {
 		owned = append(owned, r.second.recovery.worker)
+		// Project B remains live. Check its full anchor tuple before excluding
+		// that one owned resource from A's unrelated-resource comparison.
+		resources, err = r.second.recoveryWithoutRetainedAnchor(resources)
+		if err != nil {
+			return err
+		}
 	}
 	if !reflect.DeepEqual(recoveryWithoutWorkers(resources, owned), recoveryWithoutWorkers(w.offline.resourcesBefore, owned)) {
 		return errors.New("recovery changed unrelated native containers, images, networks or volumes")
@@ -357,6 +371,9 @@ func (w *world) recoveryOneLaunch() error {
 	if a.problem != nil {
 		return a.problem
 	}
+	if err := w.anchorRevalidated(a.requests); err != nil {
+		return err
+	}
 	creates, starts, removes := 0, 0, 0
 	for _, request := range a.requests {
 		transient := r.mode == "retry" && request.Method == "DELETE" && request.Status == 503
@@ -371,6 +388,9 @@ func (w *world) recoveryOneLaunch() error {
 			starts++
 		}
 		if request.Method == "DELETE" {
+			if strings.HasPrefix(request.Path, "/volumes/") {
+				continue // The original anchor tuple and worker absence were checked above.
+			}
 			if request.Path != "/containers/"+r.worker {
 				return errors.New("recovery attempted to remove a different native resource")
 			}

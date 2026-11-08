@@ -15,11 +15,11 @@ import (
 
 func (w *world) lifecycleResult(code int) error {
 	l := w.lifecycle
+	if l != nil && l.err != nil {
+		return l.err
+	}
 	if l == nil || l.run == nil {
 		return errors.New("no lifecycle invocation was observed")
-	}
-	if l.err != nil {
-		return l.err
 	}
 	if l.run.exit != code {
 		return fmt.Errorf("lifecycle run returned %d, expected %d; stderr %q", l.run.exit, code, l.run.errout.bytes())
@@ -124,6 +124,9 @@ func (w *world) lifecycleNoHostSignals() error {
 }
 
 func (w *world) lifecycleRevalidated(entries []offlineRequest) error {
+	if err := w.anchorRevalidated(entries); err != nil {
+		return err
+	}
 	worker := w.recovery.worker
 	inspected, checked := false, false
 	for _, e := range entries {
@@ -132,6 +135,11 @@ func (w *world) lifecycleRevalidated(entries []offlineRequest) error {
 		}
 		if e.Method == "GET" && e.Path == "/containers/"+worker+"/json" && e.Status == 200 && e.Observation["Id"] == worker {
 			inspected = true
+		}
+		if e.Method == "DELETE" && strings.HasPrefix(e.Path, "/volumes/") {
+			// The resource-specific oracle above checks the complete volume tuple.
+			inspected, checked = false, false
+			continue
 		}
 		mutation := e.Method == "DELETE" || (e.Method == "POST" && (strings.HasSuffix(e.Path, "/kill") || strings.HasSuffix(e.Path, "/stop")))
 		if !mutation {
@@ -179,7 +187,7 @@ func (w *world) lifecycleComplete() error {
 	if err != nil {
 		return err
 	}
-	if s.Retry != nil || s.StopCandidate {
+	if s.Retry != nil || s.StopCandidate || s.Anchor != "absent" {
 		return errors.New("confirmed cleanup retained a pending recovery retry")
 	}
 	processes := append([]*recoveryProcess{l.run}, r.stops...)
@@ -217,7 +225,7 @@ func (w *world) lifecycleComplete() error {
 	if !removed || !confirmed {
 		return errors.New("product did not remove and freshly confirm absence of the original full ID")
 	}
-	return w.lifecycleRevalidated(entries)
+	return errors.Join(w.lifecycleRevalidated(entries), w.anchorReleased(entries))
 }
 
 func (w *world) lifecycleRetained() error {
@@ -296,6 +304,9 @@ func (w *world) lifecycleOneLaunch() error {
 	a, r := w.offline.api, w.recovery
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if err := w.anchorRevalidated(a.requests); err != nil {
+		return err
+	}
 	creates, starts, removes := 0, 0, 0
 	for _, e := range a.requests {
 		if e.Status == 403 {
@@ -308,6 +319,9 @@ func (w *world) lifecycleOneLaunch() error {
 			starts++
 		}
 		if e.Method == "DELETE" {
+			if strings.HasPrefix(e.Path, "/volumes/") {
+				continue // Fully checked by anchorRevalidated, not a worker removal.
+			}
 			if e.Path != "/containers/"+r.worker {
 				return errors.New("removal targeted a name or unrelated worker")
 			}
