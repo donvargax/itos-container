@@ -564,3 +564,40 @@ sandboxed attempt refused remapped fixture ownership as `state.unsafe`; no
 ownership check or memory limit was changed. Native acceptance and fresh
 changed-code proof remain CI obligations; these local results do not settle the
 descriptor volume's Moby/kernel hypothesis.
+
+## Unreaped worker exit after the native cleanup regression
+
+The coordinator's report of run 42467490909 at `9c99617` identifies a
+`mounted-stat` refusal with ENOENT in the ephemeral-storage scenario. The
+expected workload result was zero, but the detector could not confirm exit.
+The earlier bounded Docker wait only runs after observed kernel exit. Its
+pidfd adapter used signal zero, which still succeeds for an exited, unreaped
+process even though that process's `/proc/<pid>/root` is already unavailable.
+
+A local child experiment reproduces that combination for exits zero and seven:
+signal zero succeeds, the process root returns ENOENT, and its pidfd is readable.
+The shared process-reference contract likewise fails while a child is exited
+but deliberately unreaped. This explains a detector refusal without evidence
+that Moby substituted the checkout or rejected the descriptor source.
+
+Red step commit `5dff477` adds ID-OFFLINE-37 with a real local child and the
+production disk pidfd adapter. Its engine fixture continues to report the same
+running PID until wait consumes the child's actual exit. With `@wip` removed,
+all four rows fail at the workload-result Then with `mounted-stat` and
+`worker exit not confirmed`: exits zero and seven before stat and during stat.
+These are local syscall/command regressions, not native container evidence.
+
+The adapter now polls the held pidfd with a zero timeout. Readable exit state,
+including the later reaped state, admits the existing bounded engine wait;
+polling does not reap the process or invent its workload status. Closed
+references, syscall errors and unexpected readiness events still refuse.
+Fresh full-ID/PID revalidation, the ten-second engine reconciliation budget,
+owned teardown and the descriptor-backed volume remain unchanged.
+
+OFFLINE-33 through OFFLINE-37 pass, including the new four rows, with truthful
+`not observed: worker exited` records and status. The disk adapter and focused
+command assembly regressions pass under the race detector. The complete
+engine-disabled feature suite passes without race detection in 171.348 seconds,
+using disposable fixtures with normal host ownership. Native engine acceptance
+and fresh changed-code proof remain the coordinator's CI work at the pushed
+head; no local engine or mutation run supplies that evidence.

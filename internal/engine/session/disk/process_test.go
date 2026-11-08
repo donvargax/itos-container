@@ -61,14 +61,17 @@ func TestWorkerProcessRefusesInvalidReferences(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p := &workerProcess{file: file, signal: func(fd int) error {
-			if fd != int(file.Fd()) {
-				t.Errorf("signal used different reference: %d", fd)
+		p := &workerProcess{file: file, poll: func(fd int32) (int16, error) {
+			if int(fd) != int(file.Fd()) {
+				t.Errorf("poll used different reference: %d", fd)
 			}
-			return fault
+			return 0, fault
 		}}
 		if exited, failure := p.Exited(); exited || failure != port.MountRefused {
-			t.Fatal("failed signal claimed exit", exited, failure)
+			t.Fatal("failed poll claimed exit", exited, failure)
+		}
+		if p.MountError() != mountSystemError(fault) {
+			t.Fatal("lost poll diagnostic", p.MountError())
 		}
 		p.Close()
 	}
@@ -80,5 +83,42 @@ func TestWorkerProcessRefusesInvalidReferences(t *testing.T) {
 	}}
 	if p, failure := w.HoldProcess(123); p != nil || failure != port.MountRefused {
 		t.Fatal(p, failure)
+	}
+}
+
+func TestWorkerProcessReadiness(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		events int16
+		exited bool
+		failed bool
+	}{
+		{"running", 0, false, false},
+		{"unreaped", 0x0001, true, false},
+		{"reaped", 0x0011, true, false},
+		{"hangup without exit", 0x0010, false, true},
+		{"invalid descriptor", 0x0020, false, true},
+		{"poll error", 0x0008, false, true},
+		{"readable with error", 0x0009, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			file, err := os.CreateTemp(t.TempDir(), "reference")
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := &workerProcess{file: file, poll: func(int32) (int16, error) { return tc.events, nil }}
+			defer p.Close()
+			exited, failure := p.Exited()
+			if exited != tc.exited || (failure == port.MountRefused) != tc.failed {
+				t.Fatal("incorrect readiness observation", exited, failure)
+			}
+			if tc.failed && p.MountError().Message == "" {
+				t.Fatal("missing readiness diagnostic")
+			}
+			p.Close()
+			if exited, failure := p.Exited(); exited || failure != port.MountRefused || p.MountError().Errno != int(syscall.EBADF) {
+				t.Fatal("closed reference supplied authority", exited, failure, p.MountError())
+			}
+		})
 	}
 }

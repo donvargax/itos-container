@@ -885,7 +885,7 @@ Feature: Hardened offline foreground run
   # the worker. Use a real local child and the production pidfd adapter, with
   # engine inspections held running until wait consumes that child's exit.
   # No container engine or real workspace mount is needed for this regression.
-  @slice-17 @ID-OFFLINE-37 @linux @wip
+  @slice-17 @ID-OFFLINE-37 @linux
   Scenario Outline: An unreaped worker retains its exit when its workspace is already gone
     Given an anchor detector fixture with exit <exit> at "<checkpoint>"
     When the registered command runs and fresh status reads its completed record

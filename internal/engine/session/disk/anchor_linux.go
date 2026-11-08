@@ -11,4 +11,8 @@ func openPath(root *os.Root) (*os.File, error) {
 }
 
 func openPIDFD(pid int) (int, error) { return unix.PidfdOpen(pid, 0) }
-func signalPIDFD(fd int) error       { return unix.PidfdSendSignal(fd, 0, nil, 0) }
+func pollPIDFD(fd int32) (int16, error) {
+	fds := []unix.PollFd{{Fd: fd, Events: unix.POLLIN}}
+	_, err := unix.Poll(fds, 0)
+	return fds[0].Revents, err
+}

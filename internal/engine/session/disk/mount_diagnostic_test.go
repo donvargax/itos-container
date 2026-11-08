@@ -48,11 +48,11 @@ func TestDiskMountErrorContract(t *testing.T) {
 	p := &workerProcess{file: file}
 	defer p.Close()
 	f.MountErrorContract(t, p, func(fail bool) {
-		p.signal = func(int) error {
+		p.poll = func(int32) (int16, error) {
 			if fail {
-				return syscall.EACCES
+				return 0, syscall.EACCES
 			}
-			return nil
+			return 0, nil
 		}
 		_, _ = p.Exited()
 	})
