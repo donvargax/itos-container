@@ -47,7 +47,7 @@ func TestEngineFixtureWorkflow(t *testing.T) {
 	j := ready.Jobs["engine"]
 	j.Steps = append(slices.Clone(j.Steps[:3]),
 		workflowStep{ID: "fixture", Name: "Prepare engine fixture registry", Shell: "bash", Timeout: 4, Run: "tools/bin/engine-fixture prepare"},
-		workflowStep{Name: "Engine scenarios", Shell: "bash", Timeout: 8, Env: maps.Clone(fixtureEnvironment), Run: engineInvocation},
+		workflowStep{Name: "Engine scenarios", Shell: "bash", Timeout: 5, Env: maps.Clone(fixtureEnvironment), Run: engineInvocation},
 		workflowStep{Name: "Engine failure diagnostics", If: "${{ failure() }}", Shell: "bash", Timeout: 1, Run: engineFailureDiagnostics},
 		workflowStep{Name: "Clean up engine fixture", If: "${{ always() }}", Shell: "bash", Timeout: 1, Run: "tools/bin/engine-fixture cleanup"})
 	ready.Jobs["engine"] = j
@@ -216,7 +216,7 @@ func engineFixtureWorkflowIssues(data []byte) []string {
 	require(cleanup.Run == "tools/bin/engine-fixture cleanup" && cleanup.If == "${{ always() }}" && cleanup.Shell == "bash" && cleanup.Timeout == 1 && cleanup.Uses == "" && len(cleanup.Env) == 0 && !cleanup.ContinueOnError, "required always cleanup with failure propagation")
 	require(diagnostics.Run == engineFailureDiagnostics && diagnostics.If == "${{ failure() }}" && diagnostics.Shell == "bash" && diagnostics.Timeout == 1 && diagnostics.Uses == "" && len(diagnostics.Env) == 0 && !diagnostics.ContinueOnError, "required bounded failure diagnostics")
 	require(validFixtureEnvironment(run.Env), "exact fixture output wiring")
-	require(run.Run == engineInvocation && run.Shell == "bash" && run.If == "" && run.Timeout == 8 && !run.ContinueOnError, "complete invocation")
+	require(run.Run == engineInvocation && run.Shell == "bash" && run.If == "" && run.Timeout == 5 && !run.ContinueOnError, "complete invocation")
 	dispatch := w.On["workflow_dispatch"]
 	require(validRedDispatch(dispatch), "exact optional red dispatch inputs")
 	var node yaml.Node

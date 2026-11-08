@@ -60,7 +60,7 @@ jobs:
     name: Engine scenarios (Linux amd64)
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
-    timeout-minutes: 13
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -85,7 +85,7 @@ jobs:
         timeout-minutes: 4
         run: tools/bin/engine-fixture prepare
       - name: Engine scenarios
-        timeout-minutes: 8
+        timeout-minutes: 5
         shell: bash
         env:
           ITOS_CONTAINER_ENGINE_TESTS: "1"
@@ -95,12 +95,48 @@ jobs:
           ITOS_CONTAINER_ENGINE_FIXTURE_UID: ${{ steps.fixture.outputs.uid }}
           ITOS_CONTAINER_ENGINE_FIXTURE_GID: ${{ steps.fixture.outputs.gid }}
         run: |
+          # Linux uptime is monotonic; wall-clock corrections cannot create headroom.
+          engine_now() {
+            local engine_uptime
+            read -r engine_uptime _ < /proc/uptime || return 1
+            [[ $engine_uptime =~ ^([0-9]+)\.([0-9]{2})$ ]] || return 1
+            printf '%s\n' "$((10#${BASH_REMATCH[1]} * 100 + 10#${BASH_REMATCH[2]}))"
+          }
+          engine_started=''
+          engine_finish() {
+            local result=$? finished elapsed=unknown outcome=failed
+            trap - EXIT
+            if finished=$(engine_now) && [[ -n $engine_started ]] && (( finished >= engine_started )); then
+              elapsed=$(((finished - engine_started) * 10))
+              if (( elapsed > 240000 && result == 0 )); then result=1; fi
+            elif (( result == 0 )); then
+              result=1
+            fi
+            if (( result == 0 )); then outcome=passed; fi
+            printf 'engine step timing: duration_ms=%s outcome=%s\n' "$elapsed" "$outcome"
+            exit "$result"
+          }
+          trap engine_finish EXIT
+          engine_started=$(engine_now)
+          set +e
           go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
+          compile_status=$?
+          set -e
+          compile_elapsed=unknown
+          compile_outcome=failed
+          if compiled=$(engine_now) && (( compiled >= engine_started )); then
+            compile_elapsed=$(((compiled - engine_started) * 10))
+            if (( compile_status == 0 )); then compile_outcome=passed; fi
+          elif (( compile_status == 0 )); then
+            compile_status=1
+          fi
+          printf 'engine compilation timing: duration_ms=%s outcome=%s\n' "$compile_elapsed" "$compile_outcome"
+          if (( compile_status != 0 )); then exit "$compile_status"; fi
           cd features
           set +e
           # Run 42233015284 traced no product/harness process-group signals; the step died
           # from outside that tree. Isolate tests from CI runner/Docker session signals.
-          setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
+          setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=4m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
           results=("${PIPESTATUS[@]}")
           set -e
           test_status=${results[0]}

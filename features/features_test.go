@@ -47,6 +47,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -81,6 +82,7 @@ func TestFeatures(t *testing.T) {
 	if selection.skip != "" {
 		t.Skip(selection.skip)
 	}
+	selection.started = time.Now()
 	t.Cleanup(removeCallerPath)
 	root, err := moduleRoot()
 	if err != nil {
@@ -151,6 +153,8 @@ type scenarioSelection struct {
 	count    int
 	skip     string
 	excluded []string
+	started  time.Time
+	timing   *engineTiming
 }
 
 func (env featureEnvironment) engineEnabled() (bool, error) {
@@ -333,15 +337,30 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 	options.Concurrency = 1
 	completed, unsuccessful := 0, false
 	suite := godog.TestSuite{Name: "itos-container", Options: &options, ScenarioInitializer: func(sc *godog.ScenarioContext) {
+		var started time.Time
+		rowFailed := false
+		if selection.timing != nil {
+			// Register before fixture setup, including a failing setup hook.
+			sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
+				started, rowFailed = time.Now(), false
+				return ctx, nil
+			})
+		}
 		initialize(sc)
 		if selection.engine || selection.red {
 			sc.StepContext().After(func(ctx context.Context, _ *godog.Step, status godog.StepResultStatus, err error) (context.Context, error) {
 				unsuccessful = unsuccessful || status != godog.StepPassed || err != nil
+				rowFailed = rowFailed || status != godog.StepPassed || err != nil
 				return ctx, nil
 			})
-			sc.After(func(ctx context.Context, _ *godog.Scenario, err error) (context.Context, error) {
+			sc.After(func(ctx context.Context, scenario *godog.Scenario, err error) (context.Context, error) {
 				completed++
 				unsuccessful = unsuccessful || err != nil
+				if selection.timing != nil {
+					// Godog runs After hooks in registration order. This is after
+					// all fixture cleanup and receives any cleanup error as well.
+					selection.timing.complete(scenario, started, rowFailed || err != nil)
+				}
 				return ctx, nil
 			})
 		}
