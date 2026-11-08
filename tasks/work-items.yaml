@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - T-34
   - p1-feature-suite-race-memory
 items:
   - id: T-1
