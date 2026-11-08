@@ -113,6 +113,61 @@ Use `-v` to see successful-run logs and Go's skip report. Selection precedes the
 scenario initialization, Background steps and any engine access. Each eligible scenario is a
 subtest of `TestFeatures`, named after the scenario.
 
+### Scenario memory
+
+Run the complete feature suite without `-race`. Use race detection only on named
+harness regressions, such as
+`go test -race ./features -count=1 -run '^TestFeatureMemoryRetention$'`.
+`itos task T-35` runs the full ordinary suite and the focused regression in both
+modes, requiring each measured invocation to stay within 4,194,304 KiB peak RSS.
+Its Linux `getrusage(RUSAGE_CHILDREN).ru_maxrss` measurement includes reaped
+descendants and reports the largest individual process high-water mark, not the
+sum of simultaneous processes or cumulative Go allocations.
+
+Godog v0.16.0 stores matched step handlers in its results. Those handlers retain
+their scenario's `world`, including output and fixture snapshots, after the
+scenario finishes. Manifest snapshots include the complete bytes of executable
+sentinels; at case 576 they accounted for over 95% of the pre-repair live heap.
+The initializer now clears the world after assertions, owned fixture cleanup and
+scratch removal finish. Godog keeps its captured errors and step locations.
+No snapshot assertion, scenario selection, fixture preparation or GC setting changes.
+
+On 2026-11-08, using `go1.27.3-X:nodwarf5` on Linux amd64, T-35 collected heap
+profiles inside one serial non-engine suite, after cleanup and explicit diagnostic
+GC at cases 8 and 576, while earlier results remained live:
+
+| Measurement (bytes) | Before repair | After repair |
+| --- | ---: | ---: |
+| Live heap at case 8 | 21,996,544 | 21,701,288 |
+| Live heap at case 576 | 2,239,996,256 | 58,728,640 |
+| Cumulative allocations at case 576 | 26,507,812,632 | 26,514,033,448 |
+
+Both samples had three goroutines, all belonging to the test runner/profile;
+no fixture goroutine survived those cleanup boundaries. The pre-repair diagnostic
+was stopped at 4,235,888 KiB observed RSS. The repaired diagnostic completed all
+1,274 selected cases at 446,472 KiB peak RSS. These profiling runs used a sandbox
+that remapped `/tmp` ownership and caused approval fixtures to fail, so neither
+is a passing suite check. Their comparable heap samples identify retained state;
+the ordinary task check uses normal ancestor ownership and no profiling hooks.
+Profiles and logs remain uncommitted T-35 scratch artifacts.
+
+The red regression commit `44b218327428d37223893a08ad73c8901c203479` retained
+235,644,976 additional live bytes normally and 235,648,112 under `-race`, exceeding
+its 32 MiB allowance. With repair `3f1c8e25ca43673eb75a79cd33d4d02cd876f8b9`,
+the same measurements were 774,152 and 758,824 bytes, respectively, and both runs
+passed. All 64 payload cases and their cleanup completions are required. Small
+failure subtests also require original diagnostics, nonzero suite results, joined
+owned pipe cleanup, removed directories and an independent succeeding scenario.
+GC is explicit only in these regression/diagnostic samples, never normal cleanup.
+
+At the repair SHA above, `itos task T-35` passed both unchanged ledger checks.
+The full uncached `go test ./features -count=1` exited 0 in 303.464 seconds with
+470,196 KiB peak RSS: all 1,274 eligible product scenario rows, plus the normal
+harness and coverage regressions. The exact-name focused ordinary and race runs
+both exited 0, with a combined high-water measurement of 406,028 KiB. These are
+local non-engine results, not a full-suite race measurement or native-engine
+support evidence. Fresh engine evidence remains the coordinator's CI work.
+
 ### The CI engine tier
 
 Reserve `@engine` for any scenario whose setup, hooks, steps **or cleanup** needs a real
@@ -275,7 +330,7 @@ substitutes for per-ID coverage: every listed ID must emit real product counters
 T-20's [helper](../tools/bin/engine-fixture) runs only in the existing engine job, after
 preflight. Both `prepare` and `cleanup` refuse outside GitHub Actions on an actual Linux amd64
 host, before engine access. Agents never invoke these modes against an engine or spoof CI.
-The helper uses the existing Docker CLI, shell/coreutils, curl and jq; it installs nothing.
+The helper uses the existing Docker CLI, shell/coreutils, curl, jq and tar; it installs nothing.
 Every engine call clears Docker host/context/TLS/API overrides, uses
 `unix:///var/run/docker.sock` explicitly and supplies a disposable empty Docker configuration,
 without logins or credential helpers. It never changes the daemon or its registry trust.
@@ -313,22 +368,50 @@ smoke, with a separate 30-second cleanup attempt on failure. It performs these c
    discovered from that exact container. Registry storage is container-managed tmpfs; there
    are no host mounts, host networking, extra capabilities, privileged mode or restart policy.
    `OTEL_TRACES_EXPORTER=none` disables trace export. Readiness has a 20-second limit.
-2. Build the reviewed recipe for `linux/amd64`, record the config ID and push to the attempt's
-   unique loopback repository. Read the single-platform manifest through the registry API,
-   hash its exact bytes, compare with `Docker-Content-Digest` and match its config digest to
-   the built ID. Reject an index or a mismatch.
+2. Build the reviewed recipe for `linux/amd64`, record the raw `--iidfile` image ID and push
+   to the attempt's unique loopback repository. Independently obtain its raw config with
+   [a daemon image export](https://docs.docker.com/reference/cli/docker/image/save/) by that
+   immutable ID. Read the export's single Config member with tar to stdout, accepting only a
+   digest-shaped member path; hash its exact bytes, match the member digest and validate its
+   Linux amd64 config. Read the single-platform manifest through the registry API, hash its
+   exact bytes and compare with `Docker-Content-Digest`. Require its config digest to match
+   the independently measured daemon config. Report `store=graph-driver` when the built ID
+   equals that config digest and differs from the manifest digest, or `store=containerd`
+   when the built ID equals the manifest digest. Reject any other relationship or an index.
 3. Remove only the recorded derived tag/digest references, confirm the exact requested
    `repository@sha256` reference is absent, then
    [pull that digest](https://docs.docker.com/reference/cli/docker/image/pull/). Inspect that
-   exact reference and require its complete `RepoDigests` entry, matching config ID,
+   exact reference and require its complete `RepoDigests` entry, matching daemon image ID,
    Linux amd64 platform, numeric non-root user, empty entrypoint, no declared volumes and no
    `devcontainer.metadata`. Build/push results alone are not cached-image proof. The measured
-   manifest digest and distinct config ID are retained together; neither is assumed stable.
+   manifest digest, daemon image ID and measured config digest are logged together; none is
+   assumed stable across builds or image stores.
 4. Execute a ten-second bounded benign smoke command from the cached digest with pull disabled,
    network none, read-only root, all capabilities dropped, no-new-privileges, the recorded
    UID/GID and no host mounts. Require the actual UID/GID, fixed marker and exit zero.
 5. Remove the smoke container and registry, discarding registry tmpfs, then inspect the cached
    digest again. Only then publish `image`, `image_id`, `uid` and `gid` as step outputs.
+
+T-34 makes failures from the push through output publication name their stage and expected
+and observed values. The shared [validation functions](../tools/lib/engine-fixture-checks.sh)
+check captured manifest bytes/headers, cached-image inspection and smoke state/output in both
+preparation and ordinary regression tests. Each manifest observation contains `schemaVersion`,
+`mediaType`, `hasManifests`, `configDigest`, the raw `--iidfile` value as `builtID`, and the
+advertised and measured manifest digests. Selected values are bounded and escaped; missing,
+wrong-type and invalid JSON observations remain visible without dumping image configurations.
+Read/hash failures report unavailable observations and retain the failing stage. An observation
+rendering failure also rejects the response.
+
+Diagnostic [run 42497992377](https://github.com/donvargax/itos-container/actions/runs/42497992377)
+at `4eedcec4f994ee15223532bf753631057adbae40` used Docker 29.4.2 / API 1.54 and showed a single
+OCI manifest whose advertised and measured digest equaled the built ID, with a different config
+digest. The coordinator's q-43 decision identifies the containerd store as the cause of the old
+distinct-ID assertion failure. The repair accepts both stores while independently verifying the
+config; it preserves the builder and push strategy. The coordinator retains the actual repaired
+pushed SHA, server/API/platform, pins, identities, cold-pull, cache and smoke results, and both
+cleanup verdicts for comparison with that failure. Completion still requires preparation,
+the complete live engine scenario selection and final cleanup to pass on that runner.
+Captured-response tests and source guard checks supply no native-engine evidence.
 
 The Engine scenarios step receives these fixture inputs beside its tier switch and the
 optional `ITOS_CONTAINER_RED_SCENARIOS` selector described below:
@@ -336,7 +419,7 @@ optional `ITOS_CONTAINER_RED_SCENARIOS` selector described below:
 | Variable | Meaning |
 | --- | --- |
 | `ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE` | Exact loopback repository and measured manifest digest |
-| `ITOS_CONTAINER_ENGINE_FIXTURE_ID` | Distinct image config digest |
+| `ITOS_CONTAINER_ENGINE_FIXTURE_ID` | Daemon image ID: config digest on graph-driver, manifest digest on containerd |
 | `ITOS_CONTAINER_ENGINE_FIXTURE_UID` | Runner's non-root effective UID |
 | `ITOS_CONTAINER_ENGINE_FIXTURE_GID` | Runner's effective GID |
 
@@ -356,6 +439,9 @@ after failures/cancellation and removes the remaining derived image references o
 Each attempt has a 30-second bound. Cleanup verifies recorded container IDs, names, image IDs
 and attempt labels before removal; interrupted creates can be recovered by their recorded
 unique names plus image and label. Image removal requires the recorded config identity.
+Every removal operation explicitly checks its own failures, including calls inside conditional
+cleanup paths where Bash disables implicit `errexit`. Cleanup attempts all recorded resources
+and retains the original preparation status if bounded cleanup also fails.
 Cleanup is idempotent, preserves an earlier failure and fails an otherwise successful job
 when incomplete. It never prunes, removes shared pinned inputs, or deletes checkout files.
 A killed runner cannot promise cleanup: that run is incomplete, not evidence.

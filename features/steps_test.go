@@ -70,6 +70,11 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
+		// godog retains matched handlers (and therefore w) in its results.
+		// Assertions have already materialized their diagnostics, and owned
+		// cleanup must finish before releasing snapshots, output and fixtures.
+		// Keep the small receiver, but none of the completed scenario's state.
+		*w = world{}
 		return ctx, sessionErr
 	})
 
