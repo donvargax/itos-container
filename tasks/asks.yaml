@@ -175,3 +175,7 @@ questions:
     item: "T-34"
     question: "T-34: what does the CI runner's fixture manifest look like now?"
     answer: "Run 42497992377: the built image ID equals the manifest digest (sha256:af908c… for both), so the runner's Docker uses the containerd image store, where image IDs are manifest digests. Accept either store and log which: graph driver (built ID equals .config.digest) or containerd (built ID equals the manifest digest, with .config.digest checked against the daemon's config). Keep the bytes, single-manifest and cold-reference checks. See T-34-steer.md."
+  - id: q-44
+    item: "T-25"
+    question: "T-25: the release helpers need internal/release but the architecture gate forbids tools importing internal; may the gate change?"
+    answer: "Yes, one narrow named exception: the release helper packages may import internal/release (their tests internal/release/releasetest) and nothing else under internal, with fixtures proving that edge allowed and every other tools-to-internal edge still refused. Amend the spec's no-gate-edits rule to name it, land it in a ci commit before the helpers, and apply the stashed test files. See T-25-steer.md."
