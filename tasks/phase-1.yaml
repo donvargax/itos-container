@@ -2295,7 +2295,7 @@
     cannot import internal/release, and the helpers cannot import other internal packages or link
     test support in production. Amend docs/architecture.md to describe the edge and record the
     authorization and undo in .git/itos/weakened-gates.md. Land the exception and its fixtures in a
-    ci --task T-25 commit before the helpers. These are the only authorized gate edits. Restore the
+    ci --task T-25 commit before the helpers. These are the only authorized architecture-gate edits. Restore the
     staged tests and stubs from the driver w2 T-25 stash rather than recreating them.
     That sequence is already committed on this branch: 0042ca4 amended this spec for q-44,
     4a58f87 added the named edge and compile-first fixtures, c239fb7 restored the tests and
@@ -2307,6 +2307,20 @@
     this completed sequence and its original red evidence when handing the item onward.
     Commit red tests/stubs as test --item T-25, tooling/workflow work as ci --task T-25 and
     guidance as docs --item T-25.
+
+    The coordinator, 2026-11-08 at approximately 23:30 UTC, also authorizes updating
+    features/engine_workflow_test.go for the release caller. Runs 42533353955 (4882ec2) and
+    42534116317 (522b18b) failed TestEngineWorkflow/complete_engine_contract because its five-job
+    assertion predates the release job. Require exactly the four named ordinary jobs, the single
+    engine job and the release job, preserving every existing engine assertion. Check the release
+    caller's exact ci/engine/platform prerequisites, success-and-push-to-main condition, reusable
+    workflow and contents/id-token/attestations write permissions; other jobs retain read access.
+    Add negative controls for missing or extra jobs and invalid release wiring; do not merely
+    loosen the job count. Commit this contract update as test --item T-25. Run
+    go test ./features -run TestEngineWorkflow -count=1 locally before and after the change,
+    alongside the existing release task checks. This is infrastructure evidence, not an engine
+    run or a new product scenario.
+
     The spec is docs --item T-25. Run gates through their hooks and CI; make no local mutation
     run or generated evidence. No proof.code path needs an edit here. Agents commit and stop;
     the coordinating loop owns push, CI watching, the real release and closure.
