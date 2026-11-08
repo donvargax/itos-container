@@ -4,7 +4,10 @@
 set -euo pipefail
 umask 077
 
-fail() { printf 'engine-fixture: %s\n' "$*" >&2; exit 1; }
+source "${BASH_SOURCE[0]%/*}/../lib/engine-fixture-checks.sh" || {
+  printf 'engine-fixture: validator loading failed\n' >&2
+  exit 1
+}
 
 [[ $# == 1 && ( $1 == prepare || $1 == cleanup ) ]] || fail 'usage: engine-fixture prepare|cleanup'
 [[ ${CI:-} == true && ${GITHUB_ACTIONS:-} == true ]] || fail 'requires GitHub Actions'
@@ -36,122 +39,122 @@ d() {
     docker --config "$state/docker" --host unix:///var/run/docker.sock "$@"
 }
 
-digest_valid() { [[ $1 =~ ^sha256:[0-9a-f]{64}$ ]]; }
-
 # An inspection transport/permission failure is never evidence of absence.
 # Return 0 for present, 1 only for the daemon's specific missing-object error.
 inspect_image() {
-  local ref=$1 output=$2
+  local ref=$1 output=$2 message
   if d image inspect "$ref" >"$output" 2>"$state/inspect.err"; then
     return 0
   fi
-  case "$(cat "$state/inspect.err")" in
+  message=$(cat "$state/inspect.err") || fail "image inspection error read: expected captured error; observed status=$?"
+  case "$message" in
     "Error response from daemon: No such image: $ref"|"Error: No such image: $ref") return 1 ;;
-    *) cat "$state/inspect.err" >&2; printf 'image inspection did not establish absence\n' >&2; return 2 ;;
+    *) fail "image inspection: expected image or exact absence for $(fixture_value "$ref"); observed=$(fixture_value "$message")" ;;
   esac
 }
 
 remove_image_ref() {
-  local record=$1 ref built observed status
+  local record=$1 ref repository built base registry observed status
   [[ -f $state/$record ]] || return 0
-  ref=$(cat "$state/$record")
-  # The reference must belong to the exact repository allocated in this attempt.
-  [[ -f $state/repository ]] || return 1
+  ref=$(cat "$state/$record") || fail "owned-reference record read: expected $record; observed status=$?"
+  repository=$(cat "$state/repository") || fail "owned-reference repository read: expected attempt repository; observed status=$?"
   case "$record" in
-    tag) [[ $ref == "$(cat "$state/repository"):fixture" ]] || return 1 ;;
-    reference) [[ $ref == "$(cat "$state/repository")@sha256:"* ]] && digest_valid "${ref##*@}" || return 1 ;;
-    *) return 1 ;;
+    tag) [[ $ref == "$repository:fixture" ]] || fail "owned-reference tag: expected=$repository:fixture; observed=$(fixture_value "$ref")" ;;
+    reference) [[ $ref == "$repository@sha256:"* ]] && digest_valid "${ref##*@}" || fail "owned-reference digest: expected=$repository@sha256; observed=$(fixture_value "$ref")" ;;
+    *) fail "owned-reference kind: expected tag/reference; observed=$(fixture_value "$record")" ;;
   esac
   if inspect_image "$ref" "$state/removing-image.json"; then
-    [[ -s $state/build.iid ]] || { printf 'missing built identity for %s\n' "$ref" >&2; return 1; }
-    built=$(cat "$state/build.iid")
-    digest_valid "$built" || return 1
-    observed=$(jq -er '.[0].Id' "$state/removing-image.json") || return 1
-    [[ $observed == "$built" ]] || { printf 'refuse changed image %s\n' "$ref" >&2; return 1; }
+    built=$(cat "$state/build.iid") || fail "owned-reference built identity read: expected build.iid; observed status=$?"
+    digest_valid "$built" || fail "owned-reference built identity: expected sha256; observed=$(fixture_value "$built")"
+    observed=$(jq -er '.[0].Id' "$state/removing-image.json") || fail "owned-reference identity read: expected image Id; observed invalid inspection (status=$?)"
+    [[ $observed == "$built" ]] || fail "owned-reference identity: expected=$built; observed=$(fixture_value "$observed")"
+    base=$(cat "$state/base.iid") || fail "owned-reference base identity read: expected base.iid; observed status=$?"
+    registry=$(cat "$state/registry.iid") || fail "owned-reference registry identity read: expected registry.iid; observed status=$?"
     # Never delete a pinned input, even if an invalid recipe somehow produced it.
-    [[ $built != "$(cat "$state/base.iid")" && $built != "$(cat "$state/registry.iid")" ]] || return 1
-    d image rm "$ref" || return 1
+    [[ $built != "$base" && $built != "$registry" ]] || fail "owned-reference protection: expected derived config; observed built=$built base=$(fixture_value "$base") registry=$(fixture_value "$registry")"
+    d image rm "$ref" || fail "owned-reference removal: expected removed $(fixture_value "$ref"); observed status=$?"
   else
     status=$?
-    [[ $status == 1 ]] || return 1
+    [[ $status == 1 ]] || fail "owned-reference inspection: expected present/absent; observed status=$status"
   fi
   if inspect_image "$ref" "$state/removed-image.json"; then
-    printf 'image reference still present: %s\n' "$ref" >&2
-    return 1
+    fail "owned-reference removal verification: expected absent; observed present $(fixture_value "$ref")"
   else
     status=$?
-    [[ $status == 1 ]] || return 1
+    [[ $status == 1 ]] || fail "owned-reference removal verification: expected absent; observed status=$status"
   fi
 }
 
 remove_container() {
-  local kind=$1 name expected cid observed
+  local kind=$1 name expected cid observed message summary
   [[ -f $state/$kind.intent ]] || return 0
-  name=$(cat "$state/$kind.intent")
+  name=$(cat "$state/$kind.intent") || fail "container intent read: expected $kind.intent; observed status=$?"
   case "$kind" in
-    registry) [[ $name == "$registry_name" ]] || return 1; expected=$(cat "$state/registry.iid") || return 1 ;;
-    smoke) [[ $name == "$smoke_name" ]] || return 1; expected=$(cat "$state/build.iid") || return 1 ;;
-    *) return 1 ;;
+    registry) [[ $name == "$registry_name" ]] || fail "container name: expected=$registry_name; observed=$(fixture_value "$name")"
+      expected=$(cat "$state/registry.iid") || fail "container image read: expected registry.iid; observed status=$?" ;;
+    smoke) [[ $name == "$smoke_name" ]] || fail "container name: expected=$smoke_name; observed=$(fixture_value "$name")"
+      expected=$(cat "$state/build.iid") || fail "container image read: expected build.iid; observed status=$?" ;;
+    *) fail "container kind: expected smoke/registry; observed=$(fixture_value "$kind")" ;;
   esac
-  digest_valid "$expected" || return 1
+  digest_valid "$expected" || fail "container image identity: expected sha256; observed=$(fixture_value "$expected")"
   # A create interrupted before --cidfile was written is recovered only through
   # the recorded unique name, immutable image ID and attempt label together.
   cid=$name
   if [[ -s $state/$kind.cid ]]; then
-    cid=$(cat "$state/$kind.cid")
-    [[ $cid =~ ^[0-9a-f]{64}$ ]] || return 1
+    cid=$(cat "$state/$kind.cid") || fail "container ID read: expected $kind.cid; observed status=$?"
+    [[ $cid =~ ^[0-9a-f]{64}$ ]] || fail "container ID: expected 64 hex digits; observed=$(fixture_value "$cid")"
   fi
   if ! d container inspect "$cid" >"$state/removing-container.json" 2>"$state/container.err"; then
-    case "$(cat "$state/container.err")" in
+    message=$(cat "$state/container.err") || fail "container inspection error read: expected captured error; observed status=$?"
+    case "$message" in
       "Error: No such container: $cid"|"Error response from daemon: No such container: $cid"|"Error: No such object: $cid") return 0 ;;
-      *) cat "$state/container.err" >&2; return 1 ;;
+      *) fail "container inspection: expected exact container/absence; observed=$(fixture_value "$message")" ;;
     esac
+  fi
+  if ! summary=$(jq -ac '.[0] | {name:(.Name|tostring|.[0:160]), image:(.Image|tostring|.[0:160]), owner:(.Config.Labels["io.itos.engine-fixture"]|tostring|.[0:160]), allTmpfs:all(.Mounts[]?; .Type == "tmpfs")}' "$state/removing-container.json" 2>/dev/null); then
+    summary='<invalid ownership inspection>'
   fi
   jq -e --arg name "/$name" --arg image "$expected" --arg owner "$owner" \
     'length == 1 and .[0].Name == $name and .[0].Image == $image and
      .[0].Config.Labels["io.itos.engine-fixture"] == $owner and
-     all(.[0].Mounts[]?; .Type == "tmpfs")' "$state/removing-container.json" >/dev/null || return 1
-  observed=$(jq -er '.[0].Id' "$state/removing-container.json") || return 1
-  [[ $observed =~ ^[0-9a-f]{64}$ && ( $cid == "$name" || $cid == "$observed" ) ]] || return 1
-  printf '%s\n' "$observed" >"$state/$kind.cid"
-  d container rm --force --volumes "$observed" || return 1
-  # A successful rm is not a verdict until the exact ID is absent.
+     all(.[0].Mounts[]?; .Type == "tmpfs")' "$state/removing-container.json" >/dev/null 2>&1 || fail "container ownership: expected name=$name image=$expected owner=$owner allTmpfs=true; observed=$summary"
+  observed=$(jq -er '.[0].Id' "$state/removing-container.json") || fail "container identity read: expected Id; observed invalid inspection (status=$?)"
+  [[ $observed =~ ^[0-9a-f]{64}$ && ( $cid == "$name" || $cid == "$observed" ) ]] || fail "container identity: expected recorded name/ID=$(fixture_value "$cid"); observed=$(fixture_value "$observed")"
+  printf '%s\n' "$observed" >"$state/$kind.cid" || fail "container ID record: expected writable $kind.cid; observed status=$?"
+  d container rm --force --volumes "$observed" || fail "container removal: expected removed $observed; observed status=$?"
   if d container inspect "$observed" >"$state/removed-container.json" 2>"$state/container.err"; then
-    return 1
+    fail "container removal verification: expected absent; observed present $observed"
   fi
-  case "$(cat "$state/container.err")" in
+  message=$(cat "$state/container.err") || fail "container removal error read: expected captured error; observed status=$?"
+  case "$message" in
     "Error: No such container: $observed"|"Error response from daemon: No such container: $observed"|"Error: No such object: $observed") return 0 ;;
-    *) cat "$state/container.err" >&2; return 1 ;;
+    *) fail "container removal verification: expected exact absence; observed=$(fixture_value "$message")" ;;
   esac
 }
 
 cleanup() {
-  [[ -d $state ]] || { printf 'engine-fixture cleanup: no ownership record, no resources acquired\n'; return 0; }
-  [[ ! -L $state/owner && $(cat "$state/owner") == "$owner" ]] || fail 'refuse foreign ownership record'
-  local failed=0
-  remove_container smoke || failed=1
-  remove_container registry || failed=1
-  remove_image_ref tag || failed=1
-  remove_image_ref reference || failed=1
+  [[ -d $state ]] || { printf 'engine-fixture cleanup: no ownership record, no resources acquired\n' || fail 'cleanup verdict write failed'; return 0; }
+  local recorded failed=0
+  recorded=$(cat "$state/owner") || fail "cleanup owner read: expected attempt owner; observed status=$?"
+  [[ ! -L $state/owner && $recorded == "$owner" ]] || fail "cleanup ownership: expected=$owner; observed=$(fixture_value "$recorded")"
+  # Each removal diagnoses its own failure. Subshells let cleanup try all owned
+  # resources even when fail exits; every operation inside is explicitly guarded.
+  (remove_container smoke) || failed=1
+  (remove_container registry) || failed=1
+  (remove_image_ref tag) || failed=1
+  (remove_image_ref reference) || failed=1
   if (( failed )); then
-    printf 'engine-fixture cleanup: FAILED; retained ownership record %s\n' "$state" >&2
-    return 1
+    fail "cleanup: expected all owned resources absent; observed removal failures; retained record $state"
   fi
-  printf 'engine-fixture cleanup: PASS; containers, tmpfs storage and derived references absent\n'
+  printf 'engine-fixture cleanup: PASS; containers, tmpfs storage and derived references absent\n' || fail 'cleanup verdict write failed'
   # Retain the tiny record for idempotent cleanup and runner diagnostics. Never
   # delete checkout files, prune the engine or remove the shared pinned inputs.
 }
 
 cached_fixture() {
   local reference=$1 built=$2 fixture_uid=$3 fixture_gid=$4
-  d image inspect "$reference" >"$state/cached-image.json"
-  jq -e --arg ref "$reference" --arg id "$built" --arg user "$fixture_uid:$fixture_gid" \
-    '.[0] as $i | length == 1 and
-     $i.Id == $id and ($i.RepoDigests | index($ref)) != null and
-     $i.Os == "linux" and $i.Architecture == "amd64" and $i.Config.User == $user and
-     (($i.Config.Entrypoint // []) | length) == 0 and
-     (($i.Config.Volumes // {}) | length) == 0 and
-     (($i.Config.Labels // {}) | has("devcontainer.metadata") | not)' "$state/cached-image.json" >/dev/null
+  d image inspect "$reference" >"$state/cached-image.json" || fail "cached inspection: expected exact reference $(fixture_value "$reference"); observed status=$?"
+  validate_cached "$state/cached-image.json" "$reference" "$built" "$fixture_uid" "$fixture_gid" || fail 'cached validation: expected validated image; observed failure'
 }
 
 registry_ready() {
@@ -210,73 +213,53 @@ prepare() {
     --tag "$tag" - <"$recipe"
   built=$(cat "$state/build.iid")
   digest_valid "$built"
-  d image push "$tag"
+  d image push "$tag" || fail "fixture push: expected pushed tag; observed status=$?"
   curl --fail --silent --show-error --noproxy '*' --proto '=http' --max-time 10 \
     --header 'Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json' \
     --dump-header "$state/manifest.headers" --output "$state/manifest.json" \
-    "$registry_url/v2/${repository#*/}/manifests/fixture"
-  local line header_count=0 actual
-  digest=''
-  while IFS= read -r line; do
-    line=${line%$'\r'}
-    if [[ ${line,,} == docker-content-digest:* ]]; then
-      digest=${line#*: }
-      header_count=$((header_count + 1))
-    fi
-  done <"$state/manifest.headers"
-  [[ $header_count == 1 ]] && digest_valid "$digest" || fail 'missing or ambiguous manifest digest header'
-  read -r actual _ < <(sha256sum "$state/manifest.json")
-  [[ sha256:$actual == "$digest" ]] || fail 'manifest bytes do not match Docker-Content-Digest'
-  jq -e --arg id "$built" '.schemaVersion == 2 and
-    (.mediaType == "application/vnd.docker.distribution.manifest.v2+json" or
-     .mediaType == "application/vnd.oci.image.manifest.v1+json") and
-    (has("manifests") | not) and .config.digest == $id' "$state/manifest.json" >/dev/null
-  [[ $digest != "$built" ]] || fail 'manifest digest must be distinct from image config ID'
+    "$registry_url/v2/${repository#*/}/manifests/fixture" || fail "registry manifest fetch: expected HTTP success and captured response; observed status=$?"
+  digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built") || fail "manifest validation stage: expected verified digest; observed status=$?"
   reference="$repository@$digest"
-  printf '%s\n' "$reference" >"$state/reference"
-  printf 'manifest verification: PASS bytes=%s config=%s\n' "$digest" "$built"
+  printf '%s\n' "$reference" >"$state/reference" || fail "fixture reference record: expected writable record; observed status=$?"
+  printf 'manifest verification: PASS bytes=%s config=%s\n' "$digest" "$built" || fail 'manifest verdict output: expected writable diagnostics; observed write failure'
 
-  remove_image_ref tag
-  remove_image_ref reference
+  remove_image_ref tag || fail "owned tag removal: expected absent; observed status=$?"
+  remove_image_ref reference || fail "owned digest removal: expected absent; observed status=$?"
   if inspect_image "$reference" "$state/cold-image.json"; then
-    fail 'digest reference was not cold'
+    fail "cold digest inspection: expected absent; observed present $reference"
   else
-    [[ $? == 1 ]] || fail 'cold digest inspection failed'
+    local cold_status=$?
+    [[ $cold_status == 1 ]] || fail "cold digest inspection: expected exact absence; observed status=$cold_status"
   fi
-  printf 'cold digest inspection: expected absent; observed absent\n'
-  d image pull --platform linux/amd64 "$reference"
-  cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid"
-  printf 'cached exact-reference inspection: PASS image=%s image_id=%s uid=%s gid=%s\n' "$reference" "$built" "$fixture_uid" "$fixture_gid"
+  printf 'cold digest inspection: expected absent; observed absent\n' || fail 'cold verdict output: expected writable diagnostics; observed write failure'
+  d image pull --platform linux/amd64 "$reference" || fail "cold digest pull: expected cached $reference; observed status=$?"
+  cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid" || fail "cold cache check: expected validated image; observed status=$?"
+  printf 'cached exact-reference inspection: PASS image=%s image_id=%s uid=%s gid=%s\n' "$reference" "$built" "$fixture_uid" "$fixture_gid" || fail 'cache verdict output: expected writable diagnostics; observed write failure'
 
-  printf '%s\n' "$smoke_name" >"$state/smoke.intent"
+  printf '%s\n' "$smoke_name" >"$state/smoke.intent" || fail "smoke intent record: expected writable record; observed status=$?"
   d container create --name "$smoke_name" --cidfile "$state/smoke.cid" \
     --label "io.itos.engine-fixture=$owner" --pull never --network none --read-only --cap-drop ALL \
     --security-opt no-new-privileges --user "$fixture_uid:$fixture_gid" "$reference" \
-    /bin/sh -c 'printf "uid=%s gid=%s\n" "$(id -u)" "$(id -g)"; printf "T-20-engine-fixture-ok\n"'
-  local smoke_id observed expected
-  smoke_id=$(cat "$state/smoke.cid")
-  timeout --signal=TERM --kill-after=1s 9s bash -euo pipefail -c "$(declare -f d); d container start --attach \"\$1\"" _ "$smoke_id" >"$state/smoke.out"
-  d container inspect "$smoke_id" >"$state/smoke.json"
-  jq -e '.[0].State | .Status == "exited" and .ExitCode == 0 and .OOMKilled == false and .Error == ""' "$state/smoke.json" >/dev/null
-  observed=$(cat "$state/smoke.out")
-  expected=$(printf 'uid=%s gid=%s\nT-20-engine-fixture-ok' "$fixture_uid" "$fixture_gid")
-  [[ $observed == "$expected" ]] || fail 'smoke output or effective identity mismatch'
-  printf 'fixture smoke: expected uid=%s gid=%s marker=T-20-engine-fixture-ok exit=0; observed %s exit=0\n' "$fixture_uid" "$fixture_gid" "$observed"
-  remove_container smoke
-  remove_container registry
-  printf 'pre-scenario cleanup: PASS smoke/registry absent; registry tmpfs discarded\n'
-  cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid"
-  printf 'registry offline; cached fixture remains inspectable: PASS\n'
-  # Publish atomically as one append, only after the entire protocol succeeded.
-  printf 'image=%s\nimage_id=%s\nuid=%s\ngid=%s\n' "$reference" "$built" "$fixture_uid" "$fixture_gid" >>"$GITHUB_OUTPUT"
+    /bin/sh -c 'printf "uid=%s gid=%s\n" "$(id -u)" "$(id -g)"; printf "T-20-engine-fixture-ok\n"' || fail "smoke create: expected hardened container; observed status=$?"
+  local smoke_id
+  smoke_id=$(cat "$state/smoke.cid") || fail "smoke ID read: expected recorded ID; observed status=$?"
+  [[ $smoke_id =~ ^[0-9a-f]{64}$ ]] || fail "smoke ID: expected 64 hex digits; observed=$(fixture_value "$smoke_id")"
+  timeout --signal=TERM --kill-after=1s 9s bash -euo pipefail -c "$(declare -f d); d container start --attach \"\$1\"" _ "$smoke_id" >"$state/smoke.out" || fail "smoke execution: expected completion within 10 seconds; observed status=$?"
+  d container inspect "$smoke_id" >"$state/smoke.json" || fail "smoke inspection: expected exit state; observed status=$?"
+  validate_smoke "$state/smoke.json" "$state/smoke.out" "$fixture_uid" "$fixture_gid" || fail 'smoke validation: expected exit and identity; observed failure'
+  printf 'fixture smoke: expected uid=%s gid=%s marker=T-20-engine-fixture-ok exit=0; observed matching output/identity exit=0\n' "$fixture_uid" "$fixture_gid" || fail 'smoke verdict output: expected writable diagnostics; observed write failure'
+  remove_container smoke || fail "pre-scenario smoke cleanup: expected absent; observed status=$?"
+  remove_container registry || fail "pre-scenario registry cleanup: expected absent; observed status=$?"
+  printf 'pre-scenario cleanup: PASS smoke/registry absent; registry tmpfs discarded\n' || fail 'cleanup verdict output: expected writable diagnostics; observed write failure'
+  cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid" || fail "final cache check: expected inspectable without registry; observed status=$?"
+  printf 'registry offline; cached fixture remains inspectable: PASS\n' || fail 'offline verdict output: expected writable diagnostics; observed write failure'
+  # Publish as one append, only after the entire protocol succeeded.
+  printf 'image=%s\nimage_id=%s\nuid=%s\ngid=%s\n' "$reference" "$built" "$fixture_uid" "$fixture_gid" >>"$GITHUB_OUTPUT" || fail "fixture output publication: expected four step outputs; observed status=$?"
 }
 
 bounded_cleanup() {
-  local result
-  set +e
-  timeout --signal=TERM --kill-after=1s 29s bash -euo pipefail -c "$(declare -f); cleanup"
-  result=$?
-  set -e
+  local result=0
+  timeout --signal=TERM --kill-after=1s 29s bash -euo pipefail -c "$(declare -f); cleanup" || result=$?
   if (( result != 0 )); then printf 'engine-fixture cleanup: failed or incomplete (status %s)\n' "$result" >&2; fi
   return "$result"
 }
