@@ -155,3 +155,11 @@ questions:
     item: "slice-17"
     question: "slice-17: ADR 0019 says fresh-process anchor recovery belongs to slice-18; is that conflict still open?"
     answer: "No. q-36 merged slice-18 into slice-17, so fresh-process recovery is this slice's scope and 60b81ed implements it. Update ADR 0019 to match, read CI run 42410829045 at 60b81ed, and treat a job dying near 600 s as go test's default timeout to fix by speeding the slow package, never by raising it. See slice-17-steer.md."
+  - id: q-39
+    item: "slice-17"
+    question: "slice-17: a workload that exits before the post-start stat can't be verified; refuse it (q-27) or keep its result?"
+    answer: "Keep its result. The detector checks the anchor, it is not the protection. While the worker runs: pidfd for State.Pid, a fresh inspect confirming the same PID, then stat /proc/<pid>/root/workspace; mismatch means teardown and refusal. If the worker already exited (before or between inspect and stat): return its real exit status, record the detector as not observed, tear down normally, claim no verification. Another stat failure while running stays a refusal. Regressions for exit 0 and nonzero in both windows and the PID-reuse guard; update ADR 0019. See slice-17-steer.md."
+  - id: q-40
+    item: "T-33"
+    question: "T-33: which native engine scenarios make the suite slow, and how to fix it?"
+    answer: "Run 42457394504: LIFECYCLE-13 row 1 takes 128 s (it waits out the real 120 s startup budget) and LIFECYCLE-09's four rows about 12 s each (the real 10 s grace); everything else is under 6 s. Shorten the product's call, startup and grace budgets for the harness through a test-only seam (a build tag or fixture config, never a user-settable variable), keep assertions relative to the budget used, then restore the 5-minute limits. See T-33-steer.md."
