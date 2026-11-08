@@ -92,6 +92,52 @@ func TestPinnedDownload(t *testing.T) {
 	}
 }
 
+func TestPinnedAssetRedirect(t *testing.T) {
+	archive := toolArchive(t)
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/asset":
+			if r.Header.Get("Accept") != "application/octet-stream" {
+				http.Error(w, "binary asset media type required", http.StatusNotAcceptable)
+				return
+			}
+			if calls.Add(1) == 1 {
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusGatewayTimeout)
+				return
+			}
+			http.Redirect(w, r, "/archive", http.StatusFound)
+		case "/archive":
+			_, _ = w.Write(archive)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	_, launcher := fixtureLauncher(t, server.URL+"/asset", archive)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sh", launcher, "--path", "golangci-lint")
+	cmd.Env = append(os.Environ(), "NO_PROXY=*", "no_proxy=*")
+	var diagnostics bytes.Buffer
+	cmd.Stderr = &diagnostics
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("asset download failed: %v\n%s", err, &diagnostics)
+	}
+	if calls.Load() != 2 || !strings.Contains(diagnostics.String(), "504") {
+		t.Fatalf("--path mixed streams or failed to retry: stdout %q, stderr %q, calls %d", output, diagnostics.String(), calls.Load())
+	}
+	// Consume the returned path as the caller's shell would, including on Git
+	// for Windows where shell paths differ from Go's native filesystem paths.
+	run := exec.CommandContext(ctx, "sh", "-c", `exec "$1" "$2"`, "fixture", strings.TrimSpace(string(output)), "an argument with spaces")
+	result, err := run.CombinedOutput()
+	if run.ProcessState == nil || run.ProcessState.ExitCode() != 7 || string(result) != "an argument with spaces\n" {
+		t.Fatalf("returned tool path is unusable: %v, output %q", err, result)
+	}
+}
+
 func fixtureLauncher(t *testing.T, url string, archive []byte) (string, string) {
 	t.Helper()
 	source, err := os.ReadFile("../bin/pinned")
