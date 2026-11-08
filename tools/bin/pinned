@@ -62,6 +62,24 @@ goreleaser)
 	url=https://api.github.com/repos/goreleaser/goreleaser/releases/assets/$asset_id
 	member=goreleaser exe=
 	;;
+git-cliff)
+	# Adapted from donvargax/itos-template at
+	# 79301eba51b9768a27906c720e39c49b08491e67; originally harvested from itos.
+	# v2.14.2, 2026-09-18. Upstream verified the archives against .sha512
+	# files before computing these SHA-256 values. T-25 preserves them and
+	# uses the existing binary asset API route with the matched asset IDs.
+	version=2.14.2
+	case "$platform" in
+	linux-amd64) target=x86_64-unknown-linux-gnu sum=24f397c733add5390fdceee3a2088588ab0d5f944ce00d34cb7029b888cf2db4 asset_id=573483509 ;;
+	linux-arm64) target=aarch64-unknown-linux-gnu sum=69e208f6e4baef3a0f9b759d5f44223aa9336b86c691072a3d0c98d35a816e69 asset_id=573483780 ;;
+	darwin-amd64) target=x86_64-apple-darwin sum=4e647d2deb152aca1e987f225cf42b080b991dd98f3bce4027ef95446d982ac3 asset_id=573484837 ;;
+	darwin-arm64) target=aarch64-apple-darwin sum=a0be97e237d440d34c5e508ec21d070b2c85cbb8be48a46a56f9a4e8bd247f05 asset_id=573487203 ;;
+	*) die "no pinned $tool for $platform" ;;
+	esac
+	asset=git-cliff-$version-$target.tar.gz
+	url=https://api.github.com/repos/orhun/git-cliff/releases/assets/$asset_id
+	member=git-cliff-$version/git-cliff exe=
+	;;
 itos-cc)
 	version=0.47.2
 	case "$platform" in
