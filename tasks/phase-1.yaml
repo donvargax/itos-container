@@ -2502,5 +2502,138 @@
     So agents cannot currently run the full feature suite inside a sane limit; the growth is in the
     suite, not only in the race detector. Profile the heap across the suite and release what each
     scenario keeps.
+
+    This is test-harness maintenance needed to validate the offline milestone, not new product
+    behaviour. The drafter edits only this ledger entry in docs --item T-35; no implementation,
+    scenarios or IDs. The implementation belongs in features/*_test.go in test --task T-35,
+    with any explanation of the measurements in features/README.md in docs --item T-35.
+    Preserve production code, all feature text and tags, smoke IDs, dependency pins, hooks,
+    workflows, proof settings and resource limits. T-31's heartbeat observer, T-33's engine
+    scheduling/performance work and T-34's fixture preparation remain separate.
+
+    Retain the promoted check's ceiling of 4194304 KiB (4 GiB). A complete, uncached ordinary
+    go test ./features -count=1 must exit zero below or at that peak resident-set size on Linux
+    amd64, including TestFeatures and the harness/coverage regressions normally run beside it.
+    Measure the test invocation and its reaped descendants with Linux getrusage's ru_maxrss;
+    this is the largest individual process high-water mark, not a sum of simultaneous RSS or
+    Go's cumulative allocations. Report the measured KiB, exit status, tested SHA, Go version
+    and scenario count. A cached result, skipped or narrowed suite, timeout, signal or OOM is
+    not a pass. Keep the existing memory cap; an OOM means the test consumes too much.
+
+    Never run -race on the whole features package, including after this repair. Use it only
+    for the focused regression named below and other changed tests selected explicitly with
+    -run. The complete feature suite runs without -race. The title's race requirement is
+    checked by exercising the repaired retention path under the race detector; do not claim
+    a measured full-suite race pass. Do not shard, restart between scenarios, drop coverage
+    reruns, reduce assertions, suppress diagnostics or change selection to meet the ceiling.
+    Do not tune GOGC, GOMEMLIMIT, GORACE or the machine's limit to hide retained state.
+
+    Read features/features_test.go, features/steps_test.go, features/engine_schedule_test.go
+    and the selection/coverage regressions before changing their shared harness. TestFeatures
+    builds the product once, then runScenarios initializes a fresh world and registers all
+    steps for each pickle at concurrency one. initializeScenario's After hook closes fixtures
+    and removes its directory, but leaves the world's fields reachable. The pinned godog
+    v0.16.0 suite.go stores matched step handlers in its result storage; those handlers can
+    retain a world. This is a profiling lead, not proof of the dominant allocation source.
+    Inspect any fixture owner reached by the profiles in full before changing its lifetime.
+
+    First collect comparable heap samples during one bounded non-engine run, after warm-up
+    and after more completed scenarios while the same suite and result storage are still
+    alive. Use Go's existing runtime/pprof, runtime memory statistics and process RSS; compare
+    retained heap with cumulative allocations and check for unfinished goroutines/resources.
+    A profile only after suite return can miss the retention. Identify the retaining path and
+    reproduce it before changing cleanup. Stop a pre-fix diagnostic when observed RSS exceeds
+    4 GiB; an early budget abort is failing evidence, never a completed run. Keep profiles and
+    logs in T-35-prefixed scratch paths and report their conclusions, without committing them.
+    The existing pinned godog and standard libraries suffice; no new library, dependency
+    upgrade, service, product flag or Go package is selected.
+
+    Release heavyweight scenario state after its assertions and owned cleanup finish, on both
+    success and failure. Close and join resources before dropping their references; clearing a
+    pointer alone must not orphan a process, server, pipe, timer or goroutine. Retain the failure
+    text, cleanup errors, step locations, independent scenario worlds, coverage propagation
+    and every existing engine/platform/red-selection boundary. Immutable registration data may
+    be shared only without sharing mutable world state. Preserve the nested quiet-worker
+    scheduling and its independent worlds. Do not add forced GC to normal scenario execution;
+    explicit collection is permitted only when taking diagnostic or regression heap samples.
+    If the profiles instead require a product behaviour change, report that gap for its own
+    spec rather than changing product semantics under this task.
+
+    Add TestFeatureMemoryRetention in features/memory_test.go as a focused regression through
+    the real runScenarios and initializeScenario paths, using synthetic temporary Gherkin,
+    not new product scenarios. Run 64 serial cases in one suite with the normal complete step
+    registration. Give each world a freshly allocated 4 MiB stdout payload containing a small
+    sentinel, and exercise the existing output assertion before cleanup. Do not execute the
+    product or an engine in this fixture. After the real After hook, collect and sample heap
+    at case 8 and case 64 while godog still owns its results; assert at most 32 MiB additional
+    live heap. The uncorrected retained payloads alone exceed that allowance. Count all 64
+    cases and cleanup completions, require removed scratch directories, and ensure the test's
+    own observers retain neither worlds nor payloads. Test failure/cleanup-error paths with
+    small separate fixtures too: the original diagnostic and nonzero result must survive,
+    cleanup must finish, and a later scenario must receive independent state. This bounded
+    workload tests lifetime, not an exact heap size or collector timing; the whole-suite RSS
+    check independently holds the real workload to its budget.
+
+    Commit that regression red first in test --item T-35 before the repair. Both ordinary and
+    focused race runs must fail at the retained-heap/lifetime assertion before implementation
+    and pass afterward. Missing-test discovery, compilation, setup failure, a race report or
+    OOM does not replace that assertion-level red. The second check below first requires the
+    exact test name so Go's successful 'no tests to run' result cannot satisfy it, then runs
+    only that test with and without -race, holding both invocations to the same 4 GiB RSS
+    ceiling. Keep this bounded check at the task tier; do not
+    broaden the repository's general race tier. Let the existing Linux test job run the full
+    suite and the configured hooks/CI run their gates.
+
+    At the drafter's d65191a174d68d89026dc281b762b04982c75488 baseline, the original check
+    cannot start because /usr/bin/time is absent. Replace that external-tool and RTK dependency
+    with Python 3's standard-library resource/subprocess measurement below, available in this
+    workspace and the Linux runner; no package installation is needed. The command clears
+    inherited Go instrumentation/tuning and engine/red selectors, streams output instead of
+    retaining it in the observer, and requires both a successful test and a positive in-budget
+    measurement. A separately monitored ordinary full-suite invocation reached 4305988 KiB
+    observed process RSS after 82.4 seconds and was terminated at the ceiling, before the
+    known OOM range. This is a reproduced budget failure, not a completed suite, end-of-run
+    heap profile or diagnosis of its cause. The exact-test discovery check exits 1 today
+    because TestFeatureMemoryRetention does not exist; the implementer still owes its red
+    assertion and the full passing measurement. Do not repeat an unguarded failing baseline.
+
+    Report the retaining path, before/after heap and RSS measurements, assertion-level red
+    and green for the focused regression, full non-engine execution counts and any remaining
+    limitations. A local harness result supplies no native-engine support evidence. Real
+    engine regressions remain CI-only at the actual pushed head, supplied by the coordinator;
+    agents never use Docker, approve real state or fabricate CI context. No mutation run or
+    generated evidence is part of this test-only task. Agents commit and stop; the loop owns
+    pushing, CI watching and closure.
   done_when:
-    - run: rtk proxy sh -c 'feature_rss=$(mktemp) || exit 1; trap "rm -f \"$feature_rss\"" EXIT; /usr/bin/time -f %M -o "$feature_rss" go test ./features -count=1 && test "$(cat "$feature_rss")" -le 4194304'
+    - run: |
+        env -u GOFLAGS -u GOCOVERDIR -u ITOS_CC_TEST_COVERDIR -u GOGC -u GOMEMLIMIT -u GORACE -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=0 python3 - <<'PY'
+        import resource
+        import subprocess
+        import sys
+
+        if sys.platform != "linux":
+            raise SystemExit("T-35 RSS accounting requires Linux")
+        status = subprocess.call(["go", "test", "./features", "-count=1"])
+        peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+        print(f"T-35 full features: exit {status}, peak RSS {peak} KiB, limit 4194304 KiB", flush=True)
+        raise SystemExit(0 if status == 0 and 0 < peak <= 4194304 else 1)
+        PY
+    - run: |
+        env -u GOFLAGS -u GOCOVERDIR -u ITOS_CC_TEST_COVERDIR -u GOGC -u GOMEMLIMIT -u GORACE -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=0 python3 - <<'PY'
+        import resource
+        import subprocess
+        import sys
+
+        if sys.platform != "linux":
+            raise SystemExit("T-35 RSS accounting requires Linux")
+        name = "TestFeatureMemoryRetention"
+        selection = "^" + name + "$"
+        listed = subprocess.run(["go", "test", "./features", "-list", selection], check=True, text=True, stdout=subprocess.PIPE)
+        if name not in listed.stdout.splitlines():
+            raise SystemExit("missing required regression: " + name)
+        subprocess.run(["go", "test", "./features", "-count=1", "-run", selection], check=True)
+        subprocess.run(["go", "test", "-race", "./features", "-count=1", "-run", selection], check=True)
+        peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+        print(f"T-35 focused runs: peak RSS {peak} KiB, limit 4194304 KiB", flush=True)
+        raise SystemExit(0 if 0 < peak <= 4194304 else 1)
+        PY
