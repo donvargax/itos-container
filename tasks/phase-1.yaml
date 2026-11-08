@@ -2386,24 +2386,33 @@
     rendering its summary fails. Log only these selected fixture observations and failure stages,
     not complete image configurations, environment variables, auth files or shell tracing.
 
-    Use the diagnostic CI result to identify the failed predicate before selecting the repair.
-    If the response is an index, make the push explicitly single-platform, retaining the current
-    local builder and empty context. Prefer the existing Docker CLI's --platform linux/amd64
-    push option when the observed server supports API 1.46 or newer; Docker documents that it
-    omits the index and attestations at https://docs.docker.com/reference/cli/docker/image/push/.
-    This is a documented repair path, not evidence that it explains this run. If that path is
-    unavailable, report the incompatibility rather than add a builder, service or daemon setting.
-    Never pass an index digest as the fixture image or accept the first descriptor in an index.
-    If --iidfile identifies something other than the built config, retain its raw value in the
-    diagnostics and independently establish the built image's config identity before comparing
-    the registry response. Do not take config.digest from that response as its own expected value
-    or accept either digest opportunistically. If the engine cannot supply the existing config-ID
-    contract, stop and report it; changing the product's identity semantics is outside this task.
+    The coordinator's 2026-11-08 q-43 decision settles the cause and supersedes the earlier
+    config-ID-only requirement. Diagnostic run 42497992377 at
+    4eedcec4f994ee15223532bf753631057adbae40 used Docker 29.4.2 / API 1.54 on Linux amd64.
+    It returned a single OCI manifest whose advertised and measured digest equaled --iidfile,
+    while config.digest differed. The runner uses the containerd image store; this was not an
+    index or BuildKit failure. Preserve the builder and push strategy. Accept and report either
+    graph-driver identity (built ID equals config.digest and differs from the manifest digest)
+    or containerd identity (built ID equals the measured manifest digest). Reject every other
+    relationship. Never pass an index digest as the fixture image or select its first descriptor.
+
+    Independently hash the daemon's raw config before comparing config.digest. Use the existing
+    Docker CLI image save command on the immutable built ID, within the same preparation budget,
+    and the runner's tar utility to read manifest.json and its single Config member to stdout.
+    Docker documents this daemon export at https://docs.docker.com/reference/cli/docker/image/save/.
+    Accept only one export record and a digest-shaped Config member, never arbitrary archive
+    paths or extraction into the filesystem. Validate the raw config as Linux amd64 JSON and
+    match its bytes to its member digest. This adds no installed dependency or engine service.
+    In the graph-driver case also require this config digest to equal the built ID; in the
+    containerd case compare it to the registry manifest's config.digest. Do not use the registry
+    response as its own expected config. Keep the raw built ID for cached inspection, ownership
+    and image_id output on both stores; that output names the daemon's image ID, not always a
+    config digest. Product identity semantics remain unchanged.
 
     Continue requiring exactly one well-formed Docker-Content-Digest header equal to the SHA-256
     of the exact response bytes, schemaVersion 2, one of the existing two single-image media
     types, no manifests key and config.digest equal to the independently established built config
-    ID. The published manifest digest must remain distinct from that config ID. Keep the cold
+    ID. Require distinct manifest and built IDs in the graph-driver case only. Keep the cold
     exact-reference pull and RepoDigests membership, Linux amd64, numeric non-root UID/GID, empty
     entrypoint, no volumes or devcontainer metadata, hardened smoke output/identity/exit checks,
     registry removal before scenarios and cached inspection after removal. Keep cleanup confined
@@ -2423,7 +2432,7 @@
     definitions only, used by both the real preparation path and tests. Tests invoke only those
     validators with temporary captured-response files and synthetic IDs, never the prepare/cleanup
     driver, Docker, a registry, a fake Docker transcript or spoofed CI variables. Use the existing
-    Bash, jq and coreutils and Go test facilities; no new parser or Go package is needed.
+    Bash, jq, tar and coreutils and Go test facilities; no new parser or Go package is needed.
 
     Exercise valid Docker v2 and OCI single-image responses as positive controls. Independently
     reject wrong schema/media type, OCI index and Docker manifest list, even an empty manifests
@@ -2434,6 +2443,14 @@
     synthetic inspection JSON; retain the existing workflow/recipe/helper negative controls.
     Tests must execute production validation, not a copied jq predicate whose result can diverge.
     Static guard checks and captured JSON tests are regression evidence, never runtime evidence.
+
+    Extend those regressions for both stores, including an assertion-level red containerd
+    positive control before implementation. Reject missing/malformed/mismatched daemon config
+    identities, unrelated built IDs, invalid export records/member paths and raw-config byte or
+    platform mismatches. Exercise the shared export/config validators on captured data only;
+    guard the production export and tar reads, and require their independently measured config
+    to reach manifest validation. The existing task checks already pass at the diagnostic head;
+    that is preservation evidence, not proof of containerd compatibility.
 
     The done_when command refuses either missing new regression before running its focused
     engine-disabled selection and the existing fixture/workflow regressions. On 7f8af93 it exits 1
@@ -2461,7 +2478,8 @@
 
     Implementation is limited to tools/bin/engine-fixture and tools/lib/engine-fixture-checks.sh
     in ci --task T-34, features/engine_fixture_test.go in test --item T-34, and accurate protocol
-    updates in features/README.md in docs --item T-34. The workflow itself needs no change.
+    updates in features/README.md and this settled specification in docs --item T-34.
+    The workflow itself needs no change.
     Keep new checks and their production integration in scope; do not leave an unused validator
     that passes tests while prepare still runs the old predicate. Commit no generated fixture,
     log, coverage or mutation evidence. Let configured hooks and CI run the gates. Agents commit
