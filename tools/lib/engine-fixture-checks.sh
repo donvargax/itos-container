@@ -36,7 +36,7 @@ fail_manifest_read() {
 }
 
 validate_manifest() {
-  local manifest=$1 headers=$2 built=$3 header_data line digest='' header_count=0 actual
+  local manifest=$1 headers=$2 built=$3 daemon_config=${4:-} header_data line digest='' header_count=0 actual store
   header_data=$(cat -- "$headers") || fail_manifest_read 'manifest header read' "$manifest" "$built" '<unavailable>' "$?"
   while IFS= read -r line; do
     line=${line%$'\r'}
@@ -51,19 +51,49 @@ validate_manifest() {
   [[ $header_count == 1 ]] && digest_valid "$digest" || fail "manifest header: expected one sha256 digest; observed count=$header_count digest=$(fixture_value "$digest")"
   digest_valid "$actual" || fail "manifest byte hashing: expected sha256 digest; observed=$(fixture_value "$actual")"
   [[ $actual == "$digest" ]] || fail "manifest bytes: expected advertised=$digest; observed measured=$actual"
-  digest_valid "$built" || fail "built identity: expected config sha256; observed=$(fixture_value "$built")"
-  [[ $digest != "$built" ]] || fail "manifest identity: expected distinct manifest/config IDs; observed manifest=$digest builtID=$built"
+  digest_valid "$built" || fail "built identity: expected image sha256; observed=$(fixture_value "$built")"
+  digest_valid "$daemon_config" || fail "daemon config identity: expected independently measured config sha256; observed=$(fixture_value "$daemon_config")"
+  # The daemon's immutable image ID means different things in the two stores.
+  # The config expectation comes only from the daemon export, never this response.
+  if [[ $built == "$digest" ]]; then
+    store=containerd
+  else
+    store=graph-driver
+    [[ $built == "$daemon_config" ]] || fail "manifest identity: expected graph-driver builtID=daemonConfigID distinct from manifest, or containerd builtID=manifest; observed manifest=$digest builtID=$built daemonConfigID=$daemon_config"
+  fi
+  printf 'manifest identity: store=%s builtID=%s daemonConfigID=%s manifest=%s\n' "$store" "$built" "$daemon_config" "$digest" >&2 || fail 'manifest identity output: expected writable diagnostics; observed write failure'
   local predicate='length == 1 and (.[0] | type == "object" and .schemaVersion == 2 and
     (.mediaType == "application/vnd.docker.distribution.manifest.v2+json" or
      .mediaType == "application/vnd.oci.image.manifest.v1+json") and
     (has("manifests") | not) and (.config | type == "object" and .digest == $id))'
-  jq -e -s --arg id "$built" "$predicate" "$manifest" >/dev/null 2>&1 || fail 'manifest validation: expected schemaVersion=2, single-image mediaType, hasManifests=false, configDigest=builtID; observed fields in manifest observation'
+  jq -e -s --arg id "$daemon_config" "$predicate" "$manifest" >/dev/null 2>&1 || fail 'manifest validation: expected schemaVersion=2, single-image mediaType, hasManifests=false, configDigest=daemonConfigID; observed fields in manifest observation and identity'
   printf '%s\n' "$digest" || fail 'manifest digest output: expected writable output; observed write failure'
+}
+
+# Docker save reports the raw config member independently of the registry. Both
+# archive layouts use digest-shaped names; never select an arbitrary tar path.
+daemon_config_path() {
+  local file=$1 member
+  member=$(jq -ers 'if length == 1 and (.[0] | type == "array" and length == 1) then .[0][0].Config | strings else error("expected one exported image") end' "$file" 2>/dev/null) || fail 'daemon export metadata: expected one image with a Config member; observed invalid export JSON or member type'
+  [[ $member =~ ^([0-9a-f]{64}\.json|blobs/sha256/[0-9a-f]{64})$ ]] || fail "daemon export member: expected config digest path; observed=$(fixture_value "$member")"
+  printf '%s\n' "$member" || fail 'daemon export member output: expected writable output; observed write failure'
+}
+
+daemon_config_digest() {
+  local file=$1 member=$2 actual expected
+  # Hash the captured bytes before parsing; reserializing JSON changes identity.
+  actual=$(sha256sum -- "$file") || fail "daemon config hashing: expected readable raw config; observed status=$?"
+  actual="sha256:${actual%% *}"
+  expected=${member##*/}
+  expected="sha256:${expected%.json}"
+  digest_valid "$expected" && [[ $actual == "$expected" ]] || fail "daemon config bytes: expected member=$(fixture_value "$member"); observed measured=$(fixture_value "$actual")"
+  jq -e -s 'length == 1 and (.[0] | type == "object" and .os == "linux" and .architecture == "amd64" and (.config | type == "object"))' "$file" >/dev/null 2>&1 || fail "daemon config validation: expected one Linux amd64 image config; observed invalid config at digest=$actual"
+  printf '%s\n' "$actual" || fail 'daemon config digest output: expected writable output; observed write failure'
 }
 
 validate_cached() {
   local file=$1 reference=$2 built=$3 fixture_uid=$4 fixture_gid=$5 observed
-  digest_valid "$built" || fail "cached identity: expected config sha256; observed=$(fixture_value "$built")"
+  digest_valid "$built" || fail "cached identity: expected image sha256; observed=$(fixture_value "$built")"
   [[ $fixture_uid =~ ^[1-9][0-9]*$ && $fixture_gid =~ ^[0-9]+$ ]] || fail "cached identity: expected numeric non-root UID/GID; observed=$(fixture_value "$fixture_uid:$fixture_gid")"
   local predicate='length == 1 and (.[0] | type == "array" and length == 1 and
     (.[0] | .Id == $id and (.RepoDigests | type == "array" and index($ref) != null) and

@@ -12,7 +12,7 @@ source "${BASH_SOURCE[0]%/*}/../lib/engine-fixture-checks.sh" || {
 [[ $# == 1 && ( $1 == prepare || $1 == cleanup ) ]] || fail 'usage: engine-fixture prepare|cleanup'
 [[ ${CI:-} == true && ${GITHUB_ACTIONS:-} == true ]] || fail 'requires GitHub Actions'
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || fail 'requires an actual Linux amd64 host'
-for tool in timeout docker curl jq sha256sum readlink id mkdir cat; do
+for tool in timeout docker curl jq sha256sum readlink id mkdir cat tar; do
   command -v "$tool" >/dev/null || fail "missing tool: $tool"
 done
 [[ ${GITHUB_RUN_ID:-} =~ ^[0-9]+$ && ${GITHUB_RUN_ATTEMPT:-} =~ ^[0-9]+$ ]] || fail 'missing run/attempt identity'
@@ -71,7 +71,7 @@ remove_image_ref() {
     base=$(cat "$state/base.iid") || fail "owned-reference base identity read: expected base.iid; observed status=$?"
     registry=$(cat "$state/registry.iid") || fail "owned-reference registry identity read: expected registry.iid; observed status=$?"
     # Never delete a pinned input, even if an invalid recipe somehow produced it.
-    [[ $built != "$base" && $built != "$registry" ]] || fail "owned-reference protection: expected derived config; observed built=$built base=$(fixture_value "$base") registry=$(fixture_value "$registry")"
+    [[ $built != "$base" && $built != "$registry" ]] || fail "owned-reference protection: expected derived image; observed built=$built base=$(fixture_value "$base") registry=$(fixture_value "$registry")"
     d image rm "$ref" || fail "owned-reference removal: expected removed $(fixture_value "$ref"); observed status=$?"
   else
     status=$?
@@ -147,7 +147,7 @@ cleanup() {
     fail "cleanup: expected all owned resources absent; observed removal failures; retained record $state"
   fi
   printf 'engine-fixture cleanup: PASS; containers, tmpfs storage and derived references absent\n' || fail 'cleanup verdict write failed'
-  # Retain the tiny record for idempotent cleanup and runner diagnostics. Never
+  # Retain the record for idempotent cleanup and runner diagnostics. Never
   # delete checkout files, prune the engine or remove the shared pinned inputs.
 }
 
@@ -192,7 +192,7 @@ prepare() {
     --label "io.itos.engine-fixture=$owner" --publish 127.0.0.1::5000 \
     --tmpfs /var/lib/registry:rw,nosuid,nodev --restart no \
     --env OTEL_TRACES_EXPORTER=none "$registry_image"
-  local registry_id port registry_url repository tag built digest reference
+  local registry_id port registry_url repository tag built digest reference config_path daemon_config
   registry_id=$(cat "$state/registry.cid")
   d container start "$registry_id"
   d container inspect "$registry_id" >"$state/registry.json"
@@ -214,14 +214,21 @@ prepare() {
   built=$(cat "$state/build.iid")
   digest_valid "$built"
   d image push "$tag" || fail "fixture push: expected pushed tag; observed status=$?"
+  # Read the daemon's config independently of the registry response, by immutable
+  # built ID. tar writes only the named members to stdout, never archive paths.
+  d image save --output "$state/built.tar" "$built" || fail "daemon image export: expected saved builtID=$built; observed status=$?"
+  tar -xOf "$state/built.tar" manifest.json >"$state/export-manifest.json" || fail "daemon export metadata read: expected manifest.json; observed status=$?"
+  config_path=$(daemon_config_path "$state/export-manifest.json") || fail "daemon export metadata validation: expected one config member; observed status=$?"
+  tar -xOf "$state/built.tar" "$config_path" >"$state/daemon-config.json" || fail "daemon config read: expected member=$(fixture_value "$config_path"); observed status=$?"
+  daemon_config=$(daemon_config_digest "$state/daemon-config.json" "$config_path") || fail "daemon config validation stage: expected independent config digest; observed status=$?"
   curl --fail --silent --show-error --noproxy '*' --proto '=http' --max-time 10 \
     --header 'Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json' \
     --dump-header "$state/manifest.headers" --output "$state/manifest.json" \
     "$registry_url/v2/${repository#*/}/manifests/fixture" || fail "registry manifest fetch: expected HTTP success and captured response; observed status=$?"
-  digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built") || fail "manifest validation stage: expected verified digest; observed status=$?"
+  digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built" "$daemon_config") || fail "manifest validation stage: expected verified digest; observed status=$?"
   reference="$repository@$digest"
   printf '%s\n' "$reference" >"$state/reference" || fail "fixture reference record: expected writable record; observed status=$?"
-  printf 'manifest verification: PASS bytes=%s config=%s\n' "$digest" "$built" || fail 'manifest verdict output: expected writable diagnostics; observed write failure'
+  printf 'manifest verification: PASS bytes=%s config=%s builtID=%s\n' "$digest" "$daemon_config" "$built" || fail 'manifest verdict output: expected writable diagnostics; observed write failure'
 
   remove_image_ref tag || fail "owned tag removal: expected absent; observed status=$?"
   remove_image_ref reference || fail "owned digest removal: expected absent; observed status=$?"
