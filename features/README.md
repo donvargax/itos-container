@@ -46,9 +46,11 @@ selections skip these independent reruns so only selected product IDs execute. E
 retains ordinary coverage; memory-only harness regressions still run.
 
 Slice-4's identity, publication and frozen-input contract IDs use a test-only
-`cmd/itos-container` assembly too. Their nested `go test` enables atomic coverage
-across the module when `GOCOVERDIR` is set and passes that directory explicitly
-through `-test.gocoverdir`, since `go test` supplies its own temporary directory.
+`cmd/itos-container` assembly too. Manifest, approval, preflight and session
+contracts share its compiled executable, while each invocation keeps separate
+inputs, processes and results. A covered executable is cached separately from
+the plain one; it enables atomic coverage across the module and passes the
+caller's measurement directory explicitly through `-test.gocoverdir`.
 `TestApprovalContractCoverage` requires executed approval-domain counters for each
 of the five IDs in separate directories. Like the manifest regression, it skips
 filtered and active manual red selections so they execute only the requested IDs.
@@ -88,6 +90,18 @@ PTY allocation or verification failures on Linux remain failures, never skips.
 Invalid regexes, unreadable/malformed features and expressions matching no scenario's effective
 tags fail. A selection containing only excluded cases explicitly skips `TestFeatures`, with
 the reason, excluded IDs and count. A mixed selection runs eligible cases and logs exclusions.
+
+The ordinary local `TestFeatures` run schedules at most four independent
+scenarios at once. Each keeps its own checkout, state, child processes and HTTP
+endpoint. Shared helper executables live outside those checkouts and are
+published only after a successful build, with one build per cache path. All
+selected rows, assertions, real operation deadlines and cleanup checks still run. Native engine
+and manual red selections remain serial. Harness tests use serial execution
+unless explicitly testing this scheduler. Local API setup and subprocess
+completion synchronize with their recorder locks; live fault edits use those
+locks too. Request snapshots are copied and probe-specific inputs go directly
+to the child, so observers never depend on an unprotected shared environment.
+
 Use `-v` to see successful-run logs and Go's skip report. Selection precedes the binary build,
 scenario initialization, Background steps and any engine access. Each eligible scenario is a
 subtest of `TestFeatures`, named after the scenario.
@@ -485,8 +499,8 @@ CI-only and belong to the coordinating loop.
 ## Tags
 
 Slice-17 includes slice-18's accepted `anchors.feature` under coordinator q-36.
-The seven native rows in `ID-ANCHORS-09` through `ID-ANCHORS-13` have registered
-steps and remain `@wip` for their own guarded CI red dispatch. They use actual
+The seven native rows in `ID-ANCHORS-09` through `ID-ANCHORS-13` are live after
+q-37 accepted their assertion-level CI red in run 42400524477. They use actual
 product processes, the native request recorder, independently inspected volumes,
 and the existing file/publication fsync observer. The trusted worker probe reports
 inode, nonce, progress and denied control-record reads after controller loss.
@@ -496,11 +510,12 @@ The recorder never fabricates successful native resource operations.
 
 `TestAnchorRecovery*` checks registration, CI-only guards, probe compilation,
 barriers and rejection of missing/incorrect observations without an engine.
-These are harness checks, not native red evidence. The coordinator must obtain
-assertion-level red for every row before recovery implementation; OFFLINE-29/30's
-accepted red does not cover them. Dispatch individual IDs if needed to stay within
-the existing engine-job budget. Local `ID-ANCHORS-01` through `08` still require
-their step checkpoint and assertion-level red; no anchor scenario is activated here.
+These are harness checks, not native red evidence. Local `ID-ANCHORS-01` through
+`08` are also live: `8a0bb23`, `4a39085` and `ac433f5` provide the step checkpoints
+and assertion-level red for all 49 rows. The combined implementation passes those
+rows and the 25 local OFFLINE anchor rows. Fresh-process recovery is part of
+slice-17 under q-36/q-38; schema-2 status and stop account for the original anchor.
+Native green at the actual pushed head remains the coordinator's CI obligation.
 
 | Tag               | Meaning                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------ |

@@ -446,6 +446,12 @@ func (w *world) recoveryNoLaunch() error {
 	return nil
 }
 func (w *world) recoveryLocalDiscover() {
+	w.session.api.mu.Lock()
+	defer w.session.api.mu.Unlock()
+	w.recoveryLocalDiscoverLocked()
+}
+
+func (w *world) recoveryLocalDiscoverLocked() {
 	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.recoveryIndexKey())
 	dirs, _ := os.ReadDir(root)
 	for _, dir := range dirs {
@@ -515,7 +521,7 @@ func (a *sessionAPI) recoveryCreate(r *http.Request, q sessionRequest, index int
 	c["Mounts"] = localAnchorMount(object(host))
 	a.local[id], a.observed[id] = c, approvalClone(c)
 	a.created = append(a.created, id)
-	w.recoveryLocalDiscover()
+	w.recoveryLocalDiscoverLocked()
 	e := recoveryRegistration{path: w.recoveryRecordPath(), token: w.session.token, intent: q.Record}
 	e.record, _ = sessionReadRecord(e.path)
 	for _, p := range w.recovery.processes {

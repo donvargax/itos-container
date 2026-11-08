@@ -283,7 +283,7 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 	p.cmd.Stdout = &p.out
 	p.cmd.Stderr = &p.err
 	p.cmd.WaitDelay = time.Second
-	if err := p.cmd.Start(); err != nil {
+	if err := w.startLocalCommand(p.cmd); err != nil {
 		cancel()
 		return nil, err
 	}
@@ -297,7 +297,12 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 			}
 		}
 	}
-	go func() { _ = p.cmd.Wait(); close(p.done) }()
+	go func() {
+		_ = p.cmd.Wait()
+		unlock := w.lockLocalAPI()
+		defer unlock()
+		close(p.done)
+	}()
 	return p, nil
 }
 func (w *world) finishRun(p *runProcess) (runObservation, error) {

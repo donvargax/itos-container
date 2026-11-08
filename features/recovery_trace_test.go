@@ -48,10 +48,9 @@ func (w *world) recoveryTraceBinary() (string, error) {
 	if filepath.IsAbs(w.bin) {
 		path = w.bin + "-slice-11-trace"
 	}
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
-	}
-	return path, recoveryBuildHelper(w.root, path, recoveryTraceSource)
+	return featureBinary(path, func(target string) error {
+		return recoveryBuildHelper(w.root, target, recoveryTraceSource)
+	})
 }
 
 func recoveryReadSyncs(path string) ([]recoverySync, error) {

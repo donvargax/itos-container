@@ -261,9 +261,13 @@ func (w *world) anchorRecoveryBudget() error {
 	if len(w.recoveryLocal.results) > 0 {
 		w.recoveryLocal.results[0].elapsed = time.Since(start)
 	}
+	w.session.api.mu.Lock()
 	fault := a.fault
 	a.fault = ""
+	w.session.api.mu.Unlock()
 	a.problem = errors.Join(a.problem, w.recoveryTracedInvocation("stop", "--json", w.recoveryLocal.id))
+	w.session.api.mu.Lock()
 	a.fault = fault
+	w.session.api.mu.Unlock()
 	return w.anchorRecoveryMemory()
 }

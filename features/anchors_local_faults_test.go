@@ -125,7 +125,9 @@ func (w *world) anchorRecoveryFaultAction() error {
 		return w.recoveryTracedInvocation("stop", "--json", w.recoveryLocal.id)
 	}
 	a.problem = errors.Join(a.problem, invoke())
-	a.firstRequests = len(w.sessionRequests())
+	requests := w.sessionRequests()
+	w.session.api.mu.Lock()
+	a.firstRequests = len(requests)
 	a.firstVolume = "absent"
 	if w.session.api.volumes[a.name] != nil {
 		a.firstVolume = "present"
@@ -133,7 +135,7 @@ func (w *world) anchorRecoveryFaultAction() error {
 	if a.fault == "volume delete reply lost and inspection unavailable" {
 		a.firstVolume = "unknown"
 	}
-	for _, q := range w.sessionRequests() {
+	for _, q := range requests {
 		if q.Method == "DELETE" && q.Path == "/volumes/"+a.name {
 			a.reached = true
 		}
@@ -145,8 +147,11 @@ func (w *world) anchorRecoveryFaultAction() error {
 	w.recoveryLocal.fault = ""
 	originalFault := a.fault
 	a.fault = ""
+	w.session.api.mu.Unlock()
 	a.problem = errors.Join(a.problem, w.recoveryTracedInvocation("stop", "--json", w.recoveryLocal.id))
+	w.session.api.mu.Lock()
 	a.fault = originalFault
+	w.session.api.mu.Unlock()
 	if a.control != nil {
 		a.problem = errors.Join(a.problem, a.control.recoveryTracedInvocation("stop", "--json", a.control.recoveryLocal.id))
 	}

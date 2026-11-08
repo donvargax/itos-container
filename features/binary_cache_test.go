@@ -4,18 +4,47 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 )
 
-// The initial implementation mirrors the existing per-helper cache. The
-// concurrency regression below exposes publication of an incomplete build.
+// Each in-flight build owns a completion channel. Waiters retry after failure;
+// successful builds are immutable and shared outside the scenario checkouts.
+var featureBinaryBuilds sync.Map
+
 func featureBinary(path string, build func(string) error) (string, error) {
+	for {
+		done := make(chan struct{})
+		if pending, loaded := featureBinaryBuilds.LoadOrStore(path, done); loaded {
+			<-pending.(chan struct{})
+			continue
+		}
+		defer func() {
+			featureBinaryBuilds.Delete(path)
+			close(done)
+		}()
+		break
+	}
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
 	}
-	return path, build(path)
+	dir, err := os.MkdirTemp(filepath.Dir(path), "slice-17-binary-")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	target := filepath.Join(dir, "probe")
+	if err := build(target); err != nil {
+		return "", err
+	}
+	if err := os.Rename(target, path); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func TestFeatureBinaryPublishesOnceAfterBuild(t *testing.T) {

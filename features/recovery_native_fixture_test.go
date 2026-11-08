@@ -125,12 +125,22 @@ func (w *world) recoveryStart(args ...string) *recoveryProcess {
 }
 
 func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *recoveryProcess {
+	return w.recoveryStartConfigured(timeout, w.bin, nil, args...)
+}
+
+func (w *world) recoveryStartConfigured(timeout time.Duration, executable string, env map[string]string, args ...string) *recoveryProcess {
 	r := w.recovery
 	p := &recoveryProcess{exit: -1, done: make(chan struct{})}
+	if w.session != nil && w.session.api != nil {
+		w.session.api.mu.Lock()
+	}
 	r.processes = append(r.processes, p)
 	index := strconv.Itoa(len(r.processes))
 	p.journal = filepath.Join(w.dir, "slice-11-sync-"+index+".jsonl")
 	p.pid = filepath.Join(w.dir, "slice-11-pid-"+index)
+	if w.session != nil && w.session.api != nil {
+		w.session.api.mu.Unlock()
+	}
 	trace, err := w.recoveryTraceBinary()
 	if err != nil {
 		p.err = err
@@ -140,7 +150,6 @@ func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *reco
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	p.cancel = cancel
 	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
-	executable := w.bin
 	localRun := w.doctor.real == nil && len(args) > 0 && args[0] == "run"
 	if localRun {
 		executable, err = w.sessionProbeBinary()
@@ -161,6 +170,9 @@ func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *reco
 	for key, value := range w.doctor.env {
 		p.cmd.Env = setEnv(p.cmd.Env, key, value)
 	}
+	for key, value := range env {
+		p.cmd.Env = setEnv(p.cmd.Env, key, value)
+	}
 	if w.anchors != nil {
 		p.cmd.Env = setEnv(p.cmd.Env, "SLICE_17_ACCESS_TRACE", "1")
 	}
@@ -171,7 +183,7 @@ func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *reco
 	}
 	p.cmd.Stdout, p.cmd.Stderr = &p.out, &p.errout
 	p.started = time.Now()
-	if err := p.cmd.Start(); err != nil {
+	if err := w.startLocalCommand(p.cmd); err != nil {
 		p.err = err
 		cancel()
 		close(p.done)
@@ -181,6 +193,8 @@ func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *reco
 		defer close(p.done)
 		defer cancel()
 		err := p.cmd.Wait()
+		unlock := w.lockLocalAPI()
+		defer unlock()
 		p.finished = time.Now()
 		p.exit = 0
 		if err != nil {

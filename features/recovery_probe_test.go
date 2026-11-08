@@ -28,16 +28,11 @@ func (w *world) recoveryProbeStart(args ...string) (*recoveryProbe, error) {
 	if err = os.WriteFile(input, approvalJSON(request), 0600); err != nil {
 		return nil, err
 	}
-	original := w.bin
-	w.bin = bin
-	w.doctor.env["SLICE_11_REQUEST"] = input
 	arguments := []string{"-test.run=^TestPublicRecoveryCommand$", "-test.count=1"}
 	if cover := os.Getenv("GOCOVERDIR"); cover != "" {
 		arguments = append(arguments, "-test.gocoverdir="+cover)
 	}
-	p.process = w.recoveryStart(arguments...)
-	w.bin = original
-	delete(w.doctor.env, "SLICE_11_REQUEST")
+	p.process = w.recoveryStartConfigured(120*time.Second, bin, map[string]string{"SLICE_11_REQUEST": input}, arguments...)
 	return p, nil
 }
 func (w *world) recoveryProbeWait(p *recoveryProbe) error {

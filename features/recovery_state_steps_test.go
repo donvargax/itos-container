@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -333,7 +334,9 @@ func (w *world) sessionRequests() []sessionRequest {
 	if w.session == nil {
 		return nil
 	}
-	return w.session.api.requests
+	w.session.api.mu.Lock()
+	defer w.session.api.mu.Unlock()
+	return slices.Clone(w.session.api.requests)
 }
 func (w *world) recoveryImmutable() error {
 	before := w.recoveryLocal.immutable

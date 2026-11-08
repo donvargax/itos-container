@@ -449,7 +449,12 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err := w.startLocalCommand(cmd)
+	if err == nil {
+		err = cmd.Wait()
+	}
+	unlock := w.lockLocalAPI()
+	defer unlock()
 	w.timedOut = errors.Is(ctx.Err(), context.DeadlineExceeded)
 	w.stdout, w.stderr = stdout.String(), stderr.String()
 	var exit *exec.ExitError
@@ -462,6 +467,33 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 		return fmt.Errorf("running %s: %w", program, err)
 	}
 	return nil
+}
+
+// A subprocess/HTTP exchange is not Go memory synchronization. Guard child
+// startup and result publication with the same locks as the fixture handlers.
+// Session handlers may call doctor handlers, so acquire their locks in that order.
+func (w *world) lockLocalAPI() func() {
+	if w.session != nil && w.session.api != nil {
+		w.session.api.mu.Lock()
+	}
+	if w.doctor != nil && w.doctor.engine != nil {
+		w.doctor.engine.mu.Lock()
+	}
+	return func() {
+		if w.doctor != nil && w.doctor.engine != nil {
+			w.doctor.engine.mu.Unlock()
+		}
+		if w.session != nil && w.session.api != nil {
+			w.session.api.mu.Unlock()
+		}
+	}
+}
+
+func (w *world) startLocalCommand(cmd *exec.Cmd) error {
+	unlock := w.lockLocalAPI()
+	defer unlock()
+	// Release before waiting: the running child must be able to contact the API.
+	return cmd.Start()
 }
 
 // Fixture steps.
