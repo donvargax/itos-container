@@ -7,6 +7,31 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
+func mountSystemDetail(source any) port.MountSystemError {
+	if source, ok := source.(port.MountErrorSource); ok {
+		return source.MountError()
+	}
+	return port.MountSystemError{}
+}
+
+func finiteMountError(gate chan struct{}, source any) port.MountSystemError {
+	// A timed-out observation may still own the adapter. Do not race its
+	// diagnostic write or postpone immediate teardown waiting for its return.
+	select {
+	case <-gate:
+		defer func() { gate <- struct{}{} }()
+		return mountSystemDetail(source)
+	default:
+		return port.MountSystemError{Message: "diagnostic unavailable while observation is pending"}
+	}
+}
+func (w finiteWorkspace) MountError() port.MountSystemError {
+	return finiteMountError(w.gate, w.Workspace)
+}
+func (p finiteProcess) MountError() port.MountSystemError {
+	return finiteMountError(p.gate, p.Process)
+}
+
 func (w finiteWorkspace) HoldProcess(pid int) (port.Process, port.Outcome) {
 	a, ok := w.Workspace.(port.ProcessWorkspace)
 	if !ok {

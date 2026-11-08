@@ -481,3 +481,41 @@ q-39's short-lived workload correction. This status fix does not establish a
 cause or resolution for those native failures; the coordinator must supply the
 first failing assertions or full engine log to continue that diagnosis. Native
 engine execution and fresh changed-code proof remain CI responsibilities.
+
+## Q-41 native refusal diagnostics
+
+Q-41 (2026-11-08, approximately 08:00 UTC) supplies the full engine log for
+run 42459248613. Its 34 assertion failures include fault-free controls returning
+wrapper exit 1 instead of workload exits 0 and 7. The recorded product errors
+say only `run.mount-refused`; they do not identify which check failed. The later
+run 42460442920 at `976445b` also fails its engine tier. Neither log establishes
+that Moby rejected the descriptor device path or resolved it by name.
+
+The controller now includes the failed check and original expected device:inode
+in mount diagnostics, plus the observed identity or PID where available. Stat
+and pidfd failures retain the numeric errno and its standard description. Only
+these safe values cross the port; wrapped error paths, engine response bodies,
+argv and workload streams are excluded. Diagnostic reads share the observation
+gate and never wait for a pending adapter operation or postpone owned teardown.
+They do not change refusal classification, observed workload exit precedence,
+anchor ownership, the detector's short-lived exit rule, or recovery records.
+
+The feature harness appends controller mount diagnostics to failed assertions
+before cleanup, including subordinate runs and fault-free controls. It preserves
+the original failure and does not dump full stderr or fixture records.
+
+The red test commit `46754a6` adds ID-OFFLINE-35. With `@wip` removed, all five
+rows failed at the first Then because the diagnostic lacked its named check:
+device mismatch, inode mismatch, stat permission denial, failed pidfd open and
+an invalid init PID. All five pass after implementation, including immediate
+owned worker/anchor cleanup and exclusion of synthetic private error paths and
+argv. OFFLINE-33/34 continue to pass. Targeted race tests cover the affected
+session domain, disk adapter, fake diagnostic contract, run command and harness
+failure reporting. The full engine-disabled feature suite passes without race
+detection in 169.906 seconds; no full-feature race or local mutation run was made.
+
+Q-41 requires another native CI run before any mechanism change. This checkpoint
+is blocked on that evidence: inspect the new `check`, identity and errno fields
+in the native failures. If they show Moby refusing the `/proc` device or resolving
+it by pathname, stop with that evidence as q-19 requires. Do not infer a new
+anchor mechanism, privilege, host mount, helper or support claim from local green.

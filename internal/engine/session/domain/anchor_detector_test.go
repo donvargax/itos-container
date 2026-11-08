@@ -41,10 +41,11 @@ func (w *detectorWorkspace) Mounted(pid int) (port.MountSource, port.Outcome) {
 type noProcessWorkspace struct{ port.AnchorWorkspace }
 
 func TestAnchorDetectorProcessRaces(t *testing.T) {
-	for _, name := range []string{"healthy", "exited", "never started", "paused", "invalid pid", "no process port", "open failed", "nil process", "exit during open", "pid changed", "fresh inspect unavailable", "fresh inspect foreign", "process exited before stat", "same pid reused", "process error", "stat failed while running", "exit during stat", "process error after stat", "wrong device", "wrong inode"} {
+	for _, name := range []string{"healthy", "exited", "never started", "paused", "missing state", "invalid pid", "no process port", "open failed", "nil process", "exit during open", "pid changed", "fresh inspect unavailable", "fresh inspect foreign", "process exited before stat", "same pid reused", "process error", "stat failed while running", "exit during stat", "process error after stat", "wrong device", "wrong inode"} {
 		t.Run(name, func(t *testing.T) {
 			runner, frozen, registry, engine, id := registeredLifecycleFixture()
 			w := &detectorWorkspace{Workspace: runner.Workspace.(*f.Workspace), process: &f.Process{}}
+			expectedMount := w.Mounts[123]
 			runner.Workspace = w
 			started, inspections := false, 0
 			change := func(fn func(*port.Observation)) {
@@ -73,6 +74,8 @@ func TestAnchorDetectorProcessRaces(t *testing.T) {
 					change(func(o *port.Observation) { o.Running, o.Started, o.Status = false, false, "exited" })
 				case "paused":
 					change(func(o *port.Observation) { o.Running, o.Status = false, "paused" })
+				case "missing state":
+					change(func(o *port.Observation) { o.StatePresent = false })
 				case "invalid pid":
 					change(func(o *port.Observation) { o.PID = 0 })
 				}
@@ -93,6 +96,9 @@ func TestAnchorDetectorProcessRaces(t *testing.T) {
 				}
 			}
 			engine.AfterInspect = func() {
+				if inspections == 1 && name == "missing state" {
+					change(func(o *port.Observation) { o.StatePresent = true })
+				}
 				if inspections == 1 && (name == "never started" || name == "paused") {
 					change(func(o *port.Observation) { o.Running, o.Started, o.Status = true, true, "running" })
 				}
@@ -136,8 +142,21 @@ func TestAnchorDetectorProcessRaces(t *testing.T) {
 				if result.Outcome != port.MountRefused {
 					t.Fatal(result)
 				}
+				checks := map[string]string{
+					"missing state": "worker-state",
+					"never started": "worker-init-pid", "paused": "worker-init-pid", "invalid pid": "worker-init-pid",
+					"no process port": "pidfd-open", "open failed": "pidfd-open", "nil process": "pidfd-open",
+					"pid changed": "worker-pid-recheck", "fresh inspect unavailable": "worker-inspect", "fresh inspect foreign": "worker-ownership",
+					"same pid reused": "pidfd-before-stat", "process error": "pidfd-before-stat", "stat failed while running": "mounted-stat",
+					"process error after stat": "pidfd-after-stat", "wrong device": "mounted-identity", "wrong inode": "mounted-identity",
+				}
+				if result.MountDiagnostic.Check != checks[name] || result.MountDiagnostic.ExpectedDevice != expectedMount.Device || result.MountDiagnostic.ExpectedInode != expectedMount.Inode {
+					t.Fatal("lost refusal reason or expected identity", name, result.MountDiagnostic)
+				}
 			} else if result.Outcome != "" || !result.Exited || result.Exit != 17 || r.WorkloadExit == nil || *r.WorkloadExit != 17 {
 				t.Fatal(result, r)
+			} else if result.MountDiagnostic != (port.MountDiagnostic{}) {
+				t.Fatal("successful or exited worker retained a refusal diagnostic", result)
 			}
 		})
 	}

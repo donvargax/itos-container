@@ -96,6 +96,9 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	c, attachment, resource, failure := s.registeredLaunch(startup, id, argv, streams)
 	result.ID, result.Outcome = resource, failure
 	result.Started, result.Operation = state.started, state.operation
+	if result.Outcome != "" {
+		result.MountDiagnostic = state.mountDiagnostic
+	}
 	if startup.Err() != nil && failure != port.Refused && failure != port.IsolationUnverified {
 		result.Outcome = startupFailure(startup)
 	}

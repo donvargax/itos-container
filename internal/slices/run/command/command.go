@@ -139,7 +139,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		}
 		if result.Outcome != "" {
 			failure := runFailure{result.Outcome, result.Reference, result.SessionID, false}
-			if result.Operation != "" {
+			if result.MountDiagnostic.Check != "" {
+				ui.Fail(mountFailure{failure, result.MountDiagnostic}, false)
+			} else if result.Operation != "" {
 				ui.Fail(operationFailure{failure, result.Operation}, false)
 			} else {
 				ui.Fail(failure, false)
@@ -244,6 +246,10 @@ func Classify(err error) (int, []cli.Problem) {
 		var operation operationFailure
 		if errors.As(err, &operation) {
 			message += "; operation " + operation.operation
+		}
+		var mount mountFailure
+		if errors.As(err, &mount) {
+			message += "; " + mountDiagnosticText(mount.diagnostic)
 		}
 		if run.outcome == session.EngineLost {
 			message += "; workload outcome unknown unless separately observed"

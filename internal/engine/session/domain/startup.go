@@ -11,9 +11,10 @@ import (
 
 type startupKey struct{}
 type startupState struct {
-	operation string
-	started   bool
-	failure   port.Outcome
+	mountDiagnostic port.MountDiagnostic
+	operation       string
+	started         bool
+	failure         port.Outcome
 }
 
 // Finite launch calls share the original phase deadline. Cancellation is checked

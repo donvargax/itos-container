@@ -20,6 +20,7 @@ type Workspace struct {
 	// ProcessOpen is the pidfd syscall seam for synthetic Engine API fixtures.
 	// Production leaves it nil and holds a kernel reference to the init process.
 	ProcessOpen func(int) (port.Process, port.Outcome)
+	mountError  port.MountSystemError
 	source      *os.File
 	binding     port.Binding
 	roots       []*os.Root
@@ -116,6 +117,7 @@ func (w *Workspace) Close() {
 }
 
 func (w *Workspace) Source() (port.MountSource, port.Outcome) {
+	w.mountError = port.MountSystemError{}
 	if len(w.roots) == 0 {
 		return port.MountSource{}, port.MountRefused
 	}
@@ -123,11 +125,13 @@ func (w *Workspace) Source() (port.MountSource, port.Outcome) {
 		var err error
 		w.source, err = openPath(w.roots[0])
 		if err != nil {
+			w.mountError = mountSystemError(err)
 			return port.MountSource{}, port.MountUnavailable
 		}
 	}
 	info, err := w.source.Stat()
 	if err != nil || !info.IsDir() {
+		w.mountError = mountSystemError(err)
 		return port.MountSource{}, port.MountRefused
 	}
 	device, inode, ok := mountIdentity(info)
@@ -138,6 +142,7 @@ func (w *Workspace) Source() (port.MountSource, port.Outcome) {
 }
 
 func (w *Workspace) Mounted(pid int) (port.MountSource, port.Outcome) {
+	w.mountError = port.MountSystemError{}
 	if pid <= 0 {
 		return port.MountSource{}, port.MountRefused
 	}
@@ -147,6 +152,7 @@ func (w *Workspace) Mounted(pid int) (port.MountSource, port.Outcome) {
 	}
 	info, err := stat(fmt.Sprintf("/proc/%d/root/workspace", pid))
 	if err != nil || !info.IsDir() {
+		w.mountError = mountSystemError(err)
 		return port.MountSource{}, port.MountRefused
 	}
 	device, inode, ok := mountIdentity(info)

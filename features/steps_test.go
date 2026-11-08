@@ -62,6 +62,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 		return ctx, w.setUp()
 	})
+	sc.StepContext().After(w.reportMountDiagnosticFailure)
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {

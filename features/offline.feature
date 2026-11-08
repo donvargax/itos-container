@@ -809,15 +809,10 @@ Feature: Hardened offline foreground run
       | post-start inspection has no live init PID  |
       | mounted workspace stat unavailable         |
 
-  # Q-39 refines q-27: the descriptor-backed volume is the protection. A worker
-  # that exits before the detector can observe its mount keeps its real result.
-  # Record the unobserved detector durably and expose it through fresh status.
-  # For a running worker hold a pidfd, re-inspect its full ID and same init PID,
-  # then stat; never accept a recycled PID's otherwise matching workspace.
   # Q-41 requires safe controller diagnostics before the next native attempt.
   # A fake engine supplies the worker; syscall failures use the disk adapter.
   # These local cases prove diagnostic delivery, never the Moby/kernel hypothesis.
-  @slice-17 @ID-OFFLINE-35 @linux @wip
+  @slice-17 @ID-OFFLINE-35 @linux
   Scenario Outline: Mount refusals expose the failed observation without leaking payloads
     Given an anchor diagnostic fixture with "<fault>" failure
     When the registered command encounters that mount observation failure
@@ -832,6 +827,11 @@ Feature: Hardened offline foreground run
       | pidfd       | pidfd-open        |
       | invalid PID | worker-init-pid   |
 
+  # Q-39 refines q-27: the descriptor-backed volume is the protection. A worker
+  # that exits before the detector can observe its mount keeps its real result.
+  # Record the unobserved detector durably and expose it through fresh status.
+  # For a running worker hold a pidfd, re-inspect its full ID and same init PID,
+  # then stat; never accept a recycled PID's otherwise matching workspace.
   @slice-17 @ID-OFFLINE-33
   Scenario Outline: Short-lived workers retain their exit without claiming mount verification
     Given an anchor detector fixture with exit <exit> at "<checkpoint>"
