@@ -16,8 +16,8 @@ import (
 func intentReadFixture(t *testing.T) (Store, sp.Binding, *af.Storage, *rf.Checkout) {
 	t.Helper()
 	b, _, _ := sf.Fixture()
-	// These memory ports model Linux, regardless of the test runner's OS.
-	// Keep the shared fixture's Linux root instead of a host-native temp path.
+	// The selected platform is Linux even on a Windows test host. Keep the
+	// fixture's absolute Linux path; no checkout filesystem is used here.
 	storage := &af.Storage{Directories: map[string]*af.Directory{
 		"intents/" + b.Frozen.Project:   {Files: map[string][]byte{}},
 		"snapshots/" + b.Frozen.Project: {Files: map[string][]byte{"1.json": []byte("snapshot")}},

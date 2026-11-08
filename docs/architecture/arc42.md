@@ -56,6 +56,16 @@ and selected local container engine. Containers do not defend against a host
 administrator or kernel/container escape. The writable checkout is deliberately
 exposed to destructive edits by its workload.
 
+The person's q-30 decision accepts a first-milestone limit: host Unix sockets
+created or swapped into the checkout after startup inspection remain reachable,
+including during the run. Slice-19 requires only refusal of sockets found before
+create, at any depth including `.git`, without following symlinks outside the
+checkout. The check is implemented, with runtime green evidence still required,
+and supplies no continuous IPC boundary. The
+[scope decision](../decisions/0019-checkout-socket-milestone-limit.md)
+overrides the isolation target here; kernel/runtime enforcement is deferred to
+milestone 2 in [the research handoff](../plans/checkout-socket-enforcement.md).
+
 Hooks, Git configuration and agent instructions are workflow safeguards, not isolation.
 After worker edits, checkout hooks, builds, plugins and dependency installs stay inside
 the sandbox until the person reviews them. Host inspection must not execute checkout
@@ -119,7 +129,9 @@ The controller validates data crossing from the checkout; it must not execute th
 data. The worker cannot access host approval/recovery records, host credentials or
 engine control. The control arrow through the engine is trusted orchestration, not an
 API exposed to the worker. The mount is intentionally writable, so edits return to the
-checkout. No worker-to-network path exists in the required target.
+checkout. No worker-to-network path exists in the required target, but the
+accepted milestone limit above permits indirect access through host listeners
+created or swapped into the checkout after inspection.
 
 [CLI dispatch context](../CLI.md#extension-dispatch-and-environment) belongs to the
 host controller. `ITOS_ROOT` does not establish safe checkout identity; `ITOS_CONFIG`
@@ -274,7 +286,7 @@ supply passing evidence. This split changes delivery scope, not the runtime boun
 or the requirement for CI-only real-engine proof.
 
 Each owning engine introduces reusable validation and port contracts with its work item.
-Slice-17's [descriptor-backed anchor decision](../decisions/0019-descriptor-backed-checkout-anchor.md)
+Slice-17's [descriptor-backed anchor decision](../decisions/0020-descriptor-backed-checkout-anchor.md)
 extends the existing session engine ports and adapters, with run remaining the thin
 command consumer. Its Docker local volume mechanism is implemented with native proof
 pending; it introduces neither another command nor another controller service.
@@ -363,7 +375,16 @@ must state this in help and security guidance; revisit before egress and credent
    identical records are reused without rewriting; all reuse re-establishes file
    and directory durability. Uncertain publication returns no usable handoff.
    Every new invocation still validates current requests, identities and approval.
-3. **Admit, create and own, preparing.** Slice-16 atomically reserves the validated
+3. **Admit, create and own, preparing.** Slice-19 requires a checkout
+   socket inspection before create: refuse any Unix socket at any depth, including
+   `.git`, without following symlinks outside the checkout, with typed isolation
+   refusal and no created worker. This is a startup check, not continuous
+   enforcement; sockets created or swapped in after inspection remain reachable
+   (q-30). The session workspace port implements this check during pinning,
+   before the engine create call. Its disk adapter walks the pinned root with
+   standard-library traversal; scan failures release the pin and prevent create.
+   Q-34 accepted all 12 ID-SOCKETS-01 red rows; runtime green remains required.
+   Slice-16 atomically reserves the validated
    canonical checkout under one protected control-root lock before registration or
    create. Strict ancestor/descendant roots conflict across projects and daemons;
    equal roots and disjoint roots retain concurrency. Legacy registrations without
@@ -438,7 +459,7 @@ gate: Docker's start operation also starts the task. A detector failure after
 successful start must fail native acceptance. The selected volume mechanism
 is implemented after accepted red checkpoints; native green remains required.
 The source evidence and settled ordering are recorded in the
-[descriptor-anchor decision](../decisions/0019-descriptor-backed-checkout-anchor.md#implementation-checkpoint-and-settled-detector).
+[descriptor-anchor decision](../decisions/0020-descriptor-backed-checkout-anchor.md#implementation-checkpoint-and-settled-detector).
 
 These are T-11's interface meanings, not a storage schema or proof of a transition.
 

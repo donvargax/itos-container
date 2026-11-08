@@ -9,7 +9,7 @@ Feature: Recover owned checkout mount anchors
   # the offline lifecycle contract (AC-05/06/07/22/23/28), recovery.feature,
   # offline.feature's slice-17 block and the answered q-19 in tasks/asks.yaml.
   # Baselines inspected: main 75d9238 and slice-17 51a9f48. The latter contains
-  # the anchor spec, decision 0019-descriptor-backed-checkout-anchor.md and
+  # the anchor spec, decision 0020-descriptor-backed-checkout-anchor.md and
   # executable OFFLINE-29 steps, not the anchor implementation. q-22 records
   # native red for OFFLINE-29; it is not native green or slice-18 evidence.
   # On main, session/domain/recovery.go finishes after worker absence alone;

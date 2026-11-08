@@ -79,6 +79,10 @@ func (w *Workspace) Pin(b port.Binding) port.Outcome {
 		w.names, w.infos = append(w.names, name), append(w.infos, info)
 		root = next
 	}
+	if failure := checkoutSockets(w.roots[0].FS()); failure != "" {
+		w.Close()
+		return failure
+	}
 	return ""
 }
 func (w *Workspace) Validate() port.Outcome {

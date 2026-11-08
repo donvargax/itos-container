@@ -599,7 +599,7 @@ Feature: Hardened offline foreground run
   # No new dependency/service or allowlist expansion is selected. OS is a value;
   # retain notices and architecture import boundaries. If an adapter needs a new
   # privilege/topology outside this contract, stop and report that design gap.
-  # Decision 0019-descriptor-backed-checkout-anchor.md and arc42 already record
+  # Decision 0020-descriptor-backed-checkout-anchor.md and arc42 already record
   # the planned mechanism and q-27 detector. In the implementation PR, update
   # their implementation/evidence status and affected Building-block view,
   # Foreground run, Recovery, Deployment view and ownership descriptions. Keep
@@ -613,7 +613,7 @@ Feature: Hardened offline foreground run
   # do not re-tag live cases or relax them to accept arbitrary protected paths.
   #
   # Recovery integration prerequisite, exposed by the discarded implementation
-  # draft recorded in decision 0019, now scheduled together under q-36:
+  # draft recorded in decision 0020, now scheduled together under q-36:
   # - Live RECOVERY-21 executes run's printed retry after failed removal;
   #   RECOVERY-22 discovers/stops a worker after controller death; RECOVERY-23
   #   requires independent stops to complete only their selected session.

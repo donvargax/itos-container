@@ -90,14 +90,17 @@ func TestFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runScenarios(selection, godog.Options{
+	if runFeatureScenarios(selection, godog.Options{
 		Format:      "pretty",
 		Output:      os.Stdout,
 		Paths:       []string{"."},
 		Strict:      true,
 		TestingT:    t,
 		Concurrency: 4,
-	}, func(sc *godog.ScenarioContext) { initializeScenario(sc, root, bin) }) != 0 {
+	}, func(sc *godog.ScenarioContext, duringQuiet func()) {
+		w := initializeScenario(sc, root, bin)
+		w.duringQuiet = duringQuiet
+	}) != 0 {
 		t.Fatal("a scenario failed")
 	}
 }

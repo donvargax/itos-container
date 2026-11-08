@@ -27,6 +27,8 @@ type offlineRequest struct {
 	Record              sessionRecord
 	Status              int
 	Cancelled           bool
+	Diagnostic          string
+	State               map[string]any
 	At, Replied         time.Time
 }
 
@@ -44,8 +46,8 @@ type offlineAPI struct {
 	connections map[net.Conn]bool
 	identities  map[string]map[string]any
 	volumes     map[string]*anchorVolume
-	// Recovery faults and signal capabilities belong only to the slice-11
-	// fixture. They do not broaden the existing offline runtime scenarios.
+	// Recovery faults belong only to the slice-11 fixture. Owned teardown is
+	// allowed for every run after the same full-ID and identity checks.
 	recovery    bool
 	failRemove  bool
 	removeGate  chan struct{}
@@ -102,12 +104,14 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 	allowed := readErr == nil && len(body) <= 65536 && a.allowed(request, &entry)
 	if !allowed {
 		entry.Status = http.StatusForbidden
+		entry.Diagnostic = "recorder refused unsafe request"
 	}
 	a.requests[index] = entry
 	failRemove := allowed && a.failRemove && entry.Method == http.MethodDelete && strings.HasPrefix(entry.Path, "/containers/")
 	fault := allowed && a.removalFault(entry)
 	if failRemove || fault {
 		a.requests[index].Status = http.StatusServiceUnavailable
+		a.requests[index].Diagnostic = "recorder injected removal fault"
 	}
 	gate := a.removeGate
 	hold := allowed && entry.Method == http.MethodDelete && gate != nil && !a.removeHeld
@@ -154,13 +158,14 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 		return
 	}
 	// ReverseProxy relays the attach upgrade in both directions and preserves
-	// half-close, rather than buffering the upgraded stream as an HTTP body.
+	// half-close. Use the bare transport, without the inspection client's timeout:
+	// attach and wait live until the caller/scenario ends them.
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.Out.URL.Scheme, r.Out.URL.Host, r.Out.Host = "http", "engine", "engine"
 		},
 		Transport:     a.w.doctor.real.transport,
-		FlushInterval: -1,
+		FlushInterval: -1, // forward wait's acknowledgement before its exit body
 		ModifyResponse: func(response *http.Response) error {
 			a.mu.Lock()
 			a.requests[index].Status = response.StatusCode
@@ -185,6 +190,29 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 				}}
 				return nil
 			}
+			if entry.Method == "POST" && strings.HasSuffix(entry.Path, "/wait") && response.StatusCode == http.StatusOK {
+				// Waiting for EOF here hides Docker's immediate acknowledgement
+				// and turns the product's handshake limit into a workload timeout.
+				response.Body = &offlineWaitBody{ReadCloser: response.Body, record: func(data []byte, err error) {
+					a.mu.Lock()
+					defer a.mu.Unlock()
+					a.requests[index].Cancelled = request.Context().Err() != nil
+					if err == nil {
+						err = json.Unmarshal(data, &a.requests[index].Observation)
+					}
+					if err != nil {
+						a.requests[index].Diagnostic = "recorder wait stream: " + err.Error()
+						if !a.recovery || request.Context().Err() == nil {
+							a.problem = errors.New("offline native recorder wait stream failed")
+						}
+					} else if !a.requests[index].Cancelled {
+						// Recovery needs the completed reply as evidence that an exit
+						// came from wait, not from successful removal alone.
+						a.requests[index].Replied = time.Now()
+					}
+				}}
+				return nil
+			}
 			data, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
 			_ = response.Body.Close()
 			response.Body = io.NopCloser(bytes.NewReader(data))
@@ -194,6 +222,10 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			var observed map[string]any
 			_ = json.Unmarshal(data, &observed)
 			a.mu.Lock()
+			if response.StatusCode >= http.StatusBadRequest {
+				message, _ := observed["message"].(string)
+				a.requests[index].Diagnostic = "engine response: " + message
+			}
 			if entry.Method == "POST" && entry.Path == "/containers/create" && response.StatusCode == http.StatusCreated {
 				id, _ := observed["Id"].(string)
 				if !offlineHex(id) {
@@ -211,6 +243,9 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			}
 			if observed != nil {
 				a.requests[index].Observation = observed
+				if state, ok := observed["State"].(map[string]any); ok {
+					a.requests[index].State = state
+				}
 			}
 			if entry.Method == "POST" && entry.Path == "/volumes/create" && response.StatusCode == http.StatusCreated {
 				name, _ := entry.Body["Name"].(string)
@@ -239,9 +274,10 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.mu.Unlock()
 			return nil
 		},
-		ErrorHandler: func(out http.ResponseWriter, request *http.Request, _ error) {
+		ErrorHandler: func(out http.ResponseWriter, request *http.Request, err error) {
 			a.mu.Lock()
 			a.requests[index].Status = http.StatusBadGateway
+			a.requests[index].Diagnostic = "recorder transport: " + err.Error()
 			a.requests[index].Cancelled = request.Context().Err() != nil
 			if a.lifecycle == nil && (!a.recovery || request.Context().Err() == nil) {
 				a.problem = errors.New("offline native recorder transport failed")
@@ -251,6 +287,35 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 		},
 	}
 	proxy.ServeHTTP(out, request)
+}
+
+// Retain bounded journal data while forwarding bytes immediately. Close runs
+// after the proxy finishes copying, before it completes the downstream body.
+type offlineWaitBody struct {
+	io.ReadCloser
+	data    []byte
+	failure error
+	once    sync.Once
+	record  func([]byte, error)
+}
+
+func (b *offlineWaitBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	keep := min(n, (4<<20)-len(b.data))
+	b.data = append(b.data, p[:keep]...)
+	if keep != n {
+		b.failure = errors.New("wait response exceeded journal limit")
+	}
+	if err != nil && err != io.EOF {
+		b.failure = err
+	}
+	return n, err
+}
+
+func (b *offlineWaitBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.once.Do(func() { b.record(b.data, errors.Join(b.failure, err)) })
+	return err
 }
 
 // Called under the journal lock. Refusals remain evidence, and are never
@@ -305,6 +370,7 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		return false
 	}
 	entry.Observation = observed
+	entry.State = object(observed["State"])
 	entry.Record, err = sessionReadRecord(w.sessionRecordPath())
 	if err != nil {
 		a.problem = err
@@ -327,11 +393,11 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 			}
 			return r.URL.RawQuery == "" && a.safeObserved(observed)
 		case "kill":
-			return (a.recovery || w.anchor != nil) && len(r.URL.Query()) == 1 &&
+			return len(r.URL.Query()) == 1 && len(r.URL.Query()["signal"]) == 1 &&
 				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL" ||
 					(a.lifecycle != nil && r.URL.Query().Get("signal") == "SIGINT"))
 		case "stop":
-			return a.recovery && len(r.URL.Query()) == 2 && r.URL.Query().Get("signal") == "SIGTERM" && r.URL.Query().Get("t") == "10"
+			return reflect.DeepEqual(r.URL.Query(), url.Values{"signal": {"SIGTERM"}, "t": {"10"}})
 		}
 	}
 	if r.Method == "DELETE" && operation == "" {
@@ -429,7 +495,14 @@ func offlineEmpty(value any) bool {
 func (a *offlineAPI) safeObserved(c map[string]any) bool {
 	config := approvalClone(object(c["Config"]))
 	config["Image"] = c["Image"]
-	config["HostConfig"] = c["HostConfig"]
+	host := approvalClone(object(c["HostConfig"]))
+	// Docker may report the explicit boolean form after accepting the bare
+	// create option. Normalize only this equivalent inspected representation;
+	// missing, false or additional security options still fail safeCreate.
+	if reflect.DeepEqual(host["SecurityOpt"], []any{"no-new-privileges=true"}) {
+		host["SecurityOpt"] = []any{"no-new-privileges"}
+	}
+	config["HostConfig"] = host
 	return a.safeCreate(config)
 }
 

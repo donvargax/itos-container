@@ -43,6 +43,10 @@ type RunResult struct {
 }
 
 // Workspace pins the approved subdirectory and refuses later substitution.
+// Pin also inspects the complete checkout, including .git, without following
+// symlinks. Any Unix socket (live or stale) returns IsolationUnverified; an
+// incomplete scan returns IsolationInspection. Failed pins release all handles.
+// This startup check does not deny sockets created or swapped in afterward.
 type Workspace interface {
 	Pin(Binding) Outcome
 	// Validate returns Refused for a confirmed mismatch and Incomplete when the

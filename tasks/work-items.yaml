@@ -1,7 +1,8 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue: []
+queue:
+  - p1-feature-suite-race-memory
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -686,3 +687,24 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: p1-feature-suite-race-memory
+    title: The feature suite stays within a few GB, with or without the race detector
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Measured 2026-11-08 by the loop's memory sampler: an implementer's go test -race ./features
+      -count=1 -json (1,348 scenarios, one process) grew features.test from 0.3 GB to 12.6 GB in a
+      minute and to 22 GB the next, leaving 1.5 GB of 31 GB free and pushing 3.5 GB into swap; the
+      day before, the same pressure got the loop killed. The race detector multiplies memory, but 22
+      GB also points at state kept across scenarios (buffers, fixtures, goroutines) that a long
+      suite accumulates. Find what grows per scenario (a heap profile across the suite) and release
+      it, so a full race run fits comfortably; until then agents race only the packages they change.
+
+      Worse than first measured (2026-11-08 06:10 UTC): without -race too, a full go test ./features
+      run grew features.test to 9.3 GB anonymous RSS, and the loop's 10 GB per-agent memory cap
+      OOM-killed it. So agents cannot currently run the full feature suite inside a sane limit; the
+      growth is in the suite, not only in the race detector. Profile the heap across the suite and
+      release what each scenario keeps.

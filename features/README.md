@@ -79,7 +79,7 @@ Run the full feature suite without `-race`. A full-package race run consumed
 tests with an explicit `-run` selection; for changed production packages, select
 only those packages. A test killed at the memory limit needs its memory use
 fixed, not a higher limit. Do not repeat the historical full-feature race command
-recorded in ADR 0019.
+recorded in ADR 0020.
 
 `-scenarios` takes a regular expression over each effective tag, `@` included. Godog's
 pinned Gherkin parser supplies inheritance from Feature, Rule, Scenario Outline and Examples;
@@ -183,6 +183,21 @@ baseline. A manual red list narrows it to the named eligible IDs, live or `@wip`
 Pending, undefined, failed or skipped
 runtime steps fail; losing selected engine cases also fails. Manual non-engine red runs
 apply the same completion checks.
+
+Ordinary engine runs that select both `ID-LIFECYCLE-09` and `ID-LIFECYCLE-13`
+execute the four escalation rows during the quiet worker's required 125-second
+observation. The quiet worker reaches readiness first and is not cancelled until
+every escalation assertion and cleanup has finished. Each escalation still runs
+serially, with its own checkout, controller and full-ID worker, so unrelated-resource
+snapshots see the same running quiet worker before and after. The quiet row retains
+its original observation duration and process guard, and all cases retain their
+original deadlines. This removes repeated wall-clock waiting that exhausted run
+42396452598 at `a030be0`; it neither shortens the quiet interval nor increases the
+five-minute gate. If quiet startup fails, the deferred rows run after the main suite
+and both failures are retained. Separate completion counts cover the entire original
+selection. Filtered selections missing either ID and manual red runs remain serial.
+`TestEngineSchedule` regressions exercise scheduling, cleanup ordering, exact selection
+and failure propagation using memory-only steps, without native engine access.
 
 Doctor's ID-DOCTOR-23 and ID-DOCTOR-24 are live engine scenarios for cached-image
 inspection and a missing digest. They run after preflight and fixture preparation,

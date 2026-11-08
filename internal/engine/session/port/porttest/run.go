@@ -222,7 +222,7 @@ type Workspace struct {
 }
 
 func (w *Workspace) Pin(b port.Binding) port.Outcome {
-	w.Closed = false
+	w.Closed = w.Failure != ""
 	w.binding = b
 	return w.Failure
 }

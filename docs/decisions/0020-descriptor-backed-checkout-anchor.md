@@ -2,6 +2,10 @@
 
 ## Authority and status
 
+Renumbered from 0019 when merging main, which already assigns that number to
+the checkout-socket milestone decision. Historical coordinator records retain
+the original number.
+
 The coordinator's q-19 and q-27 decisions of 2026-11-06, approximately
 22:55 and 23:50 UTC, select this mechanism and detector; the person reviews
 them later. They override earlier
