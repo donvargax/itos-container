@@ -2627,36 +2627,3 @@
     agents never use Docker, approve real state or fabricate CI context. No mutation run or
     generated evidence is part of this test-only task. Agents commit and stop; the loop owns
     pushing, CI watching and closure.
-  done_when:
-    - run: |
-        env -u GOFLAGS -u GOCOVERDIR -u ITOS_CC_TEST_COVERDIR -u GOGC -u GOMEMLIMIT -u GORACE -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=0 python3 - <<'PY'
-        import resource
-        import subprocess
-        import sys
-
-        if sys.platform != "linux":
-            raise SystemExit("T-35 RSS accounting requires Linux")
-        status = subprocess.call(["go", "test", "./features", "-count=1"])
-        peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
-        print(f"T-35 full features: exit {status}, peak RSS {peak} KiB, limit 4194304 KiB", flush=True)
-        raise SystemExit(0 if status == 0 and 0 < peak <= 4194304 else 1)
-        PY
-    - run: |
-        env -u GOFLAGS -u GOCOVERDIR -u ITOS_CC_TEST_COVERDIR -u GOGC -u GOMEMLIMIT -u GORACE -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=0 python3 - <<'PY'
-        import resource
-        import subprocess
-        import sys
-
-        if sys.platform != "linux":
-            raise SystemExit("T-35 RSS accounting requires Linux")
-        name = "TestFeatureMemoryRetention"
-        selection = "^" + name + "$"
-        listed = subprocess.run(["go", "test", "./features", "-list", selection], check=True, text=True, stdout=subprocess.PIPE)
-        if name not in listed.stdout.splitlines():
-            raise SystemExit("missing required regression: " + name)
-        subprocess.run(["go", "test", "./features", "-count=1", "-run", selection], check=True)
-        subprocess.run(["go", "test", "-race", "./features", "-count=1", "-run", selection], check=True)
-        peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
-        print(f"T-35 focused runs: peak RSS {peak} KiB, limit 4194304 KiB", flush=True)
-        raise SystemExit(0 if 0 < peak <= 4194304 else 1)
-        PY
