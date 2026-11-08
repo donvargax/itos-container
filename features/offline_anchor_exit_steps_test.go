@@ -101,6 +101,9 @@ func (w *world) anchorExitSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the detector awaits the engine exit notification before accepting the unobserved result$`, func() error {
 		return runExitOrder(runExitObservation{Events: result.Events}, "inspect:123", "engine-exit-wait", "inspect:0")
 	})
+	sc.Step(`^the detector awaits the unreaped child's engine exit notification with status (\d+)$`, func(n int) error {
+		return runExitOrder(runExitObservation{Events: result.Events}, "child-unreaped", "engine-exit-wait", "child-exit:"+strconv.Itoa(n), "inspect:0")
+	})
 	sc.Step(`^the detector pins the inspected PID and refuses its changed identity before reading any mount$`, func() error {
 		if result.Run.Exit == 0 || !strings.Contains(result.Run.Stderr, "run.mount-refused") || slices.Contains(result.Events, "mounted-stat") {
 			return fmt.Errorf("reused PID supplied mount authority: %+v", result)

@@ -42,8 +42,17 @@ func TestPublicAnchorExitContract(t *testing.T) {
 	m.e.Exit, m.e.WaitFailure = exit, ""
 	j := &runExitJournal{}
 	w := &anchorExitWorkspace{Workspace: sf.MountWorkspace(m.b), engine: m.e, mode: mode, journal: j}
+	if strings.HasPrefix(mode, "unreaped ") {
+		w.child = newAnchorExitChild(t, exit)
+	}
 	m.e.AfterStart = func() {
 		w.started = true
+		if w.child != nil {
+			for id, o := range m.e.Resources {
+				o.PID = w.child.command.Process.Pid
+				m.e.Resources[id] = o
+			}
+		}
 		if mode == "before inspection" {
 			w.exit()
 		}
@@ -83,6 +92,7 @@ type anchorExitWorkspace struct {
 	journal         *runExitJournal
 	started, exited bool
 	exitPending     bool
+	child           *anchorExitChild
 }
 
 func (w *anchorExitWorkspace) exit() {
@@ -95,6 +105,9 @@ func (w *anchorExitWorkspace) exit() {
 
 func (w *anchorExitWorkspace) HoldProcess(pid int) (sp.Process, sp.Outcome) {
 	w.journal.add("pidfd-open:" + strconv.Itoa(pid))
+	if w.child != nil {
+		return w.child.hold(w, pid)
+	}
 	if w.mode == "before pidfd open with delayed engine exit" {
 		w.exited, w.exitPending = true, true
 		w.journal.add("pidfd-open-absent")
@@ -121,6 +134,12 @@ func (p *anchorExitProcess) Close() { p.w.journal.add("pidfd-close") }
 
 func (w *anchorExitWorkspace) Mounted(pid int) (sp.MountSource, sp.Outcome) {
 	w.journal.add("mounted-stat")
+	if w.child != nil {
+		if f := w.child.finish(w); f != "" {
+			return sp.MountSource{}, f
+		}
+		return w.child.workspace.Mounted(pid)
+	}
 	if w.mode == "during stat with delayed engine exit" {
 		w.exited, w.exitPending = true, true
 		return sp.MountSource{}, sp.MountRefused
@@ -161,6 +180,10 @@ func (c anchorExitConnection) Inspect(ctx context.Context, id string) (sp.Observ
 func (c anchorExitConnection) Wait(ctx context.Context, id string) (int, sp.Outcome) {
 	if c.w.exitPending {
 		c.w.journal.add("engine-exit-wait")
+		if c.w.child != nil {
+			c.w.engine.Exit = c.w.child.reap()
+			c.w.journal.add("child-exit:" + strconv.Itoa(c.w.engine.Exit))
+		}
 		c.w.exitPending = false
 		c.w.exit()
 	}

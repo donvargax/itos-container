@@ -881,6 +881,26 @@ Feature: Hardened offline foreground run
     Then the detector pins the inspected PID and refuses its changed identity before reading any mount
     And the detector kills only the revalidated owned worker and completes worker then anchor cleanup
 
+  # Q-39 includes the interval after kernel exit but before the parent reaps
+  # the worker. Use a real local child and the production pidfd adapter, with
+  # engine inspections held running until wait consumes that child's exit.
+  # No container engine or real workspace mount is needed for this regression.
+  @slice-17 @ID-OFFLINE-37 @linux @wip
+  Scenario Outline: An unreaped worker retains its exit when its workspace is already gone
+    Given an anchor detector fixture with exit <exit> at "<checkpoint>"
+    When the registered command runs and fresh status reads its completed record
+    Then the command returns workload exit <exit> without a mount refusal and completes owned cleanup
+    And the durable record and JSON and text status report "not observed: worker exited" for the mount detector
+    And the detector releases every process handle and never signals the exited worker
+    And the detector awaits the unreaped child's engine exit notification with status <exit>
+
+    Examples:
+      | exit | checkpoint          |
+      | 0    | unreaped before stat |
+      | 7    | unreaped before stat |
+      | 0    | unreaped during stat |
+      | 7    | unreaped during stat |
+
   # Both rows acquire and durably own the anchor before the worker fault. The
   # mismatch row returns a wrong runtime boundary for an otherwise owned
   # unstarted full ID; cleanup must confirm that ID absent before source release.
