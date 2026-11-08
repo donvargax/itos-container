@@ -36,7 +36,7 @@ func TestForegroundInterruptContract(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
-	runner := session.Runner{Store: store, Entropy: sf.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &sf.Workspace{},
+	runner := session.Runner{Store: store, Entropy: sf.Entropy{Value: strings.Repeat("1", 64)}, Workspace: sf.MountWorkspace(b),
 		Engine: interruptContractEngine{worker, phase, cancel}}
 	approval := &rf.Approval{View: ap.View{Status: "matching", Inspection: af.Ready(),
 		Candidate: ap.Candidate{Project: b.Frozen.Project, Fingerprint: b.Frozen.Fingerprint, Canonical: b.Frozen.Settings},

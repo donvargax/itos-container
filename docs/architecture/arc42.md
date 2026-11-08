@@ -56,6 +56,16 @@ and selected local container engine. Containers do not defend against a host
 administrator or kernel/container escape. The writable checkout is deliberately
 exposed to destructive edits by its workload.
 
+The person's q-30 decision accepts a first-milestone limit: host Unix sockets
+created or swapped into the checkout after startup inspection remain reachable,
+including during the run. Slice-19 requires only refusal of sockets found before
+create, at any depth including `.git`, without following symlinks outside the
+checkout. The check is implemented, with runtime green evidence still required,
+and supplies no continuous IPC boundary. The
+[scope decision](../decisions/0019-checkout-socket-milestone-limit.md)
+overrides the isolation target here; kernel/runtime enforcement is deferred to
+milestone 2 in [the research handoff](../plans/checkout-socket-enforcement.md).
+
 Hooks, Git configuration and agent instructions are workflow safeguards, not isolation.
 After worker edits, checkout hooks, builds, plugins and dependency installs stay inside
 the sandbox until the person reviews them. Host inspection must not execute checkout
@@ -119,7 +129,9 @@ The controller validates data crossing from the checkout; it must not execute th
 data. The worker cannot access host approval/recovery records, host credentials or
 engine control. The control arrow through the engine is trusted orchestration, not an
 API exposed to the worker. The mount is intentionally writable, so edits return to the
-checkout. No worker-to-network path exists in the required target.
+checkout. No worker-to-network path exists in the required target, but the
+accepted milestone limit above permits indirect access through host listeners
+created or swapped into the checkout after inspection.
 
 [CLI dispatch context](../CLI.md#extension-dispatch-and-environment) belongs to the
 host controller. `ITOS_ROOT` does not establish safe checkout identity; `ITOS_CONFIG`
@@ -274,6 +286,15 @@ supply passing evidence. This split changes delivery scope, not the runtime boun
 or the requirement for CI-only real-engine proof.
 
 Each owning engine introduces reusable validation and port contracts with its work item.
+Slice-17's [descriptor-backed anchor decision](../decisions/0020-descriptor-backed-checkout-anchor.md)
+extends the existing session engine ports and adapters, with run remaining the thin
+command consumer. Its Docker local volume mechanism is implemented with native proof
+pending; it introduces neither another command nor another controller service.
+Coordinator q-36 combines slice-18's accepted anchor recovery specification with
+slice-17 in one pull request. The run, status and stop consumers share the session
+engine; recovery completion requires confirmed worker and anchor absence. This
+resolves delivery ordering only: both specifications retain their separate red-first
+evidence requirements; local fake/adapter proof does not establish native green.
 Shared contract suites under its `port/porttest` run unchanged against the in-memory
 fake and adapters wherever applicable. Later consumers reuse those suites, normalized
 values, typed failures and synthetic fixtures without importing
@@ -354,19 +375,32 @@ must state this in help and security guidance; revisit before egress and credent
    identical records are reused without rewriting; all reuse re-establishes file
    and directory durability. Uncertain publication returns no usable handoff.
    Every new invocation still validates current requests, identities and approval.
-3. **Admit, create and own, preparing.** Slice-16 atomically reserves the validated
-   canonical checkout under private coordination exclusion shared with approval publication before registration or
+3. **Admit, create and own, preparing.** Slice-19 requires a checkout
+   socket inspection before create: refuse any Unix socket at any depth, including
+   `.git`, without following symlinks outside the checkout, with typed isolation
+   refusal and no created worker. This is a startup check, not continuous
+   enforcement; sockets created or swapped in after inspection remain reachable
+   (q-30). The session workspace port implements this check during pinning,
+   before the engine create call. Its disk adapter walks the pinned root with
+   standard-library traversal; scan failures release the pin and prevent create.
+   Q-34 accepted all 12 ID-SOCKETS-01 red rows; runtime green remains required.
+   Slice-16 atomically reserves the validated
+   canonical checkout under private coordination exclusion shared with approval
+   publication before registration or
    create. Strict ancestor/descendant roots conflict across projects and daemons;
    equal roots and disjoint roots retain concurrency. Legacy registrations without
    admission metadata remain authority. The lock spans short storage transactions,
    never engine calls or session operation locks. See
    [the admission decision](../decisions/0014-checkout-admission.md) and
-   [control-state publication](../decisions/0019-control-state-publication.md).
+   [control-state publication](../decisions/0021-control-state-publication.md).
    New foreground runs publish a reserved intent before public registration, then
    clear the pending reservation marker durably before receiving launch authority.
    Advance the intent with `fsync` under the operation lock before create,
    then create unstarted. Reconcile a lost response using the trusted record plus a
-   random name before launch or cleanup, closing the untracked-create window. Names
+   random name before launch or cleanup, closing the untracked-create window.
+   Schema-2 foreground intents publish anchor intent before volume allocation and
+   independently inspected concrete anchor ownership before worker creation.
+   Worker creation mounts that exact volume at `/workspace` with copying disabled. Names
    or labels alone never authorize adoption or deletion. Durably record concrete
    resource identity before any entrypoint or workload instruction. A failed record
    write prevents execution and enters bounded cleanup/recovery. Retain uncertainty
@@ -407,6 +441,42 @@ must state this in help and security guidance; revisit before egress and credent
    records the review fixes and their local controller proof.
 
 ### State and result interpretation
+
+Slice-17's selected change to the sequence above is pending native proof. Publish
+an owned local Docker volume before worker creation, using `type=none`, `o=bind`
+and the controller's `/proc/<pid>/fd/<n>` O_PATH descriptor as its device. Keep the
+descriptor open from the final identity check through `ContainerStart`'s return.
+The worker consumes that volume at `/workspace` without copying. The anchor itself
+must prevent substituted-inode execution. Immediately after start returns, inspect
+`State.Pid`, hold a pidfd and re-inspect the same owned full ID and live PID before
+statting `/proc/<pid>/root/workspace` from the host. Check the held process on both
+sides of stat and compare device/inode with the validated identity. A mismatch or
+an unreadable workspace outside q-42's root-change errors triggers immediate owned
+kill/removal and refusal. Under q-42, ENOENT, ESRCH or EACCES requires polling the
+held pidfd: an exited worker follows q-39, while a live worker continues with
+`mount_detector` recorded and shown in JSON/text status as
+`not observed: worker root changed`. A failed process observation still refuses.
+Under q-39, an independently confirmed exited worker retains its
+real wait result and normal cleanup, with `mount_detector` recorded and shown in
+JSON/text status as `not observed: worker exited`. Only an actual identity match
+on the guarded live process records `verified`; refusals record `refused`.
+When kernel process absence precedes Docker's exit publication, reconcile the
+same owned full ID with an engine not-running wait and fresh exited inspection
+within one ten-second call budget. Retain that observed exit without a second
+wait. Process absence alone, changed identity, wait failure or expiry grants no
+success; other syscall errors still refuse without this wait.
+Legacy records have no detector observation and never imply verification. This detector is not the protection. No raw-path
+fallback, gate binary, extra mount, new controller privilege, host
+mount by the controller or long-lived helper is selected. The native race must
+prove original-inode execution or refusal before this hypothesis is accepted.
+
+The coordinator accepted OFFLINE-29's four native race failures at `51a9f48`
+on Docker 28.0.4. Q-27 settles the detector above without adding a mount/start
+gate: Docker's start operation also starts the task. A detector failure after
+successful start must fail native acceptance. The selected volume mechanism
+is implemented after accepted red checkpoints; native green remains required.
+The source evidence and settled ordering are recorded in the
+[descriptor-anchor decision](../decisions/0020-descriptor-backed-checkout-anchor.md#implementation-checkpoint-and-settled-detector).
 
 These are T-11's interface meanings, not a storage schema or proof of a transition.
 
@@ -493,6 +563,32 @@ See [public session recovery](../decisions/0010-public-session-recovery.md).
 [Unknown workload exit](../decisions/0015-unknown-workload-exit.md) corrects the
 earlier concurrent-completion success claim; known nonzero exits retain precedence.
 
+For slice-17's mount-bearing sessions, the labelled volume and protected
+ownership survive incomplete worker removal. Release the volume only after worker
+absence is confirmed, then durably complete the session. The controller descriptor
+need not survive controller exit; neither its expired `/proc` path nor a stopped
+worker's mount is a recovery source. Slice-18, integrated into slice-17 under q-36,
+adds volume release to fresh-process recovery. Never recreate the source from the current checkout path, and refuse
+unknown mount-bearing records rather than silently treating them as worker-only.
+
+The protected schema-2 intent binds the anchor's session, random operation name,
+descriptor source, validated device/inode and independently observed creation
+identity. Recovery compares the exact local driver/options and seven ownership
+labels on the original daemon; it never dereferences the saved source. Release
+requires full worker-ID absence, followed by a fresh anchor inspection, owned
+non-force volume deletion and independent absence confirmation. Reserved intents
+can be cancelled under the operation lock to fence later create before release.
+Any uncertain create, deletion or durability retains the original authority.
+The same teardown path serves foreground run and fresh stop.
+
+Status extends its existing envelope with an independent `anchor` fact for
+schema-2 sessions: present, absent or unknown. Worker absence alone is pending;
+completion requires fresh absence of both resources and durable intent/anchor/
+public completion. Legacy schema-1 entries omit this field and keep their old
+contract. Stop reloads and syncs completed evidence without rewriting it or
+repeating removal. Anchor inspection/deletion share the existing whole-command
+budgets and per-session lock; another session remains independent.
+
 Fresh recovery discovers registrations through the protected
 `sessions/<lookup>/<id>` index, where lookup hashes the host UID and canonical
 checkout path, independently of mutable Git identity. Each record still binds
@@ -539,12 +635,19 @@ Doctor inspects without writes, taking a shared lock when present; approve
 and validated run enrollment complete durable self-binding and selected-location
 claims before ordinary state writes. Existing reservation completion semantics are
 shared with separation checks, without operation locks or engine calls. The
-[control-state decision](../decisions/0019-control-state-publication.md) defines
+[control-state decision](../decisions/0021-control-state-publication.md) defines
 bootstrap/retry ordering and the legacy discovery limit. Later exposing mounts and
 recovery trust checks remain slices 22 and 23; unseen pre-upgrade roots and mixed
 controller versions require a separate upgrade contract.
 
 ## Deployment view
+
+The selected slice-17 anchor uses the already trusted native dockerd to perform
+the descriptor-backed bind. It adds one labelled local volume as session control
+infrastructure, not another host-source grant or persistent worker data store.
+The worker mount retains the original inode while the worker lives; no new helper
+has to outlive the controller. This topology remains a hypothesis until guarded
+native red/green evidence establishes it on the actual CI daemon and kernel.
 
 This is a **required target placement**, not a working deployment. The selected host is
 Linux amd64 with native Docker, subject to runtime evidence. The selected engine
@@ -554,10 +657,10 @@ settings require independent runtime probes; inspecting a flag cannot prove enfo
 | --- | --- | --- |
 | Trusted host | Person, core itos dispatch and extension controller; local engine control available only to trusted orchestration. | Agents receive no socket. Slice-4 specifies effective host UID identity, root refusal and effective UID/GID worker resolution; runtime enforcement remains planned. |
 | Host-owned state outside checkout | Approval records, trusted frozen configuration and recovery records under `$XDG_STATE_HOME/itos-container`, directory mode `0700`. | Worker must not access them. Slice-4 specifies canonical JSON SHA-256, `0600` active records and independent frozen input; slice-8 publishes session snapshots, with recovery in slices 9/11. Slice-21 protects publication with a persistent account-home catalog across selected roots. This state is not a persistent worker volume; mount/recovery enforcement and runtime inaccessibility still need their own proof. |
-| Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host filesystem mount. Safe source/target resolution and substitution handling remain blocked. |
+| Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host filesystem source, mounted through the descriptor-backed owned volume. Substitution protection requires native proof. |
 | Local engine image store | Approved cached manifest digest, checked for architecture, compatibility and metadata. | The person pulls the manifest's digest and approval binds that content. Control commands inspect, never pull/build/substitute, keeping acquisition a deliberate host operation. Slice-3 owns checks; T-20 owns fixture preparation. |
 | Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces, engine/SSH-agent sockets or host credentials. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Slice-10 still owes runtime proof. |
-| Container-managed storage | Ephemeral tmpfs only; checkout writes survive on the sole host bind mount. | No persistent worker volumes/caches/profiles, host `/tmp`, extra host bind mount or host-wide chown. A2 narrows broader pilot state to this milestone. |
+| Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its sole nonrecursive bind source. | No persistent worker volumes/caches/profiles, host `/tmp`, extra host bind mount or host-wide chown. A2 narrows broader pilot state to this milestone. |
 | Worker network boundary | `NetworkMode` `none`, inspected before start; no external network path or published port from the first instruction. | Independent network/DNS probes must prove denial through controller loss. No proxy, guard or session network. |
 | Disposable CI runtime environment | Prepared trusted test images, disposable checkouts/state, controlled probes and independent engine observations. | T-16 implemented the guarded engine tier, separate from socket-free agent work. T-20 still owns images; there are no live runtime cases. No valuable credentials or checkout-controlled host setup. |
 

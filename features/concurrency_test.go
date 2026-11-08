@@ -2,80 +2,80 @@ package features
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/cucumber/godog"
 )
 
-func TestScenarioConcurrency(t *testing.T) {
-	for _, mode := range []string{"local", "local failure", "engine", "red"} {
+// Scheduling changes must preserve every selected row and its private world,
+// including failures. Engine and red evidence still require serial execution.
+func TestFeatureConcurrency(t *testing.T) {
+	for _, mode := range []string{"local", "engine", "red"} {
 		t.Run(mode, func(t *testing.T) {
-			dir := writeFeatureFixture(t, `Feature: independent scenarios
-  Scenario Outline: each fixture executes once
-    Then observe fixture "<name>"
-    Examples:
-      | name |
-      | a    |
-      | b    |
-      | c    |
-      | d    |
-      | e    |
-      | f    |
-`)
-			serial := mode == "engine" || mode == "red"
-			selection := scenarioSelection{count: 6, engine: mode == "engine", red: mode == "red"}
-			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-			defer cancel()
-			var mu sync.Mutex
-			seen := map[string]int{}
-			active, peak := 0, 0
-			group := make(chan struct{})
-			code := runScenarios(selection, godog.Options{Paths: []string{dir}, Format: "progress", Output: io.Discard, Concurrency: localScenarioWorkers}, func(sc *godog.ScenarioContext) {
-				sc.Step(`^observe fixture "([^"]*)"$`, func(name string) error {
-					mu.Lock()
-					seen[name]++
-					active++
-					peak = max(peak, active)
-					if len(seen) == 4 {
-						close(group)
+			text := "Feature: scheduling\n"
+			for n := range 8 {
+				text += fmt.Sprintf("  @ID-MEMORY-%02d\n  Scenario: row %d\n    Given remember %d\n    Then check %d\n", n+1, n, n, n)
+			}
+			dir := writeFeatureFixture(t, text)
+			selection, err := selectScenarios("", dir, featureEnvironment{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// These flags exercise scheduling only, with memory steps and no engine.
+			selection.engine, selection.red = mode == "engine", mode == "red"
+			for _, fail := range []bool{false, true} {
+				synctest.Test(t, func(t *testing.T) {
+					var mu sync.Mutex
+					active, peak, completed := 0, 0, 0
+					seen := map[int]int{}
+					code := runScenarios(selection, godog.Options{
+						Paths: []string{dir}, Format: "progress", Output: io.Discard, Concurrency: 4,
+					}, func(sc *godog.ScenarioContext) {
+						value := -1
+						sc.Step(`^remember (\d+)$`, func(n int) {
+							value = n
+							mu.Lock()
+							active++
+							peak = max(peak, active)
+							seen[n]++
+							mu.Unlock()
+							time.Sleep(time.Second)
+						})
+						sc.Step(`^check (\d+)$`, func(n int) error {
+							if value != n || fail && n == 3 {
+								return fmt.Errorf("row %d has value %d (failure control %v)", n, value, fail)
+							}
+							return nil
+						})
+						sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+							mu.Lock()
+							active--
+							completed++
+							mu.Unlock()
+							return ctx, nil
+						})
+					})
+					want := 1
+					if mode == "local" {
+						want = 4
 					}
-					mu.Unlock()
-					defer func() { mu.Lock(); active--; mu.Unlock() }()
-					if serial {
-						// Leave a scheduling window in which a wrongly parallel
-						// runner would admit the next fixture.
-						time.Sleep(10 * time.Millisecond)
-					} else {
-						select {
-						case <-group:
-						case <-ctx.Done():
-							return errors.New("independent local fixtures never overlapped")
+					if peak != want || active != 0 || completed != 8 || len(seen) != 8 {
+						t.Errorf("peak=%d want=%d active=%d completed=%d seen=%v", peak, want, active, completed, seen)
+					}
+					for n, count := range seen {
+						if count != 1 {
+							t.Errorf("row %d executed %d times", n, count)
 						}
 					}
-					if mode == "local failure" && name == "c" {
-						return errors.New("fixture assertion failed")
+					if (code != 0) != fail {
+						t.Errorf("exit=%d failure control=%v", code, fail)
 					}
-					return nil
 				})
-			})
-			wantCode, wantPeak := 0, 4
-			if mode == "local failure" {
-				wantCode = 1
-			}
-			if serial {
-				wantPeak = 1
-			}
-			if code != wantCode || peak != wantPeak || active != 0 || len(seen) != 6 {
-				t.Fatalf("exit %d, peak %d, active %d, executions %v; want exit %d and peak %d", code, peak, active, seen, wantCode, wantPeak)
-			}
-			for name, count := range seen {
-				if count != 1 {
-					t.Errorf("fixture %s executed %d times", name, count)
-				}
 			}
 		})
 	}

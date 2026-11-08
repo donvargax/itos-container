@@ -36,6 +36,9 @@ func (w *world) lossFreshBoundary() error {
 			lossRecord(r.snapshot)["fingerprint"] != w.approval.fingerprint || r.released.IsZero() || !r.collected.After(r.released) {
 			return errors.New("worker identity, frozen input or fresh challenge correlation changed")
 		}
+		if r.intent != first.intent || !reflect.DeepEqual(r.anchor, first.anchor) {
+			return errors.New("original anchor ownership or native volume changed after controller loss")
+		}
 		if (i == 0 && !r.collected.Before(l.dead)) || (i > 0 && (!r.released.After(l.dead) || r.nonce == first.nonce)) ||
 			(i == 1 && !r.collected.Before(w.recovery.status.started)) ||
 			(i == 2 && (!r.released.After(w.recovery.status.finished) || !r.collected.Before(w.recovery.stops[0].started) || r.nonce == l.rounds[1].nonce)) {
@@ -51,7 +54,7 @@ func (w *world) lossFreshBoundary() error {
 		}
 		// Reuse the exact slice-14 mount oracle for every independent native
 		// observation, as well as the recorder's actual pre-start observation.
-		view := &isolationRun{id: w.recovery.worker, requests: []offlineRequest{{Method: "POST", Path: "/containers/" + w.recovery.worker + "/start", Observation: r.boundary}}}
+		view := &isolationRun{id: w.recovery.worker, sessionID: w.recovery.id, requests: []offlineRequest{{Method: "POST", Path: "/containers/" + w.recovery.worker + "/start", Observation: r.boundary, Anchor: r.anchor, Record: r.intent}}}
 		if err := s.mountBoundary(view); err != nil {
 			return err
 		}
@@ -60,7 +63,7 @@ func (w *world) lossFreshBoundary() error {
 	a.mu.Lock()
 	requests := append([]offlineRequest{}, a.requests...)
 	a.mu.Unlock()
-	if err := s.mountBoundary(&isolationRun{id: w.recovery.worker, requests: requests}); err != nil {
+	if err := s.mountBoundary(&isolationRun{id: w.recovery.worker, sessionID: w.recovery.id, requests: requests}); err != nil {
 		return err
 	}
 	for _, r := range requests {

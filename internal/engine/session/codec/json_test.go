@@ -95,6 +95,96 @@ func TestRecordCodecRejectsUndecodableBytesAfterParserSuccess(t *testing.T) {
 	}
 }
 
+func TestRecordCodecRejectsInvalidAnchorAuthority(t *testing.T) {
+	b, _, _ := sf.Fixture()
+	valid := sf.RunIntent(b)
+	for _, tc := range []struct {
+		name   string
+		change func(*sp.Record)
+	}{
+		{"foreign session", func(r *sp.Record) { r.Anchor.Session = "foreign" }},
+		{"different volume", func(r *sp.Record) { r.Anchor.Name += "-other" }},
+		{"pathname source", func(r *sp.Record) { r.Anchor.Source = "/checkout" }},
+		{"missing device", func(r *sp.Record) { r.Anchor.Device = "" }},
+		{"missing inode", func(r *sp.Record) { r.Anchor.Inode = "" }},
+		{"owned without creation", func(r *sp.Record) { r.Anchor.Created = "" }},
+		{"intent with creation", func(r *sp.Record) { r.Anchor.Stage = "intent" }},
+		{"unknown anchor stage", func(r *sp.Record) { r.Anchor.Stage = "future" }},
+		{"worker intent before anchor ownership", func(r *sp.Record) { r.Anchor.Stage, r.Anchor.Created = "intent", "" }},
+		{"worker intent after anchor release", func(r *sp.Record) { r.Anchor.Stage = "absent" }},
+		{"owned worker after anchor release", func(r *sp.Record) {
+			r.Stage, r.ContainerID, r.Anchor.Stage = "owned", strings.Repeat("3", 64), "absent"
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := valid
+			tc.change(&r)
+			data := (JSON{}).Encode(r)
+			codec := JSON{Parser: &mf.Parser{Value: recordValue(t, data)}}
+			if got, failure := codec.Decode(data); failure != sp.Invalid || got != (sp.Record{}) {
+				t.Fatal("invalid anchor acquired authority", got, failure)
+			}
+		})
+	}
+	for _, stage := range []string{"reserved", "intent", "owned", "absent", "cancelled"} {
+		t.Run("valid "+stage, func(t *testing.T) {
+			r := valid
+			r.Stage = stage
+			if stage == "owned" || stage == "absent" {
+				r.ContainerID = strings.Repeat("3", 64)
+			}
+			if stage == "reserved" {
+				r.Anchor.Stage, r.Anchor.Created = "intent", ""
+			}
+			if stage == "absent" || stage == "cancelled" {
+				r.Anchor.Stage = "absent"
+			}
+			data := (JSON{}).Encode(r)
+			codec := JSON{Parser: &mf.Parser{Value: recordValue(t, data)}}
+			if got, failure := codec.Decode(data); failure != "" || got != r {
+				t.Fatal("valid anchor record did not round trip", got, failure)
+			}
+		})
+	}
+}
+
+func TestRecordCodecRejectsUnknownOrMistypedAnchorFields(t *testing.T) {
+	b, _, _ := sf.Fixture()
+	for _, schema := range []int{1, 2} {
+		r := b.Intent(strings.Repeat("1", 64))
+		if schema == 2 {
+			r = sf.RunIntent(b)
+		}
+		data := (JSON{}).Encode(r)
+		parser := &mf.Parser{Value: recordValue(t, data)}
+		parser.Value.Fields["unknown"] = mp.Value{Kind: mp.String}
+		if got, failure := (JSON{Parser: parser}).Decode(data); failure != sp.Invalid || got != (sp.Record{}) {
+			t.Fatalf("schema %d accepted unknown field: %#v, %s", schema, got, failure)
+		}
+	}
+	data := (JSON{}).Encode(sf.RunIntent(b))
+	for _, field := range []string{"session", "name", "source", "device", "inode", "created", "stage"} {
+		for _, fault := range []string{"missing", "wrong type", "replaced"} {
+			t.Run(field+"/"+fault, func(t *testing.T) {
+				parser := &mf.Parser{Value: recordValue(t, data)}
+				fields := parser.Value.Fields["anchor"].Fields
+				switch fault {
+				case "missing":
+					delete(fields, field)
+				case "wrong type":
+					fields[field] = mp.Value{Kind: mp.Null}
+				case "replaced":
+					delete(fields, field)
+					fields["unknown"] = mp.Value{Kind: mp.String}
+				}
+				if got, failure := (JSON{Parser: parser}).Decode(data); failure != sp.Invalid || got != (sp.Record{}) {
+					t.Fatal("malformed anchor acquired authority", got, failure)
+				}
+			})
+		}
+	}
+}
+
 func TestFrozenAndSnapshotRequireValidatedApprovalEnvelope(t *testing.T) {
 	b, _, _ := sf.Fixture()
 	settings, err := json.Marshal(map[string]any{
@@ -150,9 +240,12 @@ func recordValue(t *testing.T, data []byte) mp.Value {
 	}
 	result := mp.Value{Kind: mp.Object, Fields: map[string]mp.Value{}}
 	for name, raw := range values {
-		if name == "schema" {
+		switch name {
+		case "schema":
 			result.Fields[name] = mp.Value{Kind: mp.Number, Text: string(raw)}
-		} else {
+		case "anchor":
+			result.Fields[name] = recordValue(t, raw)
+		default:
 			var text string
 			if err := json.Unmarshal(raw, &text); err != nil {
 				t.Fatal(err)

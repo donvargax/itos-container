@@ -15,7 +15,7 @@ import (
 func runnerFixture() (domain.Runner, approval.Durable, *st.Store, *st.RunEngine) {
 	b, store, engine := st.Fixture()
 	run := &st.RunEngine{Engine: engine}
-	return domain.Runner{Store: store, Engine: run, Entropy: st.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &st.Workspace{}}, approval.Durable{Frozen: b.Frozen}, store, run
+	return domain.Runner{Store: store, Engine: run, Entropy: st.Entropy{Value: strings.Repeat("1", 64)}, Workspace: st.MountWorkspace(b)}, approval.Durable{Frozen: b.Frozen}, store, run
 }
 func TestForegroundLifecycle(t *testing.T) {
 	s, d, store, engine := runnerFixture()
@@ -38,7 +38,7 @@ func TestForegroundLifecycle(t *testing.T) {
 	if !slices.Equal(argv, engine.Argv) {
 		t.Fatal("argv changed")
 	}
-	want := []string{"open", "create", "verify", "attach", "verify", "start", "wait", "drain", "open", "remove", "detach"}
+	want := []string{"open", "anchor allocate", "anchor inspect", "anchor inspect", "create", "verify", "attach", "verify", "anchor inspect", "start", "wait", "drain", "open", "remove", "anchor inspect", "anchor inspect", "anchor remove", "anchor inspect", "detach"}
 	if !slices.Equal(engine.Events, want) {
 		t.Fatalf("events: %v", engine.Events)
 	}

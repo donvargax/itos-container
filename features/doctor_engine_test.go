@@ -150,6 +150,7 @@ func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
 	body, err := json.Marshal(data)
 	status := a.imageStatus
 	api, _ := a.version["ApiVersion"].(string)
+	barrier, paused := a.runBarrier, a.paused
 	a.mu.Unlock()
 	if err != nil {
 		http.Error(out, "fixture encoding failed", 500)
@@ -183,10 +184,10 @@ func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if strings.HasPrefix(path, "/images/") {
-		if a.runBarrier != nil {
-			a.runBarrier(pid)
+		if barrier != nil {
+			barrier(pid)
 		}
-		if a.paused {
+		if paused {
 			a.reachedOnce.Do(func() { close(a.reached) })
 			select {
 			case <-a.release:

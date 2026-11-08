@@ -31,6 +31,7 @@ import (
 // adapter boundaries, never command results, ownership decisions or engine data.
 type publicProbeRequest struct {
 	Args                                                        []string
+	LocalMount                                                  string
 	Fault, Boundary, ID, Ready, Release, Output, Stdout, Stderr string
 }
 
@@ -63,6 +64,9 @@ func TestPublicRecoveryCommand(t *testing.T) {
 		service = coordinatedApproval(service, host)
 	}
 	runner, recovery := sessionServices(service)
+	if request.LocalMount != "" {
+		runner.Workspace = &sessiondisk.Workspace{ProcessOpen: localProcessOpen, MountStat: localMountStat(request.LocalMount)}
+	}
 	registry := runner.Registry.(sessiondisk.Registry)
 	publicStorage := registry.Storage.(approvaldisk.Registry)
 	store := runner.Store.(sessiondisk.Store)
@@ -143,6 +147,14 @@ func (publicUnknownEngine) OpenRun(context.Context, sp.Binding) (sp.RunConnectio
 
 func publicProbeIO(fault string) approvaldisk.SnapshotIO {
 	bad := errors.New("synthetic persistence failure")
+	anchorAbsent := func(data []byte) bool {
+		var r struct{ Anchor struct{ Stage string } }
+		return json.Unmarshal(data, &r) == nil && r.Anchor.Stage == "absent"
+	}
+	anchorFile := func(file *os.File) bool {
+		data, err := os.ReadFile(file.Name())
+		return err == nil && anchorAbsent(data)
+	}
 	state := func(file *os.File) string {
 		path := file.Name()
 		info, err := file.Stat()
@@ -165,12 +177,18 @@ func publicProbeIO(fault string) approvaldisk.SnapshotIO {
 	}
 	return approvaldisk.SnapshotIO{
 		Write: func(file *os.File, data []byte) (int, error) {
+			if fault == "anchor absence short write" && anchorAbsent(data) {
+				return 0, io.ErrShortWrite
+			}
 			if fault == "short record write" && strings.Contains(file.Name(), "/sessions/") {
 				return 0, io.ErrShortWrite
 			}
 			return file.Write(data)
 		},
 		FileSync: func(file *os.File) error {
+			if fault == "anchor absence file fsync" && anchorFile(file) {
+				return bad
+			}
 			public := strings.Contains(file.Name(), "/sessions/")
 			if (fault == "record file fsync" && public && state(file) == "preparing") || (fault == "lock object durability" && public && strings.HasSuffix(file.Name(), ".lock")) || (fault == "session completion file fsync" && public && state(file) == "stopped") || (fault == "intent absent publication fsync" && state(file) == "absent") {
 				return bad
@@ -184,6 +202,15 @@ func publicProbeIO(fault string) approvaldisk.SnapshotIO {
 			return root.Rename(from, to)
 		},
 		ParentSync: func(file *os.File) error {
+			if fault == "anchor absence parent fsync" {
+				entries, _ := os.ReadDir(file.Name())
+				for _, entry := range entries {
+					data, err := os.ReadFile(filepath.Join(file.Name(), entry.Name()))
+					if err == nil && anchorAbsent(data) {
+						return bad
+					}
+				}
+			}
 			if strings.Contains(file.Name(), "/sessions/") && ((fault == "session directory fsync" && state(file) == "preparing") || (fault == "session completion parent fsync" && state(file) == "stopped")) {
 				return bad
 			}

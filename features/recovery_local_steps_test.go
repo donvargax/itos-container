@@ -47,6 +47,7 @@ type recoveryLocal struct {
 }
 
 func (w *world) recoveryLocalSteps(sc *godog.ScenarioContext) {
+	w.anchorRecoveryLocalSteps(sc)
 	w.recoveryFakeBackendSteps(sc)
 	w.recoveryStateSteps(sc)
 	w.recoveryFaultSteps(sc)

@@ -104,16 +104,18 @@ func (w *world) approvalContractSteps(sc *godog.ScenarioContext) {
 	})
 }
 func (w *world) approvalProbe(kind string) error {
+	bin, err := w.sessionProbeBinary()
+	if err != nil {
+		return err
+	}
 	path := filepath.Join(w.dir, "slice-4-contract.json")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	args := []string{"test", "./cmd/itos-container", "-run", "^TestApprovalContractProbe$", "-count=1"}
+	args := []string{"-test.run=^TestApprovalContractProbe$", "-test.count=1"}
 	if coverdir := os.Getenv("GOCOVERDIR"); coverdir != "" {
-		// go test supplies its own temporary GOCOVERDIR. Explicitly direct the
-		// test binary's counters to the caller's per-ID measurement directory.
-		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...", "-args", "-test.gocoverdir="+coverdir)
+		args = append(args, "-test.gocoverdir="+coverdir)
 	}
-	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = w.root
 	cmd.Env = os.Environ()
 	for key, value := range map[string]string{"SLICE_4_PROBE_OUTPUT": path, "SLICE_4_PROBE_KIND": kind, "SLICE_4_PROBE_UID": w.approval.uid, "SLICE_4_PROBE_GID": w.approval.gid, "SLICE_4_PROBE_CONDITION": w.approval.condition} {

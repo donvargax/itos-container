@@ -73,7 +73,8 @@ func (s *Store) open(ctx context.Context, ref string, fresh bool) (*memoryIntent
 	}
 	expected := b.Intent(token)
 	expected.Stage, expected.ContainerID = r.Stage, r.ContainerID
-	if expected != r {
+	expected.Schema, expected.Anchor = r.Schema, r.Anchor
+	if expected != r || !r.ValidAnchor(b) {
 		return nil, port.Invalid
 	}
 	if b.UID != s.UID || b.GID != s.GID || (fresh && b.Checkout.Root != s.Root) || s.UID == "0" {

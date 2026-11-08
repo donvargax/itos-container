@@ -27,7 +27,6 @@ type controlEvent struct {
 func controlTraceSource() string {
 	source := recoveryTraceSource
 	for _, change := range [][2]string{
-		{`"syscall"`, `"syscall"; "time"`},
 		{`type event struct {`, `type event struct { Op, Phase string; Success bool; Flags uint64;`},
 		{`type call struct { entering bool; sync *event }`, `type call struct { entering bool; sync *event; fault bool }`},
 		{`entry := int64(regs.Rax) == -int64(unix.ENOSYS)`, `entry := int64(regs.Rax) == -int64(unix.ENOSYS) && !c.fault`},

@@ -55,9 +55,14 @@ type publicMemory struct {
 	e        *sf.RunEngine
 }
 
-func publicMemoryFixture(t *testing.T) publicMemory {
+func publicMemoryFixture(t *testing.T) publicMemory { return publicMemoryFixtureAt(t, "") }
+func publicMemoryFixtureAt(t *testing.T, root string) publicMemory {
 	t.Helper()
 	ready := af.Ready()
+	if root != "" {
+		ready.Checkout.Root = root
+	}
+	// Memory ports model Linux paths even when this test runs on another OS.
 	c := canonical.JSON{}.Candidate(ready, "1000", "1000")
 	frozen := ap.Frozen{Project: c.Project, Generation: "1", Fingerprint: c.Fingerprint, Settings: c.Canonical}
 	jsonCodec := codec.JSON{Approval: canonical.JSON{}, Parser: parser.Parser{}}
@@ -201,7 +206,7 @@ func publicFakeRegistration(t *testing.T) {
 				m.files.Sessions[m.index().Project+"/"+id] = &af.SessionFiles{Data: []byte("existing")}
 			}
 			m.e.WaitFailure = ""
-			runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: &sf.Workspace{}, Entropy: entropy}
+			runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: sf.MountWorkspace(m.b), Entropy: entropy}
 			created := 0
 			m.e.After = func(event string) {
 				if event != "create" {

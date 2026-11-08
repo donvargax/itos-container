@@ -29,7 +29,7 @@ func TestRegisteredRunRequiresBothIndependentTokensBeforePublication(t *testing.
 			registry := &f.Registry{Store: store, Project: b.Frozen.Project}
 			entropy := &f.EntropySequence{Values: tc.values}
 			runEngine := &f.RunEngine{Engine: engine, Exit: 7}
-			runner := domain.Runner{Registry: registry, Store: store, Engine: runEngine, Entropy: entropy, Workspace: &f.Workspace{}}
+			runner := domain.Runner{Registry: registry, Store: store, Engine: runEngine, Entropy: entropy, Workspace: f.MountWorkspace(b)}
 
 			result := runner.Run(t.Context(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
 			if len(entropy.Values) != tc.left {
@@ -62,7 +62,7 @@ func TestRegisteredRunPublishesNoRegistrationWhenPreparationFails(t *testing.T) 
 			registry := &f.Registry{Store: store, Project: b.Frozen.Project}
 			store.Fault = fault
 			runEngine := &f.RunEngine{Engine: engine}
-			runner := domain.Runner{Registry: registry, Store: store, Engine: runEngine, Entropy: &f.EntropySequence{Values: []f.Entropy{{Value: id}, {Value: token}}}, Workspace: &f.Workspace{}}
+			runner := domain.Runner{Registry: registry, Store: store, Engine: runEngine, Entropy: &f.EntropySequence{Values: []f.Entropy{{Value: id}, {Value: token}}}, Workspace: f.MountWorkspace(b)}
 
 			result := runner.Run(t.Context(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
 			if result != (port.RunResult{Outcome: port.IntentWrite}) {

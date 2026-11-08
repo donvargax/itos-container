@@ -42,7 +42,7 @@ func (w *world) localRegistryPaths(tree map[string]runEntry) (map[string]bool, e
 		count++
 		recordPath := filepath.Join(path, "record.json")
 		var r map[string]any
-		if json.Unmarshal([]byte(tree[recordPath].Data), &r) != nil || len(r) != 7 || r["schema"] != float64(1) || r["id"] != id || r["project"] != w.approval.project || r["state"] != "stopped" || r["workload_exit"] != float64(0) || r["last_problem"] != nil {
+		if json.Unmarshal([]byte(tree[recordPath].Data), &r) != nil || !publicRecordShape(r) || r["schema"] != float64(1) || r["id"] != id || r["project"] != w.approval.project || r["state"] != "stopped" || r["workload_exit"] != float64(0) || r["last_problem"] != nil {
 			return nil, fmt.Errorf("public registration lost exact completed facts")
 		}
 		intent, ok := r["intent"].(string)

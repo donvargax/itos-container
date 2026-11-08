@@ -28,7 +28,7 @@ func ForwardingFailureContract(t Reporter, open func() (port.RunEngine, port.Bin
 			end()
 			continue
 		}
-		id, failure := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), []string{"probe"})
+		id, failure := c.CreateRun(ctx, RunIntent(b), []string{"probe"})
 		if failure != "" {
 			t.Errorf("create: %s", failure)
 			c.Close()
@@ -76,7 +76,7 @@ func StdinClosureContract(t Reporter, open func() (port.RunEngine, port.Binding,
 		return
 	}
 	defer c.Close()
-	id, failure := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), []string{"probe"})
+	id, failure := c.CreateRun(ctx, RunIntent(b), []string{"probe"})
 	if failure != "" {
 		t.Errorf("create: %s", failure)
 		return

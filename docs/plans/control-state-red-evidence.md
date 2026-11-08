@@ -3,7 +3,7 @@
 Coordinator q-31 (2026-11-07, approximately 16:25 UTC) accepted the red evidence
 below and authorized implementation. All 45 examples use recording HTTP engine
 fixtures, not `@engine`; no CI red run is required. The production change and
-[architecture decision](../decisions/0019-control-state-publication.md) implement
+[architecture decision](../decisions/0021-control-state-publication.md) implement
 the common account-home transaction, durable catalog and separation checks. All
 45 examples now pass locally with `@wip` removed. CI proof and closure remain with
 the coordinating loop; this adds no runtime-isolation claim.

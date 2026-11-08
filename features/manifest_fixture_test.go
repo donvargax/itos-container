@@ -153,7 +153,7 @@ func (w *world) manifestSentinels() error {
 	// Compile trusted test material once per feature run, outside snapshotted
 	// directories. The copied programs record only; they never delegate.
 	target := w.bin + ".slice-2-sentinel.exe"
-	err := cachedFeatureBinary(target, func(output string) error {
+	data, err := nativeProbeBytes(target, func(output string) error {
 		source := output + ".go"
 		code := `package main
 import ("os"; "path/filepath")
@@ -170,10 +170,6 @@ func main() {
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(target)
 	if err != nil {
 		return err
 	}
@@ -218,19 +214,7 @@ func (w *world) manifestUnchanged() error {
 
 func (w *world) runManifestContract(mode string) error {
 	w.manifest.metadata = true
-	bin := w.bin + ".slice-2-contract.exe"
-	err := cachedFeatureBinary(bin, func(output string) error {
-		args := []string{"test", "-c", "-o", output}
-		if os.Getenv("GOCOVERDIR") != "" {
-			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
-		}
-		cmd := exec.Command("go", append(args, "./cmd/itos-container")...)
-		cmd.Dir = w.root
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("build manifest contract assembly: %w: %s", err, output)
-		}
-		return nil
-	})
+	bin, err := w.sessionProbeBinary()
 	if err != nil {
 		return err
 	}

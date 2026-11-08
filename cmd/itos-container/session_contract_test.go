@@ -39,6 +39,7 @@ type sessionContractRequest struct {
 	Boundary                                             string
 	LaunchBarrier, ReplacedPath, CleanupCause, ChildExit string
 	Registered                                           string
+	AnchorFault, AnchorFixture                           string
 }
 
 type sessionContractResult struct {
@@ -55,6 +56,7 @@ type sessionContractResult struct {
 	CleanupCode                                       int
 	SessionID                                         string
 	PublicRecords                                     map[string][]byte
+	Started                                           bool
 }
 
 type sessionContractEvent struct {
@@ -69,6 +71,11 @@ type sessionContractPreflight struct {
 
 func (s *sessionContractPreflight) Inspect() ap.View {
 	s.view = s.Preflight.Inspect()
+	return s.view
+}
+
+func (s *sessionContractPreflight) InspectContext(ctx context.Context) ap.View {
+	s.view = s.Preflight.InspectContext(ctx)
 	return s.view
 }
 

@@ -22,7 +22,7 @@ func TestLifecycleEngineLossRetainsRecoverableFailure(t *testing.T) {
 		}
 		m.e.OpenFailure = sp.EnvironmentMissing
 	}
-	runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
+	runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: sf.MountWorkspace(m.b), Entropy: &publicMemoryEntropy{}}
 	r := runner.Run(context.Background(), ap.Durable{Frozen: m.b.Frozen}, []string{"probe"}, sp.Streams{})
 	if r.Outcome != sp.EngineLost || r.Exited || r.Cleanup != sp.EnvironmentMissing || len(m.e.Resources) != 1 {
 		t.Fatal("transport loss invented exit or cleanup", r)

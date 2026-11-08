@@ -86,7 +86,7 @@ func (w *world) controlAccountSteps(sc *godog.ScenarioContext) {
 // the surrounding test suite or race detector enables cgo.
 func (w *world) controlAccountBinary() (string, error) {
 	path := w.bin + "-slice-21-account-cgo0"
-	err := cachedFeatureBinary(path, func(output string) error {
+	return featureBinary(path, func(output string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		args := []string{"test", "-c", "./cmd/itos-container", "-o", output}
@@ -102,5 +102,4 @@ func (w *world) controlAccountBinary() (string, error) {
 		}
 		return nil
 	})
-	return path, err
 }

@@ -16,16 +16,18 @@ import (
 // One recording daemon serves several projects and concurrent same-root runs.
 // No local fixture executes a workload. Native execution has its own recorder.
 type overlapEngine struct {
-	mu         sync.Mutex
-	metadata   *doctorAPI
-	server     *http.Server
-	endpoint   string
-	requests   []overlapRequest
-	workers    map[string]*overlapWorker
-	condition  string
-	faultRoot  string
-	createGate chan struct{}
-	preflight  *overlapRendezvous
+	mu          sync.Mutex
+	metadata    *doctorAPI
+	server      *http.Server
+	endpoint    string
+	requests    []overlapRequest
+	workers     map[string]*overlapWorker
+	volumes     map[string]map[string]any
+	volumeRoots map[string]string
+	condition   string
+	faultRoot   string
+	createGate  chan struct{}
+	preflight   *overlapRendezvous
 }
 
 type overlapRequest struct {
@@ -79,7 +81,7 @@ func newOverlapEngineAt(w *world, id, path string) (*overlapEngine, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &overlapEngine{metadata: newDoctorAPI(w.doctor.image), endpoint: "unix://" + path, workers: map[string]*overlapWorker{}}
+	a := &overlapEngine{metadata: newDoctorAPI(w.doctor.image), endpoint: "unix://" + path, workers: map[string]*overlapWorker{}, volumes: map[string]map[string]any{}, volumeRoots: map[string]string{}}
 	a.metadata.info["ID"] = id
 	a.metadata.config()["User"] = w.approval.uid + ":" + w.approval.gid
 	a.server = &http.Server{Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second, ConnContext: func(ctx context.Context, c net.Conn) context.Context {
@@ -92,7 +94,7 @@ func newOverlapEngineAt(w *world, id, path string) (*overlapEngine, error) {
 func (a *overlapEngine) serve(out http.ResponseWriter, r *http.Request) {
 	path := doctorRequestPath(r.URL.Path)
 	pid, _ := r.Context().Value(runPeerKey{}).(int)
-	if !strings.HasPrefix(path, "/containers/") {
+	if !strings.HasPrefix(path, "/containers/") && !strings.HasPrefix(path, "/volumes/") {
 		if path == "/images/"+doctorImageID+"/json" {
 			_ = json.NewEncoder(out).Encode(a.metadata.image)
 			return
@@ -122,6 +124,24 @@ func (a *overlapEngine) serve(out http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(out).Encode(reply)
 		}
 	}()
+	if strings.HasPrefix(path, "/volumes/") {
+		var body map[string]any
+		if r.Method == "POST" {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		status, reply = localVolumeReply(a.volumes, r.Method, path, body)
+		if r.Method == "POST" && status == 201 {
+			name, _ := body["Name"].(string)
+			source, _ := object(body["DriverOpts"])["device"].(string)
+			root, err := os.Readlink(source)
+			if err != nil {
+				status = 400
+				return
+			}
+			a.volumeRoots[name] = root
+		}
+		return
+	}
 	if path == "/containers/create" && r.Method == "POST" {
 		var body map[string]any
 		if json.NewDecoder(http.MaxBytesReader(out, r.Body, 65536)).Decode(&body) != nil {
@@ -132,8 +152,9 @@ func (a *overlapEngine) serve(out http.ResponseWriter, r *http.Request) {
 		mounts, _ := host["Mounts"].([]any)
 		root := ""
 		for _, m := range mounts {
-			if object(m)["Type"] == "bind" {
-				root, _ = object(m)["Source"].(string)
+			if object(m)["Type"] == "volume" {
+				name, _ := object(m)["Source"].(string)
+				root = a.volumeRoots[name]
 			}
 		}
 		token := strings.TrimPrefix(r.URL.Query().Get("name"), "itos-container-")
@@ -145,7 +166,7 @@ func (a *overlapEngine) serve(out http.ResponseWriter, r *http.Request) {
 		delete(body, "HostConfig")
 		worker := &overlapWorker{root: root, token: token, exited: make(chan struct{}), value: map[string]any{
 			"Id": id, "Name": "/itos-container-" + token, "Image": body["Image"], "Config": body, "HostConfig": host,
-			"Mounts":          []any{map[string]any{"Type": "bind", "Source": root, "Destination": "/workspace", "RW": true, "Propagation": "rprivate"}},
+			"Mounts":          localAnchorMount(host),
 			"State":           map[string]any{"Status": "created", "Running": false, "Pid": 0, "StartedAt": "0001-01-01T00:00:00Z"},
 			"NetworkSettings": map[string]any{"Networks": map[string]any{"none": map[string]any{}}},
 		}}
@@ -214,11 +235,12 @@ func (a *overlapEngine) serve(out http.ResponseWriter, r *http.Request) {
 		status = 101
 	case len(parts) == 2 && parts[1] == "start" && r.Method == "POST":
 		c.value["State"] = map[string]any{"Status": "running", "Running": true, "Pid": 123, "StartedAt": "2026-01-01T00:00:00Z"}
+
+		status = 204
+	case len(parts) == 2 && parts[1] == "wait" && r.Method == "POST":
 		if c.root == a.faultRoot && (strings.HasPrefix(a.condition, "workload exited") || a.condition == "resource removed with session completion fsync failed") {
 			c.exit()
 		}
-		status = 204
-	case len(parts) == 2 && parts[1] == "wait" && r.Method == "POST":
 		// Flush acknowledgement so SDK wait doesn't retain its startup deadline.
 		out.WriteHeader(200)
 		out.(http.Flusher).Flush()
