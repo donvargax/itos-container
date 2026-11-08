@@ -10,6 +10,7 @@ import (
 )
 
 func (w *world) anchorLocalSteps(sc *godog.ScenarioContext) {
+	w.anchorExitSteps(sc)
 	sc.Step(`^a mount-anchor contract fixture with approved settings and a writable checkout$`, func() error { return w.anchorLocalFixture("") })
 	sc.Step(`^a mount-anchor contract fixture with (?:persistent publication|source|post-start detector|worker startup) fault "([^"]*)"$`, w.anchorLocalFixture)
 	sc.Step(`^a mount-anchor contract fixture with a zero-exit workload and cleanup fault "([^"]*)"$`, w.anchorLocalFixture)

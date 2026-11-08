@@ -801,6 +801,33 @@ Feature: Hardened offline foreground run
       | post-start inspection has no live init PID  |
       | mounted workspace stat unavailable         |
 
+  # Q-39 refines q-27: the descriptor-backed volume is the protection. A worker
+  # that exits before the detector can observe its mount keeps its real result.
+  # Record the unobserved detector durably and expose it through fresh status.
+  # For a running worker hold a pidfd, re-inspect its full ID and same init PID,
+  # then stat; never accept a recycled PID's otherwise matching workspace.
+  @wip @slice-17 @ID-OFFLINE-33
+  Scenario Outline: Short-lived workers retain their exit without claiming mount verification
+    Given an anchor detector fixture with exit <exit> at "<checkpoint>"
+    When the registered command runs and fresh status reads its completed record
+    Then the command returns workload exit <exit> without a mount refusal and completes owned cleanup
+    And the durable record and JSON and text status report "not observed: worker exited" for the mount detector
+    And the detector releases every process handle and never signals the exited worker
+
+    Examples:
+      | exit | checkpoint               |
+      | 0    | before inspection        |
+      | 7    | before inspection        |
+      | 0    | between inspect and stat |
+      | 7    | between inspect and stat |
+
+  @wip @slice-17 @ID-OFFLINE-34
+  Scenario: A fresh inspection prevents a reused init PID from verifying the mount
+    Given an anchor detector fixture with exit 0 at "PID reused"
+    When the registered command runs and fresh status reads its completed record
+    Then the detector pins the inspected PID and refuses its changed identity before reading any mount
+    And the detector kills only the revalidated owned worker and completes worker then anchor cleanup
+
   # Both rows acquire and durably own the anchor before the worker fault. The
   # mismatch row returns a wrong runtime boundary for an otherwise owned
   # unstarted full ID; cleanup must confirm that ID absent before source release.
