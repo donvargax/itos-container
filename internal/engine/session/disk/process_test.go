@@ -86,6 +86,28 @@ func TestWorkerProcessRefusesInvalidReferences(t *testing.T) {
 	}
 }
 
+func TestHoldProcessRetainsPIDFDOpenError(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("native pidfd is Linux only")
+	}
+	widePID := int64(1) << 31
+	pid := int(widePID)
+	if int64(pid) != widePID {
+		t.Skip("requires a host integer wider than the kernel pid_t")
+	}
+	// pidfd_open consumes a signed 32-bit pid_t. This positive Go int reaches
+	// the syscall as a negative PID and fails with EINVAL, not process absence.
+	w := &Workspace{}
+	process, failure := w.HoldProcess(pid)
+	if process != nil {
+		process.Close()
+		t.Fatal("invalid kernel PID produced a process reference")
+	}
+	if failure != port.MountRefused || w.MountError() != mountSystemError(syscall.EINVAL) {
+		t.Fatal("pidfd error lost or misreported as process absence", failure, w.MountError())
+	}
+}
+
 func TestWorkerProcessReadiness(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

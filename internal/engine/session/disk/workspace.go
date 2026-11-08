@@ -32,23 +32,29 @@ type Workspace struct {
 	ops         *workspaceOperations
 }
 
-// Preserve real pinned handles while making failures between inspection and
-// opening a child reproducible in adapter tests.
+// Preserve real pinned handles while making root/child open races and missing
+// source identity reproducible in adapter tests. Nil operations use the OS.
 type workspaceOperations struct {
-	openChild func(*os.Root, string) (*os.Root, error)
+	openRoot   func(string) (*os.Root, error)
+	openChild  func(*os.Root, string) (*os.Root, error)
+	sourceStat func(*os.File) (fs.FileInfo, error)
 }
 
 func (w *Workspace) Pin(b port.Binding) port.Outcome {
 	w.Close()
 	w.binding = b
 	ops := workspaceOperations{openChild: (*os.Root).OpenRoot}
-	if w.ops != nil {
-		ops = *w.ops
+	if w.ops != nil && w.ops.openChild != nil {
+		ops.openChild = w.ops.openChild
 	}
 	if b.Workspace != "/workspace" && !strings.HasPrefix(b.Workspace, "/workspace/") {
 		return port.Refused
 	}
-	root, err := os.OpenRoot(b.Checkout.Root)
+	openRoot := os.OpenRoot
+	if w.ops != nil && w.ops.openRoot != nil {
+		openRoot = w.ops.openRoot
+	}
+	root, err := openRoot(b.Checkout.Root)
 	if err != nil {
 		return port.Refused
 	}
@@ -131,7 +137,11 @@ func (w *Workspace) Source() (port.MountSource, port.Outcome) {
 			return port.MountSource{}, port.MountUnavailable
 		}
 	}
-	info, err := w.source.Stat()
+	stat := (*os.File).Stat
+	if w.ops != nil && w.ops.sourceStat != nil {
+		stat = w.ops.sourceStat
+	}
+	info, err := stat(w.source)
 	if err != nil || !info.IsDir() {
 		w.mountError = mountSystemError(err)
 		return port.MountSource{}, port.MountRefused

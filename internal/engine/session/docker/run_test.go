@@ -319,6 +319,41 @@ func TestVerifyActualBoundary(t *testing.T) {
 	}
 }
 
+func TestVerifyRunAcceptsOnlyNoNewPrivilegesSecurityOptions(t *testing.T) {
+	for _, tc := range []struct {
+		option string
+		want   sp.Outcome
+	}{
+		{"no-new-privileges", ""},
+		{"no-new-privileges=true", ""},
+		{"no-new-privileges=false", sp.IsolationUnverified},
+		{"seccomp=unconfined", sp.IsolationUnverified},
+	} {
+		t.Run(tc.option, func(t *testing.T) {
+			e, b, a := runSDKFixture(t)
+			ctx := context.Background()
+			c, failure := e.OpenRun(ctx, b)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer c.Close()
+			argv := []string{"probe"}
+			id, failure := c.CreateRun(ctx, st.RunIntent(b), argv)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			a.mu.Lock()
+			a.defect = func(r *container.InspectResponse) {
+				r.HostConfig.SecurityOpt = []string{tc.option}
+			}
+			a.mu.Unlock()
+			if failure = c.VerifyRun(ctx, id, argv); failure != tc.want {
+				t.Fatalf("security option %q: got %s, want %s", tc.option, failure, tc.want)
+			}
+		})
+	}
+}
+
 func TestEnvironmentIsLiteralAndControllerOverridesHome(t *testing.T) {
 	got := environment([]string{"PATH=/bin", "APP=image", "HOME=/root", "TMPDIR=/var/tmp"}, map[string]string{"APP": "$(touch marker);$HOST", "HOME": "ignored"})
 	want := []string{"APP=$(touch marker);$HOST", "HOME=/tmp", "PATH=/bin", "TMPDIR=/tmp"}
