@@ -78,11 +78,12 @@ func (j *runExitJournal) add(event string) {
 
 type runExitStorage struct {
 	ap.RegistryStorage
-	journal      *runExitJournal
-	mu           sync.Mutex
-	probes       int
-	result       *runExitObservation
-	waitCanceled <-chan struct{}
+	journal       *runExitJournal
+	mu            sync.Mutex
+	probes        int
+	result        *runExitObservation
+	waitCanceled  <-chan struct{}
+	probeObserved chan struct{}
 }
 
 func (s *runExitStorage) Open(ctx context.Context, c ap.Candidate, id string, readOnly bool) (ap.SessionDirectory, ap.Failure) {
@@ -92,9 +93,25 @@ func (s *runExitStorage) Open(ctx context.Context, c ap.Candidate, id string, re
 	s.mu.Lock()
 	s.probes++
 	probe := s.probes
+	if probe == 1 {
+		s.probeObserved = make(chan struct{})
+	}
+	probeObserved := s.probeObserved
 	s.mu.Unlock()
 	if probe > 2 {
 		return s.RegistryStorage.Open(ctx, c, id, readOnly)
+	}
+	if probe == 1 {
+		defer close(probeObserved)
+	} else {
+		// The finite registry wrapper can start reconciliation before the
+		// expired probe's adapter goroutine has journaled its return. Await
+		// that observation before starting the fixture's next checkpoint.
+		select {
+		case <-probeObserved:
+		case <-ctx.Done():
+			return nil, "state.unavailable"
+		}
 	}
 	// The finite engine wrapper can return on cancellation before its inner
 	// Wait goroutine records that cancellation. Hold this fixture checkpoint
@@ -151,6 +168,80 @@ func TestRunExitProbeWaitsForCancellationObservation(t *testing.T) {
 			t.Fatal(j.events)
 		}
 	})
+}
+
+// Hold the expired adapter call after its caller can already have timed out.
+// This makes the finite wrapper's late-result schedule deterministic.
+type runExitDelayedStorage struct {
+	ap.RegistryStorage
+	release <-chan struct{}
+}
+
+func (s runExitDelayedStorage) Open(ctx context.Context, c ap.Candidate, id string, readOnly bool) (ap.SessionDirectory, ap.Failure) {
+	<-s.release
+	return s.RegistryStorage.Open(ctx, c, id, readOnly)
+}
+
+func TestRunExitReconciliationWaitsForProbeObservation(t *testing.T) {
+	for _, canceled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("canceled=%t", canceled), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				m := publicMemoryFixture(t)
+				id, _ := m.seed("a")
+				ack, release := make(chan struct{}), make(chan struct{})
+				close(ack)
+				journal := &runExitJournal{}
+				var result runExitObservation
+				storage := &runExitStorage{
+					RegistryStorage: runExitDelayedStorage{RegistryStorage: m.files, release: release},
+					journal:         journal, result: &result, waitCanceled: ack,
+				}
+				probe, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				done := make(chan ap.Failure, 2)
+				open := func(ctx context.Context) {
+					d, failure := storage.Open(ctx, m.c, id, true)
+					if d != nil {
+						d.Close()
+					}
+					done <- failure
+				}
+				go open(probe)
+				synctest.Wait()
+				<-probe.Done()
+				reconcile, end := context.WithCancel(context.Background())
+				defer end()
+				go open(reconcile)
+				synctest.Wait()
+				if fmt.Sprint(journal.events) != "[probe-start]" {
+					t.Errorf("reconciliation overtook the pending expiry observation: %v", journal.events)
+				}
+				want := "[probe-start probe-expired reconcile-start reconcile-acquired]"
+				pending := 2
+				if canceled {
+					end()
+					synctest.Wait()
+					select {
+					case failure := <-done:
+						pending--
+						if failure != "state.unavailable" {
+							t.Errorf("canceled reconciliation = %q", failure)
+						}
+					default:
+						t.Error("canceled reconciliation still waits for the probe observation")
+					}
+					want = "[probe-start probe-expired]"
+				}
+				close(release)
+				for range pending {
+					<-done
+				}
+				if fmt.Sprint(journal.events) != want || result.ProbeSeconds != 10 {
+					t.Errorf("probe/reconciliation observations = %v, probe seconds = %d", journal.events, result.ProbeSeconds)
+				}
+			})
+		})
+	}
 }
 
 type runExitEngine struct {
