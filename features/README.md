@@ -92,6 +92,61 @@ Use `-v` to see successful-run logs and Go's skip report. Selection precedes the
 scenario initialization, Background steps and any engine access. Each eligible scenario is a
 subtest of `TestFeatures`, named after the scenario.
 
+### Scenario memory
+
+Run the complete feature suite without `-race`. Use race detection only on named
+harness regressions, such as
+`go test -race ./features -count=1 -run '^TestFeatureMemoryRetention$'`.
+`itos task T-35` runs the full ordinary suite and the focused regression in both
+modes, requiring each measured invocation to stay within 4,194,304 KiB peak RSS.
+Its Linux `getrusage(RUSAGE_CHILDREN).ru_maxrss` measurement includes reaped
+descendants and reports the largest individual process high-water mark, not the
+sum of simultaneous processes or cumulative Go allocations.
+
+Godog v0.16.0 stores matched step handlers in its results. Those handlers retain
+their scenario's `world`, including output and fixture snapshots, after the
+scenario finishes. Manifest snapshots include the complete bytes of executable
+sentinels; at case 576 they accounted for over 95% of the pre-repair live heap.
+The initializer now clears the world after assertions, owned fixture cleanup and
+scratch removal finish. Godog keeps its captured errors and step locations.
+No snapshot assertion, scenario selection, fixture preparation or GC setting changes.
+
+On 2026-11-08, using `go1.27.3-X:nodwarf5` on Linux amd64, T-35 collected heap
+profiles inside one serial non-engine suite, after cleanup and explicit diagnostic
+GC at cases 8 and 576, while earlier results remained live:
+
+| Measurement (bytes) | Before repair | After repair |
+| --- | ---: | ---: |
+| Live heap at case 8 | 21,996,544 | 21,701,288 |
+| Live heap at case 576 | 2,239,996,256 | 58,728,640 |
+| Cumulative allocations at case 576 | 26,507,812,632 | 26,514,033,448 |
+
+Both samples had three goroutines, all belonging to the test runner/profile;
+no fixture goroutine survived those cleanup boundaries. The pre-repair diagnostic
+was stopped at 4,235,888 KiB observed RSS. The repaired diagnostic completed all
+1,274 selected cases at 446,472 KiB peak RSS. These profiling runs used a sandbox
+that remapped `/tmp` ownership and caused approval fixtures to fail, so neither
+is a passing suite check. Their comparable heap samples identify retained state;
+the ordinary task check uses normal ancestor ownership and no profiling hooks.
+Profiles and logs remain uncommitted T-35 scratch artifacts.
+
+The red regression commit `44b218327428d37223893a08ad73c8901c203479` retained
+235,644,976 additional live bytes normally and 235,648,112 under `-race`, exceeding
+its 32 MiB allowance. With repair `3f1c8e25ca43673eb75a79cd33d4d02cd876f8b9`,
+the same measurements were 774,152 and 758,824 bytes, respectively, and both runs
+passed. All 64 payload cases and their cleanup completions are required. Small
+failure subtests also require original diagnostics, nonzero suite results, joined
+owned pipe cleanup, removed directories and an independent succeeding scenario.
+GC is explicit only in these regression/diagnostic samples, never normal cleanup.
+
+At the repair SHA above, `itos task T-35` passed both unchanged ledger checks.
+The full uncached `go test ./features -count=1` exited 0 in 303.464 seconds with
+470,196 KiB peak RSS: all 1,274 eligible product scenario rows, plus the normal
+harness and coverage regressions. The exact-name focused ordinary and race runs
+both exited 0, with a combined high-water measurement of 406,028 KiB. These are
+local non-engine results, not a full-suite race measurement or native-engine
+support evidence. Fresh engine evidence remains the coordinator's CI work.
+
 ### The CI engine tier
 
 Reserve `@engine` for any scenario whose setup, hooks, steps **or cleanup** needs a real
