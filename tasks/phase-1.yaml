@@ -2367,18 +2367,38 @@
     CI runs. Optimize only demonstrated harness overhead, such as redundant fixture preparation
     or waiting after an already observed completion. Preserve every selected row and every
     observation, positive control, negative control, durable-state audit and cleanup error.
-    LIFECYCLE-13's quiet row must still observe 125 real seconds after readiness, beyond the
-    product's 120-second startup budget; its reported 128 s is not removable idle time.
-    Keep the existing 10-second call/grace and 30-second teardown bounds, delayed acknowledgements,
-    process guards, blocked pipes and independent native observations. Do not replace native
-    time with a fake clock, shorten required waits, reset origins or unblock a pipe early. Keep
+    The coordinator's q-40 decision of 2026-11-08 supersedes the original prohibition on
+    shorter test budgets. Run 42457394504 selected 47 engine examples, taking 285 s overall
+    and 246 s in the measured step, correctly failing the 240 s gate. LIFECYCLE-13's quiet
+    row took 128 s, its other rows 22 s and 12 s, and LIFECYCLE-09's four rows took 11-14 s
+    each. Shorten these real waits through the harness's own build fixture: centralize the
+    unchanged production call/startup/grace constants (10/120/10 s) in the existing budget
+    engine and let a Go build overlay substitute 1/3/1 s only in the engine tier's binary.
+    No environment variable, flag or configuration accepted by a product binary may select
+    test budgets. Ordinary tests and release builds retain the production constants.
+    Keep the 30-second teardown budget and process guards. Native assertions and actions use
+    the fixture budgets: quiet time exceeds both startup and call, acknowledgement delay is
+    60 percent of grace, repetitions occur at 20 and 80 percent, and escalation tolerance is
+    20 percent. Preserve delayed acknowledgements, blocked pipes and independent observations.
+    Do not replace native time with a fake clock, reset origins or unblock a pipe early. Keep
     the existing scenario-authorized quiet-control reuse within its outline and product build;
     add no shared observation or success cache. Preserve the narrowly bounded schedule, its quiet
     startup fallback, exact completion counts and serial filtered/manual-red execution. Do not
     enable arbitrary concurrent scenarios on one daemon: resource inventory audits would see
     each other's transitions. If a product defect prevents the target, return it for a behaviour
-    spec rather than changing cmd/internal or product semantics in this test task. T-31 owns the
+    spec rather than changing product semantics in this test task. The constant extraction and
+    test-only build fixture above are authorized; no new runtime configuration is. T-31 owns the
     equal-basename recovery heartbeat race; coordinate through the loop and do not duplicate it.
+
+    Repair the portability failures reported at cdd3897 without weakening their assertions.
+    The protected-record memory fixtures model Linux and must keep slash-absolute Linux
+    identities even on Windows. Timing records compare native-cleaned paths so godog's
+    filesystem traversal separators do not change identity. The unsupported-host doctor
+    fixture must contain a valid synthetic container UID on Windows, where Geteuid returns
+    -1, so manifest validation cannot mask the expected host refusal. FIFO examples require
+    Unix and retain their Linux/macOS execution and all portable manifest-path assertions.
+    Check parsed normal and manual-red selection for every affected platform. These are
+    harness corrections, not an expansion of the supported container-host milestone.
 
     First measure the optimized unsharded execution. If it meets 240 s, keep the single engine
     job. Otherwise use one shard per feature file on separate native ubuntu-latest runners and
@@ -2444,7 +2464,8 @@
     the new runner assertions failing before the repair and passing with the final configuration,
     without committing a workflow/test mismatch or bypassing a hook. Align features/README.md
     in docs --item T-33, explaining restored budgets and final scheduling. Leave the coordinator's
-    external allowance record to the loop.
+    external allowance entry removed once the restored limits and shortened fixture land,
+    as q-40 directs; retain every unrelated allowance.
     Keep the cheap ledger check in the ordinary task tier and runtime proof in required CI.
     Run the full feature suite without -race through its existing tier; use -race only for
     changed focused tests if needed. The 2026-11-08 22 GB whole-feature race run must not recur;
