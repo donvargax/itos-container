@@ -70,3 +70,58 @@ func TestSDKAnchorContract(t *testing.T) {
 		t.Fatal(status)
 	}
 }
+
+func TestSDKAnchorRefusesChangedSocketBeforeAnyRequest(t *testing.T) {
+	e, b, pin := sdkHandlerFixture(t, func(w http.ResponseWriter, r *http.Request, _ sp.Binding) {
+		t.Errorf("changed socket reached engine: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusBadRequest)
+	})
+	c, failure := e.OpenRun(t.Context(), b)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer c.Close()
+	r := st.RunIntent(b)
+	r.Stage, r.Anchor.Stage, r.Anchor.Created = "reserved", "intent", ""
+	pin.Current = false
+	if got := c.AllocateAnchor(t.Context(), r); got != sp.MountRefused {
+		t.Fatal("changed socket authorized allocation", got)
+	}
+	if o, got := c.InspectAnchor(t.Context(), r.Anchor.Name); got != sp.Changed || o != (sp.AnchorObservation{}) {
+		t.Fatal("changed socket supplied anchor authority", o, got)
+	}
+	c.RemoveAnchor(t.Context(), r.Anchor.Name)
+}
+
+func TestSDKAnchorAndWorkerCreationRequireRecordedAnchorAuthority(t *testing.T) {
+	for _, fault := range []string{"legacy", "foreign inode", "missing creation", "wrong stage"} {
+		t.Run(fault, func(t *testing.T) {
+			e, b, _ := sdkHandlerFixture(t, func(w http.ResponseWriter, r *http.Request, _ sp.Binding) {
+				t.Errorf("invalid anchor reached engine: %s %s", r.Method, r.URL.Path)
+				w.WriteHeader(http.StatusBadRequest)
+			})
+			c, failure := e.OpenRun(t.Context(), b)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer c.Close()
+			r := st.RunIntent(b)
+			switch fault {
+			case "legacy":
+				r.Schema, r.Anchor = 1, sp.Anchor{}
+			case "foreign inode":
+				r.Anchor.Inode = "replacement"
+			case "missing creation":
+				r.Anchor.Created = ""
+			case "wrong stage":
+				r.Anchor.Stage = "absent"
+			}
+			if got := c.AllocateAnchor(t.Context(), r); got != sp.MountRefused {
+				t.Fatal("invalid allocation authority", got)
+			}
+			if id, got := c.CreateRun(t.Context(), r, []string{"probe"}); id != "" || got != sp.MountRefused {
+				t.Fatal("invalid anchor authorized worker creation", id, got)
+			}
+		})
+	}
+}
