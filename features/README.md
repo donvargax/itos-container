@@ -129,7 +129,7 @@ for this **CI-only** invocation (the workflow also supplies the fixture environm
 ```sh
 go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
 cd features
-ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$'
+ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=4m -test.paniconexit0 -test.run '^TestFeatures$'
 ```
 
 The engine tests run in their own session. Coordinator-reviewed run 42233015284
@@ -152,16 +152,55 @@ while each engine run must still establish its own runtime evidence.
 `TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
 and `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
-T-32 temporarily gives the step an eight-minute budget and the job a thirteen-minute budget.
-The test binary's seven-minute timeout leaves time for Go's panic and goroutine dump before
-the step limit. This coordinator-authorized stopgap is recorded in `weakened-gates.md` until
-`p1-engine-suite-within-its-limit` speeds up the suite and restores the limits. These are
-test-infrastructure budgets, not product startup/resource limits. With no red input the step
+T-33 restores the step's five-minute limit and the job's ten-minute limit. The test
+binary's four-minute timeout leaves time for Go's panic and goroutine dump before the
+step limit. The workflow measures the entire Engine scenarios step, starting before
+test compilation and ending after output capture and exit diagnostics. It separately
+prints compilation time and rejects a total above 240 seconds even if the binary and
+capture both succeed. The shell reads monotonic Linux uptime at 10 ms resolution;
+missing, invalid or backwards timing fails. Compilation, test, signal and capture
+failures keep their original exit status. Fixture preparation retains its separate
+budget, followed by the existing failure diagnostics and unconditional owned cleanup.
+These are test-infrastructure budgets, not product startup/resource limits. With no red input the step
 selects every live engine case, independent of smoke selections, changed IDs or a green
 baseline. A manual red list narrows it to the named eligible IDs, live or `@wip`.
 Pending, undefined, failed or skipped
 runtime steps fail; losing selected engine cases also fails. Manual non-engine red runs
 apply the same completion checks.
+
+Each completed engine scenario example streams an `engine scenario timing:` JSON
+record after its final cleanup, including failed setup, steps and cleanup. Records
+contain only feature URI, stable scenario ID, source row line, monotonic duration in
+nanoseconds and outcome. Identical outline names/values still have distinct row lines;
+a later failure does not hide earlier records. The single `engine suite timing:`
+summary gives selected/completed example counts, outcome and elapsed time from before
+the product build through the scheduled suites. Nested row durations overlap and must
+not be added to obtain elapsed suite time. The whole-step measurement also includes
+test compilation, remaining test-process cleanup and log capture. Ordinary non-engine
+runs emit no engine timing records.
+
+`TestEngineScenarioTiming` exercises these records using memory-only steps and controlled
+Go time. `TestEngineSuiteBudget` parses the actual workflow and executes its timing and
+failure wrapper with disposable compiler/program fixtures and a controlled uptime read.
+Its cases include successful but over-budget execution, missing timing, compilation,
+capture and signal failures. Neither test enables an engine or waits four real minutes.
+Run the full feature suite without `-race`; use `-race` only on changed focused tests.
+
+The single engine job and existing schedule are retained pending the coordinator's
+native measurements; these harness checks establish no speedup or 240-second runtime
+result. T-33 still needs before/after row and whole-step timings at the actual tested
+heads. In the prepared CI engine tier only, the coordinator also measures the complete
+unsharded selection with:
+
+```sh
+env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 timeout --signal=TERM --kill-after=5s 240s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
+```
+
+Optimize only demonstrated harness overhead, then measure unsharded again. If the
+optimized run still exceeds 240 seconds, T-33 requires separate native runners for
+whole-feature shards and an exact parsed-example partition check. That decision needs
+the coordinator's measurements; historical durations are not fresh native evidence.
+The loop owns the external allowance record, native CI runs and closure.
 
 Ordinary engine runs that select both `ID-LIFECYCLE-09` and `ID-LIFECYCLE-13`
 execute the four escalation rows during the quiet worker's required 125-second
