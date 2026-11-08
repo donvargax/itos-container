@@ -2237,13 +2237,13 @@
     Commit these tests with compiling failing stubs before implementing the new tools; record
     assertion failures, not undefined symbols or missing-package errors, then all passing.
 
-    The first check below presently fails because ci.yml has no active release caller. The
-    second fails its explicit missing-helper assertion; its future tests' behavioural red
-    evidence must come from the stubs, not that absence. The third exits 2 because the launcher
-    has no git-cliff case. The fourth fails because release-version does not exist; after the
-    tools arrive it runs the workflow's actual version command at the candidate HEAD, then
-    builds both real programs and runs them against a full local no-tags clone with the current
-    pinned launcher and cliff configuration. Assert that the clone has the candidate HEAD,
+    Before implementation, the first check below failed because ci.yml had no active release
+    caller. The second failed its explicit missing-helper assertion; the tests' behavioural
+    red evidence must come from the stubs, not that absence. The third exited 2 because the
+    launcher had no git-cliff case. The fourth failed because release-version did not exist.
+    With the helpers present, it runs the workflow's actual version command at the candidate
+    HEAD, then builds both real programs and runs them against a full local no-tags clone with
+    the current pinned launcher and cliff configuration. Assert that the clone has the candidate HEAD,
     complete history and no tags before running either helper. This proves first-version and
     actual notes generation without publishing. Pass the scratch version output's last and
     next directly to the notes program and compare the What changed section's commit links
@@ -2260,6 +2260,14 @@
     55ebd658f08764a90dbc55cf626de3e1719c25db and observed the failures above. A separate
     disposable clone of that source preserved its candidate HEAD. Historical commit counts
     and candidate SHAs are observations, never constants in the tools.
+
+    The drafter rechecked all four unchanged commands on 2026-11-08 at
+    bdfe36c01c24cb416213dacfb82fcaf16aca4c37 with itos task T-25; all passed. The
+    actual version command and the no-tags clone both printed last=, next=0.1.0, bump=minor
+    and range=HEAD, each on its own line with a final newline. Both real programs ran;
+    the notes' commit links matched the complete range before and after the fixture tag,
+    and the source and scratch HEAD, refs, status and tracked diffs stayed unchanged by the
+    helpers. This is local evidence at that candidate, not CI or publication evidence.
 
     Keep the YAML/Go fixture checks at the cheap task and existing Linux go test ./... tiers.
     The integrated dry run is also a focused task check; the pinned git-cliff cache avoids
@@ -2289,6 +2297,14 @@
     authorization and undo in .git/itos/weakened-gates.md. Land the exception and its fixtures in a
     ci --task T-25 commit before the helpers. These are the only authorized gate edits. Restore the
     staged tests and stubs from the driver w2 T-25 stash rather than recreating them.
+    That sequence is already committed on this branch: 0042ca4 amended this spec for q-44,
+    4a58f87 added the named edge and compile-first fixtures, c239fb7 restored the tests and
+    compiling stubs from stash 68e02b39535449bc48df5f0940bb0c4aa728498d, c4d03cd implemented
+    the helpers and release wiring, and 585b127 updated the guidance. The stash's test files
+    match c239fb7; do not reapply its obsolete stubs over the completed helpers. The q-44
+    authorization and undo are recorded in itos/weakened-gates.md under the common Git
+    directory returned by git rev-parse --git-common-dir, shared by this worktree. Preserve
+    this completed sequence and its original red evidence when handing the item onward.
     Commit red tests/stubs as test --item T-25, tooling/workflow work as ci --task T-25 and
     guidance as docs --item T-25.
     The spec is docs --item T-25. Run gates through their hooks and CI; make no local mutation
