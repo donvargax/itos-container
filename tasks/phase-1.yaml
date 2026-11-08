@@ -2131,8 +2131,7 @@
     AGPL-3.0 permission. Do not globally replace upstream identities. Reuse this repository's
     internal/release and internal/release/releasetest, already retargeted to cmd/itos-container;
     do not overwrite their later tests or copy the template's whole workflows or launcher.
-    These are build tools under tools/, using the existing release-library exception in
-    docs/architecture.md, not container commands or new slice/engine production packages.
+    These are build tools under tools/, using the narrow q-44 release-helper edge below, not container commands or new slice/engine production packages.
 
     release-notes also calls tools/bin/pinned git-cliff, whose case is missing here. Adapt only
     that case from the same template revision, keeping git-cliff 2.14.2, its four Linux/macOS
@@ -2279,7 +2278,17 @@
     Implementation paths are the two tools and their test files/config, tools/bin/pinned,
     tools/pinned/pinned_test.go, tools/release/workflow_test.go, the two workflows and the two
     release-guidance documents named above. Leave .goreleaser.yaml, internal/release, production
-    slices, gates, proof configuration, registry owners/statuses and other tasks intact.
+    slices, proof configuration, registry owners/statuses and other tasks intact. The coordinator's
+    q-44 decision on 2026-11-08 authorizes one gate exception before the helpers land. Add an explicit,
+    named edge in tools/architecture allowing only tools/bin/release-version and
+    tools/bin/release-notes to import exactly internal/release, and their tests exactly
+    internal/release/releasetest. Do not widen the outside class or allow any other internal import.
+    Add compile-first fixtures proving both helpers' production/test edges pass, other tools still
+    cannot import internal/release, and the helpers cannot import other internal packages or link
+    test support in production. Amend docs/architecture.md to describe the edge and record the
+    authorization and undo in .git/itos/weakened-gates.md. Land the exception and its fixtures in a
+    ci --task T-25 commit before the helpers. These are the only authorized gate edits. Restore the
+    staged tests and stubs from the driver w2 T-25 stash rather than recreating them.
     Commit red tests/stubs as test --item T-25, tooling/workflow work as ci --task T-25 and
     guidance as docs --item T-25.
     The spec is docs --item T-25. Run gates through their hooks and CI; make no local mutation
