@@ -490,18 +490,9 @@ items:
     title: Host Unix sockets under the checkout are not reachable from the worker
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-host-sockets-in-checkout.
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. The whole checkout is
-      bind-mounted (docker/run.go:64) and network none does not isolate filesystem Unix sockets, so
-      a tmux server, SSH control socket or other host service with its socket under the checkout is
-      reachable from /workspace as the host UID: host command execution or network access without
-      another mount. A startup scan is not enough, as host processes can create sockets later; deny
-      connecting to host sockets, or expose a materialised checkout with no host IPC objects.
   - id: slice-20
     title: Hard links to files outside the checkout are refused
     phase: 1
