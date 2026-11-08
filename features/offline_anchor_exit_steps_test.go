@@ -101,6 +101,9 @@ func (w *world) anchorExitSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the detector awaits the engine exit notification before accepting the unobserved result$`, func() error {
 		return runExitOrder(runExitObservation{Events: result.Events}, "inspect:123", "engine-exit-wait", "inspect:0")
 	})
+	sc.Step(`^the detector observes a live held process after the changed root stat before normal workload wait$`, func() error {
+		return runExitOrder(runExitObservation{Events: result.Events}, "changed-root-stat", "held-process-live", "pidfd-close", "normal-workload-wait", "child-exit:"+strconv.Itoa(exit))
+	})
 	sc.Step(`^the detector awaits the unreaped child's engine exit notification with status (\d+)$`, func(n int) error {
 		return runExitOrder(runExitObservation{Events: result.Events}, "child-unreaped", "engine-exit-wait", "child-exit:"+strconv.Itoa(n), "inspect:0")
 	})

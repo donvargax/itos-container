@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/cli"
@@ -42,8 +44,15 @@ func TestPublicAnchorExitContract(t *testing.T) {
 	m.e.Exit, m.e.WaitFailure = exit, ""
 	j := &runExitJournal{}
 	w := &anchorExitWorkspace{Workspace: sf.MountWorkspace(m.b), engine: m.e, mode: mode, journal: j}
-	if strings.HasPrefix(mode, "unreaped ") {
+	if strings.HasPrefix(mode, "unreaped ") || strings.HasPrefix(mode, "root changed ") {
 		w.child = newAnchorExitChild(t, exit)
+		if strings.HasPrefix(mode, "root changed ") {
+			w.child.workspace.MountStat = func(path string) (fs.FileInfo, error) {
+				w.journal.add("changed-root-stat")
+				errno := map[string]syscall.Errno{"root changed ENOENT": syscall.ENOENT, "root changed ESRCH": syscall.ESRCH, "root changed EACCES": syscall.EACCES}[mode]
+				return nil, &os.PathError{Op: "stat", Path: path, Err: errno}
+			}
+		}
 	}
 	m.e.AfterStart = func() {
 		w.started = true
@@ -135,8 +144,10 @@ func (p *anchorExitProcess) Close() { p.w.journal.add("pidfd-close") }
 func (w *anchorExitWorkspace) Mounted(pid int) (sp.MountSource, sp.Outcome) {
 	w.journal.add("mounted-stat")
 	if w.child != nil {
-		if f := w.child.finish(w); f != "" {
-			return sp.MountSource{}, f
+		if !strings.HasPrefix(w.mode, "root changed ") {
+			if f := w.child.finish(w); f != "" {
+				return sp.MountSource{}, f
+			}
 		}
 		return w.child.workspace.Mounted(pid)
 	}
@@ -178,6 +189,12 @@ func (c anchorExitConnection) Inspect(ctx context.Context, id string) (sp.Observ
 }
 
 func (c anchorExitConnection) Wait(ctx context.Context, id string) (int, sp.Outcome) {
+	if strings.HasPrefix(c.w.mode, "root changed ") && !c.w.child.finished {
+		c.w.journal.add("normal-workload-wait")
+		if f := c.w.child.finish(c.w); f != "" {
+			return 0, f
+		}
+	}
 	if c.w.exitPending {
 		c.w.journal.add("engine-exit-wait")
 		if c.w.child != nil {
@@ -191,6 +208,9 @@ func (c anchorExitConnection) Wait(ctx context.Context, id string) (int, sp.Outc
 }
 
 func (w *anchorExitWorkspace) MountError() sp.MountSystemError {
+	if w.child != nil {
+		return w.child.workspace.MountError()
+	}
 	if strings.HasPrefix(w.mode, "before pidfd open") {
 		return sp.MountSystemError{Errno: 3, Message: "no such process"}
 	}

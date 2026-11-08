@@ -514,8 +514,11 @@ Feature: Hardened offline foreground run
   # The worker runs as the host UID with no-new-privileges. Use the PID from
   # fresh inspection of the owned full ID, never a cached PID, the controller's
   # own /workspace, a volume mountpoint or the current checkout pathname.
-  # A mismatch or unavailable stat while the worker still runs means immediate
-  # owned kill/removal and mount refusal. The descriptor-backed volume prevents
+  # A mismatch or other unreadable workspace means immediate owned kill/removal
+  # and mount refusal. Q-42 refines unavailable stat: on ENOENT, ESRCH or EACCES,
+  # poll the held pidfd. An exited worker follows q-39; a still-live worker records
+  # "not observed: worker root changed" and continues without claiming verification.
+  # The descriptor-backed volume prevents
   # substitution; this check
   # detects a failed anchor and cannot precede the first workload instruction.
   # If fresh owned inspection establishes that the worker exited before the
@@ -900,6 +903,28 @@ Feature: Hardened offline foreground run
       | 7    | unreaped before stat |
       | 0    | unreaped during stat |
       | 7    | unreaped during stat |
+
+  # Q-42 models the stat errors from a changed root or namespace while a real
+  # local child stays alive behind its production pidfd. The disk stat seam
+  # supplies each errno; the engine wait later releases the child and returns
+  # its actual exit. This proves detector handling, not native chroot support.
+  @slice-17 @ID-OFFLINE-38 @linux @wip
+  Scenario Outline: A live worker with a changed root retains its result without mount verification
+    Given an anchor detector fixture with exit <exit> at "root changed <error>"
+    When the registered command runs and fresh status reads its completed record
+    Then the command returns workload exit <exit> without a mount refusal and completes owned cleanup
+    And the durable record and JSON and text status report "not observed: worker root changed" for the mount detector
+    And the detector observes a live held process after the changed root stat before normal workload wait
+    And the detector releases every process handle and never signals the exited worker
+
+    Examples:
+      | exit | error  |
+      | 0    | ENOENT |
+      | 7    | ENOENT |
+      | 0    | ESRCH  |
+      | 7    | ESRCH  |
+      | 0    | EACCES |
+      | 7    | EACCES |
 
   # Both rows acquire and durably own the anchor before the worker fault. The
   # mismatch row returns a wrong runtime boundary for an otherwise owned
