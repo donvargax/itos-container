@@ -121,7 +121,7 @@ controller exit". Implementation of that behavior is authorized. The local
 ownership/fault/detector cases 25–28/31/32 have the red checkpoint recorded below.
 That checkpoint authorized implementation; native green is still required.
 
-## Historical local checkpoint and recovery integration gap
+## Historical local checkpoint and resolved recovery integration
 
 The local steps are committed in `bb19503`, with contextual preflight diagnostics
 and both-backend assertion reporting corrected in `4c57651`. With `@wip` removed
@@ -142,11 +142,16 @@ descriptor-backed volume requests, post-start inspection/stat and foreground
 release ordering. That result is local evidence only. No native green, kernel
 resolution proof, changed-code proof or support claim was obtained.
 
-The draft exposed an integration conflict that must be resolved before the
-behavior commit. This decision and OFFLINE's handoff assign fresh-process anchor
-recovery to slice-18 and require readers that cannot account for the anchor to
-refuse completion. However, these existing live scenarios launch new sessions
-and require fresh processes to complete their cleanup:
+That draft exposed an integration conflict: the earlier handoff assigned
+fresh-process anchor recovery to slice-18, while existing live scenarios already
+required new processes to complete cleanup of newly launched sessions. Q-36
+settled the conflict on 2026-11-07 at approximately 18:00 UTC by merging
+slice-18 into slice-17. Q-38 reaffirmed this on 2026-11-07 at approximately
+20:35 UTC. Fresh-process recovery is implemented in this slice, not a remaining
+integration gate; schema-2 readers account for the original anchor.
+
+The combined implementation in `e885ff8`, present at attempt 14's `60b81ed`,
+keeps these scenarios live with their existing successful-recovery requirements:
 
 - RECOVERY-21 requires run's printed stop retry to return zero after a failed
   foreground removal.
@@ -154,34 +159,27 @@ and require fresh processes to complete their cleanup:
 - RECOVERY-23 requires independent stop processes to complete one of two runs.
 - LIFECYCLE-16 requires fresh stop to reconcile uncertain launch boundaries.
 
-The draft's schema-2 refusal also fails existing local recovery checks, including
-`TestLifecycleEngineLossRetainsRecoverableFailure`,
+The local recovery checks that exposed the draft's schema-2 refusal now pass,
+including `TestLifecycleEngineLossRetainsRecoverableFailure`,
 `TestPublicRecoveryBudgetRegressions` and
-`TestRegisteredWaitReconcilesConcurrentStop`. These tests require actual recovery;
-an early ownership refusal cannot replace it. No native scenario was run locally
-to reproduce the corresponding engine cases.
+`TestRegisteredWaitReconcilesConcurrentStop`. Native RECOVERY-21/22/23 and
+LIFECYCLE-16 remain required passing CI regressions; this local checkpoint is
+not native execution evidence. No scenario was weakened or retagged to resolve
+the cycle, and q-19's anchor and q-27's detector remain unchanged.
 
-Neither weakening or retagging those live scenarios nor implementing slice-18
-without its specification is authorized by that handoff. The coordinator
-needed to reconcile the slice boundary with the live recovery contract. This does
-not reopen q-19's anchor or q-27's detector decisions.
-
-The draft was saved as `/tmp/slice-17-anchor-prototype.patch`, based on `4c57651`,
-then removed from the worktree. It is incomplete: besides the recovery conflict,
-existing adapter/unit fixtures still need the new mount contract and new
-production paths need shared-contract and unit coverage. Do not treat that patch
-as a mergeable implementation or its local green as full regression evidence.
-That checkpoint retained every slice-17 scenario as `@wip`; the combined
-implementation below supersedes it.
+The saved `/tmp/slice-17-anchor-prototype.patch` at `4c57651` is obsolete. The
+combined implementation and evidence below supersede its incomplete recovery,
+adapter fixtures and unit coverage.
 
 ## Shared-contract preparation after q-33
 
 The handoff at that checkpoint permitted implementation preparation while gating
-activation on slice-18's specification and integration. At that point:
-the registry makes slice-18 depend on slice-17, so waiting for slice-17 closure
-before preparing the recovery integration cannot satisfy the live contracts.
-Q-36 below now arranges that integration without reconsidering q-19 or q-27. The shared `Recovery.stop` path must remain the teardown authority
-for foreground and fresh-process cleanup.
+activation on slice-18's specification and integration. At that point,
+the registry made slice-18 depend on slice-17, so waiting for slice-17 closure
+could not satisfy the live recovery contracts.
+The combined implementation follows q-36 without reconsidering q-19 or q-27.
+The shared `Recovery.stop` path is the teardown authority for foreground and
+fresh-process cleanup.
 
 `internal/engine/session/port/porttest/anchor.go` now supplies reusable contracts
 and I/O-free fakes for the already specified anchor ports. They check exact
@@ -195,9 +193,9 @@ failed pinning, and rejection of missing controls by the contract oracles.
 
 At this checkpoint these contracts ran against their memory fakes. The disk and SDK
 adapters now run the same contracts in the combined implementation below.
-The test increment itself activated no slice-17 scenario and supplied no native proof. The saved prototype still
-needs the recovery integration and adapter coverage described above before a
-behavior commit, and native green remains the coordinator's CI responsibility.
+The test increment itself activated no slice-17 scenario and supplied no native
+proof. The combined implementation now includes recovery and adapter coverage;
+native green remains the coordinator's CI responsibility.
 
 ## Combined integration under q-36
 
@@ -300,10 +298,83 @@ and an HTTP recorder control which rejects substituted native volume data.
 Focused oracle tests also pass with the race detector. These are harness checks;
 the existing native scenarios still need CI at the pushed head.
 
-The reported CI line `FAIL .../features 600.444s` does not identify the active
-test or its goroutine stack. A complete engine-disabled local package run passes
-in 430.195 seconds, including all 1,348 live local scenarios in 404.03 seconds.
-The sandbox's remapped root ownership first caused fixture refusals; this full
-run used host ownership and disposable state, with the engine tier disabled.
-No timeout or gate was changed. The CI timeout remains unverified pending its
-full failure context; this passing run is not a claimed fix for that failure.
+## Local features timeout investigation after q-38
+
+The coordinator identified the reported `FAIL .../features 600.444s` as the
+package's default ten-minute Go test timeout. The next supplied CI result at
+`e17e5f0` includes three assertion failures as well as `FAIL .../features
+600.496s`: `TestFeatureBinaryPublishesOnceAfterBuild`,
+`TestFeatureBinaryFailedBuildIsNotCached` and `TestFeatureConcurrency/local`.
+These are the available CI results; this attempt has no GitHub access. No
+timeout or gate was changed.
+
+The saved engine-disabled baseline at `60b81ed` passed the package in 430.195
+seconds, with all 1,348 live local scenarios taking 404.03 seconds. Its timings
+showed more than three minutes in serial recovery/anchor/inspection deadline
+cases alone, including 10- and 30-second anchor totals and a 40-second recovery
+row. Approval and preflight contracts also launched `go test` for each row,
+repeating build work for the same assembly. This leaves little margin on CI.
+
+Harness regressions in `e08b711` first failed at the serial scheduling and
+partial/failed executable publication assertions. The ordinary local runner now
+schedules four isolated scenarios concurrently. Engine and manual red runs stay
+serial. The selected rows, assertions, real operation deadlines and cleanup
+checks are unchanged. Compiled helpers are published atomically after a single
+in-flight build per cache path, outside scenario checkouts. Manifest, approval,
+preflight and session contracts reuse one executable per coverage mode, with
+fresh processes and separate inputs/results. Per-ID coverage collection remains
+checked.
+
+The interrupted attempt's saved checkpoint reports an engine-disabled package
+pass in 138.588 seconds, with all 1,348 local scenarios passing in 120.11 seconds.
+Its race runs then exposed unsynchronized local HTTP recorder access. The
+restored changes guard child startup and result publication with the API mutexes,
+copy request snapshots, lock live recovery faults and OFFLINE-24's pause setter,
+and pass command-specific inputs without mutating the shared fixture environment.
+
+This attempt compared the 21-file stash with `e17e5f0` before restoring it; only
+coordinator-owned registry files had moved since the stash base. All three
+reported assertions failed before restoration: a reader saw `partial`, a failed
+build poisoned the cache, and local peak concurrency was one instead of four.
+They now pass, also under the race detector. Their assertions, including the
+deterministic concurrent-reader schedule, remain unchanged. The build coordinator
+uses per-build completion channels so those existing scheduling checks remain
+valid. The stash remains available.
+
+The complete engine-disabled `go test -race ./features -count=1 -json` run passes
+in 265.868 seconds. All 1,348 local scenario rows pass in 207.11 seconds, with no
+race reports; the manifest, approval and kernel coverage checks also pass. This
+run uses disposable state with host ownership. The filesystem sandbox's remapped
+ancestor ownership first caused `state.unsafe` refusals, which are not detector
+behavior evidence and were not worked around by weakening state validation.
+
+Ordinary CI at the pushed head still has to confirm the timeout is gone. No
+native-engine or mutation evidence is supplied by these local runs.
+
+## Short-lived workload conflict exposed by review
+
+PR thread `PRRT_kwDOVkB0ws606Rfz` is valid. A command such as `/bin/true` can
+exit between successful `ContainerStart` and the post-start inspection, leaving
+no live init PID. It can also exit after inspection but before the host stat.
+`detectAnchor` returns `MountRefused` in either case. The registered runner skips
+normal waiting on that refusal and performs immediate owned teardown; a recorded
+zero workload exit does not turn the refusal into success.
+
+Q-27 and live OFFLINE-32 explicitly require refusal when the PID is unusable or
+the stat cannot be made. They require the worker's freshly inspected
+`/proc/<pid>/root/workspace`, and exclude a volume mountpoint, the current checkout
+path, a cached PID or an added gate. Volume metadata and the still-open original
+descriptor prove the requested source, not the inode the exited task actually
+mounted. The native probe's release barrier keeps its PID alive and therefore
+does not exercise this short-lived case.
+
+The pilot's successful-exit contract and this unconditional detector rule cannot
+both be met for that ordering. No production workaround is made here: treating
+an exited task as verified would bypass the required observation, and another
+mount/lifetime mechanism would contradict the settled decisions. This is a new
+specification conflict, separate from q-36/q-38's resolved recovery integration.
+The coordinator must specify how a short-lived task's mounted identity can be
+verified, or explicitly settle the unavailable-observation result. A regression
+should cover exit zero and nonzero both before inspect and between inspect/stat,
+with a healthy control and retained mismatch refusal; any native rows require
+their own CI assertion-level red before implementation.
