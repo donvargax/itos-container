@@ -2339,9 +2339,10 @@
   why: >
     Since about 14:40 UTC on 2026-11-08, tools/bin/engine-fixture prepare fails on main (run
     42494336465) and on every branch: it builds and pushes the fixture image, then exits 1 with no
-    message, so no engine scenario runs anywhere. The last pass was 10:22 UTC; nothing in tools/
-    changed between. The silent exit after the push points at the unguarded jq -e check of the
-    pushed manifest (schemaVersion 2, a single-image manifest media type, no manifests key,
+    message naming the failed check, so no engine scenario runs anywhere. The last pass was
+    10:22 UTC; nothing in tools/ changed between. The silent exit after the push points at the
+    unguarded jq -e check of the pushed manifest (schemaVersion 2, a single-image manifest media
+    type, no manifests key,
     config.digest equal to the built image ID) under set -e: a runner Docker update that pushes an
     OCI index or attestations, or a config digest that differs from --iidfile, would fail it without
     a word. First make every check after the push fail with fail() and print what it saw (the media
@@ -2349,8 +2350,155 @@
     loosening what the fixture proves: if Docker now pushes an index, push or select the single
     linux/amd64 manifest explicitly (for example with provenance and attestations off at build), and
     keep the digest, bytes and config checks.
+
+    This repairs T-20's CI infrastructure for the offline milestone, not product behaviour or a
+    supported-host claim. The drafter changes only this entry in a docs commit with Item T-34;
+    no scenarios, IDs, step definitions or implementation. Read tools/bin/engine-fixture in full,
+    its reviewed Dockerfile, features/engine_fixture_test.go, features/engine_workflow_test.go,
+    features/README.md's Cached fixture protocol and .github/workflows/ci.yml. Preserve T-20's
+    image pins, recipe, acquisition boundary and ownership rules. T-31's heartbeat race and
+    T-33's scenario performance work remain separate; do not change their files or budgets.
+
+    The public job metadata for
+    https://github.com/donvargax/itos-container/actions/runs/42494336465/job/128773250266
+    confirms successful preflight, failed preparation, skipped scenarios and successful final
+    cleanup at 115ac09c3076a61850291f615355a378f7fe825d. Full logs were unavailable to this drafter;
+    the coordinator's post-push observation above is not independent proof of a Docker update.
+    The helper already sets DOCKER_BUILDKIT=0. Do not assume BuildKit or an index is the cause.
+    A generic finish_preparation status message does not identify the failing assertion.
+
+    First make the entire path from the push through final output publication diagnostic.
+    Every failed command or check there must reach fail() with its stage and relevant expected
+    and observed values, including registry fetch, header parsing, byte hashing, manifest
+    validation, owned-reference removal, cold inspection/pull, cached-image validation, smoke
+    execution/inspection, pre-scenario cleanup and the final cache check. Cover the jq checks
+    in cached_fixture and the smoke exit-state check, not just the suspected manifest predicate.
+    Guard operations inside called functions explicitly: putting a function call under || can
+    disable errexit throughout its body. Do not let a later successful command hide a failure.
+    Preserve the original preparation status when bounded cleanup also fails; the final always()
+    cleanup still retries. Publish the four fixture outputs only after all validation and
+    pre-scenario cleanup succeed.
+
+    For every fetched manifest, print a bounded, escaped summary containing schemaVersion,
+    mediaType, hasManifests, configDigest and builtID, plus the advertised and measured manifest
+    digests when available. Absent, malformed or wrong-type values need explicit diagnostics;
+    diagnostic parsing must not itself silently exit under set -e. Reject invalid data even if
+    rendering its summary fails. Log only these selected fixture observations and failure stages,
+    not complete image configurations, environment variables, auth files or shell tracing.
+
+    The coordinator's 2026-11-08 q-43 decision settles the cause and supersedes the earlier
+    config-ID-only requirement. Diagnostic run 42497992377 at
+    4eedcec4f994ee15223532bf753631057adbae40 used Docker 29.4.2 / API 1.54 on Linux amd64.
+    It returned a single OCI manifest whose advertised and measured digest equaled --iidfile,
+    while config.digest differed. The runner uses the containerd image store; this was not an
+    index or BuildKit failure. Preserve the builder and push strategy. Accept and report either
+    graph-driver identity (built ID equals config.digest and differs from the manifest digest)
+    or containerd identity (built ID equals the measured manifest digest). Reject every other
+    relationship. Never pass an index digest as the fixture image or select its first descriptor.
+
+    Independently hash the daemon's raw config before comparing config.digest. Use the existing
+    Docker CLI image save command on the immutable built ID, within the same preparation budget,
+    and the runner's tar utility to read manifest.json and its single Config member to stdout.
+    Docker documents this daemon export at https://docs.docker.com/reference/cli/docker/image/save/.
+    Accept only one export record and a digest-shaped Config member, never arbitrary archive
+    paths or extraction into the filesystem. Validate the raw config as Linux amd64 JSON and
+    match its bytes to its member digest. This adds no installed dependency or engine service.
+    In the graph-driver case also require this config digest to equal the built ID; in the
+    containerd case compare it to the registry manifest's config.digest. Do not use the registry
+    response as its own expected config. Keep the raw built ID for cached inspection, ownership
+    and image_id output on both stores; that output names the daemon's image ID, not always a
+    config digest. Product identity semantics remain unchanged.
+
+    Continue requiring exactly one well-formed Docker-Content-Digest header equal to the SHA-256
+    of the exact response bytes, schemaVersion 2, one of the existing two single-image media
+    types, no manifests key and config.digest equal to the independently established built config
+    ID. Require distinct manifest and built IDs in the graph-driver case only. Keep the cold
+    exact-reference pull and RepoDigests membership, Linux amd64, numeric non-root UID/GID, empty
+    entrypoint, no volumes or devcontainer metadata, hardened smoke output/identity/exit checks,
+    registry removal before scenarios and cached inspection after removal. Keep cleanup confined
+    to recorded attempt-owned resources; never prune or remove pinned inputs to force a cold pull.
+    Preserve CI/Linux guards, explicit local endpoint and override clearing, private empty Docker
+    config, loopback publication, step-local outputs, all existing timeouts and failure propagation.
+    Do not retry preparation, skip scenarios, downgrade the runner, enable continue-on-error or
+    change engine-required CI gating. No new dependency, action, image, service or product code.
+
+    Add TestEngineFixturePostPushDiagnostics and TestEngineFixtureManifestValidation in
+    features/engine_fixture_test.go. The former checks the executable helper's guarded failure
+    paths and required observation fields, with negative source fixtures removing a guard or an
+    observation; comments and unused diagnostic strings must not satisfy it. Its first assertion
+    must expose the current unguarded manifest predicate, not fail on a missing future helper.
+    Keep the diagnostic regression red in a test --item T-34 commit before the repair. For data
+    validation, put the shared shell functions in tools/lib/engine-fixture-checks.sh, containing
+    definitions only, used by both the real preparation path and tests. Tests invoke only those
+    validators with temporary captured-response files and synthetic IDs, never the prepare/cleanup
+    driver, Docker, a registry, a fake Docker transcript or spoofed CI variables. Use the existing
+    Bash, jq, tar and coreutils and Go test facilities; no new parser or Go package is needed.
+
+    Exercise valid Docker v2 and OCI single-image responses as positive controls. Independently
+    reject wrong schema/media type, OCI index and Docker manifest list, even an empty manifests
+    key on a single-image response, missing/wrong config digest, malformed/empty JSON, absent or
+    duplicate/malformed digest headers, byte/header mismatch and config/manifest ID confusion.
+    Assert nonzero status plus the relevant diagnostic and observed fields, including the invalid
+    JSON fallback. Also cover cached-image identity/metadata and smoke-state rejections with
+    synthetic inspection JSON; retain the existing workflow/recipe/helper negative controls.
+    Tests must execute production validation, not a copied jq predicate whose result can diverge.
+    Static guard checks and captured JSON tests are regression evidence, never runtime evidence.
+
+    Extend those regressions for both stores, including an assertion-level red containerd
+    positive control before implementation. Reject missing/malformed/mismatched daemon config
+    identities, unrelated built IDs, invalid export records/member paths and raw-config byte or
+    platform mismatches. Exercise the shared export/config validators on captured data only;
+    guard the production export and tar reads, and require their independently measured config
+    to reach manifest validation. The existing task checks already pass at the diagnostic head;
+    that is preservation evidence, not proof of containerd compatibility.
+
+    The done_when command refuses either missing new regression before running its focused
+    engine-disabled selection and the existing fixture/workflow regressions. On 7f8af93 it exits 1
+    naming both missing regressions, TestEngineFixturePostPushDiagnostics and
+    TestEngineFixtureManifestValidation.
+    That discovery failure is missing work, not assertion-level red proof. Separately, executing
+    only the current production manifest jq predicate against synthetic data accepted a valid OCI
+    manifest but returned 1 with empty stderr for both an index and a config mismatch; stdout is
+    discarded by the helper. Reproduce the silent failure with the diagnostic regression before
+    repair and report its actual assertion, then all passing positive and negative cases. Syntax
+    and existing workflow checks preserve working properties; they do not establish this repair.
+    These checks belong in the existing ordinary test tier. Use plain commands in the ledger so
+    CI needs no RTK. Never run the race detector on the full features package; the focused tests
+    need no race detector, and any wider feature run must omit -race.
+
+    Completion additionally requires the coordinator's actual pushed-head engine job to pass
+    preparation on today's native Linux amd64 runner, run its complete live scenario selection
+    and pass final cleanup. Retain logs naming the tested SHA, Docker server/API/platform, source
+    pins, measured manifest/config identities, the diagnosed cause, cold-pull/cache/smoke results
+    and both cleanup verdicts. Compare the diagnostic failure with the repaired pass. Neither a
+    source check nor successful build/push alone is sufficient. This integration requirement is
+    deliberately not a generic done_when engine command: task checks also run without an engine,
+    and a second preparation would collide with the attempt's ownership record. The coordinator
+    supplies CI observations; agents never run Docker or approve real state, spoof CI or dispatch.
+
+    Implementation is limited to tools/bin/engine-fixture and tools/lib/engine-fixture-checks.sh
+    in ci --task T-34, features/engine_fixture_test.go and its captured-data helper
+    features/engine_fixture_identity_test.go in test --item T-34 (split to preserve the existing
+    600-line lint limit), and accurate protocol
+    updates in features/README.md and this settled specification in docs --item T-34.
+    The workflow itself needs no change.
+    Keep new checks and their production integration in scope; do not leave an unused validator
+    that passes tests while prepare still runs the old predicate. Commit no generated fixture,
+    log, coverage or mutation evidence. Let configured hooks and CI run the gates. Agents commit
+    and stop; the loop alone pushes, watches CI and closes the item at the actual green head.
   done_when:
-    - run: "true"
+    - run: |-
+        bash -n tools/bin/engine-fixture || exit
+        names=$(ITOS_CONTAINER_ENGINE_TESTS=0 go test ./features -list '^TestEngineFixture(PostPushDiagnostics|ManifestValidation)$') || exit
+        missing=0
+        for name in TestEngineFixturePostPushDiagnostics TestEngineFixtureManifestValidation; do
+          if ! printf '%s\n' "$names" | grep -Fx "$name" >/dev/null; then
+            printf 'missing regression: %s\n' "$name" >&2
+            missing=1
+          fi
+        done
+        test "$missing" = 0 || exit 1
+        ITOS_CONTAINER_ENGINE_TESTS=0 go test ./features -count=1 -run '^TestEngine(FixturePostPushDiagnostics|FixtureManifestValidation|FixtureWorkflow|Workflow)$'
 - id: T-35
   type: test
   title: The feature suite stays within a few GB, with or without the race detector
