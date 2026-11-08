@@ -1,20 +1,17 @@
 package features
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -333,6 +330,11 @@ func fixtureGuardIssues(driver, checks string) []string {
 	}
 	for _, rule := range []struct{ function, prefix string }{
 		{"prepare", `d image push "$tag"`},
+		{"prepare", `d image save --output "$state/built.tar" "$built"`},
+		{"prepare", `tar -xOf "$state/built.tar" manifest.json`},
+		{"prepare", `config_path=$(daemon_config_path `},
+		{"prepare", `tar -xOf "$state/built.tar" "$config_path"`},
+		{"prepare", `daemon_config=$(daemon_config_digest `},
 		{"prepare", `curl --fail --silent --show-error --noproxy '*' --proto '=http' --max-time 10`},
 		{"prepare", `digest=$(validate_manifest `},
 		{"prepare", `remove_image_ref tag`},
@@ -370,13 +372,16 @@ func fixtureGuardIssues(driver, checks string) []string {
 		{"validate_manifest", `header_data=$(cat `},
 		{"validate_manifest", `actual=$(sha256sum `},
 		{"validate_manifest", `manifest_observation `},
-		{"validate_manifest", `jq -e -s --arg id "$built" `},
+		{"validate_manifest", `jq -e -s --arg id "$daemon_config" `},
+		{"daemon_config_path", `member=$(jq `},
+		{"daemon_config_digest", `actual=$(sha256sum `},
+		{"daemon_config_digest", `jq -e -s `},
 		{"validate_cached", `jq -e -s --arg ref `},
 		{"validate_smoke", `jq -e -s `},
 		{"validate_smoke", `observed=$(cat `},
 	} {
 		source := driver
-		if strings.HasPrefix(rule.function, "validate_") {
+		if strings.HasPrefix(rule.function, "validate_") || strings.HasPrefix(rule.function, "daemon_config_") {
 			source = checks
 		}
 		body := strings.ReplaceAll(fixtureFunction(source, rule.function), "\\\n", "")
@@ -401,6 +406,9 @@ func fixtureGuardIssues(driver, checks string) []string {
 		issues = append(issues, "cleanup must preserve original preparation status")
 	}
 	prepare := fixtureFunction(driver, "prepare")
+	if !strings.Contains(prepare, `digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built" "$daemon_config")`) {
+		issues = append(issues, "manifest validation must use the independently measured daemon config")
+	}
 	if strings.Count(prepare, `>>"$GITHUB_OUTPUT"`) != 1 {
 		issues = append(issues, "exactly one final fixture output publication")
 	}
@@ -458,7 +466,10 @@ func TestEngineFixturePostPushDiagnostics(t *testing.T) {
 	for _, tc := range []struct{ name, old, replacement string }{
 		{"unguarded push", `d image push "$tag" || fail`, `d image push "$tag" # || fail`},
 		{"unguarded cache inspect", `>"$state/cached-image.json" || fail`, `>"$state/cached-image.json" # || fail`},
-		{"unguarded validator", `digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built") || fail`, `digest=$(validate_manifest "$state/manifest.json" "$state/manifest.headers" "$built") # || fail`},
+		{"unguarded validator", `"$built" "$daemon_config") || fail`, `"$built" "$daemon_config") # || fail`},
+		{"unguarded daemon export", `d image save --output "$state/built.tar" "$built" || fail`, `d image save --output "$state/built.tar" "$built" # || fail`},
+		{"unguarded config extraction", `>"$state/daemon-config.json" || fail`, `>"$state/daemon-config.json" # || fail`},
+		{"config identity bypass", `"$built" "$daemon_config")`, `"$built" "$built")`},
 		{"unguarded owned removal", `d image rm "$ref" || fail`, `d image rm "$ref" # || fail`},
 		{"unguarded ownership read", `base=$(cat "$state/base.iid") || fail`, `base=$(cat "$state/base.iid") # || fail`},
 		{"early output publication", `remove_container registry || fail`, `printf 'image=bad' >>"$GITHUB_OUTPUT"; remove_container registry || fail`},
@@ -477,26 +488,6 @@ func TestEngineFixturePostPushDiagnostics(t *testing.T) {
 			requireFixture(t, len(fixtureGuardIssues(brokenDriver, brokenChecks)) != 0, "accepted missing executable guard/observation")
 		})
 	}
-}
-
-func runFixtureValidator(t *testing.T, function string, args ...string) (string, string, error) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	argv := append([]string{"-euo", "pipefail", "-c", `source "$1"; shift; "$@"`, "T-34", "../tools/lib/engine-fixture-checks.sh", function}, args...)
-	cmd := exec.CommandContext(ctx, "bash", argv...)
-	var stdout, stderr strings.Builder
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err := cmd.Run()
-	requireFixture(t, ctx.Err() == nil, "validator exceeded five seconds")
-	return stdout.String(), stderr.String(), err
-}
-
-func fixtureResponseFile(t *testing.T, name, data string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
-	requireFixture(t, os.WriteFile(path, []byte(data), 0o600) == nil, "cannot write %s", path)
-	return path
 }
 
 func TestEngineFixtureManifestValidation(t *testing.T) {
@@ -530,7 +521,6 @@ func TestEngineFixtureManifestValidation(t *testing.T) {
 		{"malformed header", manifest, "Docker-Content-Digest: invalid\r\n", built, "manifest header"},
 		{"digest byte mismatch", manifest, "Docker-Content-Digest: " + other + "\r\n", built, "manifest bytes"},
 		{"config as manifest", manifest, "Docker-Content-Digest: " + built + "\r\n", built, "manifest bytes"},
-		{"manifest as built", manifest, "", "DIGEST", "manifest identity"},
 		{"invalid built", manifest, "", "bad-id", "built identity"},
 		{"escaped bounded observation", strings.ReplaceAll(manifest, "application/vnd.oci.image.manifest.v1+json", `line\n\u001b`+strings.Repeat("x", 5000)), "", built, "manifest validation"},
 	} {
@@ -542,7 +532,7 @@ func TestEngineFixtureManifestValidation(t *testing.T) {
 			}
 			header = strings.ReplaceAll(header, "DIGEST", digest)
 			id := strings.ReplaceAll(tc.id, "DIGEST", digest)
-			stdout, stderr, err := runFixtureValidator(t, "validate_manifest", fixtureResponseFile(t, "manifest.json", tc.body), fixtureResponseFile(t, "headers", header), id)
+			stdout, stderr, err := runFixtureValidator(t, "validate_manifest", fixtureResponseFile(t, "manifest.json", tc.body), fixtureResponseFile(t, "headers", header), id, built)
 			if tc.diagnostic == "" {
 				requireFixture(t, err == nil && strings.TrimSpace(stdout) == digest, "valid manifest rejected: %v stdout=%s stderr=%s", err, stdout, stderr)
 			} else {
@@ -570,6 +560,8 @@ func TestEngineFixtureManifestValidation(t *testing.T) {
 			requireFixture(t, (tc.name != "malformed" && tc.name != "empty") || strings.Contains(stderr, "invalid JSON"), "missing invalid JSON fallback: %s", stderr)
 		})
 	}
+
+	testFixtureImageStores(t, built, other, manifest)
 
 	t.Run("missing captured files", func(t *testing.T) {
 		missing := filepath.Join(t.TempDir(), "absent")

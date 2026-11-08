@@ -2477,7 +2477,9 @@
     supplies CI observations; agents never run Docker or approve real state, spoof CI or dispatch.
 
     Implementation is limited to tools/bin/engine-fixture and tools/lib/engine-fixture-checks.sh
-    in ci --task T-34, features/engine_fixture_test.go in test --item T-34, and accurate protocol
+    in ci --task T-34, features/engine_fixture_test.go and its captured-data helper
+    features/engine_fixture_identity_test.go in test --item T-34 (split to preserve the existing
+    600-line lint limit), and accurate protocol
     updates in features/README.md and this settled specification in docs --item T-34.
     The workflow itself needs no change.
     Keep new checks and their production integration in scope; do not leave an unused validator
