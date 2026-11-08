@@ -31,9 +31,11 @@ func TestPinnedDownload(t *testing.T) {
 		wantText  string
 	}{
 		{"transient gateway timeout", []int{504, 200}, false, 7, 2, "an argument with spaces\n"},
-		{"exhausted gateway timeout", []int{504}, false, 2, 4, "pinned: cannot fetch"},
+		{"gateway outage outlasts early retries", []int{504, 504, 504, 504, 200}, false, 7, 5, "an argument with spaces\n"},
+		{"exhausted gateway timeout", []int{504}, false, 2, 6, "pinned: cannot fetch"},
 		{"missing release", []int{404}, false, 2, 1, "pinned: cannot fetch"},
 		{"bad checksum after retry", []int{504, 200}, true, 2, 2, "SHA-256 did not match the pinned release"},
+		{"bad checksum after extended outage", []int{504, 504, 504, 504, 200}, true, 2, 5, "SHA-256 did not match the pinned release"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -46,6 +48,9 @@ func TestPinnedDownload(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				i := int(calls.Add(1)) - 1
 				status := tc.statuses[min(i, len(tc.statuses)-1)]
+				// Keep outage tests short while exercising curl's real retry logic.
+				// Production releases need not supply this header.
+				w.Header().Set("Retry-After", "1")
 				w.WriteHeader(status)
 				if status == http.StatusOK {
 					_, _ = w.Write(body)
