@@ -216,7 +216,7 @@ type Workspace struct {
 	Closed  bool
 }
 
-func (w *Workspace) Pin(port.Binding) port.Outcome { w.Closed = false; return w.Failure }
+func (w *Workspace) Pin(port.Binding) port.Outcome { w.Closed = w.Failure != ""; return w.Failure }
 func (w *Workspace) Validate() port.Outcome {
 	if w.Changed || w.Closed {
 		return port.Refused

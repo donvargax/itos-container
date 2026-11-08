@@ -44,15 +44,17 @@ type world struct {
 	run           *runWorld
 	session       *sessionWorld
 	offline       *offlineRuntime
+	sockets       *socketWorld
 	recovery      *recoveryNative
 	recoveryLocal *recoveryLocal
 	lifecycle     *lifecycleNative
 	loss          *lifecycleLoss
 	overlap       *overlapFixture
 	hardlinks     *hardlinkWorld
+	duringQuiet   func() // Selected independent cases inside a stable quiet-worker lifetime.
 }
 
-func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
+func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w := &world{root: root, bin: bin}
 	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 		return ctx, w.setUp()
@@ -60,7 +62,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeSession())
+		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeSockets(), w.closeSession())
 		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
@@ -160,12 +162,14 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) {
 	w.recoveryNativeSteps(sc)
 	w.recoveryLocalSteps(sc)
 	w.offlineIsolationSteps(sc)
+	w.socketSteps(sc)
 	w.lifecycleNativeSteps(sc)
 	w.lifecycleLossSteps(sc)
 	w.lifecycleLocalSteps(sc)
 	w.overlapSteps(sc)
 	w.hardlinkSteps(sc)
 	w.runExitSteps(sc)
+	return w
 }
 
 // setUp makes the scenario's scratch folder.

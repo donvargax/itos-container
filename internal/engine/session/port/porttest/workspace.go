@@ -25,3 +25,27 @@ func WorkspaceContract(t Reporter, w port.Workspace, binding port.Binding, subst
 		t.Errorf("closed workspace: %s", f)
 	}
 }
+
+// WorkspaceSocketContract requires a fresh scan on each pin, no retained
+// authority after refusal, and a usable retry after the host removes the socket.
+func WorkspaceSocketContract(t Reporter, w port.Workspace, binding port.Binding, socket func(bool)) {
+	t.Helper()
+	defer w.Close()
+	if f := w.Pin(binding); f != "" || w.Validate() != "" {
+		t.Errorf("socket-free pin: %s", f)
+		return
+	}
+	socket(true)
+	for range 2 {
+		if f := w.Pin(binding); f != port.IsolationUnverified {
+			t.Errorf("checkout socket pin: %s", f)
+		}
+		if f := w.Validate(); f != port.Refused {
+			t.Errorf("socket refusal retained workspace authority: %s", f)
+		}
+	}
+	socket(false)
+	if f := w.Pin(binding); f != "" || w.Validate() != "" {
+		t.Errorf("socket-free retry: %s", f)
+	}
+}

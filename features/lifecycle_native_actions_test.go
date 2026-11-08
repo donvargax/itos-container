@@ -215,6 +215,9 @@ func (w *world) lifecycleStreams() {
 		return
 	}
 	if l.condition == "quiet workload and stdin" {
+		if w.duringQuiet != nil {
+			w.duringQuiet()
+		}
 		if !lifecycleUntil(l.run, l.ready.Add(125*time.Second)) || !w.recoveryNativePresent(true) {
 			w.lifecycleAbortEarly()
 			return
