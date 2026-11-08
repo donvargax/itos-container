@@ -170,6 +170,10 @@ items:
       unrestricted-push and automatic three-platform claims with the implemented CI policy. T-9's
       completed refresh predates this change. Defer unless it blocks the charter's configuration,
       doctor and approval step.
+
+      Already covers hook registration and verification instructions. Include the reported unset
+      core.hooksPath and missing pre-commit/commit-msg hooks in that verification, confirming how
+      subsequent commits enforce configured gates.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
