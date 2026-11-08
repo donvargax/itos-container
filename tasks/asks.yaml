@@ -167,3 +167,6 @@ questions:
     item: "slice-17"
     question: "slice-17: what failed natively in run 42459248613?"
     answer: "The full log is at .git/itos/loop/slice-17-run-42459248613-engine.log. Even fault-free native controls fail, and the product reports only run.mount-refused, so on Docker 28 the anchor or the post-start detector refuses ordinary runs. Make run.mount-refused carry its reason (the check, expected and observed device:inode, or the stat or pidfd errno), show it in the harness output, and return blocked for a native run; if Moby resolves the path by name or refuses it, stop with the evidence (q-19)."
+  - id: q-42
+    item: "slice-17"
+    question: "slice-17: the post-start stat finds no /workspace in a live worker's root (it changed root or namespaces); refuse or record?"
