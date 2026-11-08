@@ -254,7 +254,7 @@ substitutes for per-ID coverage: every listed ID must emit real product counters
 T-20's [helper](../tools/bin/engine-fixture) runs only in the existing engine job, after
 preflight. Both `prepare` and `cleanup` refuse outside GitHub Actions on an actual Linux amd64
 host, before engine access. Agents never invoke these modes against an engine or spoof CI.
-The helper uses the existing Docker CLI, shell/coreutils, curl and jq; it installs nothing.
+The helper uses the existing Docker CLI, shell/coreutils, curl, jq and tar; it installs nothing.
 Every engine call clears Docker host/context/TLS/API overrides, uses
 `unix:///var/run/docker.sock` explicitly and supplies a disposable empty Docker configuration,
 without logins or credential helpers. It never changes the daemon or its registry trust.
@@ -292,17 +292,24 @@ smoke, with a separate 30-second cleanup attempt on failure. It performs these c
    discovered from that exact container. Registry storage is container-managed tmpfs; there
    are no host mounts, host networking, extra capabilities, privileged mode or restart policy.
    `OTEL_TRACES_EXPORTER=none` disables trace export. Readiness has a 20-second limit.
-2. Build the reviewed recipe for `linux/amd64`, record the config ID and push to the attempt's
-   unique loopback repository. Read the single-platform manifest through the registry API,
-   hash its exact bytes, compare with `Docker-Content-Digest` and match its config digest to
-   the built ID. Reject an index or a mismatch.
+2. Build the reviewed recipe for `linux/amd64`, record the raw `--iidfile` image ID and push
+   to the attempt's unique loopback repository. Independently obtain its raw config with
+   [a daemon image export](https://docs.docker.com/reference/cli/docker/image/save/) by that
+   immutable ID. Read the export's single Config member with tar to stdout, accepting only a
+   digest-shaped member path; hash its exact bytes, match the member digest and validate its
+   Linux amd64 config. Read the single-platform manifest through the registry API, hash its
+   exact bytes and compare with `Docker-Content-Digest`. Require its config digest to match
+   the independently measured daemon config. Report `store=graph-driver` when the built ID
+   equals that config digest and differs from the manifest digest, or `store=containerd`
+   when the built ID equals the manifest digest. Reject any other relationship or an index.
 3. Remove only the recorded derived tag/digest references, confirm the exact requested
    `repository@sha256` reference is absent, then
    [pull that digest](https://docs.docker.com/reference/cli/docker/image/pull/). Inspect that
-   exact reference and require its complete `RepoDigests` entry, matching config ID,
+   exact reference and require its complete `RepoDigests` entry, matching daemon image ID,
    Linux amd64 platform, numeric non-root user, empty entrypoint, no declared volumes and no
    `devcontainer.metadata`. Build/push results alone are not cached-image proof. The measured
-   manifest digest and distinct config ID are retained together; neither is assumed stable.
+   manifest digest, daemon image ID and measured config digest are logged together; none is
+   assumed stable across builds or image stores.
 4. Execute a ten-second bounded benign smoke command from the cached digest with pull disabled,
    network none, read-only root, all capabilities dropped, no-new-privileges, the recorded
    UID/GID and no host mounts. Require the actual UID/GID, fixed marker and exit zero.
@@ -319,10 +326,14 @@ wrong-type and invalid JSON observations remain visible without dumping image co
 Read/hash failures report unavailable observations and retain the failing stage. An observation
 rendering failure also rejects the response.
 
-The diagnostic checkpoint does not identify the runner failure or change the builder/push
-strategy. The coordinator must obtain diagnostic CI evidence before choosing a repair and
-retain the actual pushed SHA, server/API/platform, pins, manifest/config identities, cold-pull,
-cache and smoke results, and both cleanup verdicts. Completion still requires preparation,
+Diagnostic [run 42497992377](https://github.com/donvargax/itos-container/actions/runs/42497992377)
+at `4eedcec4f994ee15223532bf753631057adbae40` used Docker 29.4.2 / API 1.54 and showed a single
+OCI manifest whose advertised and measured digest equaled the built ID, with a different config
+digest. The coordinator's q-43 decision identifies the containerd store as the cause of the old
+distinct-ID assertion failure. The repair accepts both stores while independently verifying the
+config; it preserves the builder and push strategy. The coordinator retains the actual repaired
+pushed SHA, server/API/platform, pins, identities, cold-pull, cache and smoke results, and both
+cleanup verdicts for comparison with that failure. Completion still requires preparation,
 the complete live engine scenario selection and final cleanup to pass on that runner.
 Captured-response tests and source guard checks supply no native-engine evidence.
 
@@ -332,7 +343,7 @@ optional `ITOS_CONTAINER_RED_SCENARIOS` selector described below:
 | Variable | Meaning |
 | --- | --- |
 | `ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE` | Exact loopback repository and measured manifest digest |
-| `ITOS_CONTAINER_ENGINE_FIXTURE_ID` | Distinct image config digest |
+| `ITOS_CONTAINER_ENGINE_FIXTURE_ID` | Daemon image ID: config digest on graph-driver, manifest digest on containerd |
 | `ITOS_CONTAINER_ENGINE_FIXTURE_UID` | Runner's non-root effective UID |
 | `ITOS_CONTAINER_ENGINE_FIXTURE_GID` | Runner's effective GID |
 
