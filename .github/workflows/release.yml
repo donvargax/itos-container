@@ -1,13 +1,14 @@
 name: Release
 
-# The release, cut by CI: ci.yml calls this after its ci and platform jobs pass
+# The release, cut by CI: ci.yml calls this after ci, engine and platform succeed
+# at the pushed main SHA (T-25). Pull requests and manual dispatch never publish.
 #
 # Harvested from the owner's itos-template .github/workflows/release.yml, which
 # took it from itos's, keeping the upstream identities (the actions and the itos
-# release it runs) and retargeting the binary this repository builds. The tools
-# the steps call, tools/bin/release-version and tools/bin/release-notes, belong
-# to a rendered project's main: this branch runs no binary release, so its CI
-# never calls this workflow.
+# release it runs) and retargeting the binary this repository builds. T-25 restores
+# the rendered-project helpers from itos-template at
+# 79301eba51b9768a27906c720e39c49b08491e67, reusing internal/release. Its authorization
+# enables this caller after T-3's migration deliberately left releases disabled.
 #
 # It runs when ci.yml calls it on a push to main, and releases when the commits since the last
 # vX.Y.Z tag carry a feat, a fix or a breaking change, or the binary is built from other modules
@@ -17,7 +18,8 @@ name: Release
 # go list reading both commits, which is why Go is set up before the version step;
 # else nothing is released and the job ends green. The notes of such a patch name what moved,
 # read again by the same code (internal/release's BinaryMoved) from the module cache the
-# version step filled. With no tag yet the last version is 0.0.0, so the first release is v0.1.0.
+# version step filled. With no stable reachable tag, any releasable history selects v0.1.0,
+# including fix-only or breaking-only histories; with none of those, nothing releases.
 # Its one gate of its own is that version against go.mod's module path: a major the
 # path does not end in (/vN from v2, nothing below) fails the version step, before any tag, since
 # Go's module proxy would refuse that tag. Otherwise the push's CI is what a release rests on, and
@@ -64,6 +66,7 @@ jobs:
       # identities kept: donvargax/itos is the itos this repository runs.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0 # the tags and the commits since the last one
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:

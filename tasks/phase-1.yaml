@@ -2104,13 +2104,226 @@
   type: ci
   title: Release a version on each feat or fix once run works
   why: >
-    The person, 2026-11-05: start releases when slice-10 lands, the first slice where itos-container
-    run runs a worker. release.yml exists but ci.yml never calls it. Wire it in as itos releases: on
-    a push to main whose commits since the last tag carry a feat, a fix or a breaking change, the
-    first tag v0.1.0, archives for Linux and macOS on amd64 and arm64 and Windows on amd64 with
-    checksums. Make sure the tools it calls exist and work here.
-  done_when:
-    - run: grep -q 'release.yml' .github/workflows/ci.yml
+    The person, 2026-11-05, settled enabling releases after slice-10, whose run executes a worker,
+    with the first tag v0.1.0 and archives for Linux and macOS on amd64 and arm64 and Windows on
+    amd64, with checksums. The registry also requires completed slice-14 and slice-15; preserve
+    those dependencies. This is release infrastructure for the charter's offline milestone,
+    not new container behaviour, a new host-support claim or permission to bypass engine proof.
+    It needs task checks, no Gherkin scenarios. The drafter changes only this ledger entry.
+
+    The coordinator, 2026-11-05, settled that release.yml calls tools/bin/release-version and
+    tools/bin/release-notes, neither present here, while .goreleaser.yaml and internal/release
+    already exist. Bring the tools from the owner's itos-template or itos with their attribution,
+    or use equivalent itos commands if available; read docs/upgrading.md and itos's own release
+    workflow first, and prove the version step in a dry run before the first real tag. Those are
+    requirements, not questions for the implementer. The pinned itos 8.46.4 help exposes no
+    equivalent version/notes commands, and itos's workflow still uses its Go tools. Use the
+    made-project helpers in itos-template at 79301eba51b9768a27906c720e39c49b08491e67, inspected
+    alongside itos's release and CI workflows at 0dfbdf2e80d1bafb08a884edaa3171c5bbfe2a14.
+    The sources are https://github.com/donvargax/itos-template and
+    https://github.com/donvargax/itos at those immutable revisions, not a future main checkout.
+
+    Copy tools/bin/release-version/main.go and main_test.go and tools/bin/release-notes/main.go,
+    main_test.go and cliff.toml from that template revision. Retarget their imports, generated
+    titles, binary instructions, comparison/commit links and attestation repository to
+    itos-container. Keep the source attribution comments, adding the source revision and the
+    adaptations; preserve the owner's and dependencies' licenses and notices under the existing
+    AGPL-3.0 permission. Do not globally replace upstream identities. Reuse this repository's
+    internal/release and internal/release/releasetest, already retargeted to cmd/itos-container;
+    do not overwrite their later tests or copy the template's whole workflows or launcher.
+    These are build tools under tools/, using the narrow q-44 release-helper edge below, not container commands or new slice/engine production packages.
+
+    release-notes also calls tools/bin/pinned git-cliff, whose case is missing here. Adapt only
+    that case from the same template revision, keeping git-cliff 2.14.2, its four Linux/macOS
+    archive targets and SHA-256 values, archive/member names and checksum-before-extraction
+    contract. Its source comments describe verification against the upstream .sha512 files.
+    Use this repository's GitHub binary asset API route, not the template's browser download
+    route. Commit 17fced5 switched the existing tools after repeated browser-route HTTP 504s;
+    tools/testdata/architecture/README.md records that evidence. Pin asset IDs 573483509 for
+    linux-amd64 (x86_64-unknown-linux-gnu), 573483780 for linux-arm64
+    (aarch64-unknown-linux-gnu), 573484837 for darwin-amd64 (x86_64-apple-darwin), and 573487203
+    for darwin-arm64 (aarch64-apple-darwin). The release API at
+    https://api.github.com/repos/orhun/git-cliff/releases/tags/v2.14.2 was read on 2026-11-08;
+    all four asset names and SHA-256 digests match the pinned template case. Fetch from
+    https://api.github.com/repos/orhun/git-cliff/releases/assets/$asset_id through the existing
+    application/octet-stream request, bounded retries and checksum verification. Keep the
+    archive git-cliff-$version-$target.tar.gz and member git-cliff-$version/git-cliff. Do not
+    replace the shared downloader or add a browser-route fallback. Preserve --path, separate
+    stdout/stderr, atomic cache publication and all current GoReleaser, itos-cc and linter
+    pins/checksums; copying the template's old itos-cc case would regress T-4. Use git-cliff,
+    the existing upstream notes renderer, with --offline and its copied cliff.toml.
+    Releases run on Linux; adding Windows git-cliff or another library/service is unnecessary.
+    The helper tests use standard Go and the existing release fixtures. For the workflow test,
+    reuse go.yaml.in/yaml/v4 v4.0.0 already pinned in go.mod; add no dependency or tool upgrade.
+
+    Add a release job to ci.yml calling ./.github/workflows/release.yml with needs containing
+    exactly ci, engine and platform. Use the condition success() && github.event_name == 'push'
+    && github.ref == 'refs/heads/main'. All three automatic jobs must succeed at that pushed
+    SHA; failures, cancellations and skips do not qualify. The manual platform-macos and
+    platform-windows jobs are not dependencies, since they intentionally skip on main pushes.
+    Pull requests, including ready ones, and workflow_dispatch never publish. Keep the existing
+    engine gate, Linux test job, verify/ci run steps, triggers, pins, limits and concurrency.
+    Give only this caller job contents, id-token and attestations write permissions, matching
+    the reusable job; retain the top-level read permissions and all other jobs' permissions.
+
+    Keep release.yml reusable only, with a full-history/tag checkout explicitly at github.sha,
+    Go setup before Version, and its serial, never-cancelled release concurrency. Keep Version's
+    actual command go run ./tools/bin/release-version, its failure propagation and key=value
+    GITHUB_OUTPUT protocol. Every subsequent release step must require a nonempty next. Keep
+    the order local tag at GITHUB_SHA, pinned GoReleaser draft, archive attestation, generated
+    notes, publication. The tag is not pushed separately and is never moved; GitHub creates
+    the remote tag on publication. Retain draft replacement and target_commitish FullCommit.
+    The workflow must not commit, require a person's token, publish from a pull request, or
+    add a separate tag-triggered workflow. The copied tools themselves only calculate/read;
+    they must never create tags, commits, drafts or releases.
+
+    Select the highest numeric reachable stable vX.Y.Z tag, ignoring unrelated and prerelease
+    tags, and inspect that tag..HEAD, or all HEAD history when there is no release tag. Honour
+    the settled first version v0.1.0 for an untagged history with a feat, fix or breaking change;
+    an untagged history with none of those releases nothing. This bootstrap rule takes priority
+    over the template helper's untagged fix/major arithmetic and must be explained in the notes.
+    For every releasable untagged history, including fix-only and breaking-only histories, the
+    exact stdout is last=, next=0.1.0, bump=minor and range=HEAD, each on its own line with a
+    final newline. Here bump describes the selected version, not the commit's ordinary bump.
+    An untagged history with nothing releasable prints last=, next=, bump=none and range=HEAD
+    in that same format. Bootstrap notes must still list every breaking change and upgrading
+    instruction, explaining why the initial version is 0.1.0 rather than claiming those
+    commits produced a patch or major version. Cover these cases in the helper tests.
+    After a release, a breaking header of any type or a BREAKING-CHANGE/BREAKING CHANGE footer
+    in the last paragraph takes major precedence, then feat minor, then fix patch. Preserve the
+    inherited BinaryMoved patch for linked modules or the Go toolchain when none of those
+    commits exists; test-only/unlinked/tool modules, go.sum, actions and prose alone do not
+    release. Keep the shared library's rule, shallow-history refusal, module-major compatibility
+    refusal before any output/tag, and fail-closed Git/Go errors. Never hardcode a commit count,
+    the current HEAD or a version after bootstrap. With nothing releasable, next is empty and
+    the job succeeds without publication. Notes must use Version's last/next and the same range,
+    include every commit grouped by type, preserve complete breaking/Upgrading footer text,
+    omit Upgrading: none, and identify dependency/toolchain-only patches from BinaryMoved.
+
+    Preserve .goreleaser.yaml's five archives, zip for Windows and tar.gz for Linux/macOS,
+    stamped version/full commit, LICENSE, README.md, THIRD_PARTY_NOTICES.md, and SHA-256
+    checksums.txt. These are downloadable binaries, not runtime support for five hosts. Correct
+    only release activation/provenance guidance in release.yml, docs/upgrading.md and
+    docs/ORCHESTRATING.md; distinguish the old T-3 migration's no-enable rule from T-25's new
+    authorization, and describe the safe version/notes dry run without claiming a tag already
+    exists. Do not broaden this into the other inherited documentation corrections.
+
+    Before implementing, run the four focused checks below and report their actual failures.
+    Add tools/release/workflow_test.go with TestReleaseWorkflow, using parsed YAML to check
+    the caller's dependency set, push/main/success predicate and permission boundary, the
+    reusable checkout SHA/full history, version command/output and conditional step order, and
+    the preserved five-target/archive/checksum/draft configuration. This is structural evidence,
+    not execution of GitHub Actions expressions. Its first red run must identify the missing
+    caller before workflow edits. Do not accept an absent test or a comment containing a path.
+
+    Preserve the copied helper suites and add TestReleaseHistory in release-version, running
+    its real entry function against complete temporary Git histories with the existing fixture.
+    Cover first releases for feat/fix/breaking, untagged no-release, range exclusion, numeric
+    reachable-tag selection, precedence, no-op, dependency/toolchain-only patches, shallow
+    refusal and module-major refusal with no stdout. Check exact last/next/bump/range outputs
+    and unchanged refs, not just exit success. Keep fixture dependencies local and GOTOOLCHAIN
+    local; no socket or approval state is involved. Preserve notes rendering, full-footer and
+    moved-build tests, adapting first-release expectations to the settled bootstrap rule.
+    Assert exit 1 for module-major refusal and exit 2 for shallow history or Git/Go read errors,
+    all with empty stdout, so a failed version calculation supplies no publishable output.
+    Add TestGitCliffPin in tools/pinned/pinned_test.go to assert the actual launcher's four
+    platform mappings, including the version, archive target/name, member, SHA-256 and API
+    asset ID/URL. Inspect the selected metadata without fetching four platform archives;
+    the expected digests are the template's, independently matched against the release API.
+    Keep TestPinnedDownload and TestPinnedAssetRedirect unchanged and run them as neighbouring
+    checks for retries, media-type negotiation, redirects, checksum rejection, cache reuse,
+    exact argv/exit propagation and --path output. The new pin test must fail at the missing
+    git-cliff metadata assertion before adding the case, then pass with all four verified pins.
+    Commit these tests with compiling failing stubs before implementing the new tools; record
+    assertion failures, not undefined symbols or missing-package errors, then all passing.
+
+    Before implementation, the first check below failed because ci.yml had no active release
+    caller. The second failed its explicit missing-helper assertion; the tests' behavioural
+    red evidence must come from the stubs, not that absence. The third exited 2 because the
+    launcher had no git-cliff case. The fourth failed because release-version did not exist.
+    With the helpers present, it runs the workflow's actual version command at the candidate
+    HEAD, then builds both real programs and runs them against a full local no-tags clone with
+    the current pinned launcher and cliff configuration. Assert that the clone has the candidate HEAD,
+    complete history and no tags before running either helper. This proves first-version and
+    actual notes generation without publishing. Pass the scratch version output's last and
+    next directly to the notes program and compare the What changed section's commit links
+    against git rev-list for its range; one project link alone would not prove every commit
+    was included.
+    Check the source and scratch HEAD, refs, status and tracked diffs are unchanged. Then
+    reproduce the workflow's Tag-before-Notes order: create v0.1.0 only as a fixture tag in
+    that disposable clone, snapshot its state again, and rerun notes with the same empty last
+    and next=0.1.0. Require identical notes and unchanged state from that new snapshot. The
+    notes helper must exclude the tag it is documenting when resolving an empty -from;
+    otherwise the first published notes could omit the whole history while a tagless dry
+    run passes. Only the fixture setup creates that tag; neither release helper may do so.
+    The drafter reran all four checks on 2026-11-08 at
+    55ebd658f08764a90dbc55cf626de3e1719c25db and observed the failures above. A separate
+    disposable clone of that source preserved its candidate HEAD. Historical commit counts
+    and candidate SHAs are observations, never constants in the tools.
+
+    The drafter rechecked all four unchanged commands on 2026-11-08 at
+    bdfe36c01c24cb416213dacfb82fcaf16aca4c37 with itos task T-25; all passed. The
+    actual version command and the no-tags clone both printed last=, next=0.1.0, bump=minor
+    and range=HEAD, each on its own line with a final newline. Both real programs ran;
+    the notes' commit links matched the complete range before and after the fixture tag,
+    and the source and scratch HEAD, refs, status and tracked diffs stayed unchanged by the
+    helpers. This is local evidence at that candidate, not CI or publication evidence.
+
+    Keep the YAML/Go fixture checks at the cheap task and existing Linux go test ./... tiers.
+    The integrated dry run is also a focused task check; the pinned git-cliff cache avoids
+    repeated downloads, and nothing builds release archives or runs an engine there. Before
+    the first real tag the implementer must report the fourth check's actual candidate HEAD,
+    last/next/bump/range and unchanged refs; expect empty last, next=0.1.0, bump=minor and
+    range=HEAD. Its source-history run accepts a later tagged history while the no-tags clone
+    keeps checking bootstrap, so a later release does not stale this check. The fixture tag
+    disappears with its temporary clone; never create a source-repository or remote tag as a
+    dry run. The outer loop alone verifies the pushed main run, dependency results
+    and eventual release/assets; local dry-run success is not publication evidence and main
+    may advance before that run. Do not run the whole features package with -race; a full
+    feature-suite run uses no race detector, and any race run is limited to changed packages
+    or tests. A memory-limit kill is a test-resource failure, not permission to raise the limit.
+
+    Implementation paths are the two tools and their test files/config, tools/bin/pinned,
+    tools/pinned/pinned_test.go, tools/release/workflow_test.go, the two workflows and the two
+    release-guidance documents named above. Leave .goreleaser.yaml, internal/release, production
+    slices, proof configuration, registry owners/statuses and other tasks intact. The coordinator's
+    q-44 decision on 2026-11-08 authorizes one gate exception before the helpers land. Add an explicit,
+    named edge in tools/architecture allowing only tools/bin/release-version and
+    tools/bin/release-notes to import exactly internal/release, and their tests exactly
+    internal/release/releasetest. Do not widen the outside class or allow any other internal import.
+    Add compile-first fixtures proving both helpers' production/test edges pass, other tools still
+    cannot import internal/release, and the helpers cannot import other internal packages or link
+    test support in production. Amend docs/architecture.md to describe the edge and record the
+    authorization and undo in .git/itos/weakened-gates.md. Land the exception and its fixtures in a
+    ci --task T-25 commit before the helpers. These are the only authorized architecture-gate edits. Restore the
+    staged tests and stubs from the driver w2 T-25 stash rather than recreating them.
+    That sequence is already committed on this branch: 0042ca4 amended this spec for q-44,
+    4a58f87 added the named edge and compile-first fixtures, c239fb7 restored the tests and
+    compiling stubs from stash 68e02b39535449bc48df5f0940bb0c4aa728498d, c4d03cd implemented
+    the helpers and release wiring, and 585b127 updated the guidance. The stash's test files
+    match c239fb7; do not reapply its obsolete stubs over the completed helpers. The q-44
+    authorization and undo are recorded in itos/weakened-gates.md under the common Git
+    directory returned by git rev-parse --git-common-dir, shared by this worktree. Preserve
+    this completed sequence and its original red evidence when handing the item onward.
+    Commit red tests/stubs as test --item T-25, tooling/workflow work as ci --task T-25 and
+    guidance as docs --item T-25.
+
+    The coordinator, 2026-11-08 at approximately 23:30 UTC, also authorizes updating
+    features/engine_workflow_test.go for the release caller. Runs 42533353955 (4882ec2) and
+    42534116317 (522b18b) failed TestEngineWorkflow/complete_engine_contract because its five-job
+    assertion predates the release job. Require exactly the four named ordinary jobs, the single
+    engine job and the release job, preserving every existing engine assertion. Check the release
+    caller's exact ci/engine/platform prerequisites, success-and-push-to-main condition, reusable
+    workflow and contents/id-token/attestations write permissions; other jobs retain read access.
+    Add negative controls for missing or extra jobs and invalid release wiring; do not merely
+    loosen the job count. Commit this contract update as test --item T-25. Run
+    go test ./features -run TestEngineWorkflow -count=1 locally before and after the change,
+    alongside the existing release task checks. This is infrastructure evidence, not an engine
+    run or a new product scenario.
+
+    The spec is docs --item T-25. Run gates through their hooks and CI; make no local mutation
+    run or generated evidence. No proof.code path needs an edit here. Agents commit and stop;
+    the coordinating loop owns push, CI watching, the real release and closure.
 - id: T-26
   type: docs
   title: "Architecture drift: arc42 lists implemented engines as proposed"
