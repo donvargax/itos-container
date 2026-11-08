@@ -648,3 +648,44 @@ changed session domain, disk adapter, codec and command fixture. The fixture
 records separate live-process events before and after stat, so its ordered
 assertion cannot mistake the first poll for the second. No native engine or
 local mutation run was made.
+
+## Fixture identity contract blocks the Docker 29 runner
+
+[Run 42491204197](https://github.com/donvargax/itos-container/actions/runs/42491204197)
+at `1036a6e` failed during fixture preparation, before any engine scenario ran.
+Its saved engine log identifies Ubuntu 26.04.1 and Docker 29.4.2, API 1.54.
+The build produced image ID
+`sha256:3f044f1a9f780c8af673250d2e1eadc28965a64b04599311f1d4a58d03dff56d`;
+the push reported that same value as the manifest digest. Preparation then
+exited with status 1, and its owned cleanup passed. This is not evidence of
+an anchor or detector failure.
+
+The helper treats the build ID as the config digest: its manifest predicate
+requires `.config.digest == $built`, then it requires the manifest digest to
+differ from `$built`. T-20 explicitly specifies both identities this way,
+including the distinct config digest exported as `image_id`. The cached-image
+check and native harness also require the inspected `Id` to match that output.
+However, Moby's
+[Docker 29.4.2 containerd image inspection](https://github.com/moby/moby/blob/docker-v29.4.2/daemon/containerd/image_inspect.go)
+sets `Id` from the image target descriptor digest, and reads the config
+separately. That implementation explains the equal build/push identities in
+the log. The manifest response itself was not retained in the saved log, so
+the failing predicate is a source diagnosis, not an additional native run.
+
+T-20's specification needs correction before adapting this gate: distinguish
+the immutable engine image ID from the config digest and define how both
+are independently verified and carried into the fixture. Preserve the exact
+repository digest, manifest-byte hash, cold pull, cached metadata, smoke and
+owned-cleanup requirements. Merely deleting the config comparison or exporting
+the manifest as a supposedly distinct config ID would weaken or contradict
+the existing check. No helper, runner, scenario or product change is made at
+this checkpoint, following AGENTS.md's instruction to stop on a wrong gate.
+
+The preceding proof corrections are already committed in `1036a6e` and
+`359cd0a`. A fresh local coverage run of session's codec, disk, docker, domain
+and port packages passes; matching the prior proof log's locations to that
+profile confirms execution of all 45 reported uncovered blocks. The existing
+tests also assert both supported no-new-privileges encodings and reject
+unknown detector values, addressing the two reported survivors. No local
+mutation run was made. CI still owes fresh mutation proof and native evidence
+at the eventual pushed head after the fixture contract is resolved.
