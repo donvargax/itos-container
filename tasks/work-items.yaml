@@ -708,3 +708,10 @@ items:
       OOM-killed it. So agents cannot currently run the full feature suite inside a sane limit; the
       growth is in the suite, not only in the race detector. Profile the heap across the suite and
       release what each scenario keeps.
+  - id: T-34
+    title: Engine fixture preparation passes again on today's CI runners
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task

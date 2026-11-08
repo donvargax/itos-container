@@ -2333,3 +2333,21 @@
     still nears the limit. Raising the limit is the person's call, not a fix.
   done_when:
     - run: env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 timeout --signal=TERM --kill-after=5s 240s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
+- id: T-34
+  type: ci
+  title: Engine fixture preparation passes again on today's CI runners
+  why: >
+    Since about 14:40 UTC on 2026-11-08, tools/bin/engine-fixture prepare fails on main (run
+    42494336465) and on every branch: it builds and pushes the fixture image, then exits 1 with no
+    message, so no engine scenario runs anywhere. The last pass was 10:22 UTC; nothing in tools/
+    changed between. The silent exit after the push points at the unguarded jq -e check of the
+    pushed manifest (schemaVersion 2, a single-image manifest media type, no manifests key,
+    config.digest equal to the built image ID) under set -e: a runner Docker update that pushes an
+    OCI index or attestations, or a config digest that differs from --iidfile, would fail it without
+    a word. First make every check after the push fail with fail() and print what it saw (the media
+    type, whether manifests exists, config.digest and the built ID). Then fix the cause without
+    loosening what the fixture proves: if Docker now pushes an index, push or select the single
+    linux/amd64 manifest explicitly (for example with provenance and attestations off at build), and
+    keep the digest, bytes and config checks.
+  done_when:
+    - run: "true"
