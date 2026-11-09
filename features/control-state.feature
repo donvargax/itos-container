@@ -715,3 +715,22 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | fixed tree self-binding     |
       | enrolled location binding   |
       | fixed and enrolled bindings |
+
+  # PRRT_kwDOVkB0ws61JLZm: run presented exposure as invalid approval, so a person
+  # blocked by another worker was told to reapprove and approve then refused with
+  # approval.state.exposed. Run must report the shared exposure diagnostic, which
+  # says reapproval alone cannot resolve it. P's approval matches and W is active, so
+  # nothing but the exposure can refuse P. The first Then fails on the old
+  # run.approval-invalid rule and its approve guidance.
+  @slice-21 @ID-CONTROL-24 @local-engine-fixture @wip
+  Scenario Outline: Run reports state exposed to an active worker without requesting reapproval
+    Given a control-state fixture with P approval "matching" and managed location "<location>" relative to W on "distinct daemons"
+    When W starts and a fresh P run inspects that location
+    Then W has an outstanding owned worker and P run reports approval.state.exposed with exit 1 without requesting reapproval
+    And P run created no engine resource and changed no control-state entry
+
+    Examples:
+      | location        |
+      | below W root    |
+      | equal to W root |
+      | above W root    |
