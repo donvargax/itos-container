@@ -32,10 +32,13 @@ func (CLI) Help() string {
 		"    Ordinary inspection reports the fingerprint and current approval status; runtime isolation remains unproven.\n" +
 		"    Exit codes:\n" +
 		"      0  policy validation succeeded; other requested inspections also succeeded\n" +
-		"      1  unsupported or changed checkout, host, engine or image\n" +
+		"      1  unsupported or changed checkout, host, engine or image, or control state that is\n" +
+		"         unsafe, invalid or exposed to a worker checkout\n" +
 		"      2  invalid policy or command line, or invalid selected manifest\n" +
-		"      3  policy cannot be read, or another required local resource is unavailable\n" +
-		"      75 engine inspection failed or exceeded five seconds\n"
+		"      3  policy cannot be read, or another required local resource is unavailable,\n" +
+		"         including the account home or retained control state\n" +
+		"      75 engine inspection failed or exceeded five seconds, or the control-state lock\n" +
+		"         was still held after ten seconds (approval.state.busy; retry the same command)\n"
 }
 
 // Run reports the domain's inspection result through the UI.

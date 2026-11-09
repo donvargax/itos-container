@@ -42,9 +42,13 @@ func (CLI) Help() string {
 		"    Exit codes:\n" +
 		"      2  missing command/separator or unsupported JSON request\n" +
 		"      1  approval missing, changed, invalid or superseded; use itos container approve\n" +
+		"      1  control state exposed to a worker checkout or at an unsafe path (approval.state.exposed,\n" +
+		"         approval.state.path); approve cannot fix it: choose another state location or finish\n" +
+		"         recovery from the blocking worker's checkout\n" +
 		"      1  isolation unverified, including a checkout Unix socket\n" +
 		"      3  required local environment unavailable\n" +
-		"      75 temporary controller or cleanup failure\n" +
+		"      75 temporary controller or cleanup failure, or a control-state wait that exceeded the\n" +
+		"         call budget (run.call-timeout; retry the same command)\n" +
 		"    An observed nonzero workload exit wins over a separate cleanup failure.\n"
 }
 

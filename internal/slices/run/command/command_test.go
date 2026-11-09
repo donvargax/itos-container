@@ -144,7 +144,8 @@ func TestClassifierHandlesWrappedAndUnknownFailures(t *testing.T) {
 
 func TestHelpExplainsForegroundScope(t *testing.T) {
 	help := (command.CLI{}).Help()
-	for _, text := range []string{"itos container run -- <command>", "ITOS_JSON=1", "schema-1", "offline worker", "streams remain separate", "2 ", "3 "} {
+	for _, text := range []string{"itos container run -- <command>", "ITOS_JSON=1", "schema-1", "offline worker", "streams remain separate", "2 ", "3 ",
+		"approval.state.exposed", "approve cannot fix it", "run.call-timeout"} {
 		if !strings.Contains(help, text) {
 			t.Errorf("help lacks %q", text)
 		}
