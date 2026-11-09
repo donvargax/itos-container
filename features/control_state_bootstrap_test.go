@@ -111,8 +111,10 @@ func (f *controlFixture) bootstrapOrdering() error {
 	if err != nil {
 		return err
 	}
-	locked, fileSynced, bound, durable, ordinary := false, false, false, false, false
-	created, dirSynced := map[string]bool{}, map[string]bool{}
+	locked, bound, published, durable, ordinary := false, false, false, false, false
+	// A rename publishes only the inode that was fsynced before it. The lock file
+	// is synced for its own reasons and says nothing about a binding's contents.
+	created, dirSynced, fileSynced := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, e := range events {
 		if e.Op == "flock" && e.Path == f.home && e.Flags&3 != 0 {
 			return errors.New("command still locks the publicly readable home inode")
@@ -141,15 +143,19 @@ func (f *controlFixture) bootstrapOrdering() error {
 				if bound && e.Path == f.coordination() {
 					durable = true
 				}
-			} else if strings.HasPrefix(e.Path, f.coordination()+"/") {
-				fileSynced = true
-				if filepath.Base(e.Path) == "self.json" {
+			} else if strings.HasPrefix(e.Path, f.coordination()+"/") && filepath.Base(e.Path) != "control.lock" {
+				if e.Inode != "" {
+					fileSynced[e.Inode] = true
+				}
+				// Resyncing a binding this process did not publish. A sync after our own
+				// rename is too late: its content was already visible unsynced.
+				if filepath.Base(e.Path) == "self.json" && !published {
 					bound = true
 				}
 			}
 		}
 		if e.Op == "rename" && e.Phase == "end" && e.Success && e.Path == filepath.Join(f.coordination(), "self.json") {
-			bound = fileSynced
+			bound, published = e.Inode != "" && fileSynced[e.Inode], true
 		}
 		if e.Phase == "begin" && (e.Op == "mkdir" || e.Op == "create") && (e.Path == filepath.Join(f.fixedRoot(), "approvals") || strings.Contains(e.Path, "/approvals/")) {
 			ordinary = true
