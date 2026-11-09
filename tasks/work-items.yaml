@@ -788,6 +788,16 @@ items:
       working that item should not invent a repair, and slice-21 deliberately offers only the host
       user's manual remedy. Specify any recovery with scenarios covering a lost retained location,
       legacy records and no live worker.
+
+      Records with no catalog are that item's subject, and its recovery decision is the person's
+      (itos decision): documented manual cleanup or a migration step. The 'never adopts' wording in
+      CONFIG.md and the code at internal/engine/approval/disk/control.go:303, where the evidence
+      check runs only when t.data[t.fixed] is nil, are a guarantee and a recovery procedure at once.
+      Whether the refusal lasts only until a catalog exists, or the code must enforce 'never
+      adopted', cannot be settled by a doc edit. Add to that item: a later approve under another
+      selection enrolls the original tree with its records in place, validated by the reservation
+      scan. The reviewer found no exposure bypass. Until the person decides, slice-21 should word
+      CONFIG.md to say only what the code does now.
   - id: p2-fixture-worlds-inherit-scenario-coverdir
     title: A fixture world that drops the scenario coverage destination fails in go test, not in CI
     phase: 1
