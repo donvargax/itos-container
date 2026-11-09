@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -13,6 +14,19 @@ import (
 // running until their assertions and cleanup finish. Arbitrary concurrent suites
 // would instead mistake each other's container transitions for product damage.
 func runFeatureScenarios(selection scenarioSelection, options godog.Options, initialize func(*godog.ScenarioContext, func())) int {
+	if !selection.engine || selection.skip != "" {
+		return runScheduledScenarios(selection, options, initialize)
+	}
+	started := selection.started
+	if started.IsZero() {
+		started = time.Now()
+	}
+	timing := &engineTiming{output: options.Output, started: started, selected: selection.count}
+	selection.timing = timing
+	return timing.finish(runScheduledScenarios(selection, options, initialize))
+}
+
+func runScheduledScenarios(selection scenarioSelection, options godog.Options, initialize func(*godog.ScenarioContext, func())) int {
 	plain := func(sc *godog.ScenarioContext) { initialize(sc, nil) }
 	const escalation = "@ID-LIFECYCLE-09"
 	if !selection.engine || selection.red || selection.skip != "" ||

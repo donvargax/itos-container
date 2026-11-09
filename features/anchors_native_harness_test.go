@@ -129,6 +129,20 @@ func TestAnchorRecoveryReleaseFaultAndCancelledBarrier(t *testing.T) {
 	if !a.anchorsBefore(out, r.WithContext(ctx), q, 0) {
 		t.Fatal("cancelled barrier forwarded deletion")
 	}
+	if !s.parkLost {
+		t.Fatal("a park the product abandoned was not recorded")
+	}
+}
+
+func TestAnchorRecoveryReleasedBarrierIsNotLost(t *testing.T) {
+	s := &anchorRecoveryWorld{mode: "pair", ready: make(chan struct{}), release: make(chan struct{})}
+	a := &offlineAPI{w: &world{anchors: s}, requests: make([]offlineRequest, 1)}
+	q := offlineRequest{Method: "DELETE", Path: "/volumes/owned"}
+	r := httptest.NewRequest("DELETE", q.Path, nil)
+	close(s.release)
+	if a.anchorsBefore(httptest.NewRecorder(), r, q, 0) || s.parkLost {
+		t.Fatal("a released park was dropped or recorded as lost")
+	}
 }
 
 func TestAnchorRecoveryOraclesRejectMissingAndSubstitutedEvidence(t *testing.T) {

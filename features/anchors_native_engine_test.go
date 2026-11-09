@@ -36,6 +36,11 @@ func (a *offlineAPI) anchorsBefore(out http.ResponseWriter, r *http.Request, q o
 		select {
 		case <-s.release:
 		case <-r.Context().Done():
+			// The product abandoned the call, normally at its call budget: the
+			// park outlived what the fixture may hold inside one product call.
+			a.mu.Lock()
+			s.parkLost = true
+			a.mu.Unlock()
 			return true
 		}
 	}
@@ -195,6 +200,18 @@ func (w *world) anchorsPair() {
 	}
 	w.anchorsStatus()
 	if offlineHex(r.id) {
+		// A's cross stop and B's status are whole traced product processes. The park
+		// holds the product's volume-delete call, which the product abandons at its
+		// call budget (1 s in the engine fixture), so only the second stop's start
+		// and B's heartbeat and volume observations may happen inside it. The cross
+		// stop runs before the park, on the B ID B's live fixture already recorded.
+		// B's status runs after both A stops, once A's worker and anchor are gone:
+		// that is the one public status of B, so it must see any damage A's recovery
+		// did to B's resources, lease or session. Each keeps its assertions.
+		if offlineHex(other.recovery.id) {
+			s.cross = w.recoveryStart("stop", other.recovery.id, "--json")
+			s.cross.wait()
+		}
 		first := w.recoveryStart("stop", r.id, "--json")
 		timer := time.NewTimer(32 * time.Second)
 		select {
@@ -208,18 +225,19 @@ func (w *world) anchorsPair() {
 		r.stops = append(r.stops, first, second)
 		other.anchors.later = other.anchorsProgress()
 		other.anchorsCapture()
-		other.anchorsStatus()
-		if offlineHex(other.recovery.id) {
-			s.cross = w.recoveryStart("stop", other.recovery.id, "--json")
-			s.cross.wait()
-		}
 		close(s.release)
 		first.wait()
 		second.wait()
+		other.anchorsStatus()
+		a := w.offline.api
+		a.mu.Lock()
+		if s.parkLost {
+			r.err = errors.Join(r.err, errors.New("fixture parked A's volume release past the product call budget"))
+		}
+		a.mu.Unlock()
 		var err error
 		s.completed, err = w.anchorsCompletionRecords()
 		r.err = errors.Join(r.err, err)
-		a := w.offline.api
 		a.mu.Lock()
 		s.repeatedIndex = len(a.requests)
 		a.mu.Unlock()

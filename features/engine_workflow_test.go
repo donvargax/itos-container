@@ -300,7 +300,7 @@ func engineWorkflowIssues(data []byte) []string {
 	require(engine.Name == "Engine scenarios (Linux amd64)", "stable engine check name")
 	require(engine.If == eventGuard, "engine event/draft guard")
 	require(engine.Runner == "ubuntu-latest" && engine.Container == nil && len(engine.Services) == 0 && len(engine.Strategy.Matrix.OS) == 0, "native runner")
-	require(engine.Timeout == 13 && !engine.ContinueOnError && len(engine.Needs) == 0, "engine job budget and independence")
+	require(engine.Timeout == 10 && !engine.ContinueOnError && len(engine.Needs) == 0, "engine job budget and independence")
 	require(len(engine.Env) == 0, "engine switch must be step-local")
 	enabledPath := ""
 	require(len(engine.Steps) == 7, "engine must have checkout, setup-go, preflight, preparation, scenarios, failure diagnostics and cleanup only")
@@ -312,7 +312,7 @@ func engineWorkflowIssues(data []byte) []string {
 	}
 	for i, run := range engine.Steps {
 		if run.Name == "Engine scenarios" {
-			require(run.Run == engineInvocation && run.Shell == "bash" && run.Timeout == 8 && run.If == "" && !run.ContinueOnError && validFixtureEnvironment(run.Env), "complete invocation, fixture outputs and step budget")
+			require(run.Run == engineInvocation && run.Shell == "bash" && run.Timeout == 5 && run.If == "" && !run.ContinueOnError && validFixtureEnvironment(run.Env), "complete invocation, fixture outputs and step budget")
 			enabledPath = "jobs.engine.steps." + strconv.Itoa(i) + ".env.ITOS_CONTAINER_ENGINE_TESTS"
 		}
 	}

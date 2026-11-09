@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 type lifecycleStepRegistrar interface {
@@ -42,13 +41,13 @@ func (w *world) lifecycleNativeSteps(sc lifecycleStepRegistrar) {
 		return errors.Join(w.lifecycleComplete(), w.lifecyclePreserved(), w.lifecycleOneLaunch())
 	})
 
-	sc.Step(`^a CI lifecycle checkout with a ready signal-recording probe that keeps running and a signal acknowledgement delayed (\d+) seconds$`, func(delay int) error {
+	sc.Step(`^a CI lifecycle checkout with a ready signal-recording probe that keeps running and a signal acknowledgement delayed (\d+) percent of grace$`, func(delay int) error {
 		return w.lifecycleFixture("ignore", "", "", 17, delay)
 	})
 	sc.Step(`^run launches the probe and the harness sends "([^"]*)" followed by repeated SIGINT and SIGTERM during grace$`, func(signal string) {
 		w.lifecycleSignalAction(signal, true)
 	})
-	sc.Step(`^the worker records only the first "([^"]*)" and native observations show it alive before the 10 second grace expires$`, func(signal string) error {
+	sc.Step(`^the worker records only the first "([^"]*)" and native observations show it alive before the configured grace expires$`, func(signal string) error {
 		if !w.lifecycle.aliveBeforeGrace {
 			return errors.New("native primary was not observed alive before the original grace deadline")
 		}
@@ -217,12 +216,12 @@ func (w *world) lifecycleBlockedState() error {
 func (w *world) lifecycleQuietVerified() error {
 	l := w.lifecycle
 	if l.condition != "quiet workload and stdin" {
-		if l.quiet == nil || l.quiet.elapsed < 125*time.Second {
+		if l.quiet == nil || l.quiet.elapsed < engineQuietInterval {
 			return errors.New("same-path quiet control did not run")
 		}
 		return l.quiet.err
 	}
-	if l.ready.IsZero() || l.signalled.Sub(l.ready) < 125*time.Second {
+	if l.ready.IsZero() || l.signalled.Sub(l.ready) < engineQuietInterval {
 		return errors.New("quiet work did not remain live beyond call and startup durations")
 	}
 	return l.err

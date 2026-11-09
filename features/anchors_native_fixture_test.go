@@ -15,7 +15,7 @@ import (
 type anchorRecoveryWorld struct {
 	mode                                       string
 	ready, release                             chan struct{}
-	held, reached, failDelete                  bool // recorder fields protected by offlineAPI.mu
+	held, reached, failDelete, parkLost        bool // recorder fields protected by offlineAPI.mu
 	pidPath                                    string
 	initial, later                             anchorRecoveryProbe
 	workerBefore                               map[string]any

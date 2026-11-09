@@ -2,7 +2,7 @@
 phases:
   1: null
 queue:
-  - p1-overlap-drain-flake
+  - T-41
   - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
@@ -402,6 +402,12 @@ items:
       not wait for it, so nothing forces the revisit. The coordinator should add that edge from
       slice-26 or slice-27, or ask the person to decide before slice-26 is taken. The phase is p3
       but it now gates phase-1 work, so it needs raising to p1 or the edge needs a reason.
+
+      That item already holds this exact point: its why says it has depends_on [] while slice-26 and
+      slice-27 do not wait for it, and that the coordinator should add the edge or ask the person.
+      Nothing has acted on it yet. Its p3 phase is now wrong, since slice-26 is the first approval
+      that grants network and the item gates phase-1 work. The coordinator should raise it to p1 and
+      either add the dependency from slice-26 or have the person decide before slice-26 is taken.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -675,7 +681,7 @@ items:
     title: main's engine scenarios finish well inside the job's 5-minute limit
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-32
@@ -957,21 +963,50 @@ items:
       leaves a recovery record with the exact retry command, and stop recovers it without touching
       foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
       from p1-egress-allowlist-proxy.
-  - id: p1-overlap-drain-flake
+  - id: T-41
     title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: p1-docs-admit-milestone-two-egress
+    title: PLAN.md, README and the orchestration docs stop saying proxy egress is outside the scope
     phase: 1
     owner: null
     status: todo
     depends_on: []
     kind: idea
     why: >
-      features/overlap_fixture_test.go:419 waits a fixed 5 s for 'local controllers drain after
-      assertions'. Under the code proof's per-ID coverage measurement the drain is slower and the
-      hook times out ('bounded overlap observation timed out'), so the proof's preparation fails
-      with no mutant judged. It failed slice-21's CI twice (runs 42573174685 and 42582818914) and
-      T-33's at 082884c (run 42589518540), each costing a CI cycle and a repair round on work that
-      had nothing to do with it. Fix the wait (a budget that holds under coverage, or waiting on the
-      drain's own completion signal), not the proof. Found by the coordinator, 2026-11-09.
-
-      Correction: of slice-21's runs, 42582818914 hit this hook; 42573174685 failed for another
-      reason (not this flake), so it counts once for slice-21, not twice.
+      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy). The charter
+      (ef653e7, 2026-11-09) says to specify and start it, but PLAN.md's milestone limits ("Proxy
+      egress, credentials/accounts, Git over the network... remain outside this milestone"),
+      README.md:38 and docs/ORCHESTRATING.md:12 still say it is deferred or unauthorized. AGENTS.md
+      sends every agent to the charter and then PLAN.md, so each drafter and reviewer of T-38 and
+      slice-25 to slice-28 meets two authorities that disagree, and may stop or refuse. Update
+      PLAN.md (current state, order of work, milestone limits), README and ORCHESTRATING to match
+      the charter: milestone two's steps in the charter's order, egress first and the rest when
+      reached, while LAN ingress, Compose, other platforms and the Docker socket stay out. Do not
+      touch the charter. Leave the 'deferred' headers in docs/CONFIG.md and docs/CLI.md to slice-25,
+      which edits those files for the allowlist field. Leave arc42's deferral text to T-38's
+      decision record, per the charter's architecture rule. AGENTS.md's opening paragraph is also
+      stale ("container commands and isolation are not implemented yet", v0.1.0 is published), but
+      whether to edit AGENTS.md is the person's. Documentation only: it touches no proof.code path.
+  - id: p1-acceptance-static-binary
+    title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy), through
+      slice-27. features/features_test.go buildProduct runs go build with no CGO_ENABLED setting,
+      and the binary it builds measured dynamically linked here. .goreleaser.yaml ships
+      CGO_ENABLED=0. Scenarios therefore exercise cgo paths for DNS and user lookup that no released
+      binary uses, so a pass does not prove the shipped binary, which matters beyond egress.
+      slice-27 needs a static binary for the proxy container and its real-engine scenarios. Landing
+      the fix first lets the existing suite show any static-versus-dynamic difference before the
+      egress work is mixed in. Set CGO_ENABLED=0 for the build, including the -cover variant used by
+      the code proof. Add a check that the built binary is static or matches the release setting.
+      The existing scenarios must still pass, with no gate weakened. slice-27 should depend on it.

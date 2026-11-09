@@ -2718,11 +2718,158 @@
     main went red at b2ad2ad (run 42392045565) although all 49 engine scenarios passed (feature test
     exit status 0): the Engine scenarios step hit its 5-minute timeout-minutes. The suite took 258 s
     on 2026-11-06 and 277 s on 2026-11-07 (run 42389951333), and every isolation slice adds engine
-    cases, so main will go red more often. Measure each scenario's time, make the slow ones fast
-    (LIFECYCLE-13's first row took 128 s in red), and shard the engine job by feature if the total
-    still nears the limit. Raising the limit is the person's call, not a fix.
-  done_when:
-    - run: env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 timeout --signal=TERM --kill-after=5s 240s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
+    cases, so main will go red more often. T-32 subsequently recorded 300-335 s and temporarily
+    raised the job/step/test limits to 13/8/7 minutes. That authorized allowance ends with this
+    task. Measure each scenario, remove avoidable harness overhead and shard by whole feature if
+    the suite still exceeds the target below. Raising any limit is the person's call, not a fix.
+    This is maintenance of runtime proof for the offline owned-run milestone, not new product
+    behaviour. Add no scenarios or IDs. The drafter changes only this entry, in a docs commit.
+
+    Read features/features_test.go, steps_test.go, engine_schedule_test.go and its regressions,
+    lifecycle_native_actions_test.go, lifecycle_native_fixture_test.go, lifecycle_native_steps_test.go,
+    native_probe_test.go and native_probe_cache_test.go; also features/lifecycle.feature, the engine
+    workflow/fixture/diagnostic tests, features/README.md, .github/workflows/ci.yml and
+    tools/bin/engine-fixture. Follow any measured slow step through its entire fixture and cleanup
+    before changing it. The existing schedule already nests the four LIFECYCLE-09 rows in the
+    quiet LIFECYCLE-13 observation, and trusted probe binaries are already cached per product
+    build outside writable checkouts. Neither is a new optimization to claim for T-33.
+
+    Define well inside as at most 240 seconds of wall time for the complete Engine scenarios
+    step, including test compilation, the product/probe builds, setup, assertions, cleanup and
+    output capture. Fixture preparation keeps its separate existing budget. Restore each native
+    engine job to ten minutes and each Engine scenarios step to five minutes; use a four-minute
+    Go test timeout, below the step's hard limit. The step must fail if its measured total exceeds
+    240 s even when the test binary exits zero. Compilation cannot move outside the measurement
+    to create apparent headroom. Preserve diagnostic time and unconditional owned cleanup; no
+    retry, larger runner, relaxed memory limit or reduced assertion may supply a passing result.
+
+    Add engine-only timing records to the existing harness output, one for each completed
+    scenario example, identified by feature URI, stable scenario tag and distinct example-row
+    location. Measure monotonically from before its setup through its final cleanup, including
+    failures; keep completed records visible when a later row fails. Report selected/completed
+    counts and total suite duration, and separately report compilation and whole-step elapsed
+    time. Nested escalation durations overlap the quiet row: never sum row durations as elapsed
+    suite time. Timing output contains test identity, duration and outcome only, no environment,
+    workload output, credentials or host-state contents. Reuse Go's standard library and the
+    already pinned godog and YAML parser; no new library, service, action or tool pin is needed.
+
+    Obtain the before/after row timings at the actual tested heads from the coordinator's native
+    CI runs. Optimize only demonstrated harness overhead, such as redundant fixture preparation
+    or waiting after an already observed completion. Preserve every selected row and every
+    observation, positive control, negative control, durable-state audit and cleanup error.
+    The coordinator's q-40 decision of 2026-11-08 supersedes the original prohibition on
+    shorter test budgets. Run 42457394504 selected 47 engine examples, taking 285 s overall
+    and 246 s in the measured step, correctly failing the 240 s gate. LIFECYCLE-13's quiet
+    row took 128 s, its other rows 22 s and 12 s, and LIFECYCLE-09's four rows took 11-14 s
+    each. Shorten these real waits through the harness's own build fixture: centralize the
+    unchanged production call/startup/grace constants (10/120/10 s) in the existing budget
+    engine and have the harness build the engine tier's binary from a disposable copy of
+    cmd, internal, go.mod and go.sum outside every checkout, in which only the limits file
+    holds 1/3/1 s. A Go build overlay does not work and must not be used: the engine step
+    always sets -cover, and then cmd/go hands the cover tool each package file's path on
+    disk and ignores the overlay, so the product kept 10/120/10 s (run 42566251698 spent its
+    four minutes in the unshortened waits), and the build cache stored that production build
+    under the overlaid text's key. The copy's limits file carries a header no overlay had.
+    No environment variable, flag or configuration accepted by a product binary may select
+    test budgets. Ordinary tests and release builds retain the production constants.
+    Keep the 30-second teardown budget and process guards. Native assertions and actions use
+    the fixture budgets: quiet time exceeds both startup and call, acknowledgement delay is
+    60 percent of grace, repetitions occur at 20 and 80 percent, and escalation tolerance is
+    20 percent. Preserve delayed acknowledgements, blocked pipes and independent observations.
+    Do not replace native time with a fake clock, reset origins or unblock a pipe early. Keep
+    the existing scenario-authorized quiet-control reuse within its outline and product build;
+    add no shared observation or success cache. Preserve the narrowly bounded schedule, its quiet
+    startup fallback, exact completion counts and serial filtered/manual-red execution. Do not
+    enable arbitrary concurrent scenarios on one daemon: resource inventory audits would see
+    each other's transitions. If a product defect prevents the target, return it for a behaviour
+    spec rather than changing product semantics in this test task. The constant extraction and
+    test-only build fixture above are authorized; no new runtime configuration is. T-31 owns the
+    equal-basename recovery heartbeat race; coordinate through the loop and do not duplicate it.
+
+    Repair the portability failures reported at cdd3897 without weakening their assertions.
+    The protected-record memory fixtures model Linux and must keep slash-absolute Linux
+    identities even on Windows. Timing records compare native-cleaned paths so godog's
+    filesystem traversal separators do not change identity. The unsupported-host doctor
+    fixture must contain a valid synthetic container UID on Windows, where Geteuid returns
+    -1, so manifest validation cannot mask the expected host refusal. FIFO examples require
+    Unix and retain their Linux/macOS execution and all portable manifest-path assertions.
+    Check parsed normal and manual-red selection for every affected platform. These are
+    harness corrections, not an expansion of the supported container-host milestone.
+
+    First measure the optimized unsharded execution. If it meets 240 s, keep the single engine
+    job. Otherwise use one shard per feature file on separate native ubuntu-latest runners and
+    daemons, each with the same 240-second target and restored 10/5/4-minute limits. Keep every
+    feature's examples together, especially the quiet control and escalation rows. Each shard
+    retains checkout at TO, pinned setup, read-only preflight, its own guarded fixture preparation,
+    step-local environment, setsid --wait, paniconexit0, log/signal diagnostics, original test and
+    capture exit-status propagation, and always cleanup. No shared daemon, state or fixture output
+    crosses runners. Keep the stable required check Engine scenarios (Linux amd64) as an aggregate
+    that runs with always() and the event guard and fails unless every shard succeeds; ci must
+    still require its success. Use fail-fast false so one failure does not cancel other evidence.
+    Preserve main/non-draft PR/manual triggers, permissions, pins, ordinary platform jobs and proof.
+
+    If sharding is needed, add a harness-only -engine-feature selector for one known feature
+    basename, with empty meaning the existing complete tier. Validate against the full parsed
+    inventory before building or initializing fixtures, retain the engine/platform guard and
+    reject a nonempty selector in the non-engine tier. Intersect with the existing tier, platform,
+    regex and manual-red selection; validate all red IDs against the full inventory first.
+    Unknown features and unknown red IDs still fail. Include every feature containing effective
+    @engine cases, including all-wip features, exactly once in the workflow's shard inventory.
+    Ordinary runs still exclude @wip; manual red runs admit only the named IDs and remain serial
+    within each shard. A shard with only excluded cases keeps the existing explicit skip report;
+    it cannot stand in for an eligible row elsewhere. Check the union of selected examples, not
+    just unique tags or a fixed count of 49, against the unsharded selection. Missing, duplicated,
+    extra or newly unassigned examples must fail. No smoke-only or changed-ID runtime selection.
+
+    Add TestEngineScenarioTiming and TestEngineSuiteBudget as engine-free harness regressions.
+    The former uses controlled time and memory-only steps to assert distinct outline-row records,
+    inclusion of setup/cleanup, nested elapsed-time accounting and preservation of failures.
+    The latter parses the actual workflow using the existing YAML parser, holds the restored
+    budgets and complete selection, and exercises the actual timing/failure wrapper with
+    disposable compiler/test-program fixtures and a controlled timer. A successful program over
+    240 s, missing timing, failed compilation, failed capture, signal exit or lost test failure
+    must fail, without making a local test wait four minutes. Keep the existing workflow,
+    fixture, diagnostic, selection and schedule negative controls. If sharded, extend them for
+    the exact feature partition, all-wip and manual-red cases, and failed/cancelled/skipped shard
+    aggregation; reject omissions and duplicate rows using parsed Gherkin, not source-text grep.
+    Write these assertions before repairing the runner; an absent test is not timing evidence.
+
+    The ledger check below is deliberately engine-free because task checks can execute in
+    commit hooks and the ordinary ci job. The promoted native command belongs only in the
+    prepared CI engine tier: env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1
+    timeout --signal=TERM --kill-after=5s 240s setsid --wait go test ./features -count=1 -v
+    -run '^TestFeatures$' -timeout=4m. Keep it as the unsharded before/after measurement; if
+    sharding is required, apply the same command and budget with -engine-feature=<basename>
+    in every prepared shard and establish the exact union above. The workflow's normal compiled
+    binary invocation must enforce the same whole-step budget. Sharding changes that acceptance
+    unit, not the selected suite or its deadline; an unsharded over-budget result remains in the
+    report. Do not run either native form in hooks, ordinary platform tests or changed-code proof.
+
+    Before specification at a4f5f0f, an engine-free temporary Go overlay using the existing
+    workflow parser failed on all three target assertions: job 13 rather than 10 minutes, step
+    8 rather than 5, and absence of the four-minute binary timeout. The named timing/budget tests
+    are absent, so discovery below fails before implementation. The older workflow tests still
+    accept T-32's allowance and are preservation checks until their expectations are updated.
+    The historical CI durations exceed 240 s, but the native command was not run locally and
+    neither those durations nor this configuration failure is fresh runtime red evidence.
+    The coordinator must obtain the pre-optimization native timing result; setup failure, a
+    missing selector/test or an engine-context refusal is not a measured performance failure.
+
+    Commit the test-execution changes, including their inseparable workflow and regression
+    expectations, together as test --task T-33; those paths are allowed for test commits. Record
+    the new runner assertions failing before the repair and passing with the final configuration,
+    without committing a workflow/test mismatch or bypassing a hook. Align features/README.md
+    in docs --item T-33, explaining restored budgets and final scheduling. Leave the coordinator's
+    external allowance entry removed once the restored limits and shortened fixture land,
+    as q-40 directs; retain every unrelated allowance.
+    Keep the cheap ledger check in the ordinary task tier and runtime proof in required CI.
+    Run the full feature suite without -race through its existing tier; use -race only for
+    changed focused tests if needed. The 2026-11-08 22 GB whole-feature race run must not recur;
+    a memory kill is a test-cost defect, not permission to raise the limit. Broader memory work
+    remains p1-feature-suite-race-memory. Agents use no Docker/socket, real-state approval,
+    local mutation run or generated proof. Report changed heads, before/after row and step
+    timings, complete row counts, budget failures and final native CI results supplied by the
+    loop. Agents commit and stop; the loop owns push, CI watching and closure.
 - id: T-34
   type: ci
   title: Engine fixture preparation passes again on today's CI runners
@@ -3399,3 +3546,28 @@
     so it is a task with a check. Broken down from p1-egress-allowlist-proxy.
   done_when:
     - run: go test ./internal/engine/session/...
+- id: T-41
+  type: test
+  title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
+  why: >
+    features/overlap_fixture_test.go:419 waits a fixed 5 s for 'local controllers drain after
+    assertions'. Under the code proof's per-ID coverage measurement the drain is slower and the hook
+    times out ('bounded overlap observation timed out'), so the proof's preparation fails with no
+    mutant judged. It failed slice-21's CI twice (runs 42573174685 and 42582818914) and T-33's at
+    082884c (run 42589518540), each costing a CI cycle and a repair round on work that had nothing
+    to do with it. Fix the wait (a budget that holds under coverage, or waiting on the drain's own
+    completion signal), not the proof. Found by the coordinator, 2026-11-09. Correction: of
+    slice-21's runs, 42582818914 hit this hook; 42573174685 failed for another reason (not this
+    flake), so it counts once for slice-21, not twice. p1-overlap-drain-flake already covers the 5 s
+    drain wait in features/overlap_fixture_test.go timing out under coverage, and names 'a budget
+    that holds under coverage' as a fix. Add this to it: size the bound against the product's 30 s
+    teardown budget, since the sibling waits are 20, 35 and 40 s. A drain takes up to 1.2 s locally
+    under 4-way load, and a larger bound only lengthens the wait on a hung controller. T-36's text
+    in tasks/phase-1.yaml (around lines 3074-3096) says to keep the five-second bound, so the fix
+    has to amend that spec. This belongs inside p1-overlap-drain-flake, because raising the bound
+    there makes the TestOverlapCleanup 'covered timeout' case wait that long. The fix should make
+    the drain bound a per-fixture duration, with zero meaning the default, so that case runs in
+    milliseconds. Otherwise a bound near 35 s adds that much to every run. That case currently waits
+    the real 5.0 s.
+  done_when:
+    - run: "set -o pipefail; go test ./features -run '^TestOverlapCleanup$' -count=1 -v | awk '/^    --- PASS: TestOverlapCleanup\\/covered_timeout /{gsub(/[()s]/,\"\",$4); ok=($4+0<0.5)} END{exit !ok}'"
