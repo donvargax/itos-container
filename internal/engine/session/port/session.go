@@ -28,6 +28,7 @@ const (
 // A failed result never carries an ID usable as a startup handoff. Cleanup is
 // separate so a persistence error survives even when compensating removal works.
 type Result struct {
+	RefusalLog    RefusalReport
 	Outcome       Outcome
 	Reference, ID string
 	SessionID     string
@@ -35,24 +36,26 @@ type Result struct {
 }
 
 type Record struct {
-	Anchor         Anchor `json:"anchor,omitzero"`
-	Schema         int    `json:"schema"`
-	Project        string `json:"project"`
-	Generation     string `json:"generation"`
-	Fingerprint    string `json:"fingerprint"`
-	Snapshot       string `json:"snapshot"`
-	UID            string `json:"uid"`
-	GID            string `json:"gid"`
-	Endpoint       string `json:"engine_endpoint"`
-	EngineID       string `json:"engine_id"`
-	Name           string `json:"name"`
-	ImageReference string `json:"image_reference"`
-	ImageID        string `json:"image_id"`
-	ContainerID    string `json:"container_id"`
-	Stage          string `json:"stage"`
+	Egress         EgressRecord `json:"egress,omitzero"`
+	Anchor         Anchor       `json:"anchor,omitzero"`
+	Schema         int          `json:"schema"`
+	Project        string       `json:"project"`
+	Generation     string       `json:"generation"`
+	Fingerprint    string       `json:"fingerprint"`
+	Snapshot       string       `json:"snapshot"`
+	UID            string       `json:"uid"`
+	GID            string       `json:"gid"`
+	Endpoint       string       `json:"engine_endpoint"`
+	EngineID       string       `json:"engine_id"`
+	Name           string       `json:"name"`
+	ImageReference string       `json:"image_reference"`
+	ImageID        string       `json:"image_id"`
+	ContainerID    string       `json:"container_id"`
+	Stage          string       `json:"stage"`
 }
 
 type Binding struct {
+	Egress                                                EgressGrant
 	Frozen                                                approval.Frozen
 	Checkout                                              readiness.CheckoutIdentity
 	UID, GID, Endpoint, EngineID, ImageReference, ImageID string
@@ -133,6 +136,7 @@ type Intent interface {
 }
 
 type Observation struct {
+	Kind, Session               string
 	AnchorName                  string
 	AnchorExact                 bool
 	ID, Name, ImageID           string

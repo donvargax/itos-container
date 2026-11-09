@@ -11,6 +11,7 @@ import (
 
 // Recovery observes and removes registered sessions; it has no launch path.
 type Recovery struct {
+	Refusals  port.RefusalLog
 	Registry  port.Registry
 	Engine    port.RunEngine
 	immediate bool

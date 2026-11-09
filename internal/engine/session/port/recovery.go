@@ -79,6 +79,7 @@ type RecoveryEntry struct {
 	Retry         []string `json:"retry"`
 }
 type RecoveryFailure struct {
+	Gaps    []RefusalGap
 	Session string
 	Outcome Outcome
 }

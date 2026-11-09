@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -44,7 +45,7 @@ func TestRegisteredRunRequiresBothIndependentTokensBeforePublication(t *testing.
 				}
 				return
 			}
-			if result != (port.RunResult{Outcome: port.RegistrationInternal}) {
+			if !reflect.DeepEqual(result, port.RunResult{Outcome: port.RegistrationInternal}) {
 				t.Fatal("entropy refusal exposed a retry or invented a workload result", result)
 			}
 			if len(registry.Records) != 0 || len(registry.Leases) != 0 || registry.Writes != 0 || len(store.Events) != 0 || len(store.Records) != 0 || len(engine.Events) != 0 || len(runEngine.Events) != 0 {
@@ -65,7 +66,7 @@ func TestRegisteredRunPublishesNoRegistrationWhenPreparationFails(t *testing.T) 
 			runner := domain.Runner{Registry: registry, Store: store, Engine: runEngine, Entropy: &f.EntropySequence{Values: []f.Entropy{{Value: id}, {Value: token}}}, Workspace: f.MountWorkspace(b)}
 
 			result := runner.Run(t.Context(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
-			if result != (port.RunResult{Outcome: port.IntentWrite}) {
+			if !reflect.DeepEqual(result, port.RunResult{Outcome: port.IntentWrite}) {
 				t.Fatal("failed intent publication exposed a retry or claimed workload progress", result)
 			}
 			ref := port.Reference(b.Frozen.Project, token)

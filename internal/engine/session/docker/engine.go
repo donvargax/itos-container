@@ -20,8 +20,9 @@ import (
 )
 
 type Engine struct {
-	Readiness rp.Engine
-	Selection string
+	Executable string
+	Readiness  rp.Engine
+	Selection  string
 }
 type connection struct {
 	api       *client.Client

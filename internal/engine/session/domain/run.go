@@ -14,6 +14,7 @@ import (
 // Runner preserves the unstarted-only Service contract while adding an explicit
 // foreground lifecycle. The durable intent contains no command or stream data.
 type Runner struct {
+	Refusals  port.RefusalLog
 	Store     port.Store
 	Engine    port.RunEngine
 	Entropy   port.Entropy

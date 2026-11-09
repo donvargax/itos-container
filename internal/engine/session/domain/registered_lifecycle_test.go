@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -69,7 +70,7 @@ func TestRegisteredRunClassifiesRegistrationRefusalBeforeLaunch(t *testing.T) {
 			runner, frozen, registry, engine, _ := registeredLifecycleFixture()
 			registry.Failure = tc.fault
 			result := runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{})
-			if result != (port.RunResult{Outcome: tc.want}) || len(registry.Records) != 0 || len(registry.Leases) != 0 || len(engine.Events) != 0 || registry.Store.Locked {
+			if !reflect.DeepEqual(result, port.RunResult{Outcome: tc.want}) || len(registry.Records) != 0 || len(registry.Leases) != 0 || len(engine.Events) != 0 || registry.Store.Locked {
 				t.Fatal("registration refusal published a session or reached the engine", result)
 			}
 			ref := port.Reference(frozen.Frozen.Project, strings.Repeat("2", 64))
