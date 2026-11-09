@@ -190,15 +190,75 @@ func TestSplice(t *testing.T) {
 			t.Errorf("client read %q, %v after the hello; want SERVER-FIRST", got[:n], err)
 		}
 	})
-	t.Run("a reset on one side closes the other", func(t *testing.T) {
-		upstream := listenSink(t, "")
-		h := start(t, toSink(upstream))
-		conn, server := established(t, upstream, h)
-		_ = server.SetLinger(0)
-		_ = server.Close()
-		_ = conn.SetReadDeadline(time.Now().Add(testWait))
-		if n, err := conn.Read(make([]byte, 1)); n != 0 || (!errors.Is(err, io.EOF) && !errors.Is(err, syscall.ECONNRESET)) {
-			t.Errorf("client read %d bytes, %v; want EOF or a connection reset", n, err)
-		}
-	})
+	for _, side := range []string{"client", "upstream"} {
+		t.Run("a reset from the "+side+" closes both sockets", func(t *testing.T) {
+			client, a := splicePair(t)
+			server, b := splicePair(t)
+			done := make(chan struct{})
+			go func() {
+				splice(a, b)
+				close(done)
+			}()
+			t.Cleanup(func() {
+				_ = a.Close()
+				_ = b.Close()
+				select {
+				case <-done:
+				case <-time.After(testWait):
+					t.Error("splice did not return after test cleanup closed both sockets")
+				}
+			})
+			reset, idle := client, server
+			if side == "upstream" {
+				reset, idle = server, client
+			}
+			if err := reset.SetLinger(0); err != nil {
+				t.Fatal(err)
+			}
+			if err := reset.Close(); err != nil {
+				t.Fatal(err)
+			}
+			// EOF alone also follows CloseWrite. Keep the other peer open and
+			// idle: only a full close wakes the copy still reading from it.
+			select {
+			case <-done:
+			case <-time.After(testWait):
+				t.Fatal("splice did not return after a reset while the other peer stayed idle")
+			}
+			for _, conn := range []*net.TCPConn{a, b} {
+				if err := conn.SetDeadline(time.Time{}); !errors.Is(err, net.ErrClosed) {
+					t.Errorf("proxy socket after reset: SetDeadline = %v; want a fully closed socket", err)
+				}
+			}
+			_ = idle.SetReadDeadline(time.Now().Add(testWait))
+			if n, err := idle.Read(make([]byte, 1)); n != 0 || (!errors.Is(err, io.EOF) && !errors.Is(err, syscall.ECONNRESET)) {
+				t.Errorf("idle peer read %d bytes, %v; want EOF or a connection reset", n, err)
+			}
+		})
+	}
+}
+
+// splicePair gives a splice and its peer a real TCP connection without a reader
+// or a deadline that could end the copy on the idle peer's behalf.
+func splicePair(t *testing.T) (*net.TCPConn, *net.TCPConn) {
+	t.Helper()
+	ln, err := listen4("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	ctx, cancel := context.WithTimeout(t.Context(), testWait)
+	defer cancel()
+	peer, err := dial4(ctx, &net.Dialer{}, ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = peer.Close() })
+	_ = ln.SetDeadline(time.Now().Add(testWait))
+	conn, err := ln.AcceptTCP()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return peer, conn
 }
