@@ -1709,14 +1709,15 @@ items:
       an approved grant, or after the source file changes mode or owner, run refuses before creating
       anything. A second worker or project does not receive it. Offline runs without grants are
       unchanged. Broken down from p1-credentials-passed-in.
-  - id: p1-credentials-codex-auth-run
+  - id: slice-32
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-30, T-48]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-credentials-codex-auth-run.
       Charter step 2: Codex shares the host's own login and rewrites auth.json in place, so the
       mount is the single file read-write (a directory mount would expose the host home), plus the
       lock file when the host has one. Scenarios first, real-engine ones in CI, on a synthetic file
