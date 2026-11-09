@@ -228,6 +228,20 @@ surface this item does not have, and is left to the person. The state.path text 
 says the account home's own path must contain no symbolic link, which XDG_STATE_HOME
 cannot change.
 
+A later review round corrected what the documents claimed against what the commands do.
+Records with no catalog are scanned in two trees, the selected one and the fixed account
+tree, so entries in the fixed tree (the default selection when HOME is the account home)
+refuse every selection and choosing another XDG_STATE_HOME cannot help; the recovery is
+the host user moving the `admission`, `sessions` and `intents` directories out of that
+tree after confirming no worker uses them. A lost location is reported by doctor and
+approve as state.unavailable (exit 3) or state.path (exit 1). Run shows state.path through
+the shared diagnostic and every other state failure as run.approval-invalid (exit 1), status
+takes no control lock, and stop removes its worker and then exits 75 because the admission
+completion needs the lock. Presenting state.unavailable and state.location through run's
+shared diagnostic would be new behaviour and needs its own scenario, so the documents state
+the present outcomes instead. The account home from /etc/passwd is normalized by path
+cleaning, and the home must not be writable by group or others.
+
 Known exposure reports approval.state.exposed with exit 1 and invalid approval,
 retaining the independently validated candidate. Guidance selects an unexposed
 location or recovery from the blocking worker's original checkout. Reapproval alone

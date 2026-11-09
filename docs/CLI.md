@@ -196,8 +196,11 @@ so the same command can be retried unchanged. Exit 3 `approval.state.unavailable
 means the effective user has no local `/etc/passwd` record with an existing absolute home,
 which the fixed account anchor requires; LDAP or SSSD-only accounts are refused rather than
 guessed from HOME. It also reports a state location the account catalog retains that is gone,
-which refuses every command on the account until the host user restores it or removes its
-record. Reapproval cannot clear either; recovery is in [CONFIG.md](CONFIG.md). Detailed rules are in
+and session, admission or intent records with no catalog beside them. A lost location refuses
+doctor and approve on the account, whatever state location they select, until the host user
+restores it or removes its record. `run` shows these as exit 1 `run.approval-invalid`,
+`status` keeps working and `stop` exits 75. Reapproval cannot clear any of them;
+[CONFIG.md](CONFIG.md) states each outcome and the recovery. Detailed rules are in
 [approval.feature](../features/approval.feature).
 
 An agent on the host can approve through `--fingerprint` or a faked terminal:

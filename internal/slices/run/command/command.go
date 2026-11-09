@@ -45,6 +45,9 @@ func (CLI) Help() string {
 		"      1  control state exposed to a worker checkout or at an unsafe path (approval.state.exposed,\n" +
 		"         approval.state.path); approve cannot fix it: choose another state location or finish\n" +
 		"         recovery from the blocking worker's checkout\n" +
+		"      1  control state unavailable or unsafe, such as a lost state location, an account without a\n" +
+		"         local /etc/passwd home, or records with no catalog (run.approval-invalid); approve\n" +
+		"         cannot fix it, see docs/CONFIG.md\n" +
 		"      1  isolation unverified, including a checkout Unix socket\n" +
 		"      3  required local environment unavailable\n" +
 		"      75 temporary controller or cleanup failure, or a control-state wait that exceeded the\n" +

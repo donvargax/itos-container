@@ -69,7 +69,7 @@ func Problems(v View) []Problem {
 		p.Message = "Approval state is unavailable"
 		p.Fix = "resolve the cause and inspect again with itos container doctor; approve cannot clear it. The effective user needs a local /etc/passwd entry with an existing absolute home directory, so LDAP or SSSD-only accounts are refused. " +
 			"A state location the catalog retains may be missing or unreadable, which refuses every selection on the account until the host user restores the original directory or removes its record under the account home's .local/state/itos-container/coordination after confirming no worker uses it. " +
-			"Session records with no catalog refuse that selection only, so choose another XDG_STATE_HOME"
+			"Admission, session or intent records with no catalog beside them refuse the selection that holds them, and every selection when they are in the account home's .local/state/itos-container, so choosing another XDG_STATE_HOME does not help there; the host user moves those directories out of the tree after confirming no worker uses them"
 	case "state.busy":
 		p.Exit = 75
 		p.Message = "Approval state lock wait exceeded the call budget"
