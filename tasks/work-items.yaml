@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - p1-engine-suite-under-its-limit-again
   - T-42
   - p1-credentials-passed-in
   - p1-harness-home
@@ -428,6 +429,17 @@ items:
       slice-27 should depend on it. The phase field here is already 1, so only the edges and the
       person's decision remain. Until slice-26 has them, it can start before the record it builds on
       exists, with nothing holding it back.
+
+      This is coordinator registry housekeeping, not a work item. The slice-27 edge is already held:
+      p3-approval-before-egress lists the depends_on edits (slice-26 gets T-38 and that item;
+      slice-27 gets p1-acceptance-static-binary, because the harness binary was measured dynamically
+      linked), and p1-acceptance-static-binary's why already ends with 'slice-27 should depend on
+      it'. Record 0022 (commit 1770912, delivery as the host's own static executable) confirms the
+      edge, so the coordinator applies it to slice-27 now. The rest is stale text in T-39, T-40 and
+      slice-26 to slice-28: T-39 still says 'library', its done_when lacks the fuzz run that q-51
+      requires, and the whys predate the record. Each item's own drafter rewrites that in its spec
+      round, and T-39-notes.md already carries the q-51 and review notes into it. Registry and owner
+      edits are the coordinator's act, so no new item is needed.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -902,15 +914,15 @@ items:
   - id: T-38
     title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: slice-25
     title: The policy file accepts an exact host-name egress allowlist and doctor validates it
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
@@ -1184,3 +1196,69 @@ items:
       p2-control-state-upgrade-contract, which covers a location that was once approved and then
       lost; this is a first run under a root that does not exist yet. Phase p2: no current step
       depends on it.
+
+      Doctor refuses an absent selection under a missing top-level directory. This is that item's
+      own finding: Store.prospective in internal/engine/approval/disk/control.go returns
+      state.unavailable at "/" when no ancestor exists, so `XDG_STATE_HOME=/data/state` with /data
+      absent makes doctor exit 3 where main reported `missing`. The item already has the decision: a
+      read-only Begin treats the absent selection as absent, a writer still refuses, and the red
+      scenario row comes first. Note for it: the person sees an unexplained refusal today, and no
+      CONTROL scenario covers the case.
+  - id: p1-engine-suite-under-its-limit-again
+    title: The engine suite fits its 4-minute test timeout again after T-41
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Measured by the coordinator, 2026-11-09: the Engine scenarios step took 2 min 49 s on main at
+      966e456 (run 42615366138, before T-41), 3 min 44 s on T-41's own green run (42617313777), and
+      4 min 5 s on main after T-41 merged (42618748581), where TestFeatures ran 239.55 s against
+      -test.timeout=4m. T-41's drain wait added about a minute, so every pull request's engine tier
+      now runs at the limit and fails as a timeout on any slow runner, whatever it changes. Find
+      what T-41 lengthened (its overlap drain wait or the cleanup it added) and bring the suite back
+      near 3 minutes through the harness-only budget seam; don't raise the limit. Milestone two's
+      egress step needs a green engine tier.
+
+      Engine failure diagnostics (print the streamed timings). This belongs inside
+      p1-engine-suite-under-its-limit-again. That item has to find which step T-41 lengthened, and
+      the Engine failure diagnostics step in .github/workflows/ci.yml shows only `tail -100` of the
+      log, which on a timeout is a goroutine dump. Note for that item: print the last `engine
+      scenario timing:` records, or the slowest examples sorted, in that step, and say in the README
+      that a goroutine blocked a minute or more is labelled with its minutes. It is a small ci.yml
+      change and does not need its own item.
+
+      Control transaction re-validates every pinned path chain about 11 times per Begin. Treat this
+      as a lead on that item, not a new item. A steady-state write Begin is about 2,800 syscalls and
+      41 fsyncs, and a run takes five of them. That costs about 12 ms natively, but the engine
+      harness traces every syscall and the engine call budget is 1 s. If the Engine step stays near
+      its 4-minute timeout once slice-21's control transaction lands, or Begin hits state.busy under
+      the tracer, that item should consider cutting the redundant back-to-back Unchanged() walks.
+      The checks are the anti-substitution guards, so any such change needs a security review by the
+      person. Nothing is measured to be wrong today, so it should not be tracked separately.
+  - id: p2-admission-nested-checkouts-across-state-roots
+    title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Isolation, first milestone. It does not block milestone two step 1 (the egress proxy), so p2.
+      Found in slice-21's PR review. checkAdmission in internal/engine/session/disk/admission.go
+      compares a candidate checkout with other workers' checkouts only through the admission records
+      and public registrations of the selected XDG_STATE_HOME tree. Two workers whose checkouts
+      nest, started under different XDG_STATE_HOME values, are therefore both admitted. Slice-16
+      (done) made nested checkouts a refusal, but only inside one state tree. A nested checkout
+      exposes the other worker's checkout and lets the outer worker modify what the inner worker
+      runs, which is the exposure slice-16 closed. Slice-21 now records every control-state location
+      in a catalog that is discoverable under the common control lock. Slice-22 consumes that
+      tracking at run admission for control state, and does not cover worker checkouts, so this
+      stays apart from it. Specify first: black-box scenarios, committed red, for nested checkouts
+      under different state roots in both start orders and with concurrent launches. Then decide,
+      with the person (itos decision), whether admission compares against every enrolled location's
+      admission and registry records, and what it does when an enrolled location is unreadable or
+      lost (compare p2-control-state-upgrade-contract). Depends on slice-21, and should be sequenced
+      with slice-22 because both change run admission. Real mount-isolation evidence runs only in
+      CI.
