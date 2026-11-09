@@ -3350,3 +3350,52 @@
     only heads (--no-tags), so it starts with an empty ref set; a local clone has a branch
     and never shows this. The snapshot now uses git for-each-ref, which exits 0 on an empty
     set and lists the same refs, so the state comparison proves what it did before.
+- id: T-38
+  type: docs
+  title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
+  why: >
+    Charter step 1 says the proxy is a small, maintained Go CONNECT proxy chosen in the spec, not
+    squid. This task writes a docs/decisions record and updates the arc42 building-block view and
+    runtime/network text. It picks one library with a pinned version, an AGPL-compatible licence and
+    a stated maintenance reason. It fixes the topology: an internal Docker network with no route
+    out, a proxy container dual-homed beside the worker, and the worker attached to the internal
+    network only. It states how the proxy binary or image reaches the proxy container and how it
+    stays out of the worker's reach. It defines fail-closed behaviour, with no fallback network when
+    the proxy fails. It gives the refusal log format and where it lands, with no secrets logged. It
+    names the contract's open decisions it settles and stops for the person if one is a security
+    property the charter leaves open. The library, topology and delivery are then fixed before any
+    code. Broken down from p1-egress-allowlist-proxy.
+  done_when:
+    - run: ls docs/decisions/*egress-proxy*.md && grep -qi 'egress' docs/architecture/arc42.md
+- id: T-39
+  type: feat
+  title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
+  why: >
+    Charter step 1's core decision logic, built once as shared engine code under
+    internal/engine/egress with domain, port and adapter siblings. The domain is a pure decision on
+    the name the client gave in CONNECT. It allows exact canonical matches on port 443 only, never
+    reverse-DNS an IP, refuses literal IPs, alternate ports, case and trailing-dot spelling variants
+    and suffix lookalikes, and emits a refusal record with no secrets. The port has a porttest fake,
+    and the shared contract runs against the fake and the adapter. The adapter wraps the library
+    chosen in the spec, with no TLS interception, opaque tunnelling and a pinned version. Unit and
+    contract tests drive it over in-process listeners, with no Docker. It also holds the small proxy
+    entrypoint the session lifecycle will run. It adds no CLI behaviour yet, so it is a task with a
+    check, not a slice. Broken down from p1-egress-allowlist-proxy.
+  done_when:
+    - run: go test ./internal/engine/egress/...
+- id: T-40
+  type: feat
+  title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
+  why: >
+    Charter step 1: an owned proxy on an internal network, so the worker has no direct route out.
+    This is the lifecycle plumbing in engine/session, defined as the spec fixes it. The port and its
+    stateful fake gain an internal (non-routable) network and a proxy container. The worker attaches
+    only to the internal network. Creation order is network, proxy, ready, worker. Teardown runs in
+    reverse. Ownership labels and recovery records cover the new resources, so stop and
+    interrupted-controller recovery never touch foreign networks or containers. If the proxy fails
+    to start or exits, the worker is stopped or never started, with no unrestricted fallback. The
+    Docker adapter implements it with unit coverage against its fake transport. Real-engine proof
+    belongs to the run slices, in CI only. It is session engine work with no new command behaviour,
+    so it is a task with a check. Broken down from p1-egress-allowlist-proxy.
+  done_when:
+    - run: go test ./internal/engine/session/...

@@ -46,8 +46,10 @@ drift: …".
 
 ## The second milestone: a coding agent inside the sandbox
 
-Current once `v0.1.0` is published. Milestone-one isolation items still open then (control
-state, the flaky-test and suite-speed fixes) keep their place ahead of it.
+Current now: `v0.1.0` was published on 2026-11-08. Of milestone one's open items, slice-21
+(control state) and T-33 (suite speed) finish first. slice-22 and slice-23 (more control-state
+refusals) wait until steps 1 and 2 below have landed (the person, 2026-11-09). Specify and start
+step 1 now, beside the items still finishing.
 
 Done when a coding agent's harness runs inside an approved container for one checkout and
 reaches only the hosts it needs: Codex CLI headless (`codex exec`) first, then Claude Code
