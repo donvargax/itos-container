@@ -992,3 +992,21 @@ items:
       decision record, per the charter's architecture rule. AGENTS.md's opening paragraph is also
       stale ("container commands and isolation are not implemented yet", v0.1.0 is published), but
       whether to edit AGENTS.md is the person's. Documentation only: it touches no proof.code path.
+  - id: p1-acceptance-static-binary
+    title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy), through
+      slice-27. features/features_test.go buildProduct runs go build with no CGO_ENABLED setting,
+      and the binary it builds measured dynamically linked here. .goreleaser.yaml ships
+      CGO_ENABLED=0. Scenarios therefore exercise cgo paths for DNS and user lookup that no released
+      binary uses, so a pass does not prove the shipped binary, which matters beyond egress.
+      slice-27 needs a static binary for the proxy container and its real-engine scenarios. Landing
+      the fix first lets the existing suite show any static-versus-dynamic difference before the
+      egress work is mixed in. Set CGO_ENABLED=0 for the build, including the -cover variant used by
+      the code proof. Add a check that the built binary is static or matches the release setting.
+      The existing scenarios must still pass, with no gate weakened. slice-27 should depend on it.
