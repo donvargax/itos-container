@@ -3689,11 +3689,19 @@
     timer it restarted fires no earlier than that plus the grace. Name that repeat's offset once,
     for lifecycleRepeatedSignals and this limit. A delayed row refuses it from the delay plus the
     grace after the first signal's At in the journal: the hold begins only after that arrival, and
-    an acknowledgement-relative timer begins after the hold. Neither limit can pass such a timer at
-    any runner speed, and neither can relax without passing one. The delayed limit reads At, not
-    Replied, because a cut hold has no Replied, and a cut hold keeps both the limit and the window:
-    holds are cut when the runner is slow, the condition this item targets, and a rule that skipped
-    them would pass an acknowledgement-relative timer just where it widens.
+    an acknowledgement-relative timer begins after the hold. A delayed row whose hold ran in full
+    refuses such a timer at any runner speed, and its limit cannot relax without passing one. An
+    immediate row does not: the acknowledgement returns at once, so a timer it restarted fires at
+    the first signal's arrival plus the grace and passes unless the arrival was 800 ms late; the
+    1.8 s limit holds the last repeat's restart only. The delayed limit reads At, not Replied,
+    because a cut hold has no Replied. A cut hold keeps both the limit and the window, since holds
+    are cut when the runner is slow, the condition this item targets, but its timer starts at the
+    cut, a call limit after the call began, which is before At plus the delay. The limit therefore
+    refuses an acknowledgement-relative timer after a cut only when the request reached the
+    recorder within 400 ms (the call limit less the delay) of the call starting, plus the work
+    between the cut and the SIGKILL, and a slow runner lengthens that arrival. The limit moves with
+    the arrival, so a delayed row, held or cut, refuses the last repeat's timer only when the first
+    signal arrived within 200 ms.
 
     The real margins are thinner than the numbers read. A delayed row's SIGKILL leaves at the later
     of the deadline and the reply, plus the work before a signal. Once the reply passes the deadline
@@ -3716,9 +3724,12 @@
     TestLifecycleContract's grace case spend no time before their first signal. The late starts are
     p2-grace-origin-fake-clock-row's. The restart by the 20 percent repeat is not: that repeat is
     always SIGINT and no other test sends a repeat and times the kill, so a product whose repeated
-    SIGINT restarts grace fires at about 1.2 s and passes every row here. It is returned to the
-    coordinator with this spec. Those three tests' exact assertions that an acknowledgement does not
-    restart grace stay, and nothing here touches product code or a budget.
+    SIGINT restarts grace fires at about 1.2 s and passes every row here. It was returned to the
+    coordinator with this spec, who put it in that item: its fake-clock row also sends a repeat at
+    20 percent of grace and asserts the kill still falls at the first signal plus the grace. That
+    item lands after T-42 and before charter step 4 (p1-interactive-tty) changes Ctrl-C handling,
+    and until it lands nothing holds that restart. Those three tests' exact assertions that an
+    acknowledgement does not restart grace stay, and nothing here touches product code or a budget.
 
     A second false failure sits beside the window, and widening alone would leave it. The recorder
     holds the acknowledgement after the daemon's reply and the fixture's call limit is 1 s, so the
@@ -3730,9 +3741,17 @@
     long as the product waited. A throwaway request through the recorder's real socket produced that
     journal, and a subtest below pins it. Whether a CI failure took this path is unknown. That check
     proves the fault ran; it is no timing assertion. It now also accepts a first signal with
-    Cancelled and Status 204, the engine having accepted it before the product stopped waiting. It
-    still refuses a reply sooner than the delay, a zero Replied without Cancelled, and Cancelled
-    without that 204. The last is a stall, not a cut: a product that stops waiting before the daemon
+    Cancelled and Status 204, the engine having accepted it before the product stopped waiting, but
+    only if the cut could be the call limit. The journal records no time for the cut, so
+    heldAcknowledgement infers it from the product's next request, which follows the cut at once
+    (its own wait, made the moment the signal call returns) and must come a call limit or more
+    after cancellation; a product that gave up after 100 ms leaves the same cut journal and is
+    refused. That inference is a gap. A recorder that journaled the cut's instant would let the
+    delayed limit start at the cut, so that it refused an acknowledgement-relative timer after a cut
+    at any arrival, and would let the check read the cut instead of inferring it. The recorder is
+    outside T-42's range, so the gap goes back to the coordinator as an idea. The check still
+    refuses a reply sooner than the delay, a zero Replied without Cancelled, and Cancelled without
+    that 204. The last is a stall, not a cut: a product that stops waiting before the daemon
     replies journals Status 502, Cancelled and a zero Replied, as a throwaway run showed, and there
     the hold never ran.
 
@@ -3746,8 +3765,9 @@
     has engine set, no skip, count 4 and that one ID, and unless the pickles' own steps read SIGINT
     0, SIGTERM 0, SIGINT 60 and SIGTERM 60 percent, in that order. Each row is a subtest named
     <signal>_<percent> holding every case of its class below, immediate at 0 percent and delayed at
-    60, so the 21 cases make 42 subtests. Nothing reads the process environment, builds the product
-    or reaches an engine.
+    60, so the 23 cases make 46 subtests (21 and 42 when first committed; the two added cases are
+    the abandoned holds below). Nothing reads the process environment, builds the product or reaches
+    an engine.
 
     Each case calls the real w.lifecycleSignals(true) on a journal it writes. Its world holds a
     doctorWorld with engineID and imageID, an approvalWorld with project, a sessionWorld with token,
@@ -3775,7 +3795,12 @@
     repeated instead of SIGKILL', the row's signal at 1 s. Each delayed at F 50 ms with SIGKILL at
     1.1 s, refused naming 'delay did not execute': 'acknowledgement replied early', Replied 100 ms
     after F; 'cancelled before the engine accepted', Cancelled, Status 502, zero Replied; 'no reply
-    and not cancelled', zero Replied.
+    and not cancelled', zero Replied. The cut holds' next request decides whether the cut could be
+    the call limit: the accepted cut case has none of the product's own waits, so its next request
+    is the SIGKILL's inspection, a call limit or more after cancellation. Two delayed cases, each
+    Cancelled, Status 204 and zero Replied at F 50 ms with a wait of the product's at 150 ms, are
+    refused naming 'delay did not execute': 'delayed hold abandoned before the call limit', SIGKILL
+    at 1 s, and 'delayed hold abandoned, then a timer from the abandonment', SIGKILL at 1.15 s.
 
     A subtest 'recorder journals a cut acknowledgement' ties the cut cases to the recorder, and
     passes today. On recoveryRecorderWorld with newLifecycleFaults("ignore", "", time.Hour), a.serve
