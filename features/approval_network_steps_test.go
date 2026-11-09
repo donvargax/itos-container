@@ -239,6 +239,13 @@ func approvalNetworkDefect(s map[string]any, defect string) error {
 }
 
 func (w *world) approvalOtherNetworkFingerprint(which string) error {
+	if which == "an empty flag value" || which == "a malformed fingerprint" {
+		value := ""
+		if which == "a malformed fingerprint" {
+			value = "not-a-fingerprint"
+		}
+		return w.runDoctor(w.env(), "approve", "--json", "--fingerprint="+value)
+	}
 	s := approvalClone(w.approval.settings)
 	p := s["policy"].(map[string]any)
 	n := p["network"].(map[string]any)

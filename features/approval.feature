@@ -487,10 +487,11 @@ Feature: Review and record approval of exact offline settings
   # q-52 (the person, 2026-11-09): only changed settings ask for approval again. A grant
   # with an egress allowlist or credentials requires the person at a real terminal.
   # --fingerprint is only for offline grants without credentials. For an exact network
-  # fingerprint, refuse approve.interactive-required (exit 1), with a fix naming
+  # fingerprint, refuse approve.terminal-required (exit 1), with a fix naming
   # "itos container approve" and "terminal". Bare nonterminal or JSON network approval
-  # gives the same refusal, never suggesting --fingerprint as a way around it. Fingerprint
-  # syntax and mismatch checks still precede this refusal. Matching terminal approval
+  # retains approve.confirmation-required, naming only the terminal form. For grants,
+  # the terminal-required refusal precedes fingerprint format and mismatch checks, as
+  # decision 0025 records. Matching terminal approval
   # neither prompts nor rewrites. No keys or signatures. docs/security.md records the
   # remaining gap: an unsandboxed host agent can fake a terminal.
   #
@@ -919,7 +920,7 @@ Feature: Review and record approval of exact offline settings
     And the checkout requests the allowlist "api.example.com registry.example.org"
     And approval state is "<state>"
     When approve runs without a terminal with the independently calculated exact fingerprint and "<mode>"
-    Then it reports approval problem "approve.interactive-required" with exit 1
+    Then it reports approval problem "approve.terminal-required" with exit 1
     And its guidance names "itos container approve" and "terminal"
     And it never prompts or records approval
     And the approval checkout and host state are unchanged
@@ -959,15 +960,15 @@ Feature: Review and record approval of exact offline settings
     And its standard output does not say "network none"
     And its standard output does not say "Effective offline settings"
 
-  # The offline rows are what a build that ignored the list would accept, the list rows a build
-  # that left a name out of the fingerprint, and the proxy rows one that left out the digest or
-  # bound another.
+  # q-52 refuses every fingerprint for a network grant, regardless of its value.
+  # The independent candidate oracle separately holds every bound setting.
   @wip @slice-26 @ID-APPROVAL-47 @local-engine-fixture
   Scenario Outline: A fingerprint for other network settings cannot approve the allowlist
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
     When approve runs without a terminal with the independently calculated fingerprint of "<settings>" as JSON
-    Then it reports approval problem "approve.fingerprint" with exit 1
+    Then it reports approval problem "approve.terminal-required" with exit 1
+    And its guidance names "itos container approve" and "terminal"
     And no approval record or frozen input is produced
     And the approval checkout and host state are unchanged
 
@@ -979,6 +980,8 @@ Feature: Review and record approval of exact offline settings
       | the list with other.example added             |
       | the list with no proxy member                 |
       | the list bound to another proxy image digest  |
+      | an empty flag value                           |
+      | a malformed fingerprint                       |
 
   # A hostile workload can edit the file while the person reads the review.
   @wip @slice-26 @ID-APPROVAL-48 @local-engine-fixture
@@ -1496,7 +1499,7 @@ Feature: Review and record approval of exact offline settings
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com"
     When approve runs at a terminal in "<mode>" with streams "<streams>"
-    Then it reports approval problem "approve.interactive-required" with exit 1
+    Then it reports approval problem "approve.confirmation-required" with exit 1
     And its guidance names "itos container approve" and "terminal"
     And it never prompts or records approval
     And the approval checkout and host state are unchanged
