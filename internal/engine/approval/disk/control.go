@@ -155,7 +155,7 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	if failure = t.acquire(ctx, false, write); failure != "" {
 		return nil, failure
 	}
-	if failure = t.inspect(ctx, s.Reservations); failure != "" && !t.peerLocked(write) {
+	if failure = t.inspectWithin(ctx, s.Reservations); failure != "" && !t.peerLocked(write) {
 		return nil, failure
 	}
 	if write {
@@ -177,7 +177,7 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 			}
 			t.pins = nil
 			t.bindings, t.data = map[string]locationBinding{}, map[string][]byte{}
-			if failure = t.inspect(ctx, s.Reservations); failure != "" {
+			if failure = t.inspectWithin(ctx, s.Reservations); failure != "" {
 				return nil, failure
 			}
 		}
@@ -221,6 +221,21 @@ func (s Store) prospective(c port.Candidate, path string, depth int) (*pin, port
 		}
 		path, depth = parent, depth-1
 	}
+}
+
+// inspectWithin runs inspect inside the call budget that the lock wait also
+// spends. A scan the budget interrupts has not found a fault: the session
+// engine's reservation scan gives up on an ended context with a refusal of its
+// own (a path that no longer compares equal, an intent it could not open). That
+// is contention the person retries, like the lock wait that ends the same way,
+// so any refusal returned after the budget ended is state.busy. A fault the scan
+// had found is found again by the retry.
+func (t *controlTransaction) inspectWithin(ctx context.Context, reservations port.Reservations) port.Failure {
+	failure := t.inspect(ctx, reservations)
+	if failure != "" && ctx.Err() != nil {
+		return "state.busy"
+	}
+	return failure
 }
 func (t *controlTransaction) inspect(ctx context.Context, reservations port.Reservations) port.Failure {
 	if t.catalog != nil {
