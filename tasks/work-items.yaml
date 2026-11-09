@@ -1348,6 +1348,16 @@ items:
       plus grace. That closes the gap on the native rows without touching the recorder, and a
       CancelledAt field is then not worth a separate item. T-42's own comment on escalationWindow
       already names this gap as known.
+
+      This is a question about ordering, not a new piece of work. p2-grace-origin-fake-clock-row
+      already holds the replacement coverage the codex thread asks for: its row sends a repeat
+      signal at about 20 percent of grace and asserts the kill still falls at first signal plus
+      grace. That is the first repeat's restart. The item says to land after T-42, and T-42's
+      escalationWindow comment points to it as the holder of this gap. The open decision is the
+      person's or the coordinator's: either accept the gap until that item lands and resolve the
+      thread, naming the item, or queue the item directly behind T-42 before the egress proof leans
+      on the lifecycle tier. The item adds nothing to charter step 1 itself, so it stays p2 in the
+      registry. If step 1 starts first, the person can move it up.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
