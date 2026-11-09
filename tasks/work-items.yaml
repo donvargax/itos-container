@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - T-45
   - T-42
   - p1-credentials-passed-in
   - p1-harness-home
