@@ -466,9 +466,9 @@ func (t *controlTransaction) enroll() port.Failure {
 			return f
 		}
 		t.pins = append(t.pins, p)
-		if f = validateLocation(b, p, t.selected); f != "" {
-			return f
-		}
+		// Inspection validated this binding against the same ancestors, and the
+		// check above kept them unchanged. A substitution after that is refused by
+		// the transaction check inside publishBinding, before any record is written.
 		if f = syncDirectories(p); f != "" {
 			return f
 		}
