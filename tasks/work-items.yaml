@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - p2-lifecycle-09-escalation-window-jitter
   - T-41
   - p1-credentials-passed-in
   - p1-harness-home
