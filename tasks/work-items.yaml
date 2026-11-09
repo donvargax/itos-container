@@ -1303,6 +1303,21 @@ items:
       The coordinator can then tell an unchanged flake from a new failure when a re-run fails
       differently, as the two attempts at 0a1d85c did. It is the same small ci.yml edit, so it needs
       no separate item.
+
+      The idea is conditional ("if the anchor scenario also flakes") and rests on one failure, in a
+      run where LIFECYCLE-09 rows #02 and #03 also failed. That points to a slow or loaded runner,
+      not to a fault in the anchor scenario. Exit 75 is run.cleanup-temporary and HTTP 409 is the
+      worker-removal conflict, which fits a worker that had not finished dying under that load. T-42
+      is scoped to LIFECYCLE-09 only and no item covers anchors.feature, but this item is the one
+      that makes the failure diagnosable. It owns the Engine failure diagnostics step in ci.yml: the
+      --- FAIL blocks with godog step errors, the streamed engine timings, and one ::error
+      annotation per failed scenario. It also carries the lead on the 1 s engine call budget under
+      the syscall tracer, which could explain a 409 or state.busy. Note for it: record that
+      anchors.feature:410 (ANCHORS-09, exit 75, cleanup 409) failed on the engine job for e2faafd.
+      When that step lands, check whether ANCHORS-09 or ANCHORS-10 fail again on an unchanged
+      re-run. Only a repeat on its own justifies a separate item, and then it should be treated as a
+      possible real race in anchor cleanup, not a timing flake. One unexplained failure in a run
+      that was already failing for load is too thin to track separately.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
