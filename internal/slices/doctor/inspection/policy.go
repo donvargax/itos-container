@@ -7,7 +7,10 @@ import (
 )
 
 // Policies supplies strict policy inspection through a data source.
-type Policies struct{ Source port.Source }
+type Policies struct {
+	Source port.Source
+	Names  port.Names
+}
 
 // Inspect returns a complete validated policy or its refusals.
-func (p Policies) Inspect() port.Result { return policy.Inspect(p.Source) }
+func (p Policies) Inspect() port.Result { return policy.Inspect(p.Source, p.Names) }
