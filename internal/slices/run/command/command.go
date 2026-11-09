@@ -36,9 +36,13 @@ func (CLI) Help() string {
 		"    Arguments after -- belong only to the workload.\n" +
 		"    Run the literal command in one approved offline worker; streams remain separate.\n" +
 		"    The worker uses the frozen workspace, host UID:GID and temporary HOME/TMPDIR.\n" +
+		"    A Unix socket anywhere in the checkout, including .git, refuses startup before worker creation.\n" +
+		"    Host sockets created or swapped into the checkout after inspection remain reachable during a run.\n" +
+		"    Such sockets can expose host actions or networking despite the offline network namespace.\n" +
 		"    Exit codes:\n" +
 		"      2  missing command/separator or unsupported JSON request\n" +
 		"      1  approval missing, changed, invalid or superseded; use itos container approve\n" +
+		"      1  isolation unverified, including a checkout Unix socket\n" +
 		"      3  required local environment unavailable\n" +
 		"      75 temporary controller or cleanup failure\n" +
 		"    An observed nonzero workload exit wins over a separate cleanup failure.\n"
@@ -135,7 +139,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		}
 		if result.Outcome != "" {
 			failure := runFailure{result.Outcome, result.Reference, result.SessionID, false}
-			if result.Operation != "" {
+			if result.MountDiagnostic.Check != "" {
+				ui.Fail(mountFailure{failure, result.MountDiagnostic}, false)
+			} else if result.Operation != "" {
 				ui.Fail(operationFailure{failure, result.Operation}, false)
 			} else {
 				ui.Fail(failure, false)
@@ -212,17 +218,18 @@ func Classify(err error) (int, []cli.Problem) {
 		}
 		code, cause := 75, "temporary"
 		switch run.outcome {
-		case session.Refused, session.Unsafe, session.RegistrationOwnership:
+		case session.Refused, session.Unsafe, session.RegistrationOwnership, session.MountRefused:
 			code, cause = 1, "ownership"
 		case session.Invalid:
 			code, cause = 2, "configuration"
 		case session.IdentityFailed, session.RegistrationInternal, session.Internal:
 			code, cause = 70, "internal"
-		case session.Environment, session.EnvironmentMissing:
+		case session.Environment, session.EnvironmentMissing, session.MountUnavailable:
 			code, cause = 3, "environment"
 		case session.IsolationUnverified:
 			code = 1
 		case session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,
+			session.MountWrite, session.MountUncertain,
 			session.Uncertain, session.Incomplete, session.IsolationInspection, session.ExecutionFailed, session.StreamTimeout, session.EngineLost, session.TeardownTimeout:
 			// Known transient failures retain their temporary classification.
 		default:
@@ -239,6 +246,10 @@ func Classify(err error) (int, []cli.Problem) {
 		var operation operationFailure
 		if errors.As(err, &operation) {
 			message += "; operation " + operation.operation
+		}
+		var mount mountFailure
+		if errors.As(err, &mount) {
+			message += "; " + mountDiagnosticText(mount.diagnostic)
 		}
 		if run.outcome == session.EngineLost {
 			message += "; workload outcome unknown unless separately observed"

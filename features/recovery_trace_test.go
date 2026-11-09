@@ -18,6 +18,8 @@ import (
 // controller. The engine fixture separately owns bounded worker cleanup.
 type recoverySync struct {
 	Path, Data, Inode string
+	Access            string
+	At                time.Time
 	Directory         bool
 	Files             map[string]string
 }
@@ -46,10 +48,9 @@ func (w *world) recoveryTraceBinary() (string, error) {
 	if filepath.IsAbs(w.bin) {
 		path = w.bin + "-slice-11-trace"
 	}
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
-	}
-	return path, recoveryBuildHelper(w.root, path, recoveryTraceSource)
+	return featureBinary(path, func(target string) error {
+		return recoveryBuildHelper(w.root, target, recoveryTraceSource)
+	})
 }
 
 func recoveryReadSyncs(path string) ([]recoverySync, error) {
@@ -85,12 +86,15 @@ import (
     "strconv"
     "strings"
     "syscall"
+    "time"
 
     "golang.org/x/sys/unix"
 )
 
 type event struct {
     Path, Data, Inode string
+    Access string
+    At time.Time
     Directory bool
     Files map[string]string
 }
@@ -143,6 +147,7 @@ func observe(pid int, fd uint64, root string) *event {
     return e
 }
 func completed(e *event) {
+    e.At = time.Now()
     if !e.Directory { return }
     entries, err := os.ReadDir(e.Path)
     if err != nil { return }
@@ -152,6 +157,36 @@ func completed(e *event) {
         // no recursive scan or observation of state outside the fixture root.
         if entry.Type().IsRegular() { e.Files[entry.Name()] = inode(filepath.Join(e.Path, entry.Name())) }
     }
+}
+// Record attempted proc-path reads, including failures. The target process is
+// stopped at entry; relative dirfd paths are resolved by the independent tracer.
+func access(pid int, regs unix.PtraceRegs) *event {
+    var pointer uint64
+    fd := int32(-100)
+    switch regs.Orig_rax {
+    case unix.SYS_OPEN, unix.SYS_STAT, unix.SYS_LSTAT, unix.SYS_READLINK:
+        pointer = regs.Rdi
+    case unix.SYS_OPENAT, unix.SYS_OPENAT2, unix.SYS_NEWFSTATAT, unix.SYS_STATX, unix.SYS_READLINKAT:
+        pointer, fd = regs.Rsi, int32(regs.Rdi)
+    default: return nil
+    }
+    var data []byte
+    for len(data)<4096 {
+        var b [8]byte
+        if _,err:=unix.PtracePeekData(pid,uintptr(pointer)+uintptr(len(data)),b[:]);err!=nil{return nil}
+        end:=false
+        for _,value:=range b{if value==0{end=true;break};data=append(data,value)}
+        if end{break}
+    }
+    path:=string(data)
+    if !filepath.IsAbs(path) {
+        target:=fmt.Sprintf("/proc/%d/cwd",pid)
+        if fd != -100 {target=fmt.Sprintf("/proc/%d/fd/%d",pid,fd)}
+        parent,err:=os.Readlink(target);if err!=nil{return nil}
+        path=filepath.Join(parent,path)
+    }
+    if !strings.HasPrefix(path,"/proc/"){return nil}
+    return &event{Path:path,Access:"proc-read",At:time.Now()}
 }
 func main() {
     if len(os.Args) < 6 { os.Exit(96) }
@@ -180,6 +215,7 @@ func main() {
     if unix.PtraceSetOptions(pid, options) != nil { fail() }
     if os.WriteFile(os.Args[2], []byte(strconv.Itoa(pid)), 0600) != nil { fail() }
     calls := map[int]*call{pid:{}}
+    traceAccess := os.Getenv("SLICE_17_ACCESS_TRACE") == "1"
     if unix.PtraceSyscall(pid, 0) != nil { fail() }
     exit := 96
     for len(calls) != 0 {
@@ -210,6 +246,7 @@ func main() {
             entry := int64(regs.Rax) == -int64(unix.ENOSYS)
             if entry {
                 signalCall(signals, tid, regs)
+                if traceAccess {if e:=access(tid,regs);e!=nil{if json.NewEncoder(journal).Encode(e)!=nil{fail()}}}
                 c.sync = nil
                 if regs.Orig_rax == unix.SYS_FSYNC { c.sync = observe(tid, regs.Rdi, root) }
             } else if c.entering && c.sync != nil {

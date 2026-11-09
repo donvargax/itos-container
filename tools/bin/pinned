@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs a release tool at the version and SHA-256 pinned below. Adapted from
+# Runs a release tool at the version, GitHub asset ID and SHA-256 pinned below. Adapted from
 # github.com/donvargax/itos-template, keeping its goreleaser case, which the release
 # workflow runs; the lint and mutation-proof cases are the ones this branch's CI
 # needs. govulncheck is pinned as a Go tool in go.mod.
@@ -35,48 +35,66 @@ case "$tool" in
 golangci-lint)
 	version=2.14.0
 	case "$platform" in
-	linux-amd64) sum=ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab ;;
-	linux-arm64) sum=ee7ec5f3453d15ddf106fae5a4d6c71737712348a979d1fe9cd52ec7ea299bae ;;
-	darwin-amd64) sum=a5667c1c3536be1740133213e1e822bfb8f0d98ea12903174d6d5f635e4ed68d ;;
-	darwin-arm64) sum=5ef5f36a7147e91dc58ef9ef4d11bb7bad5ead0c76eb6c01327a73c641d1dcc3 ;;
-	windows-amd64) sum=b15f903d1649283a2ab6e8d2f0c317eaf1f9f6b3763950e7e8b7e72a43dd724f ;;
-	windows-arm64) sum=6399496aef883e5d2f77ea93e6e54fdd05bc2695f64071d8de0b0579cad92274 ;;
+	linux-amd64) sum=ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab asset_id=585813815 ;;
+	linux-arm64) sum=ee7ec5f3453d15ddf106fae5a4d6c71737712348a979d1fe9cd52ec7ea299bae asset_id=585813674 ;;
+	darwin-amd64) sum=a5667c1c3536be1740133213e1e822bfb8f0d98ea12903174d6d5f635e4ed68d asset_id=585813755 ;;
+	darwin-arm64) sum=5ef5f36a7147e91dc58ef9ef4d11bb7bad5ead0c76eb6c01327a73c641d1dcc3 asset_id=585813591 ;;
+	windows-amd64) sum=b15f903d1649283a2ab6e8d2f0c317eaf1f9f6b3763950e7e8b7e72a43dd724f asset_id=585813793 ;;
+	windows-arm64) sum=6399496aef883e5d2f77ea93e6e54fdd05bc2695f64071d8de0b0579cad92274 asset_id=585813645 ;;
 	esac
 	case "$platform" in
 	windows-*) asset=golangci-lint-$version-$platform.zip exe=.exe ;;
 	*) asset=golangci-lint-$version-$platform.tar.gz exe= ;;
 	esac
-	url=https://github.com/golangci/golangci-lint/releases/download/v$version/$asset
+	url=https://api.github.com/repos/golangci/golangci-lint/releases/assets/$asset_id
 	member=golangci-lint-$version-$platform/golangci-lint$exe
 	;;
 goreleaser)
 	# v2.18.2, 2026-09-17.
 	version=2.18.2
 	case "$platform" in
-	linux-amd64) asset=goreleaser_Linux_x86_64.tar.gz sum=0a96edc9d9bc594e4a41cc4d59467c182062910ab24d9d1f6dd7b667d32606d3 ;;
-	linux-arm64) asset=goreleaser_Linux_arm64.tar.gz sum=a71681b29194f08f057a68cfcaa5c6b15d907a83a2622c51900c4faff828f322 ;;
-	darwin-amd64) asset=goreleaser_Darwin_x86_64.tar.gz sum=5e97d6517f73a0b6f71675a2911b15d3136c03c8907650c2b18e114b1c0f5205 ;;
-	darwin-arm64) asset=goreleaser_Darwin_arm64.tar.gz sum=a811ff154fe136a0cfb55d00126c151fc39ec370a663d805a9ca5547445aa70c ;;
+	linux-amd64) asset=goreleaser_Linux_x86_64.tar.gz sum=0a96edc9d9bc594e4a41cc4d59467c182062910ab24d9d1f6dd7b667d32606d3 asset_id=569382334 ;;
+	linux-arm64) asset=goreleaser_Linux_arm64.tar.gz sum=a71681b29194f08f057a68cfcaa5c6b15d907a83a2622c51900c4faff828f322 asset_id=569382435 ;;
+	darwin-amd64) asset=goreleaser_Darwin_x86_64.tar.gz sum=5e97d6517f73a0b6f71675a2911b15d3136c03c8907650c2b18e114b1c0f5205 asset_id=569382333 ;;
+	darwin-arm64) asset=goreleaser_Darwin_arm64.tar.gz sum=a811ff154fe136a0cfb55d00126c151fc39ec370a663d805a9ca5547445aa70c asset_id=569382464 ;;
 	*) die "no pinned $tool for $platform" ;;
 	esac
-	url=https://github.com/goreleaser/goreleaser/releases/download/v$version/$asset
+	url=https://api.github.com/repos/goreleaser/goreleaser/releases/assets/$asset_id
 	member=goreleaser exe=
+	;;
+git-cliff)
+	# Adapted from donvargax/itos-template at
+	# 79301eba51b9768a27906c720e39c49b08491e67; originally harvested from itos.
+	# v2.14.2, 2026-09-18. Upstream verified the archives against .sha512
+	# files before computing these SHA-256 values. T-25 preserves them and
+	# uses the existing binary asset API route with the matched asset IDs.
+	version=2.14.2
+	case "$platform" in
+	linux-amd64) target=x86_64-unknown-linux-gnu sum=24f397c733add5390fdceee3a2088588ab0d5f944ce00d34cb7029b888cf2db4 asset_id=573483509 ;;
+	linux-arm64) target=aarch64-unknown-linux-gnu sum=69e208f6e4baef3a0f9b759d5f44223aa9336b86c691072a3d0c98d35a816e69 asset_id=573483780 ;;
+	darwin-amd64) target=x86_64-apple-darwin sum=4e647d2deb152aca1e987f225cf42b080b991dd98f3bce4027ef95446d982ac3 asset_id=573484837 ;;
+	darwin-arm64) target=aarch64-apple-darwin sum=a0be97e237d440d34c5e508ec21d070b2c85cbb8be48a46a56f9a4e8bd247f05 asset_id=573487203 ;;
+	*) die "no pinned $tool for $platform" ;;
+	esac
+	asset=git-cliff-$version-$target.tar.gz
+	url=https://api.github.com/repos/orhun/git-cliff/releases/assets/$asset_id
+	member=git-cliff-$version/git-cliff exe=
 	;;
 itos-cc)
 	version=0.47.2
 	case "$platform" in
-	linux-amd64) sum=5e05856d4ed7ec245c8c94de3fd90dbf8868ccfd5bba16f395efbfb2717f8a4c ;;
-	linux-arm64) sum=4077632ceb1838414c5f4de1b6d6f7807e59b3250b71346e454caf0ff4015bdd ;;
-	darwin-amd64) sum=456adc7c5b9808aff34c19ab9d513c3c2858b7a68385aa78fc679e31536f9dcb ;;
-	darwin-arm64) sum=bd7969e2c5e7121ccef24fb7fede28eb719e61e07eed79ce2df8ac63272d0fb4 ;;
-	windows-amd64) sum=2cb032aab757e387ada20d1eb900a2478a36d7661d0dca42071410a74b240bc1 ;;
+	linux-amd64) sum=5e05856d4ed7ec245c8c94de3fd90dbf8868ccfd5bba16f395efbfb2717f8a4c asset_id=700294951 ;;
+	linux-arm64) sum=4077632ceb1838414c5f4de1b6d6f7807e59b3250b71346e454caf0ff4015bdd asset_id=700294953 ;;
+	darwin-amd64) sum=456adc7c5b9808aff34c19ab9d513c3c2858b7a68385aa78fc679e31536f9dcb asset_id=700294952 ;;
+	darwin-arm64) sum=bd7969e2c5e7121ccef24fb7fede28eb719e61e07eed79ce2df8ac63272d0fb4 asset_id=700294955 ;;
+	windows-amd64) sum=2cb032aab757e387ada20d1eb900a2478a36d7661d0dca42071410a74b240bc1 asset_id=700294948 ;;
 	*) die "no pinned $tool for $platform" ;;
 	esac
 	case "$platform" in
 	windows-*) asset=itos-cc-$version-$platform.zip exe=.exe ;;
 	*) asset=itos-cc-$version-$platform.tar.gz exe= ;;
 	esac
-	url=https://github.com/donvargax/itos-cc/releases/download/v$version/$asset
+	url=https://api.github.com/repos/donvargax/itos-cc/releases/assets/$asset_id
 	member=itos-cc$exe
 	;;
 *) die "unknown pinned tool: $tool" ;;
@@ -89,7 +107,14 @@ if [ ! -x "$bin" ]; then
 	if command -v sha256sum >/dev/null 2>&1; then check="sha256sum -c -"; else check="shasum -a 256 -c -"; fi
 	tmp=$(mktemp -d)
 	trap 'rm -rf "$tmp"' EXIT
-	curl -fsSL -o "$tmp/$asset" "$url" || die "cannot fetch $url"
+	# Six attempts let a short release-service outage recover beyond the first
+	# seven seconds of exponential backoff. Start retries for at most 45 seconds;
+	# a final 60-second transfer fits inside the fixtures' two-minute call budget.
+	# Use the official asset API: the browser download route can return persistent
+	# gateway errors while this route still serves the identical pinned archive.
+	# A failed fetch still fails the gate. Only a checksum-verified archive is cached.
+	curl -fsSL --retry 5 --retry-max-time 45 --connect-timeout 10 --max-time 60 \
+		-H 'Accept: application/octet-stream' -o "$tmp/$asset" "$url" || die "cannot fetch $url"
 	(cd "$tmp" && echo "$sum  $asset" | $check >/dev/null) || die "$asset SHA-256 did not match the pinned release"
 	case "$asset" in
 	*.zip) (cd "$tmp" && unzip -q "$asset" "$member") || die "$asset holds no $member" ;;

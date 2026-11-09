@@ -3,6 +3,7 @@
 package architecture_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -61,6 +62,11 @@ func command(t *testing.T, dir, program string, args ...string) (string, int) {
 }
 func commandWithWorkspace(t *testing.T, dir string, workspace bool, program string, args ...string) (string, int) {
 	t.Helper()
+	out, diagnostics, code := commandStreams(t, dir, workspace, program, args...)
+	return out + diagnostics, code
+}
+func commandStreams(t *testing.T, dir string, workspace bool, program string, args ...string) (string, string, int) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 	c := exec.CommandContext(ctx, program, args...)
@@ -77,24 +83,29 @@ func commandWithWorkspace(t *testing.T, dir string, workspace bool, program stri
 	} else {
 		c.Env = append(c.Env, "GOWORK=off", "GOFLAGS=-mod=readonly")
 	}
-	b, err := c.CombinedOutput()
+	var out, diagnostics bytes.Buffer
+	c.Stdout, c.Stderr = &out, &diagnostics
+	err := c.Run()
 	if ctx.Err() != nil {
-		t.Fatalf("infrastructure: command timed out: %s %v\n%s", program, args, b)
+		t.Fatalf("infrastructure: command timed out: %s %v\n%s%s", program, args, &out, &diagnostics)
 	}
 	if err == nil {
-		return string(b), 0
+		return out.String(), diagnostics.String(), 0
 	}
 	var exit *exec.ExitError
 	if !errors.As(err, &exit) {
 		t.Fatalf("infrastructure: %v", err)
 	}
-	return string(b), exit.ExitCode()
+	return out.String(), diagnostics.String(), exit.ExitCode()
 }
 func must(t *testing.T, dir, program string, args ...string) string {
 	t.Helper()
-	out, code := command(t, dir, program, args...)
+	out, diagnostics, code := commandStreams(t, dir, false, program, args...)
 	if code != 0 {
-		t.Fatalf("infrastructure: %s %v exit %d\n%s", program, args, code, out)
+		t.Fatalf("infrastructure: %s %v exit %d\n%s%s", program, args, code, out, diagnostics)
+	}
+	if diagnostics != "" {
+		t.Logf("%s diagnostics:\n%s", program, diagnostics)
 	}
 	return out
 }

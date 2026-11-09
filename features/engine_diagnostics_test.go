@@ -28,6 +28,14 @@ func logFeatureSignals(hostOS string) {
 	if hostOS != "linux" {
 		return
 	}
+	// Linux signal numbers, used only after the OS check. Job-control names
+	// are absent from syscall on Windows, where this test file still compiles.
+	const (
+		sigCONT = syscall.Signal(18)
+		sigTSTP = syscall.Signal(20)
+		sigTTIN = syscall.Signal(21)
+		sigTTOU = syscall.Signal(22)
+	)
 	received := make(chan os.Signal, 64)
 	// This subscription lasts until TestMain exits, including m.Run's cleanup.
 	signal.Notify(received)
@@ -47,7 +55,7 @@ func logFeatureSignals(hostOS string) {
 				syscall.SIGSEGV, syscall.SIGTERM,
 				syscall.Signal(16), syscall.Signal(31): // Linux SIGSTKFLT and SIGSYS.
 				os.Exit(128 + int(number))
-			case syscall.Signal(20), syscall.Signal(21), syscall.Signal(22): // Linux SIGTSTP, SIGTTIN, SIGTTOU.
+			case sigTSTP, sigTTIN, sigTTOU:
 				// Retain job-control semantics after recording the notification.
 				signal.Reset(sig)
 				self, err := os.FindProcess(os.Getpid())
@@ -58,12 +66,32 @@ func logFeatureSignals(hostOS string) {
 					fmt.Fprintf(os.Stderr, "features TestMain could not restore signal: %v\n", err)
 					os.Exit(1)
 				}
-			case syscall.Signal(18): // Linux SIGCONT.
-				signal.Notify(received, syscall.Signal(20), syscall.Signal(21), syscall.Signal(22))
+			case sigCONT:
+				signal.Notify(received, sigTSTP, sigTTIN, sigTTOU)
 			}
 		}
 	}()
 }
+
+const engineInvocation = `go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
+ITOS_CC_TEST_COVERDIR=$(mktemp -d "$RUNNER_TEMP/T-36-engine-coverage.XXXXXX")
+export ITOS_CC_TEST_COVERDIR
+cd features
+set +e
+# Run 42233015284 traced no product/harness process-group signals; the step died
+# from outside that tree. Isolate tests from CI runner/Docker session signals.
+setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
+results=("${PIPESTATUS[@]}")
+set -e
+test_status=${results[0]}
+printf 'Feature test exit status: %s\n' "$test_status"
+if (( test_status > 128 && test_status <= 192 )); then
+  signal_number=$((test_status - 128))
+  printf 'Feature test signal: %s (exit 128+%s)\n' "$(kill -l "$signal_number")" "$signal_number"
+fi
+if (( test_status != 0 )); then exit "$test_status"; fi
+exit "${results[1]}"
+`
 
 func TestEngineDiagnostics(t *testing.T) {
 	testEngineDiagnostics(t, runtime.GOOS)
@@ -123,6 +151,7 @@ cp "$RUNNER_TEMP/program" "$4"
 set -euo pipefail
 [[ "$PWD" = "$RUNNER_TEMP/features" ]]
 [[ "$*" = '-test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run ^TestFeatures$' ]]
+[[ -d "$ITOS_CC_TEST_COVERDIR" && "$ITOS_CC_TEST_COVERDIR" = "$RUNNER_TEMP"/T-36-engine-coverage.* ]]
 if [[ $(ps -o sid= -p "$$") -ne $$ ]]; then
   printf 'feature test did not get its own session\n' >&2
   exit 32

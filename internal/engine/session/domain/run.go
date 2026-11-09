@@ -3,8 +3,9 @@ package domain
 import (
 	"context"
 	"errors"
-	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"time"
+
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
@@ -29,7 +30,12 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 		return s.registeredRun(ctx, frozen, argv, streams)
 	}
 	startup, cancel := context.WithTimeout(ctx, 120*time.Second)
+	state := &startupState{}
+	startup = context.WithValue(startup, startupKey{}, state)
 	result, connection, attachment := s.launch(startup, frozen, argv, streams)
+	if state.detectorExit != nil {
+		result.Exit, result.Exited = *state.detectorExit, true
+	}
 	cancel()
 	if connection != nil {
 		defer connection.Close()
@@ -38,7 +44,7 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 		defer attachment.Close()
 	}
 	result.Started = result.ID != ""
-	if result.Outcome == "" {
+	if result.Outcome == "" && !result.Exited {
 		// Waiting for the workload is not a startup operation or a lifetime limit.
 		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, connection, attachment, result.Reference, result.ID)
 	}
@@ -220,7 +226,7 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 		result.Outcome = port.IdentityFailed
 		return result, nil, nil
 	}
-	intent, failure := s.Store.New(ctx, frozen, token)
+	intent, failure := s.Store.Prepare(ctx, frozen, token)
 	if failure != "" {
 		result.Outcome = failure
 		return result, nil, nil
@@ -241,7 +247,16 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 	if result.Outcome != "" {
 		return result, connection, nil
 	}
+	if failure = prepareAnchor(ctx, intent, connection, s.Workspace, token); failure != "" {
+		result.Outcome = failure
+		return result, connection, nil
+	}
 	record := intent.Record()
+	record.Stage = "intent"
+	if failure = intent.Save(record); failure != "" {
+		result.Outcome = failure
+		return result, connection, nil
+	}
 	id, failure := connection.CreateRun(ctx, record, argv)
 	if failure != "" {
 		result.Outcome = failure
@@ -283,9 +298,14 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 		result.Outcome = failure
 		return result, connection, attachment
 	}
+	if failure = verifyAnchor(ctx, intent.Record(), connection); failure != "" {
+		result.Outcome = failure
+		return result, connection, attachment
+	}
 	result.Outcome = connection.Start(ctx, id)
 	if result.Outcome == "" {
 		result.ID = id
+		_, result.Outcome = detectAnchor(ctx, intent, connection, s.Workspace)
 	}
 	return result, connection, attachment
 }
@@ -318,6 +338,18 @@ func (s Runner) Cleanup(ctx context.Context, reference string) port.Result {
 		return result
 	}
 	defer connection.Close()
+	if intent.Record().Schema == 2 && intent.Record().Stage == "reserved" {
+		result.Outcome = releaseAnchor(ctx, intent, connection)
+		if result.Outcome == "" {
+			r := intent.Record()
+			r.Stage = "cancelled"
+			result.Outcome = intent.Save(r)
+			if result.Outcome == "" {
+				result.Outcome = port.Complete
+			}
+		}
+		return result
+	}
 	result.Outcome = cleanupRun(ctx, intent, connection)
 	return result
 }
@@ -345,7 +377,7 @@ func cleanupRun(ctx context.Context, intent port.Intent, connection port.RunConn
 	}
 	observed, status := connection.Inspect(ctx, id)
 	if status == port.NotFound && record.ContainerID != "" {
-		return complete(intent, record, id)
+		return completeRun(ctx, intent, connection, record, id)
 	}
 	if status == port.Changed {
 		return port.Refused
@@ -374,7 +406,7 @@ func cleanupRun(ctx context.Context, intent port.Intent, connection port.RunConn
 	if status != port.NotFound {
 		return port.Incomplete
 	}
-	return complete(intent, record, id)
+	return completeRun(ctx, intent, connection, record, id)
 }
 
 func owns(record port.Record, observed port.Observation) bool {

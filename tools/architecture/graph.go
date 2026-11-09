@@ -57,7 +57,7 @@ func Inspect(ctx context.Context, dir string, checks Checks) ([]string, error) {
 				if checks.Outside && isSlice(to) && !isSlice(from) && from.kind != "cmd" {
 					violations = append(violations, "outside: "+arrow+"; only cmd may import a slice from outside slices")
 				}
-				if checks.Toplevel && under(target, "internal") && from.kind == "outside" {
+				if checks.Toplevel && under(target, "internal") && from.kind == "outside" && !releaseHelperEdge(path, target, test) {
 					violations = append(violations, "toplevel: "+arrow+"; outside packages cannot import internal")
 				}
 				if checks.Siblings && !allowed(from, to, target, test) {
@@ -101,6 +101,15 @@ func Inspect(ctx context.Context, dir string, checks Checks) ([]string, error) {
 		}
 	}
 	return violations, nil
+}
+
+// releaseHelperEdge is the exact q-44 exception for T-25's two build tools.
+// No role or prefix is widened; test support remains unavailable to production.
+func releaseHelperEdge(from, target string, test bool) bool {
+	if from != "tools/bin/release-version" && from != "tools/bin/release-notes" {
+		return false
+	}
+	return target == "internal/release" || (test && target == "internal/release/releasetest")
 }
 
 func allowed(from, to role, target string, test bool) bool {

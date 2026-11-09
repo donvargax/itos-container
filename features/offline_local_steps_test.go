@@ -12,6 +12,7 @@ import (
 
 func (w *world) offlineLocalSteps(sc *godog.ScenarioContext) {
 	w.offlineLaunchSteps(sc)
+	w.anchorLocalSteps(sc)
 	sc.Step(`^an offline run contract fixture whose pre-start inspection has "([^"]*)"$`, func(defect string) error { return w.offlineLocalFixture(defect, false) })
 	sc.Step(`^an offline run contract fixture with persistent owned-record fsync failure$`, func() error { return w.offlineLocalFixture("", true) })
 	sc.Step(`^the offline contract attempts launch through both fake and disk SDK adapters$`, func() error { return w.offlineLocalRun(false) })
@@ -106,7 +107,7 @@ func (w *world) offlineLocalFixture(defect string, fault bool) error {
 		if err := os.Mkdir(dir, 0700); err != nil {
 			return err
 		}
-		control := &world{root: w.root, bin: w.bin, dir: dir}
+		control := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: dir}
 		s.offlineControl = control
 		if err := control.sessionFixture(false, "0022"); err != nil {
 			return err
@@ -198,7 +199,7 @@ func (w *world) offlineNoLaunch() error {
 		}
 	}
 	for _, q := range s.api.requests {
-		if q.Method == "POST" && q.Path != "/containers/create" {
+		if q.Method == "POST" && q.Path != "/containers/create" && q.Path != "/volumes/create" {
 			return fmt.Errorf("refused worker attempted %s", q.Path)
 		}
 	}
@@ -225,6 +226,12 @@ func (w *world) offlineLocalCleanup() error {
 			if removed && q.Status == 404 {
 				absent = true
 			}
+		}
+		if q.Method == "DELETE" && strings.HasPrefix(q.Path, "/volumes/") {
+			if q.Path != "/volumes/itos-container-anchor-"+s.token || !absent || q.Status != 204 || (q.Query != "" && q.Query != "force=false") {
+				return fmt.Errorf("anchor removed without confirmed worker absence")
+			}
+			continue
 		}
 		if q.Method == "DELETE" {
 			if removed || !inspected || q.Path != "/containers/"+id {

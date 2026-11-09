@@ -34,7 +34,7 @@ func (w *world) foregroundInterruptSteps(sc *godog.ScenarioContext) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		args := []string{"-test.run=^TestForegroundInterruptContract$", "-test.count=1"}
-		if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+		if cover := w.coverageDir(); cover != "" {
 			args = append(args, "-test.gocoverdir="+cover)
 		}
 		cmd := exec.CommandContext(ctx, bin, args...)
@@ -58,7 +58,9 @@ func (w *world) foregroundInterruptSteps(sc *godog.ScenarioContext) {
 	})
 	var aborted, signaled bool
 	sc.Step(`^the run preflight is held at fresh image inspection$`, func() {
+		w.doctor.engine.mu.Lock()
 		w.doctor.engine.paused = true
+		w.doctor.engine.mu.Unlock()
 	})
 	sc.Step(`^the run receives "([^"]*)" during preflight$`, func(name string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

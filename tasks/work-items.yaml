@@ -168,6 +168,10 @@ items:
       unrestricted-push and automatic three-platform claims with the implemented CI policy. T-9's
       completed refresh predates this change. Defer unless it blocks the charter's configuration,
       doctor and approval step.
+
+      Already covers hook registration and verification instructions. Include the reported unset
+      core.hooksPath and missing pre-commit/commit-msg hooks in that verification, confirming how
+      subsequent commits enforce configured gates.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -425,8 +429,8 @@ items:
     title: Release a version on each feat or fix once run works
     phase: 1
     owner: donvargax
-    status: doing
-    depends_on: [slice-14, slice-15]
+    status: done
+    depends_on: [slice-14, slice-15, slice-17, slice-19]
     kind: task
   - id: slice-13
     title: Launch and cleanup contract
@@ -486,18 +490,9 @@ items:
     title: Host Unix sockets under the checkout are not reachable from the worker
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-host-sockets-in-checkout.
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. The whole checkout is
-      bind-mounted (docker/run.go:64) and network none does not isolate filesystem Unix sockets, so
-      a tmux server, SSH control socket or other host service with its socket under the checkout is
-      reachable from /workspace as the host UID: host command execution or network access without
-      another mount. A startup scan is not enough, as host processes can create sockets later; deny
-      connecting to host sockets, or expose a materialised checkout with no host IPC objects.
   - id: slice-20
     title: Hard links to files outside the checkout are refused
     phase: 1
@@ -551,17 +546,9 @@ items:
     title: Run binds its mount to the validated checkout inode
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-launch-with-inode-bound-checkout.
-      Close the gap between final validation and Docker resolving the mount pathname. Provide a
-      protected inode-bound source through engine ports and adapters, record its ownership before
-      use, and cover normal teardown and failure retention. Preserve checkout edits and the
-      sole-host-mount contract. Require CI red/green scenarios for substitution after the final
-      identity check; update affected architecture sections and record the decision. Broken down
-      from null.
   - id: slice-18
     title: Status and stop recover owned checkout mount anchors
     phase: 1
@@ -675,12 +662,33 @@ items:
   - id: T-33
     title: main's engine scenarios finish well inside the job's 5-minute limit
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-32
     title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-35
+    title: The feature suite stays within a few GB, with or without the race detector
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-34
+    title: Engine fixture preparation passes again on today's CI runners
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-36
+    title: The feature harness writes per-scenario coverage when itos-cc asks, so the code proof's coverage pass takes minutes
     phase: 1
     owner: donvargax
     status: done

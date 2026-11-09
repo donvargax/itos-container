@@ -24,6 +24,7 @@ type registryFixture struct {
 }
 
 func newRegistryFixture(t *testing.T) registryFixture {
+	t.Helper()
 	store, binding, storage, _ := intentReadFixture(t)
 	record := sp.PublicRecord{Schema: 1, ID: strings.Repeat("b", 64), Project: binding.Frozen.Project,
 		Intent: sp.Reference(binding.Frozen.Project, strings.Repeat("c", 64)), State: "preparing"}
@@ -49,6 +50,7 @@ func TestRegistryContractWithStorageFakes(t *testing.T) {
 		progress := initial
 		exit := 7
 		progress.State, progress.WorkloadExit = "failed", &exit
+		progress.MountDetector = sp.DetectorExited
 		m.codec.Records = map[string]sp.PublicRecord{"initial": initial, "progress": progress}
 		return m.registry, m.registry.Store, ap.Durable{Frozen: m.binding.Frozen}
 	})

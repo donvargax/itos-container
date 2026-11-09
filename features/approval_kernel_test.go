@@ -33,7 +33,7 @@ func (w *world) approvalLegacyKernel(umask string) (result error) {
 	w.deadline = 8 * time.Second
 	w.approval.mode = "--json"
 	env := w.env()
-	coverdir := os.Getenv("GOCOVERDIR")
+	coverdir := w.coverageDir()
 	var collected string
 	if coverdir != "" {
 		// Keep this child's coverage separate: umask 0777 also applies to Go's

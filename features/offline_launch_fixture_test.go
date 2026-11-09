@@ -18,6 +18,8 @@ type offlineTrace struct {
 	Observation            sessionMemoryObservation
 	Status, Exit           int
 	Writes                 []sessionEvent
+	Anchor                 map[string]any
+	Source                 map[string]any
 }
 
 type offlineLaunchWorld struct {
@@ -244,7 +246,7 @@ func (w *world) offlineFrozenPair() error {
 	}
 	api := s.api
 	s.api = &sessionAPI{requests: api.requests, created: api.created, observed: api.observed, local: api.local, absent: api.absent}
-	l.first = &world{root: w.root, bin: w.bin, dir: w.dir, doctor: w.doctor, approval: w.approval, session: s}
+	l.first = &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: w.dir, doctor: w.doctor, approval: w.approval, session: s}
 	// A fresh token and generation are independently supplied fixture data.
 	w.session = &sessionWorld{api: api, backend: s.backend, umask: s.umask, offline: true, journal: filepath.Join(w.dir, "slice-13-second-io.jsonl"), offlineControl: s.offlineControl, launch: l, token: approvalHash(map[string]any{"next": s.token})}
 	w.session.reference = "intents/" + w.approval.project + "/" + w.session.token + ".json"

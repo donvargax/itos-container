@@ -61,7 +61,7 @@ func (w *world) currentAdmissionPaths(tree map[string]runEntry) (map[string]bool
 			return nil, err
 		}
 		intent, ok := record["intent"].(string)
-		if !ok || len(record) != 7 || record["schema"] != float64(1) || record["id"] != id || record["project"] != w.approval.project {
+		if !ok || !publicRecordShape(record) || record["schema"] != float64(1) || record["id"] != id || record["project"] != w.approval.project {
 			return nil, fmt.Errorf("admission has no original public authority")
 		}
 		var completion *bool

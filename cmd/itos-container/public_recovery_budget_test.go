@@ -217,7 +217,7 @@ func publicRecoveryDelayedStopOrder(t *testing.T, name, order string) {
 			}()
 			synctest.Wait()
 		}
-		runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
+		runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: sf.MountWorkspace(m.b), Entropy: &publicMemoryEntropy{}}
 		approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: m.c, Record: ap.Record{Candidate: m.c, Generation: "1"}, Status: "matching"}}
 		var out, errout bytes.Buffer
 		start := time.Now()
