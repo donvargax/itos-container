@@ -62,6 +62,58 @@ func lifecycleSignalRequest(e offlineRequest) bool {
 	return e.Method == "POST" && (strings.HasSuffix(e.Path, "/kill") || strings.HasSuffix(e.Path, "/stop"))
 }
 
+// One signal request of a row's journal as the row's timing record carries it. The
+// offsets are in nanoseconds after the harness signalled the controller, the
+// cancellation the limits of LIFECYCLE-09 count from. A reader sets SIGKILL's
+// arrival against the grace window, the first signal's reply against the
+// acknowledgement hold, and the first signal's call, which starts after
+// PreviousNS (the daemon check in recoverySignal's order) and ends at its reply
+// or, when cut, just before NextNS, against the call budget, as heldAcknowledgement
+// reads a cut. The reply is absent for a request that was never answered, and the
+// neighbours' arrival at either end of the journal.
+type signalOffset struct {
+	Signal     string `json:"signal"`
+	AtNS       int64  `json:"at_ns"`
+	RepliedNS  *int64 `json:"replied_ns,omitempty"`
+	Status     int    `json:"status"`
+	Cancelled  bool   `json:"cancelled"`
+	PreviousNS *int64 `json:"previous_ns,omitempty"`
+	NextNS     *int64 `json:"next_ns,omitempty"`
+}
+
+// The offsets of the signal requests lifecycleSignalRequest selects from the
+// journal lifecycleSignals judges, in journal order: nil when the row never
+// signalled the controller or collected no journal, and an empty list when the
+// journal holds no signal request. They are taken whatever the row's outcome.
+func (l *lifecycleNative) signalOffsets() *[]signalOffset {
+	if l == nil || l.signalled.IsZero() || len(l.journalAtReturn) == 0 {
+		return nil
+	}
+	after := func(at time.Time) *int64 {
+		offset := int64(at.Sub(l.signalled))
+		return &offset
+	}
+	offsets := []signalOffset{}
+	for i, e := range l.journalAtReturn {
+		if !lifecycleSignalRequest(e) {
+			continue
+		}
+		query, _ := url.ParseQuery(e.Query)
+		offset := signalOffset{Signal: query.Get("signal"), AtNS: *after(e.At), Status: e.Status, Cancelled: e.Cancelled}
+		if !e.Replied.IsZero() {
+			offset.RepliedNS = after(e.Replied)
+		}
+		if i > 0 {
+			offset.PreviousNS = after(l.journalAtReturn[i-1].At)
+		}
+		if i+1 < len(l.journalAtReturn) {
+			offset.NextNS = after(l.journalAtReturn[i+1].At)
+		}
+		offsets = append(offsets, offset)
+	}
+	return &offsets
+}
+
 func lifecycleWaitRequest(e offlineRequest) bool {
 	return e.Method == "POST" && strings.HasSuffix(e.Path, "/wait")
 }
