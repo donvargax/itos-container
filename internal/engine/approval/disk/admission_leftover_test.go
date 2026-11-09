@@ -82,18 +82,34 @@ func TestReadAcceptsRecordWhoseTemporaryOutlivedItsPublisher(t *testing.T) {
 
 // Only that exact leftover is tolerated. Every other second link keeps the
 // record unsafe: a name the publisher never makes, a temporary that is another
-// file, a further link beside the temporary, and a temporary that cannot be listed.
+// file, a further link beside the temporary, and a directory that cannot be listed.
 func TestReadStillRefusesEveryOtherSecondLink(t *testing.T) {
-	for _, kind := range []string{"other name", "dead publisher's name", "temporary of another file", "third link", "directory cannot be listed"} {
+	nonce := strings.Repeat("0", 32)
+	names := map[string]string{
+		"other name":             "linked",
+		"dead publisher's name":  ".intent-dead.tmp",
+		"nonce that is not hex":  ".intent-" + strings.Repeat("g", 32) + ".tmp",
+		"nonce that is not low":  ".intent-" + strings.Repeat("A", 32) + ".tmp",
+		"suffix that is not tmp": ".intent-" + nonce + ".tmq",
+		"prefix that is not its": ".intens-" + nonce + ".tmp",
+		"nonce that is longer":   ".intent-" + nonce + "0.tmp",
+	}
+	for kind, link := range names {
+		t.Run(kind, func(t *testing.T) {
+			store, c, _ := diskFixture(t)
+			d, path := publishedClaim(t, store, c)
+			mustLink(t, path, filepath.Join(d.pin.path, link))
+			if data, failure := d.Read(claimName()); failure != "state.unsafe" || data != nil {
+				t.Fatalf("read = %q, %q; want state.unsafe", data, failure)
+			}
+		})
+	}
+	for _, kind := range []string{"temporary of another file", "third link", "directory cannot be listed"} {
 		t.Run(kind, func(t *testing.T) {
 			store, c, _ := diskFixture(t)
 			d, path := publishedClaim(t, store, c)
 			dir := d.pin.path
 			switch kind {
-			case "other name":
-				mustLink(t, path, filepath.Join(dir, "linked"))
-			case "dead publisher's name":
-				mustLink(t, path, filepath.Join(dir, ".intent-dead.tmp"))
 			case "temporary of another file":
 				mustLink(t, path, filepath.Join(dir, "linked"))
 				if err := os.WriteFile(filepath.Join(dir, leftoverTemporary), []byte("reservation"), 0600); err != nil {
@@ -160,6 +176,30 @@ func TestControlBeginSurvivesTheTemporaryOfAKilledPublisher(t *testing.T) {
 			}
 			if tx == nil || failure != "" {
 				t.Fatalf("Begin = %v, %q; want a transaction", tx, failure)
+			}
+		})
+	}
+}
+
+// A session that recovers a record its publisher left in that state syncs it
+// again without changing it. That path reads the record's safety on its own, so
+// it must agree with Read: the leftover temporary is tolerated, any other link
+// is not.
+func TestSyncAgreesWithReadAboutASecondLink(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		link string
+		want port.Failure
+	}{
+		{"publisher's temporary", leftoverTemporary, ""},
+		{"other name", "linked", "state.unsafe"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, c, _ := diskFixture(t)
+			d, path := publishedClaim(t, store, c)
+			mustLink(t, path, filepath.Join(d.pin.path, tc.link))
+			if failure := d.Sync(claimName(), []byte("reservation")); failure != tc.want {
+				t.Fatalf("sync = %q, want %q", failure, tc.want)
 			}
 		})
 	}
