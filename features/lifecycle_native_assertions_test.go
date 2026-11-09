@@ -62,6 +62,10 @@ func lifecycleSignalRequest(e offlineRequest) bool {
 	return e.Method == "POST" && (strings.HasSuffix(e.Path, "/kill") || strings.HasSuffix(e.Path, "/stop"))
 }
 
+func lifecycleWaitRequest(e offlineRequest) bool {
+	return e.Method == "POST" && strings.HasSuffix(e.Path, "/wait")
+}
+
 func lifecycleSignalRequests(entries []offlineRequest) []offlineRequest {
 	var signals []offlineRequest
 	for _, e := range entries {
@@ -126,11 +130,19 @@ func (w *world) lifecycleSignals(escalate bool) error {
 // bound spent before the hold begins, and a product that gave up after 50 ms
 // would pass. Nor from the kill's own arrival, which follows the start of the
 // call: an honest cut can leave a next request less than a call limit after it. The
-// product's next request follows the cut: its own wait, made the
-// moment the signal call returns. The teardown is sequential, so no other request
-// of the product lands between them, and the independent observer reads the
-// daemon without the recorder. A next request before that time means the product
-// stopped waiting early.
+// product's next request follows the cut: the moment the signal call returns it
+// goes on to inspect (terminateSession, then recoverySignal). The teardown is
+// sequential, so no other request of the product lands between them, and the
+// independent observer reads the daemon without the recorder. A next request
+// before that time means the product stopped waiting early.
+//
+// That next request is never a wait. The grace deadline is the teardown's start
+// plus the grace and the call limit equals the grace, so the signal call, which
+// starts after the teardown does, is cut after the deadline, and the product's
+// wait on the expired grace returns without a request. A wait after a cut can
+// only come from a grace that was restarted at the cut, or from a product that gave
+// up before the deadline, and is refused whatever its time. A product that sleeps
+// instead of waiting is not caught.
 func (l *lifecycleNative) heldAcknowledgement(first offlineRequest) bool {
 	if !first.Replied.IsZero() {
 		return first.Replied.Sub(first.At) >= l.delay
@@ -145,11 +157,15 @@ func (l *lifecycleNative) heldAcknowledgement(first offlineRequest) bool {
 		if i+1 >= len(l.journalAtReturn) {
 			return false
 		}
+		next := l.journalAtReturn[i+1]
+		if lifecycleWaitRequest(next) {
+			return false
+		}
 		start := l.signalled
 		if i > 0 && l.journalAtReturn[i-1].At.After(start) {
 			start = l.journalAtReturn[i-1].At
 		}
-		return l.journalAtReturn[i+1].At.Sub(start) >= engineCallBudget
+		return next.At.Sub(start) >= engineCallBudget
 	}
 	return false
 }
