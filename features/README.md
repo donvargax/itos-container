@@ -734,7 +734,10 @@ first signal's arrival). A delayed acknowledgement that the product's call limit
 (the engine's 204, a cancelled request, no reply) counts as a hold that ran only if
 the cut could be the call limit: the journal records no time for the cut, but the
 product's next request follows it at once (its own wait) and must come a call limit or
-more after cancellation. The cut keeps both limits, though its timer starts before
+more after the request before the signal (the daemon check), or after cancellation if
+that is later, since the call limit runs from the signal call's start and a first
+signal that arrives late has spent most of it before the hold begins. The cut keeps
+both limits, though its timer starts before
 the arrival plus the delay, so the delayed limit refuses it only when the request
 reached the recorder within 400 ms plus the later work.
 `TestLifecycleSignalWindow` pins these limits on journals it writes, for the four rows
