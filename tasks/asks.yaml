@@ -194,3 +194,4 @@ questions:
   - id: q-48
     item: "T-33"
     question: "T-33: may its live-scenario timing changes go in a fix commit, as the gate requires, though the task is a test task?"
+    answer: "Yes: a fix commit with Task: T-33 and the scenario footers itos asks for; pop the stashed implementation and push. See T-33-steer.md."
