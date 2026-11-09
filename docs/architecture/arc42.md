@@ -951,13 +951,18 @@ with no red input. The failed dispatch is never a merge/closure prerequisite or 
 
 T-16 implemented the engine-test tier. [features/README.md](../../features/README.md)
 is its operational authority: ordinary, smoke, coverage and mutation runs exclude
-`@engine`. The dedicated `Engine scenarios (Linux amd64)` CI job enables
+`@engine`. The dedicated engine tier runs in three engine shards
+([T-45's decision](../decisions/0024-engine-tier-shards.md)): a matrix of the
+`engine-shard` job, each shard a native runner and daemon of whole feature files
+(offline, lifecycle and other) with a 180-second step budget, and no feature split. The
+`Engine scenarios (Linux amd64)` job only aggregates them: it needs the shards alone and
+fails unless every shard succeeded, and `ci` requires its success. Each shard enables
 `ITOS_CONTAINER_ENGINE_TESTS=1` only under the guarded Linux amd64 GitHub Actions
-context; ordinary runs never enable it, and `ci` requires that job's success. Its
-read-only preflight acquires no images and starts no resources. No live engine cases
-means infrastructure readiness, not isolation proof or fixture-image availability.
-T-20 implements fixture preparation in that guarded CI job, including output wiring
-and cleanup; availability depends on successful preparation for that run. `@wip` alone
+context and takes its files from `ITOS_CONTAINER_ENGINE_FEATURES`; ordinary runs never
+enable either. Its read-only preflight acquires no images and starts no resources. No live
+engine cases means infrastructure readiness, not isolation proof or fixture-image
+availability. T-20 implements fixture preparation in each guarded shard, including output
+wiring and cleanup; availability depends on successful preparation for that run. `@wip` alone
 is not an engine-access boundary. This update
 adds no cases or runtime evidence and changes no gates. Agents commit and stop; only the
 coordinating loop pushes, verifies the actual pushed head and its required proof, and
