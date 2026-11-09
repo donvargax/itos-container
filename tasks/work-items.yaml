@@ -699,6 +699,6 @@ items:
     title: Release notes stay within GitHub's body limit, the first release included
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
