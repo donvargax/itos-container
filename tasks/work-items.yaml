@@ -967,8 +967,8 @@ items:
   - id: T-39
     title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-38]
     kind: task
   - id: T-40
@@ -1614,3 +1614,13 @@ items:
       TestEngineFixtureWorkflow and TestEngineWorkflow pin the engine steps, so the change needs a
       ledger task whose check extends TestEngineDiagnostics or TestEngineScenarioTiming. Land it
       after T-43 and T-44, which edit the same workflow region, and rebase on them.
+
+      That item already adds a step that runs on every engine job, green included, and publishes a
+      ::notice line with the runner's name, image version, OS, architecture and CPU count, so a
+      runner-image change can be told from a regression. Engine jobs are now the three engine-shard
+      legs, and that item should cover each leg. Two notes for it. First, add the Docker server
+      version to the same line. Each leg's preflight prints it only in the token-gated job log.
+      Second, the preflight is an exact allowlist in validEnginePreflight, so it should leave the
+      preflight alone and read the image and Docker version in the new step. Reading /etc/os-release
+      in the preflight would need a reviewed allowlist change, and T-44's diagnostics step prints
+      only on failure, so it cannot carry this.
