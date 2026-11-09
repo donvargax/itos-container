@@ -1262,3 +1262,25 @@ items:
       lost (compare p2-control-state-upgrade-contract). Depends on slice-21, and should be sequenced
       with slice-22 because both change run admission. Real mount-isolation evidence runs only in
       CI.
+  - id: p2-grace-origin-fake-clock-row
+    title: A fake-clock lifecycle row pins the SIGKILL grace origin when work precedes the first signal
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone one's cancellation rules (slice-12, done) say SIGKILL follows one fixed grace
+      counted from the first signal, never restarted. T-42 widens the native SIGKILL window to an
+      absolute tolerance so the engine tier stops flaking, and that lets a timer started a little
+      late, at teardown or at signal delivery, pass the native rows. Nothing else catches it.
+      TestLifecycleContract's grace case, TestLifecycleLocalContract's lost-signal row and
+      TestEngineFixtureBudgetContract, all in cmd/itos-container, spend no time before the first
+      signal, so the timer origin never differs between a correct and a late start. Add a fake-clock
+      row where work takes time before the first signal, and assert the exact kill instant. A fake
+      clock has no jitter, so the assertion can be exact. The coordinator's throwaway probe found
+      the right-origin case not held at 1.00 of grace and held at 1.10 and 1.30. The code lives
+      under cmd/, a proof.code path, so it gets the changed-code mutation and coverage proof and is
+      separate from T-42's features-only range. It tests existing behaviour, so it is a ledger task
+      with its checks, not a new scenario. Land it after T-42. It blocks no step of milestone two,
+      so p2.
