@@ -3206,13 +3206,261 @@
   type: ci
   title: Release notes stay within GitHub's body limit, the first release included
   why: >
-    The first release run (42554343999, 2026-11-09) built and uploaded v0.1.0 as a draft, then
-    failed to publish: gh release edit got HTTP 422, 'body is too long (maximum is 125000
-    characters)', because tools/bin/release-notes with no previous tag (LAST empty) writes every
-    commit body since the root. Bound the notes: for a first release, the feat and fix subjects
-    grouped by kind, the known limits from docs/security.md, and a link to the history instead of
-    every body; for later releases the same bodies as now, cut to a total below the limit with a
-    link to the rest. Test it against this repository's real history so the first-release case is
-    covered.
+    The coordinator records that the first release run (42554343999, 2026-11-09) built and
+    uploaded v0.1.0 as a draft, then failed to publish with HTTP 422, 'body is too long
+    (maximum is 125000 characters)'. The settled remedy is concise first-release notes:
+    feat and fix subjects grouped by kind, known limits from docs/security.md, and a link
+    to the complete history instead of every body. Later releases keep the present bodies
+    while they fit, shortening oversized notes with a link to the rest. Test the actual
+    repository history, including the first release. This repairs release infrastructure
+    blocking the charter's milestone transition; it adds no container behaviour or scenarios.
+    The drafter changes only this entry. The implementer changes the generator and tests.
+
+    Inspection refines the diagnosis without changing that remedy. cliff.toml already
+    renders subjects and commit links, not ordinary commit bodies. main.go separately quotes
+    full BREAKING-CHANGE/BREAKING CHANGE and non-none Upgrading footers. With no earlier tag,
+    the large list includes every commit type since the root. Preserve these distinctions;
+    do not introduce ordinary commit-body rendering or describe the failure as a footer-only
+    problem. T-37 supersedes T-25's requirement to list every commit for a first release and
+    its unconditional completeness requirement when a release would exceed the body limit.
+    T-25's version arithmetic, tag selection and publication prerequisites stay intact.
+
+    Successful stdout must be nonempty valid UTF-8 and strictly less than 125000 bytes,
+    including title, headings, links, omission notices, migration guidance, verification
+    instructions and the final newline. A byte budget is deliberately conservative for the
+    reported character limit and matches the original wc -c check; 124999 bytes is the
+    maximum, not 125000. Apply it to the complete rendered document for both release kinds,
+    not just git-cliff's contribution. Never pass an oversized body to the existing publisher.
+
+    A first release means no previous stable tag after excluding v<version>, as lastRelease
+    already does. Keep the title, bootstrap-version explanation and complete range counts.
+    Under What changed, show only Features and Fixes, in that order, using each matching
+    commit's subject, scope and full-SHA commit link, once, in the existing oldest-first
+    order within its kind. Omit an empty group; a breaking-only history must still generate
+    valid first-release notes. Ordinary bodies and other kinds' subject lists belong in
+    https://github.com/donvargax/itos-container/commits/v<version>, linked in every first
+    release. Do not invent a comparison with a nonexistent previous version. Keep the
+    dedicated Upgrading section's full breaking and non-none upgrading instructions while
+    they fit, including breaking changes of types other than feat/fix and wrapped footers.
+    This keeps T-25's migration information without reproducing all historical messages.
+
+    Before Upgrading, add Known limits to every first release. Summarize the two limitations
+    already documented in docs/security.md, without changing that security contract or
+    implying new isolation evidence. Include these plain sentences, also checked below:
+    'Host sockets created or swapped into the checkout during a run remain reachable.'
+    'Network mode `none` and a private IPC namespace do not prevent this access.'
+    'The startup scan does not provide continuous enforcement.'
+    'Approval records what was approved, not who.'
+    'Neither route proves human presence or authenticates a separate approver.'
+    Link https://github.com/donvargax/itos-container/blob/v<version>/docs/security.md there.
+    These are a short maintained summary of that document, not a new Markdown parser or a
+    runtime dependency on reading security.md. Keep the section even when notes are shortened.
+
+    A later release whose complete output is below the budget must retain the current
+    rendered content, order, complete footer bodies, dependency/toolchain-only explanation,
+    comparison link and verification instructions unchanged. For either release kind,
+    shorten only when the full candidate reaches the limit. Reserve the title, range and
+    version explanation, full-history/comparison link, first-release limits, version check,
+    attestation and checksum instructions, and an explicit omission notice. Omit first any
+    entry that cannot fit even alone beside that framing; do not sacrifice smaller entries
+    to retain it. Then remove whole change entries from the end of their existing order
+    before removing migration entries; drop headings that become empty. Retain remaining
+    entries verbatim. If migration text alone is too large, remove whole footer entries
+    from the end and state explicitly in
+    Upgrading that migration instructions were omitted and the linked history must be read.
+    A single oversized subject or footer is omitted whole, never sliced inside UTF-8,
+    a Markdown link or a quoted instruction. Dependency-only patches may similarly omit
+    whole per-module/toolchain detail entries from the end, before migration entries, while
+    retaining why a patch was cut and the history link. Every size-driven omission needs a
+    notice containing 'omitted' and the complete-range link, counted within the budget.
+    The existing later-release comparison URL is the link to the rest. Do not claim all
+    instructions are present or none are needed
+    after omitting any. If the mandatory framing alone cannot fit, fail with exit 2, empty
+    stdout and a useful stderr message rather than emit an invalid release body. Repeated
+    generation from the same inputs must be byte-identical. Tool/read failures retain the
+    existing exit-2, empty-stdout contract; a failed generator must never pass a size check
+    merely because it wrote zero bytes.
+
+    Keep the existing pinned git-cliff 2.14.2 and itos footer reader, using Go's standard
+    library for selection, byte accounting and assembly. No new dependency or network
+    service is needed. These remain release build tools under tools/bin/release-notes,
+    covered by T-25's narrow architecture exception, not a new command slice or engine.
+    Implementation paths are that tool's Go files/tests and cliff.toml, plus release-note
+    commentary in .github/workflows/release.yml and the binary-release dry-run guidance in
+    docs/upgrading.md. Update the latter's old every-commit assertion to the first-release
+    summary and bounded-notes contract. Preserve upstream attribution and licenses. Leave
+    release-version, internal/release, tools/bin/pinned, dependency pins, runtime packages,
+    workflow commands, permissions, gate wiring, draft/attest/publish order and source tags
+    unchanged. No separate notes upload, network publication or new CI job is needed.
+
+    The first check builds the current generator and executes it against the complete real
+    history ending at 056d0c721f462bce3bf33cdda9ec71ca038f6bef, in a disposable local clone
+    with no imported tags. This fixed historical input reproduces the oversized bootstrap
+    even after later releases add tags; it is a fixture revision, never a generator constant.
+    Use the current pinned launcher and cliff configuration with the existing verified cache.
+    Check the byte cap, nonempty UTF-8, exact feat/fix commit-link sets, groups, known limits,
+    history link and retained verification sections. Repeat after creating only a fixture
+    v0.1.0 tag at its HEAD: the workflow tags before generating notes, so output must match.
+    Then tag the historical root v0.0.0 only in that clone and generate v0.2.0 from it. This
+    deliberately oversized later range must also fit, link the full comparison and disclose
+    omissions. Repeat it to prove deterministic output. Check source and fixture HEAD, refs
+    and files are unchanged by the generator; fixture setup alone creates disposable tags.
+    Nothing approves state, contacts an engine, creates a source tag or publishes a release.
+
+    Add TestBoundedReleaseNotes under the release-notes tool. Use small deterministic
+    fixtures against the real renderer/entry point to cover both release kinds, an unchanged
+    under-budget later document, unshortened candidates of 124998/124999/125000/125001 bytes,
+    multibyte subjects and footers, many entries and one individually oversized entry.
+    Exercise overflow from What changed, breaking/Upgrading text and dependency-only detail;
+    check notices, links, retained migration text and mandatory framing, including refusal
+    when that framing cannot fit. Cover no features, no fixes, breaking-only history,
+    complete wrapped footers and own-tag exclusion. Assert content as well as length: empty
+    output, silently discarding every fitting entry or clipping the final rendered string
+    is not a repair. Verify failed Git/pinned-tool/itos reads give nonzero status with empty
+    stdout. Preserve existing rendering, bootstrap, footer, tag and moved-build assertions
+    except expectations explicitly superseded above. No feature-suite or recursive test run
+    belongs in these fixtures. The second check requires the named regression before running
+    the tool's complete package, so Go's successful 'no tests to run' cannot satisfy it.
+
+    Commit compiling regressions first with test --item T-37 and observe their size/content
+    assertion failures against the old renderer before implementation. Missing tests,
+    undefined names, compiler errors, tool acquisition failures and memory kills are not
+    that red evidence. Commit implementation with ci --task T-37, and guidance with
+    docs --item T-37. The spec commit is docs --item T-37. The two checks use Python 3's
+    standard library and existing tools, with no RTK dependency in CI; they belong at the
+    task tier and existing per-push Go tests, not a new commit hook or nightly job. Run no
+    whole-feature race detector; any necessary race run selects changed tests/packages only.
+    Use configured hooks and CI for gates; no local mutation run or generated evidence is
+    authorized. Local notes generation proves no GitHub publication. Agents commit and stop;
+    the loop owns push, CI watching and actual release validation.
+
+    Before drafting, the original generation command succeeded at the fixture SHA but wrote
+    160993 bytes, so its less-than-125000 assertion failed. The What changed section held
+    158935 bytes; most excess was the all-types subject list, not ordinary commit bodies.
+    The replacement check produced 160949 bytes for the tagless first release, unchanged
+    after its own fixture tag, and 160860 bytes for the later fixture range on both runs.
+    It failed the size assertions, first-release history link and group restriction, missing
+    known limits and later omission notice. State-preservation and repeatability checks
+    passed. The second check exits 1 because TestBoundedReleaseNotes is absent; the
+    implementer still owes its assertion-level red and both checks passing after the repair.
   done_when:
-    - run: go run ./tools/bin/release-notes -version 0.1.0 -from '' | wc -c | awk '$1 < 125000 {ok=1} END {exit !ok}'
+    - run: |
+        python3 - <<'PY'
+        import os
+        from pathlib import Path
+        import re
+        import shutil
+        import subprocess
+        import tempfile
+
+        source = Path.cwd()
+        base_url = "https://github.com/donvargax/itos-container"
+        failures = []
+
+        def run(*args, cwd=source):
+            return subprocess.check_output(args, cwd=cwd, timeout=180)
+
+        def require(ok, message):
+            if not ok:
+                failures.append(message)
+
+        def state(repo):
+            return tuple(run("git", *args, cwd=repo) for args in (
+                ("rev-parse", "HEAD"), ("show-ref",),
+                ("status", "--porcelain=v1", "--untracked-files=all"),
+                ("diff", "HEAD", "--"),
+            ))
+
+        before = state(source)
+        head = "056d0c721f462bce3bf33cdda9ec71ca038f6bef"
+        assert run("git", "rev-parse", "--is-shallow-repository").strip() == b"false", "full history required"
+        run("git", "cat-file", "-e", head + "^{commit}")
+        run("tools/bin/pinned", "--path", "git-cliff")
+        itos = shutil.which("itos")
+        assert itos, "itos must be available"
+        itos = str(Path(itos).resolve())
+        with tempfile.TemporaryDirectory(prefix="T-37-") as tmp:
+            tmp = Path(tmp)
+            binary, repo = tmp / "release-notes", tmp / "history"
+            run("go", "build", "-o", str(binary), "./tools/bin/release-notes")
+            run("git", "clone", "--quiet", "--shared", "--no-tags", "--no-checkout", str(source), str(repo))
+            run("git", "checkout", "--quiet", "--detach", head, cwd=repo)
+            assert run("git", "tag", "--list", cwd=repo).strip() == b"", "fixture must have no tags"
+            assert run("git", "rev-parse", "--is-shallow-repository", cwd=repo).strip() == b"false"
+            for path in ("tools/bin/pinned", "tools/bin/release-notes/cliff.toml"):
+                shutil.copy2(source / path, repo / path)
+            os.symlink(source / ".tools", repo / ".tools", target_is_directory=True)
+            expected = {"Features": set(), "Fixes": set()}
+            for line in run("git", "log", "--format=%H%x1f%s", "HEAD", cwd=repo).decode().splitlines():
+                sha, subject = line.split("\x1f", 1)
+                match = re.match(r"^(feat|fix)(\([^)]*\))?!?: ", subject)
+                if match:
+                    expected["Features" if match[1] == "feat" else "Fixes"].add(sha)
+            assert all(expected.values()), "real history must exercise both change groups"
+
+            def notes(version, start):
+                saved = state(repo)
+                body = run(str(binary), "-version", version, "-from", start, "-itos", itos, cwd=repo)
+                require(state(repo) == saved, "generator changed fixture HEAD, refs or files")
+                text = body.decode("utf-8")
+                label = "first" if not start else "later"
+                print(f"{label} release: {len(body)} bytes at {head}")
+                require(0 < len(body) < 125000, f"{label} release is not below 125000 bytes")
+                require(text.startswith(f"# itos-container {version}\n"), f"{label} title missing")
+                for required in ("## What changed", "## Upgrading", "itos-container --version",
+                                 "gh attestation verify", "sha256sum --ignore-missing -c checksums.txt"):
+                    require(required in text, f"{label} release lacks {required}")
+                return body, text
+
+            first, text = notes("0.1.0", "")
+            require(base_url + "/commits/v0.1.0" in text, "first release lacks full-history link")
+            require("compare/" not in text, "first release invents a prior release")
+            sections = re.split(r"^## ", text, flags=re.M)
+            changed = next((part.removeprefix("What changed\n") for part in sections
+                            if part.startswith("What changed\n")), "")
+            groups = re.split(r"^### (.+)\n", changed, flags=re.M)
+            require(groups[1::2] == ["Features", "Fixes"], "first release contains other or duplicate groups")
+            for group, content in zip(groups[1::2], groups[2::2]):
+                if group not in expected:
+                    continue
+                links = re.findall(re.escape(base_url) + r"/commit/([0-9a-f]{40})", content)
+                require(set(links) == expected.get(group, set()) and len(links) == len(set(links)),
+                        f"first release {group} links do not match its real commits")
+            limits = next((part for part in sections if part.startswith("Known limits\n")), "")
+            for required in ("Host sockets created or swapped into the checkout during a run remain reachable.",
+                             "Network mode `none` and a private IPC namespace do not prevent this access.",
+                             "The startup scan does not provide continuous enforcement.",
+                             "Approval records what was approved, not who.",
+                             "Neither route proves human presence or authenticates a separate approver.",
+                             base_url + "/blob/v0.1.0/docs/security.md"):
+                require(required in limits, f"first release known limits lack {required}")
+            run("git", "tag", "v0.1.0", "HEAD", cwd=repo)
+            own_tag, _ = notes("0.1.0", "")
+            require(own_tag == first, "own release tag changes first-release notes")
+
+            roots = run("git", "rev-list", "--max-parents=0", "HEAD", cwd=repo).decode().splitlines()
+            assert len(roots) == 1, "fixture expects one history root"
+            run("git", "tag", "v0.0.0", roots[0], cwd=repo)
+            later, text = notes("0.2.0", "v0.0.0")
+            require(base_url + "/compare/v0.0.0...v0.2.0" in text, "later release lacks full-range link")
+            require("omitted" in text.lower(), "oversized later release lacks an omission notice")
+            again, _ = notes("0.2.0", "v0.0.0")
+            require(again == later, "bounded notes are not deterministic")
+        require(state(source) == before, "check changed source HEAD, refs or files")
+        for failure in failures:
+            print("FAIL:", failure)
+        raise SystemExit(bool(failures))
+        PY
+    - run: |
+        python3 - <<'PY'
+        import subprocess
+
+        name = "TestBoundedReleaseNotes"
+        listed = subprocess.check_output(
+            ["go", "test", "./tools/bin/release-notes", "-list", "^" + name + "$"],
+            text=True, timeout=180,
+        )
+        if name not in listed.splitlines():
+            raise SystemExit("missing TestBoundedReleaseNotes; assertion-level red is still required")
+        subprocess.run(["go", "test", "./tools/bin/release-notes", "-count=1"], check=True, timeout=180)
+        PY
