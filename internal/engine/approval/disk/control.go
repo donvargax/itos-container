@@ -155,7 +155,7 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	if failure = t.acquire(ctx, false, write); failure != "" {
 		return nil, failure
 	}
-	if failure = t.inspect(ctx, s.Reservations); failure != "" {
+	if failure = t.inspect(ctx, s.Reservations); failure != "" && !t.peerLocked(write) {
 		return nil, failure
 	}
 	if write {
@@ -190,6 +190,16 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	}
 	success = true
 	return t, ""
+}
+
+// peerLocked reports that a writer inspected without the lock and a peer has
+// created it since. The peer may have published bindings or temporary files that
+// the unlocked scan read half-way, so what that pass refused is provisional: the
+// locked pass below repeats discovery under exclusion and decides. A refusal
+// that persists is found again there. Only a read-only transaction, which never
+// takes the lock, must see it stay absent.
+func (t *controlTransaction) peerLocked(write bool) bool {
+	return write && t.lock == nil && !t.lockUnchanged()
 }
 
 func inReservationCollection(selected, root string) bool {

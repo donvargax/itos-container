@@ -537,3 +537,21 @@ go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-(25|2
 A disk unit test covers reads and writes for both paths, requiring that the refusal
 changes nothing and that a valid selection on the same account still enrolls; it fails
 before the change and passes after it.
+
+## Lock access mode and an overlapping peer (reviews PRRT_kwDOVkB0ws61J5Av and J5Bc)
+
+Neither behaviour has a stable black-box schedule. NFS needs a mount no feature fixture
+can supply, and the overlap needs a peer to act between a writer's lock lstat and its
+catalog scan, which CONTROL-14's barrier (after the scan) does not reach. Two disk unit
+tests carry the evidence instead. Before the change both fail, and both pass after it:
+
+- `TestControlLockAccessModeFollowsLockMode` failed with "lock opened with access modes [0],
+  want [2]": a writer opened `control.lock` O_RDONLY before taking LOCK_EX.
+- `TestControlWriterJoinsPeerLockCreatedDuringCatalogScan` failed with "writer racing a
+  peer's unlocked scan: state.path" for a peer that publishes a catalog and for a peer that
+  leaves an unpublished temporary binding, injected after the writer's lock lstat found
+  none.
+
+```sh
+go test -race ./internal/engine/approval/disk -count=1
+```

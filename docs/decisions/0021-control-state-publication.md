@@ -48,6 +48,24 @@ lock retains its pinned directory checks, validates and acquires that lock, then
 repeats discovery under exclusion. Only read-only transactions require a lock
 observed absent to remain absent through their return.
 
+Review PRRT_kwDOVkB0ws61J5Bc makes that overlap complete. A writer's unlocked scan of
+the catalog can run while the peer creates the lock and publishes self.json or a
+`.location` temporary file, and the scan then read them under a lock the writer did not
+hold, so it refused with state.path, whose guidance describes substituted paths. A
+refusal from a lock-less writer's unlocked pass is now provisional once the lock has
+appeared: the writer proceeds to the locked pass, which repeats discovery under
+exclusion and finds any refusal that persists. A lock that stays absent still refuses a
+completed catalog, and a read-only transaction still requires the absence to hold.
+
+Review PRRT_kwDOVkB0ws61J5Av opens the private lock according to its mode. flock(2)
+places an exclusive lock on NFS only through a descriptor open for writing, so a writer
+that opened control.lock read-only was refused as state.unavailable on every attempt
+while doctor, whose shared lock needs only a readable descriptor, still passed. An
+account home on NFS cannot be moved off the account, so the fixed anchor must work
+there. Writers now open the file O_RDWR and readers O_RDONLY. Only the owner can open
+the validated 0600 file, so this widens no other user's access. No scenario can run an
+NFS mount; a disk unit test pins each mode.
+
 Every lock wait is bounded by the 10-second call budget. Contention returns typed,
 retryable approval.state.busy (75); run retains run.call-timeout (75). Neither a
 home-directory lock nor a background context can create an unbounded wait.

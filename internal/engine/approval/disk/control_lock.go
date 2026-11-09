@@ -84,7 +84,14 @@ func (t *controlTransaction) acquire(ctx context.Context, create, write bool) po
 	if failure := recordSafety(info, p.uid); failure != "" {
 		return failure
 	}
-	file, err := p.ops.openRecord(p.root(), controlLockName, os.O_RDONLY|noFollow, 0)
+	// flock(2) on NFS places an exclusive lock only through a descriptor open for
+	// writing, and a shared one through a readable descriptor. The 0600 file was
+	// just validated as ours alone, so only a writer opens it for writing.
+	access := os.O_RDONLY
+	if write {
+		access = os.O_RDWR
+	}
+	file, err := p.ops.openRecord(p.root(), controlLockName, access|noFollow, 0)
 	if err != nil {
 		return "state.unavailable"
 	}

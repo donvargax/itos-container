@@ -3,8 +3,10 @@ package disk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -380,6 +382,101 @@ func TestControlPeerPublishesAfterUnlockedInspection(t *testing.T) {
 				if err != nil || !os.SameFile(lockInfo, after) {
 					t.Fatalf("writer replaced peer lock: %v", err)
 				}
+			}
+		})
+	}
+}
+
+// flock(2): on NFS a descriptor needs write access to hold an exclusive lock,
+// and read access is enough for a shared one. The lock file is private, so
+// opening it for writing is open only to its owner.
+func TestControlLockAccessModeFollowsLockMode(t *testing.T) {
+	for _, write := range []bool{false, true} {
+		t.Run(fmt.Sprint("write=", write), func(t *testing.T) {
+			control, c, _, _, _ := controlFixture(t)
+			tx, failure := control.Begin(t.Context(), c, true)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			tx.Close()
+			ops := control.Store.operations()
+			openRecord := ops.openRecord
+			var modes []int
+			ops.openRecord = func(root *os.Root, name string, flag int, perm os.FileMode) (*os.File, error) {
+				if name == controlLockName {
+					modes = append(modes, flag&(os.O_RDONLY|os.O_WRONLY|os.O_RDWR))
+				}
+				return openRecord(root, name, flag, perm)
+			}
+			control.Store.ops = &ops
+			tx, failure = control.Begin(t.Context(), c, write)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			tx.Close()
+			want := os.O_RDONLY
+			if write {
+				want = os.O_RDWR
+			}
+			if len(modes) != 1 || modes[0] != want {
+				t.Fatalf("lock opened with access modes %v, want [%d]", modes, want)
+			}
+		})
+	}
+}
+
+// A peer can create the lock after the writer saw it absent but before the
+// writer's unlocked catalog scan reads what the peer published. The scan then
+// sees names the peer wrote under a lock the writer does not hold. That is not
+// substitution: the writer keeps its pinned directory checks, takes the peer's
+// lock and repeats discovery under it.
+func TestControlWriterJoinsPeerLockCreatedDuringCatalogScan(t *testing.T) {
+	for _, kind := range []string{"published catalog", "unpublished temporary binding"} {
+		t.Run(kind, func(t *testing.T) {
+			control, c, _, home, _ := controlFixture(t)
+			peer := control
+			path := filepath.Join(home, ".local/state/itos-container/coordination")
+			if err := os.MkdirAll(path, 0700); err != nil {
+				t.Fatal(err)
+			}
+			ops := control.Store.operations()
+			lstat := ops.lstat
+			fired := false
+			ops.lstat = func(root *os.Root, name string) (os.FileInfo, error) {
+				info, err := lstat(root, name)
+				if name != controlLockName || !errors.Is(err, os.ErrNotExist) || fired {
+					return info, err
+				}
+				fired = true
+				switch kind {
+				case "published catalog":
+					tx, failure := peer.Begin(t.Context(), c, true)
+					if failure != "" {
+						t.Fatal("peer bootstrap:", failure)
+					}
+					tx.Close()
+				case "unpublished temporary binding":
+					for _, name := range []string{controlLockName, ".location-" + strings.Repeat("0", 32) + ".tmp"} {
+						if err := os.WriteFile(filepath.Join(path, name), nil, 0600); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				return info, err
+			}
+			control.Store.ops = &ops
+			tx, failure := control.Begin(t.Context(), c, true)
+			if tx != nil {
+				tx.Close()
+			}
+			if failure != "" {
+				t.Fatalf("writer racing a peer's unlocked scan: %s", failure)
+			}
+			if !fired {
+				t.Fatal("the peer never ran")
+			}
+			if _, err := os.Stat(filepath.Join(path, "self.json")); err != nil {
+				t.Fatalf("writer did not publish its self-binding under the peer's lock: %v", err)
 			}
 		})
 	}
