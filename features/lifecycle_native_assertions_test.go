@@ -118,12 +118,16 @@ func (w *world) lifecycleSignals(escalate bool) error {
 // leaves the same one. A cancellation before the engine answered (a 502) is a
 // stall, and the hold never ran.
 //
-// So a cut counts only if it could be the call limit. The call starts after
-// cancellation, so the cut comes no earlier than engineCallBudget after it, and
-// the product's next request follows the cut: its own wait, made the moment the
-// signal call returns. The teardown is sequential, so no other request of the
-// product lands between them, and the independent observer reads the daemon
-// without the recorder. A next request before that time means the product
+// So a cut counts only if it could be the call limit. The call limit runs from
+// the signal call's start, which is no earlier than the request before the
+// signal (recoverySignal checks the daemon, then signals) or than cancellation, so
+// the cut comes no earlier than engineCallBudget after the later of the two. Not
+// from cancellation alone: a first signal that arrives late leaves most of that
+// bound spent before the hold begins, and a product that gave up after 50 ms
+// would pass. The product's next request follows the cut: its own wait, made the
+// moment the signal call returns. The teardown is sequential, so no other request
+// of the product lands between them, and the independent observer reads the
+// daemon without the recorder. A next request before that time means the product
 // stopped waiting early.
 func (l *lifecycleNative) heldAcknowledgement(first offlineRequest) bool {
 	if !first.Replied.IsZero() {
@@ -133,9 +137,17 @@ func (l *lifecycleNative) heldAcknowledgement(first offlineRequest) bool {
 		return false
 	}
 	for i, e := range l.journalAtReturn {
-		if lifecycleSignalRequest(e) {
-			return i+1 < len(l.journalAtReturn) && l.journalAtReturn[i+1].At.Sub(l.signalled) >= engineCallBudget
+		if !lifecycleSignalRequest(e) {
+			continue
 		}
+		if i+1 >= len(l.journalAtReturn) {
+			return false
+		}
+		start := l.signalled
+		if i > 0 && l.journalAtReturn[i-1].At.After(start) {
+			start = l.journalAtReturn[i-1].At
+		}
+		return l.journalAtReturn[i+1].At.Sub(start) >= engineCallBudget
 	}
 	return false
 }
