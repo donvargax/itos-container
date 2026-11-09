@@ -186,3 +186,4 @@ questions:
   - id: q-46
     item: "T-31"
     question: "T-31: its task check needs the engine fixtures, which only the Engine job has; how is it proven?"
+    answer: "Change done_when to the engine-free regression for the heartbeat rename race; RECOVERY-23's native proof is the Engine job, which runs every live engine scenario on each pull request. Keep the workflow guards. See T-31-steer.md."
