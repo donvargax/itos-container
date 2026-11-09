@@ -933,20 +933,9 @@ items:
     title: The policy file accepts an exact host-name egress allowlist and doctor validates it
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-egress-allowlist-policy.
-      Charter step 1: the allowlist is part of the approved settings, so it starts in
-      itos-container.yaml. Today network is a closed object whose only mode is offline
-      (docs/CONFIG.md, internal/engine/policy). Scenarios first: a network mode that routes through
-      the proxy, with a list of host names. Each name is canonicalised (case, trailing dot, IDNA)
-      and must be a full DNS name. Literal IPs, wildcards and suffix shortcuts, ports, URLs, empty
-      or duplicate names and an empty list in allowlist mode are refused with a located doctor
-      diagnostic. Offline stays the default and is unchanged. Doctor shows the effective allowlist
-      without executing checkout code. It reads and validates only, with no engine or proxy. Update
-      docs/CONFIG.md and docs/CLI.md for the new field. Broken down from p1-egress-allowlist-proxy.
   - id: slice-26
     title: Approval binds the egress allowlist, and any change to it needs a new approval
     phase: 1
