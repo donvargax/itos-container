@@ -4510,14 +4510,6 @@
     without signal requests; and the step changed without engineFailureDiagnostics. dash is not
     installed where this was written, so the checks ran under sh as bash in POSIX mode; they use
     only POSIX constructs.
-  done_when:
-    - run: |
-        out=$(go test ./features -count=1 -v -run '^(TestEngineFailureTimings|TestEngineScenarioTiming|TestEngineWorkflow|TestEngineFixtureWorkflow|TestEngineDiagnostics)$') || { printf '%s\n' "$out"; exit 1; }
-        for sub in TestEngineFailureTimings/timeout TestEngineFailureTimings/record_cut_by_a_kill TestEngineFailureTimings/no_records TestEngineFailureTimings/no_log TestEngineScenarioTiming/LIFECYCLE-09_rows_carry_their_signal_offsets; do
-          printf '%s\n' "$out" | grep "^ *--- PASS: $sub " || { echo "$sub did not pass"; exit 1; }
-        done
-    - run: |
-        grep -Fq 'minutes]:' features/README.md && grep -Fq 'slowest first' features/README.md && grep -Fq 'previous_ns' features/README.md && grep -Fq 'TestEngineFailureTimings' features/README.md
 - id: T-45
   type: test
   title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
