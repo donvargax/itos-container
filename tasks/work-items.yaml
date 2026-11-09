@@ -1012,6 +1012,15 @@ items:
       decision record, per the charter's architecture rule. AGENTS.md's opening paragraph is also
       stale ("container commands and isolation are not implemented yet", v0.1.0 is published), but
       whether to edit AGENTS.md is the person's. Documentation only: it touches no proof.code path.
+
+      This item is already a documentation-only edit of docs/ORCHESTRATING.md, whose empty 'Lessons'
+      section is the repository's place for this. Add one lesson there: a docs task whose checks
+      read documents declares `prose: true` on each such check, because on a prose-only range CI
+      leaves out any other late check and `itos work done` never runs one. Evidence: the T-38 spec
+      review's P1 (itos 8.46.4); T-26 and T-6 had the same gap. Give it the section's required
+      fields (recorded date, last-seen date, and permanent status or the exit item). Its exit is the
+      upstream itos fix, so say that. The lesson is measured, not invented. It touches no proof.code
+      path and is too small to be its own item.
   - id: p1-acceptance-static-binary
     title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
     phase: 1
