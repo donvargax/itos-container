@@ -1158,8 +1158,8 @@ items:
   - id: T-42
     title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-scheduled-fuzz-egress-parser
