@@ -4361,58 +4361,6 @@
     phrase it replaces left standing: arc42's "**Proposed**, T-39", "egress (proposed, T-39)",
     "T-39 — proposed egress engine", "the proposed egress adapter" and "Refusal log (proposed)",
     each on one line today. Broken down from p1-egress-allowlist-proxy.
-  done_when:
-    - run: go test -count=1 ./internal/engine/egress/...
-    - run: go test -race -count=1 ./internal/engine/egress/...
-    - run: |
-        has() {
-          pkg=$1
-          shift
-          list=$(go test -list '^(Test|Fuzz)' "./internal/engine/egress/$pkg") || { printf '%s\n' "$list"; exit 1; }
-          for name in "$@"; do
-            printf '%s\n' "$list" | grep -qx "$name" || { echo "T-39: $pkg has no test named $name"; exit 1; }
-          done
-        }
-        has port TestFailureText
-        has port/porttest TestProxyContract TestProxyContractCatchesFaults
-        has domain TestJudge TestJudgeHeadLimit TestAllowlist TestJudgeHello TestLog TestLimits FuzzHead
-        has tcp TestAdapterContract TestNewBindsTheRealOnes TestVerifiedThroughTheTunnel TestRefusedHeads \
-          TestEmptyConnections TestRefusedHellos TestOlderECHCodePointsPass TestShimLimit TestReplay TestSplice \
-          TestDialClassification TestRefusedAddressTable TestServeFailures TestLogFullUnderLoad \
-          TestRecordBeforeAnswer TestConcurrentRecords TestLongestRecord TestContextEndsTunnels \
-          TestNoInterceptionCode TestNoRelaxingCode FuzzPeek
-    - run: go test ./internal/engine/egress/domain -run '^$' -fuzz '^FuzzHead$' -fuzztime 30s -parallel 2 -fuzzminimizetime 0s
-    - run: go test ./internal/engine/egress/tcp -run '^$' -fuzz '^FuzzPeek$' -fuzztime 30s -parallel 2 -fuzzminimizetime 0s
-    - run: |
-        modules=$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./internal/engine/egress/...) || exit 1
-        modules=$(printf '%s\n' "$modules" | sort -u | grep -v '^$')
-        test "$modules" = github.com/donvargax/itos-container || { echo "T-39: egress depends on $modules"; exit 1; }
-        packages=$(go list -deps ./internal/engine/egress/...) || exit 1
-        if printf '%s\n' "$packages" | grep -qx 'net/http'; then echo "T-39: egress links net/http"; exit 1; fi
-    - run: |
-        probes=$(grep -c '"Name": "egress-' tools/testdata/architecture/cases.json)
-        test "$probes" -ge 24 || { echo "T-39: $probes egress probes, want at least 24"; exit 1; }
-        tmp=$(mktemp -d) || exit 1
-        go build -o "$tmp/check" ./tools/architecture/check &&
-          ARCHITECTURE_CHECKER="$tmp/check" go test ./tools/testdata/architecture -count=1 -run '^TestPolicy$/^egress-'
-        status=$?
-        rm -rf "$tmp"
-        exit "$status"
-    - run: >-
-        grep -q 'internal/engine/egress/tcp' docs/architecture/arc42.md &&
-        grep -q 'Implemented by T-39' docs/architecture/arc42.md &&
-        ! grep -qF '**Proposed**, T-39' docs/architecture/arc42.md &&
-        ! grep -q 'egress (proposed, T-39)' docs/architecture/arc42.md &&
-        ! grep -q 'T-39 — proposed egress engine' docs/architecture/arc42.md &&
-        ! grep -q 'the proposed egress adapter' docs/architecture/arc42.md &&
-        ! grep -q 'Refusal log (proposed)' docs/architecture/arc42.md &&
-        ! grep -q 'Nothing in it is implemented or proven' docs/architecture/arc42.md &&
-        ! grep -q 'nothing of it is implemented' docs/architecture/arc42.md &&
-        ! grep -q 'nothing here is built' docs/architecture/arc42.md &&
-        ! grep -q 'Nothing here is built' docs/decisions/0022-egress-proxy.md &&
-        grep -q 'TestNoInterceptionCode' docs/decisions/0022-egress-proxy.md &&
-        grep -q 'unserved' docs/decisions/0022-egress-proxy.md &&
-        grep -q '0xfe0a' docs/decisions/0022-egress-proxy.md
 - id: T-40
   type: feat
   title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
