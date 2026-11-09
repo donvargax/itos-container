@@ -75,7 +75,8 @@ from the deferred sandbox SSH identity; network Git is not implemented here.
 ## Policy version 3 and read-only source observation
 
 Following [CONFIG rules 6, 7 and 12](../CONFIG.md), version 3 is slice-25's version 2
-(decision 0023 on its branch) plus an optional top-level `credentials` list. Versions
+(decision 0023 on its branch) plus an optional top-level `credentials` list. Slice-29
+therefore depends on both T-47 and slice-25; version 2 must land first. Versions
 1 and 2 retain their meaning and refuse this unknown key. An absent list means no
 grants; an empty list is refused, as an empty allowlist is. Each list entry is a closed
 object with exactly `kind` and `source`:
@@ -101,11 +102,31 @@ checkout scan. It reads metadata, never contents. For each grant, in this order:
    other write permission unless root-owned and sticky. This is `directory()`'s rule
    in `internal/engine/approval/disk/store.go` for state-root ancestors.
 3. Compare device and inode: neither the source nor any ancestor may be the checkout
-   root or protected state root. An alias through another host mount also refuses.
+   root or protected state root. Also refuse if the checked source's device and inode
+   match **any regular file under either root**, including mounted descendants. The
+   ancestor comparison alone misses descendant aliases: if `/mnt/sub` is a bind mount
+   of `<checkout>/sub`, `/mnt/sub/token` never traverses the checkout root, but is the
+   same file the worker can reach at `/workspace/sub/token`. A separately mounted
+   subvolume or a single-file bind can expose the same alias. Apply the same exclusion
+   to descendants of the protected state root.
 4. Require a regular file owned by the host UID, no group or other permission bits,
    exactly one link and a size from 1 through 65536 bytes. A second name could expose
    or replace the source, including from the checkout.
 5. Refuse two grants naming the same device and inode.
+
+For check 3, compare all checked source identities with the regular-file metadata
+already read by `independentFiles` in `internal/engine/readiness/disk/links.go`.
+Extend that checkout scan without skipping Git, hidden, ignored or untracked entries,
+and use the same pinned-directory, no-symlink traversal for the protected state root.
+Do not stop at a device or mount boundary. Each complete root scan shares its budget
+across all grants and descendants: batches of at most 128 entries, at most 100,000
+entries, a 10-second monotonic deadline and directory depth 64 (root depth 0), as the
+checkout scan does today. Missing metadata, an incomplete scan or budget exhaustion
+refuses; a protected state root confirmed absent has no descendants to scan. Repeat
+these comparisons on each source observation and revalidation, never trusting a set
+cached at approval. No file contents are needed for either scan.
+This extends the ledger's ancestor-only check to enforce its intended exclusion of
+sources inside either tree, including aliases of their descendants.
 
 A missing source or failed check is a located problem. Doctor still shows effective
 grants; approve records nothing; run refuses before staging or creating anything.
@@ -283,6 +304,16 @@ absence from refusal logs pending the answer and downstream proof.
 
 ## Required evidence, all synthetic
 
+Slice-29's source-observation scenarios must cover a source reached through an alias
+of a checkout descendant and of a protected-state descendant, not just aliases of
+the roots. Use otherwise valid private host-UID-owned regular files with one link
+and a permitted size, so those checks cannot mask a missing inode comparison. Its
+fake/adapter contracts cover identity matches, unavailable metadata and exhausted
+scan budgets; cases requiring real mounts run only in CI. Slice-31 and slice-33 carry
+the descendant-alias refusals into AC-29 before staging or create, alongside their
+source-modification probes. A distinct private source outside both trees is the
+positive control.
+
 Each credential scenario creates a private temporary home and a source containing a
 fresh synthetic marker: `itos-synthetic-credential-` followed by 32 random lowercase
 hexadecimal digits. These bytes survive JSON and shell quoting unchanged. A cooperative
@@ -383,7 +414,7 @@ specs, not proof, charter amendments or authorization to use real credentials.
 
 | Owner | Handoff |
 | --- | --- |
-| slice-29 | Take the closed version 3 shape, checks and refusal gates; omit the Codex kind its older why named. |
+| slice-29 | Wait for both T-47 and slice-25's version 2; take the closed version 3 shape, checks and refusal gates, including descendant-inode exclusion for both trees; omit the Codex kind its older why named. |
 | slice-30 | Take canonical grants, profiles, review and q-52; update help and `docs/security.md`. |
 | T-48 | Stage and recover through session ports, fake and adapter; the file half waits for question 1. Its older "failed delivery stops the workload before it starts" applies only before a start attempt. Add acquired-mount/lost-acknowledgement coverage. |
 | slice-31 and slice-33 | Prove token delivery, isolation and uncertain-start cleanup in CI. For slice-33, "where gh expects it" means `GH_TOKEN` exported by workload argv from its file. Neither can claim refusal-log absence before question 6 and its proof. |
