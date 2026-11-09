@@ -975,8 +975,8 @@ items:
   - id: T-40
     title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-38]
     kind: task
   - id: slice-27
