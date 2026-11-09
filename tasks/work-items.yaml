@@ -657,7 +657,7 @@ items:
     title: Native stop confined to one of two equal-basename projects passes reliably
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-33
