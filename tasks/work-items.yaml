@@ -1174,6 +1174,15 @@ items:
       The YAML syntax limits stay outside the schema, as the policy spec says. It does not block
       milestone two step 1 and should follow slice-25, which publishes the version 2 schema, so p2.
       Slice-25 stays unchanged.
+
+      This item already asks for a check that runs a maintained, pinned JSON Schema validator over
+      the policy examples doctor accepts and refuses, for every published version including
+      slice-25's version 2 schema. Its why already says the YAML syntax limits stay outside the
+      schema. It also leaves the validator choice and pin to the spec, which is where the
+      new-dependency question belongs. One note to add: the version 2 schema cannot express the
+      1024-byte limit or the host-name canonicalisation rules. The check should therefore compare
+      accept and refuse outcomes only where the schema can speak, and the dependency choice is the
+      person's to review.
   - id: p2-doctor-absent-state-root-is-missing
     title: Doctor reports a missing approval, not state.unavailable, when XDG_STATE_HOME sits under an absent top-level directory
     phase: 1
