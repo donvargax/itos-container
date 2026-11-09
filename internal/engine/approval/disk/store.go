@@ -170,6 +170,13 @@ func (s Store) pinPath(c port.Candidate, create bool, path string, managedDepth 
 				return nil, "state.write"
 			}
 			info, err = ops.lstat(current, name)
+			if errors.Is(err, os.ErrNotExist) {
+				// Made here, or by a peer, and removed again before this lookup. A
+				// creating pin never reports an absent directory: its callers
+				// dereference what it returns when no failure comes with it.
+				p.close()
+				return nil, "state.path"
+			}
 		}
 		if errors.Is(err, os.ErrNotExist) {
 			p.close()
