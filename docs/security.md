@@ -117,7 +117,9 @@ Doctor creates no lock file and writes nothing: it takes a shared lock on the ac
 `control.lock` only when that file already exists. Approve and run take the exclusive
 lock for publication and admission, never across consent or engine calls. Every wait
 ends within the 10-second call budget as the retryable `approval.state.busy` (exit 75;
-`run.call-timeout` for run).
+`run.call-timeout` for run). The budget also covers the discovery scan that follows the
+lock, so a scan the budget interrupts ends the same way, never as a path or state
+refusal.
 Symlinks, hard-linked records, foreign ownership and unsafe permissions are refused,
 not repaired. State ancestors must be trusted; root-owned sticky `/tmp` above a
 private fixture parent is allowed.
