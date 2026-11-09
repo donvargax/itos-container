@@ -38,6 +38,17 @@ var diagnosticQuoted = []string{
 	"    nested_test.go:3: nested block",
 }
 
+// outlineRowError is what the nth outline row fails with: a long error of
+// short lines, so that go test blocks of failures that overlapped would cut
+// one another short, as they do when godog runs scenarios concurrently.
+func outlineRowError(row int) string {
+	lines := []string{fmt.Sprintf("row %d failed", row)}
+	for line := 2; line <= 60; line++ {
+		lines = append(lines, fmt.Sprintf("r%d l%02d", row, line))
+	}
+	return strings.Join(lines, "\n")
+}
+
 func diagnosticOutline(rows int) string {
 	var feature strings.Builder
 	feature.WriteString("@engine\nFeature: rows\n  @ID-MEMORY-01\n  Scenario Outline: failing row\n    Then row <row> fails\n    Examples:\n      | row |\n")
@@ -120,15 +131,19 @@ func TestEngineDiagnosticsLogChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Concurrency 4 is TestFeatures's request, which an engine selection runs
+	// at 1 (TestFeatureConcurrency): a log with the blocks of overlapping
+	// scenarios in it is no log of the engine job, which this report reads.
 	code := runFeatureScenarios(selection, godog.Options{
-		Format:   "pretty",
-		Output:   os.Stdout,
-		Paths:    []string{dir},
-		Strict:   true,
-		TestingT: t,
+		Format:      "pretty",
+		Output:      os.Stdout,
+		Paths:       []string{dir},
+		Strict:      true,
+		TestingT:    t,
+		Concurrency: 4,
 	}, func(sc *godog.ScenarioContext, duringQuiet func()) {
 		sc.Step(`^it passes$`, func() {})
-		sc.Step(`^row (\d+) fails$`, func(row int) error { return fmt.Errorf("row %d failed", row) })
+		sc.Step(`^row (\d+) fails$`, func(row int) error { return errors.New(outlineRowError(row)) })
 		sc.Step(`^escalation row (\d+) is observed$`, func(row int) error {
 			if row == 2 {
 				return errors.New("row 2 failed")
@@ -352,7 +367,7 @@ func testEngineFailureReport(t *testing.T, script string) {
 		log := runDiagnosticChild(t, "ten", "4m")
 		var failures []diagnosticFailure
 		for row := 1; row <= 10; row++ {
-			failures = append(failures, diagnosticFailure{prefix + outlineRowName(row), fmt.Sprintf("row %d failed", row)})
+			failures = append(failures, diagnosticFailure{prefix + outlineRowName(row), outlineRowError(row)})
 		}
 		check(t, &log, false, 5*time.Second, failures...)
 	})
@@ -361,7 +376,7 @@ func testEngineFailureReport(t *testing.T, script string) {
 		log := runDiagnosticChild(t, "eleven", "4m")
 		var failures []diagnosticFailure
 		for row := 1; row <= 11; row++ {
-			failures = append(failures, diagnosticFailure{prefix + outlineRowName(row), fmt.Sprintf("row %d failed", row)})
+			failures = append(failures, diagnosticFailure{prefix + outlineRowName(row), outlineRowError(row)})
 		}
 		annotations, printed := reportOf(failures...)
 		// Nine of their own, then the other two named, one per line.
