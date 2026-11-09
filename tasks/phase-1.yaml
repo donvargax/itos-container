@@ -3903,21 +3903,425 @@
   done_when:
     - run: go test ./internal/engine/egress/...
 - id: T-40
-  type: feat
+  type: chore
   title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
   why: >
-    Charter step 1: an owned proxy on an internal network, so the worker has no direct route out.
-    This is the lifecycle plumbing in engine/session, defined as the spec fixes it. The port and its
-    stateful fake gain an internal (non-routable) network and a proxy container. The worker attaches
-    only to the internal network. Creation order is network, proxy, ready, worker. Teardown runs in
-    reverse. Ownership labels and recovery records cover the new resources, so stop and
-    interrupted-controller recovery never touch foreign networks or containers. If the proxy fails
-    to start or exits, the worker is stopped or never started, with no unrestricted fallback. The
-    Docker adapter implements it with unit coverage against its fake transport. Real-engine proof
-    belongs to the run slices, in CI only. It is session engine work with no new command behaviour,
-    so it is a task with a check. Broken down from p1-egress-allowlist-proxy.
+    Charter step 1's owned proxy on an internal network, so the worker has no direct route out,
+    built as lifecycle plumbing in internal/engine/session. docs/decisions/0022-egress-proxy.md
+    ("the record", T-38) is its design and binds this task: read it whole, with the charter,
+    docs/architecture.md's Slices, arc42's egress rows and T-39's entry, whose proxy this container
+    runs. This entry repeats each rule T-40 builds to and settles what the record left to it; if the
+    two differ anywhere else, stop and say so. T-40 adds no command behaviour: cmd is unchanged, the
+    session codec still maps every approved snapshot to an offline binding, and the items after it
+    (slice-26 to slice-28) fill the grant, bind the executable and a refusal log and wire the run.
+    It runs no Docker and adds no scenario, package, dependency, depguard rule or fixture: the
+    pinned moby client v0.6.2 and api v1.56.1 already carry every network, log and stdcopy call it
+    needs. Nothing here is runtime evidence or a support claim; slice-27 and slice-28 prove the
+    topology on the real engine, in CI.
+
+    The entry this replaces predates the record, and its type, feat, cannot be committed: a feat
+    commit must name live scenarios, and a task has none. itos commit check-message refuses feat
+    with Task: T-40 and Upgrading: none ("feat commits need a Scenarios: @ID-… footer") and accepts
+    chore and test with Task: T-40 (all three run). T-40 gives a user nothing to feel until
+    slice-27, so its type is chore, as T-39's drafter decided for T-39 (triage note,
+    2026-11-09T16:33:27Z). It stays a task with checks.
+
+    Binding names, because slice-26 to slice-28, the checks or the fixtures read them: every type,
+    field, method, outcome, operation name, JSON key, resource name, label and environment variable
+    this entry spells out, the proxy's Cmd, Engine.Executable, Runner.Refusals, Recovery.Refusals,
+    EgressConnectionContract, RefusalLogContract and every test it names. Any other name here only
+    describes. New code goes in new files: revive's file-length-limit holds each Go file to 600
+    lines, and domain/recovery.go and docker/engine_test.go are near it.
+
+    The grant. port.Binding gains Egress port.EgressGrant, a comparable value of two strings: Names,
+    the approved canonical host names in the approval's order, one per line with no final newline,
+    and ImageID, the pinned proxy image's local ID as approval inspected it, sha256: and 64
+    lowercase hex digits. Its zero value is an offline session, which keeps every path, record and
+    event of today. EgressGrant.List returns the names, nil for the zero value. Registered run
+    refuses a non-zero grant with an empty Names, an empty line or an ImageID of another shape with
+    port.Invalid, and a grant with no Refusals bound (below) with port.Internal, each right after
+    Prepare and before registration, as a registration refusal leaves its reserved intent today, so
+    no session is registered and nothing is created that teardown could not finish. T-40 does not
+    judge the names' spelling: the proxy refuses a list that is not canonical and exits before ready
+    (T-39), so no worker is created. Nothing fills the grant yet: slice-26 binds the list and the
+    image's digest into approval, and the codec's mapping from the snapshot into the binding is
+    slice-26's or slice-27's.
+
+    The record. An egress session's intent is schema 3: schema 2's fields, its anchor under every
+    schema 2 rule, and "egress", an object of exactly three objects in creation order, "internal"
+    (the internal network), "network" (the egress network) and "proxy" (the proxy container), each
+    of exactly the strings "name", "id" and "stage". Record gains Egress port.EgressRecord, tagged
+    json:"egress,omitzero", holding three port.EgressResource values, so schema 1 and 2 records
+    encode byte for byte as today (measured with Go 1.27.3's encoding/json). The names are fixed by
+    the token from the start: itos-container-internal-<token>, itos-container-egress-<token> and
+    itos-container-proxy-<token>, beside the worker's itos-container-<token> and the anchor's
+    itos-container-anchor-<token>. A stage is "" (no create sent), intent (a create may have been
+    sent; id empty), owned (the inspected full ID) or absent (that ID confirmed gone). Each create
+    follows its own durable intent, so a resource still at "" was never asked for and recovery need
+    not look for it.
+
+    Record.ValidEgress(b Binding) and ValidTransition hold these rules, and Completed requires them.
+    A schema 3 record has a non-zero grant, and under a grant a worker at intent, owned or absent
+    has schema 3. Schema 2 becomes 3 only from a reserved worker with an owned anchor, in the save
+    that writes the internal network's intent. A resource moves from "" to intent only while the
+    worker is reserved and every earlier resource is owned; from intent to owned only by setting its
+    full ID, the worker's stage unchanged in that save; from owned to absent only with the same ID,
+    while the worker is reserved, cancelled or absent and every later resource is "" or absent;
+    absent stays absent, and no intent becomes absent. So a resource past "" has every earlier one
+    owned or absent, and an absent one every later one "" or absent. The worker moves from reserved
+    to intent only with all three owned, so a worker at intent or owned implies them, which Decode
+    also checks as it checks the owned anchor today. The anchor becomes absent only once all three
+    are "" or absent. Completed adds that all three are "" or absent, so admission, which reads
+    Completed (disk/admission.go), releases the checkout only after the egress resources are gone.
+    ValidTransition, both stores' open, Validate and Save (porttest's memory store, and
+    disk/store.go's validateBinding and Save, Save also refusing a next record ValidEgress refuses)
+    and codec.JSON's Decode compare Egress beside Anchor and refuse what these rules refuse. Decode
+    refuses a schema 3 record unless it has exactly 16 fields, the anchor as schema 2's, the egress
+    object as above, names derived from the token, stages among the four, an id of 64 lowercase hex
+    digits exactly when owned or absent, and the order rules. Every rule written today for schema 2
+    holds for schema 3 as well: its anchor's checks in the port, the codec and both stores, the
+    adapter's CreateRun, the fake's AnchorExact, and the domain's anchored stop, status, Cleanup,
+    completeRun and finishSession.
+
+    The connection. port.RunConnection embeds a new port.EgressConnection, as it embeds
+    AnchorConnection: CreateNetwork(context.Context, Record, NetworkKind) (string, Outcome), with
+    NetworkKind InternalNetwork or EgressNetwork; InspectNetwork(context.Context, string)
+    (NetworkObservation, Inspection), by name or full ID; RemoveNetwork(context.Context, string), by
+    full ID; CreateProxy(context.Context, Record) (string, Outcome); VerifyProxy(context.Context,
+    string) Outcome; ProxyReady(context.Context, string) Outcome; and CopyProxyLog(context.Context,
+    string, Writer) Outcome. The proxy is a container, so Inspect, Start, Signal, Wait and RemoveRun
+    serve it as they serve the worker, and port.Observation gains Kind and Session, read from the
+    io.itos-container.kind and io.itos-container.session labels. NetworkObservation is comparable,
+    as AnchorObservation is, and carries the full ID, name, driver, scope, internal, IPv6, whether
+    the gateway_mode_ipv4 option is isolated, whether any IPAM config has a gateway, whether it is
+    config-only, ingress, attachable or from another network's config, the five labels and whether
+    they are exactly those, and the number of attached endpoints with the container's full ID when
+    there is exactly one.
+
+    Ownership and exactness are pure predicates in the port, as OwnsAnchor is. Every egress resource
+    carries the labels io.itos-container.intent (the token), .project, .fingerprint, .session (the
+    anchor's session) and .kind, which is internal-network, egress-network or egress-proxy. A
+    network is owned when its full ID is 64 lowercase hex digits and equals the recorded one once
+    recorded, its name is the recorded name, its driver bridge, its scope local and its labels
+    exactly the five. It is exact when, besides, IPv6 is off, it is not config-only, ingress,
+    attachable or from a config, and the internal network is internal, isolated and has no gateway,
+    the egress network not internal. The proxy is owned when its full ID is hex and equals the
+    recorded one once recorded, its name is the recorded name, its image ID is the grant's and its
+    five labels match; like the worker's, its labels need not be exactly five, because Docker merges
+    the image's. A name or a label never authorizes a destructive request: only a recorded full ID
+    that a fresh inspection shows owned does.
+
+    Two outcomes are new: ProxyFailed, "proxy-failed", when the proxy gave no valid ready record or
+    was not running before the worker started, and ProxyExited, "proxy-exited", when it stopped
+    while the worker ran. A network or proxy not as required reuses IsolationUnverified, an
+    unavailable inspection IsolationInspection, a lost create Uncertain and an ownership mismatch
+    Refused, as the worker does. run's classifier names a rule after the outcome, so these become
+    run.proxy-failed and run.proxy-exited once slice-27 wires them; their exit codes are slice-27's.
+
+    The Docker adapter. Engine gains Executable, the resolved path of the host's own executable,
+    which slice-27's cmd fills. Every new method checks the pinned socket before and after its
+    request, as today's do, sends nothing once it changed (Refused, or Changed for an inspection)
+    and bounds each request as c.call does. CreateNetwork refuses with no request unless the record
+    is schema 3 with that resource at intent and every earlier one owned. It posts the resource's
+    name, driver bridge, Internal true for the internal network and false for the egress one,
+    EnableIPv6 false, the option com.docker.network.bridge.gateway_mode_ipv4=isolated for the
+    internal network and no option for the egress one, and the five labels, and returns the reply's
+    ID; an error, a missing or short ID, or a socket change after sending is Uncertain. moby's
+    bridge driver skips the gateway's address allocation for an isolated network and refuses
+    isolated mode on one that is not internal (GetSkipGwAlloc and parseNetworkOptions in
+    daemon/libnetwork/drivers/bridge/bridge_linux.go, read on master, not run), so a daemon that
+    honours the option shows no gateway, and one that ignores it leaves the gateway that fails
+    exactness, which is the record's reason to verify after create. InspectNetwork maps a 404 to
+    NotFound, and a missing ID or name, another error or a malformed body to Unavailable.
+    RemoveNetwork deletes by full ID and ignores the reply; the next inspection decides.
+
+    CreateProxy refuses with no request unless the record is schema 3 with both networks owned and
+    the proxy at intent, the grant's list is not empty and Executable is an absolute path. It
+    inspects the grant's image first, as CreateRun inspects the worker's: another ID or a declared
+    volume is Refused, a missing Config or an error Uncertain. It creates, under the proxy's name:
+    Image the grant's ImageID; User the host UID:GID; Entrypoint empty; Cmd exactly /itos-container,
+    __egress-proxy, --, then each listed name as an argument of its own, so no name is ever read as
+    a flag; Env exactly the image's own Env as inspected, nothing added; WorkingDir /; no stdin, TTY
+    or attached stream; Healthcheck NONE; the five labels. HostConfig: NetworkMode the egress
+    network's name; ReadonlyRootfs; CapDrop ALL; SecurityOpt no-new-privileges; PidsLimit 4096;
+    RestartPolicy no; IpcMode and CgroupnsMode private; Init false; Sysctls exactly
+    net.ipv4.ip_forward=0; LogConfig json-file with max-size 64m, max-file 1 and mode blocking; and
+    one mount, a bind of Executable at /itos-container, read-only, with no bind options; no tmpfs,
+    port, device, link, extra host, DNS setting, bind or volume. NetworkingConfig names both
+    networks with empty endpoint settings: no alias, static address, driver option or gateway
+    priority, the egress network giving the default route as the only one with a gateway. An error
+    after sending is Uncertain. mode blocking is Docker's own default, set explicitly because Docker
+    copies a daemon's default log options into a container that names the daemon's default driver
+    (mergeAndVerifyLogConfig in daemon/logs.go, read on master), so a daemon configured non-blocking
+    would otherwise drop records the proxy's writes never notice.
+
+    VerifyProxy inspects by full ID before start and holds every field this connection's CreateProxy
+    requested, as VerifyRun does for the worker, refusing anything more: an added capability,
+    privileged, auto-remove, publish-all, a pid, UTS or user namespace mode, a device, a bind,
+    volumes-from, a second sysctl or mount, a mount point that is writable or has another source, a
+    third network or one whose NetworkID differs from the record, a port binding, and a state other
+    than created, not running, PID 0 and never started. Among the log options it requires the three
+    above and tolerates the rest, which that same merge may add (compress, labels, env, tag and the
+    like) and which change neither which stdout records are stored nor the stream T-40 reads. A
+    defect is IsolationUnverified, a missing inspection IsolationInspection, another identity
+    Refused.
+
+    The stream rule, which slice-28's copy check reuses (triage note, 2026-11-09T16:33:27Z). Only
+    the proxy's stdout is read as records. Both log reads ask the engine for stdout alone (stdout=1,
+    no stderr, timestamps or details) and demultiplex the frames, dropping any stderr frame unread,
+    so a line slice-27's handler prints on stderr, Serve's failure or a Go panic's trace, never
+    reaches the ready judgement or the copy. moby's log stream skips every stderr message when
+    stderr is not asked for, writes each line as stored and puts a daemon-side read error on its
+    system-error stream (daemon/server/httputils/logstream/logstream.go, read on master), which
+    stdcopy returns as an error, and the adapter treats that as a failed read. ProxyReady follows
+    the log (follow=1) within one call budget and judges the first complete stdout line, at most
+    2,048 bytes before its newline: it is ready only when it is one JSON object with exactly the
+    keys schema, seq, time and event, schema the number 1, seq the number 1, event "ready" and time
+    an RFC 3339 UTC time ending in Z, with nothing after the object but the newline, as T-39 writes
+    it. Any other first line, a longer one, or the stream's end before a newline (the proxy stopped)
+    is ProxyFailed; a request or stream error is ExecutionFailed. It is one call, not polling: the
+    record's "bounded log calls" are that call, and a proxy silent for its whole budget fails as a
+    call timeout named proxy readiness. CopyProxyLog reads the whole log once, without following,
+    and writes the stdout bytes to w exactly as stored, ready included, since slice-28's writer
+    drops ready and checks seq; a request, stream or write error is ExecutionFailed.
+
+    The worker on the internal network. For a schema 3 record CreateRun first inspects the proxy by
+    its recorded full ID and requires it owned, running and attached to the internal network's
+    recorded ID with an IPv4 address; anything else is IsolationUnverified with no create. It then
+    creates the worker exactly as today but with NetworkMode the internal network's name, and, after
+    the image's defaults, the manifest's overlay and HOME and TMPDIR as today, sets HTTP_PROXY,
+    HTTPS_PROXY, http_proxy and https_proxy each to http://<address>:3128 and NO_PROXY and no_proxy
+    to localhost,127.0.0.1,::1 (the manifest already reserves these names in any letter case).
+    VerifyRun holds an egress worker to today's checks with NetworkMode the internal network's name
+    in place of none and exactly one attached network, the internal one with the recorded NetworkID,
+    in place of none's, and besides them to no published port and no DNS server, search domain or
+    option. CreateRun refuses a schema 3 record under an offline binding and a schema 2 record under
+    a grant before any request, so no worker is created on the wrong network; offline workers keep
+    NetworkMode none and today's checks unchanged.
+
+    The fake and the contracts. porttest's RunEngine models both networks and the proxy in memory,
+    with a fault at each step, the proxy's scripted stdout, stderr, readiness and exit, and the
+    proxy's start, signal, wait and removal named apart from the worker's in its events; it does no
+    I/O. EgressConnectionContract runs unchanged against the fake (TestEgressConnectionContract) and
+    the SDK's HTTP fixture (TestSDKEgressContract): a missing network is NotFound with a zero
+    observation; each network created from its intent inspects owned and exact with no endpoint, the
+    same by full ID and by name; the proxy created after both inspects owned and verifies; it starts
+    and is ready while a stderr line precedes its ready record; SIGKILL, the not-running wait and a
+    fresh inspection show it exited; the copy holds exactly the scripted stdout bytes and none of
+    stderr; and after removal the proxy and both networks inspect NotFound. port.RefusalLog's fake
+    keeps copies in memory, with faults at Begin, Write and Commit, and RefusalLogContract
+    (TestRefusalLogContract) holds what slice-28's writer must do as well: a committed copy is the
+    session's stored bytes; a copy closed uncommitted leaves nothing and changes no earlier copy; a
+    second committed copy replaces the first, since stop may copy a log again; Write, Commit and
+    Close are safe to call together, once Commit or Close has begun a later Write fails, and Close
+    after a successful Commit changes nothing.
+
+    The launch, in run's registered path, under the session operation lock as today. After the
+    checkout pin, its socket scan and the anchor, and before the worker's intent, an egress binding
+    creates in order the internal network, the egress network and the proxy. For each: save its
+    intent, recheck the daemon, create, inspect the returned full ID, refuse anything not owned,
+    save the owned ID, then refuse anything not exact, so a resource is always recorded for cleanup
+    before its refusal; the networks must also have no endpoint yet. The proxy is then verified
+    (else IsolationUnverified), started (else ExecutionFailed) and read for ready, and a fresh
+    inspection must then show it owned and running; a failed ready or that inspection is
+    ProxyFailed, and no worker is created. Only then does the worker move to intent and get created
+    as today. After the lock is released and the session reopened, the checks before the worker's
+    start gain, beside VerifyRun's and the anchor's, the proxy owned and running and each network
+    owned and exact with exactly one endpoint, the proxy's, so a foreign container joined to either
+    fails them; any failure leaves the worker created but never started. Each is a startup operation
+    of one 10 s call inside the existing 120 s budget, named network creation, network inspection,
+    proxy creation, proxy verification, proxy start, proxy readiness and proxy inspection, and
+    finiteConnection bounds every new method as it bounds the anchor's. run's unregistered path
+    (Registry nil) stays offline only: a grant is refused with port.Refused right after Prepare,
+    before the workspace pin and any engine call. Offline bindings take no new step: their events,
+    records and results are today's.
+
+    The watch. While the worker runs, the controller also waits on the proxy, on a connection of its
+    own opened with the session's binding, because the worker's wait holds the launch connection's
+    finite gate for the whole workload (domain/finite_wait.go). If the proxy's wait returns first,
+    the worker's wait is cancelled and the outcome is ProxyExited, or the watch's own failure when
+    it could not be opened or returned no exit; the worker then gets the existing termination (the
+    first host signal, SIGTERM without one, grace to 10 s from cancellation, then SIGKILL), an exit
+    observed in teardown is kept with its precedence, and the run fails once slice-27 classifies it.
+    If the worker's wait returns first, the watch is cancelled and ignored, so teardown's own stop
+    of the proxy changes neither the result nor the exit code. A proxy that exits between the checks
+    before start and the watch is still seen, since a not-running wait on a stopped container
+    returns at once. Nothing restarts the proxy, reconnects the worker or changes its network.
+
+    Teardown reverses creation on every path that releases the anchor: run's teardown through
+    Recovery.stop, the uncreated (reserved or cancelled) path, the immediate kill after a refused
+    mount detector, Runner.Cleanup and a fresh stop. Once the worker is confirmed absent or proven
+    never created, the egress resources are released, the proxy first, then the egress network, then
+    the internal network, and only then the anchor as today: releaseAnchor and finishSession refuse
+    with no request while an egress resource remains. A worker that cannot be confirmed absent keeps
+    its proxy and networks, as a lost controller does (A3), and stop retries. For the proxy: a fresh
+    full-ID inspection showing it owned; if it runs, the authority checks releaseAnchor makes (the
+    session, the intent, the daemon), SIGKILL, a not-running wait within one call budget and a fresh
+    inspection showing it exited; then the copy; then the authority checks, RemoveRun by full ID, an
+    inspection showing NotFound and its absent record. A proxy already NotFound has no log left to
+    copy and is recorded absent. For each network: a fresh inspection showing it owned, the
+    authority checks, RemoveNetwork by full ID, an inspection showing NotFound and its absent
+    record; a network that still has an endpoint is left alone and the cleanup is Incomplete, and no
+    request disconnects anything. A resource at intent is first looked up by name: owned, it is
+    adopted by saving its ID and released; not found, the intent is kept and the cleanup is
+    Incomplete, because a miss by name cannot fence a delayed create, the rule the worker and the
+    anchor follow, and the resources after it in teardown order wait; anything else is Refused. A
+    resource at "" needs no request, and one at absent is inspected by its ID and must be NotFound,
+    as the anchor's is. A changed socket, or a resource whose name, labels or ID differ, is Refused
+    with nothing removed, so stop never touches a foreign network or container. Status reads the
+    same facts and writes nothing, adopting no intent: its cleanup is pending while any egress
+    resource is present, complete only when all are "" or absent, and an intent not found by name, a
+    foreign resource or an unavailable inspection is a failure.
+
+    The copy. port.RefusalLog has Begin(ctx context.Context, session string) (RefusalCopy, Outcome),
+    which opens a staged copy for the public session ID (the anchor's session); port.RefusalCopy is
+    a Writer with Commit() Outcome and Close(). Teardown copies only a stopped proxy: Begin,
+    CopyProxyLog into the copy, Commit, then the removal, each a finite call inside teardown's 30 s.
+    Runner and Recovery gain Refusals, which registered run hands to the Recovery it builds; cmd
+    binds none in T-40. Any failure keeps the stopped proxy, its json-file log, both networks, the
+    anchor and the intent and closes the uncommitted copy: a nil Refusals is port.Internal, any
+    other failure Incomplete, which stop retries. A copy is never skipped, so no refusal is dropped
+    silently. A copy whose call timed out may be closed while the adapter still writes it, which the
+    copy refuses (above). The record's other copy rules are slice-28's: the file
+    sessions/<lookup>/<id>/egress-refusals.jsonl, its private, fsynced and renamed writer, the seq
+    check with its typed gap, and status's count of records.
+
+    What T-40 leaves. The log's lost tail is p2-proxy-log-lost-tail-sink's, for the person: T-40
+    builds the record as it stands, a SIGKILL stop and one read-only mount, and its reader and copy
+    carry either candidate unchanged, a terminal record being one more stdout line. Refusing a
+    daemon older than 28.0 before create, and the executable's checks (a static Linux amd64 ELF
+    outside the checkout), are slice-27's doctor and run; T-40 verifies after create, which fails
+    closed on a daemon that ignores the option. A create whose reply was lost stays uncertain until
+    a lookup by name finds it, so a network create the daemon failed leaves a session stop cannot
+    finish; that is the worker's and the anchor's rule today, not T-40's to change. How status
+    presents the proxy and networks is slice-28's; T-40 adds no field to its entries.
+
+    T-40 amends two documents in the same pull request, under the charter's drift rule. In arc42:
+    the building-block row "Session networks and proxy" takes the status Implemented by T-40,
+    unbound until slice-27, its design still proposed in the sense of arc42's first paragraph, with
+    no runtime evidence; the work-item row becomes "T-40 — implemented session networks and proxy";
+    the deployment rows "Session networks, egress run (**proposed**, T-40)" and "Egress proxy
+    container (**proposed**, T-40 and slice-27)" say that T-40's session engine creates them,
+    unbound until slice-27; and the status sentences T-40 makes untrue, "Nothing in it is
+    implemented or proven", "nothing of it is implemented" and the Egress run's "nothing here is
+    built", or whatever T-39 left in their place, say that T-40 built the session engine's half. In
+    the record, the opening's "Nothing here is built", or T-39's sentence in its place, says the
+    same, and a section headed "## What T-40 settled" lists for the siblings what this entry
+    settled: the grant and schema 3, the resource names and labels, the proxy's Cmd and
+    configuration, the worker's proxy variables, the endpoint check before start, the stream rule
+    and the ready read, the RefusalLog port with its nil and failure rules, and the uncertain
+    creates that stay. Sibling specs, the contract and the registry stay as they are.
+
+    Tests, with fakes and the SDK's HTTP fixture and no Docker. Each asserts exact values (event
+    orders, request bodies, record bytes, outcomes), so a wrong constant or a missing step fails it,
+    and each refusal test has a healthy control, so a stub that refuses everything fails it too. In
+    port: TestEgressGrant (List, the zero value, each shape refused), TestValidEgress (names,
+    stages, IDs, the order rules), TestEgressTransitions (a table of every move above, allowed and
+    refused, with Completed) and TestEgressOwnership (every condition of each predicate). In codec:
+    TestDecodeEgressRecord (a round trip, and each field-count, name, stage, ID and order defect
+    refused). In disk: TestStoreEgressRecordRoundTrip (a schema 3 intent saved through every stage
+    and reopened, a refused transition, and a tampered egress block refused at Validate). In
+    port/porttest: TestEgressConnectionContract and TestRefusalLogContract. In docker:
+    TestSDKEgressContract; TestCreateNetworkRequest (both bodies exactly, and each refusal before a
+    request); TestInspectNetworkObservation (the mapping, 404, missing fields, a malformed body, a
+    changed socket); TestCreateProxyRequest (the body exactly, the image inspected first, each
+    refusal before a request); TestVerifyProxyRefusesEachDefect (a row per field above, the healthy
+    one passing); TestProxyReadyReadsStdoutOnly (the query; a stderr frame before the ready line;
+    each malformed, extra-key, wrong-value and 2,049-byte first line; the stream ending early; a
+    request error; a system-error frame); TestCopyProxyLogCopiesStdoutOnly (the query, the stdout
+    bytes exact with stderr frames between them dropped, a failed write, a system-error frame);
+    TestCreateRunOnInternalNetwork (the body, the six variables, the proxy checks, both schema
+    mismatches); TestVerifyRunEgressNetworks (each network, port and DNS defect); and
+    TestEgressRequestsRecheckSocket (each new method sending nothing once the pin changed, beside a
+    healthy control).
+
+    In domain: TestEgressLaunchOrder (the order above, the store's record at each create holding
+    that resource's intent and every earlier ID); TestEgressLaunchFailuresStartNoWorker (a row per
+    failure point, from a lost network reply and a gateway on the internal network to a proxy that
+    is never ready, stays silent for its call budget, stops right after ready, or stops between the
+    worker's create and start, and a foreign endpoint at the checks before start, each with its
+    outcome and operation, no worker started, and teardown releasing every recorded resource in
+    reverse order or, after a lost reply, keeping that intent); TestEgressProxyExitDuringRun
+    (ProxyExited with the existing termination and the exit seen in teardown kept, a watch failure,
+    and a worker exiting first leaving the result the worker's); TestEgressTeardownOrder (worker,
+    SIGKILL, wait, exited, the copy holding the stdout bytes, proxy removal, egress network,
+    internal network, anchor, Completed and the admission released);
+    TestEgressCopyFailureRetainsProxy (Begin, Write and Commit failing, a fresh Recovery with nil
+    Refusals and a copy timing out each keep all but the worker, Incomplete or Internal with the
+    retry, and a later Recovery.Stop with a working log completes, copying again); TestEgressRecoveryRefusesForeignResources (a
+    foreign name, other labels, another ID and a changed socket, each Refused with no removal);
+    TestEgressRecoveryAfterControllerLoss (a fresh Recovery.Stop of a running session ends the
+    worker and tears everything down); TestEgressUncertainCreates (an intent not found stays
+    Incomplete with the later resources untouched, and one found owned is adopted and released);
+    TestEgressStatus (pending while any resource remains, complete only when all are absent,
+    failures for foreign or unknown ones, nothing written); TestEgressGrantRefusedBeforeResources
+    (each invalid grant Invalid and a nil Refusals Internal, with no registration or engine call);
+    TestOfflineRunCreatesNoEgress (an offline run's events and record bytes exactly today's); and
+    TestUnregisteredRunRefusesEgress.
+
+    Commits, decided before editing, each with itos commit --task T-40, because CI runs no check of
+    a task the range's Task: footers do not name. First a test commit, red first: every test above
+    with what it needs to compile, the port's types, fields, interfaces and outcomes whole but its
+    new predicates and the schema 3 branches of its existing ones stubbed to refuse, and stub
+    methods in the fake, the RefusalLog fake, the adapter and the domain that return zero values or
+    refusals, so each test reaches its assertions. Every test fails there at an assertion, not in
+    setup, reported test by test, but TestOfflineRunCreatesNoEgress, which passes because what it
+    checks is already whole: it guards offline against the work, and its red is any later commit
+    that adds an event to an offline run. Then chore commits: the port, codec and stores; the fake
+    and the contracts; the adapter; the domain's launch and watch; its teardown and recovery. Then a
+    docs commit for the two documents. T-40 adds no package and no enforcement input, so the hooks
+    run only the cheap structural check.
+
+    Beyond the checks, run once: golangci-lint over the module through its hook,
+    tools/bin/architecture-check, tools/bin/domain-coverage, which holds session's domain to 80%,
+    and the whole non-engine feature suite once without -race, since the run, status, stop and
+    recovery scenarios drive this engine through the binary and their offline events must not
+    change. The code proof measures changed lines with the engine off and samples mutants in changed
+    functions, so every added production line in port, codec, disk, docker and domain needs a test
+    here, never an exception, and agents make no local mutation run.
+
+    The checks. The first two pass at the base, since nothing tests egress yet; their red is the
+    test commit's, where they fail at the new tests' assertions; the race form holds the watch's
+    goroutines and the copy's concurrent close (6 s for the whole engine here). The third exits 1
+    today at its first name, "port has no test named TestEgressGrant", and later names any test a
+    package lacks, because go test passes when a pattern matches nothing. The fourth exits 1 today
+    at its first grep, since arc42 does not say Implemented by T-40, and later at any status phrase
+    left standing or the record's missing section. Broken down from p1-egress-allowlist-proxy.
   done_when:
-    - run: go test ./internal/engine/session/...
+    - run: go test -count=1 ./internal/engine/session/...
+    - run: go test -race -count=1 ./internal/engine/session/...
+    - run: |
+        has() {
+          pkg=$1
+          shift
+          list=$(go test -list '^Test' "./internal/engine/session/$pkg") || { printf '%s\n' "$list"; exit 1; }
+          for name in "$@"; do
+            printf '%s\n' "$list" | grep -qx "$name" || { echo "T-40: $pkg has no test named $name"; exit 1; }
+          done
+        }
+        has port TestEgressGrant TestValidEgress TestEgressTransitions TestEgressOwnership
+        has codec TestDecodeEgressRecord
+        has disk TestStoreEgressRecordRoundTrip
+        has port/porttest TestEgressConnectionContract TestRefusalLogContract
+        has docker TestSDKEgressContract TestCreateNetworkRequest TestInspectNetworkObservation \
+          TestCreateProxyRequest TestVerifyProxyRefusesEachDefect TestProxyReadyReadsStdoutOnly \
+          TestCopyProxyLogCopiesStdoutOnly TestCreateRunOnInternalNetwork TestVerifyRunEgressNetworks \
+          TestEgressRequestsRecheckSocket
+        has domain TestEgressLaunchOrder TestEgressLaunchFailuresStartNoWorker TestEgressProxyExitDuringRun \
+          TestEgressTeardownOrder TestEgressCopyFailureRetainsProxy TestEgressRecoveryRefusesForeignResources \
+          TestEgressRecoveryAfterControllerLoss TestEgressUncertainCreates TestEgressStatus \
+          TestEgressGrantRefusedBeforeResources TestOfflineRunCreatesNoEgress TestUnregisteredRunRefusesEgress
+    - run: >-
+        grep -qF 'Implemented by T-40' docs/architecture/arc42.md &&
+        ! grep -qF '**Proposed**, T-40' docs/architecture/arc42.md &&
+        ! grep -qF 'T-40 — proposed session networks and proxy' docs/architecture/arc42.md &&
+        ! grep -qF '(**proposed**, T-40)' docs/architecture/arc42.md &&
+        ! grep -qF '(**proposed**, T-40 and slice-27)' docs/architecture/arc42.md &&
+        ! grep -q 'Nothing in it is implemented or proven' docs/architecture/arc42.md &&
+        ! grep -q 'nothing of it is implemented' docs/architecture/arc42.md &&
+        ! grep -q 'nothing here is built' docs/architecture/arc42.md &&
+        ! grep -q 'Nothing here is built' docs/decisions/0022-egress-proxy.md &&
+        grep -q '^## What T-40 settled' docs/decisions/0022-egress-proxy.md
 - id: T-41
   type: test
   title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
