@@ -454,6 +454,42 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | matching | below W root    | shared daemon    | JSON   |
       | matching | equal to W root | distinct daemons | plain  |
 
+  # PRRT_kwDOVkB0ws61Iu4r: a worker admitted before the selection compared the
+  # selected tree with its root one way, so state whose approvals collection IS
+  # the worker checkout passed. Enrolling it then writes every project's approvals
+  # into that read/write workspace. Each first Then fails on the old successful
+  # inspection or publication; W is active and P's selection is above W's root.
+  @slice-21 @ID-CONTROL-21 @local-engine-fixture @wip
+  Scenario Outline: Doctor refuses state above an active worker checkout
+    Given a control-state fixture with P approval "<approval>" and managed location "above W root" relative to W on "<engines>"
+    When W starts and a fresh P doctor inspects that location in "<format>"
+    Then W has an outstanding owned worker and P reports approval.state.exposed with exit 1 instead of usable approval
+    And the doctor invocation leaves all checkout control-state and outside-target entries unchanged
+    When a fresh P doctor selects a missing safe textual-prefix state root while W remains active
+    Then doctor reports missing approval with exit 0 without enrolling or creating that safe location
+    And neither doctor invocation mutates an engine or executes checkout code
+
+    Examples:
+      | approval | engines          | format |
+      | absent   | shared daemon    | plain  |
+      | absent   | distinct daemons | JSON   |
+      | matching | shared daemon    | JSON   |
+
+  @slice-21 @ID-CONTROL-22 @local-engine-fixture @wip
+  Scenario Outline: Consent cannot publish into state above an active worker checkout
+    Given a control-state fixture with P approval "<approval>" and managed location "above W root" relative to W on "<engines>"
+    When W starts and P approve receives its independently calculated exact fingerprint in "<format>"
+    Then W has an outstanding owned worker and P reports approval.state.exposed with exit 1 instead of usable approval
+    And P creates no managed directory location claim lock file or approval temp file and preserves any prior approval exactly
+    And W retains its full ID activity and original protected ownership without an approve-triggered engine mutation
+
+    Examples:
+      | approval | engines          | format |
+      | absent   | shared daemon    | JSON   |
+      | absent   | distinct daemons | plain  |
+      | changed  | distinct daemons | JSON   |
+      | matching | shared daemon    | plain  |
+
   # Reuse slice-16's completion semantics, including retained controller-loss
   # evidence. Today none of these reservations is consulted by doctor/approve.
   # The post-recovery success is a control, not a second red requirement.
