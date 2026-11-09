@@ -1633,3 +1633,10 @@ items:
       title=Engine step over its time limit` with measured and limit seconds and nothing else. Cover
       it in TestEngineSuiteBudget's over-budget cases. Public data only. It edits the same workflow
       region and pins, so it is one change with the notice step, not a separate item.
+  - id: T-46
+    title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
