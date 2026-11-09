@@ -363,15 +363,19 @@ both configured budgets. Repeated signals occur at 20 and 80 percent of grace;
 delayed acknowledgements take 60 percent. Escalation cannot occur early. It may
 leave up to an absolute two seconds late (`engineEscalationTolerance`, as the 30 s
 teardown assertion's 2 s), 1 s to 3 s after cancellation with the fixture grace, but
-never from a grace timer an event restarted. An immediate row refuses a SIGKILL from
-1.8 s after cancellation, the last repeat at 80 percent of grace plus the grace. A
-delayed row refuses it from the delay plus the grace after the first signal's
+not from a grace timer that the last repeat restarted (an immediate row) or that the
+first signal's acknowledgement restarted (a delayed row). An immediate row refuses a
+SIGKILL from 1.8 s after cancellation, the last repeat at 80 percent of grace plus the
+grace. A delayed row refuses it from the delay plus the grace after the first signal's
 arrival in the journal. The recorder holds that signal's acknowledgement, and the
 product waits for the reply before it can act on the grace deadline, so a delayed
 row's SIGKILL leaves at the later of the deadline and that reply, plus the work
 before a signal; a window closing 200 ms after the grace refused it on a slow
-runner. Neither limit can pass an acknowledgement-relative timer at any runner
-speed. Blocked pipes remain blocked until independent controller termination.
+runner. A delayed row whose hold ran in full refuses an acknowledgement-relative
+timer at any runner speed; an immediate row does not, and a cut hold (below) refuses
+it only when the request reached the recorder within 400 ms plus the later work. A
+timer restarted by the first repeat is the known gap below. Blocked pipes remain
+blocked until independent controller termination.
 `TestEngineSuiteBudget` also compiles the actual command contract in that copy,
 under the engine step's `-cover -coverpkg=./...` instrumentation, and checks startup
 expiry, drain expiry, quiet lifetime, delayed acknowledgement and owned cleanup
@@ -723,17 +727,24 @@ budget (200 ms and 800 ms against the 1-second fixture grace). Observer I/O does
 not hold the request recorder's lock, and a delayed running reply remains evidence
 for the same never-restarted primary. The journal rejects SIGKILL before the grace
 budget or after it plus two seconds (1 s to 3 s with the fixture grace, both ends
-accepted), and from the first instant a restarted timer could fire: 1.8 s after
-cancellation in an immediate row, the delay plus the grace (1.6 s) after the first
-signal's arrival in a delayed row. A delayed acknowledgement the product's call limit
-cut (the engine's 204, a cancelled request, no reply) still counts as a hold that ran,
-and keeps both limits. `TestLifecycleSignalWindow` pins these limits on journals it
-writes, for the four rows the engine step selects, with no engine and no waiting.
-Controlled-time harness tests cover delayed replies and early controller exit; fresh
-native-engine evidence remains CI-only. A grace timer restarted only by the first
-repeat, a SIGINT at a fifth of grace, fires 200 ms after the grace and passes these
-limits, as does a late start that no event restarted: no test sends a repeat and
-times the kill.
+accepted), and from the first instant a timer restarted by the last repeat could fire
+in an immediate row (1.8 s after cancellation), or one restarted by the first
+signal's acknowledgement in a delayed row (the delay plus the grace, 1.6 s, after the
+first signal's arrival). A delayed acknowledgement that the product's call limit cut
+(the engine's 204, a cancelled request, no reply) counts as a hold that ran only if
+the cut could be the call limit: the journal records no time for the cut, but the
+product's next request follows it at once (its own wait) and must come a call limit or
+more after cancellation. The cut keeps both limits, though its timer starts before
+the arrival plus the delay, so the delayed limit refuses it only when the request
+reached the recorder within 400 ms plus the later work.
+`TestLifecycleSignalWindow` pins these limits on journals it writes, for the four rows
+the engine step selects, with no engine and no waiting. Controlled-time harness tests
+cover delayed replies and early controller exit; fresh native-engine evidence remains
+CI-only. Two restarts pass these limits. A grace timer restarted only by the first
+repeat, a SIGINT at a fifth of grace, fires 200 ms after the grace and is accepted in
+every row; a late start that no event restarted passes too. No other test sends a
+repeat and times the kill. A fake-clock row holds both, in
+`p2-grace-origin-fake-clock-row`, not in this suite.
 
 LIFECYCLE-18/19 cover teardown diagnostics and primary-cause preservation through
 both local backends. They freeze output at command return, before disposing of

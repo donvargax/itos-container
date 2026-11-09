@@ -14,9 +14,12 @@ const (
 	engineQuietInterval = max(engineCallBudget, engineStartupBudget) + time.Second
 	// SIGKILL may leave this long after the grace expires. Absolute, as the 30 s
 	// teardown assertion's 2 s is: scheduling on a hosted runner under -cover does
-	// not shrink with the fixture's grace. It is never a license for a timer that
-	// an event restarted: lifecycleSignals refuses those from the instant they
-	// could fire.
+	// not shrink with the fixture's grace. It is no license for a timer that the
+	// last repeat restarted in an immediate row, or that the first signal's
+	// acknowledgement restarted in a delayed row: lifecycleSignals refuses those from
+	// the instant they could fire (escalationWindow says when a cut hold lets one
+	// through). A timer the first repeat restarted passes: a known gap, held by
+	// p2-grace-origin-fake-clock-row.
 	engineEscalationTolerance = 2 * time.Second
 )
 
