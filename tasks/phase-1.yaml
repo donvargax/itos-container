@@ -3647,6 +3647,10 @@
     features/lifecycle_native_assertions_test.go accepts SIGKILL only from 1.0 s to 1.2 s after
     cancellation, while the 30 s teardown assertion kept an absolute 2 s.
 
+    Triage reported on 2026-11-09 that run 42626087465 failed the same row #03 on a docs-only range,
+    the row that failed T-41's run and main's. So the failure does not depend on the range and
+    blocks work that never touches LIFECYCLE-09. That run's assertion is unread too.
+
     The cause is inferred from the code and a fake clock: nobody has read the failing assertion,
     because CI's report gives the test an empty message and no agent has gh. terminateSession
     (internal/engine/session/domain/recovery.go:370) sends the first signal and waits for its
