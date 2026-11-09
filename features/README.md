@@ -291,7 +291,13 @@ text its last `suite.go` block, as `pretty` prints the same error only at its st
 failed; or `Engine scenarios`, when the log holds no go-test failure line, as a kill, a
 caught signal, a capture failure or a passing run over the 240 s budget leave, or no log
 at all because the binary never ran. Only the run's own lines steer it: an error that
-quotes `=== RUN`, `--- FAIL:` or `panic:` lines stays whole inside its scenario. The runner
+quotes `=== RUN`, `--- FAIL:` or `panic:` lines stays whole inside its scenario. That holds
+because an engine run executes one scenario at a time (LIFECYCLE-09's rows run inside the
+quiet interval's step, which waits for them): `TestFeatures` asks godog for four at once,
+`runScenarios` runs an engine or red selection at one (`TestFeatureConcurrency` holds that),
+and go test prints a failing scenario's block, with its further lines, before the next
+one starts. Run concurrently, godog's scenarios would interleave those blocks line by line, and
+the report would keep only the first chunk of each error. The runner
 keeps ten error annotations per step, so above ten failures the first nine are annotated and
 the tenth, `<N> more failed`, lists the other titles one per line, which keeps the set of
 names comparable between re-runs; it cuts a message at 4096 characters, and the report cuts
@@ -307,8 +313,11 @@ while each engine run must still establish its own runtime evidence.
 `TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
 and runs the failure-only step against logs that `TestEngineDiagnosticsLogChild`, a re-executed
 child of the test binary, leaves by failing real scenarios through memory-only steps (a timeout,
-ten and eleven failures, a quoted error, a bare failed test), plus a few hand-written logs for
-branches no cheap run reaches, so that a Go or godog upgrade changing a log's shape fails there.
+ten and eleven failures of sixty-line errors, a quoted error, a bare failed test), plus a few
+hand-written logs for branches no cheap run reaches, so that a Go or godog upgrade changing a
+log's shape fails there. The child asks godog for `TestFeatures`'s four at once, so that
+dropping the engine tier's clamp to one cuts those errors short and fails the ten and eleven
+failures cases.
 `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
 T-33 restores the step's five-minute limit and the job's ten-minute limit. The test
