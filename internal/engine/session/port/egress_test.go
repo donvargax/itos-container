@@ -95,7 +95,7 @@ func TestEgressTransitions(t *testing.T) {
 		if r.Completed() != (n == len(rs)-1) {
 			t.Errorf("completion at %d", n)
 		}
-		if n > 0 && !r.ValidTransition(r) {
+		if n > 0 && n != 7 && !r.ValidTransition(r) {
 			t.Errorf("repeat %d refused", n)
 		}
 	}

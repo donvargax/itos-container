@@ -201,8 +201,8 @@ func (t *intent) validateBinding() port.Outcome {
 	}
 	expected := b.Intent(t.record.NameToken())
 	expected.Stage, expected.ContainerID = t.record.Stage, t.record.ContainerID
-	expected.Schema, expected.Anchor = t.record.Schema, t.record.Anchor
-	if t.record != expected || !t.record.ValidAnchor(b) {
+	expected.Schema, expected.Anchor, expected.Egress = t.record.Schema, t.record.Anchor, t.record.Egress
+	if t.record != expected || !t.record.ValidAnchor(b) || !t.record.ValidEgress(b) {
 		return port.Invalid
 	}
 	uid, gid, failure := t.store.identity()
@@ -239,7 +239,7 @@ func (t *intent) Save(next port.Record) port.Outcome {
 	if failure := t.Validate(); failure != "" {
 		return failure
 	}
-	if !t.record.ValidTransition(next) {
+	if !t.record.ValidTransition(next) || !next.ValidEgress(t.binding) {
 		return port.Invalid
 	}
 	data := t.store.Codec.Encode(next)

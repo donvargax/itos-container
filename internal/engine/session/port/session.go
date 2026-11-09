@@ -107,8 +107,8 @@ type Store interface {
 func (r Record) ValidTransition(next Record) bool {
 	expected := r
 	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
-	expected.Schema, expected.Anchor = next.Schema, next.Anchor
-	if next != expected || !r.anchorTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
+	expected.Schema, expected.Anchor, expected.Egress = next.Schema, next.Anchor, next.Egress
+	if next != expected || !r.anchorTransition(next) || !r.egressTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
 		return false
 	}
 	switch r.Stage {
@@ -116,7 +116,7 @@ func (r Record) ValidTransition(next Record) bool {
 		return next.ContainerID == "" && (next.Stage == "reserved" || next.Stage == "intent" || next.Stage == "cancelled") &&
 			(next.Schema == 1 || next.Stage == "reserved" || (next.Stage == "intent" && next.Anchor.Stage == "owned") || next.Stage == "cancelled")
 	case "cancelled", "absent":
-		return next.Stage == r.Stage && next.ContainerID == r.ContainerID && (next == r || r.Schema == 2 && r.anchorTransition(next))
+		return next.Stage == r.Stage && next.ContainerID == r.ContainerID && (next == r || r.Schema >= 2 && r.anchorTransition(next))
 	default:
 		return HexID(next.ContainerID) && (next.Stage == "owned" || next.Stage == "absent")
 	}
@@ -124,7 +124,7 @@ func (r Record) ValidTransition(next Record) bool {
 
 // Completed includes cancellation proven before create, never an unknown create.
 func (r Record) Completed() bool {
-	return (r.Schema == 1 || r.Anchor.Stage == "absent") && ((r.Stage == "absent" && HexID(r.ContainerID)) || (r.Stage == "cancelled" && r.ContainerID == ""))
+	return r.EgressGone() && r.ValidEgressShape() && (r.Schema == 1 || r.Anchor.Stage == "absent") && ((r.Stage == "absent" && HexID(r.ContainerID)) || (r.Stage == "cancelled" && r.ContainerID == ""))
 }
 
 type Intent interface {
