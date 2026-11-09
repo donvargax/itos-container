@@ -190,3 +190,4 @@ questions:
   - id: q-47
     item: "T-37"
     question: "T-37: its check's git show-ref fails on CI's ref-less fixture clone; use for-each-ref?"
+    answer: "Yes: git for-each-ref, which succeeds on an empty ref set, keeping the same state comparison; change the check and push."
