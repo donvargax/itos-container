@@ -582,6 +582,8 @@ Feature: Named credential requests and read-only source inspection
 
   # Source metadata inspection. The observer is armed after fixture setup and
   # before either CLI invocation; its positive control is outside product trees.
+  # The selected manifest is absent: successful source inspection must not
+  # depend on manifest validation, even when both grants are requested.
   @wip @slice-29 @ID-CREDENTIALS-16 @linux
   Scenario: metadata inspection shows both grants without reading or retaining either token
     Given a private credential inspection fixture
@@ -591,6 +593,7 @@ Feature: Named credential requests and read-only source inspection
       | kind         | source |
       | github-token | github |
       | claude-token | claude |
+    And the credential fixture manifest is absent
     And credential inspection effects are snapshotted
     And credential source data access is observed with an independent read control
     When itos-container runs with "doctor --policy-only --json"
@@ -937,11 +940,15 @@ Feature: Named credential requests and read-only source inspection
   # New Givens change only the selected policy/version and remove the fixture's
   # otherwise empty managed state root, retaining private XDG_STATE_HOME. They
   # do not call a product command or open the person's real state directory.
+  # Reuse 30's unreadable descendant and metadata-only snapshot setup. With no
+  # grants, that unrelated checkout directory must not prevent success. The
+  # observation contract in 31 also rejects a scan whose errors are discarded.
   @wip @slice-29 @ID-CREDENTIALS-27 @linux
   Scenario Outline: metadata mode with no grants creates no state and inspects no sources
     Given a private credential inspection fixture
     And the credential fixture policy version is <version> with no credentials section
     And the credential fixture protected state root is absent
+    And the credential fixture "checkout" has an unreadable descendant
     And credential inspection effects are snapshotted
     When itos-container runs with "doctor --credentials-only --json"
     Then it exits with code 0
@@ -955,6 +962,48 @@ Feature: Named credential requests and read-only source inspection
       | 1       |
       | 2       |
       | 3       |
+
+  # Extend 29's raw observation fixture with an "unreadable descendant" layout:
+  # the source is a distinct outside private file, both protected roots can be
+  # pinned, and the selected tree has an empty mode-000 descendant whose entry
+  # enumeration returns a permission failure. The other tree remains readable.
+  # Supply metadata and that per-directory failure, never a credential decision.
+  # The new policy-version Given changes only the version and removes credentials;
+  # it preserves all topology, including the source file and unreadable descendant.
+  # The same real command assembly runs both invocations. Its test-only observer
+  # records raw source-metadata and protected-tree traversal calls below validation,
+  # including failed calls, from command entry through return. Record each tree
+  # separately and reset the call log before each invocation, not in a Then step.
+  # The positive control must record traversal of the selected tree; with no grants,
+  # require zero source observations and zero traversal calls across BOTH trees.
+  # Root identity pinning is allowed; directory-entry reads and descendant walk
+  # calls are not. Export observations through test-only output separate from the
+  # product JSON, and run the same cases against the fake/disk observation contract.
+  @wip @slice-29 @ID-CREDENTIALS-31
+  Scenario Outline: no-grant inspection makes no source or protected-tree traversal calls
+    Given a credential observation fixture for "<boundary>" with "unreadable descendant"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                   | path                  | exit |
+      | credential.unavailable | /credentials/0/source | 3    |
+    And it exits with code 3
+    And the credential observation recorded traversal calls for "<boundary>"
+    Given the credential observation policy version is <version> with no credentials section
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind | source | target |
+    And the credential observation recorded no source metadata or protected-tree traversal calls
+    And the engine recorder has no connections
+
+    Examples:
+      | boundary        | version |
+      | checkout        | 1       |
+      | checkout        | 2       |
+      | checkout        | 3       |
+      | protected state | 1       |
+      | protected state | 2       |
+      | protected state | 3       |
 
   # A string-prefix check would reject these safe siblings. The sibling sources
   # are distinct private directories/inodes, never symlinks or mount aliases.
