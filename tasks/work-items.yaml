@@ -1639,3 +1639,27 @@ items:
     status: dropped
     depends_on: []
     kind: task
+  - id: p1-credentials-decision-record
+    title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Charter milestone two step 2 fixes the shape (Claude token from a host file, Codex auth.json
+      bind-mounted read-write as one file plus its lock file, a GitHub token for gh, all passed per
+      command, never in container configuration, docker inspect or the checkout). The mechanism,
+      though, is open: with no exec command and a workload that may be the container's main process,
+      how does a secret reach the worker without entering the create config? Candidates are a
+      pre-start archive copy, stdin handoff and an exec-time environment. The record is
+      documentation only, like T-38 and 0022. It settles the policy keys that name a credential
+      source, the host-file checks (regular file, owner, mode, outside the checkout and every
+      mount), the in-worker names and paths, redaction in status and logs, what the approval record
+      binds and shows (names and kinds, never contents), the refusal of --fingerprint for any
+      credential grant per q-52, and the synthetic-marker test approach. It states plainly what
+      stays open for the person (refresh ownership and revocation, deletion, the GitHub token's
+      scope, and the contract's rule that account-management contracts are settled before real
+      credentials are used) and asks through itos decision rather than inventing protections. It
+      updates the arc42 sections it overrides under the charter's drift rule. Later items take their
+      design from it. Broken down from p1-credentials-passed-in.
