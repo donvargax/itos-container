@@ -1316,6 +1316,16 @@ items:
       separate from T-42's features-only range. It tests existing behaviour, so it is a ledger task
       with its checks, not a new scenario. Land it after T-42. It blocks no step of milestone two,
       so p2.
+
+      This belongs inside p2-grace-origin-fake-clock-row. That item already adds a fake-clock row
+      asserting the exact SIGKILL instant, because a fake clock has no jitter and T-42's absolute
+      tolerance hides a mistimed grace timer on the native rows. A grace timer restarted by the
+      repeated SIGINT is the same defect (slice-12: one fixed grace from the first signal, never
+      restarted) with a different trigger. Extend the item so the fake-clock row also sends a repeat
+      signal before grace ends and asserts the kill still falls at first signal plus grace. Land it
+      before charter step 4 (p1-interactive-tty) changes Ctrl-C handling. Prefer this to sending
+      both signals at 80 percent, which changes a schedule T-42 fixes and two tests pin, and leaves
+      the repeat untimed.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
