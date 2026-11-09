@@ -878,14 +878,15 @@ items:
       diagnostic. Offline stays the default and is unchanged. Doctor shows the effective allowlist
       without executing checkout code. It reads and validates only, with no engine or proxy. Update
       docs/CONFIG.md and docs/CLI.md for the new field. Broken down from p1-egress-allowlist-proxy.
-  - id: p1-egress-allowlist-approval
+  - id: slice-26
     title: Approval binds the egress allowlist, and any change to it needs a new approval
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-25]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-egress-allowlist-approval.
       Charter step 1: the allowlist is part of the approved settings, and the contract's AC-02
       requires a change to network permissions to refuse startup with no self-approval. The
       canonical approved-settings record (engine/approval/canonical, profile offline-v1) and the
@@ -937,7 +938,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-egress-allowlist-approval, p1-egress-connect-proxy, p1-egress-network-lifecycle]
+    depends_on: [slice-26, p1-egress-connect-proxy, p1-egress-network-lifecycle]
     kind: idea
     why: >
       The first user-visible egress behaviour, charter step 1 (contract AC-09, AC-10, AC-13).
