@@ -168,6 +168,7 @@ jobs:
         timeout-minutes: 1
         run: |
           set +e
+          timeout 40 tools/bin/engine-failure-report "$RUNNER_TEMP/slice-11-features.log"
           sudo dmesg | tail -50
           free -m
           if [[ -f "$RUNNER_TEMP/slice-11-features.log" ]]; then
