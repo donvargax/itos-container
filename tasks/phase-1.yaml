@@ -2844,17 +2844,204 @@
   type: test
   title: The feature harness writes per-scenario coverage when itos-cc asks, so the code proof's coverage pass takes minutes
   why: >
-    Issue #29: itos-cc's whole-run coverage sets ITOS_CC_TEST_COVERDIR and expects each listed
-    test's processes to write to <dir>/<ID>; features/features_test.go builds with -cover only under
-    GOCOVERDIR and ignores that variable, so itos-cc falls back to one go test per scenario (320
-    runs, about 4 hours per proof in runs 42471183432 and 42505641988). Build with -cover
-    -covermode=atomic -coverpkg=./... when ITOS_CC_TEST_COVERDIR is set too, give each scenario
-    <ITOS_CC_TEST_COVERDIR>/<its ID without @> as GOCOVERDIR for every command it starts (w.env
-    drops ITOS_ variables, so read it in the harness), keep a selected run with neither variable a
-    plain build, and correct the package comment. Model: features/cover_test.go in donvargax/itos
-    (about 1,400 listed scenarios in about 130 s). Watch the issue's list: every listed scenario
-    must write data, the umask-0777 approval fixture's files must stay readable, and
-    TestManifestContractCoverage and the engine tests must still hold. Done when a proof log says
-    'the listed tests ran in', not 'ran one at a time'.
+    Issue https://github.com/donvargax/itos-container/issues/29 records listed-test coverage
+    taking 13745.2 and 14176.2 seconds for 320 IDs in runs 42471183432 and 42505641988.
+    The harness ignores ITOS_CC_TEST_COVERDIR, so itos-cc falls back to one go test per ID.
+    This blocks timely code proof for the charter's offline milestone. It is test infrastructure,
+    with no product scenarios, new IDs, runtime behavior or dependency. Keep the pinned itos-cc
+    0.47.2 and its mutation.tests contract unchanged; see
+    https://github.com/donvargax/itos-cc/blob/v0.47.2/README.md#mutation.
+    The model is donvargax/itos's features/cover_test.go, whose reported approximately 1400 IDs
+    in 130 seconds illustrates the protocol, not this project's performance guarantee.
+
+    Build both the CLI in features/features_test.go and the shared cmd test assembly in
+    features/session_probe_test.go with -cover -covermode=atomic -coverpkg=./... whenever
+    either GOCOVERDIR or ITOS_CC_TEST_COVERDIR is nonempty. With neither set, including a
+    selected -scenarios run, keep plain builds and unchanged stdout/stderr, with no missing
+    GOCOVERDIR warning. Preserve version/commit stamps and one shared executable per build
+    mode; a cached plain assembly cannot satisfy a later covered request, or conversely.
+    GOCOVERDIR alone retains the existing aggregate-coverage route.
+
+    The harness reads ITOS_CC_TEST_COVERDIR itself, before w.env drops ITOS_ variables.
+    Resolve a relative root against the harness working directory, then create the absolute
+    <root>/<ID tag without @> before that scenario starts a covered process. This destination
+    wins when both variables are set. Store it on the scenario world, not in process-global
+    environment changed by a Before hook: four local worlds can execute concurrently, and
+    the native quiet-worker scheduler nests independent worlds. Outline examples sharing an
+    ID accumulate in that ID's directory; different IDs never share counters. Preserve data
+    until the external collector reads it, beyond world cleanup. A missing/ambiguous ID or
+    directory-creation failure during a requested product coverage run is a harness failure,
+    never a silent fallback, a skip or an empty successful result.
+
+    Give every product invocation that scenario's effective GOCOVERDIR, including launches
+    through modified w.env, raw os.Environ, implicit inherited environments, fresh recovery
+    controllers and child wrappers. Covered test-binary invocations that return through Go's
+    test runner also need the matching -test.gocoverdir; those which exit directly retain
+    their existing exit-hook behavior. Audit the manifest/approval/run/session probes,
+    foreground/recovery/lifecycle/anchor contract helpers and native launch helpers, not only
+    runEnv. Share harness-only routing helpers under features, without changing product
+    assembly, environment sanitization, package import arrows or fixture assertions.
+
+    The older-kernel approval helper and run's child-umask helper must stage restrictive-mask
+    output beneath the effective scenario destination and export it there after child exit.
+    Preserve exportApprovalKernelCoverage's validation and restoration of owner access only
+    on generated coverage files. In particular ID-APPROVAL-32 must run both 0022 and 0777
+    examples, and ID-RUN-13 must retain its 0000/0777 cases. Do not relax the child's umask,
+    change approval/snapshot permissions, chown state or fabricate metadata/counters.
+
+    Whole runs also execute independent harness tests. Isolate their coverage in private
+    temporary roots and restore the caller's variables afterward, so synthetic memory cases
+    without IDs and repeated metadata/approval/session checks neither fail for a missing ID
+    nor add data to the external listed-ID root. This includes TestFeatureMemoryRetention,
+    TestManifestContractCoverage, TestApprovalContractCoverage, TestApprovalKernelCoverage,
+    TestDoctorListedCoverage and TestSessionContractCoverage. Keep all their assertions and
+    filtering rules; specifically clear both variables for the session regression's plain
+    cache setup. Do not skip these regressions merely because the new variable is present.
+    A selected run still executes only its selected product scenarios.
+
+    Add TestScenarioCoverageContract in features/cover_test.go. Use the real initializer,
+    environments and binaries to check the neither/aggregate/per-ID/both-variable matrix,
+    absolute routing from a relative root, independent concurrent IDs, combined outline
+    rows, retained data after cleanup, and useful errors before launch for invalid IDs or an
+    unusable destination. Check readable atomic metadata/counters and positive product-code
+    blocks with go tool covdata, not just directory creation or coverage of the test harness.
+    COUNT-01 and CLI-01 must have disjoint count reach; metadata, approval, session and
+    lifecycle contract probes must contribute their own executed domain/command blocks.
+    Exercise ID-APPROVAL-32's restrictive child, the run umask route and plain/covered cache
+    transitions. Bound these fixtures; do not recursively invoke the whole features suite.
+    Isolate this regression's own coverage, retain platform/engine guards, and skip its
+    independent scenario reruns for filtered/manual-red execution as existing regressions do.
+
+    Commit the focused regression red first with test --item T-36, then repair the harness.
+    Its per-ID routing/coverage assertion must fail against the current implementation and
+    pass after the repair. Missing-test discovery, compiler errors, setup errors and memory
+    kills are not that assertion-level evidence. The first check below is an independent
+    small end-to-end red using existing product scenarios. The second requires the exact
+    regression name before running it, so Go's successful 'no tests to run' cannot pass.
+    The third obtains the unchanged live/native-platform inventory from tools/bin/scenario-list
+    and runs the configured whole command once with only ITOS_CC_TEST_COVERDIR. Require a
+    nonempty unique inventory and readable executed product coverage for every listed ID,
+    with no extra IDs or root-level data. Never prune the inventory, retag scenarios, copy one
+    ID's coverage into another or add no-op product calls to make collection pass.
+
+    These checks use Python 3's standard library and the existing Go tools, with no RTK
+    dependency in CI. Keep the focused checks at the task tier and the complete collection
+    check in task/CI validation, not a new commit hook. The whole non-engine command has a
+    600-second wall limit, matching Go's existing ten-minute test bound; report its elapsed
+    time and listed-ID count. Run it without -race. Race checking, if needed for the routing
+    change, selects only the new/changed harness tests. Retain T-35's memory checks and world
+    cleanup, the existing four-world scheduler, native serial/nested scheduling, selectors,
+    deadlines, CI guards and gates. A memory kill requires reducing test memory use, never
+    raising the limit. Correct the package comment and features/README.md's coverage guidance.
+
+    Native engine validation remains CI-only. Preserve the existing engine job's selection,
+    preflight, fixture lifecycle, timeouts and required gate. For coverage-enabled evidence,
+    its Engine scenarios step must create a fresh directory beneath RUNNER_TEMP and set
+    ITOS_CC_TEST_COVERDIR for the existing TestFeatures invocation. Limit workflow changes to
+    enabling that collection and checking its selected IDs' readable per-ID data. The covered
+    run retains every existing behavior assertion; do not add a second whole engine run to the
+    job. Agents never use Docker, approve real state or fabricate CI context; the coordinator
+    supplies this runtime evidence.
+
+    Closure also requires a fresh pinned-itos-cc CI proof on the actual pushed head whose log
+    says 'the listed tests ran in', not 'ran one at a time', with no missing-ID coverage error
+    and a listed-test execution phase below 600 seconds. Record the run URL, SHA, judged base,
+    count and elapsed time. A cached collector result or no-code-change proof skip is not this
+    evidence. The harness-only range does not touch proof.code paths; the coordinator must
+    arrange CI evidence over a real production-changing judged range at that head, without
+    changing proof scope, pins, sampling or thresholds or manufacturing a production edit.
+    No agent-local mutation run, new proof lane or committed generated evidence is authorized.
+    Agents commit the implementation and stop; the loop owns push, CI watching and closure.
+
+    At ce4c20aa119cc82f98e020ef94ecc7097feff604, the original grep exits 0 because the ignored
+    variable already appears in a comment; it is not a useful check. The first replacement
+    runs COUNT-01 and CLI-01 successfully, then exits 1 at missing per-ID directories for both.
+    The second exits 1 at missing TestScenarioCoverageContract; its implementer still owes
+    assertion-level red. The third was attempted without -race: go test exited 1 after
+    181.974 seconds with existing approval/session fixtures reporting state.unsafe, before
+    inventory comparison. This sandbox exposes / and /tmp as UID 65534 while the test user
+    is UID 1000; the same ancestor-ownership limitation was recorded under T-35. That is not
+    a coverage assertion failure or runtime green. Repeat the unchanged check in a permitted
+    environment with normal ancestor ownership, or CI; never weaken approval checks or
+    chmod/chown those ancestors to make the fixture pass. The small routing red above does
+    not need host-state fixtures. No native-engine or mutation test ran during drafting.
   done_when:
-    - run: grep -q ITOS_CC_TEST_COVERDIR features/features_test.go
+    - run: |
+        python3 - <<'PY'
+        import os, pathlib, subprocess, tempfile
+
+        env = dict(os.environ)
+        for key in ("GOCOVERDIR", "ITOS_CC_TEST_COVERDIR", "ITOS_CONTAINER_ENGINE_TESTS", "ITOS_CONTAINER_RED_SCENARIOS", "GOFLAGS"):
+            env.pop(key, None)
+        ids = ("ID-COUNT-01", "ID-CLI-01")
+        with tempfile.TemporaryDirectory(prefix="T-36-selected-") as scratch:
+            top = pathlib.Path(scratch)
+            cover = top / "coverage"
+            cover.mkdir()
+            env["ITOS_CC_TEST_COVERDIR"] = str(cover)
+            subprocess.run(["go", "test", "./features", "-count=1", "-run", "^TestFeatures$", "-scenarios=^@(?:" + "|".join(ids) + ")$"], env=env, check=True, timeout=180)
+            missing = [name for name in ids if not (cover / name).is_dir()]
+            assert not missing, "missing per-ID coverage directories: " + ", ".join(missing)
+            for name in ids:
+                directory = cover / name
+                for pattern in ("covmeta.*", "covcounters.*"):
+                    files = list(directory.glob(pattern))
+                    assert files and all(p.is_file() and p.stat().st_size > 0 for p in files), name + " lacks " + pattern
+                profile = top / (name + ".out")
+                subprocess.run(["go", "tool", "covdata", "textfmt", "-i=" + str(directory), "-o=" + str(profile)], env=env, check=True, timeout=30)
+                rows = [line.split() for line in profile.read_text().splitlines()[1:]]
+                product = [row for row in rows if len(row) == 3 and "/internal/" in row[0] and int(row[2]) > 0]
+                assert product, name + " has no executed product coverage"
+                counted = any("/internal/slices/count/" in row[0] for row in product)
+                assert counted == (name == "ID-COUNT-01"), name + " has mixed or missing count coverage"
+            assert {p.name for p in cover.iterdir()} == set(ids), "unexpected coverage outside selected IDs"
+        PY
+    - run: |
+        python3 - <<'PY'
+        import os, subprocess
+
+        env = dict(os.environ)
+        for key in ("GOCOVERDIR", "ITOS_CC_TEST_COVERDIR", "ITOS_CONTAINER_ENGINE_TESTS", "ITOS_CONTAINER_RED_SCENARIOS", "GOFLAGS"):
+            env.pop(key, None)
+        name = "TestScenarioCoverageContract"
+        listed = subprocess.run(["go", "test", "./features", "-count=1", "-list", "^" + name + "$"], env=env, check=True, text=True, stdout=subprocess.PIPE, timeout=60).stdout
+        assert name in listed.splitlines(), "missing required regression " + name
+        subprocess.run(["go", "test", "./features", "-count=1", "-run", "^" + name + "$"], env=env, check=True, timeout=180)
+        PY
+    - run: |
+        python3 - <<'PY'
+        import os, pathlib, re, subprocess, tempfile, time
+
+        env = dict(os.environ)
+        for key in ("GOCOVERDIR", "ITOS_CC_TEST_COVERDIR", "ITOS_CONTAINER_ENGINE_TESTS", "ITOS_CONTAINER_RED_SCENARIOS", "GOFLAGS"):
+            env.pop(key, None)
+        listed = subprocess.run(["tools/bin/scenario-list"], env=env, check=True, text=True, stdout=subprocess.PIPE, timeout=60).stdout
+        rows = [line.split("\t") for line in listed.splitlines()]
+        assert rows and all(len(row) == 3 and re.fullmatch(r"ID-[A-Z]+-[0-9]+", row[0]) and row[1] and row[2] for row in rows), "invalid or empty scenario inventory"
+        ids = [row[0] for row in rows]
+        assert len(ids) == len(set(ids)), "duplicate listed IDs"
+        with tempfile.TemporaryDirectory(prefix="T-36-inventory-") as scratch:
+            top = pathlib.Path(scratch)
+            cover = top / "coverage"
+            cover.mkdir()
+            env["ITOS_CC_TEST_COVERDIR"] = str(cover)
+            start = time.monotonic()
+            subprocess.run(["go", "test", "./features", "-count=1"], env=env, check=True, timeout=600)
+            elapsed = time.monotonic() - start
+            print("T-36 whole run: %d listed IDs in %.1fs" % (len(ids), elapsed), flush=True)
+            actual = {p.name for p in cover.iterdir()}
+            missing = set(ids) - actual
+            extra = actual - set(ids)
+            assert not missing and not extra, "per-ID inventory differs: %d missing (%s); extras %s" % (len(missing), ", ".join(sorted(missing)[:12]), sorted(extra))
+            for name in ids:
+                directory = cover / name
+                assert directory.is_dir(), name + " is not a coverage directory"
+                for pattern in ("covmeta.*", "covcounters.*"):
+                    files = list(directory.glob(pattern))
+                    assert files and all(p.is_file() and p.stat().st_size > 0 for p in files), name + " lacks " + pattern
+                profile = top / (name + ".out")
+                subprocess.run(["go", "tool", "covdata", "textfmt", "-i=" + str(directory), "-o=" + str(profile)], env=env, check=True, timeout=30)
+                counters = [line.split() for line in profile.read_text().splitlines()[1:]]
+                assert any(len(row) == 3 and ("/internal/" in row[0] or "/cmd/" in row[0]) and "/porttest/" not in row[0] and not row[0].split(":", 1)[0].endswith("_test.go") and int(row[2]) > 0 for row in counters), name + " has no executed product coverage"
+            print("T-36 collected readable executed product coverage for every listed ID", flush=True)
+        PY
