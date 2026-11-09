@@ -903,8 +903,8 @@ items:
   - id: T-38
     title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: slice-25
