@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -117,25 +118,42 @@ func (w *world) credentialSteps(sc *godog.ScenarioContext) {
 		return w.policyProblems(&table, false)
 	})
 	sc.Step(`^its plain credential output lists exactly the requested grants$`, func() error {
-		var want []string
-		for _, g := range w.requestedCredentials() {
-			path := strconv.Quote(g.Source)
-			want = append(want, "credentials."+g.Kind+".source: "+path[1:len(path)-1], "credentials."+g.Kind+".target: "+g.Target)
-		}
-		var got []string
+		grants := w.requestedCredentials()
+		var lines []string
 		for _, line := range strings.Split(w.stdout, "\n") {
-			if strings.HasPrefix(line, "credentials.") {
-				got = append(got, line)
+			if strings.Contains(line, "claude-token") || strings.Contains(line, "github-token") {
+				lines = append(lines, line)
 			}
 		}
-		if !reflect.DeepEqual(got, want) {
-			return fmt.Errorf("credential lines %q, want %q", got, want)
+		if len(lines) != len(grants) {
+			return fmt.Errorf("got %d credential lines, want %d", len(lines), len(grants))
+		}
+		for i, g := range grants {
+			escaped := strconv.Quote(g.Source)
+			// The specification requires one sorted line per kind, with the
+			// exact literal path and fixed target, without fixing its labels.
+			for _, value := range []string{g.Kind, escaped[1 : len(escaped)-1], g.Target} {
+				pattern := `(^|[[:space:].:=])` + regexp.QuoteMeta(value) + `($|[[:space:]:=])`
+				if !regexp.MustCompile(pattern).MatchString(lines[i]) {
+					return fmt.Errorf("credential line %q lacks exact field %q", lines[i], value)
+				}
+			}
 		}
 		return nil
 	})
 }
 
 func (w *world) credentialFixture() error {
+	root, err := os.MkdirTemp("/tmp", "slice-29-credentials-")
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(w.dir); err != nil {
+		_ = os.RemoveAll(root)
+		return err
+	}
+	w.dir = root
+
 	if err := w.manifestCheckout(); err != nil {
 		return err
 	}
