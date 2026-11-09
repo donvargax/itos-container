@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -13,6 +14,41 @@ const (
 	engineGraceBudget   = time.Second
 	engineQuietInterval = max(engineCallBudget, engineStartupBudget) + time.Second
 )
+
+// engineTreeName is the fixture's folder, beside the engine tier's product.
+const engineTreeName = "T-33-engine-tree"
+
+// probeSuffix marks the test assembly that stands in for the product where a
+// fixture isolates the account home (see sessionProbeBinary).
+const probeSuffix = "-session-probe"
+
+// productSource is the module a harness-built assembly of the product compiles:
+// the engine tier's shortened-budget copy when one sits beside bin, which only
+// that tier's buildProduct creates, else the checkout. An assembly compiled from
+// the checkout carries the production limits, so a scenario that waits out a
+// call, startup or grace budget would wait for the full length.
+func productSource(root, bin string) string {
+	if filepath.IsAbs(bin) {
+		tree := filepath.Join(filepath.Dir(bin), engineTreeName)
+		if info, err := os.Stat(filepath.Join(tree, "go.mod")); err == nil && info.Mode().IsRegular() {
+			return tree
+		}
+	}
+	return root
+}
+
+func isProbeBinary(bin string) bool { return strings.Contains(filepath.Base(bin), probeSuffix) }
+
+// probeProduct names the product that bin, or the probe built from it, stands
+// for. A world that already runs the probe derives the same path again instead
+// of compiling a second assembly of the same sources.
+func probeProduct(bin string) string {
+	dir, name := filepath.Split(bin)
+	if i := strings.Index(name, probeSuffix); i >= 0 {
+		name = name[:i]
+	}
+	return dir + name
+}
 
 // Only the harness builds this fixture, from a disposable copy of the product
 // sources outside every writable checkout. The product has no environment, flag,
@@ -25,7 +61,7 @@ const (
 // ignores the overlay, so the product kept its 10/120/10 s limits and every wait
 // stayed long.
 func engineBudgetTree(root, dir string) (string, error) {
-	tree := filepath.Join(dir, "T-33-engine-tree")
+	tree := filepath.Join(dir, engineTreeName)
 	for _, name := range []string{"cmd", "internal"} {
 		if err := os.CopyFS(filepath.Join(tree, name), os.DirFS(filepath.Join(root, name))); err != nil {
 			return "", fmt.Errorf("copy %s for the engine budget fixture: %w", name, err)

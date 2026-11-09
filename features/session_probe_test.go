@@ -180,7 +180,7 @@ func (w *world) sessionProbeBinary() (string, error) {
 	// survives their teardown. Reuse only the executable; requests, processes,
 	// state, journals and coverage destinations remain scenario-specific.
 	if filepath.IsAbs(w.bin) {
-		path = w.bin + "-session-probe"
+		path = probeProduct(w.bin) + "-session-probe"
 	}
 	covered := productCoverageRequested() || w.coverdir != ""
 	if covered {
@@ -197,7 +197,7 @@ func (w *world) sessionProbeBinary() (string, error) {
 			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 		}
 		cmd := exec.CommandContext(ctx, "go", args...)
-		cmd.Dir, cmd.Env = w.root, sessionChildEnvironment(os.Environ())
+		cmd.Dir, cmd.Env = productSource(w.root, w.bin), sessionChildEnvironment(os.Environ())
 		data, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("build session test assembly: %w\n%s", err, data)

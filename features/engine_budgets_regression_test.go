@@ -2,7 +2,9 @@ package features
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -15,7 +17,8 @@ func testEngineBudgetFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tree, err := engineBudgetTree(root, t.TempDir())
+	dir := t.TempDir()
+	tree, err := engineBudgetTree(root, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,6 +30,78 @@ func testEngineBudgetFixture(t *testing.T) {
 	want := fmt.Sprintf("compiled budgets: call=%s startup=%s grace=%s", engineCallBudget, engineStartupBudget, engineGraceBudget)
 	if err != nil || !strings.Contains(string(output), want) || !strings.Contains(string(output), "--- PASS: TestEngineFixtureBudgetContract") {
 		t.Fatalf("compiled fixture did not enforce its budgets: %v\n%s", err, output)
+	}
+	// Scenario worlds do not run the engine product itself: the fixture that
+	// builds a checkout swaps in the assembly that honors its isolated account
+	// home. Built through a world beside the engine product, that assembly must
+	// carry the same shortened budgets, or every native wait runs at full length.
+	t.Setenv("ITOS_CC_TEST_COVERDIR", t.TempDir())
+	w := &world{root: root, dir: t.TempDir(), bin: filepath.Join(dir, "itos-container")}
+	if err := w.doctorCheckout(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.closeDoctor)
+	if !isProbeBinary(w.bin) || filepath.Dir(w.bin) != dir {
+		t.Fatalf("the world's product is %q, want the probe assembly beside the engine product", w.bin)
+	}
+	if again, err := w.sessionProbeBinary(); err != nil || again != w.bin {
+		t.Fatalf("a world already on the probe compiled another assembly: %q (%v), want %q", again, err, w.bin)
+	}
+	probe := exec.Command(w.bin, "-test.run", "^TestEngineFixtureBudgetContract$", "-test.v")
+	probe.Dir = filepath.Join(tree, "cmd", "itos-container")
+	output, err = probe.CombinedOutput()
+	if err != nil || !strings.Contains(string(output), want) || !strings.Contains(string(output), "--- PASS: TestEngineFixtureBudgetContract") {
+		t.Fatalf("the world's assembly did not enforce the engine budgets: %v\n%s", err, output)
+	}
+}
+
+func TestProductSourceFollowsTheEngineFixture(t *testing.T) {
+	root := t.TempDir()
+	engine, other := t.TempDir(), t.TempDir()
+	tree := filepath.Join(engine, engineTreeName)
+	if err := os.MkdirAll(tree, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tree, "go.mod"), []byte("module m\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// A fixture folder without its module is not a product tree.
+	if err := os.MkdirAll(filepath.Join(other, engineTreeName), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct{ bin, want string }{
+		"engine tier product":        {filepath.Join(engine, "itos-container"), tree},
+		"its probe":                  {filepath.Join(engine, "itos-container-session-probe-cover.exe"), tree},
+		"checkout product":           {filepath.Join(other, "itos-container"), root},
+		"no module in the folder":    {filepath.Join(other, "product"), root},
+		"relative path":              {"itos-container", root},
+		"empty path":                 {"", root},
+		"engine folder, other child": {filepath.Join(engine, "nested", "itos-container"), root},
+	} {
+		if got := productSource(root, tc.bin); got != tc.want {
+			t.Errorf("%s: compiled %q, want %q", name, got, tc.want)
+		}
+	}
+}
+
+func TestProbeProductIsStable(t *testing.T) {
+	for bin, want := range map[string]string{
+		"/x/itos-container":                                 "/x/itos-container",
+		"/x/itos-container-session-probe.exe":               "/x/itos-container",
+		"/x/itos-container-session-probe-cover.exe":         "/x/itos-container",
+		"/x/itos-container.exe-session-probe-cover.exe":     "/x/itos-container.exe",
+		"/x-session-probe/itos-container":                   "/x-session-probe/itos-container",
+		"/x/itos-container-session-probe.exe-session-probe": "/x/itos-container",
+	} {
+		if got := probeProduct(bin); got != want {
+			t.Errorf("probeProduct(%q) = %q, want %q", bin, got, want)
+		}
+		if got := probeProduct(want + "-session-probe-cover.exe"); got != want {
+			t.Errorf("a probe of %q names %q", want, got)
+		}
+	}
+	if isProbeBinary("/x-session-probe/itos-container") || !isProbeBinary("/x/itos-container-session-probe.exe") {
+		t.Error("only the file name marks a probe")
 	}
 }
 

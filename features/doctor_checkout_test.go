@@ -27,7 +27,10 @@ func (w *world) doctorCheckoutForHost(hostOS string, uid int) error {
 	d := &doctorWorld{checkout: filepath.Join(w.dir, "checkout"), host: filepath.Join(w.dir, "host"), recorder: filepath.Join(w.dir, "recorder"),
 		image: doctorImage, imageID: doctorImageID, engineID: "engine-A", api: "1.56", env: map[string]string{}}
 	w.doctor = d
-	if !strings.Contains(filepath.Base(w.bin), "-session-probe") {
+	// The real product reads the account home from /etc/passwd. The probe
+	// assembly honors the isolated one the fixture names, so every scenario that
+	// builds a checkout runs it instead; sessionProbeBinary compiles it once.
+	if !isProbeBinary(w.bin) {
 		binary, err := w.sessionProbeBinary()
 		if err != nil {
 			return err
