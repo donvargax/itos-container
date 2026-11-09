@@ -112,6 +112,12 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # preserving its binding and inode. Doctor may report missing approval for an
   # otherwise safe bootstrap-only tree, but never completes or fsyncs it.
   #
+  # The coordination directory is reserved for catalog metadata. Reject a selected
+  # managed root equal to or below that directory with approval.state.path (1)
+  # before bootstrap, binding publication or selected-tree creation, even if the
+  # catalog is absent. The fixed default tree and whole-component sibling paths
+  # remain valid selections. Refusal must leave other checkouts usable.
+  #
   # The shared catalog binds each absolute managed location to its validated
   # filesystem identity and host UID. For an absent tree, a pending claim binds
   # the intended path and pinned existing ancestors; complete its root identity
@@ -279,6 +285,29 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # @wip for local assertion-level red, then implement and obtain green. Each
   # scenario's expected first failing Then is documented beside it. An undefined
   # step, setup failure or an already-passing control is not red evidence.
+
+  # PRRT_kwDOVkB0ws61FzgB: selecting catalog metadata as the state parent can
+  # poison every later account-wide transaction. The first Then fails because
+  # doctor reports missing approval or approve publishes into the catalog.
+  @wip @slice-21 @ID-CONTROL-17 @local-engine-fixture
+  Scenario Outline: Selected state cannot occupy the coordination catalog namespace
+    Given a control-state fixture with an "<catalog>" catalog and XDG_STATE_HOME "<selection>" inside its metadata namespace
+    When P inspects that selection with "<command>" using valid approval inputs
+    Then P reports approval.state.path with exit 1 and invalid approval
+    And the namespace refusal creates no bootstrap binding or selected-tree entry and preserves existing state
+    When fresh commands select the default tree a catalog-prefix sibling and another checkout's safe state
+    Then all safe selections remain usable without engine mutation or checkout execution
+
+    Examples:
+      | catalog     | selection     | command |
+      | absent      | catalog       | doctor  |
+      | absent      | catalog       | approve |
+      | absent      | catalog child | doctor  |
+      | absent      | catalog child | approve |
+      | initialized | catalog       | doctor  |
+      | initialized | catalog       | approve |
+      | initialized | catalog child | doctor  |
+      | initialized | catalog child | approve |
 
   # PRRT_kwDOVkB0ws61FpuQ: publication can precede an exposing worker. The second
   # schedule holds W after preflight so admission must rediscover P's binding.
