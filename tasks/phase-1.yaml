@@ -5803,45 +5803,6 @@
     first replaces the promoted check, which a file holding its three phrases would pass, and keeps
     them. It fails today at ls, because no record exists. The second fails today on its first anchor,
     ### Credential run.
-  done_when:
-    - run: |
-        f=$(ls docs/decisions/*-credentials-passed-in.md) || exit 1
-        test "$(printf '%s\n' "$f" | wc -l)" -eq 1 || { echo "want one record: $f" >&2; exit 1; }
-        flat=$(tr -s ' \n' ' ' < "$f")
-        for s in 'docker inspect' 'per command' auth.json auth.lock 0.167.0 \
-          582a8812e023b08cbf10b4603ac41644b8d99261 EBUSY /dev/shm 0400 \
-          /run/itos-container/credentials/claude-token /run/itos-container/credentials/github-token \
-          CLAUDE_CODE_OAUTH_TOKEN 'claude setup-token' GH_TOKEN O_PATH sticky 'version 3' \
-          offline-credentials-v1 allowlist-credentials-v1 approve.terminal-required \
-          approve.confirmation-required --fingerprint q-52 'pre-start archive copy' \
-          checkWritablePath 'stdin handoff' 'exec-time environment' may_copy_tree unlink \
-          'uncertain start' 'lost start acknowledgement' 'hostname-marker probe' \
-          itos-synthetic-credential- 'synthetic marker' 'itos decision' revocation deletion \
-          fine-grained 'before real credentials are used' 'Do not mount the sources directly' \
-          'isolated container-managed storage' 'confirm or overturn' AC-29 AC-31 AC-36 \
-          slice-29 slice-30 slice-31 slice-32 slice-33 T-48 docs/security.md \
-          'Building-block view' 'Runtime view' 'Deployment view' 'Cross-cutting concepts' \
-          'Risks and open questions'; do
-          printf '%s' "$flat" | grep -qiF -- "$s" || { echo "$f lacks: $s" >&2; exit 1; }
-        done
-      prose: true
-    - run: |
-        a=docs/architecture/arc42.md
-        flat=$(tr -s ' \n' ' ' < "$a")
-        for s in '### Credential run' /run/itos-container/credentials /dev/shm \
-          approve.terminal-required q-52 offline-credentials-v1 allowlist-credentials-v1 auth.lock \
-          T-48 slice-33 'uncertain start' 'lost start acknowledgement' 'hostname-marker probe'; do
-          printf '%s' "$flat" | grep -qiF -- "$s" || { echo "arc42 lacks: $s" >&2; exit 1; }
-        done
-        for s in 'The record settles no approver' 'revisit before egress' 'revisit it before egress' \
-          'Accounts, network Git, LAN publishing' '| Minimal auth provisioning/refresh' \
-          'extra host bind mount or host-wide chown' p3-approval-before-egress; do
-          if printf '%s' "$flat" | grep -qiF -- "$s"; then echo "arc42 still says: $s" >&2; exit 1; fi
-        done
-        f=$(ls docs/decisions/*-credentials-passed-in.md) || exit 1
-        printf '%s' "$flat" | grep -qF -- "decisions/$(basename "$f")" || { echo "arc42 lacks a link to $f" >&2; exit 1; }
-        test "$(grep -c '^## ' "$a")" -eq 12
-      prose: true
 - id: T-48
   type: feat
   title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration

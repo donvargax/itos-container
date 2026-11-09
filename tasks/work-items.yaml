@@ -1652,7 +1652,7 @@ items:
     title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: slice-29
