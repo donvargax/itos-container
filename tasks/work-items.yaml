@@ -418,6 +418,17 @@ items:
       record. Also add p1-acceptance-static-binary to slice-27's depends_on (T-39 and T-40 already
       depend on T-38). Raise p3-approval-before-egress to p1 and give slice-26 the edge on it, or
       ask the person to decide before slice-26 is taken.
+
+      This item already holds the edges and the open decision; the T-38 review confirms they are
+      still absent on origin/main and at T-38's head. For the coordinator to apply as depends_on
+      edits: slice-26 gets T-38, because its drafter takes the digest binding and the
+      network-granting profile from T-38's record. slice-26 also gets this item, unless the person
+      decides first who may approve a network-granting sandbox. slice-27 gets
+      p1-acceptance-static-binary, because the harness binary was measured dynamically linked and
+      cannot serve as the proxy in an inert root filesystem; that item's own why already says
+      slice-27 should depend on it. The phase field here is already 1, so only the edges and the
+      person's decision remain. Until slice-26 has them, it can start before the record it builds on
+      exists, with nothing holding it back.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
