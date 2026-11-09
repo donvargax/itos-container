@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -174,6 +176,114 @@ Feature: timing
 				t.Errorf("nested elapsed time double counted: %+v, row sum %s", summaries, time.Duration(sum))
 			}
 		})
+	})
+	t.Run("LIFECYCLE-09 rows carry their signal offsets", func(t *testing.T) {
+		// The real world's Before hook would otherwise make a coverage directory per ID.
+		t.Setenv("GOCOVERDIR", "")
+		t.Setenv("ITOS_CC_TEST_COVERDIR", "")
+		const fixture = `@engine
+Feature: signal offsets
+  @ID-LIFECYCLE-09
+  Scenario Outline: escalation
+    Given the escalation journal "<journal>"
+    Then the row <verdict>
+    Examples:
+      | journal             | verdict |
+      | immediate           | passes  |
+      | delayed             | passes  |
+      | cut after the check | fails   |
+      | no signal request   | passes  |
+      | never signalled     | passes  |
+
+  @ID-LIFECYCLE-08
+  Scenario: another row
+    Given the escalation journal "immediate"
+    Then the row passes
+`
+		// The journals of TestLifecycleSignalWindow's cases, each with a fault so that
+		// the world's closeLifecycleNative runs, as it does for a collected row.
+		built := func(signal string, percent int, name string, withoutSignals bool) *lifecycleNative {
+			delay := time.Duration(percent) * engineGraceBudget / 100
+			cases := lifecycleImmediateWindowCases()
+			if percent != 0 {
+				cases = lifecycleDelayedWindowCases(delay)
+			}
+			i := slices.IndexFunc(cases, func(c lifecycleWindowCase) bool { return c.name == name })
+			if i < 0 {
+				t.Fatalf("no window case %q", name)
+			}
+			l := lifecycleWindowWorld(t, signal, delay, cases[i]).lifecycle
+			l.fault = newLifecycleFaults("ignore", "", delay)
+			if withoutSignals {
+				l.journalAtReturn = slices.DeleteFunc(slices.Clone(l.journalAtReturn), lifecycleSignalRequest)
+			}
+			return l
+		}
+		journals := map[string]*lifecycleNative{
+			"immediate":           built("SIGINT", 0, "immediate at the grace", false),
+			"delayed":             built("SIGTERM", 60, "delayed slow teardown", false),
+			"cut after the check": built("SIGTERM", 60, "delayed acknowledgement cut a call limit after the daemon check", false),
+			"no signal request":   built("SIGINT", 0, "immediate at the grace", true),
+			"never signalled":     {fault: newLifecycleFaults("ignore", "", 0)},
+		}
+		dir, selection := timingSelection(t, fixture, true)
+		var output bytes.Buffer
+		code := runFeatureScenarios(selection, godog.Options{Paths: []string{dir}, Format: "progress", Output: &output}, func(sc *godog.ScenarioContext, _ func()) {
+			w := initializeScenario(sc, t.TempDir(), "unused")
+			sc.Step(`^the escalation journal "([^"]*)"$`, func(name string) error {
+				journal, ok := journals[name]
+				if !ok {
+					return fmt.Errorf("no journal %q", name)
+				}
+				copied := *journal
+				w.lifecycle = &copied
+				return nil
+			})
+			sc.Step(`^the row passes$`, func() {})
+			sc.Step(`^the row fails$`, func() error { return errors.New("the row fails") })
+		})
+		type signalledRecord struct {
+			scenarioTimingRecord
+			Signals json.RawMessage `json:"signals"`
+		}
+		rows := timingRecords[signalledRecord](t, output.String(), "engine scenario timing: ")
+		ms := func(n int) int64 { return int64(n) * int64(time.Millisecond) }
+		signal := func(signal string, at int, replied string, cancelled bool, previous int, next string) string {
+			return fmt.Sprintf(`{"signal":%q,"at_ns":%d%s,"status":204,"cancelled":%t,"previous_ns":%d%s}`, signal, ms(at), replied, cancelled, ms(previous), next)
+		}
+		replied := func(at int) string { return fmt.Sprintf(`,"replied_ns":%d`, ms(at)) }
+		next := func(at int) string { return fmt.Sprintf(`,"next_ns":%d`, ms(at)) }
+		type expectation struct {
+			id, outcome string
+			signals     *string // nil: no signals field
+		}
+		wants := []expectation{
+			{"@ID-LIFECYCLE-09", "passed", ptr("[" + signal("SIGINT", 50, replied(50), false, 50, next(1000)) + "," + signal("SIGKILL", 1000, replied(1000), false, 1000, "") + "]")},
+			{"@ID-LIFECYCLE-09", "passed", ptr("[" + signal("SIGTERM", 500, replied(1100), false, 500, next(1300)) + "," + signal("SIGKILL", 1300, replied(1300), false, 1300, "") + "]")},
+			{"@ID-LIFECYCLE-09", "failed", ptr("[" + signal("SIGTERM", 650, "", true, 600, next(1620)) + "," + signal("SIGKILL", 1620, replied(1620), false, 1620, "") + "]")},
+			{"@ID-LIFECYCLE-09", "passed", ptr("[]")},
+			{"@ID-LIFECYCLE-09", "passed", nil},
+			{"@ID-LIFECYCLE-08", "passed", nil},
+		}
+		if code == 0 || len(rows) != len(wants) {
+			t.Fatalf("exit %d, %d records, want a failing run of %d: %s", code, len(rows), len(wants), output.String())
+		}
+		for i, want := range wants {
+			got := rows[i]
+			if got.ID != want.id || got.Outcome != want.outcome {
+				t.Errorf("row %d is %s %s, want %s %s", i, got.ID, got.Outcome, want.id, want.outcome)
+			}
+			switch {
+			case want.signals == nil && got.Signals != nil:
+				t.Errorf("row %d (%s) carries signals %s, want none", i, got.ID, got.Signals)
+			case want.signals != nil && string(got.Signals) != *want.signals:
+				seen := "no signals field"
+				if got.Signals != nil {
+					seen = string(got.Signals)
+				}
+				t.Errorf("row %d (%s) has %s\nwant %s", i, got.ID, seen, *want.signals)
+			}
+		}
 	})
 	t.Run("ordinary tier has no timing records", func(t *testing.T) {
 		dir, selection := timingSelection(t, strings.TrimPrefix(source, "@engine\n"), false)
