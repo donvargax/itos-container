@@ -402,6 +402,12 @@ items:
       not wait for it, so nothing forces the revisit. The coordinator should add that edge from
       slice-26 or slice-27, or ask the person to decide before slice-26 is taken. The phase is p3
       but it now gates phase-1 work, so it needs raising to p1 or the edge needs a reason.
+
+      That item already holds this exact point: its why says it has depends_on [] while slice-26 and
+      slice-27 do not wait for it, and that the coordinator should add the edge or ask the person.
+      Nothing has acted on it yet. Its p3 phase is now wrong, since slice-26 is the first approval
+      that grants network and the item gates phase-1 work. The coordinator should raise it to p1 and
+      either add the dependency from slice-26 or have the person decide before slice-26 is taken.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
