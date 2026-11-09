@@ -897,24 +897,13 @@ items:
       approvals keep their existing profile and identity. This slice covers records, presentation
       and refusal only. Nothing starts a proxy yet. It follows the policy slice, which supplies the
       validated list. Broken down from p1-egress-allowlist-proxy.
-  - id: p1-egress-connect-proxy
+  - id: T-39
     title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
     phase: 1
     owner: null
     status: todo
     depends_on: [T-38]
-    kind: idea
-    why: >
-      Charter step 1's core decision logic, built once as shared engine code under
-      internal/engine/egress with domain, port and adapter siblings. The domain is a pure decision
-      on the name the client gave in CONNECT. It allows exact canonical matches on port 443 only,
-      never reverse-DNS an IP, refuses literal IPs, alternate ports, case and trailing-dot spelling
-      variants and suffix lookalikes, and emits a refusal record with no secrets. The port has a
-      porttest fake, and the shared contract runs against the fake and the adapter. The adapter
-      wraps the library chosen in the spec, with no TLS interception, opaque tunnelling and a pinned
-      version. Unit and contract tests drive it over in-process listeners, with no Docker. It also
-      holds the small proxy entrypoint the session lifecycle will run. It adds no CLI behaviour yet,
-      so it is a task with a check, not a slice. Broken down from p1-egress-allowlist-proxy.
+    kind: task
   - id: p1-egress-network-lifecycle
     title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
     phase: 1
@@ -938,7 +927,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-26, p1-egress-connect-proxy, p1-egress-network-lifecycle]
+    depends_on: [slice-26, T-39, p1-egress-network-lifecycle]
     kind: idea
     why: >
       The first user-visible egress behaviour, charter step 1 (contract AC-09, AC-10, AC-13).
