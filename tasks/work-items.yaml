@@ -1,7 +1,8 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue: []
+queue:
+  - T-36
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
