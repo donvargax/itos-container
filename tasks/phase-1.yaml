@@ -3881,10 +3881,11 @@
     the stop before the log copy, the streaming log writer and the handshake disclosure, all of
     which their whys predate.
 
-    Both checks read only those two documents, with grep, at the task tier. Their anchors are words
-    the decisions above force, compared with whitespace flattened so line wrapping cannot fail them;
-    semantic review judges the rest. The first fails today at ls, because no record exists. The
-    second fails on its first anchor, internal/engine/egress.
+    Both checks read only those two documents, with grep, and declare prose: true, because on a
+    prose-only range CI leaves out any other late check and itos work done never runs one. Their
+    anchors are words the decisions above force, compared with whitespace flattened so line wrapping
+    cannot fail them; semantic review judges the rest. The first fails today at ls, because no
+    record exists. The second fails on its first anchor, internal/engine/egress.
   done_when:
     - run: |
         f=$(ls docs/decisions/*egress-proxy*.md) || exit 1
@@ -3903,6 +3904,7 @@
           'Building-block view' 'Runtime view' 'Deployment view'; do
           printf '%s' "$flat" | grep -qF -- "$s" || { echo "$f lacks: $s" >&2; exit 1; }
         done
+      prose: true
     - run: |
         a=docs/architecture/arc42.md
         flat=$(tr -s ' \n' ' ' < "$a")
@@ -3917,6 +3919,7 @@
         f=$(ls docs/decisions/*egress-proxy*.md) || exit 1
         printf '%s' "$flat" | grep -qF -- "decisions/$(basename "$f")" || { echo "arc42 lacks a link to $f" >&2; exit 1; }
         test "$(grep -c '^## ' "$a")" -eq 12
+      prose: true
 - id: T-39
   type: feat
   title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
