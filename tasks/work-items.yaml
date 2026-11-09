@@ -981,6 +981,19 @@ items:
 
       Correction: of slice-21's runs, 42582818914 hit this hook; 42573174685 failed for another
       reason (not this flake), so it counts once for slice-21, not twice.
+
+      p1-overlap-drain-flake already covers the 5 s drain wait in features/overlap_fixture_test.go
+      timing out under coverage, and names 'a budget that holds under coverage' as a fix. Add this
+      to it: size the bound against the product's 30 s teardown budget, since the sibling waits are
+      20, 35 and 40 s. A drain takes up to 1.2 s locally under 4-way load, and a larger bound only
+      lengthens the wait on a hung controller. T-36's text in tasks/phase-1.yaml (around lines
+      3074-3096) says to keep the five-second bound, so the fix has to amend that spec.
+
+      This belongs inside p1-overlap-drain-flake, because raising the bound there makes the
+      TestOverlapCleanup 'covered timeout' case wait that long. The fix should make the drain bound
+      a per-fixture duration, with zero meaning the default, so that case runs in milliseconds.
+      Otherwise a bound near 35 s adds that much to every run. That case currently waits the real
+      5.0 s.
   - id: p1-docs-admit-milestone-two-egress
     title: PLAN.md, README and the orchestration docs stop saying proxy egress is outside the scope
     phase: 1
