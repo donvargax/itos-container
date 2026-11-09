@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -57,10 +58,18 @@ func (w *world) lifecycleCancelled() error {
 	return w.lifecycleSafeState()
 }
 
+func lifecycleSignalRequest(e offlineRequest) bool {
+	return e.Method == "POST" && (strings.HasSuffix(e.Path, "/kill") || strings.HasSuffix(e.Path, "/stop"))
+}
+
+func lifecycleWaitRequest(e offlineRequest) bool {
+	return e.Method == "POST" && strings.HasSuffix(e.Path, "/wait")
+}
+
 func lifecycleSignalRequests(entries []offlineRequest) []offlineRequest {
 	var signals []offlineRequest
 	for _, e := range entries {
-		if e.Method == "POST" && (strings.HasSuffix(e.Path, "/kill") || strings.HasSuffix(e.Path, "/stop")) {
+		if lifecycleSignalRequest(e) {
 			signals = append(signals, e)
 		}
 	}
@@ -89,17 +98,124 @@ func (w *world) lifecycleSignals(escalate bool) error {
 		if e.At.Before(l.signalled) {
 			return errors.New("worker signal preceded controller cancellation")
 		}
-		if i == 1 && (e.At.Sub(l.signalled) < engineGraceBudget || e.At.Sub(l.signalled) > engineGraceBudget+engineGraceBudget/5) {
-			return fmt.Errorf("SIGKILL at %s, expected original %s grace (at most %s scheduling tolerance)", e.At.Sub(l.signalled), engineGraceBudget, engineGraceBudget/5)
+		if i == 1 {
+			if err := l.escalationWindow(entries[0], e); err != nil {
+				return err
+			}
 		}
 	}
 	if escalate && !l.aliveBeforeGrace {
 		return errors.New("independent native observation did not find the primary alive before grace expired")
 	}
-	if l.delay > 0 && entries[0].Replied.Sub(entries[0].At) < l.delay {
+	if l.delay > 0 && !l.heldAcknowledgement(entries[0]) {
 		return errors.New("signal acknowledgement delay did not execute")
 	}
 	return errors.Join(w.lifecycleRevalidated(l.journalAtReturn), w.lifecycleNoHostSignals())
+}
+
+// heldAcknowledgement reports whether the recorder held the first signal's
+// acknowledgement for the row's delay. The recorder holds it after the daemon's
+// reply, so a hold that outlasts what is left of the product's call limit is
+// rightly given up on: the request is cancelled with the engine's 204 journaled
+// and no Replied. The hold ran as long as the product waited, but that journal
+// records no time for the cut, and a product that gave up 100 ms after the reply
+// leaves the same one. A cancellation before the engine answered (a 502) is a
+// stall, and the hold never ran.
+//
+// So a cut counts only if it could be the call limit. The call limit runs from
+// the signal call's start, which is no earlier than the request before the
+// signal (recoverySignal checks the daemon, then signals) or than cancellation, so
+// the cut comes no earlier than engineCallBudget after the later of the two. Not
+// from cancellation alone: a first signal that arrives late leaves most of that
+// bound spent before the hold begins, and a product that gave up after 50 ms
+// would pass. Nor from the kill's own arrival, which follows the start of the
+// call: an honest cut can leave a next request less than a call limit after it. The
+// product's next request follows the cut: the moment the signal call returns it
+// goes on to inspect (terminateSession, then recoverySignal). The teardown is
+// sequential, so no other request of the product lands between them, and the
+// independent observer reads the daemon without the recorder. A next request
+// before that time means the product stopped waiting early.
+//
+// That next request is never a wait. The grace deadline is the teardown's start
+// plus the grace and the call limit equals the grace, so the signal call, which
+// starts after the teardown does, is cut after the deadline, and the product's
+// wait on the expired grace returns without a request. A wait after a cut can
+// only come from a grace that was restarted at the cut, or from a product that gave
+// up before the deadline, and is refused whatever its time. A product that sleeps
+// instead of waiting is not caught.
+func (l *lifecycleNative) heldAcknowledgement(first offlineRequest) bool {
+	if !first.Replied.IsZero() {
+		return first.Replied.Sub(first.At) >= l.delay
+	}
+	if !first.Cancelled || first.Status != http.StatusNoContent {
+		return false
+	}
+	for i, e := range l.journalAtReturn {
+		if !lifecycleSignalRequest(e) {
+			continue
+		}
+		if i+1 >= len(l.journalAtReturn) {
+			return false
+		}
+		next := l.journalAtReturn[i+1]
+		if lifecycleWaitRequest(next) {
+			return false
+		}
+		start := l.signalled
+		if i > 0 && l.journalAtReturn[i-1].At.After(start) {
+			start = l.journalAtReturn[i-1].At
+		}
+		return next.At.Sub(start) >= engineCallBudget
+	}
+	return false
+}
+
+// escalationWindow judges the SIGKILL's arrival after cancellation. It leaves
+// from the grace through the grace plus engineEscalationTolerance, both ends
+// inclusive. That alone would accept what LIFECYCLE-09 exists to refuse, a grace
+// timer restarted by an event, so it also refuses a SIGKILL from the first
+// instant a timer restarted by some of those events could fire. An honest SIGKILL
+// leaves at the later of the deadline and the first signal's reply, so the limit
+// differs by row. The figures are the fixture's budgets.
+//
+//   - an immediate row refuses the last repeat's restart: that repeat goes no
+//     earlier than lifecycleLastRepeat, so its timer fires no earlier than that
+//     plus the grace (1.8 s). The acknowledgement returns at once, so a timer it
+//     restarted fires at the first signal's arrival plus the grace, below that
+//     limit unless the arrival was 800 ms late, and is accepted.
+//   - a delayed row refuses an acknowledgement-relative timer: the hold begins
+//     when the first signal arrives (its At in the journal, since a cut hold has
+//     no Replied), and the timer begins after it, no earlier than the delay plus
+//     the grace after that. A hold that ran in full refuses that timer at any
+//     runner speed. A cut hold keeps this limit and the window, because holds are
+//     cut just when the runner is slow, but its timer starts at the cut,
+//     engineCallBudget after the call began, which is before At plus the delay.
+//     It is refused only when the request reached the recorder within
+//     engineCallBudget less the delay (400 ms) plus the work between the cut and
+//     the SIGKILL, and a slow runner lengthens that arrival. The limit moves with
+//     the arrival, so a delayed row refuses the last repeat's timer only when the
+//     first signal arrived within 200 ms.
+//
+// A timer restarted only by the first repeat, a fifth of grace in, fires 200 ms
+// after the grace and is accepted in every row. That gap is known: a fake clock
+// holds it, in p2-grace-origin-fake-clock-row.
+func (l *lifecycleNative) escalationWindow(first, kill offlineRequest) error {
+	elapsed := kill.At.Sub(l.signalled)
+	late := engineGraceBudget + engineEscalationTolerance
+	restart, cause := lifecycleLastRepeat+engineGraceBudget, "the last repeated signal"
+	if l.delay > 0 {
+		arrival := first.At.Sub(l.signalled)
+		restart, cause = arrival+l.delay+engineGraceBudget, fmt.Sprintf("the first signal's %s acknowledgement, which arrived at %s", l.delay, arrival)
+	}
+	switch {
+	case elapsed < engineGraceBudget:
+		return fmt.Errorf("SIGKILL at %s, before the original %s grace", elapsed, engineGraceBudget)
+	case elapsed > late:
+		return fmt.Errorf("SIGKILL at %s, past the original %s grace plus its %s scheduling tolerance (%s)", elapsed, engineGraceBudget, engineEscalationTolerance, late)
+	case elapsed >= restart:
+		return fmt.Errorf("SIGKILL at %s, no earlier than %s, when a grace timer restarted by %s could fire", elapsed, restart, cause)
+	}
+	return nil
 }
 
 func (w *world) lifecycleNoHostSignals() error {
