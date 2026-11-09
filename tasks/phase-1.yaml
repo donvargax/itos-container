@@ -3887,21 +3887,424 @@
     cannot fail them; semantic review judges the rest. The first fails today at ls, because no
     record exists. The second fails on its first anchor, internal/engine/egress.
 - id: T-39
-  type: feat
+  type: chore
   title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
   why: >
-    Charter step 1's core decision logic, built once as shared engine code under
-    internal/engine/egress with domain, port and adapter siblings. The domain is a pure decision on
-    the name the client gave in CONNECT. It allows exact canonical matches on port 443 only, never
-    reverse-DNS an IP, refuses literal IPs, alternate ports, case and trailing-dot spelling variants
-    and suffix lookalikes, and emits a refusal record with no secrets. The port has a porttest fake,
-    and the shared contract runs against the fake and the adapter. The adapter wraps the library
-    chosen in the spec, with no TLS interception, opaque tunnelling and a pinned version. Unit and
-    contract tests drive it over in-process listeners, with no Docker. It also holds the small proxy
-    entrypoint the session lifecycle will run. It adds no CLI behaviour yet, so it is a task with a
-    check, not a slice. Broken down from p1-egress-allowlist-proxy.
+    Charter step 1's proxy, built once as engine code under internal/engine/egress. It is the one
+    process of this project a hostile worker can talk to, and it has a route out, so a bug in it is
+    the boundary failing. docs/decisions/0022-egress-proxy.md ("the record", T-38) is its design and
+    binds this task: read it whole, with the charter, docs/architecture.md's Slices and arc42's
+    egress rows. This entry repeats each rule T-39 builds to, settles what the record left to T-39,
+    and names the four places it corrects the record, which T-39 amends. If they differ anywhere
+    else, stop and say so. It adds no CLI behaviour: slice-27 writes the hidden command and binds
+    the adapter in cmd, and T-40 owns the containers. It runs no Docker, adds no scenario and
+    changes neither go.mod nor THIRD_PARTY_NOTICES.md. Nothing here is runtime evidence or a support
+    claim.
+
+    The entry this replaces predates the record. q-51 removed its library: the proxy is our own code
+    on Go's standard library, with no dependency and no network service, the deliberate exception
+    the charter and the record explain. Its type was feat, and a feat commit must name live
+    scenarios, which this task has none of: itos commit check-message refuses feat with Task: T-39
+    and Upgrading: none ("feat commits need a Scenarios: @ID-… footer") and accepts chore with Task:
+    T-39 (both run). T-39 gives a user nothing to feel until slice-27, so its type is chore. It
+    stays a task with checks, not a slice.
+
+    Four packages, laid out as Slices says. internal/engine/egress/port holds the contract values,
+    within the domain allowlist: Proxy, whose Serve(ctx context.Context, names []string) error is
+    what slice-27's thin handler calls; Log, whose Write(line []byte) (int, error) *os.File
+    satisfies, so the port needs no io and slice-27 binds os.Stdout; Failure, a string type with
+    Error(), whose values ListInvalid, ListenFailed, AcceptFailed, LogFailed and LogExhausted hold
+    no Go error text, because the handler may print them; and the event, reason, record and hello
+    values. internal/engine/egress/domain is the pure decision, importing only its port: the
+    allowlist, the head, the hello, the limits (HeadLimit 8,192, HelloLimit 65,536, LogLimit 20,000)
+    and the numbering of records. internal/engine/egress/port/porttest holds an in-memory log, a
+    Proxy fake and ProxyContract, with no I/O. internal/engine/egress/tcp is the adapter and T-39's
+    "entrypoint": tcp.New(log port.Log) *Proxy, with listener, dial, peek and splice. Binding names,
+    because slice-27, the checks or the fixtures read them: those four paths, Proxy, Log, the five
+    Failure values, tcp.New, ProxyContract, the three depguard rules and every test this entry
+    names. Any other name here only describes.
+
+    The head. The domain's parser takes what the adapter read and finds the first CRLF CRLF itself,
+    within the first 8,192 bytes; a terminator ending at exactly byte 8,192 counts. With no
+    terminator there the reason is malformed with no method, target or port, so a partial head, an
+    oversized head and empty input read alike. Every byte after the terminator belongs to the
+    tunnel, and the verdict says where they start. The request line is exactly a non-empty method,
+    one space, a non-empty target, one space, HTTP/1.1 or HTTP/1.0, and CRLF. A bare CR or LF in it
+    is malformed, and a line of any other shape writes none of the three. Headers are skipped
+    unread: never judged, logged or forwarded, Host and Proxy-Authorization included. A request
+    passes only when its method is exactly CONNECT and its target is exactly a listed name followed
+    by :443. Anything else is refused with the first reason that fits, in this order: malformed
+    (above); not-connect (any other method, whatever its target); malformed (a CONNECT whose target
+    is not a plain host, a colon and a port); literal-ip; not-canonical; not-listed; port (the name
+    is listed and the port is not the exact text 443, so name:0443 and name:80).
+
+    T-39 settles the words the record leaves loose. The target is split at its last colon. The port
+    is one to 5 digits. A plain host is at most 255 bytes, either ASCII letters, digits, hyphen,
+    underscore and dot, or a bracketed IPv6 literal, which here is [, one or more hex digits, colons
+    and dots, and ], checked no further because it only earns a label, so []:443 and
+    [fe80::1%25eth0]:443 are malformed. Dotted IPv4 is exactly four dot-separated runs of digits
+    with no range check, so 1234:443 and 1.2.3:443 read not-listed, where the spike said literal-ip
+    (T-38 review, P3 d). A name not exactly listed reads not-canonical when its strings.ToLower with
+    one trailing dot removed is listed. These are labels for the person: only the exact match admits
+    anything. A verdict keeps a method only when it is one to 16 ASCII uppercase letters, and a
+    target and port only when both fit the rule above, so secret-token@listed.example:443,
+    a/b?token=secret:443, listed.example:443/path?token=secret and
+    http://listed.example/path?token=secret, the forms slice-28's AC-36 scenario uses, keep neither.
+
+    T-39 canonicalises nothing and calls no IDNA library or port. A triage note
+    (2026-11-09T13:55:50Z) asked it to canonicalise the client's name through slice-25's Names port
+    in internal/engine/policy/idna, because that adapter alone refuses a final xn--. This entry
+    declines: the record admits only the exact match, byte for byte, and has egress import no other
+    engine, and q-51 allows no dependency. The confusion that note guards against needs a library
+    that maps spellings, and none runs here: listed.example.xn--:443 is compared as written and
+    reads not-listed, a Unicode spelling is no plain host and reads malformed, and case or one
+    trailing dot only choose the label. So T-39 does not depend on slice-25. A list that is not
+    already canonical is refused, never mapped. The list is valid when it is non-empty, names
+    nothing twice, and each name has at least two labels, each label 1 to 63 bytes of a-z, 0-9 and
+    hyphen, at most 253 bytes in all, no trailing dot, and a final label that is neither all digits
+    nor 0x with only hex digits. That is the shape slice-25's canonicalHost returns
+    (internal/engine/policy/domain/allowlist.go on its branch), written again because of the import
+    rule, so every list policy produces passes, and a later drift fails closed at run.
+
+    The hello. The domain judges what the peek captured, in this order: a callback that never ran is
+    not-tls, however that happened; extension 0xfe0d is tls-ech; no ServerName is tls-no-name; a
+    ServerName other than the CONNECT name, byte for byte, is tls-name. Only 0xfe0d is refused, as
+    the record says. A hello with the older ECH code points 0xfe0a or 0xffce and the exact SNI
+    passes (T-38 review, P3 a): no upstream is known to honour them, fronting is already disclosed,
+    and widening the refused set is a security decision this task does not take.
+    TestOlderECHCodePointsPass pins it, and the record's handshake guarantee gains the sentence, the
+    fourth correction. crypto/tls refuses a malformed non-empty 0xfe0d before the callback, which
+    reads not-tls, and an empty one reads tls-ech (both measured). Only the label differs: both are
+    refused.
+
+    The log. One JSON object per line, at most 2 KiB, one write per record, its fields in this order
+    with each empty one left out: schema (the number 1), seq, time (RFC 3339 UTC, to the second),
+    event, method, target, port (a string, so 0443 keeps its zero), reason. For example
+    {"schema":1,"seq":2,"time":"2026-11-09T12:00:00Z","event":"refused","method":"CONNECT","target":"other.example","port":"443","reason":"not-listed"}.
+    T-40 and slice-28 read this format. The events are ready, always seq 1; refused, with reason
+    not-listed, literal-ip, port, not-canonical, not-connect, malformed, address, not-tls, tls-name,
+    tls-no-name or tls-ech; upstream-failed, with reason dns or connect; and log-full. ready and
+    log-full add nothing. A pure domain type numbers the records and counts the limit: the 20,000th
+    refused or upstream-failed record is followed by one log-full, so those two are seq 20,001 and
+    20,002. The adapter encodes with encoding/json and writes under one mutex, so seq is the order
+    of the writes. Never written: URL path or query, userinfo, headers, Proxy-Authorization, bodies,
+    tunnel bytes, the hello's SNI, client address or Go error text. An allowed tunnel writes no
+    record.
+
+    Serve, in order. Validate the list, else ListInvalid with nothing opened. Listen on
+    0.0.0.0:3128, tcp4, else ListenFailed. Write ready, else LogFailed. Then accept, one goroutine
+    per connection, until ctx ends (nil), AcceptTCP fails (AcceptFailed), a record's write fails
+    (LogFailed) or log-full is written (LogExhausted). Before returning it stops the log, closes the
+    listener and every socket it holds and waits for its goroutines, so no record follows its return
+    and a test leaks nothing. The record's stop is SIGKILL, so nothing in the product need end ctx.
+    Egress's production code holds no recover: a panic in any goroutine ends the process, the same
+    closure. After a failed write or the limit, no further record is written and the connection that
+    hit it gets no answer, because the process is ending.
+
+    One connection, in the record's order. Set a 10 s read deadline from accept, once, so a byte a
+    second cannot extend it, and read up to the terminator, at most 8,192 bytes. A read error with
+    no byte read leaves no record unless it is the deadline (os.ErrDeadlineExceeded), whether the
+    client closed or reset: both asked for nothing. That settles the T-38 review's P3 c, since the
+    spike spared only io.EOF and wrote malformed for a reset (measured here). Judge. A refusal
+    writes its record, answers 403 and closes, and its name is never resolved or dialled, so
+    refusals are no DNS channel. Dial: an address refusal is a refused record and 403; dns or
+    connect is an upstream-failed record and 502. Answer 200. From here the proxy holds the upstream
+    socket and moves nothing in either direction until the hello passes, so a server that speaks
+    first reaches no client. Set a fresh 10 s read deadline and peek. A refusal writes its record
+    and closes both sockets, with no answer and no byte forwarded. On a pass, clear the deadline,
+    write upstream the recorded bytes and then any unserved bytes from after the head, and splice. A
+    failed replay writes upstream-failed, reason connect, and closes. A failed write of an answer is
+    ignored, with no branch of its own: after the 200 the peek then reads the dead socket and
+    records not-tls, as the record's "a client that closes" says. Each record is written before the
+    client is answered. The answers, exactly: HTTP/1.1 200 Connection Established with nothing else;
+    HTTP/1.1 403 Forbidden and HTTP/1.1 502 Bad Gateway, each with Content-Length: 0 and Connection:
+    close and no body.
+
+    First correction. The record says a pass writes every recorded byte upstream. That misses bytes
+    read with the head which crypto/tls never asked for: they are never recorded, and the splice
+    reads only the socket. On a throwaway build forwarding only the recording, CONNECT, Go's
+    1,518-byte hello and a trailer in one write gave the upstream 2,048 bytes of 2,118 at 600 bytes
+    and 2,048 of 7,518 at 6,000 (measured, as the T-38 review did). Nothing crosses the boundary,
+    since only the sender's own stream breaks, but the record's "every byte after that terminator
+    belongs to the tunnel" must hold.
+
+    The peek. Its one tls.Config sets GetConfigForClient and nothing else. The callback captures
+    ServerName and Extensions and always returns an error, so crypto/tls stops once the hello has
+    parsed, before it chooses a version. tls.Server runs over a shim, a net.Conn whose Read serves
+    the bytes after the head, then the socket, recording every byte and stopping at exactly 65,536,
+    and whose Write discards, because crypto/tls sends a 7-byte alert when the callback aborts and a
+    client must get nothing forged by the proxy. Embedding the client's net.Conn gives the shim its
+    other methods with no line to cover. The splice is two goroutines, each an io.Copy between the
+    raw *net.TCPConn pair, which Go turns into splice(2) on Linux; the shim never reaches them. EOF
+    in one direction calls CloseWrite on the other socket, an error closes both at once, and both
+    close when both directions have ended. There is no idle timeout, because agents stream for long
+    periods; the contract's resource limits stay open.
+
+    The dial. A net.Dialer with Timeout 10 s, the proxy's Resolver and a Control hook, network tcp4,
+    address the rooted name and :443. The hook sees the address actually connected, CNAME targets
+    and changed answers included, with no second lookup, and refuses any address in the table and
+    any text that does not parse as an IPv4 address and port. A mixed answer dials only its valid
+    addresses. IPv6 is out of this step: under tcp4 a listed name with only AAAA answers fails as
+    dns. A failed dial is classified in the record's four steps, in order: an error holding a
+    *net.DNSError is dns; the dial's atomic passed flag set is connect; its refused flag set is
+    address; neither is connect. The table, in the adapter on net/netip, is the IANA IPv4
+    special-purpose registry (read 2026-11-09, last updated 2025-10-09) plus multicast, with the
+    registry's narrower rows inside these: 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8,
+    169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.31.196.0/24, 192.52.193.0/24,
+    192.88.99.0/24, 192.168.0.0/16, 192.175.48.0/24, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24,
+    224.0.0.0/4 and 240.0.0.0/4.
+
+    Seams. tcp.New takes the log alone and fills an unexported settings struct with every real
+    value: the address, the three 10 s waits, net.DefaultResolver, the real listen and dial
+    functions and LogLimit. So cmd always binds the real ones, and no exported field, flag, variable
+    or build tag can relax anything. In-package tests build through an unexported constructor taking
+    those settings, which is the record's test resolver and dial function and the dial timeout a
+    test can shorten (triage note, 14:42:54Z). The dial seam is func(ctx context.Context, d
+    *net.Dialer, address string) (*net.TCPConn, error) and receives the dialer the adapter built.
+    That lets the mixed-answer tests send no packet, as the T-38 PR review asked, since a VPN or
+    route answering 11.22.33.44 would otherwise fail them: the test's dial wraps d.Control so the
+    adapter's own hook judges each address first, and for one it passes the wrapper returns an
+    error, on which net stops before connect(2). Go's real Dialer and resolver and the real table
+    all still run, and the valid address still passes the table, as the record requires. Tests fake
+    DNS with a UDP socket on 127.0.0.1 behind net.Resolver{PreferGo: true, Dial: …}. Go's resolver
+    sorts an answer by RFC 6724 before dialling: 10.0.0.1, 127.0.0.1 was tried 127.0.0.1 first
+    (measured), and an address with no route moves last (read in net/addrselect.go, rule 1). So a
+    test asserts no dial order across scopes. Both orders of the mixed answer still give connect on
+    any machine, and a test that needs an order uses one scope, 127.0.0.2 then 127.0.0.1.
+
+    Tests, over in-process listeners with no Docker and no external binary. Only a test about a
+    deadline sets that deadline short; every other wait is 30 s or more, so a loaded runner cannot
+    turn a slow read into another reason. Upstream certificates are generated in memory, so no key
+    enters a file. The contract goes to port/porttest only where it does no I/O; the record's
+    contract test with a verifying client belongs in the adapter's _test.go, because porttest does
+    no I/O and depguard refuses it crypto/tls (T-38 review, P3 b). Test files keep to 600 lines and
+    errcheck, as lint holds them.
+
+    In port, TestFailureText holds each value's Error(). In porttest, TestProxyContract runs
+    ProxyContract on the fake, and TestProxyContractCatchesFaults shows through a recording reporter
+    that the contract fails faulty proxies, as count's contract_test.go does. ProxyContract holds: a
+    valid list writes exactly one ready record (schema 1, seq 1, RFC 3339 UTC time, event ready,
+    nothing more, a final newline), Serve stays in until ctx ends and returns nil, and nothing
+    follows; each invalid list (nil, empty, LISTED.example, listed.example., 127.0.0.1, a repeated
+    name) returns ListInvalid with no record; a failing log returns LogFailed. Its fixture follows
+    policy's SourceFixture: an adapter consumes the names and the log, and the fake, which validates
+    nothing because a port-side package may not import the domain, takes the failure it should
+    return. The fake records the names it was given and writes the same ready record, for slice-27's
+    handler tests.
+
+    In the domain. TestJudge's table holds every reason; each AC-36 form; both versions; the order
+    cases LISTED.example:80 (not-canonical), other.example:80 (not-listed) and 127.0.0.1:80
+    (literal-ip); 1234:443, 1.2.3:443, listed.example..:443 and listed.example.xn--:443
+    (not-listed); [::1]:443 (literal-ip); []:443, a zone and a Unicode spelling (malformed);
+    lower-case connect (not-connect, a target and port but no method); 16- and 17-letter methods;
+    255- and 256-byte hosts; 5- and 6-digit ports; a bare CR, a bare LF, a double space, a trailing
+    space, HTTP/1.2 and an HTTP/2 preface. TestJudgeHeadLimit holds 8,192 and 8,193 bytes and that
+    the first of two terminators says where the tunnel starts. TestAllowlist holds each edge of the
+    list rule, including 253 and 254 bytes, 63 and 64 bytes and a final 0x7f. TestJudgeHello holds
+    the order and byte-for-byte comparison. TestLog holds seq from 1, UTC, the fields kept and the
+    limit at LogLimit. TestLimits holds the three constants.
+
+    In the adapter. TestAdapterContract runs ProxyContract over a loopback listener.
+    TestNewBindsTheRealOnes holds what New fills. TestVerifiedThroughTheTunnel has Go's client
+    verify against a pool holding only the upstream's in-memory certificate, see that leaf in
+    PeerCertificates and read the upstream's bytes, with no record written. TestRefusedHeads drives
+    real sockets: not-listed, port, not-connect with a marker in the URL and Proxy-Authorization,
+    malformed with a marker in userinfo and in a path, exactly 8,192 bytes with no terminator (no
+    more, so the close is no reset racing the answer), a bare LF and a partial head then close each
+    answer exactly the 403, leave one record whose bytes match the format and hold no marker, and
+    never call the dial seam. TestEmptyConnections holds no record after a close and after a reset
+    (SetLinger(0)) before the first byte, and one malformed record and a 403 for silence to the
+    deadline and a partial head then silence. TestRefusedHellos holds wrong SNI, upper-case SNI, no
+    SNI, ECH from Go's client, an empty 0xfe0d, a malformed 0xfe0d, plain HTTP, an SSH banner,
+    silence to the deadline, truncation then silence, truncation then close, close with no bytes, a
+    record that starts like TLS and fails to parse, and 70 KB of one-byte records: each gives the
+    client no byte after the 200, the upstream no byte and a closed socket, and leaves one record
+    with method, target and port and no SNI text. TestOlderECHCodePointsPass forwards both hellos
+    whole. TestShimLimit feeds a handshake message claiming 65,000 bytes in one-byte records and
+    holds the recording at exactly HelloLimit, with the next Read refused. TestReplay holds the
+    exact bytes upstream for head, hello and a trailer of 0, 37, 600 and 6,000 bytes in one write, a
+    hello split byte by byte and one over two TLS records; the deadline cleared on a pass, by
+    sending the hello with the head, so the peek reads no socket, then writing past a short
+    deadline; and a failed replay, from a dial seam returning a closed socket. TestSplice holds
+    half-close each way, a server that speaks first reaching the client only after the hello passes,
+    and a reset on one side closing the other. TestDialClassification holds, with the wrapper above,
+    both orders of 10.0.0.1 and 11.22.33.44 and 11.22.33.44 alone (connect); none valid (address);
+    no such host, an empty answer and a resolver that never replies under a short timeout (dns); a
+    refused connection to a closed loopback port with the hook removed (connect, step four);
+    127.0.0.2 then 127.0.0.1 connecting to a loopback listener while the wrapper shows the hook
+    11.22.33.44 for it, after the hook refused 127.0.0.2; the rooted name; and through Serve the
+    event and answer for address, dns and connect. TestRefusedAddressTable holds the first and last
+    address of every row, the address on each side of it (11.22.33.44 too), and refused text that
+    does not parse, IPv6 included. TestServeFailures holds an invalid list never calling listen, a
+    failed listen, a closed listener (AcceptFailed, no record), a failing write (LogFailed, no
+    answer) and a limit of 2. TestLogFullUnderLoad has 50 concurrent refused clients at a limit of 5
+    leave exactly ready, five records and log-full, and LogExhausted. TestRecordBeforeAnswer uses a
+    log that blocks, and no answer arrives until its write returns. TestConcurrentRecords has 50
+    concurrent refused clients leave seq 1 to 51 in write order, one line each. TestLongestRecord
+    holds a 16-letter method, a 255-byte host and a 5-digit port within 2,048 bytes.
+    TestContextEndsTunnels ends a live tunnel with ctx, and Serve returns nil.
+
+    No interception code exists in the tree, proved the record's three ways, with the second changed
+    in form (second correction). TestVerifiedThroughTheTunnel is the first. The record's second is a
+    search for names, which cannot stand: a correct peek writes tls.ClientHelloInfo, so grep -F
+    tls.Client matches it (T-38 review, P2), and a ledger check leaves the ledger when work done
+    closes the task (triage note, 11:55:55Z). So TestNoInterceptionCode, an ordinary Go test in the
+    adapter, parses every production source under cmd and internal with go/parser and refuses: any
+    crypto/x509 import, sub-packages included; any rename of crypto/tls; and in a file importing it,
+    any tls.<name> selector but Config, ClientHelloInfo and Server, which refuses tls.Certificate,
+    tls.LoadX509KeyPair, tls.X509KeyPair, tls.Listen, tls.NewListener and tls.Client by identifier,
+    and any key but GetConfigForClient in a tls.Config literal, which refuses GetCertificate. It
+    compares the qualifier, since session's Docker adapter writes container.Config literals
+    (measured). It first proves itself on a table of offending sources, and fails if it read fewer
+    than 100 files, since 174 exist today. It holds on every later push because CI's go test
+    ./cmd/... ./internal/... and the platform job run it. TestNoRelaxingCode holds the rest of "no
+    flag, variable or build tag" and "recovers no panic" the same way over egress's own production
+    sources: no //go:build line, no Getenv, LookupEnv, Environ or GOOS selector and no recover call.
+    The third way stays a check: go list -deps of egress's packages shows no module but this one and
+    no net/http (measured).
+
+    Three depguard rules hold the imports on every later push, in .golangci.yml, each lax or strict
+    as written. egress-tls is lax, files **/cmd/**, **/internal/**, !$test and
+    !**/internal/engine/egress/tcp/**, denying crypto/tls. egress-x509 is lax, files **/cmd/**,
+    **/internal/** and !$test, denying crypto/x509. egress-imports is strict, files
+    **/internal/engine/egress/** and !$test, allowing bytes, context, crypto/tls, encoding/json,
+    errors, fmt, io, maps, net, net/netip, os, slices, sort, strconv, strings, sync, sync/atomic,
+    syscall, time, unicode, each exact with its trailing $, and the owner's prefix
+    github.com/donvargax/itos-container/internal/engine/egress/, so net/http, flag, a library or
+    another engine needs a reviewed change. The third goes beyond the record's two, because the
+    adapter's own rule allows any standard package or engine API and the go list check leaves with
+    the task. Each fixture is appended to tools/testdata/architecture/cases.json with a Name
+    starting egress-. Kind allow, with Rule naming the rule it passes: crypto/tls in tcp/probe.go,
+    tcp/nested/probe.go and tcp/probe_test.go; crypto/x509 and crypto/x509/pkix in
+    tcp/probe_test.go; crypto/tls and crypto/x509 in internal/engine/session/docker/probe_test.go;
+    $module/internal/engine/egress/domain in tcp/probe.go. Kind lint, with Rule as given: crypto/tls
+    in internal/engine/egress/domain/probe.go (domain,egress-tls),
+    internal/engine/egress/port/probe.go (port,egress-tls), and with egress-tls alone in
+    internal/engine/egress/port/porttest/probe.go, internal/engine/egress/tcpx/probe.go,
+    internal/engine/session/docker/probe.go, internal/slices/fresh/command/probe.go,
+    internal/cli/probe.go and cmd/probe/probe.go; crypto/x509 and crypto/x509/pkix in tcp/probe.go
+    (egress-imports,egress-x509); crypto/x509 in internal/engine/session/docker/probe.go and
+    cmd/probe/probe.go (egress-x509); net/http, flag, golang.org/x/term and
+    $module/internal/engine/policy/domain in tcp/probe.go (egress-imports). That is 24 probes, with
+    tcp/ short for internal/engine/egress/tcp/.
+
+    Fuzz tests, q-51's requirement, written as internal/engine/policy/yaml/fuzz_test.go is.
+    FuzzHead, in the domain, takes arbitrary bytes and holds them to an oracle of its own, regular
+    expressions in the test rather than the domain's helpers, which could not catch themselves:
+    nothing panics; a pass happens exactly when the input begins with CONNECT, a listed name, :443,
+    one space, HTTP/1.1 or HTTP/1.0 and CRLF and its first terminator ends within 8,192 bytes; a
+    pass's tunnel offset follows that terminator; and method, target and port obey the log's rule.
+    FuzzPeek, in the adapter, takes bytes and a cut, giving up to 8,192 bytes as the bytes after the
+    head and the rest to a scripted client socket: nothing panics; no byte reaches the client; the
+    recording is a prefix of the input within 65,536 bytes; a pass has the exact ServerName and no
+    0xfe0d. Third correction: a pass also forwards the whole input, its recording, its unserved
+    bytes and what the socket still holds together equalling the input, because the record's
+    assertions cannot catch the first correction's loss, a recording being a prefix either way. Its
+    seeds are real hellos from Go's client, captured in memory over net.Pipe at seed time, with the
+    exact SNI, another SNI, no SNI and ECH, an exact-SNI hello with a 6,000-byte trailer, and both
+    code-point extensions, beside empty input, plain HTTP and a truncated record. No curl or openssl
+    capture enters the tree: Go's client's hellos are real, the parser is crypto/tls's either way,
+    and an opaque blob would explain nothing. Plain go test replays the seeds on every push. Each
+    target also runs with -fuzz for 30 s at -parallel 2 and -fuzzminimizetime 0s in done_when, for
+    T-39's own range, the flag and its reason as the record has them, and every crash found is
+    committed as a seed under testdata/fuzz. A nightly tier stays p2-scheduled-fuzz-egress-parser's.
+    The race check likewise runs once, for this range, because the adapter is where this project's
+    concurrency meets a hostile client and its tests take seconds; go test -race runs only over
+    egress's packages, never ./features.
+
+    T-39 amends two documents in the same pull request, under the charter's drift rule. In the
+    record: the peek's replay sentence (first correction, using the word unserved); the second way
+    and "Those checks run only for T-39's own range" under "No interception code", naming the two Go
+    tests and the three depguard rules (second); the peek target's assertions (third); and in the
+    handshake guarantee, one sentence that hellos with ECH's older code points and the exact SNI
+    pass (fourth, using the word 0xfe0a). In arc42: the building-block row, the mermaid node and the
+    work-item row of internal/engine/egress say it is built by T-39 with its adapter at
+    internal/engine/egress/tcp, not bound by cmd until slice-27, its design still proposed and with
+    no runtime evidence. The quality row stays unproven. Sibling specs, the contract and the
+    registry stay as they are.
+
+    Commits, decided before editing. Every one names the task with itos commit --task T-39, because
+    CI runs no check of a task the range's Task: footers do not name, and an Item:-only commit names
+    none; and the item must be taken, or its checks wait (T-38's review replayed both). First a test
+    commit, red first for a new package: the tests, the fake and the contract over a stub of the
+    domain and adapter that compiles, with every test failing at an assertion and not in setup,
+    reported test by test. Then chore commits for the domain, the adapter, and the depguard rules
+    with their fixtures, whose commit runs the whole fixture matrix in its pre-commit hook (measured
+    124 s for all 368 probes); run the new probes once before adding the rules, as the matrix's
+    README describes, and report each Kind lint probe failing at its expected refusal. Then a docs
+    commit for the two documents. What the change reaches beyond its checks:
+    tools/bin/architecture-check, the matrix, TestNoDenyEntryPrefixesAnother, golangci-lint over the
+    whole module and tools/bin/domain-coverage, which finds the new domain itself and holds it to
+    80%. The code proof measures changed lines with the engine off and excludes porttest, so T-39
+    covers its serve loop with these loopback tests, and every added production line needs a test,
+    never an exception. Agents run no local mutation proof.
+
+    Measured on a throwaway build of this design, outside the tree, under Go 1.27.3 with no Docker,
+    so no runtime evidence, and to be replaced by T-39's own: about 700 lines of production Go with
+    comments, against the person's estimate of about 300 for the flow alone; 100.0% of statements in
+    domain, port and tcp, in about 1 s of tests, stable at -count=5 on one CPU and clean under
+    -race; lint with no issues over the whole module; architecture-check clean; go vet clean under
+    GOOS=windows and darwin; the 24 probes passing in under 10 s; 30 s of FuzzHead at 1,867,353
+    executions and FuzzPeek at 589,927, each finding nothing, 39 s and 41 s from a cold cache,
+    FuzzPeek peaking at 156 MiB. Hand mutants of that build failed the named test each time:
+    forwarding only the recording failed TestReplay and FuzzPeek; sparing only EOF failed
+    TestEmptyConnections; calling any digit run literal-ip failed TestJudge; classifying by the
+    returned error failed TestDialClassification; a shim that writes failed TestRefusedHellos and
+    FuzzPeek with its 7 bytes; keeping the deadline failed TestReplay. macOS and Windows runs were
+    not made: the manual dispatch jobs run these tests, and no test needs a Linux-only address.
+
+    The checks all fail today and each can fail after a wrong change. go test -count=1
+    ./internal/engine/egress/... and its -race form exit 1 at lstat, since the directory does not
+    exist. The third exits 1 at go test -list for the same reason, and later names any test a
+    package lacks, because go test passes when a -run or -fuzz pattern matches nothing. Each -fuzz
+    check exits 1 at the missing directory, and later at any crash. The go list check exits 1 at the
+    same directory, and later at any module or net/http. The fixture check exits 1 at its count of
+    egress- probes, zero today, and later at any probe the rules do not meet. The document check
+    exits 1 at its first grep, since arc42 does not name internal/engine/egress/tcp. Broken down
+    from p1-egress-allowlist-proxy.
   done_when:
-    - run: go test ./internal/engine/egress/...
+    - run: go test -count=1 ./internal/engine/egress/...
+    - run: go test -race -count=1 ./internal/engine/egress/...
+    - run: |
+        has() {
+          pkg=$1
+          shift
+          list=$(go test -list '^(Test|Fuzz)' "./internal/engine/egress/$pkg") || { printf '%s\n' "$list"; exit 1; }
+          for name in "$@"; do
+            printf '%s\n' "$list" | grep -qx "$name" || { echo "T-39: $pkg has no test named $name"; exit 1; }
+          done
+        }
+        has port TestFailureText
+        has port/porttest TestProxyContract TestProxyContractCatchesFaults
+        has domain TestJudge TestJudgeHeadLimit TestAllowlist TestJudgeHello TestLog TestLimits FuzzHead
+        has tcp TestAdapterContract TestNewBindsTheRealOnes TestVerifiedThroughTheTunnel TestRefusedHeads \
+          TestEmptyConnections TestRefusedHellos TestOlderECHCodePointsPass TestShimLimit TestReplay TestSplice \
+          TestDialClassification TestRefusedAddressTable TestServeFailures TestLogFullUnderLoad \
+          TestRecordBeforeAnswer TestConcurrentRecords TestLongestRecord TestContextEndsTunnels \
+          TestNoInterceptionCode TestNoRelaxingCode FuzzPeek
+    - run: go test ./internal/engine/egress/domain -run '^$' -fuzz '^FuzzHead$' -fuzztime 30s -parallel 2 -fuzzminimizetime 0s
+    - run: go test ./internal/engine/egress/tcp -run '^$' -fuzz '^FuzzPeek$' -fuzztime 30s -parallel 2 -fuzzminimizetime 0s
+    - run: |
+        modules=$(go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./internal/engine/egress/...) || exit 1
+        modules=$(printf '%s\n' "$modules" | sort -u | grep -v '^$')
+        test "$modules" = github.com/donvargax/itos-container || { echo "T-39: egress depends on $modules"; exit 1; }
+        packages=$(go list -deps ./internal/engine/egress/...) || exit 1
+        if printf '%s\n' "$packages" | grep -qx 'net/http'; then echo "T-39: egress links net/http"; exit 1; fi
+    - run: |
+        probes=$(grep -c '"Name": "egress-' tools/testdata/architecture/cases.json)
+        test "$probes" -ge 24 || { echo "T-39: $probes egress probes, want at least 24"; exit 1; }
+        tmp=$(mktemp -d) || exit 1
+        go build -o "$tmp/check" ./tools/architecture/check &&
+          ARCHITECTURE_CHECKER="$tmp/check" go test ./tools/testdata/architecture -count=1 -run '^TestPolicy$/^egress-'
+        status=$?
+        rm -rf "$tmp"
+        exit "$status"
+    - run: >-
+        grep -q 'internal/engine/egress/tcp' docs/architecture/arc42.md &&
+        ! grep -q 'egress (proposed, T-39)' docs/architecture/arc42.md &&
+        grep -q 'TestNoInterceptionCode' docs/decisions/0022-egress-proxy.md &&
+        grep -q 'unserved' docs/decisions/0022-egress-proxy.md &&
+        grep -q '0xfe0a' docs/decisions/0022-egress-proxy.md
 - id: T-40
   type: feat
   title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
