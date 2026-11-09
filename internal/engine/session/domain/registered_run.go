@@ -159,7 +159,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		// Stop already won a transition. Observe its result without repeating or
 		// rewriting cleanup; an unstarted workload never becomes successful.
 		result.Outcome = port.Incomplete
-		observed := (Recovery{Registry: s.Registry, Engine: s.Engine}).status(teardown, id)
+		observed := (Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals}).status(teardown, id)
 		result.Cleanup = port.Incomplete
 		if len(observed.Failures) == 0 && len(observed.Entries) == 1 && observed.Entries[0].Cleanup == "complete" {
 			result.Cleanup = port.Complete
@@ -169,7 +169,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		}
 		return result
 	}
-	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, immediate: result.Outcome == port.MountRefused && result.Started}
+	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, immediate: result.Outcome == port.MountRefused && result.Started}
 	// The output subscription is independent of termination and removal. A blocked
 	// consumer must never hold the operation lock or prevent owned cleanup.
 	drain := startDrain(teardown, attachment)
@@ -178,8 +178,8 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		if len(prepared.Entries) == 1 && prepared.Entries[0].WorkloadExit != nil {
 			result.Exit, result.Exited = *prepared.Entries[0].WorkloadExit, true
 		}
-		if len(prepared.Failures) != 0 {
-			result.Cleanup = prepared.Failures[0].Outcome
+		if f := recoveryCleanup(prepared, &result.RefusalLog); f != port.Complete {
+			result.Cleanup = f
 			result.Stream = <-drain
 			if budget.Cause(teardown) != nil {
 				result.Teardown = port.TeardownTimeout
@@ -192,10 +192,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		exit = &result.Exit
 	}
 	cleaned := recovery.stop(teardown, id, signal, exit, true)
-	result.Cleanup = port.Complete
-	if len(cleaned.Failures) != 0 {
-		result.Cleanup = cleaned.Failures[0].Outcome
-	}
+	result.Cleanup = recoveryCleanup(cleaned, &result.RefusalLog)
 	if !result.Exited && len(cleaned.Entries) == 1 && cleaned.Entries[0].WorkloadExit != nil {
 		result.Exit, result.Exited = *cleaned.Entries[0].WorkloadExit, true
 	}

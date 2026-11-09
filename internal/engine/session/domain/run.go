@@ -327,24 +327,30 @@ func validateLaunch(ctx context.Context, intent port.Intent, connection port.Run
 
 // Cleanup reacquires the original record/snapshot with a fresh teardown budget;
 // neither current approval nor an expired startup context can authorize removal.
-func (s Runner) Cleanup(ctx context.Context, reference string) port.Result {
+func (s Runner) Cleanup(ctx context.Context, reference string) (result port.Result) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	result := port.Result{Reference: reference}
+	result = port.Result{Reference: reference}
+	report := port.RefusalReport{}
+	ctx = context.WithValue(ctx, egressRecoveryKey{}, egressRecoveryState{log: s.Refusals, report: &report})
+	defer func() { result.RefusalLog = report }()
 	intent, failure := s.Store.OpenCleanup(ctx, reference)
 	if failure != "" {
 		result.Outcome = failure
 		return result
 	}
 	defer intent.Close()
+	if intent.Record().Schema == 3 {
+		s.Engine = finiteEngine{s.Engine}
+	}
 	connection, failure := s.Engine.OpenRun(ctx, intent.Binding())
 	if failure != "" {
 		result.Outcome = failure
 		return result
 	}
 	defer connection.Close()
-	if intent.Record().Schema == 2 && intent.Record().Stage == "reserved" {
-		result.Outcome = releaseAnchor(ctx, intent, connection)
+	if intent.Record().Schema >= 2 && (intent.Record().Stage == "reserved" || intent.Record().Stage == "cancelled") {
+		result.Outcome = releaseSessionResources(ctx, intent, connection)
 		if result.Outcome == "" {
 			r := intent.Record()
 			r.Stage = "cancelled"

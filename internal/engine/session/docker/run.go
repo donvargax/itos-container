@@ -47,6 +47,10 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 	}
 	call, cancel := c.call(ctx)
 	defer cancel()
+	networking, address, failure := c.workerNetwork(call, r)
+	if failure != "" {
+		return "", failure
+	}
 	image, err := c.api.ImageInspect(call, r.ImageID)
 	if !c.pin.Unchanged() {
 		return "", port.Refused
@@ -61,9 +65,8 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 	if json.Unmarshal([]byte(c.binding.Environment), &env) != nil {
 		return "", port.Invalid
 	}
-	networking, address, failure := c.workerNetwork(call, r)
-	if failure != "" {
-		return "", failure
+	if env == nil {
+		env = map[string]string{}
 	}
 	if address != "" {
 		for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {

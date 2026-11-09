@@ -11,6 +11,8 @@ import (
 
 // RunEngine is an in-memory lifecycle fake, including explicit boundary faults.
 type RunEngine struct {
+	OpenNil                       bool
+	AfterProxyWait                func()
 	Networks                      map[string]port.NetworkObservation
 	EgressFault                   string
 	ProxyOutput, ProxyErrorOutput string
@@ -55,6 +57,9 @@ func (e *RunEngine) event(name string) {
 	}
 }
 func (e *RunEngine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection, port.Outcome) {
+	if e.OpenNil {
+		return nil, ""
+	}
 	if e.OpenFailure != "" {
 		return nil, e.OpenFailure
 	}

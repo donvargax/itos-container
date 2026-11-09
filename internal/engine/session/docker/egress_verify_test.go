@@ -5,6 +5,7 @@ import (
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	st "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"net/netip"
 	"slices"
@@ -14,6 +15,99 @@ import (
 
 func TestVerifyProxyRefusesEachDefect(t *testing.T) {
 	defects := map[string]func(*container.InspectResponse){
+		"config image":   func(r *container.InspectResponse) { r.Config.Image = "other" },
+		"entrypoint":     func(r *container.InspectResponse) { r.Config.Entrypoint = []string{"sh"} },
+		"health":         func(r *container.InspectResponse) { r.Config.Healthcheck = nil },
+		"health command": func(r *container.InspectResponse) { r.Config.Healthcheck.Test = []string{"CMD", "sh"} },
+		"volume":         func(r *container.InspectResponse) { r.Config.Volumes = map[string]struct{}{"/data": {}} },
+		"attach stdin":   func(r *container.InspectResponse) { r.Config.AttachStdin = true },
+		"attach stdout":  func(r *container.InspectResponse) { r.Config.AttachStdout = true },
+		"attach stderr":  func(r *container.InspectResponse) { r.Config.AttachStderr = true },
+		"stdin once":     func(r *container.InspectResponse) { r.Config.StdinOnce = true },
+		"running":        func(r *container.InspectResponse) { r.State.Running = true },
+		"PID":            func(r *container.InspectResponse) { r.State.Pid = 1 },
+		"state":          func(r *container.InspectResponse) { r.State.Status = "exited" },
+		"network mode":   func(r *container.InspectResponse) { r.HostConfig.NetworkMode = "host" },
+		"auto remove":    func(r *container.InspectResponse) { r.HostConfig.AutoRemove = true },
+		"publish all":    func(r *container.InspectResponse) { r.HostConfig.PublishAllPorts = true },
+		"extra group":    func(r *container.InspectResponse) { r.HostConfig.GroupAdd = []string{"0"} },
+		"pids absent":    func(r *container.InspectResponse) { r.HostConfig.PidsLimit = nil },
+		"pids wrong":     func(r *container.InspectResponse) { n := int64(4095); r.HostConfig.PidsLimit = &n },
+		"restart":        func(r *container.InspectResponse) { r.HostConfig.RestartPolicy.Name = "always" },
+		"pid ns":         func(r *container.InspectResponse) { r.HostConfig.PidMode = "host" },
+		"ipc ns":         func(r *container.InspectResponse) { r.HostConfig.IpcMode = "host" },
+		"uts ns":         func(r *container.InspectResponse) { r.HostConfig.UTSMode = "host" },
+		"user ns":        func(r *container.InspectResponse) { r.HostConfig.UsernsMode = "host" },
+		"cgroup ns":      func(r *container.InspectResponse) { r.HostConfig.CgroupnsMode = "host" },
+		"devices": func(r *container.InspectResponse) {
+			r.HostConfig.Devices = []container.DeviceMapping{{PathOnHost: "/dev/x"}}
+		},
+		"device requests": func(r *container.InspectResponse) {
+			r.HostConfig.DeviceRequests = []container.DeviceRequest{{Driver: "other"}}
+		},
+		"device rules":    func(r *container.InspectResponse) { r.HostConfig.DeviceCgroupRules = []string{"a"} },
+		"binds":           func(r *container.InspectResponse) { r.HostConfig.Binds = []string{"/other:/data"} },
+		"volumes from":    func(r *container.InspectResponse) { r.HostConfig.VolumesFrom = []string{"other"} },
+		"links":           func(r *container.InspectResponse) { r.HostConfig.Links = []string{"other"} },
+		"extra hosts":     func(r *container.InspectResponse) { r.HostConfig.ExtraHosts = []string{"other:127.0.0.1"} },
+		"DNS":             func(r *container.InspectResponse) { r.HostConfig.DNS = []netip.Addr{netip.MustParseAddr("1.1.1.1")} },
+		"DNS search":      func(r *container.InspectResponse) { r.HostConfig.DNSSearch = []string{"other"} },
+		"DNS options":     func(r *container.InspectResponse) { r.HostConfig.DNSOptions = []string{"ndots:1"} },
+		"tmpfs":           func(r *container.InspectResponse) { r.HostConfig.Tmpfs = map[string]string{"/tmp": "rw"} },
+		"init absent":     func(r *container.InspectResponse) { r.HostConfig.Init = nil },
+		"init enabled":    func(r *container.InspectResponse) { v := true; r.HostConfig.Init = &v },
+		"security absent": func(r *container.InspectResponse) { r.HostConfig.SecurityOpt = nil },
+		"security extra": func(r *container.InspectResponse) {
+			r.HostConfig.SecurityOpt = append(r.HostConfig.SecurityOpt, "seccomp=unconfined")
+		},
+		"security false": func(r *container.InspectResponse) { r.HostConfig.SecurityOpt = []string{"no-new-privileges=false"} },
+		"log type":       func(r *container.InspectResponse) { r.HostConfig.LogConfig.Type = "none" },
+		"second mount": func(r *container.InspectResponse) {
+			r.HostConfig.Mounts = append(r.HostConfig.Mounts, r.HostConfig.Mounts[0])
+		},
+		"bind options":             func(r *container.InspectResponse) { r.HostConfig.Mounts[0].BindOptions = &mount.BindOptions{} },
+		"materialized missing":     func(r *container.InspectResponse) { r.Mounts = nil },
+		"materialized source":      func(r *container.InspectResponse) { r.Mounts[0].Source = "/other" },
+		"materialized destination": func(r *container.InspectResponse) { r.Mounts[0].Destination = "/other" },
+		"materialized type":        func(r *container.InspectResponse) { r.Mounts[0].Type = mount.TypeVolume },
+		"materialized propagation": func(r *container.InspectResponse) { r.Mounts[0].Propagation = "shared" },
+		"endpoint alias": func(r *container.InspectResponse) {
+			for _, ep := range r.NetworkSettings.Networks {
+				ep.Aliases = []string{"alias"}
+				break
+			}
+		},
+		"endpoint IPAM": func(r *container.InspectResponse) {
+			for _, ep := range r.NetworkSettings.Networks {
+				ep.IPAMConfig = &network.EndpointIPAMConfig{}
+				break
+			}
+		},
+		"endpoint driver": func(r *container.InspectResponse) {
+			for _, ep := range r.NetworkSettings.Networks {
+				ep.DriverOpts = map[string]string{"x": "y"}
+				break
+			}
+		},
+		"endpoint links": func(r *container.InspectResponse) {
+			for _, ep := range r.NetworkSettings.Networks {
+				ep.Links = []string{"other"}
+				break
+			}
+		},
+		"endpoint gateway priority": func(r *container.InspectResponse) {
+			for _, ep := range r.NetworkSettings.Networks {
+				ep.GwPriority = 1
+				break
+			}
+		},
+		"published port": func(r *container.InspectResponse) {
+			r.NetworkSettings.Ports = network.PortMap{network.MustParsePort("443/tcp"): {{HostPort: "443"}}}
+		},
+		"port binding": func(r *container.InspectResponse) {
+			r.HostConfig.PortBindings = network.PortMap{network.MustParsePort("443/tcp"): {{HostPort: "443"}}}
+		},
+
 		"argv":                  func(r *container.InspectResponse) { r.Config.Cmd = []string{"sh"} },
 		"environment":           func(r *container.InspectResponse) { r.Config.Env = append(r.Config.Env, "UNAPPROVED=1") },
 		"stdin":                 func(r *container.InspectResponse) { r.Config.OpenStdin = true },

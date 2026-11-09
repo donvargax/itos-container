@@ -212,7 +212,7 @@ func closeAnchorWorkspace(c port.RunConnection, w port.Workspace) {
 // intent which proves no worker create was issued. It never resolves Source.
 func releaseAnchor(ctx context.Context, i port.Intent, c port.RunConnection) port.Outcome {
 	r := i.Record()
-	if r.Schema != 2 || (r.Stage != "reserved" && r.Stage != "absent" && r.Stage != "cancelled") {
+	if (r.Schema != 2 && r.Schema != 3) || !r.EgressGone() || (r.Stage != "reserved" && r.Stage != "absent" && r.Stage != "cancelled") {
 		return port.Refused
 	}
 	o, failure := inspectRecoveryAnchor(ctx, i, c)

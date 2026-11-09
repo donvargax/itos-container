@@ -170,3 +170,18 @@ func TestEgressOwnership(t *testing.T) {
 		}
 	}
 }
+
+func TestEgressUnknownKindAndSchemaTransitionRefused(t *testing.T) {
+	b, _, _ := f.Fixture()
+	b = f.EgressBinding(b)
+	rs := f.EgressRecords(b)
+	if rs[6].OwnsNetwork(f.EgressNetwork(rs[6], port.InternalNetwork), port.NetworkKind("other")) {
+		t.Error("unknown network kind owned")
+	}
+	old := rs[0]
+	old.Schema = 1
+	old.Anchor = port.Anchor{}
+	if old.ValidTransition(rs[1]) {
+		t.Error("schema 1 skipped the anchor")
+	}
+}

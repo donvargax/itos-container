@@ -16,6 +16,9 @@ import (
 )
 
 type egressAPI struct {
+	replyStatus     int
+	malformed       bool
+	shortID         bool
 	mu              sync.Mutex
 	networks        map[string]map[string]any
 	containers      map[string]*container.InspectResponse
@@ -50,6 +53,14 @@ func egressSDKFixture(t *testing.T) (Engine, sp.Binding, *egressAPI, *st.Readine
 		path := strings.TrimPrefix(r.URL.Path, "/v1.56")
 		a.requests = append(a.requests, r.Method+" "+path)
 		w.Header().Set("Content-Type", "application/json")
+		if a.replyStatus != 0 {
+			w.WriteHeader(a.replyStatus)
+			return
+		}
+		if a.malformed {
+			_, _ = w.Write([]byte("{broken"))
+			return
+		}
 		switch {
 		case path == "/info":
 			_ = json.NewEncoder(w).Encode(map[string]string{"ID": b.EngineID})
@@ -77,7 +88,12 @@ func egressSDKFixture(t *testing.T) (Engine, sp.Binding, *egressAPI, *st.Readine
 			}
 			a.networks[id] = observed
 			w.WriteHeader(201)
-			_ = json.NewEncoder(w).Encode(map[string]string{"Id": id})
+			_ = json.NewEncoder(w).Encode(map[string]string{"Id": func() string {
+				if a.shortID {
+					return "short"
+				}
+				return id
+			}()})
 		case strings.HasPrefix(path, "/networks/"):
 			target := strings.TrimPrefix(path, "/networks/")
 			v := a.networks[target]
@@ -130,7 +146,12 @@ func egressSDKFixture(t *testing.T) (Engine, sp.Binding, *egressAPI, *st.Readine
 			}
 			a.containers[id] = observed
 			w.WriteHeader(201)
-			_ = json.NewEncoder(w).Encode(map[string]string{"Id": id})
+			_ = json.NewEncoder(w).Encode(map[string]string{"Id": func() string {
+				if a.shortID {
+					return "short"
+				}
+				return id
+			}()})
 		case strings.HasPrefix(path, "/containers/"):
 			parts := strings.Split(strings.TrimPrefix(path, "/containers/"), "/")
 			id := parts[0]

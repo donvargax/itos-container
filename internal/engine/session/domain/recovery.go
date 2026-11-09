@@ -67,7 +67,7 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	}
 	// Validated no-create evidence proves worker absence for either schema.
 	// An anchored session still needs an independent volume observation.
-	if failure == "" && (!noCreate || entry.Intent().Record().Schema == 2) {
+	if failure == "" && (!noCreate || entry.Intent().Record().Schema >= 2) {
 		connection, f := s.Engine.OpenRun(ctx, entry.Intent().Binding())
 		failure = f
 		if failure == "" {
@@ -75,10 +75,13 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 			if !noCreate {
 				_, e.Resource, failure = inspectSession(ctx, entry, connection)
 			}
-			if entry.Intent().Record().Schema == 2 {
+			if entry.Intent().Record().Schema >= 2 {
 				_, anchorFailure := inspectRecoveryAnchor(ctx, entry.Intent(), connection)
 				if anchorFailure != "" {
 					failure = anchorFailure
+				}
+				if failure == "" {
+					failure = inspectEgress(ctx, entry.Intent(), connection)
 				}
 			}
 		}
@@ -117,7 +120,7 @@ func sessionEntry(s port.Session) (port.RecoveryEntry, port.Outcome) {
 	r := s.Record()
 	controller, failure := s.Controller()
 	e := port.RecoveryEntry{ID: r.ID, Project: r.Project, Fingerprint: s.Intent().Record().Fingerprint, State: r.State, Resource: "unknown", Controller: controller, Cleanup: "unknown", WorkloadExit: r.WorkloadExit, MountDetector: r.MountDetector}
-	if s.Intent().Record().Schema == 2 {
+	if s.Intent().Record().Schema >= 2 {
 		e.Anchor = "unknown"
 	}
 	return e, failure
@@ -173,7 +176,7 @@ func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (
 	if status != port.Observed || !o.StatePresent {
 		return o, "unknown", port.Incomplete
 	}
-	if o.ID != id || !owns(r, o) || r.Stage == "absent" || (r.Schema == 2 && (!o.AnchorExact || o.AnchorName != r.Anchor.Name)) {
+	if o.ID != id || !owns(r, o) || r.Stage == "absent" || (r.Schema >= 2 && (!o.AnchorExact || o.AnchorName != r.Anchor.Name)) {
 		return o, "unknown", port.Refused
 	}
 	switch {
@@ -196,6 +199,8 @@ func (s Recovery) Stop(ctx context.Context, id string) port.RecoveryResult {
 	return s.stop(ctx, id, "SIGTERM", nil, true)
 }
 func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove bool) port.RecoveryResult {
+	report := port.RefusalReport{}
+	ctx = context.WithValue(ctx, egressRecoveryKey{}, egressRecoveryState{log: s.Refusals, report: &report})
 	if !port.HexID(id) {
 		return recoveryFailure("", port.Invalid)
 	}
@@ -215,7 +220,7 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 		connection, failure = s.Engine.OpenRun(ctx, entry.Intent().Binding())
 		if failure == "" {
 			defer connection.Close()
-			if entry.Intent().Record().Schema == 2 {
+			if entry.Intent().Record().Schema >= 2 {
 				failure = stopAnchoredSession(ctx, entry, connection, signal, exit, remove, s.immediate)
 			} else {
 				failure = stopSession(ctx, entry, connection, signal, exit, remove)
@@ -246,6 +251,9 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	finishEntry(&e)
 	r := recoveryResult()
 	r.Entries = append(r.Entries, e)
+	if report.Outcome == port.RefusalLogGap {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: port.RefusalLogGap, Gaps: report.Gaps})
+	}
 	if failure != "" {
 		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: failure})
 	}
@@ -451,7 +459,7 @@ func recordExit(s port.Session, exit int) port.Outcome {
 }
 func finishSession(s port.Session) port.Outcome {
 	i := s.Intent().Record()
-	if i.Schema == 2 && i.Anchor.Stage != "absent" {
+	if (i.Schema >= 2 && i.Anchor.Stage != "absent") || !i.EgressGone() {
 		return port.Refused
 	}
 	if !port.HexID(i.ContainerID) {

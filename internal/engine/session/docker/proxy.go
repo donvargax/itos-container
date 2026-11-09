@@ -66,7 +66,7 @@ func (c *runConnection) VerifyProxy(ctx context.Context, id string) port.Outcome
 			return port.Refused
 		}
 	}
-	if expected == nil || !slices.Equal(r.Config.Cmd, expected.Cmd) || len(r.Config.Entrypoint) != 0 || r.Config.User != expected.User || r.Config.WorkingDir != "/" || !sameEnvironment(r.Config.Env, expected.Env) || r.Config.OpenStdin || r.Config.StdinOnce || r.Config.Tty || r.Config.AttachStdin || r.Config.AttachStdout || r.Config.AttachStderr || len(r.Config.ExposedPorts) != 0 || len(r.Config.Volumes) != 0 || r.Config.Healthcheck == nil || !slices.Equal(r.Config.Healthcheck.Test, []string{"NONE"}) {
+	if expected == nil || r.Config.Image != expected.Image || !slices.Equal(r.Config.Cmd, expected.Cmd) || len(r.Config.Entrypoint) != 0 || r.Config.User != expected.User || r.Config.WorkingDir != "/" || !sameEnvironment(r.Config.Env, expected.Env) || r.Config.OpenStdin || r.Config.StdinOnce || r.Config.Tty || r.Config.AttachStdin || r.Config.AttachStdout || r.Config.AttachStderr || len(r.Config.ExposedPorts) != 0 || len(r.Config.Volumes) != 0 || r.Config.Healthcheck == nil || !slices.Equal(r.Config.Healthcheck.Test, []string{"NONE"}) {
 		return port.IsolationUnverified
 	}
 	if r.State.Status != "created" || r.State.Running || r.State.Pid != 0 || (r.State.StartedAt != "" && r.State.StartedAt != "0001-01-01T00:00:00Z") || !safeProxyHost(r.HostConfig, p.Egress.Network.Name, c.executable) || !proxyMount(r.Mounts, c.executable) {

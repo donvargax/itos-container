@@ -15,6 +15,9 @@ func (s Runner) waitEgress(ctx context.Context, c port.RunConnection, a port.Att
 	if f != "" {
 		return 0, false, f
 	}
+	if watcher == nil {
+		return 0, false, port.Internal
+	}
 	defer watcher.Close()
 	type result struct {
 		exit    int
@@ -32,12 +35,6 @@ func (s Runner) waitEgress(ctx context.Context, c port.RunConnection, a port.Att
 	case v := <-worker:
 		return v.exit, v.exited, v.failure
 	case f := <-proxy:
-		// An already observed worker exit wins over a simultaneous proxy result.
-		select {
-		case v := <-worker:
-			return v.exit, v.exited, v.failure
-		default:
-		}
 		cancel()
 		v := <-worker
 		if f == "" {

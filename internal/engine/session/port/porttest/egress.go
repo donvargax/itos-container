@@ -30,6 +30,9 @@ func (c *runConnection) CreateNetwork(ctx context.Context, r port.Record, k port
 	c.run.Networks[o.ID] = o
 	c.engine.resourcesMu.Unlock()
 	c.egressCreateEvent(r, "NETWORK CREATE", o.Name)
+	if c.run.EgressFault == string(k)+" short ID" {
+		return "short", ""
+	}
 	return o.ID, ""
 }
 func (c *runConnection) egressCreateEvent(r port.Record, method, name string) {
@@ -37,6 +40,12 @@ func (c *runConnection) egressCreateEvent(r port.Record, method, name string) {
 }
 func (c *runConnection) InspectNetwork(ctx context.Context, target string) (port.NetworkObservation, port.Inspection) {
 	c.run.event("network inspect")
+	if c.run.EgressFault == "network unavailable" {
+		return port.NetworkObservation{}, port.Unavailable
+	}
+	if c.run.EgressFault == "network changed" {
+		return port.NetworkObservation{}, port.Changed
+	}
 	if c.engine.Replaced {
 		return port.NetworkObservation{}, port.Changed
 	}
@@ -47,6 +56,9 @@ func (c *runConnection) InspectNetwork(ctx context.Context, target string) (port
 	defer c.engine.resourcesMu.Unlock()
 	for id, o := range c.run.Networks {
 		if target == id || target == o.Name {
+			if c.run.EgressFault == "network foreign" {
+				o.Kind = "foreign"
+			}
 			if c.run.EgressFault == "foreign endpoint" && o.Endpoints > 0 {
 				o.Endpoints = 2
 				o.ContainerID = ""
@@ -85,6 +97,9 @@ func (c *runConnection) CreateProxy(ctx context.Context, r port.Record) (string,
 	c.run.ProxyID = o.ID
 	c.engine.resourcesMu.Unlock()
 	c.egressCreateEvent(r, "PROXY CREATE", r.Egress.Proxy.Name)
+	if c.run.EgressFault == "proxy short ID" {
+		return "short", ""
+	}
 	return o.ID, ""
 }
 func (c *runConnection) VerifyProxy(ctx context.Context, id string) port.Outcome {
@@ -114,6 +129,10 @@ func (c *runConnection) ProxyReady(ctx context.Context, id string) port.Outcome 
 	if ctx.Err() != nil {
 		return port.ExecutionFailed
 	}
+	if c.run.EgressFault == "proxy silent" {
+		<-ctx.Done()
+		return port.ProxyFailed
+	}
 	if c.run.EgressFault == "proxy ready" {
 		return port.ProxyFailed
 	}
@@ -130,6 +149,10 @@ func (c *runConnection) CopyProxyLog(ctx context.Context, _ string, w port.Write
 	c.run.event("proxy copy")
 	if c.engine.Replaced {
 		return port.Refused
+	}
+	if c.run.EgressFault == "proxy copy timeout" {
+		<-ctx.Done()
+		return port.ExecutionFailed
 	}
 	if ctx.Err() != nil || c.run.EgressFault == "proxy copy" {
 		return port.ExecutionFailed
@@ -166,6 +189,9 @@ func (c *runConnection) startProxy(ctx context.Context, id string) port.Outcome 
 }
 func (c *runConnection) waitProxy(ctx context.Context, id string) (int, port.Outcome) {
 	c.run.event("proxy wait")
+	if c.run.EgressFault == "proxy wait" {
+		return 0, port.ExecutionFailed
+	}
 	c.engine.resourcesMu.Lock()
 	running := c.engine.Resources[id].Running
 	c.engine.resourcesMu.Unlock()
@@ -181,10 +207,19 @@ func (c *runConnection) waitProxy(ctx context.Context, id string) (int, port.Out
 	o.Running, o.Status, o.PID = false, "exited", 0
 	c.engine.Resources[id] = o
 	c.engine.resourcesMu.Unlock()
+	if c.run.AfterProxyWait != nil {
+		c.run.AfterProxyWait()
+	}
 	return 137, ""
 }
 func (c *runConnection) signalProxy(ctx context.Context, id, signal string) port.Outcome {
 	c.run.event("proxy " + signal)
+	if c.run.EgressFault == "proxy signal" {
+		return port.ExecutionFailed
+	}
+	if c.run.EgressFault == "proxy ignores kill" {
+		return ""
+	}
 	if ctx.Err() != nil {
 		return port.ExecutionFailed
 	}
