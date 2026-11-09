@@ -694,3 +694,24 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | doctor  | approval.state.busy |
       | approve | approval.state.busy |
       | run     | run.call-timeout    |
+
+  # PRRT_kwDOVkB0ws61JLQ0: st_dev is not stable across boots (btrfs subvolumes get
+  # anonymous numbers; device-mapper and NVMe minors follow activation or
+  # enumeration order). Comparing a persisted device refused every doctor, approve
+  # and run on the account after a renumbering, and nothing repaired the binding.
+  # A binding is trusted by path and inode; the replaced-root row of CONTROL-07
+  # still refuses a changed inode. The first Then fails on the old refusal with
+  # approval.state.path instead of matching approval. The fixture changes only the
+  # recorded device of each ancestor, in place, so inode, owner and mode are kept.
+  @slice-21 @ID-CONTROL-23 @local-engine-fixture @wip
+  Scenario Outline: Renumbered filesystem devices do not invalidate enrolled control state
+    Given a control-state fixture whose "<bindings>" record device numbers the live filesystem no longer uses
+    When fresh P doctor and exact-fingerprint approve inspect the renumbered catalog as JSON
+    Then both commands report matching approval with exit 0 and no prompt
+    And the renumbered bindings keep their bytes and the prior approval is unchanged without engine mutation
+
+    Examples:
+      | bindings                    |
+      | fixed tree self-binding     |
+      | enrolled location binding   |
+      | fixed and enrolled bindings |
