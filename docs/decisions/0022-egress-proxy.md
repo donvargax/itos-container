@@ -144,20 +144,38 @@ addresses dials only the valid ones; one with none valid is a refusal with reaso
 `address`. IPv6 is out of this step: both networks have it off, so a listed name with only
 AAAA answers fails as `dns`.
 
-The adapter classifies a failed dial from a flag, never from the error `Dial` returns. The
-Control hook sets an atomic flag for the dial when any address passes the table, and
-`address` applies only when the dial failed with that flag still unset. If a valid address
-was dialed and the dial failed, the failure is `connect`, whichever order the answer lists the
-refused addresses in. The returned error cannot decide it, because `net.Dialer` keeps the
-first address's error: for the answer 10.0.0.1 then 11.22.33.44, with the second timing out,
-the error is the hook's, and for the reverse order it is the timeout (measured twice on Go
+The adapter classifies a failed dial in four steps, in this order. Only the first reads the
+error `Dial` returns, and only to learn whether resolution failed.
+
+1. An error holding a `*net.DNSError` (`errors.As`) is `dns`. That covers a name that does
+   not exist, a name with no IPv4 answer (what only AAAA answers give under `tcp4`) and a
+   resolver that does not reply before the dial's timeout. Resolution runs once, before any
+   address is tried, so the Control hook has not run and both flags below are unset. Nothing
+   but the error tells this from step 4, and a flag read alone would take it for an address
+   refusal and answer 403 where this record says `dns` and 502.
+2. The Control hook sets an atomic `passed` flag for the dial when any address passes the
+   table, and a `refused` flag when it refuses one. With `passed` set the failure is
+   `connect`, whichever order the answer lists the refused addresses in.
+3. With `passed` unset and `refused` set, the hook refused every address it saw: `address`.
+4. With neither set, the dial failed before any address was tried and not in resolution (a
+   socket that could not be created, say): `connect`.
+
+The returned error cannot decide between steps 2 to 4, because `net.Dialer` keeps the first
+address's error: for the answer 10.0.0.1 then 11.22.33.44, with the second timing out, the
+error is the hook's, and for the reverse order it is the timeout (measured twice on Go
 1.27.3 against a fake resolver: in the review, and again here with a fake DNS server, whose
 hook refused 10/8 and let 11.22.33.44 pass). By the error alone one upstream fault would
-read `address` and 403, or `connect` and 502, by answer order. T-39's adapter tests cover
-both orders of that answer, expecting `connect` each time, besides an answer with none
-valid (`address`), no such host (`dns`) and a refused connection (`connect`). The valid
-address in that test must pass the adapter's own table, so it cannot come from a
-documentation range such as 203.0.113.0/24, which the table refuses; 11.22.33.44 passes.
+read `address` and 403, or `connect` and 502, by answer order. The same fake DNS server
+showed why step 1 exists: no such host, an empty answer and a resolver that never replied
+each failed with a `*net.DNSError` (not found, not found, timeout), and the hook ran not once
+(measured here).
+
+T-39's adapter tests cover both orders of the mixed answer, expecting `connect` each time,
+besides an answer with none valid (`address`), the three resolution failures just measured
+(`dns` each, the last with a dial timeout short enough that the test does not wait 10 s) and
+a refused connection (`connect`). The valid address in the mixed test must pass the
+adapter's own table, so it cannot come from a documentation range such as 203.0.113.0/24,
+which the table refuses; 11.22.33.44 passes.
 
 T-39's adapter tests reach their loopback listeners by giving its constructor a test
 resolver and dial function, and test the table directly. Porttest fakes stay free of I/O,
@@ -591,7 +609,9 @@ Docker, so it is no runtime evidence, and T-39's tests replace it.
   connection. A mixed answer whose valid address then timed out returned the hook's error
   when the refused address came first and the timeout when it came last, in the review's
   run and in a second scratch run with a fake DNS server on loopback, which is why the
-  adapter classifies from the hook's flag.
+  adapter classifies from the hook's flags. In a third run the same fake server answered no
+  such host, an empty answer and silence: each failed with a `*net.DNSError` without the
+  hook running once, which is why the adapter checks for that error before the flags.
 
 Read, not run: Docker's port-publishing documentation, moby's `TestIsolated`, libnetwork's
 resolver code and `handleContainerExit`. The topology, the missing IPAM gateway on inspect,
