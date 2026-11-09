@@ -585,6 +585,16 @@ items:
       discoverable session. Include a black-box scenario and safe retirement based on durable
       evidence that creation was never issued, preserving active reservations; a name-only 404 must
       not establish absence.
+
+      This is crash debris with no supported way to clear it, which is what
+      p3-registration-before-intent is about. Add this to that item's safe-retirement part. A
+      publisher killed anywhere in Publish (before the write, during it, or after the link) leaves a
+      .intent-<nonce>.tmp, either alone or as the second link of its record. The next control-lock
+      holder can retire it on durable evidence: the name Publish makes, in the pinned private
+      directory, and either an orphan or the same inode as its record. Keep to the item's rule that
+      a name alone is not proof. It is not needed for correctness, because Names skips the temporary
+      and bd383fd reads the record around it. The item's scenario should check that a retired
+      temporary leaves the record intact and that a live publisher's temporary is never removed.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
@@ -1259,6 +1269,15 @@ items:
       data for reviewing T-42's limits and for seeing how close real calls come to T-33's 1 s limit,
       so they are not a task of their own. No failure has been tied to the 1 s limit yet. T-42's fix
       is already decided and does not wait on them.
+
+      This item already owns the Engine failure diagnostics step in .github/workflows/ci.yml. Its
+      text says to print each `--- FAIL` block with its godog step error beside the streamed `engine
+      scenario timing:` records, so a red run shows its failing assertion. It also says not to wait
+      for the extractor fix already tracked upstream in itos. The empty `go-test
+      TestFeatures/...#03:` body in run 42626087465 is that same gap. The project-side fix is the
+      existing ci.yml edit. The summary extractor belongs in itos and is already noted there as
+      tracked. When the coordinator files upstream, it should search itos's open and closed issues
+      first and comment on the existing one instead of opening a second.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
@@ -1306,6 +1325,16 @@ items:
       separate from T-42's features-only range. It tests existing behaviour, so it is a ledger task
       with its checks, not a new scenario. Land it after T-42. It blocks no step of milestone two,
       so p2.
+
+      This belongs inside p2-grace-origin-fake-clock-row. That item already adds a fake-clock row
+      asserting the exact SIGKILL instant, because a fake clock has no jitter and T-42's absolute
+      tolerance hides a mistimed grace timer on the native rows. A grace timer restarted by the
+      repeated SIGINT is the same defect (slice-12: one fixed grace from the first signal, never
+      restarted) with a different trigger. Extend the item so the fake-clock row also sends a repeat
+      signal before grace ends and asserts the kill still falls at first signal plus grace. Land it
+      before charter step 4 (p1-interactive-tty) changes Ctrl-C handling. Prefer this to sending
+      both signals at 80 percent, which changes a schedule T-42 fixes and two tests pin, and leaves
+      the repeat untimed.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
@@ -1326,3 +1355,14 @@ items:
       p3-session-state-retention, which covers how long the log is kept, not whether it is complete.
       The answer shapes T-40's teardown copy and slice-28's reading of the log, so settle it before
       slice-28 is taken.
+
+      This item already records the problem and the open decision: a hostile worker fills a Docker
+      data root that shares the checkout's filesystem, the proxy's writes keep succeeding, and the
+      teardown copy succeeds on a truncated log. It is p2 and must be settled before slice-28 is
+      taken. Note to add: the open decision has two concrete candidates. (1) A proxy-held fsynced
+      volume sink that fails closed mid-run but gives the proxy a writable mount, which cuts against
+      its hardening. (2) A terminal record the proxy writes on clean stop, which shows a lost tail
+      at teardown without a new mount, but cannot stop a run that is already losing records. The
+      choice changes the log schema (a terminal record or final count) and the proxy's hardening, so
+      the person must decide it before slice-28 writes its copy check, and the drafter must stop for
+      it rather than invent a protection.
