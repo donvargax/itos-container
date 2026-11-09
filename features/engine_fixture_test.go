@@ -21,6 +21,7 @@ const busyboxFixturePin = "docker.io/library/busybox@sha256:5624bb6777cf469b1fb5
 
 var fixtureEnvironment = map[string]string{
 	"ITOS_CONTAINER_ENGINE_TESTS":         "1",
+	"ITOS_CONTAINER_ENGINE_FEATURES":      "${{ matrix.features }}",
 	"ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE": "${{ steps.fixture.outputs.image }}",
 	"ITOS_CONTAINER_ENGINE_FIXTURE_ID":    "${{ steps.fixture.outputs.image_id }}",
 	"ITOS_CONTAINER_ENGINE_FIXTURE_UID":   "${{ steps.fixture.outputs.uid }}",
@@ -48,13 +49,13 @@ func TestEngineFixtureWorkflow(t *testing.T) {
 	if err := yaml.Unmarshal(data, &ready); err != nil {
 		t.Fatal(err)
 	}
-	j := ready.Jobs["engine"]
+	j := ready.Jobs["engine-shard"]
 	j.Steps = append(slices.Clone(j.Steps[:3]),
 		workflowStep{ID: "fixture", Name: "Prepare engine fixture registry", Shell: "bash", Timeout: 4, Run: "tools/bin/engine-fixture prepare"},
 		workflowStep{Name: "Engine scenarios", Shell: "bash", Timeout: 5, Env: maps.Clone(fixtureEnvironment), Run: engineInvocation},
 		workflowStep{Name: "Engine failure diagnostics", If: "${{ failure() }}", Shell: "bash", Timeout: 1, Run: engineFailureDiagnostics},
 		workflowStep{Name: "Clean up engine fixture", If: "${{ always() }}", Shell: "bash", Timeout: 1, Run: "tools/bin/engine-fixture cleanup"})
-	ready.Jobs["engine"] = j
+	ready.Jobs["engine-shard"] = j
 	setRedDispatch(t, &ready, redDispatchSchema)
 	baseline, err := yaml.Marshal(ready)
 	if err != nil {
@@ -68,40 +69,40 @@ func TestEngineFixtureWorkflow(t *testing.T) {
 		breakIt     func(*engineWorkflow)
 	}{
 		{"missing preparation", "preparation", func(w *engineWorkflow) {
-			j := w.Jobs["engine"]
+			j := w.Jobs["engine-shard"]
 			j.Steps = slices.Delete(j.Steps, 3, 4)
-			w.Jobs["engine"] = j
+			w.Jobs["engine-shard"] = j
 		}},
 		{"missing cleanup", "cleanup", func(w *engineWorkflow) {
-			j := w.Jobs["engine"]
+			j := w.Jobs["engine-shard"]
 			j.Steps = j.Steps[:5]
-			w.Jobs["engine"] = j
+			w.Jobs["engine-shard"] = j
 		}},
 		{"ignored preparation failure", "preparation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Prepare engine fixture registry", func(s *workflowStep) { s.ContinueOnError = true })
+			changeStep(w, "engine-shard", "Prepare engine fixture registry", func(s *workflowStep) { s.ContinueOnError = true })
 		}},
 		{"preparation success fallback", "preparation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Prepare engine fixture registry", func(s *workflowStep) { s.Run += " || true" })
+			changeStep(w, "engine-shard", "Prepare engine fixture registry", func(s *workflowStep) { s.Run += " || true" })
 		}},
 		{"conditional preparation", "preparation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Prepare engine fixture registry", func(s *workflowStep) { s.If = "false" })
+			changeStep(w, "engine-shard", "Prepare engine fixture registry", func(s *workflowStep) { s.If = "false" })
 		}},
 		{"unbounded preparation", "preparation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Prepare engine fixture registry", func(s *workflowStep) { s.Timeout = 0 })
+			changeStep(w, "engine-shard", "Prepare engine fixture registry", func(s *workflowStep) { s.Timeout = 0 })
 		}},
 		{"conditional cleanup", "cleanup", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Clean up engine fixture", func(s *workflowStep) { s.If = "success()" })
+			changeStep(w, "engine-shard", "Clean up engine fixture", func(s *workflowStep) { s.If = "success()" })
 		}},
 		{"ignored cleanup failure", "cleanup", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Clean up engine fixture", func(s *workflowStep) { s.ContinueOnError = true })
+			changeStep(w, "engine-shard", "Clean up engine fixture", func(s *workflowStep) { s.ContinueOnError = true })
 		}},
 		{"late preparation", "ordered", func(w *engineWorkflow) {
-			j := w.Jobs["engine"]
+			j := w.Jobs["engine-shard"]
 			j.Steps[3], j.Steps[4] = j.Steps[4], j.Steps[3]
-			w.Jobs["engine"] = j
+			w.Jobs["engine-shard"] = j
 		}},
 		{"wrong output", "output wiring", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Env["ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE"] = "busybox:latest" })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { s.Env["ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE"] = "busybox:latest" })
 		}},
 		{"leaked fixture environment", "leaked fixture", func(w *engineWorkflow) { w.Env["ITOS_CONTAINER_ENGINE_FIXTURE_ID"] = "id" }},
 		{"leaked fixture in command", "leaked fixture", func(w *engineWorkflow) {
@@ -120,7 +121,7 @@ func TestEngineFixtureWorkflow(t *testing.T) {
 			w.Jobs["ci"] = j
 		}},
 		{"filtered engine run", "complete invocation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Run += " -scenarios=@smoke" })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { s.Run += " -scenarios=@smoke" })
 		}},
 		{"new dispatch input", "dispatch inputs", func(w *engineWorkflow) {
 			var n yaml.Node
@@ -193,7 +194,7 @@ func engineFixtureWorkflowIssues(data []byte) []string {
 			issues = append(issues, issue)
 		}
 	}
-	engine := w.Jobs["engine"]
+	engine := w.Jobs["engine-shard"]
 	var names []string
 	prepare, cleanup, run, diagnostics := workflowStep{}, workflowStep{}, workflowStep{}, workflowStep{}
 	allowed := map[string]string{}
@@ -210,7 +211,7 @@ func engineFixtureWorkflowIssues(data []byte) []string {
 			run = step
 			for key, value := range fixtureEnvironment {
 				if strings.HasPrefix(key, "ITOS_CONTAINER_ENGINE_FIXTURE_") {
-					allowed["jobs.engine.steps."+strconv.Itoa(i)+".env."+key] = value
+					allowed["jobs.engine-shard.steps."+strconv.Itoa(i)+".env."+key] = value
 				}
 			}
 		}
@@ -234,7 +235,7 @@ func engineFixtureWorkflowIssues(data []byte) []string {
 			require(ok && value == expected, "leaked fixture environment at "+path)
 			seen++
 		}
-		if !strings.HasPrefix(path, "jobs.engine.") && (strings.Contains(value, "engine-fixture") || fixtureAcquisition.MatchString(value)) {
+		if !strings.HasPrefix(path, "jobs.engine-shard.") && (strings.Contains(value, "engine-fixture") || fixtureAcquisition.MatchString(value)) {
 			require(false, "fixture acquisition outside engine at "+path)
 		}
 	})

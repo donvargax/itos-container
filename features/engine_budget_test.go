@@ -26,7 +26,7 @@ func TestEngineSuiteBudget(t *testing.T) {
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
 		t.Fatal(err)
 	}
-	engine := workflow.Jobs["engine"]
+	engine := workflow.Jobs["engine-shard"]
 	var step workflowStep
 	for _, candidate := range engine.Steps {
 		if candidate.Name == "Engine scenarios" {
@@ -61,18 +61,18 @@ func testEngineBudgetScript(t *testing.T, hostOS, script string) {
 		name, finish, clock, compileClock string
 		compileExit, captureExit, want    int
 	}{
-		{name: "below budget", clock: "339.99", want: 0},
-		{name: "exact budget", clock: "340.00", want: 0},
-		{name: "successful but over budget", clock: "340.01", want: 1},
-		{name: "capture time counts", clock: "341.00", want: 1},
-		{name: "compilation time counts", compileClock: "339.00", clock: "341.00", want: 1},
+		{name: "below budget", clock: "279.99", want: 0},
+		{name: "exact budget", clock: "280.00", want: 0},
+		{name: "successful but over budget", clock: "280.01", want: 1},
+		{name: "capture time counts", clock: "281.00", want: 1},
+		{name: "compilation time counts", compileClock: "279.00", clock: "281.00", want: 1},
 		{name: "missing final timing", clock: "", want: 1},
 		{name: "invalid final timing", clock: "invalid", want: 1},
 		{name: "backwards timing", clock: "99.00", want: 1},
 		{name: "missing compilation timing", compileClock: "invalid", clock: "110.00", want: 1},
 		{name: "compile failure", compileExit: 31, clock: "110.00", want: 31},
 		{name: "test failure", finish: "exit 7", clock: "110.00", want: 7},
-		{name: "over budget preserves test failure", finish: "exit 7", clock: "341.00", want: 7},
+		{name: "over budget preserves test failure", finish: "exit 7", clock: "281.00", want: 7},
 		{name: "missing timing preserves test failure", finish: "exit 7", want: 7},
 		{name: "capture failure", captureExit: 29, clock: "110.00", want: 29},
 		{name: "test and capture failure", finish: "exit 7", captureExit: 29, clock: "110.00", want: 7},

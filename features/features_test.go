@@ -108,13 +108,13 @@ func TestFeatures(t *testing.T) {
 
 // Environment and platform values enter the policy as data. Harness entry points
 // supply the real lookup; regression fixtures never enable engine access.
-type featureEnvironment struct{ engine, ci, actions, event, red, os, arch string }
+type featureEnvironment struct{ engine, ci, actions, event, red, shard, os, arch string }
 
 func readFeatureEnvironment(lookup func(string) string, hostOS, arch string) featureEnvironment {
 	env := featureEnvironment{
 		engine: lookup("ITOS_CONTAINER_ENGINE_TESTS"),
 		ci:     lookup("CI"), actions: lookup("GITHUB_ACTIONS"),
-		event: lookup("GITHUB_EVENT_NAME"), os: hostOS, arch: arch,
+		event: lookup("GITHUB_EVENT_NAME"), shard: lookup("ITOS_CONTAINER_ENGINE_FEATURES"), os: hostOS, arch: arch,
 	}
 	if env.manualDispatch() {
 		env.red = lookup("ITOS_CONTAINER_RED_SCENARIOS")
@@ -150,6 +150,7 @@ type scenarioSelection struct {
 	ids      []string
 	engine   bool
 	red      bool
+	paths    []string // the shard's feature files; empty reads whatever the run is given
 	count    int
 	skip     string
 	excluded []string
@@ -171,6 +172,30 @@ func (env featureEnvironment) engineEnabled() (bool, error) {
 	}
 }
 
+// featureName is a feature file's basename: no path, no godog line suffix.
+var featureName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*\.feature$`)
+
+// engineFeatures reads ITOS_CONTAINER_ENGINE_FEATURES, the whitespace-separated
+// basenames of the feature files one engine shard runs. Blank is the whole tier.
+func (env featureEnvironment) engineFeatures(engine bool) ([]string, error) {
+	names := strings.Fields(env.shard)
+	if len(names) == 0 {
+		return nil, nil
+	}
+	if !engine {
+		return nil, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES applies only to the engine tier (ITOS_CONTAINER_ENGINE_TESTS=1)")
+	}
+	for i, name := range names {
+		if !featureName.MatchString(name) {
+			return nil, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES: %q is not a feature file basename ending in .feature", name)
+		}
+		if slices.Contains(names[:i], name) {
+			return nil, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES: %q is given twice", name)
+		}
+	}
+	return names, nil
+}
+
 // These tags select native binaries before any scenario hook or fixture runs.
 // The repository's macOS/Windows jobs are manual; Linux proof never runs them.
 func (env featureEnvironment) excludedPlatforms() []string {
@@ -189,6 +214,12 @@ func (env featureEnvironment) excludedPlatforms() []string {
 
 // RetrieveFeatures compiles Gherkin pickles, including inherited Feature, Rule,
 // Outline and Examples tags. Selection runs before any binary build or hooks.
+//
+// An engine shard (ITOS_CONTAINER_ENGINE_FEATURES) selects from its own files alone,
+// and the filtered-pickle check below reads those same files: godog numbers pickles
+// across the files of one read, so a check over other files than the selection's
+// would never match. Red IDs and the expression are still validated against every
+// file, and the rows a shard leaves to the others are named among its exclusions.
 func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSelection, error) {
 	var result scenarioSelection
 	engine, err := env.engineEnabled()
@@ -196,6 +227,10 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 		return result, err
 	}
 	result.engine = engine
+	shard, err := env.engineFeatures(engine)
+	if err != nil {
+		return result, err
+	}
 	redIDs, err := env.redIDs()
 	if err != nil {
 		return result, err
@@ -213,56 +248,91 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 		return result, err
 	}
 	suite := godog.TestSuite{Options: &godog.Options{Paths: []string{dir}}}
-	features, err := suite.RetrieveFeatures()
+	inventory, err := suite.RetrieveFeatures()
 	if err != nil {
 		return result, err
+	}
+	features, paths := inventory, []string(nil)
+	if len(shard) > 0 {
+		engineFiles := map[string]bool{}
+		for _, feature := range inventory {
+			for _, scenario := range feature.Pickles {
+				for _, tag := range scenario.Tags {
+					engineFiles[filepath.Base(scenario.Uri)] = engineFiles[filepath.Base(scenario.Uri)] || tag.Name == "@engine"
+				}
+			}
+		}
+		for _, name := range shard {
+			if !engineFiles[name] {
+				return result, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES: no feature file %q has an @engine case", name)
+			}
+			paths = append(paths, filepath.Join(dir, name))
+		}
+		suite.Options.Paths = paths
+		if features, err = suite.RetrieveFeatures(); err != nil {
+			return result, err
+		}
 	}
 	matchedTags := map[string]bool{}
 	expected := map[string]bool{}
 	matched, liveEngine := 0, 0
+	inspect := func(scenario *godog.Scenario, mine bool) {
+		wip, needsEngine, needsLinux, matches := false, false, false, selection == ""
+		wrongPlatform := false
+		var ids []string
+		for _, tag := range scenario.Tags {
+			wrongPlatform = wrongPlatform || slices.Contains(env.excludedPlatforms(), tag.Name)
+			wip = wip || tag.Name == "@wip"
+			needsEngine = needsEngine || tag.Name == "@engine"
+			needsLinux = needsLinux || tag.Name == "@linux"
+			if strings.HasPrefix(tag.Name, "@ID-") {
+				ids = append(ids, tag.Name)
+			}
+			if selection != "" && pattern.MatchString(tag.Name) {
+				matches = true
+				matchedTags[tag.Name] = true
+			}
+		}
+		if needsEngine && !wip && mine {
+			liveEngine++
+		}
+		if !matches {
+			return
+		}
+		matched++
+		if (wip && !result.red) || needsEngine != engine || wrongPlatform || (needsLinux && env.os != "linux") {
+			reason := "other tier"
+			if wrongPlatform {
+				reason = "other platform"
+			}
+			if wip && !result.red {
+				reason = "@wip"
+			} else if needsEngine {
+				reason = "@engine disabled"
+			} else if needsLinux && env.os != "linux" {
+				reason = "@linux requires Linux"
+			}
+			result.excluded = append(result.excluded, fmt.Sprintf("%s %q (%s)", strings.Join(ids, ","), scenario.Name, reason))
+			return
+		}
+		if !mine {
+			result.excluded = append(result.excluded, fmt.Sprintf("%s %q (other engine shard)", strings.Join(ids, ","), scenario.Name))
+			return
+		}
+		expected[scenario.Uri+":"+scenario.Id] = true
+		result.ids = append(result.ids, ids...)
+		result.count++
+	}
 	for _, feature := range features {
 		for _, scenario := range feature.Pickles {
-			wip, needsEngine, needsLinux, matches := false, false, false, selection == ""
-			wrongPlatform := false
-			var ids []string
-			for _, tag := range scenario.Tags {
-				wrongPlatform = wrongPlatform || slices.Contains(env.excludedPlatforms(), tag.Name)
-				wip = wip || tag.Name == "@wip"
-				needsEngine = needsEngine || tag.Name == "@engine"
-				needsLinux = needsLinux || tag.Name == "@linux"
-				if strings.HasPrefix(tag.Name, "@ID-") {
-					ids = append(ids, tag.Name)
-				}
-				if selection != "" && pattern.MatchString(tag.Name) {
-					matches = true
-					matchedTags[tag.Name] = true
-				}
+			inspect(scenario, true)
+		}
+	}
+	for _, feature := range inventory {
+		for _, scenario := range feature.Pickles {
+			if len(shard) > 0 && !slices.Contains(shard, filepath.Base(scenario.Uri)) {
+				inspect(scenario, false)
 			}
-			if needsEngine && !wip {
-				liveEngine++
-			}
-			if !matches {
-				continue
-			}
-			matched++
-			if (wip && !result.red) || needsEngine != engine || wrongPlatform || (needsLinux && env.os != "linux") {
-				reason := "other tier"
-				if wrongPlatform {
-					reason = "other platform"
-				}
-				if wip && !result.red {
-					reason = "@wip"
-				} else if needsEngine {
-					reason = "@engine disabled"
-				} else if needsLinux && env.os != "linux" {
-					reason = "@linux requires Linux"
-				}
-				result.excluded = append(result.excluded, fmt.Sprintf("%s %q (%s)", strings.Join(ids, ","), scenario.Name, reason))
-				continue
-			}
-			expected[scenario.Uri+":"+scenario.Id] = true
-			result.ids = append(result.ids, ids...)
-			result.count++
 		}
 	}
 	for _, id := range redIDs {
@@ -275,6 +345,7 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	}
 	slices.Sort(result.ids)
 	result.ids = slices.Compact(result.ids)
+	result.paths = paths
 	if result.count == 0 {
 		result.skip = "no live scenarios in selected tier and platform (count 0)"
 		if result.red {
@@ -311,6 +382,7 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	}
 	// Check godog's actual filtered pickles before hooks. This also refuses a
 	// tag containing filter operators if it would broaden or lose the selection.
+	// suite still holds the shard's own paths, if it has any.
 	suite.Options.Tags = result.filter
 	filtered, err := suite.RetrieveFeatures()
 	if err != nil {
@@ -331,10 +403,19 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	return result, nil
 }
 
+// scope reads the files the selection read: a shard's own, whatever options named.
+func (selection scenarioSelection) scope(options godog.Options) godog.Options {
+	if len(selection.paths) > 0 {
+		options.Paths = selection.paths
+	}
+	return options
+}
+
 func runScenarios(selection scenarioSelection, options godog.Options, initialize func(*godog.ScenarioContext)) int {
 	if selection.skip != "" {
 		return 0 // TestFeatures reports the explicit testing.T skip before calling us.
 	}
+	options = selection.scope(options)
 	options.Tags = selection.filter
 	options.Strict = true
 	// Local worlds own their processes, state and endpoints. Overlap their
