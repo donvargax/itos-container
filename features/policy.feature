@@ -624,17 +624,23 @@ Feature: Strict offline sandbox policy
   # path budgets bound the list; it has no limit of its own.
   #
   # A problem's fix depends on the version read. For a version 2 file under doctor
-  # --policy-only, no fix names version 1, and policy.network_mode's names offline and
-  # allowlist. Version 1 keeps its words exactly (ID-POLICY-29) and never offers a mode it
-  # refuses. An unsupported version's fix names both versions.
+  # --policy-only, no fix names version 1, and policy.network_mode's says "use offline or
+  # allowlist mode". Version 1 keeps its words exactly (ID-POLICY-29, 75 and 77) and never
+  # offers a mode it refuses. Where no supported version was read, the fix names both: "use
+  # policy version 1 or 2" for an unsupported number, and "use the field type defined by
+  # policy version 1 or 2" for a wrongly typed version or a root that is not an object.
+  # Ordinary doctor says the same (ID-POLICY-77), though it refuses version 2 for now: these
+  # words describe the format, and version 2's own refusal then says what to do next.
   #
   # Only doctor --policy-only and --manifest-only read version 2 for now. Ordinary doctor,
-  # approve and run refuse it with the existing policy.version at /version, exit 2, whatever
-  # its mode, before the manifest, the engine or host state. Canonical settings v1
-  # (features/approval.feature) hardcode profile offline-v1 and network offline, so without
+  # approve and run refuse a valid version 2 file with the existing policy.version at /version,
+  # exit 2, whatever its mode, before the manifest, the engine or host state. Canonical settings
+  # v1 (features/approval.feature) hardcode profile offline-v1 and network offline, so without
   # this refusal approve would record offline settings for a request that asks for network,
   # and an offline approval would appear to match it. On all three commands the refusal's
-  # fix names doctor --policy-only, so a person can still see what the file asks for.
+  # fix names doctor --policy-only, so a person can still see what the file asks for. A version
+  # 2 file that fails validation is refused there for its own problems instead, as any invalid
+  # policy is (ID-POLICY-78): the person mends the file, then learns where it can be read.
   # Slice-26 lifts the refusal for doctor and approve once approval can bind version 2, and
   # must keep run from starting a version 2 policy until slice-27 can.
   #
@@ -651,7 +657,9 @@ Feature: Strict offline sandbox policy
   # sits behind a policy port with an adapter at internal/engine/policy/idna, an I/O-free
   # porttest fake and the shared contract against both; cmd assembles it. Steps 1 and 3 to
   # 5, duplicates and sorting are pure domain code. port.Value must start retaining list
-  # items, which it drops today.
+  # items, which it drops today. The charter's no-dependency rule (q-51) binds the proxy, and
+  # this adapter is no part of it: canonical names are plain ASCII, so the proxy can compare
+  # them without any IDNA of its own.
   #
   # No new slice: this adds to what exists. internal/engine/policy takes the rules, that
   # port and its adapter. The doctor slice's command presents the list, plain and JSON, and
@@ -660,10 +668,15 @@ Feature: Strict offline sandbox policy
   # ordinary doctor, approve and run share that call, and --policy-only and --manifest-only
   # read the policy through the doctor slice's inspection package instead.
   #
-  # The implementing pull request also updates docs/CONFIG.md and docs/CLI.md, publishes
-  # docs/schemas/itos-container-v2.schema.json beside the unchanged v1 schema, and records a
-  # decision naming the arc42 text this overrides (internal/engine/policy's strict offline
-  # schema, proxy egress deferred), as the charter's "Architecture is a hypothesis" asks.
+  # The implementing pull request also updates docs/CONFIG.md and docs/CLI.md for the new
+  # field. That includes the opening paragraphs that call network egress deferred, which
+  # p1-docs-admit-milestone-two-egress leaves to this item: they say instead that a policy can
+  # request an allowlist, and that nothing approves or grants it yet. The doctor command's help
+  # line stops saying "strict offline policy". The pull request publishes
+  # docs/schemas/itos-container-v2.schema.json beside the unchanged v1 schema. It records a
+  # decision that names and updates the one arc42 text this overrides, the internal/engine/policy
+  # row's "Strict offline schema", as the charter's "Architecture is a hypothesis" asks. arc42's
+  # "Proxy egress ... deferred" text stays: this slice builds no proxy, and T-38's record owns it.
   # Its feat commit also moves what pins version 2 as refused to version 3, and says so:
   # ID-POLICY-15's example 2, TestVersionIsRequiredAndExact in
   # internal/engine/policy/domain/policy_test.go and PoliciesContract's last fixture in
@@ -686,8 +699,9 @@ Feature: Strict offline sandbox policy
   # Red first: today every version 2 policy is refused as policy.version at /version, exit
   # 2, so each scenario fails at its first Then that reads the outcome; deadline and output
   # size steps pass. Where the final answer is that same refusal, the scenario runs
-  # --policy-only first so that it can fail before the work. This spec's red evidence used
-  # scratch steps, so the first test commit adds the steps above and repeats the red run.
+  # --policy-only first so that it can fail before the work. ID-POLICY-77 fails instead at
+  # today's fix, which names only version 1. This spec's red evidence used scratch steps, so
+  # the first test commit adds the steps above and repeats the red run.
 
   @wip @slice-25 @ID-POLICY-43
   Scenario: an allowlist policy shows its effective host names and runs nothing
@@ -1033,8 +1047,8 @@ Feature: Strict offline sandbox policy
       | {version: 2, manifest: a.json, network: {mode: null, allow: 7}}                  | policy.type         | /network/mode    |
 
   # The plain step guards a fix that would point at the wrong schema. Both policy.type's and
-  # policy.unknown_key's fix name version 1 today and ID-POLICY-29 holds version 1's words
-  # exactly, so the text must depend on the version actually read.
+  # policy.unknown_key's fix name version 1 today, and ID-POLICY-77 and ID-POLICY-29 hold those
+  # words exactly for version 1, so the text must depend on the version actually read.
   @wip @slice-25 @ID-POLICY-53
   Scenario Outline: version 2 stays closed and keeps version 1's other checks
     Given the policy file contains:
@@ -1075,8 +1089,7 @@ Feature: Strict offline sandbox policy
       """
     When itos-container runs with "doctor --policy-only"
     Then it exits with code 2
-    And its error output says "allowlist"
-    And its error output says "offline"
+    And its error output says "use offline or allowlist mode"
     Given the policy file contains:
       """
       version: 1
@@ -1087,6 +1100,42 @@ Feature: Strict offline sandbox policy
     Then it exits with code 2
     And its error output says "use offline mode"
     And its error output does not say "allowlist"
+
+  # The words are literal on purpose: a correct "version 1 or 2" has no separate "version 2"
+  # for a looser step to find. The exact step holds version 1's policy.type words, which no
+  # other scenario pins: "says" would pass a build that wrote "version 1 or 2" there as well.
+  @wip @slice-25 @ID-POLICY-77
+  Scenario Outline: a fix names both versions only where no supported version was read
+    Given the policy file contains:
+      """
+      <document>
+      """
+    When itos-container runs with "doctor --policy-only"
+    Then it exits with code 2
+    And its error output says "<fix>"
+    When itos-container runs with "doctor"
+    Then it exits with code 2
+    And its error output says "<fix>"
+    Given the policy file contains:
+      """
+      version: 1
+      manifest: null
+      """
+    When itos-container runs with "doctor --policy-only"
+    Then its error output is exactly:
+      """
+      itos-container: itos-container.yaml/manifest: Value has the wrong type; use the field type defined by policy version 1
+      """
+    And it exits with code 2
+    And the engine recorder has no connections
+
+    Examples:
+      | document                         | fix                                                 |
+      | {version: 3, manifest: a.json}   | use policy version 1 or 2                           |
+      | {version: 0, manifest: a.json}   | use policy version 1 or 2                           |
+      | {version: '2', manifest: a.json} | use the field type defined by policy version 1 or 2 |
+      | {version: 2.5, manifest: a.json} | use the field type defined by policy version 1 or 2 |
+      | []                               | use the field type defined by policy version 1 or 2 |
 
   # The last entry repeats the first exactly. A refused entry has no canonical name to
   # repeat, so it is one more policy.host_name and never a policy.host_duplicate.
@@ -1154,11 +1203,12 @@ Feature: Strict offline sandbox policy
 
   # 21600 distinct characters of 3 bytes each are the longest such name the 64 KiB file
   # limit admits. Encoding it takes the library four to six seconds here and refusing it
-  # first takes milliseconds, so the 2 second deadline tells a limit checked before IDNA from
-  # one checked after it, on a machine of this speed; one over twice as fast would miss it.
-  # So the implementing commit also adds a domain unit test, which holds that order on any
-  # machine: the names port's fake records no call for an entry over the limit. ID-POLICY-57
-  # holds the limit's exact value without any timing.
+  # first takes 4 ms, so the 2 second deadline tells a limit checked before IDNA from one
+  # checked after it, where the usual 5 seconds would tell nothing. A correct build has five
+  # hundred times the room, so a slow machine does not flake it, but a machine over twice as
+  # fast would miss the wrong build. So the implementing commit also adds a domain unit test,
+  # which holds that order on any machine: the names port's fake records no call for an entry
+  # over the limit. ID-POLICY-57 holds the limit's exact value without any timing.
   @wip @slice-25 @ID-POLICY-56
   Scenario: a hostile host name is refused before canonicalising can amplify it
     Given the policy file allows one host name of 21600 distinct characters
@@ -1243,7 +1293,7 @@ Feature: Strict offline sandbox policy
     And it exits with code 2
     And the engine recorder has no connections
 
-  # The last three scenarios keep a version 2 request away from canonical settings v1. Each
+  # The next three scenarios keep a version 2 request away from canonical settings v1. Each
   # file edit is the only difference from an approved or approvable offline checkout, so
   # refusing later than the policy stage would reach the engine or the approval record. The
   # rows naming an absent manifest catch a refusal between the manifest stage and the engine:
@@ -1328,6 +1378,34 @@ Feature: Strict offline sandbox policy
       | {version: 2, manifest: .devcontainer/devcontainer.json}                                                       |
       | {version: 2, manifest: absent/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}}        |
       | {version: 2, manifest: absent/devcontainer.json}                                                              |
+
+  # The refusal above follows validation, so an invalid file reports what is wrong with it. A
+  # build that refused every version 2 file first would report policy.version instead. Either
+  # order exits 2 before the manifest, so this settles which answer a person gets, not a safety
+  # property. Each row's first run fails today, when every version 2 file gets policy.version.
+  @wip @slice-25 @ID-POLICY-78 @local-engine-fixture @linux
+  Scenario Outline: ordinary commands report an invalid version 2 file's own problem
+    Given an approval checkout and isolated host state
+    And the checkout policy contains:
+      """
+      <policy>
+      """
+    When itos-container runs with "doctor --json"
+    Then its doctor JSON reports exactly these policy problems:
+      | rule   | path   | exit |
+      | <rule> | <path> | 2    |
+    And it exits with code 2
+    When approve runs without a terminal with a well-formed candidate fingerprint as JSON
+    Then it reports prerequisite problem "<rule>" with exit 2 before requesting consent
+    When itos-container runs with "run -- fixture-workload"
+    Then run reports preflight problem "<rule>" with exit 2 and subject "<path>"
+    And the Engine API journal is empty
+    And no endpoint connection was attempted
+
+    Examples:
+      | policy                                                                                            | rule                | path             |
+      | {version: 2, manifest: .devcontainer/devcontainer.json, network: {mode: allowlist, allow: ['*']}} | policy.host_name    | /network/allow/0 |
+      | {version: 2, manifest: .devcontainer/devcontainer.json, network: {mode: bridge, allow: ['*']}}    | policy.network_mode | /network/mode    |
 
   # A date or yes/on without quotes remains a string under the core scalar rules.
   # These filenames request no host expansion; policy-only does not open them.
