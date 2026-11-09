@@ -191,3 +191,7 @@ questions:
     item: "T-37"
     question: "T-37: its check's git show-ref fails on CI's ref-less fixture clone; use for-each-ref?"
     answer: "Yes: git for-each-ref, which succeeds on an empty ref set, keeping the same state comparison; change the check and push."
+  - id: q-48
+    item: "T-33"
+    question: "T-33: may its live-scenario timing changes go in a fix commit, as the gate requires, though the task is a test task?"
+    answer: "Yes: a fix commit with Task: T-33 and the scenario footers itos asks for; pop the stashed implementation and push. See T-33-steer.md."

@@ -3206,13 +3206,147 @@
   type: ci
   title: Release notes stay within GitHub's body limit, the first release included
   why: >
-    The first release run (42554343999, 2026-11-09) built and uploaded v0.1.0 as a draft, then
-    failed to publish: gh release edit got HTTP 422, 'body is too long (maximum is 125000
-    characters)', because tools/bin/release-notes with no previous tag (LAST empty) writes every
-    commit body since the root. Bound the notes: for a first release, the feat and fix subjects
-    grouped by kind, the known limits from docs/security.md, and a link to the history instead of
-    every body; for later releases the same bodies as now, cut to a total below the limit with a
-    link to the rest. Test it against this repository's real history so the first-release case is
-    covered.
-  done_when:
-    - run: go run ./tools/bin/release-notes -version 0.1.0 -from '' | wc -c | awk '$1 < 125000 {ok=1} END {exit !ok}'
+    The coordinator records that the first release run (42554343999, 2026-11-09) built and
+    uploaded v0.1.0 as a draft, then failed to publish with HTTP 422, 'body is too long
+    (maximum is 125000 characters)'. The settled remedy is concise first-release notes:
+    feat and fix subjects grouped by kind, known limits from docs/security.md, and a link
+    to the complete history instead of every body. Later releases keep the present bodies
+    while they fit, shortening oversized notes with a link to the rest. Test the actual
+    repository history, including the first release. This repairs release infrastructure
+    blocking the charter's milestone transition; it adds no container behaviour or scenarios.
+    The drafter changes only this entry. The implementer changes the generator and tests.
+
+    Inspection refines the diagnosis without changing that remedy. cliff.toml already
+    renders subjects and commit links, not ordinary commit bodies. main.go separately quotes
+    full BREAKING-CHANGE/BREAKING CHANGE and non-none Upgrading footers. With no earlier tag,
+    the large list includes every commit type since the root. Preserve these distinctions;
+    do not introduce ordinary commit-body rendering or describe the failure as a footer-only
+    problem. T-37 supersedes T-25's requirement to list every commit for a first release and
+    its unconditional completeness requirement when a release would exceed the body limit.
+    T-25's version arithmetic, tag selection and publication prerequisites stay intact.
+
+    Successful stdout must be nonempty valid UTF-8 and strictly less than 125000 bytes,
+    including title, headings, links, omission notices, migration guidance, verification
+    instructions and the final newline. A byte budget is deliberately conservative for the
+    reported character limit and matches the original wc -c check; 124999 bytes is the
+    maximum, not 125000. Apply it to the complete rendered document for both release kinds,
+    not just git-cliff's contribution. Never pass an oversized body to the existing publisher.
+
+    A first release means no previous stable tag after excluding v<version>, as lastRelease
+    already does. Keep the title, bootstrap-version explanation and complete range counts.
+    Under What changed, show only Features and Fixes, in that order, using each matching
+    commit's subject, scope and full-SHA commit link, once, in the existing oldest-first
+    order within its kind. Omit an empty group; a breaking-only history must still generate
+    valid first-release notes. Ordinary bodies and other kinds' subject lists belong in
+    https://github.com/donvargax/itos-container/commits/v<version>, linked in every first
+    release. Do not invent a comparison with a nonexistent previous version. Keep the
+    dedicated Upgrading section's full breaking and non-none upgrading instructions while
+    they fit, including breaking changes of types other than feat/fix and wrapped footers.
+    This keeps T-25's migration information without reproducing all historical messages.
+
+    Before Upgrading, add Known limits to every first release. Summarize the two limitations
+    already documented in docs/security.md, without changing that security contract or
+    implying new isolation evidence. Include these plain sentences, also checked below:
+    'Host sockets created or swapped into the checkout during a run remain reachable.'
+    'Network mode `none` and a private IPC namespace do not prevent this access.'
+    'The startup scan does not provide continuous enforcement.'
+    'Approval records what was approved, not who.'
+    'Neither route proves human presence or authenticates a separate approver.'
+    Link https://github.com/donvargax/itos-container/blob/v<version>/docs/security.md there.
+    These are a short maintained summary of that document, not a new Markdown parser or a
+    runtime dependency on reading security.md. Keep the section even when notes are shortened.
+
+    A later release whose complete output is below the budget must retain the current
+    rendered content, order, complete footer bodies, dependency/toolchain-only explanation,
+    comparison link and verification instructions unchanged. For either release kind,
+    shorten only when the full candidate reaches the limit. Reserve the title, range and
+    version explanation, full-history/comparison link, first-release limits, version check,
+    attestation and checksum instructions, and an explicit omission notice. Omit first any
+    entry that cannot fit even alone beside that framing; do not sacrifice smaller entries
+    to retain it. Then remove whole change entries from the end of their existing order
+    before removing migration entries; drop headings that become empty. Retain remaining
+    entries verbatim. If migration text alone is too large, remove whole footer entries
+    from the end and state explicitly in
+    Upgrading that migration instructions were omitted and the linked history must be read.
+    A single oversized subject or footer is omitted whole, never sliced inside UTF-8,
+    a Markdown link or a quoted instruction. Dependency-only patches may similarly omit
+    whole per-module/toolchain detail entries from the end, before migration entries, while
+    retaining why a patch was cut and the history link. Every size-driven omission needs a
+    notice containing 'omitted' and the complete-range link, counted within the budget.
+    The existing later-release comparison URL is the link to the rest. Do not claim all
+    instructions are present or none are needed
+    after omitting any. If the mandatory framing alone cannot fit, fail with exit 2, empty
+    stdout and a useful stderr message rather than emit an invalid release body. Repeated
+    generation from the same inputs must be byte-identical. Tool/read failures retain the
+    existing exit-2, empty-stdout contract; a failed generator must never pass a size check
+    merely because it wrote zero bytes.
+
+    Keep the existing pinned git-cliff 2.14.2 and itos footer reader, using Go's standard
+    library for selection, byte accounting and assembly. No new dependency or network
+    service is needed. These remain release build tools under tools/bin/release-notes,
+    covered by T-25's narrow architecture exception, not a new command slice or engine.
+    Implementation paths are that tool's Go files/tests and cliff.toml, plus release-note
+    commentary in .github/workflows/release.yml and the binary-release dry-run guidance in
+    docs/upgrading.md. Update the latter's old every-commit assertion to the first-release
+    summary and bounded-notes contract. Preserve upstream attribution and licenses. Leave
+    release-version, internal/release, tools/bin/pinned, dependency pins, runtime packages,
+    workflow commands, permissions, gate wiring, draft/attest/publish order and source tags
+    unchanged. No separate notes upload, network publication or new CI job is needed.
+
+    The first check builds the current generator and executes it against the complete real
+    history ending at 056d0c721f462bce3bf33cdda9ec71ca038f6bef, in a disposable local clone
+    with no imported tags. This fixed historical input reproduces the oversized bootstrap
+    even after later releases add tags; it is a fixture revision, never a generator constant.
+    Use the current pinned launcher and cliff configuration with the existing verified cache.
+    Check the byte cap, nonempty UTF-8, exact feat/fix commit-link sets, groups, known limits,
+    history link and retained verification sections. Repeat after creating only a fixture
+    v0.1.0 tag at its HEAD: the workflow tags before generating notes, so output must match.
+    Then tag the historical root v0.0.0 only in that clone and generate v0.2.0 from it. This
+    deliberately oversized later range must also fit, link the full comparison and disclose
+    omissions. Repeat it to prove deterministic output. Check source and fixture HEAD, refs
+    and files are unchanged by the generator; fixture setup alone creates disposable tags.
+    Nothing approves state, contacts an engine, creates a source tag or publishes a release.
+
+    Add TestBoundedReleaseNotes under the release-notes tool. Use small deterministic
+    fixtures against the real renderer/entry point to cover both release kinds, an unchanged
+    under-budget later document, unshortened candidates of 124998/124999/125000/125001 bytes,
+    multibyte subjects and footers, many entries and one individually oversized entry.
+    Exercise overflow from What changed, breaking/Upgrading text and dependency-only detail;
+    check notices, links, retained migration text and mandatory framing, including refusal
+    when that framing cannot fit. Cover no features, no fixes, breaking-only history,
+    complete wrapped footers and own-tag exclusion. Assert content as well as length: empty
+    output, silently discarding every fitting entry or clipping the final rendered string
+    is not a repair. Verify failed Git/pinned-tool/itos reads give nonzero status with empty
+    stdout. Preserve existing rendering, bootstrap, footer, tag and moved-build assertions
+    except expectations explicitly superseded above. No feature-suite or recursive test run
+    belongs in these fixtures. The second check requires the named regression before running
+    the tool's complete package, so Go's successful 'no tests to run' cannot satisfy it.
+
+    Commit compiling regressions first with test --item T-37 and observe their size/content
+    assertion failures against the old renderer before implementation. Missing tests,
+    undefined names, compiler errors, tool acquisition failures and memory kills are not
+    that red evidence. Commit implementation with ci --task T-37, and guidance with
+    docs --item T-37. The spec commit is docs --item T-37. The two checks use Python 3's
+    standard library and existing tools, with no RTK dependency in CI; they belong at the
+    task tier and existing per-push Go tests, not a new commit hook or nightly job. Run no
+    whole-feature race detector; any necessary race run selects changed tests/packages only.
+    Use configured hooks and CI for gates; no local mutation run or generated evidence is
+    authorized. Local notes generation proves no GitHub publication. Agents commit and stop;
+    the loop owns push, CI watching and actual release validation.
+
+    Before drafting, the original generation command succeeded at the fixture SHA but wrote
+    160993 bytes, so its less-than-125000 assertion failed. The What changed section held
+    158935 bytes; most excess was the all-types subject list, not ordinary commit bodies.
+    The replacement check produced 160949 bytes for the tagless first release, unchanged
+    after its own fixture tag, and 160860 bytes for the later fixture range on both runs.
+    It failed the size assertions, first-release history link and group restriction, missing
+    known limits and later omission notice. State-preservation and repeatability checks
+    passed. The second check exits 1 because TestBoundedReleaseNotes is absent; the
+    implementer still owes its assertion-level red and both checks passing after the repair.
+
+    CI run 42560455437 at f0b6e39 failed only this first check, with a CalledProcessError
+    from the ref snapshot in state(): git show-ref exits 1 when a repository has no refs.
+    CI's checkout is a detached merge ref with no branch heads, and the fixture clone copies
+    only heads (--no-tags), so it starts with an empty ref set; a local clone has a branch
+    and never shows this. The snapshot now uses git for-each-ref, which exits 0 on an empty
+    set and lists the same refs, so the state comparison proves what it did before.
