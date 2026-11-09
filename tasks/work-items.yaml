@@ -1430,6 +1430,15 @@ items:
       escalationWindow comment already names this gap. The row's exact assertion also catches a
       timer started late, which the delayed limit only refuses when the kill arrives early. The
       recorder stays unchanged, so the idea is not a separate item.
+
+      The item's notes already settle this. A recorder that journals the cut only sharpens the
+      native tier's inference. The defect it guards against, a grace timer started at the
+      acknowledgement or the cut and not at the first signal, is what the item's fake-clock row
+      catches. That row takes a hold longer than what is left of the call limit and asserts SIGKILL
+      at first signal plus grace. A recorded cut instant is not worth its own item and touches the
+      recorder outside T-42's range. The new rationale (an acknowledgement-relative timer refused at
+      any arrival, the wait-after-cut rule and the bound reading the cut) is about making the native
+      tier's checks sharper, which the item has already ruled out as a separate piece of work.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
