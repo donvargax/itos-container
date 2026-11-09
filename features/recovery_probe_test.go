@@ -29,14 +29,28 @@ func (w *world) recoveryProbeStart(args ...string) (*recoveryProbe, error) {
 		return nil, err
 	}
 	arguments := []string{"-test.run=^TestPublicRecoveryCommand$", "-test.count=1"}
-	if cover := os.Getenv("GOCOVERDIR"); cover != "" {
-		arguments = append(arguments, "-test.gocoverdir="+cover)
+	env := map[string]string{"SLICE_11_REQUEST": input}
+	cover, collected := w.coverageDir(), ""
+	if cover != "" {
+		// testing.Main rereads every counter in its report directory. Keep
+		// this traced invocation independent of sibling/outline counters;
+		// closeRecoveryNative exports these bytes after joining the child.
+		collected, err = os.MkdirTemp(cover, "recovery-probe-")
+		if err != nil {
+			return nil, err
+		}
+		env["GOCOVERDIR"] = collected
+		arguments = append(arguments, "-test.gocoverdir="+collected)
 	}
-	p.process = w.recoveryStartConfigured(120*time.Second, bin, map[string]string{"SLICE_11_REQUEST": input}, arguments...)
+	p.process = w.recoveryStartConfigured(120*time.Second, bin, env, arguments...)
+	p.process.coverageSource, p.process.coverageDestination = collected, cover
 	return p, nil
 }
 func (w *world) recoveryProbeWait(p *recoveryProbe) error {
 	p.process.wait()
+	if err := p.process.exportCoverage(); err != nil {
+		return err
+	}
 	if p.process.err != nil {
 		return p.process.err
 	}

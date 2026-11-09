@@ -15,6 +15,7 @@ import (
 )
 
 func TestFeatureMemoryRetention(t *testing.T) {
+	isolateProductCoverage(t)
 	t.Run("completed worlds release payloads during the suite", testFeatureLiveHeap)
 	for _, mode := range []string{"assertion", "cleanup", "assertion and cleanup"} {
 		t.Run(mode, func(t *testing.T) { testFeatureFailedCleanup(t, mode) })

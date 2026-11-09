@@ -123,10 +123,20 @@ runner's shell tools directly; RTK is not a CI dependency.
 `itos-cc.yaml` now lists live scenarios through `itos tests list scenario --tsv` and preserves
 the two T-8 equivalent-mutant exceptions and their reasons. The omitted format version means
 version 1. The strict parser rejects unknown keys, anchors, aliases, merge keys, non-JSON tags,
-non-string keys and extra documents. The existing harness builds with coverage when itos-cc
-sets `GOCOVERDIR`; its documented individual-test fallback collects each listed scenario's
-counters alongside own-test coverage. A failed or missing collection is not proof. Coverage
-is produced in the `ci` job; platform jobs keep running all tests without unused coverage output.
+non-string keys and extra documents. T-36 makes the harness collect the listed scenarios in
+one run when itos-cc sets `ITOS_CC_TEST_COVERDIR`, writing atomic product counters to
+`<root>/<ID>`. Both the CLI and command test assembly use covered builds. The per-ID root
+takes precedence over `GOCOVERDIR`, whose aggregate route remains available. See the
+[feature coverage contract](../features/README.md#product-coverage) for routing, secondary
+worlds and cleanup. This replaces reliance on the collector's individual-test fallback
+without changing the pinned tool or its mutation contract.
+
+The existing engine CI run also collects and checks its selected IDs. Platform jobs keep
+running all tests without unused coverage output. Local collection is not code proof:
+T-36 closure still requires a fresh pinned-itos-cc CI run on the actual pushed head over
+a production-changing judged range, reporting "the listed tests ran in" under 600 seconds,
+with no missing-ID error. The coordinator records its URL, SHA, base, count and elapsed
+time. A failed or missing collection, cached result or no-code-change skip is not proof.
 
 T-4's results are historical. Its launcher/docs range from
 `ebd187e7f0722f65d9aadda7a13d27048e4e03f6` passed with no source files, proving compatibility

@@ -31,14 +31,15 @@ type recoveryNative struct {
 }
 
 type recoveryProcess struct {
-	cmd               *exec.Cmd
-	cancel            context.CancelFunc
-	done              chan struct{}
-	out, errout       offlineBuffer
-	exit              int
-	err               error
-	journal, pid      string
-	started, finished time.Time
+	cmd                                 *exec.Cmd
+	cancel                              context.CancelFunc
+	done                                chan struct{}
+	out, errout                         offlineBuffer
+	exit                                int
+	err                                 error
+	journal, pid                        string
+	started, finished                   time.Time
+	coverageSource, coverageDestination string
 }
 
 func (w *world) recoveryNativeFixture(mode string) error {
@@ -78,7 +79,7 @@ func (w *world) recoveryPairFixture() error {
 	if err := w.recoveryNativeFixture("pair"); err != nil {
 		return err
 	}
-	child := &world{root: w.root, bin: w.bin, dir: filepath.Join(w.dir, "slice-11-project-b")}
+	child := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: filepath.Join(w.dir, "slice-11-project-b")}
 	w.recovery.second = child
 	if err := os.Mkdir(child.dir, 0700); err != nil {
 		return err
@@ -403,13 +404,15 @@ func (w *world) closeRecoveryNative() error {
 		return nil
 	}
 	r := w.recovery
+	var coverageErr error
 	for _, p := range r.processes {
 		if p.cancel != nil {
 			p.cancel() // tracer death kills only its controller, not another PID
 		}
 		p.wait()
+		coverageErr = errors.Join(coverageErr, p.exportCoverage())
 	}
-	anchorErr := w.closeAnchorsForeign()
+	anchorErr := errors.Join(coverageErr, w.closeAnchorsForeign())
 	if r.second != nil {
 		other := r.second
 		err := errors.Join(anchorErr, other.closeRecoveryNative(), other.closeOfflineRuntime(), other.closeAnchor(), other.closeSession())

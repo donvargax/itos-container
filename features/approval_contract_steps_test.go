@@ -112,12 +112,12 @@ func (w *world) approvalProbe(kind string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	args := []string{"-test.run=^TestApprovalContractProbe$", "-test.count=1"}
-	if coverdir := os.Getenv("GOCOVERDIR"); coverdir != "" {
+	if coverdir := w.coverageDir(); coverdir != "" {
 		args = append(args, "-test.gocoverdir="+coverdir)
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = w.root
-	cmd.Env = os.Environ()
+	cmd.Env = w.coverageEnv(os.Environ())
 	for key, value := range map[string]string{"SLICE_4_PROBE_OUTPUT": path, "SLICE_4_PROBE_KIND": kind, "SLICE_4_PROBE_UID": w.approval.uid, "SLICE_4_PROBE_GID": w.approval.gid, "SLICE_4_PROBE_CONDITION": w.approval.condition} {
 		cmd.Env = setEnv(cmd.Env, key, value)
 	}
