@@ -402,9 +402,11 @@ func TestControlLockAccessModeFollowsLockMode(t *testing.T) {
 			ops := control.Store.operations()
 			openRecord := ops.openRecord
 			var modes []int
+			var creation []os.FileMode
 			ops.openRecord = func(root *os.Root, name string, flag int, perm os.FileMode) (*os.File, error) {
 				if name == controlLockName {
 					modes = append(modes, flag&(os.O_RDONLY|os.O_WRONLY|os.O_RDWR))
+					creation = append(creation, perm)
 				}
 				return openRecord(root, name, flag, perm)
 			}
@@ -420,6 +422,11 @@ func TestControlLockAccessModeFollowsLockMode(t *testing.T) {
 			}
 			if len(modes) != 1 || modes[0] != want {
 				t.Fatalf("lock opened with access modes %v, want [%d]", modes, want)
+			}
+			// The existing lock was validated before this open, so the open names no
+			// creation mode: only the exclusive create in acquire may set one.
+			if len(creation) != 1 || creation[0] != 0 {
+				t.Fatalf("existing lock opened with creation modes %v, want [0]", creation)
 			}
 		})
 	}
