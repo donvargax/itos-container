@@ -701,3 +701,16 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: p3-release-notes-skip-merges
+    title: Release notes leave out merges of main into an item branch
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      v0.1.0's generated notes (2026-11-09) list 'Merge main into slice-13', 'slice-14' and
+      'slice-11' under Features: release-notes counts a merge commit whose subject carries a feat
+      type, or classifies merges by their first parent's type. A merge of main into an item branch
+      changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
+      own subject names the item).
