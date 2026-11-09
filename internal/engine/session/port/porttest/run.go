@@ -73,7 +73,7 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		c.engine.resourcesMu.Lock()
 		o := c.engine.Resources[id]
 		o.Mounts = true
-		o.AnchorName, o.AnchorExact = r.Anchor.Name, r.Schema == 2
+		o.AnchorName, o.AnchorExact = r.Anchor.Name, r.Schema >= 2
 		c.engine.Resources[id] = o
 		c.engine.resourcesMu.Unlock()
 	}
@@ -124,6 +124,9 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 	return a, ""
 }
 func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
+	if c.isProxy(id) {
+		return c.startProxy(ctx, id)
+	}
 	c.run.event("start")
 	if ctx.Err() != nil {
 		return port.ExecutionFailed
@@ -145,6 +148,9 @@ func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 	return ""
 }
 func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome) {
+	if c.isProxy(id) {
+		return c.waitProxy(ctx, id)
+	}
 	c.run.event("wait")
 	if c.run.WaitRelease != nil {
 		select {
@@ -174,10 +180,17 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 	return c.run.Exit, c.run.WaitFailure
 }
 func (c *runConnection) RemoveRun(ctx context.Context, id string) {
+	if c.isProxy(id) {
+		c.removeProxy(ctx, id)
+		return
+	}
 	c.run.event("remove")
 	c.Remove(ctx, id)
 }
 func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outcome {
+	if c.isProxy(id) {
+		return c.signalProxy(ctx, id, signal)
+	}
 	c.run.event(signal)
 	if ctx.Err() != nil {
 		return port.ExecutionFailed
