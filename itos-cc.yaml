@@ -60,3 +60,21 @@ mutation:
       replacement: "1"
       reason: openCandidate calls os.Root.OpenFile with O_RDONLY|O_NOFOLLOW|O_NONBLOCK and no creation flag. The os.OpenFile contract uses perm only when creating a file; Root.OpenFile rejects only bits outside 0777, so both 0 and 1 pass validation. Either value opens the same existing file read-only or returns the same error for a missing, unsafe or inaccessible path. Neither creates a file, changes contents or permissions, nor alters no-follow, nonblocking or subsequent identity checks. TestFilesContract, TestNoFollowAndPathFailures and TestCandidateChangesAfterInspection preserve these behaviors but cannot distinguish this equivalent mutant.
       line_text: return root.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+    - file: internal/engine/egress/domain/domain.go
+      function: github.com/donvargax/itos-container/internal/engine/egress/domain#splitTarget
+      hash: 08d1fac276e2dbc2
+      line_in_function: 3
+      column: 13
+      original: "0"
+      replacement: "1"
+      reason: Changing colon < 0 to colon < 1 differs only when strings.LastIndexByte returns 0. Then target[:colon] is the empty host. The original returns the same empty host, empty port and false either from the port validation or from the following host == empty check; the mutant returns that triple earlier. All other colon indices take identical branches. splitTarget is pure, so neither the Judge verdict nor its logged fields can change. TestJudge already covers CONNECT :443 as malformed with no target or port.
+      line_text: if colon < 0 {
+    - file: internal/engine/egress/domain/domain.go
+      function: github.com/donvargax/itos-container/internal/engine/egress/domain#splitTarget
+      hash: 08d1fac276e2dbc2
+      line_in_function: 3
+      column: 11
+      original: <
+      replacement: <=
+      reason: Changing colon < 0 to colon <= 0 differs only when strings.LastIndexByte returns 0. Then target[:colon] is the empty host. The original returns the same empty host, empty port and false either from the port validation or from the following host == empty check; the mutant returns that triple earlier. All other colon indices take identical branches. splitTarget is pure, so neither the Judge verdict nor its logged fields can change. TestJudge already covers CONNECT :443 as malformed with no target or port.
+      line_text: if colon < 0 {

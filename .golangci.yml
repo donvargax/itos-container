@@ -218,6 +218,56 @@ linters:
             - "$gostd"
             - "github.com/donvargax/itos-container/internal/release$"
             - "github.com/donvargax/itos-container/internal/release/releasetest"
+        # The egress proxy reads the ClientHello and terminates nothing (the T-38 record):
+        # crypto/tls stays in its adapter, crypto/x509 nowhere, and its packages import a
+        # short list. TestNoInterceptionCode and TestNoRelaxingCode hold the rest, since a
+        # rule cannot see identifiers or files go ignores.
+        egress-tls:
+          list-mode: lax
+          files:
+            - "**/cmd/**"
+            - "**/internal/**"
+            - "!$test"
+            - "!**/internal/engine/egress/tcp/**"
+          deny:
+            - pkg: "crypto/tls"
+              desc: "TLS belongs to the egress adapter's ClientHello peek alone (T-38 record)"
+        egress-x509:
+          list-mode: lax
+          files:
+            - "**/cmd/**"
+            - "**/internal/**"
+            - "!$test"
+          deny:
+            - pkg: "crypto/x509"
+              desc: "no package holds a certificate, so none can intercept TLS (T-38 record)"
+        egress-imports:
+          list-mode: strict
+          files:
+            - "**/internal/engine/egress/**"
+            - "!$test"
+          allow:
+            - "bytes$"
+            - "context$"
+            - "crypto/tls$"
+            - "encoding/json$"
+            - "errors$"
+            - "fmt$"
+            - "io$"
+            - "maps$"
+            - "net$"
+            - "net/netip$"
+            - "os$"
+            - "slices$"
+            - "sort$"
+            - "strconv$"
+            - "strings$"
+            - "sync$"
+            - "sync/atomic$"
+            - "syscall$"
+            - "time$"
+            - "unicode$"
+            - "github.com/donvargax/itos-container/internal/engine/egress/"
         rapid:
           list-mode: lax
           files:

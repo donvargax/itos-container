@@ -3887,21 +3887,480 @@
     cannot fail them; semantic review judges the rest. The first fails today at ls, because no
     record exists. The second fails on its first anchor, internal/engine/egress.
 - id: T-39
-  type: feat
+  type: chore
   title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
   why: >
-    Charter step 1's core decision logic, built once as shared engine code under
-    internal/engine/egress with domain, port and adapter siblings. The domain is a pure decision on
-    the name the client gave in CONNECT. It allows exact canonical matches on port 443 only, never
-    reverse-DNS an IP, refuses literal IPs, alternate ports, case and trailing-dot spelling variants
-    and suffix lookalikes, and emits a refusal record with no secrets. The port has a porttest fake,
-    and the shared contract runs against the fake and the adapter. The adapter wraps the library
-    chosen in the spec, with no TLS interception, opaque tunnelling and a pinned version. Unit and
-    contract tests drive it over in-process listeners, with no Docker. It also holds the small proxy
-    entrypoint the session lifecycle will run. It adds no CLI behaviour yet, so it is a task with a
-    check, not a slice. Broken down from p1-egress-allowlist-proxy.
-  done_when:
-    - run: go test ./internal/engine/egress/...
+    Charter step 1's proxy, built once as engine code under internal/engine/egress. It is the one
+    process of this project a hostile worker can talk to, and it has a route out, so a bug in it is
+    the boundary failing. docs/decisions/0022-egress-proxy.md ("the record", T-38) is its design and
+    binds this task: read it whole, with the charter, docs/architecture.md's Slices and arc42's
+    egress rows. This entry repeats each rule T-39 builds to, settles what the record left to T-39,
+    and names the four places it corrects the record, which T-39 amends. If they differ anywhere
+    else, stop and say so. It adds no CLI behaviour: slice-27 writes the hidden command and binds
+    the adapter in cmd, and T-40 owns the containers. It runs no Docker, adds no scenario and
+    changes neither go.mod nor THIRD_PARTY_NOTICES.md. Nothing here is runtime evidence or a support
+    claim.
+
+    The entry this replaces predates the record. q-51 removed its library: the proxy is our own code
+    on Go's standard library, with no dependency and no network service, the deliberate exception
+    the charter and the record explain. Its type was feat, and a feat commit must name live
+    scenarios, which this task has none of: itos commit check-message refuses feat with Task: T-39
+    and Upgrading: none ("feat commits need a Scenarios: @ID-… footer") and accepts chore with Task:
+    T-39 (both run). T-39 gives a user nothing to feel until slice-27, so its type is chore. It
+    stays a task with checks, not a slice.
+
+    Four packages, laid out as Slices says. internal/engine/egress/port holds the contract values,
+    within the domain allowlist: Proxy, whose Serve(ctx context.Context, names []string) error is
+    what slice-27's thin handler calls; Log, whose Write(line []byte) (int, error) *os.File
+    satisfies, so the port needs no io and slice-27 binds os.Stdout; Failure, a string type with
+    Error(), whose values ListInvalid, ListenFailed, AcceptFailed, LogFailed and LogExhausted hold
+    no Go error text, because the handler may print them; and the event, reason, record and hello
+    values. internal/engine/egress/domain is the pure decision, importing only its port: the
+    allowlist, the head, the hello, the limits (HeadLimit 8,192, HelloLimit 65,536, LogLimit 20,000)
+    and the numbering of records. Its head and hello verdicts refuse at their zero value, so a stub
+    or a forgotten branch fails closed: a pass is a field of its own, never an empty reason.
+    internal/engine/egress/port/porttest holds an in-memory log, a Proxy fake and ProxyContract,
+    with no I/O. internal/engine/egress/tcp is the adapter and T-39's "entrypoint": tcp.New(log
+    port.Log) *Proxy, with listener, dial, peek and splice. Binding names, because slice-27, the
+    checks or the fixtures read them: those four paths, Proxy, Log, the five Failure values,
+    tcp.New, ProxyContract, the three depguard rules and every test this entry names. Any other name
+    here only describes.
+
+    The head. The domain's parser takes what the adapter read and finds the first CRLF CRLF itself,
+    within the first 8,192 bytes; a terminator ending at exactly byte 8,192 counts. With no
+    terminator there the reason is malformed with no method, target or port, so a partial head, an
+    oversized head and empty input read alike. Every byte after the terminator belongs to the
+    tunnel, and the verdict says where they start. The request line is exactly a non-empty method,
+    one space, a non-empty target, one space, HTTP/1.1 or HTTP/1.0, and CRLF. A bare CR or LF in it
+    is malformed, and a line of any other shape writes none of the three. Headers are skipped
+    unread: never judged, logged or forwarded, Host and Proxy-Authorization included. A request
+    passes only when its method is exactly CONNECT and its target is exactly a listed name followed
+    by :443. Anything else is refused with the first reason that fits, in this order: malformed
+    (above); not-connect (any other method, whatever its target); malformed (a CONNECT whose target
+    is not a plain host, a colon and a port); literal-ip; not-canonical; not-listed; port (the name
+    is listed and the port is not the exact text 443, so name:0443 and name:80).
+
+    T-39 settles the words the record leaves loose. The target is split at its last colon. The port
+    is one to 5 digits. A plain host is one to 255 bytes, the record's non-empty plain host, either
+    ASCII letters, digits, hyphen, underscore and dot, or a bracketed IPv6 literal, which here is [,
+    one or more hex digits, colons and dots, and ], checked no further because it only earns a
+    label, so []:443 and [fe80::1%25eth0]:443 are malformed. Dotted IPv4 is exactly four
+    dot-separated runs of digits with no range check, so 1234:443 and 1.2.3:443 read not-listed,
+    where the spike said literal-ip (T-38 review, P3 d). A name not exactly listed reads
+    not-canonical when its strings.ToLower with one trailing dot removed is listed. These are labels
+    for the person: only the exact match admits anything. A verdict keeps a method only when it is
+    one to 16 ASCII uppercase letters, and a target and port only when both fit the rule above, so
+    secret-token@listed.example:443, a/b?token=secret:443, listed.example:443/path?token=secret and
+    http://listed.example/path?token=secret, the forms slice-28's AC-36 scenario uses, keep neither.
+
+    T-39 canonicalises nothing and calls no IDNA library or port. A triage note
+    (2026-11-09T13:55:50Z) asked it to canonicalise the client's name through slice-25's Names port
+    in internal/engine/policy/idna, because that adapter alone refuses a final xn--. This entry
+    declines: the record admits only the exact match, byte for byte, and has egress import no other
+    engine, and q-51 allows no dependency. The confusion that note guards against needs a library
+    that maps spellings, and none runs here: listed.example.xn--:443 is compared as written and
+    reads not-listed, a Unicode spelling is no plain host and reads malformed, and case or one
+    trailing dot only choose the label. So T-39 does not depend on slice-25. A list that is not
+    already canonical is refused, never mapped. The list is valid when it is non-empty, names
+    nothing twice, and each name has at least two labels, each label 1 to 63 bytes of a-z, 0-9 and
+    hyphen, at most 253 bytes in all, no trailing dot, and a final label that is neither all digits
+    nor 0x with only hex digits. That is the shape slice-25's canonicalHost returns
+    (internal/engine/policy/domain/allowlist.go on its branch), written again because of the import
+    rule, so every list policy produces passes, and a later drift fails closed at run.
+
+    The hello. The domain judges what the peek captured, in this order: a callback that never ran is
+    not-tls, however that happened; extension 0xfe0d is tls-ech; no ServerName is tls-no-name; a
+    ServerName other than the CONNECT name, byte for byte, is tls-name. Only 0xfe0d is refused, as
+    the record says. A hello with the older ECH code points 0xfe0a or 0xffce and the exact SNI
+    passes (T-38 review, P3 a): no upstream is known to honour them, fronting is already disclosed,
+    and widening the refused set is a security decision this task does not take.
+    TestOlderECHCodePointsPass pins it, and the record's handshake guarantee gains the sentence, the
+    fourth correction. crypto/tls refuses a malformed non-empty 0xfe0d before the callback, which
+    reads not-tls, and an empty one reads tls-ech (both measured). Only the label differs: both are
+    refused.
+
+    The log. One JSON object per line, at most 2 KiB, one write per record, its fields in this order
+    with each empty one left out: schema (the number 1), seq, time (RFC 3339 UTC, to the second),
+    event, method, target, port (a string, so 0443 keeps its zero), reason. For example
+    {"schema":1,"seq":2,"time":"2026-11-09T12:00:00Z","event":"refused","method":"CONNECT","target":"other.example","port":"443","reason":"not-listed"}.
+    T-40 and slice-28 read this format. The events are ready, always seq 1; refused, with reason
+    not-listed, literal-ip, port, not-canonical, not-connect, malformed, address, not-tls, tls-name,
+    tls-no-name or tls-ech; upstream-failed, with reason dns or connect; and log-full. ready and
+    log-full add nothing. A pure domain type numbers the records and counts the limit: the 20,000th
+    refused or upstream-failed record is followed by one log-full, so those two are seq 20,001 and
+    20,002. The adapter encodes with encoding/json and writes under one mutex, so seq is the order
+    of the writes. Never written: URL path or query, userinfo, headers, Proxy-Authorization, bodies,
+    tunnel bytes, the hello's SNI, client address or Go error text. An allowed tunnel writes no
+    record.
+
+    Serve, in order. Validate the list, else ListInvalid with nothing opened. Listen on
+    0.0.0.0:3128, tcp4, else ListenFailed. Write ready, else LogFailed. Then accept, one goroutine
+    per connection, until ctx ends (nil), AcceptTCP fails (AcceptFailed), a record's write fails
+    (LogFailed) or log-full is written (LogExhausted). Before returning it stops the log, closes the
+    listener and every socket it holds and waits for its goroutines, so no record follows its return
+    and a test leaks nothing. The record's stop is SIGKILL, so nothing in the product need end ctx.
+    Egress's production code holds no recover: a panic in any goroutine ends the process, the same
+    closure. After a failed write or the limit, no further record is written and the connection that
+    hit it gets no answer, because the process is ending.
+
+    One connection, in the record's order. Set a 10 s read deadline from accept, once, so a byte a
+    second cannot extend it, and read up to the terminator, over as many reads as it takes and at
+    most 8,192 bytes in all, looking for it in everything read so far. A read error with no byte
+    read leaves no record unless it is the deadline (os.ErrDeadlineExceeded), whether the client
+    closed or reset: both asked for nothing. That settles the T-38 review's P3 c, since the spike
+    spared only io.EOF and wrote malformed for a reset (measured here). Judge. A refusal writes its
+    record, answers 403 and closes, and its name is never resolved or dialled, so refusals are no
+    DNS channel. Dial: an address refusal is a refused record and 403; dns or connect is an
+    upstream-failed record and 502. Answer 200. From here the proxy holds the upstream socket and
+    moves nothing in either direction until the hello passes, so a server that speaks first reaches
+    no client. Set a fresh 10 s read deadline and peek. A refusal writes its record and closes both
+    sockets, with no answer and no byte forwarded. On a pass, clear the deadline, write upstream the
+    recorded bytes and then any unserved bytes from after the head, and splice. A failed replay
+    writes upstream-failed, reason connect, and closes. A failed write of an answer is ignored, with
+    no branch of its own: after the 200 the peek then reads the dead socket and records not-tls, as
+    the record's "a client that closes" says. Each record is written before the client is answered.
+    The answers, exactly: HTTP/1.1 200 Connection Established with nothing else; HTTP/1.1 403
+    Forbidden and HTTP/1.1 502 Bad Gateway, each with Content-Length: 0 and Connection: close and no
+    body.
+
+    First correction. The record says a pass writes every recorded byte upstream. That misses bytes
+    read with the head which crypto/tls never asked for: they are never recorded, and the splice
+    reads only the socket. On a throwaway build forwarding only the recording, CONNECT, Go's
+    1,518-byte hello and a trailer in one write gave the upstream 2,048 bytes of 2,118 at 600 bytes
+    and 2,048 of 7,518 at 6,000 (measured, as the T-38 review did). Nothing crosses the boundary,
+    since only the sender's own stream breaks, but the record's "every byte after that terminator
+    belongs to the tunnel" must hold.
+
+    The peek. Its one tls.Config sets GetConfigForClient and nothing else. The callback captures
+    ServerName and Extensions and always returns an error, so crypto/tls stops once the hello has
+    parsed, before it chooses a version. tls.Server runs over a shim, a net.Conn whose Read serves
+    the bytes after the head, then the socket, recording every byte and stopping at exactly 65,536,
+    and whose Write discards, because crypto/tls sends a 7-byte alert when the callback aborts and a
+    client must get nothing forged by the proxy. Embedding the client's net.Conn gives the shim its
+    other methods with no line to cover. The splice is two goroutines, each an io.Copy between the
+    raw *net.TCPConn pair, which Go turns into splice(2) on Linux; the shim never reaches them. EOF
+    in one direction calls CloseWrite on the other socket, an error closes both at once, and both
+    close when both directions have ended. There is no idle timeout, because agents stream for long
+    periods; the contract's resource limits stay open.
+
+    The dial. A net.Dialer with Timeout 10 s, the proxy's Resolver and a Control hook, network tcp4,
+    address the rooted name and :443. The hook sees the address actually connected, CNAME targets
+    and changed answers included, with no second lookup, and refuses any address in the table and
+    any text that does not parse as an IPv4 address and port. A mixed answer dials only its valid
+    addresses. IPv6 is out of this step: under tcp4 a listed name with only AAAA answers fails as
+    dns. A failed dial is classified in the record's four steps, in order: an error holding a
+    *net.DNSError is dns; the dial's atomic passed flag set is connect; its refused flag set is
+    address; neither is connect. The table, in the adapter on net/netip, is the IANA IPv4
+    special-purpose registry (read 2026-11-09, last updated 2025-10-09) plus multicast, with the
+    registry's narrower rows inside these: 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8,
+    169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.31.196.0/24, 192.52.193.0/24,
+    192.88.99.0/24, 192.168.0.0/16, 192.175.48.0/24, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24,
+    224.0.0.0/4 and 240.0.0.0/4.
+
+    Seams. tcp.New takes the log alone and fills an unexported settings struct with every real
+    value: the address, the three 10 s waits, net.DefaultResolver, the real listen and dial
+    functions and LogLimit. So cmd always binds the real ones, and no exported field, flag, variable
+    or build tag can relax anything. Lint's gosec reports G102 for the literal 0.0.0.0:3128 passed
+    straight to net.Listen (measured in the spec review). Listening on every interface is Serve's
+    rule above, because the proxy is told no address of its own and Docker's inter-bridge isolation
+    keeps other networks from its port (the record): the address reaches Listen through those
+    settings, and wherever gosec still reports it, a //nolint:gosec naming G102 and that reason, as
+    approval/disk's private.go names G302, is the fix, never another address. In-package tests build
+    through an unexported constructor taking those settings, which is the record's test resolver and
+    dial function and the dial timeout a test can shorten (triage note, 14:42:54Z). The dial seam is
+    func(ctx context.Context, d *net.Dialer, address string) (*net.TCPConn, error) and receives the
+    dialer the adapter built. That lets the mixed-answer tests send no packet, as the T-38 PR review
+    asked, since a VPN or route answering 11.22.33.44 would otherwise fail them: the test's dial
+    wraps d.Control so the adapter's own hook judges each address first, and for one it passes the
+    wrapper returns an error, on which net stops before connect(2). Go's real Dialer and resolver
+    and the real table all still run, and the valid address still passes the table, as the record
+    requires. Tests fake DNS with a UDP socket on 127.0.0.1 behind net.Resolver{PreferGo: true,
+    Dial: …}. The fake encodes its answers by hand, a header, the query's question and fixed A or
+    AAAA records, in about 30 lines of encoding/binary (measured), because
+    golang.org/x/net/dns/dnsmessage, the maintained library for it, is a module go.mod does not
+    hold, and the standard library's copy is internal. Go's resolver sorts an answer by RFC 6724
+    before dialling: 10.0.0.1, 127.0.0.1 was tried 127.0.0.1 first (measured), and an address with
+    no route moves last (read in net/addrselect.go, rule 1). So a test asserts no dial order across
+    scopes. Both orders of the mixed answer still give connect on any machine, and a test that needs
+    an order uses one scope, 127.0.0.2 then 127.0.0.1.
+
+    Tests, over in-process listeners with no Docker and no external binary. Only a test about a
+    deadline sets that deadline short; every other wait is 30 s or more, so a loaded runner cannot
+    turn a slow read into another reason. Upstream certificates are generated in memory, so no key
+    enters a file. The contract goes to port/porttest only where it does no I/O; the record's
+    contract test with a verifying client belongs in the adapter's _test.go, because porttest does
+    no I/O and depguard refuses it crypto/tls (T-38 review, P3 b). Tests write each limit and wait
+    they check as its literal value, never the code's constant, so a wrong constant, or a stub's
+    zero one, fails at an assertion. Test files keep to 600 lines and errcheck, as lint holds them.
+
+    In port, TestFailureText holds each value's Error(). In porttest, TestProxyContract runs
+    ProxyContract on the fake, and TestProxyContractCatchesFaults shows through a recording reporter
+    that the contract fails faulty proxies, as count's contract_test.go does. ProxyContract holds: a
+    valid list writes exactly one ready record (schema 1, seq 1, RFC 3339 UTC time, event ready,
+    nothing more, a final newline), Serve stays in until ctx ends and returns nil, and nothing
+    follows; each invalid list (nil, empty, LISTED.example, listed.example., 127.0.0.1, a repeated
+    name) returns ListInvalid with no record; a failing log returns LogFailed. Its fixture follows
+    policy's SourceFixture: an adapter consumes the names and the log, and the fake, which validates
+    nothing because a port-side package may not import the domain, takes the failure it should
+    return. The fake records the names it was given and writes the same ready record, for slice-27's
+    handler tests.
+
+    In the domain. TestJudge's table holds every reason; each AC-36 form; both versions; the order
+    cases LISTED.example:80 (not-canonical), other.example:80 (not-listed) and 127.0.0.1:80
+    (literal-ip); 1234:443, 1.2.3:443, listed.example..:443, listed.example.xn--:443, which a prefix
+    match would pass, and a.listed.example:443 and xlisted.example:443, which a suffix match would
+    (not-listed); [::1]:443 (literal-ip); []:443, a zone and a Unicode spelling (malformed); an
+    empty host and an empty port, :443 and listed.example: (malformed, with the method and no target
+    or port); lower-case connect (not-connect, a target and port but no method); 16- and 17-letter
+    methods; 255- and 256-byte hosts; 5- and 6-digit ports; a bare CR, a bare LF, a double space, a
+    trailing space, HTTP/1.2 and an HTTP/2 preface. TestJudgeHeadLimit holds 8,192 and 8,193 bytes
+    and that the first of two terminators says where the tunnel starts. TestAllowlist holds each
+    edge of the list rule, including 253 and 254 bytes, 63 and 64 bytes and a final 0x7f.
+    TestJudgeHello holds the order and byte-for-byte comparison. TestLog holds seq from 1, UTC, the
+    fields kept and the limit at 20,000. TestLimits holds the three constants.
+
+    In the adapter. TestAdapterContract runs ProxyContract over a loopback listener.
+    TestNewBindsTheRealOnes holds what New fills. TestVerifiedThroughTheTunnel has Go's client
+    verify against a pool holding only the upstream's in-memory certificate, see that leaf in
+    PeerCertificates and read the upstream's bytes, with no record written. TestRefusedHeads drives
+    real sockets: not-listed, port, not-connect with a marker in the URL and Proxy-Authorization,
+    malformed with a marker in userinfo and in a path, exactly 8,192 bytes with no terminator (no
+    more, so the close is no reset racing the answer), a bare LF and a partial head then close each
+    answer exactly the 403, leave one record whose bytes match the format and hold no marker, and
+    never call the dial seam. TestEmptyConnections holds no record after a close and after a reset
+    (SetLinger(0)) before the first byte, and one malformed record and a 403 for silence to the
+    deadline, a partial head then silence, and a trickle of one byte every quarter of a short
+    deadline for four deadlines, which that deadline must cut off because it is set once.
+    TestRefusedHellos holds wrong SNI, upper-case SNI, no SNI, ECH from Go's client, an empty
+    0xfe0d, a malformed 0xfe0d, plain HTTP, an SSH banner, silence to the deadline, truncation then
+    silence, truncation then close, close with no bytes, a record that starts like TLS and fails to
+    parse, 70 KB of one-byte records, and a hello trickled one byte every quarter of a short
+    deadline for four deadlines, which the peek's one deadline must cut off: each gives the client
+    no byte after the 200, the upstream no byte and a closed socket, and leaves one record with
+    method, target and port and no SNI text. TestOlderECHCodePointsPass forwards both hellos whole.
+    TestShimLimit feeds a handshake message claiming 65,000 bytes in one-byte records and holds the
+    recording at exactly 65,536 bytes, with the next Read refused. TestReplay holds the exact bytes
+    upstream for head, hello and a trailer of 0, 37, 600 and 6,000 bytes in one write, a hello split
+    byte by byte and one over two TLS records; a head in two writes 100 ms apart, cut inside its
+    CRLF CRLF after the CR LF CR, under a head deadline of 120 s, longer than the test's 30 s wait,
+    whose client gets the 200 and whose hello, sent after it, reaches the upstream exactly; the
+    deadline cleared on a pass, by sending the hello with the head, so the peek reads no socket,
+    then writing past a short deadline; and a failed replay, from a dial seam returning a closed
+    socket. Every other complete head arrives in one write, which loopback hands over in one Read,
+    so without the split head an adapter that took one Read for the head would pass every test,
+    though it refuses as malformed a head split across segments, as a long Proxy-Authorization can
+    be, and so would one that searched only its latest read for the terminator, though it answers
+    only at the deadline, which the 120 s makes fail the test's wait. Loopback gave the two writes
+    as reads of 64 and 1 bytes (measured, five runs). TestSplice holds half-close each way, a server
+    that speaks first reaching the client only after the hello passes, and a reset on one side
+    closing the other. TestDialClassification holds, with the wrapper above, both orders of 10.0.0.1
+    and 11.22.33.44 and 11.22.33.44 alone (connect); none valid (address); no such host, an empty
+    answer, a name with only an AAAA record and a resolver that never replies under a short timeout
+    (dns), the AAAA answer pinning tcp4, since under tcp the hook sees that address and refuses it
+    as address (measured); a refused connection to a closed loopback port with the hook removed
+    (connect, step four); 127.0.0.2 then 127.0.0.1 connecting to a loopback listener while the
+    wrapper shows the hook 11.22.33.44 for it, after the hook refused 127.0.0.2; the rooted name;
+    and through Serve the event and answer for address, dns and connect. TestRefusedAddressTable
+    holds the first and last address of every row, the address on each side of it (11.22.33.44 too),
+    and refused text that does not parse, IPv6 included. TestServeFailures holds an invalid list
+    never calling listen, a failed listen, a closed listener (AcceptFailed, no record), a failing
+    write (LogFailed, no answer) and a limit of 2. TestLogFullUnderLoad has 50 concurrent refused
+    clients at a limit of 5 leave exactly ready, five records and log-full, and LogExhausted.
+    TestRecordBeforeAnswer uses a log that blocks, and no answer arrives until its write returns.
+    TestConcurrentRecords has 50 concurrent refused clients leave seq 1 to 51 in write order, one
+    line each. TestLongestRecord holds a 16-letter method, a 255-byte host and a 5-digit port within
+    2,048 bytes. TestContextEndsTunnels ends a live tunnel with ctx, and Serve returns nil.
+
+    No interception code exists in the tree, proved the record's three ways, with the second changed
+    in form (second correction). TestVerifiedThroughTheTunnel is the first. The record's second is a
+    search for names, which cannot stand: a correct peek writes tls.ClientHelloInfo, so grep -F
+    tls.Client matches it (T-38 review, P2), and a ledger check leaves the ledger when work done
+    closes the task (triage note, 11:55:55Z). So TestNoInterceptionCode, an ordinary Go test in the
+    adapter, parses with go/parser every .go file under cmd and internal that is neither a _test.go
+    file nor under testdata, files go would ignore on the runner included, and refuses: any
+    crypto/x509 import, sub-packages included; any crypto/tls import outside
+    internal/engine/egress/tcp and the folders below it, egress-tls's rule; any rename of
+    crypto/tls; and in a file importing it, any tls.<name> selector but Config, ClientHelloInfo and
+    Server, which refuses tls.Certificate, tls.LoadX509KeyPair, tls.X509KeyPair, tls.Listen,
+    tls.NewListener and tls.Client by identifier, and any key but GetConfigForClient in a tls.Config
+    literal, which refuses GetCertificate. It compares the qualifier, since session's Docker adapter
+    writes container.Config literals (measured). In a file importing net/http it also refuses any
+    selector named ListenAndServeTLS or ServeTLS, whatever its qualifier, since they terminate TLS
+    from certificate and key files with no crypto/tls import, and in any file an import of
+    net/http/httptest, whose NewTLSServer and StartTLS serve a built-in certificate. None of these
+    is in a production file today, where only readiness's and session's Docker adapters import
+    net/http (measured). It reads the files go ignores because depguard cannot: on Linux go list
+    builds 169 of today's 174 production files and ignores five OS-specific ones, approval/disk's
+    calls_windows.go and private_other.go, manifest/disk's and policy/disk's open_windows.go and
+    session/disk's anchor_other.go (measured), and the pinned golangci-lint 2.14.0 lints no ignored
+    file (the spec review measured an os import in an engine domain's probe_windows.go: no depguard
+    issue on Linux, one under GOOS=windows). So egress-tls and egress-x509 miss crypto/tls or
+    crypto/x509 in a _windows.go file under cmd, which the Windows release still compiles, and on
+    every push only this walk catches it. It first proves itself on a table of offending sources,
+    one for each form it refuses, and fails unless it read at least 100 files, among them at least
+    one under cmd and one under internal/engine/egress/tcp: 174 exist today but only 2 under cmd, so
+    a walk rooted at internal alone would pass a bare count. It holds on every later push because
+    CI's go test ./cmd/... ./internal/... and the platform job run it. The third way stays a check:
+    go list -deps of egress's packages shows no module but this one and no net/http (measured).
+
+    TestNoRelaxingCode holds the rest of "no flag, variable or build tag" and "recovers no panic"
+    the same way, over egress's own production sources: every .go file under internal/engine/egress
+    that is neither a _test.go file nor under testdata, files go would ignore included. It refuses a
+    comment line that go/build/constraint's IsGoBuild or IsPlusBuild reports, so a constraint in
+    either form; a file that go/build's Context.MatchFile does not match for each target
+    .goreleaser.yaml builds, linux and darwin on amd64 and arm64 and windows on amd64, so a name
+    such as table_darwin.go or table_amd64.go and one go ignores, such as _table.go; any rename of
+    os or syscall; in a file importing os, any os selector but ErrDeadlineExceeded, which refuses
+    Args, a flag read without the flag package egress-imports refuses, and Getenv, LookupEnv,
+    Environ, Open and ReadFile; in a file importing syscall, any syscall selector but RawConn, the
+    Control hook's type, which refuses syscall.Getenv and syscall.Open; any GOOS selector, whatever
+    its qualifier; and any recover call. So neither a build tag nor a file name can make egress
+    differ by platform, and neither os.Args, an environment variable nor a file can feed it a
+    setting. It fails unless it read at least one production file in each of domain, port,
+    port/porttest and tcp, because a walk rooted wrongly, at tcp alone say, would otherwise pass,
+    and table_windows.go's red run below proves only that tcp is read. It needs both of its first
+    two rules: MatchFile refuses // +build ignore, _windows.go on linux and _amd64.go on arm64, but
+    matches //go:build !relaxed for all five targets, though a build with -tags relaxed would drop
+    that file (measured under Go 1.27.3). os stays in egress-imports for os.ErrDeadlineExceeded,
+    which errors.Is matches exactly where net.Error's Timeout is broader.
+
+    Three depguard rules hold the imports on every later push, in .golangci.yml, each lax or strict
+    as written. egress-tls is lax, files **/cmd/**, **/internal/**, !$test and
+    !**/internal/engine/egress/tcp/**, denying crypto/tls. egress-x509 is lax, files **/cmd/**,
+    **/internal/** and !$test, denying crypto/x509. egress-imports is strict, files
+    **/internal/engine/egress/** and !$test, allowing bytes, context, crypto/tls, encoding/json,
+    errors, fmt, io, maps, net, net/netip, os, slices, sort, strconv, strings, sync, sync/atomic,
+    syscall, time, unicode, each exact with its trailing $, and the owner's prefix
+    github.com/donvargax/itos-container/internal/engine/egress/, so net/http, flag, a library or
+    another engine needs a reviewed change. The third goes beyond the record's two, because the
+    adapter's own rule allows any standard package or engine API and the go list check leaves with
+    the task. Each fixture is appended to tools/testdata/architecture/cases.json with a Name
+    starting egress-. Kind allow, with Rule naming the rule it passes: crypto/tls in tcp/probe.go,
+    tcp/nested/probe.go and tcp/probe_test.go; crypto/x509 and crypto/x509/pkix in
+    tcp/probe_test.go; crypto/tls and crypto/x509 in internal/engine/session/docker/probe_test.go;
+    $module/internal/engine/egress/domain in tcp/probe.go. Kind lint, with Rule as given: crypto/tls
+    in internal/engine/egress/domain/probe.go (domain,egress-tls),
+    internal/engine/egress/port/probe.go (port,egress-tls), and with egress-tls alone in
+    internal/engine/egress/port/porttest/probe.go, internal/engine/egress/tcpx/probe.go,
+    internal/engine/session/docker/probe.go, internal/slices/fresh/command/probe.go,
+    internal/cli/probe.go and cmd/probe/probe.go; crypto/x509 and crypto/x509/pkix in tcp/probe.go
+    (egress-imports,egress-x509); crypto/x509 in internal/engine/session/docker/probe.go and
+    cmd/probe/probe.go (egress-x509); net/http, flag, golang.org/x/term and
+    $module/internal/engine/policy/domain in tcp/probe.go (egress-imports). That is 24 probes, with
+    tcp/ short for internal/engine/egress/tcp/.
+
+    Fuzz tests, q-51's requirement, written as internal/engine/policy/yaml/fuzz_test.go is.
+    FuzzHead, in the domain, takes arbitrary bytes and holds them to an oracle of its own, regular
+    expressions in the test rather than the domain's helpers, which could not catch themselves:
+    nothing panics; a pass happens exactly when the input begins with CONNECT, a listed name, :443,
+    one space, HTTP/1.1 or HTTP/1.0 and CRLF and its first terminator ends within 8,192 bytes; a
+    pass's tunnel offset follows that terminator; and method, target and port obey the log's rule.
+    Its seeds are TestJudge's heads, passes among them. FuzzPeek, in the adapter, takes bytes and a
+    cut, giving up to 8,192 bytes as the bytes after the head and the rest to a scripted client
+    socket: nothing panics; no byte reaches the client; the recording is a prefix of the input
+    within 65,536 bytes; a pass has the exact ServerName and no 0xfe0d. Third correction: a pass
+    also forwards the whole input, its recording, its unserved bytes and what the socket still holds
+    together equalling the input, because the record's assertions cannot catch the first
+    correction's loss, a recording being a prefix either way. Its seeds are real hellos from Go's
+    client, captured in memory over net.Pipe at seed time, with the exact SNI, another SNI, no SNI
+    and ECH, an exact-SNI hello with a 6,000-byte trailer, and both code-point extensions, beside
+    empty input, plain HTTP and a truncated record. No curl or openssl capture enters the tree: Go's
+    client's hellos are real, the parser is crypto/tls's either way, and an opaque blob would
+    explain nothing. Plain go test replays the seeds on every push. Each target also runs with -fuzz
+    for 30 s at -parallel 2 and -fuzzminimizetime 0s in done_when, for T-39's own range, the flag
+    and its reason as the record has them, and every crash found is committed as a seed under
+    testdata/fuzz. A nightly tier stays p2-scheduled-fuzz-egress-parser's. The race check likewise
+    runs once, for this range, because the adapter is where this project's concurrency meets a
+    hostile client and its tests take seconds; go test -race runs only over egress's packages, never
+    ./features.
+
+    T-39 amends two documents in the same pull request, under the charter's drift rule. In the
+    record: its opening "Nothing here is built", which T-39 makes untrue, now saying that T-39 built
+    only its engine package, that nothing binds it until slice-27 and that none of it is runtime
+    evidence; the peek's replay sentence (first correction, using the word unserved); the second way
+    and "Those checks run only for T-39's own range" under "No interception code", naming the two Go
+    tests and the three depguard rules (second); the peek target's assertions (third); and in the
+    handshake guarantee, one sentence that hellos with ECH's older code points and the exact SNI
+    pass (fourth, using the word 0xfe0a). In arc42, whose terms make implemented present in this
+    checkout and proposed an unbuilt responsibility: the building-block row of
+    internal/engine/egress takes the status Implemented by T-39, with its adapter at
+    internal/engine/egress/tcp, not bound by cmd until slice-27, its design still proposed in the
+    sense of arc42's first paragraph, which leaves T-38's design for the person to confirm or
+    overturn, and no runtime evidence; its mermaid node and its work-item row say the same in short,
+    the row titled implemented egress engine; cmd's row names that adapter as what slice-27 binds,
+    no longer "the proposed egress adapter"; and the label "Refusal log (proposed)" says that T-39
+    implements the record format and that its delivery stays proposed, since slice-27 binds stdout
+    and slice-28 copies the log. The three arc42 sentences T-39 makes untrue say what the record's
+    opening now says: "Nothing in it is implemented or proven" under Constraints,
+    "nothing of it is implemented" under Context and scope, and "nothing here is built" opening the
+    Runtime view's Egress run, whose steps 2 to 4 hold what T-39 builds on the proxy's side, the run
+    itself staying proposed. The quality row stays unproven. Sibling specs, the contract and the
+    registry stay as they are.
+
+    Commits, decided before editing. Every one names the task with itos commit --task T-39, because
+    CI runs no check of a task the range's Task: footers do not name, and an Item:-only commit names
+    none; and the item must be taken, or its checks wait (T-38's review replayed both). First a test
+    commit, red first for a new package. It holds the tests, the fake and the contract; the port,
+    whole because they and the stubs are written against it, but for Failure's Error(), stubbed to
+    return the empty string; a domain stub whose functions return zero values and whose constants
+    are zero; and an adapter stub whose New and unexported constructor keep only what they are
+    given, whose Serve listens through its settings, closes each connection it accepts at once and
+    returns nil when ctx ends, and whose other functions return zero values, so that each test
+    reaches its assertions. Every test fails there at an assertion, not in setup, reported test by
+    test, but five, which pass because what they check is already whole: TestProxyContract, since
+    the fake and the contract are; TestProxyContractCatchesFaults, since the contract and its faulty
+    proxies are; TestNoInterceptionCode and TestNoRelaxingCode, since neither the tree nor the stubs
+    hold what they refuse; and FuzzPeek, since a stub that reads and writes nothing records only the
+    empty prefix and sends the client nothing, and its other assertions follow from a pass, which a
+    zero verdict refuses. Their red stands elsewhere and is reported with the rest.
+    TestAdapterContract, failing on the adapter stub, shows the contract failing a faulty proxy.
+    Each source test refuses every row of its table, and is run once with one uncommitted offending
+    file, failing at that file, which is then deleted: for TestNoInterceptionCode a tls.Certificate
+    literal in cmd/itos-container/probe_windows.go, a name go ignores on the runner, so the run
+    proves the walk reads what depguard cannot; for TestNoRelaxingCode an
+    internal/engine/egress/tcp/table_windows.go holding only its package clause. TestReplay,
+    TestRefusedHellos and TestShimLimit, failing on the stub, hold on fixed inputs what FuzzPeek
+    fuzzes. The domain's commit fills Error(). Then chore commits for the domain, the adapter, and
+    the depguard rules with their fixtures, whose commit runs the whole fixture matrix in its
+    pre-commit hook (124 s for the package's 368 subtests on the throwaway build; TestPolicy runs
+    303 cases today and 327 with these 24); run the new probes once before adding the rules, as the
+    matrix's README describes, and report each Kind lint probe failing at its expected refusal. Then
+    a docs commit for the two documents. What the change reaches beyond its checks:
+    tools/bin/architecture-check, the matrix, TestNoDenyEntryPrefixesAnother, golangci-lint over the
+    whole module and tools/bin/domain-coverage, which finds the new domain itself and holds it to
+    80%. The code proof measures changed lines with the engine off and excludes porttest, so T-39
+    covers its serve loop with these loopback tests, and every added production line needs a test,
+    never an exception. Agents run no local mutation proof.
+
+    Measured on a throwaway build of this design, outside the tree, under Go 1.27.3 with no Docker,
+    so no runtime evidence, and to be replaced by T-39's own: about 700 lines of production Go with
+    comments, against the person's estimate of about 300 for the flow alone; 100.0% of statements in
+    domain, port and tcp, in about 1 s of tests, stable at -count=5 on one CPU and clean under
+    -race; lint with no issues over the whole module; architecture-check clean; go vet clean under
+    GOOS=windows and darwin; the 24 probes passing in under 10 s; 30 s of FuzzHead at 1,867,353
+    executions and FuzzPeek at 589,927, each finding nothing, 39 s and 41 s from a cold cache,
+    FuzzPeek peaking at 156 MiB. Hand mutants of that build failed the named test each time:
+    forwarding only the recording failed TestReplay and FuzzPeek; sparing only EOF failed
+    TestEmptyConnections; calling any digit run literal-ip failed TestJudge; classifying by the
+    returned error failed TestDialClassification; a shim that writes failed TestRefusedHellos and
+    FuzzPeek with its 7 bytes; keeping the deadline failed TestReplay. macOS and Windows runs were
+    not made: the manual dispatch jobs run these tests, and no test needs a Linux-only address. The
+    cases and rules added after the two spec reviews were not run on that build; only MatchFile's
+    readings, the AAAA answer under tcp4 and tcp and the split head's two reads were measured, in
+    scratch programs, and the file counts with go list.
+
+    The checks all fail today and each can fail after a wrong change. go test -count=1
+    ./internal/engine/egress/... and its -race form exit 1 at lstat, since the directory does not
+    exist. The third exits 1 at go test -list for the same reason, and later names any test a
+    package lacks, because go test passes when a -run or -fuzz pattern matches nothing. Each -fuzz
+    check exits 1 at the missing directory, and later at any crash. The go list check exits 1 at the
+    same directory, and later at any module or net/http. The fixture check exits 1 at its count of
+    egress- probes, zero today, and later at any probe the rules do not meet. The document check
+    exits 1 at its first grep, since arc42 does not name internal/engine/egress/tcp, and later at
+    any anchor missing, any of the four sentences T-39 makes untrue left in place, or any status
+    phrase it replaces left standing: arc42's "**Proposed**, T-39", "egress (proposed, T-39)",
+    "T-39 — proposed egress engine", "the proposed egress adapter" and "Refusal log (proposed)",
+    each on one line today. Broken down from p1-egress-allowlist-proxy.
 - id: T-40
   type: chore
   title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
@@ -4778,15 +5237,289 @@
     'Process completed with exit code 1' and a goroutine dump from `tail -100`. In
     .github/workflows/ci.yml, make the step print each `--- FAIL` block with its godog step error.
     Also emit one `::error title=<scenario>` annotation per failed scenario or go-test failure line,
-    so the coordinator can tell an unchanged flake from a new failure on a re-run. This is
-    project-side and does not wait for the itos summary-extractor fix tracked upstream. Cover it in
-    the existing TestEngineDiagnostics, which runs the workflow shell against disposable fixtures.
-    Record in the item that anchors.feature:410 (ANCHORS-09, exit 75, cleanup 409) failed on
-    e2faafd, so the next unchanged re-run can show whether ANCHORS-09 or ANCHORS-10 repeat. A repeat
-    on its own would justify a separate item for a possible real race in anchor cleanup. Broken down
+    so the coordinator can tell an unchanged flake from a new failure on a re-run, which the two
+    attempts at 0a1d85c could not show. Annotations are public: read without a token on 2026-11-09,
+    e2faafd's failed engine job (check run 129190393996) returns its annotations, whose only failure
+    text is that exit-code line, and 403 for its log. This is project-side and does not wait for the
+    itos summary-extractor fix tracked upstream. Runs 42609794543 and 42626087465 are further
+    instances of the unreadable message: LIFECYCLE-09's assertion stays unread until a red run after
+    this lands, and T-44 adds its signal and SIGKILL offsets to the same output. A log artifact itos
+    can fetch is no separate upstream item, as that fix is already tracked. Cover it in the existing
+    TestEngineDiagnostics, which runs the workflow shell against disposable fixtures. Broken down
     from p1-engine-suite-under-its-limit-again.
-  done_when:
-    - run: go test ./features -count=1 -run '^TestEngineDiagnostics$'
+
+    Record for the next re-run: anchors.feature:410 (ANCHORS-09, exit 75, cleanup 409) failed on
+    e2faafd, at the step 'Then status identifies the original running session', still line 410
+    today. The next unchanged re-run can show whether ANCHORS-09 or ANCHORS-10 repeat. A repeat on
+    its own would justify a separate item for a possible real race in anchor cleanup; the one
+    failure, in a run where LIFECYCLE-09 rows #02 and #03 also failed, does not.
+
+    What a red log holds, captured for this spec by running failing memory-only scenarios through
+    runFeatureScenarios with TestFeatures's godog options and the step's flags, on go1.27.3 and
+    godog v0.16.0. Under -test.v, go test streams t.Errorf where it happens, so every `--- FAIL:`
+    line at the end of the log is bare: that is the empty `go-test TestFeatures/...#03:` body of run
+    42626087465. A scenario's error reaches the log up to three times. `pretty` prints it at its
+    step, in bold red with its later lines at their original indent. Then comes go test's
+    `    suite.go:640: <first line>` block, with further lines indented eight spaces, beneath the
+    last `=== RUN` or `=== NAME` line, which names its test: the one copy that says whose it is.
+    `pretty` prints it again under `--- Failed steps:` when the suite completes. So what an error
+    quotes can stand at column 0: features/offline_anchor_assertions_test.go:159 and
+    features/sockets_run_test.go:101 quote raw stderr with `%s`, where a later line can be a panic,
+    and features/lifecycle_local_steps_test.go:49 quotes nested -test.v output, though in non-engine
+    steps only today. `=== NAME` matters: LIFECYCLE-13's step can fail after LIFECYCLE-09's nested
+    rows ran. A timeout prints no `--- FAIL:` line at all, only the blocks so far and then `panic:
+    test timed out after 4m0s` and a tab-indented `running tests:` list naming the scenario in
+    flight. A real `panic: ` or `fatal error: ` ends the process: a panicking test prints its `---
+    FAIL:` lines before it, and only a goroutine dump follows, as seen on subtest, top-level,
+    goroutine, cleanup and double panics, a nil dereference and a misused mutex. godog's `--- Failed
+    steps:` summary cannot stand in, as it omits undefined and pending steps and a timeout never
+    reaches it. So the report below pairs each failure with its block itself; -test.v and the rest
+    of engineInvocation stay.
+
+    The rule. A new executable tools/bin/engine-failure-report <log>, in bash like
+    tools/bin/engine-fixture, reads the log once into an ordered list of failures, each a title and
+    a text.
+
+    Only the run's own lines steer it, so that a quoted line is plain text. The run's test is the
+    one the log's first `=== RUN` line names, as both invocations select exactly one. Its own lines
+    are a column-0 `=== RUN   <name>` or `=== NAME  <name>` and a `--- FAIL: <name> (<time>)` at any
+    indent, each naming that test or a subtest of it, and a block start, `<file>.go:<line>: ` after
+    exactly four spaces. A block belongs to the test named by the last own `=== RUN` or `=== NAME`,
+    and goes on through the lines right after it that are indented eight spaces. A line of only
+    eight spaces is one of them and becomes an empty line of the block's text, never its end: it is
+    how go test prints a blank line of an error, and quoted stderr holds them, as a Go panic dump
+    has one after its first line. Go test prints three spaces after `=== RUN`, two after `=== NAME`
+    and four before a block's file; `itos work show` collapses such runs, so read these literals in
+    tasks/phase-1.yaml itself. Every line of the log counts, a last one with no newline after it
+    included, as a kill can leave one. A block start is tried before a failure line, whatever its
+    first line quotes: `nested go test said --- FAIL: TestX (0.00s)` has its block, and the block's
+    later lines are its text, never lines of the run, so a quoted failure line among them marks
+    nothing. The script reads in the C locale (`export LC_ALL=C`), so that it works on bytes: in a
+    UTF-8 locale, this host's en_US.UTF-8 or C.UTF-8, a pattern's `.` matches no invalid byte
+    sequence, and the `%s` errors above quote raw stderr, which can put one on a block's first
+    line, so that no block starts and its scenario goes unnamed in a timeout's log and loses its
+    text in a completed run's.
+
+    The list, in order. First, so that the cap below never hides a timeout's list, each `panic: ` or
+    `fatal error: ` line at column 0 with no own line anywhere after it: title `go test`, text that
+    line and the tab-indented lines after it, less one tab. A quoted one has its block or the run's
+    `=== NAME` after it, unless the run dies first, when it is reported as one more `go test`, which
+    is accepted. Then each failed scenario, in the order the log first shows it failed: title its
+    go-test name as printed (`TestFeatures/<name>#NN`), text its last `suite.go` block without
+    location or indents, or `no error text in the log`. A scenario, a subtest of the run's test, has
+    failed when the log holds its `--- FAIL:` line or a `suite.go` block beneath it, the second for
+    the timeout. One whose step failed while its After hook was still running at the timeout has
+    neither, and its error is nowhere in the log: godog runs those hooks before `pretty` prints the
+    step (suite.go:189 and 220) and reports the error to the subtest only after them (suite.go:640).
+    Then only the `go test` annotation's `running tests:` list names it, which is accepted. No step
+    here uses godog.T, so another file's block beneath a scenario can only be a quote. A quote
+    steers only where it reproduces an own line itself, as a quoted `suite.go` block start would:
+    nested godog -test.v output holds one at four spaces, and the summary's echo of it would start a
+    block beneath whichever scenario ran last, marking that one failed or replacing its text. No
+    engine step quotes such output today, so that is accepted. Then, only if no scenario failed and
+    the run's test has a `--- FAIL:` line: title that name, text its last block of any file or `no
+    error text in the log`, as TestFeatures logs its excluded scenarios first
+    (features/features_test.go:74) and fails last. When a scenario did fail, its `a scenario failed`
+    adds nothing and would take a slot. Last, only if the log has no go-test failure line, meaning
+    no `panic: ` or `fatal error: ` line counted above and no `--- FAIL:` line of the run's test:
+    title `Engine scenarios`, text `the log holds no go-test failure line; its last line: <last
+    non-blank line>`, where a blank line holds nothing but spaces and tabs, or, when every line is
+    blank or there is none, `the log holds no go-test failure line; it is blank`. That is what a
+    kill, a caught signal, a capture failure or a passing run over the 180 s shard budget leave.
+    For the last, how long the step took is in the Engine scenarios step's own `engine step timing:`
+    line, which this report does not read: annotating it would change that step and
+    TestEngineSuiteBudget, and is not this item's work. A missing log file gives one failure,
+    title `Engine scenarios`,
+    text `no test log: the test binary never ran`, for a failed preflight, preparation or
+    compilation.
+
+    Each text keeps only its first 4096 bytes, in the C locale: for ASCII the 4096 characters that
+    are all the runner keeps of a message, and for other text no more than it keeps; the log above
+    it holds the rest. That bound is what keeps the report's time linear in the log. A long error is
+    reachable, as offlineBuffer (features/offline_runtime_fixture_test.go:122) has no cap and the
+    `%s` errors above quote it, and bash is quadratic when it substitutes across a long string:
+    `${s//%/%25}` on one 3.6 MB error took 10.8 s in the C locale and 145 s in C.UTF-8, and the spec
+    review's own report took 63.5 s on such an error, while the same substitution line by line took
+    0.2 to 0.3 s in either. Cutting first leaves no such string, however the text was built.
+
+    It prints, first, one `::error title=<title>::<text>` line per failure, with no file or line
+    property, escaped as the runner unescapes (ActionCommand.cs in actions/runner; escapeData and
+    escapeProperty in @actions/core): in both, `%`, CR and LF become `%25`, `%0D` and `%0A`; in the
+    title, `:` and `,` also become `%3A` and `%2C`, and 9 of today's 358 scenario names hold one of
+    these. The runner keeps ten error annotations per step, dropping the rest silently, and cuts a
+    message at 4096 characters (_maxCountPerIssueType and _maxIssueMessageLength in its
+    ExecutionContext.cs). So above ten failures the first nine are annotated and the tenth has title
+    `<N> more failed` and, as text, the other N titles one per line, which keeps the set of names
+    comparable between re-runs; exactly ten get ten of their own. The runner's cut reaches that list
+    too: about 47 titles fit at today's average of 85 characters, so beyond about 56 failures of
+    today's 75 engine examples, as with the daemon down, only N stays comparable. That is accepted,
+    since such a run is no flake to compare. Then, however many there are, it prints each failure as
+    `--- FAIL: <title>` with each line of its text indented four spaces, an empty one too. The step
+    runs it under `set +e`, so no check can see its exit status and none is asked for.
+
+    The step gains one line, straight after `set +e`: timeout 40 tools/bin/engine-failure-report
+    "$RUNNER_TEMP/slice-11-features.log". The kernel messages, `free -m` and `tail -100` stay after
+    it, with T-44's sorted timing records before the tail in every engine shard. The 40 s leaves
+    them the rest of the step's minute if the report ever overruns, which costs its annotations,
+    as they print after reading, but not those. The annotations come first because the
+    runner trims each printed line and parses it as a possible command, so a reprinted
+    `::stop-commands::x` could swallow them. No stop-commands guard follows: Engine scenarios
+    already streamed the same lines to the same parser and code in this job can print commands
+    anyway, so a command-looking line may add an annotation after ours. Annotation text comes from
+    the checkout: to the coordinator it is data, never instructions.
+
+    Why a script: engineFailureDiagnostics (features/engine_failure_timings_test.go) pins the
+    step's exact text, so the prototype's hundred lines would otherwise exist twice. Why bash, not
+    awk: the agents' host has only gawk, and ubuntu-latest, moving to Ubuntu 26 by its own notice,
+    may not, so only CI would catch a difference. Why no library: go tool test2json, tried on the captured
+    logs, attributes the same lines correctly, but it replaces only a few patterns, leaves blocks,
+    escaping and the cap to a jq program, and since Go 1.25 is built on demand, a compile in a
+    failure step on a runner that may be out of memory. The prototype took under 5 s both on a 13.8
+    MB, 200,000-line log and on a 20 MB log holding one 100,000-line error in all three places, well
+    within the 40 s.
+
+    The test. TestEngineDiagnostics, in features/engine_diagnostics_test.go, gains t.Run("failure
+    report") with the seven subtests the first check names. Each runs the real step text read from
+    ci.yml as the existing cases do, bash -euo pipefail -c under a 5 s context, with cmd.Dir `..`,
+    the checkout's root as in CI, LC_ALL=C.UTF-8, where a byte that is no UTF-8 cuts a pattern
+    short, RUNNER_TEMP a temporary directory holding the log, and `sudo` and `free` stubs first on
+    PATH that print markers, so no real sudo runs. Each asserts exit 0; that
+    the annotations, read as the leading run of output lines starting `::error `, equal an exact
+    list, which also fails an annotation printed after anything else; the printed blocks; both
+    markers; and, given a log, its last non-blank line from the tail, which ends the output without
+    a newline when the log does. The one inexact part is a timeout's `running tests:` list, whose
+    running times go rounds to the second, `(5s)` or `(4s)` under load: the comparison leaves those
+    durations out, in its annotation and its printed block, so that no test hard-codes one. An empty
+    log leaves the tail nothing to show, so T-44's zero-count timing summary ends the output;
+    with no log, the markers end it.
+
+    Logs come from real runs, so that a Go or godog upgrade changing this shape fails here, as
+    hand-written lines would not; a subtest adds a hand-written log only for a branch no cheap run
+    reaches, each named below, and those need no subtest of their own. Add a top-level
+    TestEngineDiagnosticsLogChild that returns at once unless ITOS_CONTAINER_DIAGNOSTIC_LOG_CHILD
+    names a fixture, as TestFeatureSignalDiagnosticChild does. It writes the fixture with
+    writeFeatureFixture, selects with selectScenarios("", dir, featureEnvironment{engine: "1", ci:
+    "true", actions: "true", os: "linux", arch: "amd64"}), data that reaches no engine, as
+    engine_schedule_regression_test.go does, and runs runFeatureScenarios with TestFeatures's
+    options (pretty, os.Stdout, Strict, TestingT t, and Concurrency 4) and memory-only steps,
+    ending in t.Fatal("a scenario failed") on a nonzero code. The Concurrency 4 is part of what
+    the failure report relies on: TestFeatures asks godog for four scenarios at once, and
+    runScenarios clamps an engine or red selection to one, as TestFeatureConcurrency holds, so that
+    go test prints a failing scenario's block with its further lines before the next scenario
+    starts. The report ends a block at the first line not indented eight spaces, so blocks that
+    overlapped, as unclamped scenarios' do, would each keep only their first chunk. The child asks
+    for the four so that dropping the clamp fails `ten failures` and `more than ten`, whose rows
+    fail with sixty-line errors; with no Concurrency those rows would not show it. The parent
+    re-executes os.Executable() with the step's flags, -test.count=1 -test.v
+    -test.timeout=<limit> -test.paniconexit0 -test.run '^TestEngineDiagnosticsLogChild$', stdout
+    and stderr together, under a 30 s context, and requires a nonzero exit. It sets the child's
+    TMPDIR inside its own t.TempDir(): a timed-out child cannot remove its temporary directory and
+    would otherwise leave one in /tmp on every run.
+
+    `completed run`: an outline named with a comma and a colon, tagged @ID-LIFECYCLE-09, whose
+    second row fails; an @ID-LIFECYCLE-13 scenario whose step calls duringQuiet and then fails; a
+    passing scenario, which nothing names; a cleanup-only After hook error, `after scenario hook
+    failed: ... 409 conflict`, the shape ANCHORS-09 showed; an undefined step; a scenario whose
+    error is `nested go test said --- FAIL: TestX (0.00s)` and `more detail`; one whose error is
+    `completed anchored workload returned 75: ` then the bytes 0xFF 0xFE and ` stderr`, and `more `
+    then the byte 0xC3 and ` detail`, the shape of the `%s` errors above; and, last so that the
+    summary's echo falls beneath it, a scenario named with `100%` whose multi-line error holds
+    `%2F`, a CR, and the lines `panic: quoted`, an empty one, `::error title=planted::x`,
+    `=== RUN   TestNested`, `=== NAME  TestNested/sub`, `    --- FAIL: TestNested/sub (0.00s)`, `---
+    FAIL: TestNested (0.00s)` and `    nested_test.go:3: nested block`, each at that indent. The
+    exact list, in log order, has the nested row before its outer scenario and that error whole
+    under its own scenario, with no `go test`, no `TestNested` and no annotation for the child test
+    itself. Whole means that its annotation holds `%0A%0A` where the empty line stands, and its
+    printed block a line of four spaces there: a report that ends a block at a line of spaces, trims
+    one, or matches `^ {8}(.+)` keeps only the text before it.
+
+    `timeout`: -test.timeout=5s, one scenario fails with an error holding a column-0 `panic: quoted`
+    line and the next sleeps. The first annotation starts `::error title=go test::panic: test timed
+    out after 5s%0Arunning tests:%0A` and names the sleeper, its durations left out as above, the
+    second is the failed scenario's, with no `--- FAIL:` in the log. Five seconds passed ten runs of
+    ten beside four busy loops, and this is the test's one real wait. Hand-written, for branches the
+    real logs above do not reach: `=== RUN   TestFeatures`, `=== RUN   TestFeatures/a`, `--- FAIL:
+    TestFeatures (0.00s)`, `    --- FAIL: TestFeatures/a (0.00s)`, `fatal error: all goroutines are
+    asleep - deadlock!` gives `go test` with that line, then `TestFeatures/a` with `no error text in
+    the log`. `=== RUN   TestFeatures`, `panic: first`, a tab and `detail`, a blank line, `goroutine
+    1 [running]:`, `fatal error: second` gives two `go test`, `panic: first%0Adetail` and `fatal
+    error: second`. `=== RUN   TestFeatures`, `panic: quoted` and then, in turn, each of
+    `=== RUN   TestFeatures/b`, `=== NAME  TestFeatures`, `    x.go:1: y`, `--- FAIL: TestFeatures
+    (0.00s)` and `    --- FAIL: TestFeatures/a (0.00s)` gives no `go test`. Two more end with
+    `=== RUN   TestFeatures/b` and a timeout's `panic: test timed out after 4m0s`, a tab and
+    `running tests:`, two tabs and `TestFeatures/b (4m0s)`, after `=== RUN   TestFeatures` and
+    `=== RUN   TestFeatures/a`; a timeout's log has no `--- FAIL:` line, so only a scenario's block
+    names it. The first has `    suite.go:640: nested go test said --- FAIL: TestX (0.00s)`, a
+    line of twelve spaces and `--- FAIL: TestFeatures/c (0.00s)`, and `        more detail`, and
+    gives `go test`, then `TestFeatures/a` with all three lines as its text and no
+    `TestFeatures/c`: no real log shows that, as `pretty` prints an error's copy at its step before
+    the block, where a quoted own failure line steers, which is accepted. The second has
+    `    suite.go:640: returned 75: ` then the bytes 0xFF 0xFE and ` stderr`, and `        more`,
+    and gives `go test`, then `TestFeatures/a` with `returned 75: `, those bytes, ` stderr` and
+    `more`.
+
+    `ten failures`: ten outline rows, each failing with a sixty-line error, ten annotations of
+    their own. `more than ten`: eleven rows, nine of their own then `::error title=2 more
+    failed::<#09>%0A<#10>`, with all eleven printed, which holds the boundary as well as the cap.
+    `test failure without scenario`: the child calls t.Logf then t.Fatal, giving one annotation
+    titled with its test name and holding the fatal's text; and, hand-written,
+    `=== RUN   TestFeatures`, `--- FAIL: TestFeatures (0.00s)`, `FAIL` gives `TestFeatures` with
+    `no error text in the log`. `no go test failure line`, hand-written as
+    no cheap run gives them: `=== RUN   TestFeatures`, `=== RUN   TestFeatures/a`, `panic: quoted`,
+    `--- FAIL: TestNested (0.00s)`, `    suite.go:640: boom`, `features TestMain received signal 15
+    (terminated), pid 7`, with no newline after that last line, gives `TestFeatures/a` with `boom`
+    and the `Engine scenarios` line quoting the signal, where a bare `while IFS= read -r` loop,
+    which drops such a line, would quote `    suite.go:640: boom`; a passing log with a trailing
+    blank line gives one quoting `PASS`; an empty log gives one with `the log holds no go-test
+    failure line; it is blank`; and a log whose suite.go block runs 50,000 lines before `--- FAIL:
+    TestFeatures (0.00s)`, under a 30 s context of its own, gives one annotation holding exactly the
+    error's first 4096 characters, escaped, with no later line of it printed before the `sudo`
+    marker. That log took 0.6 s idle and 2.4 s beside eight busy loops, too close to 5 s on a shared
+    host, and a report without the bound ran into its `timeout 40` on it. `no log`: no file gives
+    the one annotation, exit 0 and both markers.
+
+    Commit the test changes alone first, red, with test --item T-43, and report each subtest's
+    failing assertion. Then commit the script, the step and the matching line of
+    engineFailureDiagnostics with ci --task T-43, and features/README.md with docs --item T-43.
+    There, correct the failure-only step's sentence and TestEngineDiagnostics's, and say that
+    annotations are public while job logs need a token, that the runner keeps ten per step, and that
+    a text is cut at 4096 characters. Those files are the whole change: no product code, scenario,
+    engine invocation, proof setting or dependency. It touches no proof.code path, so its CI judges
+    no mutant. Before stopping, also run TestEngineRedWorkflow and TestEngineSuiteBudget, which read
+    the same workflow, and TestFeatureSignalDiagnostics, which shares this test's file.
+
+    The step runs only on a red job, so no green run exercises it, and these fixtures cannot show
+    what the runner does with its output. So before closing, the coordinator dispatches the workflow
+    on the item's head with red_scenarios set to a @wip @engine scenario, @ID-SOCKETS-02 today, and
+    reads that engine job's annotations without a token.
+
+    The first check captures go test's status as T-41's did, not with set -o pipefail: itos runs a
+    check through sh -c, and ubuntu-latest's sh is dash. The promoted check, go test ./features
+    -count=1 -run '^TestEngineDiagnostics$', passes today and could not fail before the work (itos
+    task T-43 says done at 487d544), and go test exits 0 when nothing matches, so this one also
+    requires each subtest's PASS line. TestEngineWorkflow and TestEngineFixtureWorkflow are in it
+    because they hold the step to that constant. At this spec's head both checks fail. The first: go
+    test passes, then `failure_report/completed_run did not pass`; once committed red, every subtest
+    fails at its annotations assertion, as the step prints none, while the existing cases pass. The
+    second: features/README.md has neither name. The previous revision's prototype passed the first
+    check, and each of 55 deliberate breaks failed it: 51 of its script, among them the first spec
+    review's six, its limit at eleven, counting every column-0 panic, dropping each kind of own
+    line, trusting a quoted test name and removing the 4096 bound; the report moved after the kernel
+    messages or dropped from both the step and the constant; and `timeout 40` dropped from only one
+    of them, each way. This revision only adds expectations to the same subtests, so those breaks
+    still fail them. Run on a real log from a scratch godog v0.16.0 suite with the child's options,
+    holding the `completed run` error's lines, and on the new hand-written logs, a scratch report
+    written to this rule kept the eight-space line as an empty one. Matching `^ {8}(.+)`, trimming
+    lines and ending a block at a line of spaces each cut the `100%` annotation at `panic: quoted`,
+    and without the empty line the first and third went unseen; a bare `while IFS= read -r` loop
+    quoted `    suite.go:640: boom` for the signal. The implementation review then found two more the
+    cases did not hold, which the `completed run` and `timeout` subtests now do. Against the script
+    as it was, a first line quoting `--- FAIL:` left the real scenario with `no error text in the
+    log` and, in the hand-written log, named `TestFeatures/c` failed and lost `TestFeatures/a`; an
+    invalid byte did the same to the real scenario and to `TestFeatures/a` under LC_ALL=C.UTF-8,
+    and passes under LC_ALL=C. Each fix alone turns only its own cases green. One thing no test can
+    hold is the `timeout 40` itself, removed from both the step and the constant: that is for the
+    implementation review to read.
 - id: T-44
   type: test
   title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
@@ -4799,10 +5532,188 @@
     they inform review of T-42's limits. In features/README.md, say that a goroutine blocked a
     minute or more is labelled with its minutes in a timeout dump. Keep the limit at 4 minutes and
     the engine harness's syscall tracer as it is. Leave the diagnostics step's failure-block
-    printing to p1-engine-diagnostics-failures. Both items edit the one step in ci.yml, so whichever
-    lands second rebases on the other. Broken down from p1-engine-suite-under-its-limit-again.
-  done_when:
-    - run: go test ./features -count=1 -run '^(TestEngineDiagnostics|TestEngineScenarioTiming)$'
+    printing to p1-engine-diagnostics-failures, now T-43. Both items edit the one step in ci.yml,
+    so whichever lands second rebases on the other. Broken down from
+    p1-engine-suite-under-its-limit-again.
+
+    The coordinator decided, 2026-11-09 15:18 UTC: the promoted check, go test ./features -count=1
+    -run '^(TestEngineDiagnostics|TestEngineScenarioTiming)$', already passes on main before any
+    work, since both tests exist today, so as written the task would close with nothing done. This
+    entry replaces it with checks that fail on today's main and pass only once the work is in.
+
+    The section. Inside the step's `if [[ -f "$RUNNER_TEMP/slice-11-features.log" ]]` block and
+    before `tail -100`, print `Engine scenario timing records, slowest first: <N>`, N being the
+    number of the log's lines that begin `engine scenario timing: `, then one line for each of
+    them: its duration, as `%4d.%03d s ` prints the whole seconds and the milliseconds of the
+    line's first `"duration_ns":<digits>`, truncated, then the line's text after that prefix,
+    unchanged. Slowest first; equal durations keep their order in the log; a line with no
+    `"duration_ns":<digits>`, as a killed run can leave its last, counts as zero. All of them, not
+    the last few: a timeout's run is the rows that finished plus the one in flight, and only the
+    whole list shows which rows took the time. Read the log as text whatever it holds: a NUL byte,
+    or invalid UTF-8 under a UTF-8 locale, makes plain grep print `binary file matches` in place of
+    the lines, and quoted workload output can hold either, so use grep -a or a bash read loop. With
+    no log there is no section, as there is no tail, and the step still exits 0. Use bash, grep,
+    sort and the like, no awk or jq: the agents' host has only gawk and its own jq, and
+    ubuntu-latest's may differ, so only CI would catch a difference, the reason T-43 wrote its
+    report in bash. It is a few lines, so it stays inline in the step, and
+    engineFailureDiagnostics in features/engine_workflow_test.go, which TestEngineWorkflow and
+    TestEngineFixtureWorkflow compare with the step's text, gains the same lines.
+
+    T-43's spec, committed on its branch at 79d2974, puts `timeout 40
+    tools/bin/engine-failure-report "$RUNNER_TEMP/slice-11-features.log"` straight after `set +e`,
+    keeps the kernel messages, `free -m` and `tail -100` after it unchanged, and leaves what becomes
+    of the tail to this item. The tail stays, and stays last: T-43's tests assert that the log's
+    last non-blank line ends the step's output, which this placement keeps true whichever item
+    lands first. T-43's report already prints a timeout's `panic: test timed out` line with its
+    `running tests:` list, which names the row in flight, the one row with no record yet, so this
+    section prints records only. The second item to land rebases the step,
+    engineFailureDiagnostics and the README sentence on the first, and runs the step through the
+    first's test helper rather than adding a second one.
+
+    The offsets. The `engine scenario timing:` record of a row whose ID is @ID-LIFECYCLE-09, and of
+    no other row, gains `signals`: one object per request of the row's collected journal
+    (lifecycleNative.journalAtReturn, the journal lifecycleSignals judges) that
+    lifecycleSignalRequest selects, in journal order, holding in this order `signal`, the request's
+    `signal` query value, empty when it has none; `at_ns`, its arrival; `replied_ns`, its reply,
+    absent when Replied is zero; `status`, the journaled status; `cancelled`, the journal's
+    Cancelled; and `previous_ns` and `next_ns`, the arrival of the journal's request just before it
+    and just after it, each absent at the journal's end. Each offset is in nanoseconds after the
+    harness signalled the controller (lifecycleNative.signalled), the cancellation T-42's limits
+    count from. A reader can then set SIGKILL's at_ns against the 1 s to 3 s window, an immediate
+    row's 1.8 s and a delayed row's first at_ns plus 1.6 s; the first signal's reply, or its cut,
+    against the 600 ms hold; and that signal's call, which starts after previous_ns, the daemon
+    check in recoverySignal's order, and ends at its reply or, when cut, just before next_ns,
+    against the 1 s call budget, which is how heldAcknowledgement reads a cut. `signals` is absent
+    when the row never signalled the controller or collected no journal, as an aborted row that
+    never reached its signal, and `[]` when the journal holds no signal request, as a product that
+    sent none leaves it.
+
+    The offsets are taken whatever the row's outcome: a failing row is the one whose offsets
+    matter, and godog skips the steps after a failure. initializeScenario's After hook
+    (features/steps_test.go:72) computes them from w.lifecycle before it resets the world, and
+    hands them on through the context godog passes to the After hooks registered after it, so the
+    timing collector's hook in runScenarios (features/features_test.go:372) writes them. No other
+    field, record or tier changes: other rows' records keep their five fields, and the ordinary
+    tier writes none.
+
+    The words, in features/README.md. The failure-only step's sentence (line 280) says the step
+    prints the timing records slowest first before the last 100 lines. The records paragraph (line
+    308), which says records contain only five fields, gives LIFECYCLE-09's `signals`, its fields
+    and their origin. The sentence on TestEngineScenarioTiming (line 319) adds the subtest below
+    and TestEngineFailureTimings. And a note on reading a timeout's goroutine dump: a goroutine
+    waiting a minute or more can carry its whole minutes in its header, as in `goroutine 8 [chan
+    receive, 1 minutes]:`, Go writing `minutes` for one as well. The note says the label is
+    approximate, as a scratch test measured on go1.27.3 for this spec. The runtime stamps a waiting
+    goroutine only when a garbage collection's marking finds it, and with the time the collection
+    before began its mark termination: runtime/mgcmark.go:275 copies work.tstart, which gcMark
+    (runtime/mgc.go:1976) sets only after marking. So a 35-second wait seen by the process's second
+    collection showed `1 minutes`, and a goroutine that waited 70 s with only the first collection
+    behind it had no label at all. In a 4-minute engine run collections are frequent, so a long
+    wait is labelled, give or take the time between two of them.
+
+    What stays: the Engine scenarios step and engineInvocation, with the 4-minute test timeout and
+    the 240 s step budget, which TestEngineDiagnostics, in the first check as a guard, and
+    TestEngineSuiteBudget hold; the syscall tracer in features/recovery_trace_test.go; T-43's
+    report; and every existing assertion of TestEngineScenarioTiming.
+
+    TestEngineFailureTimings, in a new features/engine_failure_timings_test.go, takes the host OS as
+    a value and skips off Linux, as testEngineDiagnostics does. It runs the real step text read
+    from ci.yml as T-43's cases do: bash -euo pipefail -c under a 5 s context, with cmd.Dir `..`,
+    the checkout's root as in CI, RUNNER_TEMP a temporary directory holding the log, and `sudo` and
+    `free` stubs first on PATH that check their arguments and print `kernel marker` and `memory
+    marker`, so no real sudo runs. Each subtest asserts exit 0, the kernel marker before the memory
+    marker, and that what follows the memory marker is exactly the section and then the log's last
+    100 lines as tail prints them. It writes each record line with engineTiming.write, so that a
+    change to the streamed form fails here.
+
+    Its subtests. `timeout`: `=== RUN   TestFeatures`, a godog line, a line holding a NUL and a
+    0xff byte, then, between godog lines, the records of @ID-RUN-01 at 1999999999 ns,
+    @ID-OVERLAP-03 at 35.2 s, @ID-LIFECYCLE-09 at 12.3 s holding the cut row's `signals` below,
+    @ID-LIFECYCLE-13 at 128.41 s and @ID-ANCHORS-09 at 35.2 s, then `panic: test timed out after
+    4m0s`, its tab-indented `running tests:` list, a blank line and 120 goroutine headers, so that
+    the last 100 lines hold no record. Its section is the header with 5, then LIFECYCLE-13 at
+    128.410 s, OVERLAP-03 and then ANCHORS-09 at 35.200 s, LIFECYCLE-09 at 12.300 s and RUN-01 at
+    1.999 s, which pins truncation, each right-aligned as the format prints it. `record cut by a
+    kill`: the RUN-01 and OVERLAP-03 records, then a last line `engine scenario timing:
+    {"feature":"lifecycle.feature","id":"@ID-LIFE` with no newline after it. Its section is the
+    header with 3, OVERLAP-03, RUN-01 and the cut line at 0.000 s, and the output ends without a
+    newline, as the log does. `no records`: `=== RUN   TestFeatures`, `--- FAIL: TestFeatures
+    (0.00s)` and `FAIL`, giving the header with 0 and no line under it. `no log`: nothing after the
+    memory marker.
+
+    TestEngineScenarioTiming gains t.Run("LIFECYCLE-09 rows carry their signal offsets"). It clears
+    GOCOVERDIR and ITOS_CC_TEST_COVERDIR with t.Setenv, as features/cover_test.go:27 does, since the
+    real world's Before hook would otherwise make a coverage directory per ID in the proof's root.
+    It runs runFeatureScenarios at the engine tier, the selection from timingSelection(t, fixture,
+    true), with an initializer that calls the real initializeScenario(sc, t.TempDir(), "unused"),
+    none of whose steps runs here, and registers three steps of its own: `the escalation journal
+    "<name>"`, which sets w.lifecycle to a copy of one built before the run; `the row passes`; and
+    `the row fails`, which returns an error. No real step matches those texts. The fixture is an
+    @engine feature with an @ID-LIFECYCLE-09 outline whose rows are immediate, delayed, cut after
+    the check, no signal request, never signalled and no journal, the third failing at its second
+    step, and an @ID-LIFECYCLE-08 scenario with the immediate journal. The journals are
+    lifecycleWindowWorld's, each given newLifecycleFaults("ignore", "", its delay) as fault, so that the world's
+    closeLifecycleNative runs: immediate is the case 'immediate at the grace' with SIGINT at 0
+    percent; delayed is 'delayed slow teardown' and cut after the check is 'delayed acknowledgement
+    cut a call limit after the daemon check', each with SIGTERM at 60 percent; no signal request is
+    immediate without its signal requests; never signalled is immediate with only signalled
+    cleared, preserving its requests; no journal is immediate with only journalAtReturn cleared,
+    preserving its signal time. These last two independently pin both reasons to omit signals.
+    Decode each record into the test's own type with DisallowUnknownFields, as timingRecords does, with
+    `signals` a json.RawMessage, which tells absent from null and [] and pins the order, and
+    compare it with the exact JSON. The run exits nonzero and its seven records read, in milliseconds
+    after cancellation, nanoseconds in the JSON: immediate passed, SIGINT at 50, replied 50, status
+    204, not cancelled, previous 50, next 1000, then SIGKILL at 1000, replied 1000, 204, not
+    cancelled, previous 1000, no next; delayed passed, SIGTERM at 500, replied 1100, 204, not
+    cancelled, previous 500, next 1300, then SIGKILL at 1300, replied 1300, 204, not cancelled,
+    previous 1300, no next; cut after the check failed, SIGTERM at 650, no reply, 204, cancelled,
+    previous 600, next 1620, then SIGKILL at 1620, replied 1620, 204, not cancelled, previous 1620,
+    no next; no signal request passed with `[]`; never signalled, no journal and the LIFECYCLE-08
+    row passed with no `signals`.
+
+    Both name only what exists today, so they compile at their red commit and fail at their
+    assertions. Commit TestEngineFailureTimings and the subtest alone first, red, with test --item
+    T-44, and report each failing assertion. Then commit the section, engineFailureDiagnostics,
+    the offsets and features/README.md with test --task T-44. .github/workflows/ci.yml,
+    features/engine_failure_timings_test.go, features/engine_timing_regression_test.go,
+    features/engine_timing_test.go, features/features_test.go, features/steps_test.go,
+    features/engine_workflow_test.go, features/lifecycle_native_assertions_test.go for the offsets'
+    helper beside lifecycleSignalRequest, and features/README.md are the whole change: no product
+    code, scenario, engine invocation, proof setting or dependency. It touches no proof.code path,
+    so its CI judges no mutant. Before stopping, run without -race go test ./features -count=1
+    -run '^(TestEngineSuiteBudget|TestEngineRedWorkflow|TestFeatureSignalDiagnostics|TestLifecycleSignalWindow|TestEngineSchedule)',
+    which read the same workflow, file or journals, and the whole feature suite once, since every
+    scenario's After hook changes. Race detection, if wanted, names only TestEngineFailureTimings
+    and TestEngineScenarioTiming, never the whole features package.
+
+    The step runs only on a red engine job, so no green run shows the section, and these fixtures
+    cannot show the runner's own bash, grep and sort. Closure rests on the checks below and on the
+    pushed head's engine tier passing. A manual dispatch with red_scenarios set to a @wip @engine
+    scenario, which T-43 asks the coordinator for before its close, prints the section on the
+    runner too, with that row's record.
+
+    The first check captures go test's status as T-41's and T-43's do, not with set -o pipefail:
+    itos runs a check through sh -c, and ubuntu-latest's sh is dash. go test exits 0 when -run
+    matches nothing, so the check requires each subtest's PASS line. TestEngineWorkflow and
+    TestEngineFixtureWorkflow are in it because they hold the step to engineFailureDiagnostics. At
+    255bc2b both checks fail. The first: go test passes, then `TestEngineFailureTimings/timeout did
+    not pass`. Once committed red, timeout, record_cut_by_a_kill and no_records fail at the
+    assertion on what follows the memory marker, today the tail alone, while no_log passes, since
+    today's step already prints nothing there without a log: it is a guard. The subtest fails its
+    signals assertion for the immediate, delayed, cut after the check and no signal request rows,
+    which carry no `signals` today, while the never signalled and LIFECYCLE-08 rows pass. The
+    second: features/README.md has none of `minutes]:`, `slowest first`, `previous_ns` and
+    TestEngineFailureTimings.
+
+    A throwaway prototype of this rule, in a copy of the tree outside the repository and with
+    README words of its own, passed both checks, the neighbours above, golangci-lint, the whole
+    feature suite in 210.7 s, and -race on the two tests. Each of these breaks failed the first
+    check: sort without -s, which puts ANCHORS-09 before OVERLAP-03; grep without -a, which loses
+    the records after the NUL; the After hook not handing the offsets on; the LIFECYCLE-09
+    restriction dropped, which gives the LIFECYCLE-08 row `signals`; a nil list for a journal
+    without signal requests; and the step changed without engineFailureDiagnostics. dash is not
+    installed where this was written, so the checks ran under sh as bash in POSIX mode; they use
+    only POSIX constructs.
 - id: T-45
   type: test
   title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
@@ -4994,24 +5905,375 @@
   type: docs
   title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
   why: >
-    Charter milestone two step 2 fixes the shape (Claude token from a host file, Codex auth.json
-    bind-mounted read-write as one file plus its lock file, a GitHub token for gh, all passed per
-    command, never in container configuration, docker inspect or the checkout). The mechanism,
-    though, is open: with no exec command and a workload that may be the container's main process,
-    how does a secret reach the worker without entering the create config? Candidates are a
-    pre-start archive copy, stdin handoff and an exec-time environment. The record is documentation
-    only, like T-38 and 0022. It settles the policy keys that name a credential source, the
-    host-file checks (regular file, owner, mode, outside the checkout and every mount), the
-    in-worker names and paths, redaction in status and logs, what the approval record binds and
-    shows (names and kinds, never contents), the refusal of --fingerprint for any credential grant
-    per q-52, and the synthetic-marker test approach. It states plainly what stays open for the
-    person (refresh ownership and revocation, deletion, the GitHub token's scope, and the contract's
-    rule that account-management contracts are settled before real credentials are used) and asks
-    through itos decision rather than inventing protections. It updates the arc42 sections it
-    overrides under the charter's drift rule. Later items take their design from it. Broken down
-    from p1-credentials-passed-in.
-  done_when:
-    - run: test -f docs/decisions/0025-credentials-passed-in.md && grep -qi 'docker inspect' docs/decisions/0025-credentials-passed-in.md && grep -qi 'auth.json' docs/decisions/0025-credentials-passed-in.md && grep -qi 'fingerprint' docs/decisions/0025-credentials-passed-in.md
+    Charter milestone two, step 2: credentials passed in, never injected and never in the checkout,
+    per command, so that they never appear in the container's configuration or docker inspect;
+    Claude's long-lived token from a host file the person keeps; Codex sharing the host's own login,
+    its auth.json bind-mounted read-write as one file under the charter's now-stale premise that
+    Codex rewrites it in place, plus its lock file when the host has one; a GitHub token for gh and
+    pushes, passed the same way. The workload is the worker's main process and there is no exec
+    command, so how a secret reaches it without entering the create configuration is open, and
+    slice-29 to slice-33 and T-48 need that and the rest fixed before any code. This entry holds
+    every decision. The implementer writes them as one record,
+    docs/decisions/0025-credentials-passed-in.md (the next free number with that name if
+    another record takes 0025 first: slice-21 holds 0021 and slice-25 0023 on their branches, and
+    slice-26's implementation records one too), and updates docs/architecture/arc42.md. This is
+    documentation only, like T-38: no code, dependency, scenario, step definition, workflow or
+    engine run, and nothing here is runtime evidence or a support claim. Read the charter, the
+    contract's "Credentials and Git", "Approval and session state", "Decisions still open" and
+    acceptance matrix (AC-29 to AC-31, AC-36), arc42, docs/decisions/0022-egress-proxy.md,
+    docs/CONFIG.md's rules 6, 7 and 12, q-52, slice-26's spec on its branch
+    (features/approval.feature), and slice-29 to slice-33 and T-48. PLAN.md, README.md and
+    docs/ORCHESTRATING.md still call credentials out of scope; the charter governs and their edit is
+    not this item's, so that wording is no reason to stop. Broken down from
+    p1-credentials-passed-in.
+
+    Codex first, because the charter's shape for it cannot work as stated with today's Codex, and
+    this record decides nothing in its place. Codex rewrote auth.json in place (OpenOptions with
+    truncate, mode 0600) until openai/codex commit 582a8812e023b08cbf10b4603ac41644b8d99261 of
+    2026-10-30 (#58251, which "replaces auth.json atomically"), and the latest release,
+    rust-v0.167.0 of 2026-11-06, contains it: FileAuthStorage::save in
+    codex-rs/login/src/auth/storage.rs now writes a temporary file beside the target and renames it
+    over auth.json, and storage_file.rs follows symlinks and refuses a hard-linked or read-only
+    target. Its write lock is auth.lock in CODEX_HOME, opened without truncating and locked, never
+    renamed. All of this was read on GitHub at that tag and at the commit's parent, c15d0ce, not
+    run. With auth.json bind-mounted as a single file, that rename targets a mount point, which the
+    kernel refuses with EBUSY (vfs_rename in fs/namei.c), so the worker cannot keep a refreshed
+    login; and once the host's own Codex renames a new file into place, the worker's mount keeps the
+    old inode, so each side holds a login the other never sees. Only the lock file would still work
+    as a single-file mount. The record states this, defines no Codex kind and no Codex delivery, and
+    asks the person (question 1 below); slice-32 and the bind-mounted-file half of T-48 wait for the
+    answer.
+
+    The two token kinds reach the worker as read-only single-file bind mounts of staged copies,
+    which is this record's own decision, for the person to confirm or overturn. For each approved
+    grant, run reads the source once, through the descriptor that passed the checks below, and
+    writes exactly those bytes, untrimmed, to a new file of mode 0400 (O_CREAT, O_EXCL, O_NOFOLLOW)
+    in a staging directory it makes for that run under /dev/shm: itos-container- followed by 32
+    random lowercase hexadecimal digits, mode 0700, owned by the host UID and validated by
+    descriptor after mkdir as q-35's coordination directory is, except that an existing name
+    refuses. /dev/shm is a tmpfs on every Linux host Docker runs on, so a copy reaches no disk
+    unless the host swaps, and statfs must confirm it is one or delivery is unavailable;
+    XDG_RUNTIME_DIR is not always set, and the protected state root is on disk. No worker reaches
+    the host's /dev/shm: each has its own (IpcMode private) and sees only its own staged files,
+    bound in. Durable intent names the directory before it exists. The worker is created with one
+    bind mount per grant (HostConfig.Mounts, type bind, read-only, source the staged file, target
+    the kind's fixed path below); Docker checks at create that each source exists and binds it at
+    start, so the file must exist until then. VerifyRun checks by inspect before start that the
+    mounts are exactly today's checkout volume and /tmp tmpfs (safeHost and safeMounts in
+    internal/engine/session/docker/run.go) plus those binds, each with its exact source, target and
+    read-only flag. After the controller's start wait returns and any applicable existing mount
+    detector has run, whatever either answered, run attempts to unlink every staged file and remove
+    the directory, recording absence only after it is confirmed. Unlink removes a pathname, not an
+    acquired mount or open reference: a runtime that has already opened or bound the file can still
+    complete a delayed start with those bytes. Neither unlink, restart policy no, a start error or timeout,
+    nor a lost start acknowledgement proves that no workload ran. An uncertain start follows the
+    existing reconciliation and owned-cleanup contract in features/lifecycle.feature and decision
+    0017: retain the original protected identity, do not retry start, reconcile the owned full ID
+    under the existing budgets and attempt owned termination/removal. Keep an unobserved workload
+    outcome unknown; staging-path absence is not worker absence or completed credential cleanup.
+    Completion needs confirmed owned-worker removal and staged-path removal; an unavailable
+    observation or incomplete cleanup keeps the recovery record and exact stop retry. The acquired
+    copy remains accessible to the worker until its mount is torn down; no restart is authorized.
+    docker inspect and the create configuration show the staged source path and target, never a
+    value. Checks, reads, staging, create and verification failures before any start attempt
+    prevent launch and enter owned cleanup as needed. Once start may have been accepted, a refusal
+    cannot claim nothing ran. A controller lost before unlink leaves the staged path until stop,
+    which removes it by the intent's name after checking its owner and mode and that it holds only
+    the expected names, and otherwise refuses and keeps recovery with its exact retry. A reboot
+    clears /dev/shm too, but does not establish a prior workload outcome. This reads "per command"
+    as each run reading the current sources when it starts and dropping its copies with its worker,
+    keeping nothing between runs and nothing in an image, a volume or the checkout. It assumes
+    rootful dockerd in the host's mount namespace, as slice-17's anchor does.
+
+    Rejected, each read in source and not run. A pre-start archive copy (PUT
+    /containers/{id}/archive): moby's checkWritablePath (daemon/archive_unix.go) accepts only a
+    writable entry of the container's MountPoints, which HostConfig.Tmpfs's /tmp is not, and
+    otherwise refuses a read-only root ("container rootfs is marked read-only"); a tmpfs given as a
+    Mounts entry exists only once the container runs, so a copy made before start cannot land in
+    it; a tmpfs-typed local volume is unmounted and emptied when its last user unmounts (Unmount in
+    daemon/volume/local/local.go), which happens between the copy and start; only a disk-backed
+    volume keeps the copy, which puts the token on disk under Docker's data root until teardown or
+    stop, needs a worker mount Docker can write, and adds an owned resource with intent and
+    recovery. A stdin handoff: the workload is the literal argv, so an init of ours would have to
+    read the frame first, which needs the host's executable mounted into the worker (decision 0020
+    calls such a gate a forbidden extra mount in milestone one; charter step 5 brings one later for
+    Landlock), and under step 4's TTY the pty echoes the frame into the output stream before
+    anything can turn echo off. An exec-time environment: an exec's Env stays out of container
+    inspect and of exec inspect (ProcessConfig has no Env in the pinned moby API v1.56.1 types), but
+    an exec needs a running container whose main process is something else, and run rests on the
+    workload being that main process: its wait, its signals (ContainerKill reaches PID 1 and no
+    endpoint signals an exec), its exit status and its isolation after controller loss, built and
+    proven by slice-10 to slice-17. The deferred exec command inherits the session's mounts, so it
+    needs no delivery of its own. A direct read-only bind of the source: no copy, but it mounts the
+    source, which the contract's Authentication row forbids ("Do not mount the sources directly"),
+    puts the person's path in docker inspect, shows the worker later edits and binds whatever the
+    path names at start, not the inode checked. A descriptor as the source (/proc/<pid>/fd/<n>, as
+    slice-17's anchor uses): the anchor works because dockerd's local volume driver binds in the
+    host's mount namespace, onto a directory, which a file cannot be bound onto (ENOTDIR); a bind
+    mount is made by the runtime in the worker's new mount namespace, where the kernel refuses a
+    source that resolves into another namespace's mount (may_copy_tree in fs/namespace.c).
+
+    In the worker, kind claude-token is /run/itos-container/credentials/claude-token and kind
+    github-token is /run/itos-container/credentials/github-token, each a read-only regular file of
+    the host UID, mode 0400, whose mount point the runtime creates in the root filesystem before
+    making it read-only, as for /tmp; the approved image is trusted for that path as for /tmp
+    (contract, "Goal and limits"). No environment variable is set, since the create
+    configuration's Env would show its value. Claude Code reads a long-lived token from
+    CLAUDE_CODE_OAUTH_TOKEN, which claude setup-token generates, and ignores it in project settings
+    (code.claude.com/docs/en/env-vars); gh reads GH_TOKEN (gh help environment); neither documents a
+    file form. So the person's argv exports each from its file, for example sh -c
+    'CLAUDE_CODE_OAUTH_TOKEN="$(cat /run/itos-container/credentials/claude-token)" exec claude -p
+    "$1"' sh <task>. The manifest already reserves the CLAUDE_, GH_ and GITHUB_ prefixes, so a
+    checkout cannot set or shadow those names. Exporting them for the workload is left to step 3
+    (p1-harness-home) and step 5's init if their specs choose it; this record fixes only the files.
+
+    The policy requests grants in a new version, since a new key needs one (docs/CONFIG.md rule 7):
+    version 3 is slice-25's version 2 (decision 0023, on its branch) plus an optional top-level
+    credentials list, and versions 1 and 2 keep their meaning and refuse the key as unknown. Each
+    entry is a closed object of exactly kind and source. kind is claude-token or github-token,
+    compared exactly and never case folded, each at most once. source is the absolute host path of
+    the file the person keeps, written literally with no ~, variable or expansion (rule 6), slash
+    separated, at most 4096 bytes, with no empty, dot or dot-dot component, no trailing slash, no
+    backslash and no ASCII control. Absent means no grants; an empty list is refused, as slice-25
+    refuses an empty allowlist, so a file never carries a section that grants nothing. Entries keep
+    their written order for diagnostics and are a set keyed by kind everywhere else. A valid file
+    reads nothing on the host. Problems are located at /credentials/<index>/kind or /source and
+    collected as in version 1, never echoing a rejected value. slice-29 names the rule IDs and owns
+    the version 3 schema beside version 2's and the edits to docs/CONFIG.md and docs/CLI.md. A Codex
+    kind is defined only once question 1 is answered, by that answer's spec, which also says whether
+    it needs version 4; until then version 3 refuses one as an unknown kind.
+
+    The host-file checks, which doctor, approve and run share through one observation in readiness,
+    beside slice-20's checkout scan, and which never read contents, in this order for each grant:
+    open the source with O_PATH and O_NOFOLLOW at every component, so a symbolic link anywhere in
+    the path is refused (openat2 with RESOLVE_NO_SYMLINKS, or a component walk); every ancestor
+    directory owned by root or the host UID and not writable by group or other unless it is
+    root-owned and sticky, the rule that directory() in internal/engine/approval/disk/store.go
+    applies to the state root's ancestors; neither the file nor any ancestor the checkout root or
+    the protected state root, compared by device and inode, so an alias of the checkout through
+    another host mount is refused too; the file regular, owned by the host UID, with no group or
+    other permission bits, one link (a second name could expose or replace it, the checkout's
+    included), and 1 to 65536 bytes; and no two grants naming the same device and inode. A missing
+    source or a failed check is a located problem: doctor reports it and still shows the effective
+    grants, approve records nothing, and run refuses before staging or creating anything. Only run
+    reads, only after every check passed, by reopening the checked descriptor for reading
+    (/proc/self/fd/<n>), so the bytes come from the inode checked; a short read, or a size other
+    than fstat's, refuses. No command prints, hashes, logs or compares contents, so a changed token
+    needs no new approval, and rotation is the person's (question 2).
+
+    Approval binds grants as slice-26 binds the allowlist, and slice-30 builds it. A candidate with
+    grants takes one of two new profiles, offline-credentials-v1 or allowlist-credentials-v1, each
+    offline-v1's or allowlist-v1's boundary except for two of its clauses
+    (internal/engine/approval/presentation/presentation.go): "checkout-only host mount at
+    /workspace" becomes the checkout as the only host directory, at /workspace, plus the read-only
+    credential files under /run/itos-container/credentials, and "no ports, grants or hooks" becomes
+    no ports or hooks. That is a boundary a person consents to, hence the new names. They add one
+    canonical member, credentials, an array of {kind, source, target} ascending by kind, target
+    being the kind's fixed path, so a release that moved a target reads as a change and needs new
+    consent, as proxy.image does under slice-26. A candidate without grants keeps offline-v1 or
+    allowlist-v1 and their bytes, so existing approvals keep their identity, and policy.version is
+    the declared version (slice-26's rule), so moving a file to version 3 without grants changes
+    only /policy/version. valid() accepts either new profile only with a nonempty, strictly
+    ascending set of known kinds and lexically valid sources, and the differences walk reports any
+    change as one difference at /credentials with the whole old and new arrays. Approve's review and
+    status show each grant's kind, source and in-worker path, and say what a person consents to: the
+    worker can read each file and use it for anything the provider permits, since approval does not
+    narrow a token's scopes (contract, "Credentials and Git"); each run copies the source's current
+    contents when it starts, holds the copy in memory, drops it with the worker and never writes the
+    source; nothing redacts what the workload prints or sends, and under allowlist-credentials-v1 it
+    can send a credential to any listed host. slice-30 fixes those lines' exact words, as slice-26
+    did for the allowlist. Status shows the grants from the frozen snapshot and, during recovery,
+    whether the staging directory is present, absent or unknown.
+
+    q-52 (the person) settles who may approve. For a candidate with any grant, approve refuses
+    --fingerprint with approve.terminal-required, exit 1, whatever the value's format, whether it
+    matches and whether the candidate is already approved, so no answer depends on state and no
+    non-interactive credential grant can exist; its fix names bare itos container approve at a
+    terminal. The rule follows inspection, so an unready candidate keeps its own problem. Bare
+    approve without a terminal, or with --json, keeps approve.confirmation-required, but for such a
+    candidate its fix names the terminal form only, never --fingerprint. The same rule covers an
+    allowlist grant under q-52; whichever of slice-26, slice-27 and slice-30 lands first adds it and
+    the others widen its condition. A credential approval can therefore only have been given at a
+    terminal over the same canonical grants, so one recorded before a delivery slice lifts run's
+    refusal carries forward. The disclosed gap stays: an agent running unsandboxed on the host can
+    fake a terminal, and approval records what, not who. slice-30 carries both into approve's help
+    and docs/security.md, whose "Revisit this limitation before adding egress or credentials" q-52
+    answers.
+
+    Each slice refuses what the next must build, as slice-25 and slice-26 do for version 2. Under
+    slice-29 only doctor --policy-only and --manifest-only read a valid version 3 file, and ordinary
+    doctor, approve and run refuse it with policy.version; slice-30 lets ordinary doctor and approve
+    read it; run refuses a grant of a kind whose delivery has not landed (slice-31 claude-token,
+    slice-33 github-token) and an allowlist until slice-27, before the manifest, the engine and host
+    state.
+
+    Redaction. The controller's provisioning path copies a credential's bytes only from the checked
+    descriptor to the staged file: never into a policy, approval or snapshot record, an intent or
+    recovery record, a label, the create configuration, an environment variable or argv, an Engine
+    API request body, status, doctor, approve or run diagnostics, an error text, a log line, or any
+    file under the checkout or the state root. Sources and targets are paths, not secrets, and may
+    appear wherever grants are shown. A problem about a source names its rule, location and path,
+    never bytes or a wrapped Go error. The controller holds the bytes in one buffer between the read
+    and the write and overwrites it after; Go may still keep copies, so that is hygiene, not a
+    guarantee. The workload's streams and what it sends stay unredacted (arc42, "Diagnostics and
+    streaming"); a workload can copy a credential into anything it can write or send.
+
+    The refusal log conflicts with an unconditional credential-absence claim. Decision 0022 omits
+    userinfo, paths, queries and headers, but records a syntactically permitted target hostname
+    verbatim. A hostile workload can send CONNECT <synthetic-marker>.example.com:443 for an unlisted
+    name; the marker's letters, digits and hyphens pass that target filter. Its refusal therefore
+    puts the marker in proxy stdout, dockerd's json-file log and the teardown copy at
+    sessions/<lookup>/<id>/egress-refusals.jsonl under protected state. This is a persisted-log path,
+    not just an unredacted workload stream, and omitting the other request fields does not close it.
+    The record documents this conflict with AC-36 and asks the person question 6 below. It neither
+    changes decision 0022 nor selects a sanitization scheme or a weaker acceptance rule. No
+    credential absence from refusal logs is promised pending that answer and downstream proof.
+
+    Tests never use a real token or account (charter). Each credential scenario writes a synthetic
+    marker, itos-synthetic-credential- followed by 32 random lowercase hexadecimal digits made for
+    that scenario, into a source the harness creates in a private temporary home; letters, digits
+    and hyphens pass JSON and shell quoting unchanged. The workload proves what it read by printing
+    the marker's SHA-256, never the marker, so its streams stay clean. The absence checks search the
+    marker's bytes, and its base64 at all three offsets, in the worker's docker inspect output,
+    every request and response the harness's Engine API recorder holds, the whole host state tree
+    (approval, snapshot, intent and recovery records), status in text and JSON, doctor, approve and
+    run's error output, the proxy's stdout and both persisted refusal-log copies when present,
+    and every file in the checkout; and they find no staging directory under /dev/shm after
+    acknowledged startup and staging cleanup, nor after confirmed teardown. Each search has a
+    positive control: the same search over a file seeded with the marker finds it, so a broken
+    search cannot pass. In addition to the cooperative workload that prints only the hash, require
+    an adversarial hostname-marker probe: the workload sends the marker as a label of an unlisted,
+    syntactically valid CONNECT hostname, and the same searches cover the refusal through proxy
+    output, Docker logs and the protected-state copy. This probe must fail credential absence under
+    decision 0022 as written; do not avoid the hostname, omit either persisted copy, skip the probe
+    or treat the expected leak as evidence of absence. T-39 and slice-28 own the affected logging
+    contract; slice-31 and slice-33 need the integrated credential probe after the person's answer
+    to question 6, before promising credential absence from refusal logs. Their drafters reconcile
+    that answer; T-47 changes none of their specs and claims no AC-36 closure here.
+
+    Domain tests use the session port's fake, which does no I/O, for staging before create, unlink
+    after the start attempt, refusal before any start attempt on a provisioning failure, and no
+    marker in recorded configuration or recovery values. T-48's shared fake/adapter contract must
+    also cover a lost start acknowledgement after the runtime acquired the credential mount,
+    including delayed start completion after unlink. The fake models that acquisition without I/O.
+    Slice-31 and slice-33 require the corresponding CI real-engine case: the acquired mount can
+    still supply the synthetic bytes, proved by their hash, despite the missing acknowledgement.
+    Assert no repeated start, reconciliation of the original owned full ID, an observed outcome or
+    explicit uncertainty, and bounded owned cleanup. A failed cleanup retains recovery and its
+    exact stop retry; successful cleanup confirms both worker absence and staging-path removal.
+    Neither an absent staging pathname nor a failed acknowledgement may satisfy an assertion that
+    no workload ran or that cleanup completed. These extend LIFECYCLE-03/07's start-acknowledgement
+    and accepted-start coverage for credential mounts; they do not replace its lifecycle rules.
+    Real-engine proof runs in CI only, and no agent receives the Docker socket. This is AC-22/23
+    for uncertain start and cleanup, AC-36 for credentials subject to question 6, AC-29's
+    approved-material-only and source-modification probes, and AC-31's HTTPS and API half; the SSH
+    identity and AC-30's login and refresh flows stay deferred. No search here is a credential
+    scanner.
+
+    What stays open is the person's, asked through itos decision rather than decided here, and the
+    record lists each with what waits on it. 1, Codex: how does the worker share the host's Codex
+    login now that Codex replaces auth.json by rename? It names the options without choosing: a
+    Codex that still rewrites in place, pinned on the host and in the worker image; a host
+    directory holding only auth.json, which both installs reach through a symlink Codex follows,
+    mounted read-write, with auth.lock as a single file (read in the source, not run); the worker's
+    own login or API key, delivered like the tokens; or a copy in and back out, which loses a
+    refresh made on the other side. slice-32 and T-48's file half wait. 2, refresh and revocation:
+    neither token kind refreshes, revoking a token is the provider's, and removing a grant refuses
+    the next run until an approval without it, while a live session keeps its copy; is that enough,
+    and who owns refresh when a later kind has one? 3, deletion: no command creates, rotates or
+    deletes a source, and the only copies are the staged ones; does the person want
+    account-management commands, or is deleting a file theirs? 4, the GitHub token's scope: nothing
+    requires or checks one, since checking needs a call to GitHub; should approval require a
+    fine-grained token limited to the checkout's repository, or an expiry? 5, the contract's rule
+    that "the explicit contracts for granting/revoking accounts, deleting profiles, rotating the
+    sandbox SSH key and the inspection CA must be settled before real credentials are used": does
+    this record meet it for the two token kinds? Until the person answers 5, no real credential is
+    used, the person's smoke check included; the scenarios need none. 6, credential-bearing
+    refusal hostnames: how should the refusal log represent a hostile CONNECT hostname that
+    contains credential bytes, given decision 0022's verbatim target and AC-36's marker exclusion?
+    Changing the target representation or explicitly revising the credential-absence guarantee is
+    the person's decision, not this record's. Passing the hostname-marker probe and accepting
+    credential-bearing egress under AC-36 wait for that answer and the affected logging specs.
+    Documentation must disclose the current leak until the chosen rule has downstream proof.
+    No question here authorizes silent weakening of the contract or its probes.
+
+    The record lists each contract passage it supersedes or defers, so the person can edit the
+    contract. Agreed scope's Mounts row ("do not bind-mount additional host paths") and "Credentials
+    and Git"'s "This is not an exception allowing host-file mounts", for the staged binds, since
+    their alternative, copying into isolated container-managed storage, fails as above. The
+    Authentication row's "Do not mount the sources directly" and "The worker cannot directly read
+    or write the host-side source" hold for the token kinds and would give way to Codex's read-write
+    mount, as would "Do not share ... a writable credential store between projects"; question 1
+    leaves all three open. "Safe provisioning, OAuth callback paths, refresh ownership and
+    account-source updates are unresolved", the auth provisioning, account-management, callback and
+    revocation/deletion entry of "Decisions still open", and Experiments item 3: provisioning is
+    settled for the two token kinds, no login runs in the worker so no callback exists, and the rest
+    is questions 2 to 5. The Logging row and AC-36 remain required; the conflict between decision
+    0022's verbatim target and marker exclusion stays open in question 6, not superseded here. The
+    Git row's sandbox SSH identity, AC-31's SSH half and OpenCode stay deferred.
+
+    What rests on an answered question, and what the record decides itself. The approval rule is
+    q-52's. The shape is the charter's, and its Codex premise no longer holds, which only the person
+    can change. Grants in itos-container.yaml with absolute host paths, and approval binding kinds
+    and paths and never contents, are the coordinator's breakdown (slice-29, slice-30). The staged
+    binds and /dev/shm, the unlink after start, the in-worker paths, the kind names, version 3, the
+    host checks, the two profiles, approve.terminal-required and its precedence, the carried-forward
+    approvals, the redaction rules and the marker approach are the record's own, for the person to
+    confirm or overturn, and it marks them so. T-48 and slice-31 must prove the mechanism on the
+    real engine in CI; if Docker refuses a staged bind, or a copy outlives its worker there, the
+    mechanism reopens with that evidence rather than a fallback.
+
+    In arc42 the opening says the credentials design added by T-47 is proposed, as T-38's is.
+    Constraints keeps the offline limits and names the record for credential grants. Context and
+    scope replaces "Accounts, network Git, LAN publishing" with credentials passed in per command,
+    proposed, and account management and network Git deferred, and qualifies "The worker cannot
+    access ... host credentials" by its approved grants. Building-block view adds the policy's
+    credentials and readiness's source observation (slice-29), approval's grants with
+    offline-credentials-v1, allowlist-credentials-v1 and the terminal rule (slice-30) and session's
+    credential staging (T-48), all proposed, and the work-item table adds T-47, slice-29 to slice-33
+    and T-48, with slice-32 waiting on question 1. Runtime view adds the terminal rule to its
+    Approve row and a subsection headed ### Credential run with the order and its failure closure,
+    explicitly naming uncertain start and a lost start acknowledgement after mount acquisition.
+    It distinguishes staged-path removal from owned-worker removal, keeps unknown outcomes unknown
+    and carries the existing reconciliation, budgets and recovery retry instead of a late-start
+    fencing claim.
+    Deployment view names the credential files in the Worker row, replaces "extra host bind mount
+    or host-wide chown" in container-managed storage with the grants' staged read-only binds, and
+    adds a row for the /dev/shm staging. Cross-cutting concepts states q-52 in "Approval and
+    ownership are distinct", the provisioning redaction rule under "Diagnostics and streaming",
+    the hostname-marker probe and unresolved persisted-log conflict under "Refusal log", and a
+    credentials paragraph that includes auth.lock and the Codex finding. Decisions links the record
+    and says q-52 revisited A1, so no text still asks to revisit before egress or credentials. Quality
+    requirements maps AC-29, AC-31's HTTPS half and AC-36 to slice-31 and slice-33, unproven, with
+    AC-36's hostname-marker case awaiting question 6 and the logging owners, and AC-22/23's lost
+    start acknowledgement to T-48 and those credential slices. Risks and open questions replaces
+    "The record settles no approver" with q-52's answer, replaces the row beginning "Minimal auth
+    provisioning/refresh" with rows for questions 1 to 6, and drops
+    p3-approval-before-egress, which q-52 closed, wherever arc42 names it. Keep the twelve headings
+    and all text that still holds, and label everything proposed. The record names these sections
+    as the ones it updates, under the charter's drift rule.
+
+    The drafter changes only this entry. The implementer changes only the record and arc42, in docs
+    commits with Task T-47 as T-38's were, and leaves the registry, decision 0022 and sibling specs
+    alone, reporting a conflict rather than resolving it. slice-29's, slice-30's, T-48's,
+    slice-31's and slice-33's drafters take these decisions from the record, though their whys
+    predate it: slice-29's names a Codex kind, which waits on question 1; slice-33's "where gh
+    expects it" is GH_TOKEN exported from the file; T-48's "or a bind-mounted host file" waits on
+    question 1. T-48's "a failed delivery stops the workload before it starts" holds only before
+    any start attempt; its drafter must distinguish uncertain start and require the acquired-mount,
+    lost-acknowledgement case above. T-39 and slice-28 must take question 6's eventual answer into
+    their logging specs before slice-31 or slice-33 can claim the hostname-marker probe passes.
+    Slice-26's spec on its branch says who may approve stays open, which q-52 has since settled.
+
+    Both checks read only those two documents, with grep, and declare prose: true, because on a
+    prose-only range CI leaves out any other late check and itos work done never runs one (T-38).
+    Their anchors are words the decisions above force, compared case-insensitively with whitespace
+    flattened, so wrapping and capitals cannot fail them; semantic review judges the rest. Both
+    checks require the uncertain-start and hostname-marker anchors added after spec review; these
+    are presence checks, not proof that either conflict is resolved or a runtime probe passes. The
+    first replaces the promoted check, which a file holding its three phrases would pass, and keeps
+    them. It fails today at ls, because no record exists. The second fails today on its first anchor,
+    ### Credential run.
 - id: T-48
   type: feat
   title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration

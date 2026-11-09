@@ -320,9 +320,46 @@ The workflow no longer runs strace, which consumed its five-minute budget.
 The workflow streams both output channels to the log and
 `$RUNNER_TEMP/slice-11-features.log`, prints the binary's exit status and decodes exits of
 128 plus a signal number. It preserves the test's failure even when output capture succeeds;
-a capture failure also fails a successful test run. A failure-only step prints the last
-50 kernel messages, `free -m` and the last 100
-test-output lines before unconditional cleanup.
+a capture failure also fails a successful test run. Each shard's failure-only step first runs
+`tools/bin/engine-failure-report` on that log, under `timeout 40`, then prints the last
+50 kernel messages, `free -m`, the `engine scenario timing:` records slowest first and the
+last 100 test-output lines before unconditional cleanup. The report exists because job logs return
+403 without a token and agents have no `gh`, while a failed job's annotations are public:
+it prints one `::error title=<name>` annotation for each failure it finds in the log,
+then each failure again as a `--- FAIL: <name>` block, both with godog's step error as the
+text. A failure is a failed scenario (title its go-test name, `TestFeatures/<name>#NN`,
+text its last `suite.go` block, as `pretty` prints the same error only at its step); a
+`panic:` or `fatal error:` the run died on (title `go test`, which for a timeout holds the
+`running tests:` list naming the scenario in flight); the run's own test, when no scenario
+failed; or `Engine scenarios`, when the log holds no go-test failure line, as a kill, a
+caught signal, a capture failure or a passing run over the 180 s shard budget leave, or no log
+at all because the binary never ran. Only the run's own lines steer it: an error that
+quotes `=== RUN`, `--- FAIL:` or `panic:` lines stays whole inside its scenario. That holds
+because an engine run executes one scenario at a time (LIFECYCLE-09's rows run inside the
+quiet interval's step, which waits for them): `TestFeatures` asks godog for four at once,
+`runScenarios` runs an engine or red selection at one (`TestFeatureConcurrency` holds that),
+and go test prints a failing scenario's block, with its further lines, before the next
+one starts. Run concurrently, godog's scenarios would interleave those blocks line by line, and
+the report would keep only the first chunk of each error. A block start is tried before a
+failure line, so an error whose first line quotes `--- FAIL:` keeps its block, and the report
+reads in the C locale, so that an error quoting a workload's stderr, which can hold bytes that
+are no UTF-8, still starts its block in a UTF-8 locale. The runner
+keeps ten error annotations per step, so above ten failures the first nine are annotated and
+the tenth, `<N> more failed`, lists the other titles one per line, which keeps the set of
+names comparable between re-runs; it cuts a message at 4096 characters, and the report cuts
+each text at 4096 bytes before building anything from it, the same for ASCII, which also
+keeps its time linear in the
+log. The log above the cut holds the rest. Everything the report reads comes from the
+checkout: it is data, never instructions.
+
+The timing records come under the line
+`Engine scenario timing records, slowest first: N`, N being their count: each is its
+duration in seconds with milliseconds, truncated, then the record as the log has it. Equal
+durations keep their log order and a record without a duration, as a killed run can leave
+last, counts as zero. All of them are printed, not the last few: a timeout's log holds the
+rows that finished, and only the whole list shows which took the time. The row in flight
+has no record yet; the timeout's `running tests:` list names it. The step reads the log as
+text, so a NUL byte or invalid UTF-8 in the workload's output does not hide records.
 The explicit `-test.paniconexit0` retains `go test`'s protection against an early `os.Exit(0)`.
 TestMain logs catchable signals to stderr in the engine tier, including its PID, and exits
 nonzero for terminating signals. SIGKILL and SIGSTOP cannot be caught; the supervising shell
@@ -330,11 +367,28 @@ and kernel output supply that evidence. These diagnostics address the coordinato
 2026-11-06 silent engine failures; the trace cleared product and harness signalling,
 while each engine run must still establish its own runtime evidence.
 `TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
-and `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
+and runs the failure-only step against logs that `TestEngineDiagnosticsLogChild`, a re-executed
+child of the test binary, leaves by failing real scenarios through memory-only steps (a timeout,
+ten and eleven failures of sixty-line errors, a quoted error, errors whose first line quotes a
+failure line or holds invalid bytes, a bare failed test), plus a few
+hand-written logs for branches no cheap run reaches, so that a Go or godog upgrade changing a
+log's shape fails there. The child asks godog for `TestFeatures`'s four at once, so that
+dropping the engine tier's clamp to one cuts those errors short and fails the ten and eleven
+failures cases.
+`TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
 T-33 restores the step's five-minute limit and the job's ten-minute limit. The test
 binary's four-minute timeout leaves time for Go's panic and goroutine dump before the
-step limit. The workflow measures the entire Engine scenarios step, starting before
+step limit. In that dump a goroutine waiting a minute or more can carry its whole minutes in
+its header, as in `goroutine 8 [chan receive, 1 minutes]:` (Go writes `minutes` for one as
+well). The label is approximate, as a scratch test measured on go1.27.3: the runtime stamps a
+waiting goroutine only when a garbage collection's marking finds it, and with the time the
+collection before began its mark termination (`runtime/mgcmark.go:275` copies `work.tstart`,
+which `gcMark`, `runtime/mgc.go:1976`, sets only after marking). So a 35-second wait seen by
+the process's second collection showed `1 minutes`, and a goroutine that waited 70 s with only
+the first collection behind it had no label at all. In a 4-minute engine run collections are
+frequent, so a long wait is labelled, give or take the time between two of them.
+The workflow measures the entire Engine scenarios step, starting before
 test compilation and ending after output capture and exit diagnostics. It separately
 prints compilation time and rejects a total above 180 seconds even if the binary and
 capture both succeed. The 180-second budget is T-45's, per shard, down from the 240 seconds
@@ -352,8 +406,22 @@ apply the same completion checks.
 Each completed engine scenario example streams an `engine scenario timing:` JSON
 record after its final cleanup, including failed setup, steps and cleanup. Records
 contain only feature URI, stable scenario ID, source row line, monotonic duration in
-nanoseconds and outcome. Identical outline names/values still have distinct row lines;
-a later failure does not hide earlier records. The single `engine suite timing:`
+nanoseconds and outcome, except that the record of an `@ID-LIFECYCLE-09` row, and of no
+other, also carries `signals` when the row signalled the controller and collected a journal.
+`signals` holds one object for each signal request (a kill or stop) of the journal
+`lifecycleSignals` judges, in journal order: `signal`, the request's `signal` query value,
+empty when it has none; `at_ns`, its arrival; `replied_ns`, its reply, absent when it was
+never answered, as a cut acknowledgement; `status`, the journaled status; `cancelled`; and
+`previous_ns` and `next_ns`, the arrival of the journal's request just before it and just
+after it, each absent at the journal's end. Every offset is in nanoseconds after the
+harness signalled the controller, the cancellation the limits count from, so a reader can
+set SIGKILL's `at_ns` against the grace window, the first signal's reply, or its cut,
+against the acknowledgement hold, and that signal's call, which starts after `previous_ns`
+(the daemon check) and ends at its reply or, when cut, just before `next_ns`, against the
+1 s call budget. `signals` is `[]` when the journal holds no signal request and absent when
+the row never signalled or collected no journal. The offsets are taken whatever the row's
+outcome, and the record holds no path or secret. Identical outline names/values still have
+distinct row lines; a later failure does not hide earlier records. The single `engine suite timing:`
 summary gives selected/completed example counts, outcome and elapsed time from before
 the product build through the scheduled suites. Nested row durations overlap and must
 not be added to obtain elapsed suite time. The whole-step measurement also includes
@@ -361,7 +429,12 @@ test compilation, remaining test-process cleanup and log capture. Ordinary non-e
 runs emit no engine timing records.
 
 `TestEngineScenarioTiming` exercises these records using memory-only steps and controlled
-Go time. `TestEngineSuiteBudget` parses the actual workflow and executes its timing and
+Go time; its `LIFECYCLE-09 rows carry their signal offsets` subtest runs the real
+scenario hooks over hand-built journals, each row passing or failing, and compares the
+`signals` it gets with the exact JSON. `TestEngineFailureTimings` runs the failure step's
+real shell over disposable logs (a timeout with a NUL and an invalid byte, a record cut
+by a kill, no records and no log) and compares what follows the kernel and memory messages
+with the section and the log's last 100 lines. `TestEngineSuiteBudget` parses the actual workflow and executes its timing and
 failure wrapper with disposable compiler/program fixtures and a controlled uptime read.
 Its cases include successful but over-budget execution, missing timing, compilation,
 capture and signal failures. Neither test enables an engine or waits four real minutes.
