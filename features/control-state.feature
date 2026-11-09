@@ -292,6 +292,37 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # scenario's expected first failing Then is documented beside it. An undefined
   # step, setup failure or an already-passing control is not red evidence.
 
+  # PRRT_kwDOVkB0ws61IKmj: a checkout below a protected tree can expose its
+  # approvals collection. Each first Then fails on the old successful inspection
+  # or publication, or on worker authority granted before/after preflight.
+  @slice-21 @ID-CONTROL-19 @local-engine-fixture @wip
+  Scenario Outline: A checkout inside protected state cannot be inspected or approved
+    Given a control-state fixture with P checkout at the approvals collection of the "<location>" managed tree
+    When P inspects that selection with "<command>" using valid approval inputs
+    Then P reports approval.state.path with exit 1 and invalid approval
+    And the namespace refusal creates no bootstrap binding or selected-tree entry and preserves existing state
+
+    Examples:
+      | location | command |
+      | selected | doctor  |
+      | selected | approve |
+      | fixed    | doctor  |
+      | fixed    | approve |
+      | enrolled | doctor  |
+      | enrolled | approve |
+
+  @slice-21 @ID-CONTROL-20 @local-engine-fixture @wip
+  Scenario Outline: Retained control state blocks a checkout nested inside it at admission
+    Given a control-state fixture with P approval "absent" and managed location "above W root" relative to W on "distinct daemons"
+    When P publishes approval before W admission using the "<schedule>" schedule
+    Then P approval succeeds and W reports "<rule>" with exit 1 before registration or engine mutation
+    And W preserves the enrolled catalog approvals and both projects without creating launch authority
+
+    Examples:
+      | schedule        | rule                 |
+      | fresh run       | approval.state.path  |
+      | after preflight | run.ownership-unsafe |
+
   # PRRT_kwDOVkB0ws61F-IT: ordinary state entries inside sessions or admission
   # poison subsequent reservation scans. Each first Then must fail on the old
   # implementation's successful doctor inspection or approval publication.

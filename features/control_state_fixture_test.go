@@ -60,6 +60,9 @@ func (w *world) controlSetup(approval, location, engines string) error {
 			return err
 		}
 		root := filepath.Join(base, "projects", name, "itos-container")
+		if name == "W" && location == "above W root" {
+			root = filepath.Join(root, "approvals")
+		}
 		if err := os.MkdirAll(filepath.Dir(root), 0700); err != nil {
 			return err
 		}
@@ -102,6 +105,8 @@ func (w *world) controlSetup(approval, location, engines string) error {
 			p.doctor.env["XDG_STATE_HOME"] = filepath.Dir(worker)
 		case "below W root":
 			p.doctor.env["XDG_STATE_HOME"] = filepath.Join(worker, "selected-state")
+		case "above W root":
+			p.doctor.env["XDG_STATE_HOME"] = filepath.Dir(filepath.Dir(worker))
 		default:
 			return fmt.Errorf("unknown control-state location %q", location)
 		}

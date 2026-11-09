@@ -10,6 +10,7 @@ import (
 )
 
 func (w *world) controlAdmissionSteps(sc *godog.ScenarioContext) {
+	sc.Step(`^a control-state fixture with P checkout at the approvals collection of the "([^"]*)" managed tree$`, w.controlNestedCheckout)
 	sc.Step(`^P publishes approval before W admission using the "([^"]*)" schedule$`, func(schedule string) {
 		w.control.publicationBeforeAdmission(schedule)
 	})
@@ -47,6 +48,39 @@ func (w *world) controlAdmissionSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^W preserves the enrolled catalog approvals and both projects without creating launch authority$`, func() error {
 		return errors.Join(w.control.unchanged(), w.control.inspectionOnly())
 	})
+}
+
+func (w *world) controlNestedCheckout(location string) error {
+	if err := w.controlSetup("absent", "below W root", "distinct daemons"); err != nil {
+		return err
+	}
+	f := w.control
+	root := filepath.Join(f.p.doctor.env["XDG_STATE_HOME"], "itos-container")
+	switch location {
+	case "selected":
+	case "fixed":
+		root = f.fixedRoot()
+	case "enrolled":
+		root = filepath.Join(f.parent, "projects", "retained", "itos-container")
+	default:
+		return fmt.Errorf("unknown protected location %q", location)
+	}
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return err
+	}
+	checkout := filepath.Join(root, "approvals")
+	if err := os.Rename(f.p.doctor.checkout, checkout); err != nil {
+		return err
+	}
+	f.p.doctor.checkout, f.p.doctor.cwd, f.p.doctor.env["ITOS_ROOT"] = checkout, checkout, checkout
+	if location == "enrolled" {
+		for _, path := range []string{f.fixedRoot(), root} {
+			if _, err := f.seedBinding(path); err != nil {
+				return err
+			}
+		}
+	}
+	return f.p.approvalOracle()
 }
 
 func (f *controlFixture) publicationBeforeAdmission(schedule string) {
