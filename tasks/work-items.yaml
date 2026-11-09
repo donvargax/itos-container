@@ -2,9 +2,7 @@
 phases:
   1: null
 queue:
-  - T-45
   - T-44
-  - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
 items:
@@ -571,6 +569,16 @@ items:
       a name alone is not proof. It is not needed for correctness, because Names skips the temporary
       and bd383fd reads the record around it. The item's scenario should check that a retired
       temporary leaves the record intact and that a live publisher's temporary is never removed.
+
+      This is the same family: a session that status and stop can never finish, because an uncertain
+      create keeps its intent and a name-only miss is not proof of absence. That item already covers
+      the crash gaps around registration and intent. Add the case where the daemon answered a create
+      with an error (an exhausted address pool, say) as another way to reach it. Whether an error
+      reply proves no create was made is a security decision, so it is for the person or coordinator
+      to settle, and a drafter must not invent that rule. T-40's spec says the uncertain-create rule
+      is the worker's and the anchor's today and is not T-40's to change. But T-40 adds two network
+      creates per egress run, so slice-27 makes the stuck session reachable and nested checkouts
+      then stay blocked. The item is p3; its phase is worth revisiting once slice-27 is queued.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
@@ -888,15 +896,9 @@ items:
     title: Credentials passed in per command, never injected and never in the checkout
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Milestone two, step 2 (docs/charter.md). Per command, so they never appear in the container's
-      configuration or docker inspect: Claude's long-lived token from a host file the person keeps;
-      Codex shares the host login, its auth.json bind-mounted read-write as a single file (Codex
-      rewrites it in place) plus its lock file when present; a GitHub token for gh and pushes,
-      passed the same way. No scenario uses a real credential.
   - id: p1-harness-home
     title: A home of the harness's own inside the container, seeded so a first run neither stops nor calls home
     phase: 1
@@ -1052,6 +1054,13 @@ items:
       fields (recorded date, last-seen date, and permanent status or the exit item). Its exit is the
       upstream itos fix, so say that. The lesson is measured, not invented. It touches no proof.code
       path and is too small to be its own item.
+
+      The item already edits PLAN.md, README.md and docs/ORCHESTRATING.md to match the charter's
+      milestone two. Its text covers egress first and 'the rest when reached', but its why and title
+      name only egress. Widen it so the milestone-limits sentence 'credentials/accounts, Git over
+      the network... remain outside this milestone' is also replaced by the charter's steps 2 to 4
+      in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
+      otherwise meet two disagreeing authorities, as T-38's did.
   - id: p1-acceptance-static-binary
     title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
     phase: 1
@@ -1464,7 +1473,7 @@ items:
     title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-harness-env-clears-columns
@@ -1640,3 +1649,132 @@ items:
     status: dropped
     depends_on: []
     kind: task
+  - id: T-47
+    title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: slice-29
+    title: The policy file accepts named credential sources and doctor validates them without reading their contents
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-47]
+    kind: slice
+    why: >
+      Was p1-credentials-policy-sources.
+      Charter step 2: the credential grants are part of the approved settings, so they start in
+      itos-container.yaml, as the egress allowlist did in slice-25. Scenarios first: a closed
+      credentials section naming each source by kind (Claude token file, Codex auth file, GitHub
+      token file) with an absolute host path. Unknown kinds, duplicates, relative or empty paths,
+      and paths inside the checkout or any mount are refused with a located diagnostic. Doctor
+      reports a missing, non-regular, group- or world-accessible, or foreign-owned source, and shows
+      the effective grants. It never prints, hashes or logs contents. It does not execute checkout
+      code and starts no engine. Offline policies without the section are unchanged. docs/CONFIG.md
+      and docs/CLI.md are updated, and the published policy schema moves with it. It takes the keys
+      and checks from the decision record. Broken down from p1-credentials-passed-in.
+  - id: slice-30
+    title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-29, slice-26]
+    kind: slice
+    why: >
+      Was p1-credentials-approval-grant.
+      Charter step 2 plus q-52: approve shows exactly which credential kinds and host paths the
+      worker will receive and asks for yes at a real terminal. --fingerprint is refused, with a fix
+      naming the interactive form, for any grant that includes credentials (and, per slice-26, an
+      egress allowlist). The canonical approved-settings record gains the grants as a set of names,
+      kinds and paths and never contents. Adding, removing or repointing a grant invalidates an
+      existing approval, and run refuses with the change explained. Reordering does not. Offline
+      approvals keep their identity. Status shows grants without secrets. Records, presentation and
+      refusal only: nothing is delivered to a worker yet. It follows the policy slice for the
+      validated grants and slice-26 for the shared canonical record and refusal rule. Broken down
+      from p1-credentials-passed-in.
+  - id: T-48
+    title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-47]
+    kind: task
+  - id: slice-31
+    title: run hands the approved Claude token to the workload; it appears nowhere in docker inspect, the checkout, status or logs
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48]
+    kind: slice
+    why: >
+      Was p1-credentials-claude-token-run.
+      The first user-visible credential behaviour, charter step 2. Scenarios first, real-engine ones
+      in CI, using a synthetic token marker and no real account. With an approved Claude grant, run
+      makes the token readable by the workload in the form the decision record chose. A scenario
+      that fails without the isolation shows that docker inspect of the worker, the session's
+      recovery and approval records, status output, doctor output, the refusal log and run's own
+      diagnostics never contain the marker, and that nothing is written under the checkout. Without
+      an approved grant, or after the source file changes mode or owner, run refuses before creating
+      anything. A second worker or project does not receive it. Offline runs without grants are
+      unchanged. Broken down from p1-credentials-passed-in.
+  - id: slice-32
+    title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48]
+    kind: slice
+    why: >
+      Was p1-credentials-codex-auth-run.
+      Charter step 2: Codex shares the host's own login and rewrites auth.json in place, so the
+      mount is the single file read-write (a directory mount would expose the host home), plus the
+      lock file when the host has one. Scenarios first, real-engine ones in CI, on a synthetic file
+      with no real login. A write by the workload reaches the host file in place. Nothing else from
+      the host directory is visible. A missing or replaced source, a symlink or a path outside the
+      approved one is refused before create. The mount appears in the session's records by path and
+      never by contents. The grant needs approval from a terminal. It also states, in approve's
+      review, that the worker can alter this file, since a read-write mount is the person's chosen
+      design. Broken down from p1-credentials-passed-in.
+  - id: slice-33
+    title: run hands the approved GitHub token to the workload the same way, for gh and pushes
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-31]
+    kind: slice
+    why: >
+      Was p1-credentials-github-token-run.
+      Charter step 2: a GitHub token for gh and pushes, passed like Claude's. Scenarios first, on a
+      synthetic marker. With an approved grant the workload can read the token where gh expects it.
+      The same absence properties hold: docker inspect, records, status, logs and the checkout. Git
+      push over the network needs the egress allowlist, so only the credential's delivery is in
+      scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
+      Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
+      approved grant. Broken down from p1-credentials-passed-in.
+  - id: p1-egress-refusal-log-writer
+    title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks charter milestone two, step 1 (egress through an allowlisting proxy), at slice-27.
+      T-40's spec has the controller copy the stopped proxy's stdout through port.RefusalLog before
+      removing it. It refuses an egress run with no log bound (nil is port.Internal), and a failed
+      copy keeps the stopped proxy, both networks, the anchor and the intent. So slice-27 can
+      neither run nor tear down an egress session until a real writer exists. cmd binds none in
+      T-40. The record (docs/decisions/0022-egress-proxy.md, 'Where the log lands') and arc42's
+      slice-28 row give the writer to slice-28, which depends on slice-27. No item schedules it
+      earlier. Approval's Publish refuses more than 1 MiB, so it cannot be reused. Build the adapter
+      as a task before slice-27: the streaming writer for
+      sessions/<lookup>/<id>/egress-refusals.jsonl, with Publish's private-file, fsync, rename and
+      parent-fsync rules, passing T-40's RefusalLogContract unchanged. It adds no command behaviour,
+      so it is a ledger task with a check, not part of slice-27's scenarios. It depends on T-40, and
+      slice-27 should depend on it. Slice-28 keeps the seq check and its typed gap error, status's
+      record count, display escaping of hostile names, and the proxy-failure scenarios. Update the
+      record and arc42 rows that now give the writer to slice-28. The writer does not wait for
+      p2-proxy-log-lost-tail-sink, since T-40 says either candidate is one more stdout line the
+      reader and copy carry unchanged. Retention stays with p3-session-state-retention.

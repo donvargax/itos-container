@@ -86,7 +86,7 @@ engine_finish() {
   trap - EXIT
   if finished=$(engine_now) && [[ -n $engine_started ]] && (( finished >= engine_started )); then
     elapsed=$(((finished - engine_started) * 10))
-    if (( elapsed > 240000 && result == 0 )); then result=1; fi
+    if (( elapsed > 180000 && result == 0 )); then result=1; fi
   elif (( result == 0 )); then
     result=1
   fi
@@ -147,7 +147,7 @@ func testEngineDiagnostics(t *testing.T, hostOS string) {
 		t.Fatal(err)
 	}
 	var script, diagnostics string
-	for _, step := range workflow.Jobs["engine"].Steps {
+	for _, step := range workflow.Jobs["engine-shard"].Steps {
 		switch step.Name {
 		case "Engine scenarios":
 			script = step.Run

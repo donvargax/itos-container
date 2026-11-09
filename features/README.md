@@ -239,12 +239,55 @@ receive a Docker socket and never run the engine tier locally or spoof the CI co
 `TestEngineWorkflow` and `TestEngineFixtureWorkflow` parse the workflow and reject broken
 fixtures without executing Docker. The latter also checks the pinned recipe and helper guards.
 
-The sole engine job in `.github/workflows/ci.yml` has the stable check name
-**`Engine scenarios (Linux amd64)`** for the coordinator's repository settings. It runs on main
-pushes, non-draft pull requests and manual dispatch, checking out the exact `${{ env.TO }}`
-head on native `ubuntu-latest`. `ci` depends on it, runs with `always()` plus the event guard,
-and explicitly fails if the engine result is anything other than success. Remote branch
-protection settings remain the coordinator's responsibility.
+Since T-45 the engine tier runs in three engine shards, the matrix of the `engine-shard` job in
+`.github/workflows/ci.yml`: **offline** (`offline.feature`), **lifecycle** (`lifecycle.feature`,
+whose four `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row) and **other**
+(every other feature with an engine case). A shard is a job of whole feature files on its own
+native `ubuntu-latest` runner and daemon, with its own checkout of the exact `${{ env.TO }}`
+head, preflight, fixture preparation and cleanup. Nothing crosses runners, `fail-fast` is off
+so a red shard hides no other, and no feature is ever split. Each runs on main pushes,
+non-draft pull requests and manual dispatch.
+
+The stable check name **`Engine scenarios (Linux amd64)`**, for the coordinator's repository
+settings, belongs to the `engine` aggregate job. It needs `engine-shard` alone, runs under
+`always()` plus the event guard for one minute, and its one step, **Require every engine
+shard**, fails unless the shard job's result is `success`. GitHub's contexts reference does
+not spell out a matrix job's result in `needs`; the gate takes success to mean that every
+shard succeeded, and the loop confirms that on the first red shard. `ci` depends on the
+aggregate, runs with `always()` plus the event guard, and explicitly fails if the engine
+result is anything other than success; `release` needs it as before. Remote branch protection
+settings remain the coordinator's responsibility.
+
+`ITOS_CONTAINER_ENGINE_FEATURES` names a shard's files. It is a second harness-only input,
+read through the same lookup as the red input (`readFeatureEnvironment`), so tests hold it
+as data, and set only as the Engine scenarios step's `${{ matrix.features }}`. It holds
+whitespace-separated feature file basenames. Unset or blank is the complete tier. Before any
+build or fixture, `selectScenarios` refuses, naming it, a nonempty value outside the engine
+tier, a name that is not a basename ending in `.feature`, a name given twice, and a name that
+no feature file with an effective `@engine` case, live or `@wip`, bears. In the engine tier it
+keeps only the named files' rows, intersected with the tier, platform, `-scenarios` and red
+selection. Red IDs and a `-scenarios` expression are still validated against the full
+inventory, and an unknown one fails. A red list matching only other shards' rows leaves the
+shard the explicit red skip, which names those IDs as left to another engine shard. A
+`-scenarios` expression matching only other shards' rows leaves it the plain count-0 skip,
+`no live scenarios in selected tier and platform (count 0)`, which names no ID: those
+shards' rows appear only in the separate `excluded N scenario(s)` log line. The selection and
+its check of godog's filtered pickles read the shard's files alone, and the run and the
+nested schedule read the same files (`scenarioSelection.paths`): godog numbers pickles
+across the files of one read, so a check over other files than the selection's never
+matches. Exact completion counts, the timing records and the coverage check follow the
+shard's selection. The `ITOS_CONTAINER_ENGINE_` prefix keeps it from product children and
+harness subprocesses, as for the switch.
+
+`TestEngineShards` holds all of this without an engine. Its workflow subtest parses the actual
+workflow; its partition subtest selects each shard over the real feature files and requires
+each shard's rows and IDs to be the unsharded selection's in its files, the three together the
+whole tier exactly once, every feature with an engine case in exactly one shard, and
+`ID-LIFECYCLE-09` and `-13` in the lifecycle shard; its selector subtest runs fixture
+features with memory-only steps; and its broken-workflows subtest refuses a dropped, doubled,
+unknown or path-named feature, an empty or fourth shard, a weakened aggregate, a gate that
+accepts another result, `continue-on-error`, `fail-fast: true`, the feature input at job
+level and a second engine switch.
 
 A read-only server preflight targets `unix:///var/run/docker.sock`, clearing caller-selected
 Docker host/context and TLS/API overrides. Missing CLI/socket, denied access, daemon failure,
@@ -329,8 +372,9 @@ T-33 restores the step's five-minute limit and the job's ten-minute limit. The t
 binary's four-minute timeout leaves time for Go's panic and goroutine dump before the
 step limit. The workflow measures the entire Engine scenarios step, starting before
 test compilation and ending after output capture and exit diagnostics. It separately
-prints compilation time and rejects a total above 240 seconds even if the binary and
-capture both succeed. The shell reads monotonic Linux uptime at 10 ms resolution;
+prints compilation time and rejects a total above 180 seconds even if the binary and
+capture both succeed. The 180-second budget is T-45's, per shard, down from the 240 seconds
+T-33 set for the unsharded step; the job, step and Go test limits stay 10, 5 and 4 minutes. The shell reads monotonic Linux uptime at 10 ms resolution;
 missing, invalid or backwards timing fails. Compilation, test, signal and capture
 failures keep their original exit status. Fixture preparation retains its separate
 budget, followed by the existing failure diagnostics and unconditional owned cleanup.
@@ -361,7 +405,7 @@ Run the full feature suite without `-race`; use `-race` only on changed focused 
 
 The coordinator's before measurement is run `42457394504` at
 `cdd38978c57440d0a8d6328614acc5d84d68adf3`: 47 engine examples, 285 seconds overall
-and 246 seconds in the measured step, which correctly failed the 240-second gate.
+and 246 seconds in the measured step, which correctly failed the then 240-second gate.
 The quiet `ID-LIFECYCLE-13` row took 128 seconds; the other slow stream rows took
 22 and 12 seconds. The four `ID-LIFECYCLE-09` rows took 11–14 seconds each.
 
@@ -428,17 +472,35 @@ both failures. Exact completion counts cover the full selection. Filtered select
 missing either ID and manual red runs remain serial. One observed quiet control may
 be reused only within the stream outline and the same product build.
 
-The single engine job remains until the coordinator measures this revision. A suite
-near 100 seconds is an estimate, not a measured result. In the prepared CI tier only,
-the coordinator measures the complete unsharded selection with:
+The unsharded step ran 75 examples one at a time, 28 more than the 47 measured at
+`cdd3897`; a suite near 100 seconds was an estimate, never a measured result. The
+coordinator read the Engine scenarios step's time from public job metadata for 33 main
+pushes, from T-33's merge (`4641ad4`) to T-42's (`19a188f`): 162 to 196 seconds on 11 runs
+and 199 to 245 seconds on 22. T-33's own merge took 238 seconds, inside its 240-second
+budget by about two seconds, and run `42635414385` took 245 seconds and ended in the test
+binary's four-minute timeout. T-41 lengthened nothing the engine step runs: before it merged
+(`d1099fc`) the runs split 5 and 8, at 162 to 173 and 199 to 242 seconds, and after it 6 and
+14, at 164 to 196 and 212 to 245. Nothing measured points at one step; the spread reads as
+runner speed. T-33's rule applied: the
+measured unsharded step exceeded 240 seconds, so whole-feature shards on separate native
+runners with an exact parsed-example partition check. Offline holds 24 examples, lifecycle 19
+and other 32, of which 12 are `ID-SOCKETS-01` refusals before any worker exists. An estimate
+from those shares and a cold compile, not a measurement, puts the slowest shard between two
+and two and a half minutes on the slowest runner seen.
+
+The loop records each shard's step time from the public job metadata and, from its log, the
+runner image (`/etc/os-release`) and the preflight's Docker version, so a later image change
+is not taken for a regression. Move a whole feature to another shard only on measured shard
+times that show the need. In the prepared CI tier only, the coordinator measures each shard
+with:
 
 ```sh
-env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 timeout --signal=TERM --kill-after=5s 240s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
+for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
+  env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
+done
 ```
 
-If the measured result still exceeds 240 seconds, T-33 calls for whole-feature shards
-on separate native runners with an exact parsed-example partition check. The loop
-owns native CI runs and closure. No local engine or mutation run substitutes for
+The loop owns native CI runs and closure. No local engine or mutation run substitutes for
 that evidence.
 
 Doctor's ID-DOCTOR-23 and ID-DOCTOR-24 are live engine scenarios for cached-image
@@ -509,12 +571,12 @@ Code proof obtains its listed tests through `tools/bin/scenario-list`. It uses t
 Gherkin tier/platform selector as execution, before any fixture setup, and preserves
 core itos's TSV files and fingerprints. Thus ordinary Linux proof lists local Engine API
 fixtures but excludes the native non-Linux ID-DOCTOR-22 and real-engine IDs. The manual
-platform jobs and engine job still execute their eligible scenarios. Listing never
+platform jobs and engine shards still execute their eligible scenarios. Listing never
 substitutes for per-ID coverage: every listed ID must emit real product counters.
 
 ### Cached fixture protocol
 
-T-20's [helper](../tools/bin/engine-fixture) runs only in the existing engine job, after
+T-20's [helper](../tools/bin/engine-fixture) runs only in the engine shard job, after
 preflight. Both `prepare` and `cleanup` refuse outside GitHub Actions on an actual Linux amd64
 host, before engine access. Agents never invoke these modes against an engine or spoof CI.
 The helper uses the existing Docker CLI, shell/coreutils, curl, jq and tar; it installs nothing.
@@ -621,7 +683,7 @@ when scenarios start. Product request-journal assertions still have to prove zer
 an unavailable registry is not that proof. Those steps and journals belong to the behaviour
 items, including slice-3's doctor cases, not T-20.
 
-Preparation attempts cleanup on failure. The engine job's final `always()` step retries cleanup
+Preparation attempts cleanup on failure. Each engine shard's final `always()` step retries cleanup
 after failures/cancellation and removes the remaining derived image references on success.
 Each attempt has a 30-second bound. Cleanup verifies recorded container IDs, names, image IDs
 and attempt labels before removal; interrupted creates can be recovered by their recorded
@@ -675,8 +737,9 @@ today's live-only selection in both tiers. Agents never spoof this context or ac
 
 A nonempty list selects only its exact IDs, live or `@wip`, while retaining every tier and
 platform restriction. Inherited Feature, Rule, Outline and Examples tags apply; an outline ID
-selects all eligible rows. The input never enables the engine. The same list may reach all
-three jobs: engine IDs skip on manual platforms, non-engine IDs skip in the engine job, and
+selects all eligible rows. The input never enables the engine. The same list may reach the
+manual platform jobs and every engine shard: engine IDs skip on manual platforms; in an engine
+shard, non-engine IDs and IDs left to another shard skip; and
 `@linux` cases remain excluded on macOS/Windows. The `@unix` examples for manifest
 FIFOs run on Linux and macOS; Windows retains every portable manifest-path example. A wholly excluded selection reports its IDs,
 reasons and count, runs no scenario setup and supplies no red evidence. Eligible selections must finish
@@ -882,8 +945,8 @@ commits name. The rule, which `itos tests smoke check scenario` checks:
 
 So a `feat` that adds a feature file, or makes a `@wip` one live, picks its smoke scenario in the
 same commit. This includes engine-only features: each still supplies a live smoke ID.
-The ordinary smoke run may explicitly skip that ID because the required engine job runs all
-live engine cases at the same head. Listing, footer validation and smoke-coverage rules remain
+The ordinary smoke run may explicitly skip that ID because the required engine shards run all
+live engine cases between them at the same head. Listing, footer validation and smoke-coverage rules remain
 unchanged.
 
 ## Writing a scenario
