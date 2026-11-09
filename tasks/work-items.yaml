@@ -1691,14 +1691,15 @@ items:
     status: todo
     depends_on: [T-47]
     kind: task
-  - id: p1-credentials-claude-token-run
+  - id: slice-31
     title: run hands the approved Claude token to the workload; it appears nowhere in docker inspect, the checkout, status or logs
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-30, T-48]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-credentials-claude-token-run.
       The first user-visible credential behaviour, charter step 2. Scenarios first, real-engine ones
       in CI, using a synthetic token marker and no real account. With an approved Claude grant, run
       makes the token readable by the workload in the form the decision record chose. A scenario
@@ -1730,7 +1731,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-credentials-claude-token-run]
+    depends_on: [slice-31]
     kind: idea
     why: >
       Charter step 2: a GitHub token for gh and pushes, passed like Claude's. Scenarios first, on a
