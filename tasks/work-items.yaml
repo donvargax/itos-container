@@ -1196,6 +1196,14 @@ items:
       p2-control-state-upgrade-contract, which covers a location that was once approved and then
       lost; this is a first run under a root that does not exist yet. Phase p2: no current step
       depends on it.
+
+      Doctor refuses an absent selection under a missing top-level directory. This is that item's
+      own finding: Store.prospective in internal/engine/approval/disk/control.go returns
+      state.unavailable at "/" when no ancestor exists, so `XDG_STATE_HOME=/data/state` with /data
+      absent makes doctor exit 3 where main reported `missing`. The item already has the decision: a
+      read-only Begin treats the absent selection as absent, a writer still refuses, and the red
+      scenario row comes first. Note for it: the person sees an unexplained refusal today, and no
+      CONTROL scenario covers the case.
   - id: p1-engine-suite-under-its-limit-again
     title: The engine suite fits its 4-minute test timeout again after T-41
     phase: 1
