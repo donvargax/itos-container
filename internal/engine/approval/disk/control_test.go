@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -276,7 +277,7 @@ func TestControlBootstrapWriteFaultsRetainSafeRetry(t *testing.T) {
 	}
 }
 func TestControlBindingsRefuseMalformedOrReplacedEvidence(t *testing.T) {
-	for _, kind := range []string{"json", "unknown field", "duplicate uid", "duplicate ancestor", "missing complete", "trailing data", "schema", "uid", "relative path", "noncanonical path", "mismatched name", "empty ancestors", "wrong ancestor path", "bad device", "bad inode", "changed device", "changed inode", "incomplete self", "short complete", "missing root", "symlink", "hardlink", "mode", "unknown name", "missing self", "oversized", "read failure"} {
+	for _, kind := range []string{"json", "unknown field", "duplicate uid", "duplicate ancestor", "missing complete", "null complete", "renamed field", "trailing data", "schema", "uid", "relative path", "noncanonical path", "mismatched name", "empty ancestors", "wrong ancestor path", "bad device", "bad inode", "changed device", "changed inode", "incomplete self", "short complete", "missing root", "symlink", "hardlink", "mode", "unknown name", "missing self", "oversized", "size limit", "read failure"} {
 		t.Run(kind, func(t *testing.T) {
 			control, c, _, home, selected := controlFixture(t)
 			tx, f := control.Begin(t.Context(), c, true)
@@ -309,6 +310,12 @@ func TestControlBindingsRefuseMalformedOrReplacedEvidence(t *testing.T) {
 				data = []byte(strings.Replace(string(data), `"device":`, `"device":"0","device":`, 1))
 			case "missing complete":
 				data = []byte(strings.Replace(string(data), `"complete":true,`, "", 1))
+			case "null complete":
+				// The struct decode accepts null for a bool; only the shape check refuses it.
+				data = []byte(strings.Replace(string(data), `"complete":true`, `"complete":null`, 1))
+			case "renamed field":
+				// Field names match case-insensitively, so only the shape check sees this.
+				data = []byte(strings.Replace(string(data), `"schema":`, `"Schema":`, 1))
 			case "trailing data":
 				data = append(data, []byte(" {}")...)
 			case "schema":
@@ -375,7 +382,11 @@ func TestControlBindingsRefuseMalformedOrReplacedEvidence(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "oversized":
-				data = make([]byte, 1024*1024+1)
+				// Valid JSON padded with whitespace, so only the size check refuses it.
+				data = append(data, bytes.Repeat([]byte(" "), 1024*1024+1-len(data))...)
+			case "size limit":
+				data = append(data, bytes.Repeat([]byte(" "), 1024*1024-len(data))...)
+				want = ""
 			case "read failure":
 				ops := control.Store.operations()
 				ops.readAll = func(io.Reader) ([]byte, error) { return nil, errors.New("unreadable") }
