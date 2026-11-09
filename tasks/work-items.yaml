@@ -1269,6 +1269,15 @@ items:
       data for reviewing T-42's limits and for seeing how close real calls come to T-33's 1 s limit,
       so they are not a task of their own. No failure has been tied to the 1 s limit yet. T-42's fix
       is already decided and does not wait on them.
+
+      This item already owns the Engine failure diagnostics step in .github/workflows/ci.yml. Its
+      text says to print each `--- FAIL` block with its godog step error beside the streamed `engine
+      scenario timing:` records, so a red run shows its failing assertion. It also says not to wait
+      for the extractor fix already tracked upstream in itos. The empty `go-test
+      TestFeatures/...#03:` body in run 42626087465 is that same gap. The project-side fix is the
+      existing ci.yml edit. The summary extractor belongs in itos and is already noted there as
+      tracked. When the coordinator files upstream, it should search itos's open and closed issues
+      first and comment on the existing one instead of opening a second.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
