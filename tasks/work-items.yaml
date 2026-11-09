@@ -1391,6 +1391,24 @@ items:
       is T-45, T-42, p1-credentials-passed-in, p1-harness-home, p1-interactive-tty, and the item is
       not in it), or accept the gap and say so. It stays p2 because it blocks no step on its own.
       Move it up if step 4 starts first.
+
+      The item already carries this, in its note that a recorder journalling the cut would only
+      sharpen the native tier's inference. It also says a recorded cut instant is not worth its own
+      item and touches the recorder outside T-42's range. The gap is covered by extending the item's
+      fake-clock row with a hold longer than what is left of the call limit. The row asserts that
+      SIGKILL still falls at first signal plus grace, not at the cut plus grace. A synthetic clock
+      has no jitter, so no recorded instant is needed. T-42's escalationWindow comment already names
+      this gap as known.
+
+      The item already holds this. Its fake-clock row sends a repeat signal at about 20 percent of
+      grace, not the 80 percent T-42 fixes and two tests pin. It asserts the kill still falls at
+      first signal plus grace. It also says to land it before charter step 4 (p1-interactive-tty)
+      changes Ctrl-C handling. The only open point is ordering: the item is not in the queue (T-45,
+      T-42, p1-credentials-passed-in, p1-harness-home, p1-interactive-tty), so the person or
+      coordinator should queue it before p1-interactive-tty or accept the gap. It stays p2 because
+      it blocks no step on its own. Note on the item: a product whose repeated SIGINT restarts grace
+      fires at about 1.2 s and passes every LIFECYCLE-09 row under the widened 1 s to 3 s window, so
+      that timing is the row's failing-first case.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
