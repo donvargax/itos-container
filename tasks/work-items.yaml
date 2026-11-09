@@ -694,3 +694,10 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: T-37
+    title: Release notes stay within GitHub's body limit, the first release included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
