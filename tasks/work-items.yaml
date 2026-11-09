@@ -1624,3 +1624,12 @@ items:
       preflight alone and read the image and Docker version in the new step. Reading /etc/os-release
       in the preflight would need a reviewed allowlist change, and T-44's diagnostics step prints
       only on failure, so it cannot carry this.
+
+      This belongs inside p1-engine-timing-notice-every-run, which already adds a step on every
+      engine job, failures included, publishing duration_ms and the 240000 ms limit as a notice.
+      That reaches a reader without the token-gated log. What the notice lacks is a label saying the
+      step failed on time alone. Fold that in: the engine_finish trap in ci.yml, at the branch that
+      sets result=1 when elapsed exceeds 240000 with a passing test run, also prints `::error
+      title=Engine step over its time limit` with measured and limit seconds and nothing else. Cover
+      it in TestEngineSuiteBudget's over-budget cases. Public data only. It edits the same workflow
+      region and pins, so it is one change with the notice step, not a separate item.
