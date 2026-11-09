@@ -889,3 +889,21 @@ items:
       diagnostic. Offline stays the default and is unchanged. Doctor shows the effective allowlist
       without executing checkout code. It reads and validates only, with no engine or proxy. Update
       docs/CONFIG.md and docs/CLI.md for the new field. Broken down from p1-egress-allowlist-proxy.
+  - id: p1-egress-allowlist-approval
+    title: Approval binds the egress allowlist, and any change to it needs a new approval
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-egress-allowlist-policy]
+    kind: idea
+    why: >
+      Charter step 1: the allowlist is part of the approved settings, and the contract's AC-02
+      requires a change to network permissions to refuse startup with no self-approval. The
+      canonical approved-settings record (engine/approval/canonical, profile offline-v1) and the
+      approve presentation extend to the allowlist. Scenarios first: approve shows the exact host
+      names the worker will be able to reach and the profile that grants network. Adding, removing
+      or changing a name invalidates an existing approval, and run refuses with the change
+      explained. Reordering the same names does not, since the canonical form is a set. Offline
+      approvals keep their existing profile and identity. This slice covers records, presentation
+      and refusal only. Nothing starts a proxy yet. It follows the policy slice, which supplies the
+      validated list. Broken down from p1-egress-allowlist-proxy.
