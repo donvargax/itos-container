@@ -734,3 +734,43 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | below W root    |
       | equal to W root |
       | above W root    |
+
+  # PRRT_kwDOVkB0ws61J5AN: the catalog stores each path as JSON, and encoding/json
+  # replaces an invalid UTF-8 byte with U+FFFD. The binding then names a directory
+  # that does not exist, the next transaction finds an enrolled location that is
+  # absent, and every doctor, approve and run on the account refuses with
+  # approval.state.unavailable, with nothing to repair it. A selected state tree
+  # whose path is not valid UTF-8 refuses with approval.state.location (exit 2)
+  # before bootstrap or any binding. The first Then fails on the old success: doctor
+  # reports missing approval and approve publishes one, and the final Then fails
+  # because the published binding poisons the fresh selections.
+  @slice-21 @ID-CONTROL-25 @wip @local-engine-fixture
+  Scenario Outline: A state selection that is not valid UTF-8 is refused before it can poison the catalog
+    Given a control-state fixture selecting state through "<source>" with a path that is not valid UTF-8
+    When P inspects that selection with "<command>" using valid approval inputs
+    Then P reports approval.state.location with exit 2 and invalid approval
+    And the refusal creates no bootstrap binding or selected-tree entry and preserves existing state
+    When fresh commands select the default tree and another checkout's safe state
+    Then all safe selections remain usable without engine mutation or checkout execution
+
+    Examples:
+      | source         | command |
+      | XDG_STATE_HOME | doctor  |
+      | XDG_STATE_HOME | approve |
+      | HOME fallback  | doctor  |
+      | HOME fallback  | approve |
+
+  # The same encoding applies to the fixed anchor, whose account home comes from
+  # the local account record. A home that is not valid UTF-8 refuses with
+  # approval.state.unavailable (exit 3) before any directory exists.
+  @slice-21 @ID-CONTROL-26 @wip @local-engine-fixture
+  Scenario Outline: An account home that is not valid UTF-8 refuses control state before it is created
+    Given a control-state fixture whose account home path is not valid UTF-8
+    When P inspects that selection with "<command>" using valid approval inputs
+    Then P reports approval.state.unavailable with exit 3 and invalid approval
+    And the refusal creates no bootstrap binding or selected-tree entry and preserves existing state
+
+    Examples:
+      | command |
+      | doctor  |
+      | approve |
