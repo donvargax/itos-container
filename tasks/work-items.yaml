@@ -1798,3 +1798,7 @@ items:
       bound, like LIFECYCLE-09 before T-42. A red main run blocks itos work done on every item
       merged onto it, so each flake stops a worker. Find which bound the hosted runner misses and
       give it room through the harness budget seam, as T-42 did.
+
+      Belongs in the existing investigation of lifecycle barrier failures. Include controller exit
+      code, stderr and the request journal in failure messages to distinguish early controller exits
+      from missed timing bounds; T-43 already exposes those step errors in CI annotations.
