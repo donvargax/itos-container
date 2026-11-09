@@ -447,6 +447,14 @@ items:
       allowlist through --fingerprint or a faked terminal gains no route. Slice-27 is where that
       approval first becomes a route, so the person's decision must land before slice-27. Weigh that
       when the edge is placed. docs/security.md and q-2 both say to revisit this before egress.
+
+      Its why already lists this exact coordinator edit: slice-26 gets T-38 in depends_on, because
+      the drafter takes the digest binding and the network-granting profile from T-38's record,
+      docs/decisions/0022-egress-proxy.md. The registry still shows slice-26 with depends_on
+      [slice-25], so the edit has not been made. The new point is why it matters. That record exists
+      only on T-38's branch and is still proposed. Without the edge, slice-26 could land with a
+      dangling link, or bind text the person later overturns. It is a coordinator edit, not a new
+      item.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
