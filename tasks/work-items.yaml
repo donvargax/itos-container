@@ -954,3 +954,6 @@ items:
       T-33's at 082884c (run 42589518540), each costing a CI cycle and a repair round on work that
       had nothing to do with it. Fix the wait (a budget that holds under coverage, or waiting on the
       drain's own completion signal), not the proof. Found by the coordinator, 2026-11-09.
+
+      Correction: of slice-21's runs, 42582818914 hit this hook; 42573174685 failed for another
+      reason (not this flake), so it counts once for slice-21, not twice.
