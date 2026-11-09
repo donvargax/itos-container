@@ -1571,3 +1571,25 @@ items:
       and leave ID-APPROVAL-56's explicit width alone. Phase p2: nothing blocks the current step,
       and CI normally exports no COLUMNS. The harness came from go-template-itos, so once this lands
       the coordinator files it there as a backport issue.
+  - id: p2-approve-allowlist-added-removed-names
+    title: Approve's review shows an allowlist change as the names added and removed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Charter milestone two, step 1: the allowlist is part of the approved settings, and the
+      contract's AC-02 makes a change to network permissions need a new approval. The checkout is
+      hostile and can edit itos-container.yaml, so the person's re-approval review is the one place
+      a hostile added name is caught. Slice-26's spec compares /policy/network/allow as one value,
+      so a change prints as one difference holding the whole old and new arrays. The policy admits
+      lists of up to 2037 names, and one added name among them is hard to see before y/N. Show the
+      names added and the names removed, in sorted order, beside or instead of the whole arrays, in
+      bare approve's review and in the plain output of approve and doctor. Decide in the spec
+      whether the schema-1 JSON differences keep their {path,before,after} shape, which scenarios
+      already hold. It changes presentation only; it grants and binds nothing. It follows slice-26,
+      which supplies the record and the comparison. It is not a blocker, but it should land before
+      slice-27 makes an approved list a live route. Slice-26's spec chose the whole-array form on
+      purpose, so this is a follow-up that changes that scenario in a feat commit, not an edit to
+      slice-26.
