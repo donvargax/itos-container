@@ -81,7 +81,9 @@ unsupported setting or failed check can select an unrestricted fallback.
 Those limits are the offline run's and stay as written. The second milestone's egress
 profile is **proposed** and follows [the egress proxy record](../decisions/0022-egress-proxy.md):
 it adds one owned proxy and its networks, grants the worker no other route, and widens none
-of the worker's other limits. Nothing in it is implemented or proven.
+of the worker's other limits. Only its engine package is implemented (T-39, tested over
+loopback listeners and bound by nothing until slice-27), and none of it is proven on the
+real engine.
 
 Work follows ports and in-memory fakes; agents have no Docker socket and real-engine
 scenarios run only in CI. Dependencies need a maintained library, a reason in the owning
@@ -150,8 +152,9 @@ dispatch does not authorize forwarding it to the worker.
 Accounts, network Git, LAN publishing, Compose services and other platforms are
 **deferred**, as are the pilot's mitmdump guard and its HTTPS inspection and SSH tunnel
 modes. Egress through an allowlisting proxy is the charter's second-milestone step 1 and is
-**proposed**: [the egress proxy record](../decisions/0022-egress-proxy.md) fixes its design,
-slice-25 to slice-28 and T-39 and T-40 would build it, and nothing of it is implemented.
+**proposed**: [the egress proxy record](../decisions/0022-egress-proxy.md) fixes its design.
+T-39 has built its engine package, which nothing binds until slice-27; slice-25 to slice-28
+and T-40 would build the rest, and none of it is proven.
 Its context differs from the diagram above only for a run whose approved policy lists host
 names: one owned proxy container, on its own egress network, reaches the listed names on
 port 443, and the worker, on an internal network with no gateway, reaches only that proxy.
@@ -201,7 +204,7 @@ record schemas. Settled choices constrain them without proving their implementat
 
 | Building block | Status | Responsibility | Dependencies and contracts |
 | --- | --- | --- | --- |
-| `cmd/itos-container` | Implemented assembly root, including policy-only doctor and run refusals | Assemble commands, ports, concrete adapters and classifiers. Preserve version/completion infrastructure without turning it into container slices. | Existing count, doctor, run, policy, generic UI and version leaf; remaining wiring only as specified. Slice-27 would also bind the proposed egress adapter for the hidden `__egress-proxy` command. |
+| `cmd/itos-container` | Implemented assembly root, including policy-only doctor and run refusals | Assemble commands, ports, concrete adapters and classifiers. Preserve version/completion infrastructure without turning it into container slices. | Existing count, doctor, run, policy, generic UI and version leaf; remaining wiring only as specified. Slice-27 would also bind the egress adapter, `internal/engine/egress/tcp`, for the hidden `__egress-proxy` command. |
 | `internal/cli` | Implemented | Generic output/error rendering, flag rules and completion helpers. | No project imports; command model and classifiers supplied by `cmd`. |
 | `internal/version` | Implemented leaf | Build/version information. | No container responsibility. |
 | `internal/slices/count` | Implemented | Preserve counting behaviour and Files contract. | `command`, `domain`, `port`, `disk`, `input` siblings; `port/porttest` fake and shared contract are test support. Input's disk port is wired by `cmd`. |
@@ -219,7 +222,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
 | `internal/engine/budget` | Implemented by slice-12 | Shared phase and finite-operation deadlines, late-result handling and retained handle lifetimes. | Context/time only; typed values in ports, policy in domain. |
 | `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, cross-project checkout admission, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
-| `internal/engine/egress` | **Proposed**, T-39; real-engine proof in slice-27/28 | Our own CONNECT proxy on Go's standard library: CONNECT head parsing, exact name and port 443 decision, address check, ClientHello peek, replay and splice, and one-line JSON refusal records. No TLS interception, library or `net/http`. | Own domain, port, adapter siblings and porttest fake; imports no other engine. Only its adapter may import `crypto/tls`. Fuzz tests cover head parsing and the peek. [Record](../decisions/0022-egress-proxy.md). |
+| `internal/engine/egress` | Implemented by T-39, not bound by `cmd` until slice-27; its design is still proposed (see the first paragraph), with no runtime evidence; real-engine proof in slice-27/28 | Our own CONNECT proxy on Go's standard library: CONNECT head parsing, exact name and port 443 decision, address check, ClientHello peek, replay and splice, and one-line JSON refusal records. No TLS interception, library or `net/http`. | Own `domain`, `port` with its `porttest` fake and shared contract, and the adapter `internal/engine/egress/tcp`; imports no other engine. Production code may import `crypto/tls` only in the adapter, held by `egress-tls` and `TestNoInterceptionCode`. `egress-x509` bans production `crypto/x509` imports; `egress-imports` restricts egress's dependencies. `TestNoRelaxingCode` rejects build constraints, platform-specific or ignored files, external settings reads and panic recovery. Fuzz tests cover head parsing and the peek. [Record](../decisions/0022-egress-proxy.md). |
 | `internal/slices/egressproxy` | **Proposed**, slice-27; command package only | The hidden `__egress-proxy` command the proxy container runs: a thin handler over the egress engine's port, with `cmd` binding its adapter. | No domain or port directory of its own; no network I/O in the command. Not a public command. |
 | Session networks and proxy (in `internal/engine/session`) | **Proposed**, T-40 | Create, verify, own and tear down the internal network, the egress network and the proxy container beside the worker, with durable intent before each and no fallback network. | Extends the session ports, fake and Docker adapter; ownership by durable intent, random name and inspected full ID, never labels alone. |
 
@@ -269,7 +272,7 @@ flowchart LR
     session --> manifest
     session --> readiness
     session --> approval
-    egress["egress (proposed, T-39): imports no other engine"]
+    egress["egress (implemented, T-39; bound from slice-27): imports no other engine"]
 ```
 
 The [registry](../../tasks/work-items.yaml) records slice-1, slice-2, slice-3 and slice-5
@@ -300,7 +303,7 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | T-38 — egress proxy record | Charter step 1 of the second milestone | [The egress proxy record](../decisions/0022-egress-proxy.md) fixes library (none: our own proxy, q-51), topology, delivery, failure closure and refusal log for T-39, T-40 and slices 26 to 28. Documentation only; no runtime evidence. |
 | slice-25 — proposed egress allowlist in policy | None | Exact host-name allowlist in `itos-container.yaml`, validated by doctor without an engine or proxy. Offline stays the default. |
 | slice-26 — proposed approval of the allowlist | slice-25 | Approval binds the allowlist and the network-granting profile; approve presents the handshake guarantee. Who may approve a sandbox that grants network stays with `p3-approval-before-egress`. |
-| T-39 — proposed egress engine | T-38 | `internal/engine/egress`: domain, port, adapter and fake, its depguard rule and fixture, and fuzz tests, all driven over loopback listeners without Docker. |
+| T-39 — implemented egress engine | T-38 | `internal/engine/egress`: domain, port, adapter and fake, its three depguard rules and fixtures, and fuzz tests, all driven over loopback listeners without Docker. Nothing binds it until slice-27, and none of it is runtime evidence. |
 | T-40 — proposed session networks and proxy | T-38 | Session ports, fake and Docker adapter gain the two networks and the proxy container, with creation order, teardown and recovery as the record fixes them. |
 | slice-27 — proposed run through the proxy | slice-26, T-39, T-40; the record also names `p1-acceptance-static-binary` | `internal/slices/egressproxy`, the hidden `__egress-proxy` command, the static harness build, and the real-engine scenarios, in CI only, that prove the topology, DNS and address rules. It edits `docs/security.md`. |
 | slice-28 — proposed refusal log, failure stop and cleanup | slice-27 | The streaming writer for `egress-refusals.jsonl`, status and cleanup of the proxy and networks, and the proxy-failure scenarios (AC-17, AC-23 and AC-36), in CI only. |
@@ -650,8 +653,9 @@ lifetime. Exec implementation remains deferred.
 
 ### Egress run
 
-**Proposed**, for a run whose approved policy lists host names; nothing here is built,
-and every claim awaits slice-27 and slice-28 evidence on the real engine, in CI. An offline
+**Proposed**, for a run whose approved policy lists host names. The run itself is unbuilt;
+steps 2 to 4 hold what T-39 built on the proxy's side, tested over loopback listeners, and
+every claim awaits slice-27 and slice-28 evidence on the real engine, in CI. An offline
 run keeps the sequence above with `NetworkMode` `none`, no proxy and no network. The reasons
 and measurements are in [the egress proxy record](../decisions/0022-egress-proxy.md).
 
@@ -673,8 +677,8 @@ and measurements are in [the egress proxy record](../decisions/0022-egress-proxy
 3. **Each connection.** The proxy reads a CONNECT head, admits only a listed name on port
    443, dials with every address checked against the special-purpose table, answers 200,
    reads the first ClientHello without completing a handshake, requires its SNI to equal
-   the CONNECT name (a missing SNI, ECH and non-TLS bytes are refused), replays those bytes
-   upstream untouched and splices both ways. It holds no CA, certificate or key. It cannot
+   the CONNECT name (a missing SNI, ECH and non-TLS bytes are refused), replays every byte it
+   read after the head upstream untouched and splices both ways. It holds no CA, certificate or key. It cannot
    see the HTTP Host or anything after that hello.
 4. **Failure closes; there is no fallback network.** A missing ready, a proxy exit or an
    unverifiable resource creates no worker. The proxy recovers no panic and ends on an
@@ -807,7 +811,8 @@ even in a completed cleanup tombstone. This records delivery failure without
 changing resource absence or the authoritative workload exit. Open security
 choices follow the charter stop rule, not a blanket reopening of settled limits.
 
-**Refusal log (proposed).** The egress proxy writes one JSON object per line on stdout, at
+**Refusal log.** T-39 implements the record format below; its delivery stays **proposed**,
+since slice-27 binds stdout and slice-28 copies the log. The egress proxy writes one JSON object per line on stdout, at
 most 2 KiB each: schema 1, a per-process `seq`, time, and an event of `ready`, `refused`,
 `upstream-failed` or `log-full`, with method, target, port and a reason only on the two
 failure events. Target and port appear only for a plain host and a one-to-five-digit port; nothing else of the
@@ -829,8 +834,9 @@ and tooling's v3 pin are settled; manifest and Docker-client choices belong to s
 2 and 3. The one deliberate exception is q-51's: the egress proxy is our own code on Go's
 standard library, with no dependency and no interception code anywhere in the tree; if TLS
 interception is ever wanted, the charter moves the proxy to a repository of its own first.
-Only the egress adapter may import `crypto/tls`, under a depguard rule T-39 adds, and
-`crypto/x509` nowhere. Egress delivery needs the host's own static Linux amd64 executable,
+Only the egress adapter may import `crypto/tls`, under depguard rules T-39 added
+(`egress-tls`, `egress-x509` and `egress-imports`), and `crypto/x509` nowhere;
+`TestNoInterceptionCode` and `TestNoRelaxingCode` hold the rest on every push. Egress delivery needs the host's own static Linux amd64 executable,
 so other platforms cannot run it this way. Pass the OS as a value to OS-dependent logic;
 do not branch on `runtime.GOOS` inside it. Build tags hold only an unavailable OS call,
 with no mutation site, under the existing architecture rules. Fakes perform no I/O and

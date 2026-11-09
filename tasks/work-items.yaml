@@ -969,7 +969,7 @@ items:
     title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-38]
     kind: task
   - id: T-40

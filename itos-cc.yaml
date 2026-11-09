@@ -69,3 +69,21 @@ mutation:
       replacement: "&&"
       reason: InspectBeforeEngine obtains m directly from manifest/domain.Inspect, not from an injected Result. That function returns read, parse and non-object failures with Effective nil and nonempty Issues. Its final return assigns Effective only when len(Issues) == 0, using a newly allocated Settings; otherwise Effective stays nil. Thus m.Effective == nil and len(m.Issues) != 0 always have the same truth value at this guard. Both OR and AND return on every failure and continue on every success, with identical diagnostics, checkout lifetime and engine access. Neither operand has side effects. Existing manifest domain success/refusal tests and readiness prerequisite tests exercise both outcomes; no reachable input can distinguish this mutant. Reassess this exception if manifest.Inspect changes its result invariant.
       line_text: if m.Effective == nil || len(m.Issues) != 0 {
+    - file: internal/engine/egress/domain/domain.go
+      function: github.com/donvargax/itos-container/internal/engine/egress/domain#splitTarget
+      hash: 08d1fac276e2dbc2
+      line_in_function: 3
+      column: 13
+      original: "0"
+      replacement: "1"
+      reason: Changing colon < 0 to colon < 1 differs only when strings.LastIndexByte returns 0. Then target[:colon] is the empty host. The original returns the same empty host, empty port and false either from the port validation or from the following host == empty check; the mutant returns that triple earlier. All other colon indices take identical branches. splitTarget is pure, so neither the Judge verdict nor its logged fields can change. TestJudge already covers CONNECT :443 as malformed with no target or port.
+      line_text: if colon < 0 {
+    - file: internal/engine/egress/domain/domain.go
+      function: github.com/donvargax/itos-container/internal/engine/egress/domain#splitTarget
+      hash: 08d1fac276e2dbc2
+      line_in_function: 3
+      column: 11
+      original: <
+      replacement: <=
+      reason: Changing colon < 0 to colon <= 0 differs only when strings.LastIndexByte returns 0. Then target[:colon] is the empty host. The original returns the same empty host, empty port and false either from the port validation or from the following host == empty check; the mutant returns that triple earlier. All other colon indices take identical branches. splitTarget is pure, so neither the Judge verdict nor its logged fields can change. TestJudge already covers CONNECT :443 as malformed with no target or port.
+      line_text: if colon < 0 {
