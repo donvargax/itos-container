@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
+	policydomain "github.com/donvargax/itos-container/internal/engine/policy/domain"
 	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
 )
 
@@ -35,8 +36,16 @@ type engine struct {
 	Architecture string `json:"architecture"`
 }
 type network struct {
-	Mode string `json:"mode"`
+	Mode  string   `json:"mode"`
+	Allow []string `json:"allow,omitempty"`
 }
+type proxy struct {
+	Image string `json:"image"`
+}
+
+// ProxyImage binds the inert proxy root filesystem selected in T-38.
+const ProxyImage = "docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835"
+
 type policy struct {
 	Version  int     `json:"version"`
 	Manifest string  `json:"manifest"`
@@ -59,6 +68,7 @@ type image struct {
 type settings struct {
 	Schema   int      `json:"schema"`
 	Profile  string   `json:"profile"`
+	Proxy    *proxy   `json:"proxy,omitempty"`
 	Host     host     `json:"host"`
 	Checkout checkout `json:"checkout"`
 	Engine   engine   `json:"engine"`
@@ -104,7 +114,13 @@ func (JSON) Candidate(r readiness.Result, uid, gid string) port.Candidate {
 	if env == nil {
 		env = map[string]string{}
 	}
-	return candidate(settings{Schema: 1, Profile: "offline-v1", Host: host{uid, gid}, Checkout: checkout{c.Root, c.Device, c.Inode, c.GitDevice, c.GitInode}, Engine: engine{e.Endpoint, e.ID, e.OS, e.Architecture}, Policy: policy{1, r.Policy.Policy.Manifest, network{"offline"}}, Manifest: manifest{m.Name, m.Image, m.WorkspaceFolder, env, uid, uid}, Image: image{i.Reference, i.ID, i.OS, i.Architecture}})
+	s := settings{Schema: 1, Profile: "offline-v1", Host: host{uid, gid}, Checkout: checkout{c.Root, c.Device, c.Inode, c.GitDevice, c.GitInode}, Engine: engine{e.Endpoint, e.ID, e.OS, e.Architecture}, Policy: policy{r.Policy.Policy.Version, r.Policy.Policy.Manifest, network{Mode: r.Policy.Policy.Network.Mode}}, Manifest: manifest{m.Name, m.Image, m.WorkspaceFolder, env, uid, uid}, Image: image{i.Reference, i.ID, i.OS, i.Architecture}}
+	if s.Policy.Network.Mode == "allowlist" {
+		s.Profile = "allowlist-v1"
+		s.Policy.Network.Allow = r.Policy.Policy.Network.Allow
+		s.Proxy = &proxy{Image: ProxyImage}
+	}
+	return candidate(s)
 }
 
 // Encode emits compact recursively sorted maps, default HTML escaping, no LF.
@@ -182,10 +198,34 @@ func sha(s string) bool {
 	return strings.HasPrefix(s, "sha256:") && len(s) == 71 && strings.Trim(s[7:], "0123456789abcdef") == ""
 }
 func valid(s settings) bool {
-	return s.Schema == 1 && s.Profile == "offline-v1" && decimal(s.Host.UID) && s.Host.UID != "0" && decimal(s.Host.GID) &&
+	return s.Schema == 1 && validProfile(s) && decimal(s.Host.UID) && s.Host.UID != "0" && decimal(s.Host.GID) &&
 		s.Checkout.Root != "" && decimal(s.Checkout.Device) && decimal(s.Checkout.Inode) && decimal(s.Checkout.GitDevice) && decimal(s.Checkout.GitInode) &&
 		s.Engine.Endpoint != "" && s.Engine.ID != "" && s.Engine.OS == "linux" && s.Engine.Architecture == "amd64" &&
-		s.Policy.Version == 1 && s.Policy.Manifest != "" && s.Policy.Network.Mode == "offline" &&
+		s.Policy.Manifest != "" &&
 		s.Manifest.ContainerUser == s.Host.UID && s.Manifest.RemoteUser == s.Host.UID && s.Manifest.Env != nil && s.Manifest.Workspace != "" &&
 		s.Manifest.Image == s.Image.Reference && sha(s.Image.ID) && s.Image.OS == "linux" && s.Image.Architecture == "amd64"
+}
+
+func validProfile(s settings) bool {
+	n := s.Policy.Network
+	switch s.Profile {
+	case "offline-v1":
+		return (s.Policy.Version == 1 || s.Policy.Version == 2) && n.Mode == "offline" && n.Allow == nil && s.Proxy == nil
+	case "allowlist-v1":
+		if s.Policy.Version != 2 || n.Mode != "allowlist" || len(n.Allow) == 0 || s.Proxy == nil {
+			return false
+		}
+		name, digest, ok := strings.Cut(s.Proxy.Image, "@")
+		if !ok || name == "" || !sha(digest) {
+			return false
+		}
+		for i, name := range n.Allow {
+			if !policydomain.ValidCanonicalHost(name) || (i > 0 && n.Allow[i-1] >= name) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }

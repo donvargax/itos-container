@@ -63,6 +63,7 @@ type View struct {
 	Failure       Failure
 	Field, Socket string
 	Differences   []Difference
+	ChangedPaths  []string
 }
 
 // Inspector is read-only; Approver rechecks a reviewed candidate after consent.
@@ -107,4 +108,10 @@ type Presentation interface {
 	Report(View) Report
 	Problems(View) []Problem
 	Print(View, bool) int
+}
+
+// RequiresTerminal identifies grants whose consent cannot use the fingerprint route.
+// The policy has already passed readiness validation when consent is considered.
+func (v View) RequiresTerminal() bool {
+	return v.Inspection.Policy != nil && v.Inspection.Policy.Policy != nil && v.Inspection.Policy.Policy.Network.Mode == "allowlist"
 }

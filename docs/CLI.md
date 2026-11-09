@@ -134,9 +134,9 @@ host names (see [CONFIG.md](CONFIG.md)). Policy-only output then shows the effec
 list: plain output has one `network.allow: <name>` line per canonical name in ascending
 byte order after `network.mode`, and JSON has `policy.network.allow` as the same sorted
 array. Offline has no list. Inspection reads and validates only: it runs no engine, proxy
-or helper. Ordinary doctor, approve and run refuse a valid version 2 policy for now
-with `policy.version` at `/version` and exit 2, and name `doctor --policy-only` as the
-way to read what it asks for.
+or helper. Ordinary doctor and approve bind a valid version 2 policy in the
+canonical approval. Run still refuses every version 2 policy with `policy.version`
+at `/version` and exit 2 before engine access, naming `doctor --policy-only`.
 
 ## Implemented run refusals
 
@@ -189,22 +189,35 @@ or invalid state is a typed refusal. File-only modes do not inspect identity/sta
 or emit a fingerprint.
 
 Bare `itos container approve` requires terminal stdin and stdout and plain output.
-It shows all settings, fixed offline restrictions and changes since the last approval,
+It shows all settings, the profile restrictions and changes since the last approval,
 then asks y/N. Only a complete y/yes line consents; other input or EOF declines.
 Matching settings need no further prompt. Without both terminals, bare approve
-refuses and names `--fingerprint <value>`; `doctor` provides that optional exact value.
+refuses. For offline grants without credentials it names `--fingerprint <value>`;
+`doctor` provides that optional exact value. Network grants name only terminal approval.
 A person using the terminal flow never types a hash.
 
 `approve --json` or `ITOS_JSON=1` never prompts. `--no-json` overrides inherited JSON.
 JSON approval emits one schema-1 object with `ok`, complete `problems` and `approval`.
-An exact `--fingerprint` works without a terminal; malformed values exit 2 and stale
-values exit 1. Changes during review and concurrent replacement refuse a fresh
-publication. Identity/state refusals exit 1, unavailable observations exit 3, and
+For offline grants without credentials, an exact `--fingerprint` works without a
+terminal; malformed values exit 2 and stale values exit 1. An egress allowlist requires
+the person at a real terminal: any `--fingerprint` refuses with
+`approve.terminal-required` (exit 1), regardless of its value or an existing approval.
+Bare nonterminal or JSON grant requests use `approve.confirmation-required` and name
+`itos container approve` at a terminal. Prerequisite failures take precedence.
+Changes during review and concurrent replacement refuse a fresh publication. Identity/state refusals exit 1, unavailable observations exit 3, and
 uncertain durable publication exits 75. Detailed rules are in
 [approval.feature](../features/approval.feature).
 
-An agent on the host can approve through `--fingerprint` or a faked terminal:
-approval records what was approved, not who. See [security.md](security.md).
+The `allowlist-v1` review and plain status list every canonical host name and disclose
+the proxy's handshake and logging limits. They also say that run cannot start this
+profile yet. The profile binds the sorted allowlist and pinned proxy image; changing
+any name or the proxy digest needs new consent. Offline retains `offline-v1`; changing
+policy version also needs consent. Run's changed-approval diagnostic lists sorted
+JSON-pointer paths, never their values.
+
+An unsandboxed agent on the host can fake a terminal; the offline fingerprint route
+also permits automation. Approval records what was approved, not who. See
+[security.md](security.md).
 
 ## Implemented manifest inspection
 

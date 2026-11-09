@@ -51,8 +51,15 @@ Bare `itos container approve` at a terminal displays the effective settings and,
 on re-approval, changes since the last approval, then asks y/N. A yes records those
 settings; unchanged approved settings need no further prompt. A person never types
 a hash. Without a terminal, bare approve refuses and names the optional
-`--fingerprint <value>` route. `doctor` prints the fingerprint; the option approves
-only those exact settings and refuses a mismatch.
+`--fingerprint <value>` route only for offline grants without credentials. `doctor`
+prints the fingerprint; for those grants the option approves only matching settings.
+Under q-52 an egress allowlist or credential grant requires the person at a real
+terminal. Allowlist approval refuses every `--fingerprint`, even a matching value or
+an already-approved request, with `approve.terminal-required` and a fix naming bare
+`itos container approve` at a terminal. Bare nonterminal or JSON requests retain
+`approve.confirmation-required` and name only that interactive form. Credential grant
+support will extend the same rule when it lands. Unchanged terminal approvals do not
+prompt again; approval is asked again only when the settings fingerprint changes.
 
 Approval's plain review, differences and status, including the effective settings
 printed by ordinary `doctor`, render non-printing Unicode as visible JSON escapes.
@@ -60,10 +67,16 @@ This includes C1 and bidirectional controls in environment values and manifest
 names. Printable Unicode stays readable. This display escaping does not change
 the canonical settings, stored approval, fingerprint or structured JSON values.
 
-An agent on the host can approve its own sandbox through `--fingerprint` or a
-faked terminal. Approval records **what was approved, not who**. Neither route
-proves human presence or authenticates a separate approver. Revisit this limitation
-before adding egress or credentials, as q-2 requires.
+An agent running unsandboxed on the host could fake a terminal. Terminal detection
+therefore does not authenticate a person or a separate approver. Approval records
+**what was approved, not who**; no keys or signatures are introduced. The fingerprint
+route remains available for offline grants without credentials. This is the remaining
+host-agent limitation after q-52, rather than permission to automate network consent.
+
+Allowlist approval binds the canonical names, `allowlist-v1` profile and pinned proxy
+image, and reviews the handshake and refusal-log limits. Run still refuses every
+version 2 policy, including an approved one. These records and local fixture tests
+provide no new runtime enforcement evidence.
 
 The fingerprint is SHA-256 of canonical effective JSON. Approval records
 live under `$XDG_STATE_HOME/itos-container` (default `$HOME/.local/state/itos-container`),

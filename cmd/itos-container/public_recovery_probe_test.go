@@ -57,7 +57,7 @@ func TestPublicRecoveryCommand(t *testing.T) {
 		return file
 	}
 	out, errout := open(request.Stdout), open(request.Stderr)
-	service, _ := approvalServices(nil, out, errout)
+	service, _ := approvalServices("run", nil, out, errout)
 	runner, recovery := sessionServices(service)
 	if request.LocalMount != "" {
 		runner.Workspace = &sessiondisk.Workspace{ProcessOpen: localProcessOpen, MountStat: localMountStat(request.LocalMount)}

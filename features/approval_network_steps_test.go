@@ -19,7 +19,7 @@ func (w *world) approvalNetworkSteps(sc *godog.ScenarioContext) {
 			return fmt.Errorf("fixture names must be sorted and nonempty")
 		}
 		for i, name := range list {
-			if name != strings.ToLower(name) || strings.ContainsAny(name, "* ") || (i > 0 && name == list[i-1]) {
+			if strings.Trim(name, "abcdefghijklmnopqrstuvwxyz0123456789-.") != "" || (i > 0 && name == list[i-1]) {
 				return fmt.Errorf("noncanonical fixture name %q", name)
 			}
 		}
@@ -173,6 +173,15 @@ func (w *world) approvalNetworkEdit(edit string) error {
 	}
 	sort.Strings(names)
 	a.allow = names
+	if strings.HasSuffix(edit, "to its Cyrillic look-alike") {
+		raw := append([]string(nil), names...)
+		for i, name := range raw {
+			if name == "xn--pi-6kc.example.com" {
+				raw[i] = "аpi.example.com"
+			}
+		}
+		return w.approvalNetworkFile(raw)
+	}
 	return w.approvalNetworkFile(names)
 }
 

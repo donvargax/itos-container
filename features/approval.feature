@@ -1,5 +1,5 @@
 @phase-1
-Feature: Review and record approval of exact offline settings
+Feature: Review and record approval of exact settings
   Checkout files request permissions; approval records the reviewed effective settings
   outside the checkout. Approval is not evidence of human presence or runtime isolation.
   The host user is the effective UID, never an environment variable, and root is refused.
@@ -9,9 +9,9 @@ Feature: Review and record approval of exact offline settings
   # 2026-11-04 assignment of host identity, UID resolution and frozen input to slice-4.
   # q-2 replaces q-1's scriptable-only interaction. Bare terminal approve reviews
   # settings/differences and asks y/N; the person never types a hash. A host agent can
-  # approve through --fingerprint or a faked terminal: approval records what, not who.
+  # approve offline settings through --fingerprint or fake a terminal: approval records what, not who.
   # Carry that exact limitation into approve help and docs/security.md. There are no
-  # credentials, network grants, hooks, persistent worker volumes or new runtime claims.
+  # credentials, hooks, persistent worker volumes or new runtime claims in slice-4.
   # Slice-26's block below adds the first network grant approval can record, and no route.
   #
   # Layout and dependency choice:
@@ -157,9 +157,10 @@ Feature: Review and record approval of exact offline settings
   # An unchanged matching approval returns 0 without prompting or rewriting.
   # Bare approve without both terminals refuses even if already approved; piped y
   # is not consent. --json or ITOS_JSON=1 never prompts, even at a terminal.
-  # Those refusals name "--fingerprint <value>" and "itos container doctor".
+  # For offline grants those refusals name "--fingerprint <value>" and "itos container doctor".
   # Optional --fingerprint accepts only the exact current sha256:<hex> value; it
-  # works without a terminal, never prompts and refuses stale/mismatched values.
+  # works for offline grants without a terminal, never prompts and refuses stale/mismatched
+  # values. Slice-26 below applies q-52's terminal requirement to any network grant.
   # Explicit --no-json overrides inherited JSON. No --yes or environment consent.
   #
   # Approval JSON is one object {schema:1,ok,problems,approval}; no prompt/prose on
@@ -352,8 +353,8 @@ Feature: Review and record approval of exact offline settings
   # the changed-field comparison and the review and status lines. internal/engine/policy exports
   # the host-name shape check that valid() calls, and internal/engine/readiness takes the gate's
   # field. internal/slices/run/domain takes only ApprovalRefusal's wording, from what the view
-  # carries. The approve and doctor slices change only through cmd/itos-container's assembly, which
-  # also holds the help line.
+  # carries. The approve domain enforces q-52; cmd/itos-container opts doctor and approve
+  # into version 2 and holds the command summary. The approve command holds detailed help.
   #
   # Canonical settings v1 gain a second profile:
   # {schema:1, profile:"allowlist-v1", host:{uid,gid},
@@ -486,8 +487,8 @@ Feature: Review and record approval of exact offline settings
   #
   # q-52 (the person, 2026-11-09): only changed settings ask for approval again. A grant
   # with an egress allowlist or credentials requires the person at a real terminal.
-  # --fingerprint is only for offline grants without credentials. For an exact network
-  # fingerprint, refuse approve.terminal-required (exit 1), with a fix naming
+  # --fingerprint is only for offline grants without credentials. For any network
+  # fingerprint option, refuse approve.terminal-required (exit 1), with a fix naming
   # "itos container approve" and "terminal". Bare nonterminal or JSON network approval
   # retains approve.confirmation-required, naming only the terminal form. For grants,
   # the terminal-required refusal precedes fingerprint format and mismatch checks, as
@@ -587,7 +588,7 @@ Feature: Review and record approval of exact offline settings
   # before the work. A version 1 file keeps its behaviour by design, so a row that reads one starts
   # from an approval today's record check refuses.
 
-  @wip @slice-26 @ID-APPROVAL-36 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-36 @local-engine-fixture
   Scenario Outline: Doctor exposes the exact allowlist candidate without granting approval
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
@@ -603,7 +604,7 @@ Feature: Review and record approval of exact offline settings
       |        |
       | --json |
 
-  @wip @slice-26 @ID-APPROVAL-37 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-37 @local-engine-fixture
   Scenario: Offline at policy version 2 keeps the offline profile
     Given an approval checkout and isolated host state
     And the checkout requests offline at policy version "2"
@@ -614,7 +615,7 @@ Feature: Review and record approval of exact offline settings
     And the approval checkout and host state are unchanged
 
   # The second name has a Unicode spelling, so the respelling row can change every name.
-  @wip @slice-26 @ID-APPROVAL-38 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-38 @local-engine-fixture
   Scenario Outline: Equivalent allowlist requests keep one approval
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com xn--bcher-kva.example"
@@ -631,7 +632,7 @@ Feature: Review and record approval of exact offline settings
       | write the policy version as 2.0                            |
 
   # A parent name and a look-alike are other names, not spellings of a listed one.
-  @wip @slice-26 @ID-APPROVAL-39 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-39 @local-engine-fixture
   Scenario Outline: Any change to a host name needs a new approval
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
@@ -651,7 +652,7 @@ Feature: Review and record approval of exact offline settings
 
   # The third and fourth rows narrow what the file asks for: a new approval is needed that way
   # too. The last two pin the policy.version decision above.
-  @wip @slice-26 @ID-APPROVAL-40 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-40 @local-engine-fixture
   Scenario Outline: Moving between network modes or policy versions needs a new approval
     Given an approval checkout and isolated host state
     And the checkout requests <from>
@@ -672,7 +673,7 @@ Feature: Review and record approval of exact offline settings
 
   # No file can change the digest, so a record from a release that bound another one stands in
   # for the release that moves the constant.
-  @wip @slice-26 @ID-APPROVAL-41 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-41 @local-engine-fixture
   Scenario: A different proxy image digest needs a new approval
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com"
@@ -809,7 +810,7 @@ Feature: Review and record approval of exact offline settings
   # consents to: every line of the block above ID-APPROVAL-36 but the settings themselves, whole
   # and in its order, because a fragment would also pass a line that says the opposite, such as
   # "SSH over 443 is allowed".
-  @wip @slice-26 @ID-APPROVAL-42 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-42 @local-engine-fixture
   Scenario: Review shows the exact host names and the profile that grants network before a yes stores approval
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
@@ -840,7 +841,7 @@ Feature: Review and record approval of exact offline settings
   # these host names", and the last widens an offline approval, the one place such a build would
   # tell a person offline. The rows reach to the disclosure's last line, so a re-approval that cuts
   # it short fails.
-  @wip @slice-26 @ID-APPROVAL-43 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-43 @local-engine-fixture
   Scenario Outline: Re-approval reviews the old and new network before replacing the active record
     Given an approval checkout and isolated host state
     And the checkout requests <prior>
@@ -865,7 +866,7 @@ Feature: Review and record approval of exact offline settings
       | the allowlist "a.example b.example"   | the allowlist "a.example"                       | /policy/network/allow                                                      |
       | offline at policy version "1"         | the allowlist "a.example"                       | /policy/network/allow /policy/network/mode /policy/version /profile /proxy |
 
-  @wip @slice-26 @ID-APPROVAL-44 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-44 @local-engine-fixture
   Scenario: Narrowing an approved allowlist to offline reviews the offline profile
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com"
@@ -889,7 +890,7 @@ Feature: Review and record approval of exact offline settings
   # follows the review on the same terminal, so the standard output step reads both. A version 1
   # file with no record would pass today and could not fail before the work; here the first row
   # fails at the version 2 request and the second at the version 2 record today's check refuses.
-  @wip @slice-26 @ID-APPROVAL-57 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-57 @local-engine-fixture
   Scenario Outline: An offline request keeps the offline review and status at either policy version
     Given an approval checkout and isolated host state
     And the checkout requests offline at policy version "<approved>"
@@ -914,7 +915,7 @@ Feature: Review and record approval of exact offline settings
       | 1        | 2         |
       | 2        | 1         |
 
-  @wip @slice-26 @ID-APPROVAL-45 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-45 @local-engine-fixture
   Scenario Outline: The optional exact fingerprint refuses an allowlist grant without a terminal
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
@@ -936,7 +937,7 @@ Feature: Review and record approval of exact offline settings
 
   # Unchanged settings need no second consent. The terminal status still discloses
   # the full grant, and the remembered record is not rewritten.
-  @wip @slice-26 @ID-APPROVAL-46 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-46 @local-engine-fixture
   Scenario: Plain approval status says what the allowlist profile grants and cannot do
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
@@ -962,8 +963,8 @@ Feature: Review and record approval of exact offline settings
 
   # q-52 refuses every fingerprint for a network grant, regardless of its value.
   # The independent candidate oracle separately holds every bound setting.
-  @wip @slice-26 @ID-APPROVAL-47 @local-engine-fixture
-  Scenario Outline: A fingerprint for other network settings cannot approve the allowlist
+  @slice-26 @ID-APPROVAL-47 @local-engine-fixture
+  Scenario Outline: No fingerprint option can consent to an allowlist grant
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
     When approve runs without a terminal with the independently calculated fingerprint of "<settings>" as JSON
@@ -984,7 +985,7 @@ Feature: Review and record approval of exact offline settings
       | a malformed fingerprint                       |
 
   # A hostile workload can edit the file while the person reads the review.
-  @wip @slice-26 @ID-APPROVAL-48 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-48 @local-engine-fixture
   Scenario Outline: Consent cannot approve an allowlist changed while the review was visible
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
@@ -1002,7 +1003,7 @@ Feature: Review and record approval of exact offline settings
   # 2037 is what ID-POLICY-58 lets a list hold, and 253 bytes with 63-byte labels is the longest
   # name slice-25 admits: approval adds no limit of its own. The doctor half reads the record back,
   # so a valid() narrower than the policy fails there, on an approval approve has just written.
-  @wip @slice-26 @ID-APPROVAL-49 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-49 @local-engine-fixture
   Scenario Outline: The longest list and the longest name the policy admits can be approved and still match
     Given an approval checkout and isolated host state
     And the checkout requests <request>
@@ -1071,7 +1072,7 @@ Feature: Review and record approval of exact offline settings
   # Each record is self-consistent, its fingerprint recomputed, so only the rules for what a
   # profile may hold can catch it. None can match a candidate, but a record no approval could have
   # written is invalid state, not a changed setting.
-  @wip @slice-26 @ID-APPROVAL-50 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-50 @local-engine-fixture
   Scenario Outline: A self-consistent record that contradicts its profile fails closed
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
@@ -1251,7 +1252,7 @@ Feature: Review and record approval of exact offline settings
 
   # The first half passes today: ID-POLICY-62 holds it beside an offline approval, and here the
   # approval is for this very request. The doctor half is what fails before the work.
-  @wip @slice-26 @ID-APPROVAL-51 @local-engine-fixture @linux
+  @slice-26 @ID-APPROVAL-51 @local-engine-fixture @linux
   Scenario Outline: An approved version 2 request still cannot start a run
     Given an approval checkout and isolated host state
     And the checkout requests <request>
@@ -1276,7 +1277,7 @@ Feature: Review and record approval of exact offline settings
 
   # A version 1 file is the one request run can compare with an allowlist approval today. The
   # local comparison settles it, so no engine is needed.
-  @wip @slice-26 @ID-APPROVAL-52 @local-engine-fixture @linux
+  @slice-26 @ID-APPROVAL-52 @local-engine-fixture @linux
   Scenario Outline: An approval for other network settings does not authorize run, and run says what changed
     Given an approval checkout and isolated host state
     And the checkout requests <approved>
@@ -1299,7 +1300,7 @@ Feature: Review and record approval of exact offline settings
       | the allowlist "api.example.com" | /policy/network/allow, /policy/network/mode, /policy/version, /profile, /proxy |
       | offline at policy version "2"   | /policy/version                                                                |
 
-  @wip @slice-26 @ID-APPROVAL-53 @local-engine-fixture @linux
+  @slice-26 @ID-APPROVAL-53 @local-engine-fixture @linux
   Scenario: Run names changed settings without their values
     Given an approval checkout and isolated host state
     And a seeded prior approval at generation "2" with a different application environment and workspace
@@ -1315,7 +1316,7 @@ Feature: Review and record approval of exact offline settings
 
   # The comparison after inspection is the other path to this refusal, and the one a changed
   # digest takes. Slice-27's allowlist runs will use both.
-  @wip @slice-26 @ID-APPROVAL-54 @local-engine-fixture @linux
+  @slice-26 @ID-APPROVAL-54 @local-engine-fixture @linux
   Scenario: Run names a change it observed through read-only inspection
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -1350,7 +1351,7 @@ Feature: Review and record approval of exact offline settings
   # Lifting the version refusal must leave every later stage in place for a version 2 file. The
   # tree step does the looking for frozen input, as it did in ID-POLICY-61, whose absent manifest
   # row moves here: the record step beside it stops once the record is absent.
-  @wip @slice-26 @ID-APPROVAL-55 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-55 @local-engine-fixture
   Scenario Outline: Approve applies every other prerequisite to a version 2 request
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com"
@@ -1391,7 +1392,7 @@ Feature: Review and record approval of exact offline settings
 
   # Help wraps to an inherited COLUMNS, so the run names a wide one: a narrow terminal must not
   # fail a correct build.
-  @wip @slice-26 @ID-APPROVAL-56
+  @slice-26 @ID-APPROVAL-56
   Scenario Outline: Approval help stops limiting approval to offline settings
     When itos-container runs with "<arguments>" and the environment "COLUMNS=200"
     Then its standard output says "Review and remember exact settings"
@@ -1440,7 +1441,7 @@ Feature: Review and record approval of exact offline settings
   # grant. "Effective settings:" is a new line, so ID-APPROVAL-33 cannot hold it. The step reads all
   # of standard output for raw controls, so the status after the yes is held too, and the prior rows
   # read the /manifest/containerEnv difference, so a review that drops it fails.
-  @wip @slice-26 @ID-APPROVAL-58 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-58 @local-engine-fixture
   Scenario Outline: Terminal approval of an allowlist escapes Unicode controls in current settings and prior differences
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com"
@@ -1494,7 +1495,7 @@ Feature: Review and record approval of exact offline settings
       | C1            | name         |
       | bidirectional | name         |
 
-  @wip @slice-26 @ID-APPROVAL-59 @local-engine-fixture
+  @slice-26 @ID-APPROVAL-59 @local-engine-fixture
   Scenario Outline: A network grant requires both review terminals and plain output
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com"
