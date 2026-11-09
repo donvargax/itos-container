@@ -482,6 +482,43 @@ func TestControlWriterJoinsPeerLockCreatedDuringCatalogScan(t *testing.T) {
 	}
 }
 
+// A peer's lock must not hide a refusal. A reader never takes the lock, so it
+// reports the refusal its own inspection found; a writer's provisional refusal
+// is found again under the lock it then takes.
+func TestControlPeerLockDoesNotHideRefusals(t *testing.T) {
+	for _, write := range []bool{false, true} {
+		t.Run(fmt.Sprint("write=", write), func(t *testing.T) {
+			control, c, reservations, home, _ := controlFixture(t)
+			path := filepath.Join(home, ".local/state/itos-container/coordination")
+			if err := os.MkdirAll(path, 0700); err != nil {
+				t.Fatal(err)
+			}
+			reservations.Failure = "state.unavailable"
+			ops := control.Store.operations()
+			lstat := ops.lstat
+			fired := false
+			ops.lstat = func(root *os.Root, name string) (os.FileInfo, error) {
+				info, err := lstat(root, name)
+				if name == controlLockName && errors.Is(err, os.ErrNotExist) && !fired {
+					fired = true
+					if err := os.WriteFile(filepath.Join(path, controlLockName), nil, 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				return info, err
+			}
+			control.Store.ops = &ops
+			tx, failure := control.Begin(t.Context(), c, write)
+			if tx != nil {
+				tx.Close()
+			}
+			if failure != "state.unavailable" || !fired {
+				t.Fatalf("refusal beside a peer's lock: %q (peer ran: %v), want state.unavailable", failure, fired)
+			}
+		})
+	}
+}
+
 func TestControlBootstrapRechecksReservationsUnderPrivateLock(t *testing.T) {
 	control, c, reservations, _, selected := controlFixture(t)
 	ops := control.Store.operations()
