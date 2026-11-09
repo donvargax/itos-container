@@ -33,6 +33,11 @@ func (w *world) lifecycleSignalAction(signal string, repeat bool) {
 	w.lifecycleFreshRecovery(false)
 }
 
+// The last repeated signal goes this long after cancellation. A grace timer it
+// restarted fires no earlier than this plus the grace, which lifecycleSignals
+// refuses a SIGKILL at.
+const lifecycleLastRepeat = 4 * engineGraceBudget / 5
+
 func lifecycleRepeatedSignals(p *recoveryProcess, cancelled time.Time, signal func(string), present func() bool) bool {
 	// Inspect immediately after cancellation, while repeats keep their own
 	// schedule. The independent observer already bounds its request to 5 s.
@@ -44,7 +49,7 @@ func lifecycleRepeatedSignals(p *recoveryProcess, cancelled time.Time, signal fu
 		for _, item := range []struct {
 			after  time.Duration
 			signal string
-		}{{engineGraceBudget / 5, "SIGINT"}, {4 * engineGraceBudget / 5, "SIGTERM"}} {
+		}{{engineGraceBudget / 5, "SIGINT"}, {lifecycleLastRepeat, "SIGTERM"}} {
 			if !lifecycleUntil(p, cancelled.Add(item.after)) {
 				break
 			}

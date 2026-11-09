@@ -3501,19 +3501,391 @@
   type: docs
   title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
   why: >
-    Charter step 1 says the proxy is a small, maintained Go CONNECT proxy chosen in the spec, not
-    squid. This task writes a docs/decisions record and updates the arc42 building-block view and
-    runtime/network text. It picks one library with a pinned version, an AGPL-compatible licence and
-    a stated maintenance reason. It fixes the topology: an internal Docker network with no route
-    out, a proxy container dual-homed beside the worker, and the worker attached to the internal
-    network only. It states how the proxy binary or image reaches the proxy container and how it
-    stays out of the worker's reach. It defines fail-closed behaviour, with no fallback network when
-    the proxy fails. It gives the refusal log format and where it lands, with no secrets logged. It
-    names the contract's open decisions it settles and stops for the person if one is a security
-    property the charter leaves open. The library, topology and delivery are then fixed before any
-    code. Broken down from p1-egress-allowlist-proxy.
-  done_when:
-    - run: ls docs/decisions/*egress-proxy*.md && grep -qi 'egress' docs/architecture/arc42.md
+    Charter step 1 says the proxy is our own, on Go's standard library with no dependencies, beside
+    the worker on an internal network, allowing CONNECT to listed host names on port 443 only, with
+    no TLS interception, matching the name the client gave, checking the TLS ClientHello's SNI
+    against that name, and logging every refusal. T-39 and T-40 need its design, topology, delivery,
+    failure closure and refusal log fixed before any code. The title's "library" is the first of
+    those questions, and the answer is none. This entry holds every decision. The implementer writes
+    them as one record, docs/decisions/0022-egress-proxy.md (slice-21 holds 0021 on its branch; take
+    the next free number), and updates docs/architecture/arc42.md. This is documentation only: no
+    code, dependency, scenario, step definition, workflow or engine run. Nothing here is runtime
+    evidence or a support claim; real-engine proof belongs to slice-27 and slice-28, in CI. Read the
+    charter, the contract's "Runtime and network boundary", "Decisions still open" and acceptance
+    matrix, arc42, docs/architecture.md's Slices, then T-39, T-40 and slice-25 to slice-28. PLAN.md,
+    README.md and docs/ORCHESTRATING.md still call egress out of scope; the charter's "Specify and
+    start step 1 now" governs, and p1-docs-admit-milestone-two-egress owns their edit, so that
+    wording is no reason to stop here.
+
+    The proxy is our own code on Go's standard library (the person, q-51): no library, no go.mod
+    change, nothing new in THIRD_PARTY_NOTICES.md, and no network service. Its flow, in this order:
+    read the CONNECT head; check the name against the allowlist and the port against 443; dial;
+    answer 200; peek the ClientHello through crypto/tls; replay the peeked bytes upstream untouched;
+    splice both ways; log each refusal as one JSON line. The person's estimate is about 300 lines.
+    This is a deliberate exception to the charter's "prefer an existing, maintained library", and
+    the charter says so. The record repeats q-51's reasons: the proxy is security-critical and
+    small, the libraries either carry MITM machinery (goproxy) or are unmaintained (cproxy), and
+    q-49's check needs custom code anyway. If TLS interception is ever wanted, the charter moves the
+    proxy to a repository of its own first, and this code seeds it.
+
+    No interception code exists anywhere in the tree. The proxy holds no CA, certificate or key and
+    never completes a handshake: its one tls.Config sets GetConfigForClient, which always returns an
+    error, so crypto/tls stops once the ClientHello has parsed, before it chooses a version. T-39
+    proves this three ways. A contract test has a client verify through the tunnel and see the
+    upstream's own certificate. A check finds none of tls.Certificate, tls.LoadX509KeyPair,
+    tls.X509KeyPair, tls.Listen, tls.NewListener, tls.Client, GetCertificate or
+    x509.CreateCertificate in the production sources under cmd and internal, where no Go file
+    mentions crypto/tls or x509 today. And go list -deps of internal/engine/egress's packages shows
+    no module but this one and no net/http (measured: crypto/tls, net, io, os and encoding/json do
+    not import it). Those checks run only for T-39's own range, so T-39 also adds a depguard rule
+    with its fixture, which holds on every later push: production code may import crypto/tls only in
+    egress's adapter, and crypto/x509 nowhere. Test fakes generate their upstream's certificate in
+    memory, so no key enters a file.
+
+    Rejected. github.com/elazarl/goproxy v1.9.3 (BSD-3-Clause), the maintained candidate with eleven
+    tags since 2026-01-17: certs.go's init parses CA_CERT and CA_KEY on import, unconditionally, and
+    its MITM path and signer are linked, so "no interception code" could not be said of it. It also
+    brings about 3,700 production lines, golang.org/x/net and x/text at versions with OSV
+    advisories, acceptance when a handler returns nil, plain-HTTP forwarding and HTTPS_PROXY read
+    from the environment. github.com/smarty/cproxy/v2 v2.1.1 (MIT), CONNECT only with no TLS code:
+    its last tag is 2024-07-09, its production files are unchanged since v2.1.0 of 2023-06-22, and
+    q-49's check would still have needed a guard socket, a replaying connector and one handler per
+    request around it. wzshiming/httpproxy v0.6.1 (MIT): one maintainer, a plain-HTTP forwarding
+    path and a tunnel that closes both directions at the first EOF. stripe/smokescreen v0.1.0 (MIT):
+    purpose-built but with its own ACL engine and roles, Datadog, Prometheus, logrus and a private
+    goproxy fork, so neither small nor a fit for a domain that owns the decision.
+    caddyserver/forwardproxy: a Caddy plugin with no tagged release.
+
+    The proxy reads the head itself and imports no net/http, a choice q-51's "parse CONNECT" leaves
+    open. Nothing of the head is ever forwarded, so no second parser can disagree with it, and all
+    that is judged is one literal string against a list. net/http's server would only add what this
+    design must then close: ErrorLog lines holding client addresses, recovered handler panics, its
+    own 400, 431 and 505 answers, and a parsed URL that hides the target, since it reads
+    user:pw@name:443 as userinfo and host, and name:443/x and name:0443 also carry a usable URL.Host
+    (each measured). The adapter reads the socket up to the first CRLF CRLF, at most 8 KiB, under a
+    10 s read deadline from accept, and every byte after that terminator belongs to the tunnel. The
+    domain parses the head as pure code, within its allowlist, so a domain test and the fuzz test
+    reach it. The request line is exactly a non-empty method, one space, a non-empty target, one
+    space, a version and CRLF, where the version is HTTP/1.1 or HTTP/1.0: curl and Python 3.14 send
+    1.1 and openssl s_client sends 1.0 (measured), as Python 3.11's http.client does (read in its
+    source). A bare LF or CR in that line is malformed. Headers are skipped unread: never judged,
+    logged or forwarded, Host and Proxy-Authorization included.
+
+    A request passes only when its method is exactly CONNECT and its target is exactly a listed name
+    followed by :443. Anything else is refused with the first reason that fits, in this order:
+    malformed (no complete head, or a request line of any other shape); not-connect (any other
+    method, compared exactly, whatever its target); malformed (a CONNECT whose target is not a plain
+    host, a colon and a port as the log's rule below defines them); literal-ip (dotted IPv4 or
+    bracketed IPv6); not-canonical (its lowercase form without one trailing dot is listed);
+    not-listed; and port (the name is listed and the port is not the exact text 443, so name:0443
+    and name:80). So GET http://listed.example/path HTTP/1.1, what curl and urllib send for any
+    http:// URL once http_proxy is set, reads not-connect, not malformed. These are labels for the
+    person: only the exact match admits anything. T-39's domain decides on the name first, so a
+    refused name is never resolved and refusals are no DNS channel.
+
+    The contract's address rule stands, since the charter does not change it (AC-12). The adapter
+    dials with net.Dialer, network tcp4 and a 10 s timeout, giving the rooted name to the proxy's
+    resolver, and checks each address in net.Dialer's Control hook, which sees the address actually
+    connected, including CNAME targets and changed answers, with no second lookup. It refuses the
+    IANA IPv4 special-purpose registry, including 10/8, 172.16/12, 192.168/16, 127/8, 169.254/16 and
+    100.64/10, plus multicast, from a table in the adapter: net/netip is outside the domain
+    allowlist, and a table this small needs no library (code.dny.dev/ssrf rejected for that reason).
+    An answer mixing valid and refused addresses dials only the valid ones; one with none valid is a
+    refusal with reason address. IPv6 is out of this step: both networks have it off, so a listed
+    name with only AAAA answers fails as dns. T-39's adapter tests reach their loopback listeners by
+    giving its constructor a test resolver and dial function, and test the table directly; porttest
+    fakes stay free of I/O, cmd always binds the real ones, and no flag, variable or build tag
+    relaxes the table in the product.
+
+    The peek follows q-49, which q-51 takes up. After the 200 the proxy holds the upstream socket
+    and moves nothing in either direction until the hello passes, so a server that speaks first
+    reaches no client. It sets a 10 s read deadline on the client and runs tls.Server over a shim, a
+    small net.Conn whose Read serves the bytes that came after the head, then the socket, recording
+    every byte and stopping at 64 KiB, and whose Write discards, because crypto/tls sends an alert
+    when the callback aborts (measured: 7 bytes) and a client must get nothing forged by the proxy.
+    GetConfigForClient captures ClientHelloInfo's ServerName and Extensions. The domain then judges
+    them, in this order: extension 0xfe0d, encrypted_client_hello, is tls-ech; no ServerName is
+    tls-no-name; a ServerName other than the CONNECT name, byte for byte, is tls-name. If the
+    callback never ran the reason is not-tls, however that happened: bytes that are not TLS, bytes
+    that start like TLS and then fail to parse, a truncated hello, a client that closes or stays
+    silent to the deadline, or more than 64 KiB. Each refusal writes a record, then closes both
+    sockets with no byte forwarded. On a pass the proxy writes every recorded byte upstream
+    unchanged, including any beyond the hello, clears the deadline and splices. A failed replay is
+    event upstream-failed, reason connect, and closes.
+
+    The splice is two goroutines, each an io.Copy between the raw *net.TCPConn pair, which Go turns
+    into splice(2) on Linux. The shim never reaches them and no wrapper type touches the tunnel, so
+    nothing can copy around the peek, which has finished before either starts. When one direction
+    reaches EOF the proxy calls CloseWrite on the other socket, so half-close carries, and both
+    sockets close once both directions have ended or either has failed. There is no idle timeout,
+    because agents stream for long periods; the contract's resource limits stay open.
+
+    A scratch spike of this flow ran on loopback under Go 1.27.3, outside the tree: no Docker, so it
+    is no runtime evidence, and T-39's tests replace it. curl 8.23.0, Python 3.14's http.client,
+    openssl s_client and Go's client each completed a verified handshake with the upstream's own
+    certificate through it. A wrong SNI (curl --connect-to included), no SNI, an ECH hello from Go's
+    client, plain HTTP, an SSH banner, silence, truncation, unparseable records and 70 KB of
+    one-byte records each put 0 bytes upstream and none to the client after the 200, and left one
+    record. A hello sent with the CONNECT, split byte by byte, split across two TLS records or
+    followed by more bytes reached the upstream exactly as sent. Half-close carried both ways, and
+    strace showed splice(2) on a 200,000-byte tunnel. The real resolver through the Control hook
+    connected a mixed answer to its valid address, and gave address with none valid, dns for no such
+    host and connect for a refused connection.
+
+    T-39 requires fuzz tests for CONNECT parsing and the ClientHello peek (q-51), beside slice-27's
+    real-engine scenarios. The proxy is the one process of this project a hostile worker can talk
+    to, and it has a route out, so a parser bug there is the boundary failing. There is one target
+    over the domain's head parser and one over the adapter's peek, written as
+    internal/engine/policy/yaml/fuzz_test.go is, with real hellos among the seeds. The head target
+    asserts that nothing panics, that only an exact CONNECT of a listed name on 443 passes, and that
+    the method, target and port it would log obey the log's rule below. The peek target asserts that
+    nothing panics, that no byte reaches the client, that the recording is a prefix of the input
+    within 64 KiB, and that a pass has the exact ServerName and no 0xfe0d. Plain go test only
+    replays seeds, which CI's go test ./cmd/... ./internal/... does on every push, and every crash a
+    run finds is committed as a seed under testdata/fuzz. So T-39's done_when also runs each target
+    with -fuzz for 30 s at -parallel 2 and -fuzzminimizetime=0s, which itos ci run runs for T-39's
+    own range. Go's default spends up to 60 s minimizing an interesting input while fuzzing waits:
+    from a fresh corpus the spike's peek target did 11,141 executions in its first 3 s and none in
+    the other 27 s, against 226,151 in all with the flag, and its head target found 18 new inputs
+    against 109 (measured). A crash is still written to the corpus with the flag, just not minimized
+    (measured). Thirty seconds of each target found nothing and peaked at 120 MiB a process here and
+    159 MiB in the spec review's runs, which is no firm bound, since the cached corpus grows. This
+    repository has no nightly tier for fresh runs after that, and this record adds none.
+
+    The code proof measures changed lines with the engine off (arc42's check tiers), so the proxy
+    container never starts under it, and its exact Env and lack of a writable mount would stop a
+    -cover binary writing counters anyway (reasoned from the design, not run). T-39 therefore covers
+    its serve loop with tests over loopback listeners, and slice-27 covers the slice's handler and
+    cmd's binding with tests that need no engine.
+
+    The topology has two owned per-session bridge networks. The internal network is created with
+    Internal true, EnableIPv6 false and com.docker.network.bridge.gateway_mode_ipv4=isolated. Plain
+    internal is not enough: Docker's port-publishing documentation says containers on an internal
+    network can reach host services on the bridge address, including those bound to 0.0.0.0, which
+    is AC-10's host gateway, and features/offline_isolation_network_test.go binds host listeners on
+    just such an address. Isolated mode assigns the bridge no address while containers on it still
+    reach each other (moby's TestIsolated), so the worker's closure depends on neither iptables nor
+    the proxy. It needs Docker 28.0, API 1.48; the recorded runners are 28.0.4 and 29.4.2. Doctor
+    and run refuse an older engine as an unavailable control, and verify after create that the
+    network is internal, IPv6-off, isolated and has no IPAM gateway, because old daemons ignore
+    unknown options. The egress network is a plain bridge with IPv6 off and only the proxy on it. It
+    is owned rather than the default bridge, which other containers share and a daemon may disable;
+    Docker's inter-bridge isolation keeps other networks from the proxy's port.
+
+    The proxy joins both networks at create, publishes no port and listens on 3128. Its default
+    route comes from the egress network, the only one of the two with a gateway. Its HostConfig sets
+    Sysctls net.ipv4.ip_forward=0, verified by inspect before start, so its kernel cannot route
+    between the two networks: a new network namespace inherits the host's value, and a Docker host
+    runs with forwarding on (measured under unshare -rn: 1 on a host at 1). The worker joins the
+    internal network only, with no published port and its existing CapDrop ALL, so it can neither
+    craft packets nor change routes. Its environment carries HTTP_PROXY, HTTPS_PROXY and their
+    lowercase forms with the proxy's literal internal address, read by inspect after ready, plus
+    NO_PROXY and no_proxy set to localhost,127.0.0.1,::1; the manifest already reserves these names
+    in any letter case. Without the last two a test suite's local server would go to the proxy,
+    since curl and Python's urllib both send localhost through http_proxy (each measured), and each
+    such request would count toward the log's cap. Loopback stays inside the worker, so this does
+    not touch the boundary. The variables help cooperating clients and are not the boundary: a
+    client ignoring them has no route. Docker's embedded resolver at 127.0.0.11 cannot be removed
+    from a user-defined network, so the contract's "block embedded Docker DNS" gives way to its
+    result, AC-11's no unauthorized resolution path (the coordinator, provisional for the person's
+    review, q-50): for a sandbox with only internal endpoints libnetwork starts it with proxyDNS
+    false, skips host-loopback servers and sends the rest from the container's own namespace, where
+    no route exists (sandbox_dns_unix.go and resolver.go). Clients need no DNS, since the proxy
+    resolves. slice-27's AC-11 scenario must prove this on the real engine; if it cannot, the
+    topology reopens. Offline runs keep NetworkMode none, with no proxy or network.
+
+    For delivery, the proxy container runs the host's own itos-container executable, at its resolved
+    os.Executable path, bind-mounted read-only at /itos-container as that container's only mount,
+    through a hidden __egress-proxy command. That command is a slice of its own,
+    internal/slices/egressproxy, which slice-27 creates with only a command package: a thin handler
+    over the engine's port, with cmd binding the adapter. An owner needs no empty domain or port
+    directory, and a command cannot import net, so listener, dial, peek and splice stay in
+    internal/engine/egress's adapter, which is T-39's "entrypoint". The hidden __complete, which cmd
+    handles itself, is no precedent: arc42's cmd row exempts only version and completion
+    infrastructure, and this is a long-running network server. No image is built, published or
+    pulled by a command, no second artifact ships, and a scenario exercises the proxy of its own
+    commit. The root filesystem is inert:
+    docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835,
+    T-20's pinned image, which the engine job already pulls. Docker needs some image; nothing in
+    this one runs. It is a product constant that neither policy nor manifest can change, because the
+    contract says the manifest cannot configure or replace the trusted proxy. The person pulls it as
+    they pull the worker's image, so this project distributes none of its GPL-2.0 content; doctor
+    names the exact pull when it is absent, commands only inspect it, and approval binds the digest,
+    so changing it needs a new approval. slice-26 names the network-granting profile. The executable
+    must be a static Linux amd64 ELF, and doctor and run refuse anything else (debug/elf behind a
+    port). .goreleaser.yaml already builds with CGO_ENABLED=0. features/features_test.go does not,
+    and its build measured dynamically linked here; p1-acceptance-static-binary makes the harness
+    build what the release ships, and slice-27 depends on it. Rejected: the worker image as root
+    filesystem, which puts a checkout-requested image and its ENV under the trusted proxy; a
+    published proxy image, which adds a registry service (the charter's stop) and a digest-in-source
+    cycle; importing an image at run, which the contract's "no automatic pull/build path" bars.
+
+    The proxy stays out of the worker's reach. The worker's mounts remain exactly the checkout and
+    tmpfs, as VerifyRun already enforces; the two containers share no volume or namespace; the
+    worker has no engine access; and run refuses an executable whose resolved path lies inside the
+    checkout, which a worker could replace for the next session (slice-20's scan already refuses
+    hard links there). The proxy runs as the effective host UID/GID like the worker, with read-only
+    root, CapDrop ALL, no-new-privileges, pids limit 4096, restart policy no, no tmpfs, and no
+    checkout, state volume or socket. The frozen allowlist is its Cmd, its Env is exact, and both
+    are verified by inspect before start, so nothing the worker does can change them and a restart
+    cannot widen them.
+
+    Failure closure has no fallback network: nothing reconnects the worker, changes its network or
+    restarts the proxy. Creation order is the anchor as today, internal network, egress network,
+    proxy, verify, start, ready, then the worker as today, with durable intent before each. The
+    checkout's pin, its socket scan and the anchor stay first, so a refused checkout starts no
+    proxy; the scan's known race (q-30) only grows by the proxy's start. Ready is one record, event
+    ready, that the proxy prints on stdout only after validating the list and listening; the
+    controller reads it with bounded log calls inside run's existing 120 s startup budget. A missing
+    ready, a proxy exit or an unverifiable resource means no worker is created. Policy is compiled
+    into the same process, so the contract's addon-failure window does not arise: an invalid list
+    exits nonzero before the listener opens. The proxy recovers no panic, so a panic in any
+    goroutine ends the process, and an Accept error or a failed log write ends it too; each is the
+    same closure. During a run the controller also waits on the proxy, and its exit is a typed
+    failure: the worker gets the existing termination (first signal, 10 s from cancellation,
+    SIGKILL), an observed exit keeps its precedence and run returns nonzero. With the proxy gone the
+    worker has no peer. Under A3 a lost controller leaves both running under the frozen list until
+    stop, with no watchdog and no new route.
+
+    Teardown reverses creation: worker, stop the proxy and confirm it has exited, refusal-log copy,
+    remove the proxy, egress network, internal network, then the anchor. The copy waits for that
+    exit because a record reaches the json-file asynchronously, through a pipe to dockerd's log
+    copier, so a log read of a running proxy could miss a workload's last refusal and removing the
+    proxy would then lose it for good. Docker waits for that path only when a container exits:
+    handleContainerExit in moby's daemon/monitor.go waits up to 2 s for the streams and up to 10 s
+    for the copier before it marks the container stopped (read at v27.5.1 and v28.5.2, not run). The
+    stop is SIGKILL, then the engine's not-running wait and a fresh inspection, as for the worker's
+    exit: each record is one write with nothing buffered in the process, so the kill loses none, and
+    a proxy that has already exited goes straight to the copy. This stop is the controller's own act
+    once the worker is gone, not the typed proxy failure, so it changes neither the run's result nor
+    its exit code. A failed step retains its recovery record and exact retry. Removal is authorized
+    as arc42's protocol has it, by durable intent with a random name before each create and then the
+    inspected full ID, recorded before any instruction, never by labels or names alone (T-40).
+
+    The refusal log is one JSON object per line on the proxy's stdout, at most 2 KiB: schema 1, time
+    (RFC 3339 UTC) and event, which is one of ready, refused, upstream-failed or log-full. A refused
+    or upstream-failed record adds method, target, port and reason; ready and log-full add nothing.
+    A refused record's reason is one of not-listed, literal-ip, port, not-canonical, not-connect,
+    malformed, address, not-tls, tls-name, tls-no-name, tls-ech, and an upstream-failed record's is
+    dns or connect. Method is written only when it is one to 16 ASCII uppercase letters. Target and
+    port are written only when the text before the request target's last colon is a non-empty plain
+    host, at most 255 bytes of ASCII letters, digits, hyphen, underscore and dot or a bracketed IPv6
+    literal, and the text after it is one to 5 digits; otherwise both are omitted. A request line of
+    any other shape writes none of the three. So secret-token@listed.example:443,
+    a/b?token=secret:443, listed.example:443/path?token=secret and
+    http://listed.example/path?token=secret write neither target nor port, though net.SplitHostPort
+    accepts all four (measured), and slice-28's AC-36 marker scenario uses these forms. Never
+    written: URL path or query, userinfo, headers, Proxy-Authorization, bodies, tunnel bytes, the
+    hello's SNI, client address or Go error text. Every way a head can fail leaves one malformed
+    record, a partial head and a deadline expiry included; a connection closed before its first byte
+    asked for nothing and leaves none. An allowed tunnel writes no record. Each record is one write,
+    made before the client is answered, and a failed write ends the process, because a refusal that
+    cannot be recorded must stop the session.
+
+    A refusal decided before the 200 answers HTTP/1.1 403 Forbidden, an address refusal included. A
+    DNS or connect failure on a listed name is event upstream-failed, reason dns or connect,
+    answered HTTP/1.1 502 Bad Gateway, so the status and the log both tell policy from failure. Both
+    answers carry Content-Length: 0 and Connection: close with no body, and the proxy then closes.
+    The tunnel's answer is HTTP/1.1 200 Connection Established. Handshake refusals come after that
+    200, so they close the connection with no answer.
+
+    The log lands in two places. During the run it is the proxy's json-file log (max-size 64m,
+    max-file 1), which survives controller loss. At teardown, after stopping the proxy and before
+    removing it, the controller copies every record but ready, fsynced and mode 0600, to
+    sessions/<lookup>/<id>/egress-refusals.jsonl under the protected state root. Publish in
+    internal/engine/approval/disk/storage.go refuses more than 1 MiB, which this log can exceed, so
+    slice-28 adds a streaming writer with the same private-file, fsync, rename and parent-fsync
+    rules. A failed copy keeps the stopped proxy, its log and its recovery record, so stop retries
+    and nothing is lost. Cleanup never deletes that file; status names it and its count, and display
+    escapes a hostile name as approval's does (slice-28). The proxy stops after 20,000 refused or
+    upstream-failed records, writing one log-full record and exiting nonzero, which the run treats
+    as a proxy failure. Every refusal stays recorded, and a hostile workload can end its own session
+    but cannot rotate away its earlier attempts, since a session's records, each at most 2 KiB, stay
+    under the 64m cap even after Docker's escaping. That bounds one session at about 40 MiB of host
+    disk. Retention across sessions stays open (p3-session-state-retention): completed sessions are
+    not garbage-collected (features/recovery.feature), so these files accumulate with them.
+
+    Handshake guarantee (q-49): the proxy reads the ClientHello without terminating TLS or holding a
+    key or CA, which the charter's "no TLS interception" permits, and T-39's "opaque tunnelling"
+    means opaque after that hello. The guarantee to disclose in approve, status and
+    docs/security.md: the proxy verifies the CONNECT name and the first ClientHello's SNI. It cannot
+    see the HTTP Host inside TLS or anything after that hello, a second hello after a
+    HelloRetryRequest included, so fronting remains a limit, as does a hello the upstream's TLS
+    stack reads differently from crypto/tls, and it cannot stop data sent to an allowed service.
+    Clients that omit SNI or send ECH, Chromium's GREASE included, and SSH over 443 are refused
+    until a later mode names them. That Codex and Claude Code send SNI without ECH is not yet known:
+    the person's smoke check confirms it, since no scenario uses a real harness. The disclosure has
+    owners: slice-26 puts it in approve's presentation, and slice-27 puts it in status and edits
+    docs/security.md, which p1-docs-admit-milestone-two-egress does not cover. This settles the
+    contract's "Which passthrough handshake guarantees can be enforced".
+
+    From the contract's "Decisions still open" this record settles the concrete guard/proxy topology
+    and its fail-closed handling, and for the guard only its versions, digests, provenance and
+    acquisition. Worker versions, final destinations, resource limits and the platform matrix stay
+    open. It does not settle who may approve a sandbox that grants network, which stays with
+    p3-approval-before-egress; the record says so, so that no one reads it as settled. q-49 began as
+    the coordinator's provisional answer, and the person's q-51 and the charter have since taken up
+    its check, so the record treats it as settled. q-50 stays provisional for the person's review,
+    and the record says that too. The record lists each contract passage it supersedes or defers, so
+    the person can edit the contract: the Agreed scope's Proxy row (mitmdump) and TLS row
+    (inspection per destination), which give way to the charter by the person's 2026-11-09 choice;
+    its Images row, for the proxy only; its Mounts row's "do not bind-mount additional host paths"
+    and the "Not included" list's "extra host-directory mounts", which must now read as the
+    worker's, since the proxy has one read-only executable mount; its Platforms row, since delivery
+    needs the host's own static Linux amd64 ELF, so the darwin, windows and arm64 builds in
+    .goreleaser.yaml cannot run egress this way, which the charter's "Not yet" allows for now, and a
+    later platform needs another delivery; "The precise guard/worker network topology is a blocking
+    experiment" with Experiments item 1 (mitmdump), since this record settles the topology from
+    reading and a loopback spike and leaves its proof to slice-27; the sentence "block embedded
+    Docker DNS" (q-50); and the HTTPS inspection and SSH tunnel modes with AC-15, AC-19 and AC-20,
+    deferred.
+
+    The record also says which of these rest on an answered question and which it decides itself.
+    The Proxy and TLS rows rest on q-51 and the DNS sentence on q-50. The Images and Mounts
+    readings, the two-network topology and the delivery have no question behind them, though the
+    charter's stop rule names contract changes and "Decisions still open". The coordinator told the
+    drafter to finish, and slice-27 must prove the topology and delivery on the real engine, so the
+    work goes on, but the record marks all of these as its own decisions for the person to confirm
+    or overturn.
+
+    Scenarios need no product seam. In the engine job the harness creates its own bridge network
+    with a subnet outside the refused table (for example 11.22.33.0/24) and a fake TLS endpoint on
+    it whose network alias equals a listed name, then connects the running proxy container to that
+    network, so the proxy's embedded resolver answers the alias. A second network with a private
+    subnet and alias proves the address refusal. The workload waits on a checkout sentinel until the
+    harness has connected. No flag, variable or build tag enters the product; this is the charter's
+    "fake endpoint the proxy allows in tests".
+
+    In arc42, Constraints keeps offline's limits, names this record for the egress profile, and
+    names q-51's exception beside its rule on dependencies. Context and scope replaces "Proxy
+    egress, guard/proxy infrastructure" and "Do not create a guard, proxy or session network" with
+    egress's status. Building-block view adds internal/engine/egress (proposed, T-39, importing no
+    other engine), internal/slices/egressproxy (proposed, slice-27) and session's networks and proxy
+    (proposed, T-40). The work-item table adds T-38 to T-40 and slice-25 to slice-28. Runtime view
+    adds a subsection headed ### Egress run with the order and failure closure. Deployment view adds
+    the proxy and both networks and confines NetworkMode none to offline runs. Cross-cutting
+    concepts adds the refusal log and, under dependencies, q-51's exception. Decisions links the
+    record. Quality requirements maps AC-09 to AC-14, AC-16 to AC-18, AC-23 and AC-36 to slice-27
+    and slice-28, marked unproven. Risks replaces the topology and handshake rows with pointers to
+    the record, leaving TLS interception deferred. Use the record's exact terms for the isolated
+    mode, the hidden command and the log file. Keep the twelve headings and all offline text that
+    still holds; label everything proposed. The record names these sections as the ones it updates,
+    under the charter's drift rule.
+
+    The drafter changes only this entry. The implementer changes only the record and arc42, in docs
+    commits with Task T-38 as T-26's implementation was, and leaves the registry and sibling specs
+    alone, reporting a conflict rather than resolving it. T-39's, T-40's, slice-26's, slice-27's and
+    slice-28's drafters take these decisions from the record, including our own proxy and its fuzz
+    tests, the crypto/tls depguard rule, the second network, the forwarding sysctl, NO_PROXY, the
+    address check, the hello peek, the egressproxy slice, the inert image, the static harness build,
+    the stop before the log copy, the streaming log writer and the handshake disclosure, all of
+    which their whys predate.
+
+    Both checks read only those two documents, with grep, and declare prose: true, because on a
+    prose-only range CI leaves out any other late check and itos work done never runs one. Their
+    anchors are words the decisions above force, compared with whitespace flattened so line wrapping
+    cannot fail them; semantic review judges the rest. The first fails today at ls, because no
+    record exists. The second fails on its first anchor, internal/engine/egress.
 - id: T-39
   type: feat
   title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
@@ -3636,34 +4008,550 @@
   type: test
   title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
   why: >
-    Run 42609794543 (T-41's range, which touches nothing LIFECYCLE-09 uses) failed the engine tier
-    at row #03 of 'Ignored and repeated cancellation escalates once after the fixed grace' (SIGTERM,
-    acknowledgement delayed 60% of grace), while T-33 to T-37 each passed it. T-33 shortened the
-    engine grace from 10 s to 1 s and kept the SIGKILL tolerance proportional: lifecycleSignals in
+    LIFECYCLE-09 keeps failing the engine tier on ranges that touch nothing it uses, and on main,
+    and milestone two's egress proof relies on that tier. 'Ignored and repeated cancellation
+    escalates once after the fixed grace' failed at row #03 in run 42609794543 (T-41's range), at
+    row #02 in runs 42605880158 and 42605822567 (main) and 42613812662, and in T-33's 7e30371, while
+    T-33 to T-37 each passed it. Go numbers an outline's later rows #01, #02 and #03, so #02 and #03
+    are its third and fourth rows, the two whose acknowledgement is delayed 60 percent of grace: the
+    delayed rows, beside the two immediate ones. T-33 shortened the engine grace from 10 s to 1 s
+    and kept the SIGKILL tolerance proportional: lifecycleSignals in
     features/lifecycle_native_assertions_test.go accepts SIGKILL only from 1.0 s to 1.2 s after
-    cancellation. The 30 s teardown assertion kept an absolute 2 s tolerance. Controller wake-up and
-    request latency under -cover on a shared runner do not shrink with the grace, so 200 ms is a
-    plausible flake source. The same run's engine step took 235 s against its 240 s gate, so the
-    runner was busy. The cause is not confirmed: the failing assertion was not visible to the
-    implementer (no gh access) or to this triage. The coordinator should put the failing assertion's
-    text from the job log in the brief before the item is taken. If it is the SIGKILL window,
-    replace the 20% share with an absolute floor. A tolerance up to about 500 ms still rejects an
-    acknowledgement-relative timer, which fires at 1.6 s with a 60% delay. Keep the lower bound, the
-    native receipts and the 60% delay row. Change the T-33 wording 'escalation tolerance is 20
-    percent' and the matching lines in features/README.md with it. This keeps the engine tier from
-    failing unrelated ranges, which matters for milestone two's egress proof, which relies on it.
-    Coordinator, 2026-11-09 12:12 UTC: now red on main too (runs 42605880158 and 42605822567, row
-    #02), besides T-41's run 42609794543 and T-33's 7e30371: it fails on any range, so it goes
-    first. Widen the SIGKILL acceptance to an absolute tolerance that holds under -cover on a hosted
-    runner (as the teardown assertion's 2 s does), keeping the assertion that SIGKILL comes after
-    the grace and exactly once; don't lengthen the grace back to 10 s. This item is already first in
-    the queue, and its coordinator note of 2026-11-09 12:12 UTC says it fails on any range and goes
-    first. It already records the T-41 failures on different rows (#03, then #02) and the
-    main-branch failures on runs 42605880158 and 42605822567. It already covers the engine step
-    running near its 240 s gate (235 s) and the link to milestone two's egress proof. New evidence
-    to add as a note: run 42613812662 is a further engine-tier failure, and its failing assertion
-    text is still not visible (it depends on the upstream extractor fix). The item's own fix does
-    not wait on that text. The coordinator's instruction is to widen the SIGKILL acceptance to an
-    absolute tolerance. A new item or a promotion would add nothing.
+    cancellation, while the 30 s teardown assertion kept an absolute 2 s.
+
+    Triage reported on 2026-11-09 that run 42626087465 failed the same row #03 on a docs-only range,
+    the row that failed T-41's run and main's. So the failure does not depend on the range and
+    blocks work that never touches LIFECYCLE-09. That run's assertion is unread too.
+
+    The cause is inferred from the code and a fake clock: nobody has read the failing assertion,
+    because CI's report gives the test an empty message and no agent has gh. terminateSession
+    (internal/engine/session/domain/recovery.go:370) sends the first signal and waits for its
+    acknowledgement, in one call bounded by the call limit, before it can act on the grace deadline.
+    So an honest SIGKILL leaves at the later of the deadline and that reply, plus the fresh
+    inspections, validation and daemon check that precede every signal. In a delayed row the reply
+    comes at least 600 ms after the first signal reaches the recorder, and that arrival follows the
+    session open, a new engine connection, anchor and worker inspections and two durable writes,
+    under the syscall observer and -cover. A delayed row therefore passes 1.2 s by the time the
+    first signal arrives 600 ms after cancellation, however punctual the work after the deadline,
+    while an immediate row stays on time. That matches the failures, and it is structural, not only
+    jitter. A throwaway copy of TestEngineFixtureBudgetContract's delayed case showed it, with time
+    added only before the first signal: a first signal at 0.3, 0.5 and 0.7 of grace gave SIGKILL at
+    1.00, 1.10 and 1.30 of grace when held 60 percent, and at 1.00 each when not held. The one
+    hosted measurement fits. Red run 42297748701 (2026-11-06, before anchors added work), whose
+    product really was acknowledgement-relative, put SIGKILL at 16.4-16.6 s with a 10 s grace and a
+    6 s delay, so that work took 0.4-0.6 s, which at 1 s budgets puts an honest delayed SIGKILL at
+    1.0-1.2 s, on the limit already.
+
+    The coordinator decided, 2026-11-09 12:12 UTC: widen the SIGKILL acceptance to an absolute
+    tolerance that holds under -cover on a hosted runner, as the teardown assertion's 2 s does, keep
+    the assertion that SIGKILL comes after the grace and exactly once, and don't lengthen the grace
+    back to 10 s. The fix does not wait on the failing assertion's text. Keep the lower bound, the
+    native receipts and the 60 percent delay rows.
+
+    The coordinator decided, 2026-11-09 13:18 UTC: the promoted check is wrong twice and this entry
+    must replace it. It began with a lock and a path that exist only on the loop's host, for
+    commands run there. CI has no such path, so no check, ledger entry or committed file names them.
+    And its -run pattern reaches no scenario row, since the feature scenarios run under
+    TestFeatures, and a pattern that matches nothing exits 0, so it passed before any work. Write a
+    check that selects LIFECYCLE-09's rows the way this repository's CI selects engine scenarios,
+    and that fails before the fix.
+
+    The rule. engineEscalationTolerance = 2 * time.Second joins the budgets in
+    features/engine_budgets_test.go, and lifecycleSignals accepts SIGKILL from the grace through the
+    grace plus that tolerance after cancellation, both ends inclusive: 1 s to 3 s. Two seconds alone
+    would accept what LIFECYCLE-09 exists to refuse, so the same check also refuses a SIGKILL from a
+    restarted timer, from the first instant such a timer could fire. An immediate row refuses it
+    from 1.8 s after cancellation: the last repeat goes no earlier than 80 percent of grace, so a
+    timer it restarted fires no earlier than that plus the grace. Name that repeat's offset once,
+    for lifecycleRepeatedSignals and this limit. A delayed row refuses it from the delay plus the
+    grace after the first signal's At in the journal: the hold begins only after that arrival, and
+    an acknowledgement-relative timer begins after the hold. A delayed row whose hold ran in full
+    refuses such a timer at any runner speed, and its limit cannot relax without passing one. An
+    immediate row does not: the acknowledgement returns at once, so a timer it restarted fires at
+    the first signal's arrival plus the grace and passes unless the arrival was 800 ms late; the
+    1.8 s limit holds the last repeat's restart only. The delayed limit reads At, not Replied,
+    because a cut hold has no Replied. A cut hold keeps both the limit and the window, since holds
+    are cut when the runner is slow, the condition this item targets, but its timer starts at the
+    cut, a call limit after the call began, which is before At plus the delay. The limit therefore
+    refuses an acknowledgement-relative timer after a cut only when the request reached the
+    recorder within 400 ms (the call limit less the delay) of the call starting, plus the work
+    between the cut and the SIGKILL, and a slow runner lengthens that arrival. The limit moves with
+    the arrival, so a delayed row, held or cut, refuses the last repeat's timer only when the first
+    signal arrived within 200 ms.
+
+    The real margins are thinner than the numbers read. A delayed row's SIGKILL leaves at the later
+    of the deadline and the reply, plus the work before a signal. Once the reply passes the deadline
+    its limit leaves that work a full second; with an earlier reply it leaves 600 ms plus the first
+    signal's time after cancellation, so a first signal at 50 ms refuses a SIGKILL at 1.65 s. An
+    immediate row leaves 800 ms, four times today's 200 ms, which since T-33 only the delayed rows
+    have been seen to exceed, and only while the reply beats the deadline: a first signal at 1.7 s
+    with SIGKILL at 1.85 s is refused with no restart. So a refusal alone does not prove a restart.
+    Keep each error's 'SIGKILL at' and name the limit it passed, with the measured times, so a
+    failure read from a log says which limit moved.
+
+    Considered and left. The single tolerance of about 500 ms first proposed for this item also
+    refuses both timers, but at 1.5 s it refuses an honest delayed SIGKILL once the work above
+    passes 900 ms, some 300 ms over a measurement taken before anchors, so the flake would return
+    under load. Two seconds alone keeps green by weakening the scenario. Widening does give
+    something up: a timer started late without being restarted by these events, at teardown or at
+    signal delivery, was refused past 200 ms and now passes below these limits, as does one
+    restarted only by the 20 percent repeat. No check found for this spec holds those, since
+    TestEngineFixtureBudgetContract, TestLifecycleLocalContract's lost-signal row and
+    TestLifecycleContract's grace case spend no time before their first signal. The late starts are
+    p2-grace-origin-fake-clock-row's. The restart by the 20 percent repeat is not: that repeat is
+    always SIGINT and no other test sends a repeat and times the kill, so a product whose repeated
+    SIGINT restarts grace fires at about 1.2 s and passes every row here. It was returned to the
+    coordinator with this spec, who put it in that item: its fake-clock row also sends a repeat at
+    20 percent of grace and asserts the kill still falls at the first signal plus the grace. That
+    item lands after T-42 and before charter step 4 (p1-interactive-tty) changes Ctrl-C handling,
+    and until it lands nothing holds that restart. Those three tests' exact assertions that an
+    acknowledgement does not restart grace stay, and nothing here touches product code or a budget.
+
+    A second false failure sits beside the window, and widening alone would leave it. The recorder
+    holds the acknowledgement after the daemon's reply and the fixture's call limit is 1 s, so the
+    delay is inside the call limit by 400 ms less everything before the hold: the product's request,
+    the recorder's own inspection and record read, and the daemon's kill. When that runs out the
+    product rightly stops waiting and escalates (retryableSignal), and the recorder journals Status
+    204, Cancelled and a zero Replied. lifecycleSignals then reads Replied.Sub(At) as about
+    -2562047h and fails with 'signal acknowledgement delay did not execute', though the delay ran as
+    long as the product waited. A throwaway request through the recorder's real socket produced that
+    journal, and a subtest below pins it. Whether a CI failure took this path is unknown. That check
+    proves the fault ran; it is no timing assertion. It now also accepts a first signal with
+    Cancelled and Status 204, the engine having accepted it before the product stopped waiting, but
+    only if the cut could be the call limit. The journal records no time for the cut, so
+    heldAcknowledgement infers it from the product's next request, which follows the cut at once
+    and must come a call limit or more after the later of cancellation and the request before the
+    signal, the daemon check that recoverySignal makes just before it signals, since the call limit
+    runs from the signal call's start; a product that gave up after 100 ms leaves the same cut
+    journal and is refused. Measured from cancellation alone, a first signal at 1.2 s and a SIGKILL
+    at 1.25 s passed though the hold lasted 50 ms, so detection depended on runner speed.
+
+    That next request is never a wait, and a wait there is refused whenever it comes. The grace
+    deadline is the teardown's start plus the grace (registered_run.go:121), the signal call starts
+    after that, and the call limit equals the grace (1 s each in the fixture, 10 s in production),
+    so the cut falls after the deadline. terminateSession's wait on the expired grace then returns
+    without a request (finite_wait.go:19), and the next request is inspectSession's GET /info. A
+    throwaway run of terminateSession over a fake connection and finiteConnection showed the order
+    kill, info, inspect, info, inspect, info, SIGKILL, with the only wait after the SIGKILL. A wait
+    after a cut therefore comes only from a grace restarted at the cut or a hold given up before
+    the deadline. Accepting one let a first signal at 600 ms with the daemon check at 100 ms, a wait
+    at 1.1 s and a SIGKILL at 2.15 s pass: a timer restarted at the cut, as if the foreground
+    deadline were dropped, 50 ms inside the delayed limit. A product that sleeps instead of waiting
+    still passes, so that gap narrows but stays. The detection of the cut remains an inference, a
+    gap. A recorder that journaled the cut's instant would let the
+    delayed limit start at the cut, so that it refused an acknowledgement-relative timer after a cut
+    at any arrival, and would let the check read the cut instead of inferring it. The recorder is
+    outside T-42's range, so the gap goes back to the coordinator as an idea. The check still
+    refuses a reply sooner than the delay, a zero Replied without Cancelled, and Cancelled without
+    that 204. The last is a stall, not a cut: a product that stops waiting before the daemon
+    replies journals Status 502, Cancelled and a zero Replied, as a throwaway run showed, and there
+    the hold never ran.
+
+    TestLifecycleSignalWindow goes in features/lifecycle_grace_test.go, with no engine and no
+    waiting, naming only what exists today, so it compiles now and fails at its assertions. It takes
+    its rows from the selection the engine step makes: selectScenarios("^@ID-LIFECYCLE-09$", ".",
+    featureEnvironment{engine: "1", ci: "true", actions: "true", os: "linux", arch: "amd64"}) over
+    the real feature files, the environment entering as data as in
+    TestEngineSchedulePreservesFilteredAndRedSelections, then godog's RetrieveFeatures under
+    selection.filter, which is what runScenarios hands godog. It fails at once unless the selection
+    has engine set, no skip, count 4 and that one ID, and unless the pickles' own steps read SIGINT
+    0, SIGTERM 0, SIGINT 60 and SIGTERM 60 percent, in that order. Each row is a subtest named
+    <signal>_<percent> holding every case of its class below, immediate at 0 percent and delayed at
+    60, so the 32 cases make 64 subtests (21 and 42 when first committed; the eleven added cases are
+    the abandoned and cut holds below). Nothing reads the process environment, builds the product or reaches
+    an engine.
+
+    Each case calls the real w.lifecycleSignals(true) on a journal it writes. Its world holds a
+    doctorWorld with engineID and imageID, an approvalWorld with project, a sessionWorld with token,
+    a recoveryNative with worker, an offlineRuntime whose api is an offlineAPI with w and that
+    worker created, and a lifecycleNative with first the row's signal, signalled, delay the row's
+    percent of grace as lifecycleFixture computes it, aliveBeforeGrace true, journalAtReturn and an
+    empty signalTrace file. Each kill follows its own GET /info and GET /containers/<worker>/json,
+    all three reaching the recorder at one instant unless a case says otherwise, carries the
+    observation and 0600 record that lifecycleRevalidated checks, and is otherwise Status 204 with
+    Replied its At plus the row's delay.
+
+    Times below are after cancellation and F is the first signal's arrival. Accepted, marking the
+    cases that fail today: 'immediate at the grace' F 50 ms, SIGKILL 1 s; 'immediate past the old
+    window' F 50 ms, 1.201 s (fails); 'immediate just before a repeat restart' F 50 ms, 1.799 s
+    (fails); 'delayed slow teardown' F 500 ms, 1.3 s (fails); 'delayed just before an
+    acknowledgement restart' F 300 ms, 1.899 s (fails); 'delayed at the absolute tolerance' F 1.5 s,
+    3 s (fails); 'delayed acknowledgement cut by the call limit' F 50 ms, Cancelled, zero Replied,
+    1.1 s (fails, at the delay check). Refused naming 'SIGKILL at': 'immediate before the grace' F
+    50 ms, 999 ms; 'delayed before the grace' F 50 ms, 999 ms; 'immediate at a repeat restart' F 50
+    ms, 1.8 s; 'delayed at an acknowledgement restart' F 300 ms, 1.9 s; 'delayed as an
+    acknowledgement timer on a hosted runner' F 500 ms, 2.2 s; 'delayed past the absolute tolerance'
+    F 1.5 s, 3.001 s; and, each delayed at F 50 ms with Cancelled, Status 204 and zero Replied,
+    'delayed cut at an acknowledgement restart', 1.65 s, and 'delayed cut before the grace', 999 ms.
+    Each immediate at F 50 ms, refused naming 'signal request count': 'no SIGKILL' with no second
+    kill and 'second SIGKILL' at 1 s and 1.1 s; refused naming 'literal first signal': 'first signal
+    repeated instead of SIGKILL', the row's signal at 1 s. Each delayed at F 50 ms with SIGKILL at
+    1.1 s, refused naming 'delay did not execute': 'acknowledgement replied early', Replied 100 ms
+    after F; 'cancelled before the engine accepted', Cancelled, Status 502, zero Replied; 'no reply
+    and not cancelled', zero Replied. The cut holds' next request decides whether the cut could be
+    the call limit: the accepted cut case has none of the product's own waits, so its next request
+    is the SIGKILL's inspection, a call limit or more after the request before it, as an honest
+    cut's is. Two delayed cases, each Cancelled, Status 204 and zero Replied at F 50 ms, are refused
+    naming 'delay did not execute': 'delayed hold abandoned before the call limit', SIGKILL at 1 s
+    with no wait, which comes 950 ms after the request, and 'delayed hold abandoned, then a timer
+    from the abandonment', a wait of the product's at 150 ms and SIGKILL at 1.15 s.
+
+    The call limit runs from the signal call's start, not from cancellation, so a first signal that
+    arrives late spends most of it before the hold begins. Each signal's requests follow
+    recoverySignal's order, inspection, daemon check, kill, and the bound is measured from the
+    request before the kill. Four more delayed cases with Cancelled, Status 204 and zero Replied are
+    refused naming 'delay did not execute': 'delayed hold abandoned after a late first signal', F
+    1.2 s, SIGKILL 1.25 s; 'delayed hold abandoned after a late first signal, then a timer from the
+    abandonment', F 1.2 s, a wait at 1.25 s and SIGKILL at 2.25 s; 'delayed hold abandoned within the
+    call limit of a first signal at 600 ms', F 600 ms, SIGKILL 1.1 s, which is what a 500 ms call
+    limit produces; and 'delayed hold abandoned just before the call limit', F 600 ms, SIGKILL
+    1.599 s. Only the second sends a wait; the bound alone refuses the other three. An honest cut after
+    a late first signal stays accepted so a repair cannot tighten past the product's limit:
+    'delayed acknowledgement cut by the call limit after a late first signal', F 600 ms, SIGKILL
+    1.65 s. 'Delayed hold cut at the call limit after a late first signal', F 600 ms, wait 1.6 s,
+    SIGKILL 1.7 s, was listed as a second honest cut and is refused naming 'delay did not execute',
+    since an honest cut sends no wait.
+
+    The accepted cases put the daemon check and the kill at one instant, so they cannot tell a bound
+    measured from the daemon check from one measured from the kill's arrival, and the second is
+    tighter than the call limit allows: the call starts after the daemon check, the recorder sees
+    the kill some time later, and the product's next request follows the cut at once. A throwaway
+    mutant that started the bound at the kill's arrival passed all 58 subtests while refusing
+    honest cuts, such as the daemon check at 600 ms, the kill at 650 ms, the cut and the next
+    request at 1.62 s, 970 ms after the kill and 1.02 s after the check. A case can therefore put
+    the first signal's daemon check a lead before its kill and its inspection a lead before the
+    check. Three more delayed cases with Cancelled, Status 204 and zero Replied, each with F 650
+    ms and the daemon check at 600 ms: 'delayed acknowledgement cut a call limit after the daemon
+    check', SIGKILL 1.62 s, stays accepted; 'delayed hold cut a call limit after the daemon check',
+    wait 1.62 s, SIGKILL 1.7 s, is refused naming 'delay did not execute' as a wait, whatever its
+    time; 'delayed hold abandoned within a call limit of the daemon check', the inspection at 560
+    ms, SIGKILL 1.59 s, is refused naming 'delay did not execute', which pins the check, not the
+    inspection, as the start. Against the committed file the mutant from the kill's arrival passes
+    and the mutant from the inspection passes; against the new file the first fails the accepted
+    case and the second the refused one, in both delayed rows.
+
+    A subtest 'recorder journals a cut acknowledgement' ties the cut cases to the recorder, and
+    passes today. On recoveryRecorderWorld with newLifecycleFaults("ignore", "", time.Hour), a.serve
+    takes a first kill on a cancellable request. Once the daemon has the kill and the journal
+    entry's Status is set, cancel it. After serve returns, the entry must hold Status 204, Cancelled
+    and a zero Replied. Its world is Linux's and skips elsewhere.
+
+    Correct the words with the rule. Lines 361-365 and 711-718 of features/README.md say the
+    tolerance is 20 percent of grace, and 1 s to 1.2 s; they must state the two-second tolerance,
+    the 1.8 s limit (with '1.8 s' on one line) and the delayed row's limit, and why a delayed row's
+    SIGKILL follows its acknowledgement. The comment at features/lifecycle.feature:216 says 20
+    percent. No scenario text, tag or step changes. T-42 supersedes T-33's 'escalation tolerance is
+    20 percent' alone; T-33's entry stays as the record, as T-36's did under T-41. Fixture budgets
+    stay 1/3/1 s, the 20 and 80 percent repeats and the 60 percent delay stay, and so do
+    lifecycleBound and the recorder.
+
+    Commit TestLifecycleSignalWindow alone first, red, with test --item T-42, and report each
+    failing subtest's assertion. Then commit the rule, the named offset and the corrected words with
+    test --task T-42. features/lifecycle_grace_test.go,
+    features/lifecycle_native_assertions_test.go, features/lifecycle_native_actions_test.go,
+    features/engine_budgets_test.go, features/README.md and the comment in
+    features/lifecycle.feature are the whole change. Before stopping, without -race, run the
+    neighbours that read these helpers and words: go test ./features -count=1 -run
+    '^(TestLifecycle|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)'. The range touches
+    no proof.code path, so its CI judges no mutant. Native proof is CI's and one green engine run
+    cannot show an intermittent failure gone, so closure rests on the checks below and the pushed
+    head's engine tier passing. If a LIFECYCLE-09 row still fails, that is new evidence: read its
+    assertion from the job log, and never raise a limit on inference again. An engine step that only
+    times out says nothing about T-42, which adds no waiting: that is
+    p1-engine-suite-under-its-limit-again's, it holds closure until a rerun passes or that item
+    lands, and no limit here moves for it.
+
+    The first check follows the 13:18 decision, and how CI selects was tested for it. The engine
+    step runs TestFeatures with no pattern, so every live @engine row, and TestFeatures'
+    selectScenarios intersects -scenarios, a regular expression over tags, with the tier the
+    environment enables. -scenarios='^@ID-LIFECYCLE-09$' in a hook, itos task or the ci job
+    therefore excludes all four rows as '@engine disabled' and skips, exit 0, before and after the
+    fix: alone it is the empty pass the decision refuses. With ITOS_CONTAINER_ENGINE_TESTS=1 and
+    CI's variables but no prepared fixture, as in the ci job, every row stops at 'absent or
+    malformed CI cached-image fixture inputs', before any engine call, before and after the fix.
+    Only the engine job prepares that fixture, and it runs no task check; off GitHub Actions the
+    switch and tools/bin/engine-fixture refuse, and agents run no engine. Nor can a native row fail
+    on demand: it fails on a slow runner, and T-33 to T-37 passed it before any fix. So the check
+    selects with CI's own flag and function and takes its red from the journals. It passes that
+    -scenarios to TestFeatures and requires the four rows excluded and the skip, and
+    TestLifecycleSignalWindow makes the same selection at the engine tier's values. The native rows
+    keep running where they do already, in the engine job on every non-draft pull request and main
+    push, and the ci job fails unless that job succeeded.
+
+    The promoted check's pattern reached only the two TestLifecycleGrace tests, which pass, so it
+    reported done. These checks name no lock and run as written in CI, through sh -c under dash,
+    capturing go test's status rather than using set -o pipefail. itos ci plan marks the first
+    (run), where a check written as itos.yaml's select reads (merged), into the ordinary run where
+    its rows skip. At ae75d46 both fail. The first: go test exits 0, TestFeatures skips with the
+    rows excluded, and awk exits 1 finding no TestLifecycleSignalWindow; once committed red, twelve
+    of the 42 subtests fail, ten at 'SIGKILL at ... (at most 200ms scheduling tolerance)' and the
+    two cut cases at 'signal acknowledgement delay did not execute', while the other thirty and the
+    recorder subtest pass. The second: features/README.md says 20 percent at lines 364 and 716 and
+    1.2 s at 716, features/lifecycle.feature says 20 percent at line 216, and the README has no 1.8
+    s. With a throwaway rule and words, since reverted, both pass and the neighbours above stay
+    green, and each of 26 variants of the rule fails the first at named subtests: today's share, a
+    plain 2 s, a plain 500 ms, tolerances of 1 s and 3 s, no lower bound, no upper bound, either end
+    of the window exclusive, inclusive restart limits, the acknowledgement limit on every row, the
+    repeat limit on every row, the repeat limit from its 20 percent send, the acknowledgement limit
+    from Replied with and without a zero guard, from cancellation or without the delay, the delayed
+    limit or the whole window skipped on a cut hold, no cut path, any cancellation accepted, a cut
+    without Cancelled or without the 204, no hold check, no exact count and no literal signal check.
+    The rows losing @engine, a row dropped, the delayed rows moved and the ID renamed each fail it
+    too. dash is not installed where this was written, so the checks ran under sh as bash in POSIX
+    mode and gawk; they use only POSIX constructs.
+- id: T-43
+  type: ci
+  title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
+  why: >
+    Job logs return 403 without a token and agents have no gh, so a red engine job shows only
+    'Process completed with exit code 1' and a goroutine dump from `tail -100`. In
+    .github/workflows/ci.yml, make the step print each `--- FAIL` block with its godog step error.
+    Also emit one `::error title=<scenario>` annotation per failed scenario or go-test failure line,
+    so the coordinator can tell an unchanged flake from a new failure on a re-run. This is
+    project-side and does not wait for the itos summary-extractor fix tracked upstream. Cover it in
+    the existing TestEngineDiagnostics, which runs the workflow shell against disposable fixtures.
+    Record in the item that anchors.feature:410 (ANCHORS-09, exit 75, cleanup 409) failed on
+    e2faafd, so the next unchanged re-run can show whether ANCHORS-09 or ANCHORS-10 repeat. A repeat
+    on its own would justify a separate item for a possible real race in anchor cleanup. Broken down
+    from p1-engine-suite-under-its-limit-again.
   done_when:
-    - run: flock /home/yorch/src/os/github/donvargax/itos-container/.git/itos/loop/features.lock go test ./features -count=1 -run 'TestLifecycle(Grace|Signal)'
+    - run: go test ./features -count=1 -run '^TestEngineDiagnostics$'
+- id: T-44
+  type: test
+  title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
+  why: >
+    The same step must show where the engine tier's 4-minute budget goes, so the slowdown after T-41
+    (2 min 49 s, then 3 min 44 s, then 4 min 5 s on main) can be located from a red run's output.
+    Print the last `engine scenario timing:` records, or the slowest examples sorted, instead of
+    only `tail -100`. Add LIFECYCLE-09's per-row signal and SIGKILL offsets to the same `engine
+    scenario timing:` output. They show how close real calls come to T-33's 1 s call budget, and
+    they inform review of T-42's limits. In features/README.md, say that a goroutine blocked a
+    minute or more is labelled with its minutes in a timeout dump. Keep the limit at 4 minutes and
+    the engine harness's syscall tracer as it is. Leave the diagnostics step's failure-block
+    printing to p1-engine-diagnostics-failures. Both items edit the one step in ci.yml, so whichever
+    lands second rebases on the other. Broken down from p1-engine-suite-under-its-limit-again.
+  done_when:
+    - run: go test ./features -count=1 -run '^(TestEngineDiagnostics|TestEngineScenarioTiming)$'
+- id: T-45
+  type: test
+  title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
+  why: >
+    T-41 lengthened nothing the engine step runs, so this title's premise is wrong and the
+    coordinator retitles the item. The step has run at its limit on slow runners since T-33 landed.
+    Public job metadata, read without a token on 2026-11-09, gives the Engine scenarios step's time
+    for 33 main pushes sampled from T-33's merge (4641ad4, 10:00 UTC) to T-42's (19a188f, 17:12
+    UTC): 162 to 196 s on 11 runs and 199 to 245 s on 22. Before T-41 merged (d1099fc, 12:37 UTC)
+    they split 5 and 8, at 162 to 173 s and 199 to 242 s; after it, 6 and 14, at 164 to 196 s and
+    212 to 245 s. T-33's own merge took 238 s, inside its 240 s budget by about two seconds. The
+    2 min 49 s before T-41 (run 42615366138 at 966e456) was a fast runner, and T-41's 3 min 44 s
+    (42617313777) and main's 4 min 5 s (42618748581, where TestFeatures ran 239.55 s against
+    -test.timeout=4m) were slow ones. Run 42635414385 at b62c89d took 245 s and its job's public
+    annotation reads exit code 2, the test binary's timeout; the other slow failures read exit
+    code 1, which the 240 s budget and a failed scenario both give. Broken down from
+    p1-engine-suite-under-its-limit-again.
+
+    The code says the same. finishLocalWorkloads, the only reader of T-41's overlapDrainBound, runs
+    from closeOverlap only for a covered fixture that is not native
+    (features/overlap_fixture_test.go:393). The engine step runs TestFeatures alone, whose
+    selectScenarios keeps only @engine rows, and both @engine overlap scenarios, OVERLAP-06 and -07,
+    set up native fixtures (features/overlap_steps_test.go:64 and 66). T-41's other change,
+    features/overlap_cleanup_test.go, holds unit tests the step's -test.run '^TestFeatures$' never
+    runs. From 966e456 to d1099fc those two files are the only code that changed.
+
+    The step runs 75 examples one at a time (runScenarios sets Concurrency 1 in the engine tier),
+    28 more than the 47 T-33 measured at cdd3897; the README's suite near 100 seconds was an
+    estimate, never measured. The same 75 ran in every run above. Nothing measured points at one
+    step. The seam already holds call, startup and grace at 1/3/1 s and the quiet observation at
+    4 s, and the engine steps' other waits end on their events, costing time only on a fault. T-42
+    showed that a slow runner can cut LIFECYCLE-09's acknowledgement hold at the 1 s call budget,
+    so shorter budgets would leave slow runners less room still. Compilation is a fraction of the
+    step: on four CPUs of the drafting host a cold-cache compile of the features test binary took
+    21 s and the covered product build after it 16 s, 4.7 s and 0.8 s warm. The rest is engine
+    work under -cover, and under the ptrace syscall observer for recovery processes, which a slow
+    runner slows throughout. Every engine log streams its 'engine scenario timing:' records, but
+    logs need a token, and nothing here depends on them.
+
+    The coordinator decided, 2026-11-09 15:18 UTC: the promoted check already passed on main before
+    any work, as every test it named existed, so as written the task would close with nothing done.
+    The spec must replace it with a check that fails on today's main and passes only once the work
+    is in: one that measures the engine suite's time against a budget well under the 4-minute
+    limit, or that fails while T-41's lengthened wait is still there. The second cannot be written,
+    since that wait is not in the engine step, and the drain bound stays a stuck-controller bound
+    per T-41, so this entry takes the first.
+
+    The rule is T-33's own. features/README.md says that if the measured unsharded suite still
+    exceeds 240 s, T-33 calls for whole-feature shards on separate native runners with an exact
+    parsed-example partition check, and main's has, at 242, 244 and 245 s and in that timeout. So
+    the engine tier runs in three shards on separate native ubuntu-latest runners and daemons, each
+    of whole feature files: offline (offline.feature, 24 examples), lifecycle (lifecycle.feature,
+    19, its four LIFECYCLE-09 rows still nested in LIFECYCLE-13's quiet row) and other (anchors,
+    checkout-overlap, doctor, hardlinks, recovery, session and sockets, 32, of which 12 are
+    SOCKETS-01 refusals before any worker exists). Each shard's measured step fails above 180 s
+    instead of 240 s: that is the budget well under the 4-minute limit, measured by the step's
+    existing wrapper on every run. Job, step and Go test limits stay 10, 5 and 4 minutes, and
+    fixture preparation keeps its own. An estimate from the shares of examples and a cold compile,
+    no measurement, puts the slowest shard between two and two and a half minutes on today's
+    slowest runner. Move whole features between the three shards only with measured shard times
+    that show the need, and never split a feature.
+
+    In .github/workflows/ci.yml the engine job becomes two. engine-shard, named 'Engine shard
+    (${{ matrix.shard }})', keeps the event guard, ubuntu-latest with no container or services, the
+    10-minute timeout and the seven steps, and adds strategy fail-fast false and a matrix whose
+    include lists the three shards, each a shard name and its features as whitespace-separated
+    basenames. Its Engine scenarios step gains ITOS_CONTAINER_ENGINE_FEATURES:
+    ${{ matrix.features }} in its step env and the 180 s budget, and changes nothing else. engine
+    keeps its id and the stable name Engine scenarios (Linux amd64) that ci, release and the
+    repository's settings use. It needs engine-shard alone and runs if always() and the event guard
+    hold, with a 1-minute timeout and one step, 'Require every engine shard', running
+    test "$SHARD_RESULT" = success with SHARD_RESULT: ${{ needs.engine-shard.result }}. GitHub's
+    contexts reference does not spell out a matrix job's result in needs; the gate takes success to
+    mean every shard succeeded, and the loop confirms that on the first red shard. ci's gate and
+    release's needs stay as they are. Each shard keeps what T-33 required of one: checkout at TO,
+    the pinned setup, the read-only preflight, its own guarded fixture preparation and final
+    cleanup, step-local environment, setsid --wait, -test.paniconexit0, the timing records, the
+    coverage check of its own IDs, the log and signal diagnostics with T-43's and T-44's steps, and
+    the test's and capture's exit statuses. No daemon, state or fixture output crosses runners,
+    exactly one engine switch remains, in that step, and manual red input reaches every shard's
+    step.
+
+    The selector is an environment input rather than T-33's -engine-feature flag, so that it stays
+    data in featureEnvironment, read through readFeatureEnvironment's lookup as
+    ITOS_CONTAINER_RED_SCENARIOS is, and tests can hold it without a process environment.
+    ITOS_CONTAINER_ENGINE_FEATURES holds whitespace-separated feature file basenames; unset or
+    blank is today's complete tier. Before any build or fixture, selectScenarios refuses, with an
+    error naming it, a nonempty value outside the engine tier, a name that is not a basename ending
+    in .feature, a name given twice, and a name that no feature file with an effective @engine
+    case, live or @wip, bears. In the engine tier it keeps only the named files' rows, intersected
+    with the tier, platform, -scenarios and red selection as today. Red IDs and a -scenarios
+    expression are still validated against the full inventory: an unknown one fails, and one
+    matching only other shards' rows leaves this shard the existing explicit skip, which names the
+    red IDs it left to them. selectScenarios reads the shard's files alone for both its selection
+    and its check of godog's filtered pickles, and the run reads the same files: that check keys
+    rows by URI and godog's pickle ID, so a check over other paths than the selection's never
+    matches. Exact completion counts, the nested schedule, the timing records and the coverage
+    check follow the shard's selection. The ITOS_CONTAINER_ENGINE_ prefix already keeps the
+    variable from product children and harness subprocesses (world.env and
+    sessionChildEnvironment).
+
+    Considered and left. Lowering the unsharded budget: today's suite took at most 180 s on 9 of
+    those 33 runs, so a check of it would pass about one run in four with nothing done, and no
+    known wait would bring the slow runs under it. Shorter seam budgets, for the reason above. One
+    shard per feature, as T-33 wrote: nine engine runners a run beside its other jobs, while the
+    loop keeps several runs going at once; three shards keep each under half the examples at a
+    third of the runners. Raising a limit is the person's call, not a fix, and T-33 excludes a
+    larger runner, a retry or a reduced assertion. The control transaction's repeated Unchanged()
+    walks stay as they are: cutting them needs the person's security review, and nothing measured
+    points at them. No product code, seam value, scenario, assertion, cleanup or overlap drain
+    bound changes.
+
+    The tests are engine-free. TestEngineShards, in a new features/engine_shards_test.go, names
+    only what exists today, so it compiles now and fails at its assertions. Its 'workflow shards'
+    subtest parses the actual workflow and holds both jobs as above: the shard job's guard, runner,
+    timeout, fail-fast false, three named shards, step-local feature input and 180 s step, and the
+    aggregate's id, name, need, guard, timeout and exact gate. 'partition' takes each shard's
+    selection through readFeatureEnvironment and selectScenarios over the real feature files, the
+    engine tier's values entering as data as in TestLifecycleSignalWindow. It requires each shard's
+    count and IDs to equal those of the unsharded selection's rows in its files, the counts to sum
+    to the unsharded count, the IDs' union to equal the unsharded IDs with none in two shards,
+    every feature with an effective @engine case, live or @wip, in exactly one shard, and
+    LIFECYCLE-09 and -13 both in lifecycle's. 'selector' runs fixture features with memory-only
+    steps through runFeatureScenarios, as the schedule regressions do: only the named files' rows
+    run, each refusal above errors before any run, a red ID of another file leaves the explicit
+    skip naming it, an unknown red ID still fails, and a -scenarios expression intersects. 'broken
+    workflows' first finds the unmodified workflow clean, then refuses each of a feature dropped
+    from every shard, a feature in two shards, an unknown feature, a path, an empty shard, a fourth
+    shard, the aggregate without always() or the event guard, needing more or less, a gate
+    accepting another result, continue-on-error on either job, fail-fast true, the feature input
+    moved to job env, and a second engine switch. TestEngineSuiteBudget keeps every case, reads the
+    shard job's step and moves each clock value tied to the budget down 60 s (279.99, 280.00 and
+    280.01 against its 100.00 start). TestEngineWorkflow, TestEngineFixtureWorkflow,
+    TestEngineRedWorkflow and TestEngineDiagnostics keep every assertion and negative control,
+    applied to the shard job; the exact job set gains engine-shard, and its exactly-one-engine-job
+    rule becomes the shard job and its aggregate.
+
+    Words. features/README.md describes the shards, the aggregate, the feature input and the
+    180-second budget, with '180-second' and ITOS_CONTAINER_ENGINE_FEATURES each on one line, the
+    measurements above and the coordinator's measurement command per shard. It drops 'The sole
+    engine job', 'rejects a total above 240 seconds', 'The single engine job remains' and 'If the
+    measured result still exceeds 240 seconds'. docs/architecture/arc42.md's paragraph on the
+    dedicated job under Future behaviour evidence says what the shards and the aggregate do, with
+    'engine shard' on one line. A decision record,
+    docs/decisions/<next free number>-engine-tier-shards.md, names that section as the one it
+    overrides, as the charter asks, with these measurements and the alternatives left.
+
+    T-43 and T-44 change the step this item moves into every shard; each of the three rebases on
+    whichever landed before it, and their steps then run in each shard. Commit TestEngineShards and
+    TestEngineSuiteBudget's 180 s boundary alone first, red, with test --item T-45, and report each
+    failing assertion. Then commit the selector in features/features_test.go and the schedule, the
+    workflow and the adapted workflow tests with test --task T-45, and the words with docs --item
+    T-45. Before stopping, without -race, run go test ./features -count=1 -run
+    '^(TestEngine|TestFeatureSignalDiagnostics|TestLifecycleSignalWindow|TestPlatformSelection)'
+    and the whole feature suite once. The range touches no proof.code path, so its CI judges no
+    mutant. Closure rests on the checks below and the pushed head's engine tier: all three shards
+    green, each measured step within 180 s. The loop records each shard's step time from the public
+    job metadata and, from each job's log, its runner image and the preflight's Docker version, so
+    a later image change is not taken for a regression (triage, 2026-11-09). The unsharded runs
+    above stay the before measurement. Agents run no engine and no Docker.
+
+    The checks capture go test's status rather than use set -o pipefail and use only POSIX
+    constructs, as T-41's and T-42's do. dash is not installed where this was written, so they ran
+    under sh as bash in POSIX mode, their awk under gawk --posix. At 255bc2b all three fail. The
+    first: go test exits 0, the six kept tests pass and awk exits 1, finding no TestEngineShards.
+    The second: TestEngineSuiteBudget passes, but ci.yml says elapsed > 240000 at line 111 and has
+    no 180000. The third: features/README.md says 'The sole engine job' at line 242, 'above 240
+    seconds' at 296, 'The single engine job remains' at 395 and 'still exceeds 240 seconds' at 403,
+    and has neither '180-second' nor ITOS_CONTAINER_ENGINE_FEATURES; arc42.md has no 'engine
+    shard' and no decision record exists. A throwaway selector in a scratch copy, since discarded,
+    split the real inventory into 24, 19 and 32 examples with 12, 7 and 16 IDs, together the
+    unsharded 75 and 35, refused each bad name and the non-engine tier, ran only its file's rows
+    and left the selection, schedule, timing and LIFECYCLE-09 window regressions green. It also
+    showed that the selection and its check must read the same files, and that its red skip lost
+    the names of the red IDs left to other shards, hence those rules.
+- id: T-46
+  type: ci
+  title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
+  why: >
+    Codex's PR reviews stopped on 2026-11-09 (the person's usage reached 100%). push.pr.review_by
+    and push.pr.reviewers still name chatgpt-codex-connector, so itos push --ready would wait for a
+    review that never comes, re-ask after review_stall and stop, and no pull request could land.
+    Empty both; the loop's own Claude review (run by the driver before landing, once per head) stays
+    the review, and an open thread still blocks landing. Recorded in .git/itos/weakened-gates.md.
+    Undo: restore both lists when an outside reviewer is available again.
+  done_when:
+    - run: "! grep -q chatgpt-codex-connector itos.yaml"
+- id: T-47
+  type: docs
+  title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
+  why: >
+    Charter milestone two step 2 fixes the shape (Claude token from a host file, Codex auth.json
+    bind-mounted read-write as one file plus its lock file, a GitHub token for gh, all passed per
+    command, never in container configuration, docker inspect or the checkout). The mechanism,
+    though, is open: with no exec command and a workload that may be the container's main process,
+    how does a secret reach the worker without entering the create config? Candidates are a
+    pre-start archive copy, stdin handoff and an exec-time environment. The record is documentation
+    only, like T-38 and 0022. It settles the policy keys that name a credential source, the
+    host-file checks (regular file, owner, mode, outside the checkout and every mount), the
+    in-worker names and paths, redaction in status and logs, what the approval record binds and
+    shows (names and kinds, never contents), the refusal of --fingerprint for any credential grant
+    per q-52, and the synthetic-marker test approach. It states plainly what stays open for the
+    person (refresh ownership and revocation, deletion, the GitHub token's scope, and the contract's
+    rule that account-management contracts are settled before real credentials are used) and asks
+    through itos decision rather than inventing protections. It updates the arc42 sections it
+    overrides under the charter's drift rule. Later items take their design from it. Broken down
+    from p1-credentials-passed-in.
+  done_when:
+    - run: test -f docs/decisions/0025-credentials-passed-in.md && grep -qi 'docker inspect' docs/decisions/0025-credentials-passed-in.md && grep -qi 'auth.json' docs/decisions/0025-credentials-passed-in.md && grep -qi 'fingerprint' docs/decisions/0025-credentials-passed-in.md
+- id: T-48
+  type: feat
+  title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
+  why: >
+    The shared seam every credential slice needs, built before them, as T-40 is for the proxy. A
+    port method, a stateful fake in porttest and a docker adapter hand secret bytes or a
+    bind-mounted host file to one worker for one command, by the mechanism the decision record
+    chose. The port's shared contract runs against the fake and the adapter. It asserts that the
+    created container's configuration, mounts list, labels and recovery records hold no secret
+    value, that the secret is gone with the session, and that a failed delivery stops the workload
+    before it starts. Real-engine proof runs in CI only, on a synthetic marker, and the agent never
+    receives the Docker socket. The fake does no I/O. Broken down from p1-credentials-passed-in.
+  done_when:
+    - run: go test ./internal/engine/session/...
