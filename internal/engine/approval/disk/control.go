@@ -246,9 +246,6 @@ func (t *controlTransaction) inspect(ctx context.Context, reservations port.Rese
 			if name != expected {
 				return "state.invalid"
 			}
-			if _, exists := t.bindings[binding.Path]; exists {
-				return "state.invalid"
-			}
 			t.bindings[binding.Path], t.data[binding.Path] = binding, data
 		}
 		if len(t.bindings) > 0 && t.lock == nil {

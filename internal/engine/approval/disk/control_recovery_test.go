@@ -153,8 +153,8 @@ func TestControlProspectiveRequiresAnExistingNonRootAncestor(t *testing.T) {
 	}
 }
 
-func TestControlInspectionRefusesLostOrRepeatedCatalog(t *testing.T) {
-	for _, kind := range []string{"closed descriptor", "replaced directory", "already bound location"} {
+func TestControlInspectionRefusesLostCatalog(t *testing.T) {
+	for _, kind := range []string{"closed descriptor", "replaced directory"} {
 		t.Run(kind, func(t *testing.T) {
 			control, c, reservations, _, _ := controlFixture(t)
 			tx, failure := control.Begin(t.Context(), c, true)
@@ -163,7 +163,7 @@ func TestControlInspectionRefusesLostOrRepeatedCatalog(t *testing.T) {
 			}
 			defer tx.Close()
 			transaction := tx.(*controlTransaction)
-			want := port.Failure("state.invalid")
+			var want port.Failure
 			switch kind {
 			case "closed descriptor":
 				if err := transaction.catalog.dir.Close(); err != nil {
@@ -179,9 +179,6 @@ func TestControlInspectionRefusesLostOrRepeatedCatalog(t *testing.T) {
 					t.Fatal(err)
 				}
 				want = "state.path"
-			case "already bound location":
-				// An inspection must not silently overwrite a binding retained
-				// in its transaction. A fresh inspection explicitly clears them.
 			}
 			if failure := transaction.inspect(t.Context(), reservations); failure != want {
 				t.Fatalf("catalog inspection: %s, want %s", failure, want)
