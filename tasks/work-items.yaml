@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - p2-lifecycle-09-escalation-window-jitter
   - T-41
   - p1-credentials-passed-in
   - p1-harness-home
@@ -835,6 +836,16 @@ items:
       literals through one constructor if that is the smallest repair. Keep every scenario,
       assertion and the pinned itos-cc contract unchanged. Phase p2: nothing blocks the current
       step, since slice-21's own fix has landed on its branch.
+
+      This is the same defect class that item already names: every secondary fixture builds its
+      world as a hand-written &world{root, bin, coverdir, ...} literal, so a fixture can drop or
+      swap what the harness set up (here w.bin, which hid the slice-21 10/120/10 s regression until
+      a 4-minute CI timeout). That item already plans a harness regression that names the offending
+      fixture, and then one constructor for the world literals. Put this guard in that constructor
+      or regression: before the first engine-tier scenario, assert that w.bin lies beside the T-33
+      budget fixture tree and carries the engine suffix, so a fixture that swaps w.bin or calls
+      sessionProbeBinary for a native row fails in seconds. TestEngineSuiteBudget only pins the
+      doctorCheckout path.
   - id: p1-egress-allowlist-proxy
     title: Egress through an allowlisting Go CONNECT proxy beside the worker
     phase: 1
@@ -1113,6 +1124,21 @@ items:
       'escalation tolerance is 20 percent' and the matching lines in features/README.md with it.
       This keeps the engine tier from failing unrelated ranges, which matters for milestone two's
       egress proof, which relies on it.
+
+      Coordinator, 2026-11-09 12:12 UTC: now red on main too (runs 42605880158 and 42605822567, row
+      #02), besides T-41's run 42609794543 and T-33's 7e30371: it fails on any range, so it goes
+      first. Widen the SIGKILL acceptance to an absolute tolerance that holds under -cover on a
+      hosted runner (as the teardown assertion's 2 s does), keeping the assertion that SIGKILL comes
+      after the grace and exactly once; don't lengthen the grace back to 10 s.
+
+      This item is already first in the queue, and its coordinator note of 2026-11-09 12:12 UTC says
+      it fails on any range and goes first. It already records the T-41 failures on different rows
+      (#03, then #02) and the main-branch failures on runs 42605880158 and 42605822567. It already
+      covers the engine step running near its 240 s gate (235 s) and the link to milestone two's
+      egress proof. New evidence to add as a note: run 42613812662 is a further engine-tier failure,
+      and its failing assertion text is still not visible (it depends on the upstream extractor
+      fix). The item's own fix does not wait on that text. The coordinator's instruction is to widen
+      the SIGKILL acceptance to an absolute tolerance. A new item or a promotion would add nothing.
   - id: p2-scheduled-fuzz-egress-parser
     title: A scheduled CI job fuzzes the egress proxy's CONNECT parser and ClientHello peek with fresh seeds, and each find becomes a committed seed
     phase: 1
@@ -1150,3 +1176,25 @@ items:
       The YAML syntax limits stay outside the schema, as the policy spec says. It does not block
       milestone two step 1 and should follow slice-25, which publishes the version 2 schema, so p2.
       Slice-25 stays unchanged.
+  - id: p2-doctor-absent-state-root-is-missing
+    title: Doctor reports a missing approval, not state.unavailable, when XDG_STATE_HOME sits under an absent top-level directory
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Follow-up to slice-21, which is still in doing, so it must land after slice-21 and does not
+      block slice-22 or slice-23. On slice-21's branch Store.prospective in
+      internal/engine/approval/disk/control.go returns state.unavailable when its parent walk
+      reaches "/" with no existing ancestor. So `XDG_STATE_HOME=/data/state` with /data not yet
+      mounted makes doctor exit 3, where main reported `missing` with exit 0.
+      TestControlProspectiveRequiresAnExistingNonRootAncestor pins the refusal. This is a behaviour
+      change to a first-milestone control-state command that slice-21 deferred from review thread
+      PRRT_kwDOVkB0ws61O3O1. Specify it first as a scenario row, committed red. Then let a read-only
+      Begin treat an absent selection with no existing ancestor as absent (no pins, no binding), and
+      change the unit test. Keep refusing for a writer before anything is published: a binding with
+      empty Ancestors would make every later inspect return state.invalid. It stays apart from
+      p2-control-state-upgrade-contract, which covers a location that was once approved and then
+      lost; this is a first run under a root that does not exist yet. Phase p2: no current step
+      depends on it.
