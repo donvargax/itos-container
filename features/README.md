@@ -736,7 +736,9 @@ the cut could be the call limit: the journal records no time for the cut, but th
 product's next request follows it at once (its own wait) and must come a call limit or
 more after the request before the signal (the daemon check), or after cancellation if
 that is later, since the call limit runs from the signal call's start and a first
-signal that arrives late has spent most of it before the hold begins. The cut keeps
+signal that arrives late has spent most of it before the hold begins. The bound runs
+from that check, not from the kill's own arrival, which follows the start of the call
+and would refuse an honest cut. The cut keeps
 both limits, though its timer starts before
 the arrival plus the delay, so the delayed limit refuses it only when the request
 reached the recorder within 400 ms plus the later work.

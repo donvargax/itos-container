@@ -4178,7 +4178,7 @@
     has engine set, no skip, count 4 and that one ID, and unless the pickles' own steps read SIGINT
     0, SIGTERM 0, SIGINT 60 and SIGTERM 60 percent, in that order. Each row is a subtest named
     <signal>_<percent> holding every case of its class below, immediate at 0 percent and delayed at
-    60, so the 29 cases make 58 subtests (21 and 42 when first committed; the eight added cases are
+    60, so the 32 cases make 64 subtests (21 and 42 when first committed; the eleven added cases are
     the abandoned and cut holds below). Nothing reads the process environment, builds the product or reaches
     an engine.
 
@@ -4188,8 +4188,9 @@
     worker created, and a lifecycleNative with first the row's signal, signalled, delay the row's
     percent of grace as lifecycleFixture computes it, aliveBeforeGrace true, journalAtReturn and an
     empty signalTrace file. Each kill follows its own GET /info and GET /containers/<worker>/json,
-    carries the observation and 0600 record that lifecycleRevalidated checks, and is otherwise
-    Status 204 with Replied its At plus the row's delay.
+    all three reaching the recorder at one instant unless a case says otherwise, carries the
+    observation and 0600 record that lifecycleRevalidated checks, and is otherwise Status 204 with
+    Replied its At plus the row's delay.
 
     Times below are after cancellation and F is the first signal's arrival. Accepted, marking the
     cases that fail today: 'immediate at the grace' F 50 ms, SIGKILL 1 s; 'immediate past the old
@@ -4229,6 +4230,24 @@
     repair cannot tighten past the product's limit: 'delayed acknowledgement cut by the call limit
     after a late first signal', F 600 ms, SIGKILL 1.65 s, and 'delayed hold cut at the call limit
     after a late first signal', F 600 ms, wait 1.6 s, SIGKILL 1.7 s.
+
+    Those two put the daemon check and the kill at one instant, so they cannot tell a bound
+    measured from the daemon check from one measured from the kill's arrival, and the second is
+    tighter than the call limit allows: the call starts after the daemon check, the recorder sees
+    the kill some time later, and the product's next request follows the cut at once. A throwaway
+    mutant that started the bound at the kill's arrival passed all 58 subtests while refusing
+    honest cuts, such as the daemon check at 600 ms, the kill at 650 ms, the cut and the next
+    request at 1.62 s, 970 ms after the kill and 1.02 s after the check. A case can therefore put
+    the first signal's daemon check a lead before its kill and its inspection a lead before the
+    check. Three more delayed cases with Cancelled, Status 204 and zero Replied, each with F 650
+    ms and the daemon check at 600 ms: 'delayed acknowledgement cut a call limit after the daemon
+    check', SIGKILL 1.62 s, and 'delayed hold cut a call limit after the daemon check', wait 1.62
+    s, SIGKILL 1.7 s, stay accepted; 'delayed hold abandoned within a call limit of the daemon
+    check', the inspection at 560 ms, wait 1.59 s, SIGKILL 1.7 s, is refused naming 'delay did not
+    execute', which pins the check, not the inspection, as the start. Against the committed file
+    the mutant from the kill's arrival passes and the mutant from the inspection passes; against
+    the new file the first fails exactly the two accepted cases and the second the refused one, in
+    both delayed rows.
 
     A subtest 'recorder journals a cut acknowledgement' ties the cut cases to the recorder, and
     passes today. On recoveryRecorderWorld with newLifecycleFaults("ignore", "", time.Hour), a.serve
