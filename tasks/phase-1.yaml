@@ -3636,34 +3636,154 @@
   type: test
   title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
   why: >
-    Run 42609794543 (T-41's range, which touches nothing LIFECYCLE-09 uses) failed the engine tier
-    at row #03 of 'Ignored and repeated cancellation escalates once after the fixed grace' (SIGTERM,
-    acknowledgement delayed 60% of grace), while T-33 to T-37 each passed it. T-33 shortened the
-    engine grace from 10 s to 1 s and kept the SIGKILL tolerance proportional: lifecycleSignals in
+    LIFECYCLE-09 keeps failing the engine tier on ranges that touch nothing it uses, and on main,
+    and milestone two's egress proof relies on that tier. 'Ignored and repeated cancellation
+    escalates once after the fixed grace' failed at row #03 in run 42609794543 (T-41's range), at
+    row #02 in runs 42605880158 and 42605822567 (main) and 42613812662, and in T-33's 7e30371, while
+    T-33 to T-37 each passed it. Go numbers an outline's later rows #01, #02 and #03, so #02 and #03
+    are its third and fourth rows, the two whose acknowledgement is delayed 60 percent of grace: the
+    delayed rows, beside the two immediate ones. T-33 shortened the engine grace from 10 s to 1 s
+    and kept the SIGKILL tolerance proportional: lifecycleSignals in
     features/lifecycle_native_assertions_test.go accepts SIGKILL only from 1.0 s to 1.2 s after
-    cancellation. The 30 s teardown assertion kept an absolute 2 s tolerance. Controller wake-up and
-    request latency under -cover on a shared runner do not shrink with the grace, so 200 ms is a
-    plausible flake source. The same run's engine step took 235 s against its 240 s gate, so the
-    runner was busy. The cause is not confirmed: the failing assertion was not visible to the
-    implementer (no gh access) or to this triage. The coordinator should put the failing assertion's
-    text from the job log in the brief before the item is taken. If it is the SIGKILL window,
-    replace the 20% share with an absolute floor. A tolerance up to about 500 ms still rejects an
-    acknowledgement-relative timer, which fires at 1.6 s with a 60% delay. Keep the lower bound, the
-    native receipts and the 60% delay row. Change the T-33 wording 'escalation tolerance is 20
-    percent' and the matching lines in features/README.md with it. This keeps the engine tier from
-    failing unrelated ranges, which matters for milestone two's egress proof, which relies on it.
-    Coordinator, 2026-11-09 12:12 UTC: now red on main too (runs 42605880158 and 42605822567, row
-    #02), besides T-41's run 42609794543 and T-33's 7e30371: it fails on any range, so it goes
-    first. Widen the SIGKILL acceptance to an absolute tolerance that holds under -cover on a hosted
-    runner (as the teardown assertion's 2 s does), keeping the assertion that SIGKILL comes after
-    the grace and exactly once; don't lengthen the grace back to 10 s. This item is already first in
-    the queue, and its coordinator note of 2026-11-09 12:12 UTC says it fails on any range and goes
-    first. It already records the T-41 failures on different rows (#03, then #02) and the
-    main-branch failures on runs 42605880158 and 42605822567. It already covers the engine step
-    running near its 240 s gate (235 s) and the link to milestone two's egress proof. New evidence
-    to add as a note: run 42613812662 is a further engine-tier failure, and its failing assertion
-    text is still not visible (it depends on the upstream extractor fix). The item's own fix does
-    not wait on that text. The coordinator's instruction is to widen the SIGKILL acceptance to an
-    absolute tolerance. A new item or a promotion would add nothing.
+    cancellation, while the 30 s teardown assertion kept an absolute 2 s.
+
+    The cause is inferred from the code and a fake clock: nobody has read the failing assertion,
+    because CI's report gives the test an empty message and no agent has gh. terminateSession
+    (internal/engine/session/domain/recovery.go:370) sends the first signal and waits for its
+    acknowledgement, in one call bounded by the call limit, before it can act on the grace deadline.
+    So an honest SIGKILL leaves at the later of the deadline and that reply, plus the fresh
+    inspections, validation and daemon check that precede every signal. In a delayed row the reply
+    comes at least 600 ms after the first signal reaches the recorder, and that arrival follows the
+    session open, a new engine connection, anchor and worker inspections and two durable writes,
+    under the syscall observer and -cover. A delayed row therefore passes 1.2 s by the time the
+    first signal arrives 600 ms after cancellation, however punctual the work after the deadline,
+    while an immediate row stays on time. That matches the failures, and it is structural, not only
+    jitter. A throwaway copy of TestEngineFixtureBudgetContract's delayed case showed it, with time
+    added only before the first signal: a first signal at 0.3, 0.5 and 0.7 of grace gave SIGKILL at
+    1.00, 1.10 and 1.30 of grace when held 60 percent, and at 1.00 each when not held. The one
+    hosted measurement fits. Red run 42297748701 (2026-11-06, before anchors added work), whose
+    product really was acknowledgement-relative, put SIGKILL at 16.4-16.6 s with a 10 s grace and a
+    6 s delay, so that work took 0.4-0.6 s, which at 1 s budgets puts an honest delayed SIGKILL at
+    1.0-1.2 s, on the limit already. Run 42609794543's engine step took 235 s of its 240 s gate, so
+    that runner was busy as well.
+
+    The coordinator decided, 2026-11-09 12:12 UTC: widen the SIGKILL acceptance to an absolute
+    tolerance that holds under -cover on a hosted runner, as the teardown assertion's 2 s does, keep
+    the assertion that SIGKILL comes after the grace and exactly once, and don't lengthen the grace
+    back to 10 s. The fix does not wait on the failing assertion's text. Keep the lower bound, the
+    native receipts and the 60 percent delay rows.
+
+    The rule. engineEscalationTolerance = 2 * time.Second joins the budgets in
+    features/engine_budgets_test.go, and lifecycleSignals accepts SIGKILL from the grace through the
+    grace plus that tolerance after cancellation, both ends inclusive: 1 s to 3 s. Two seconds alone
+    would accept what LIFECYCLE-09 exists to refuse, so the same check also refuses a SIGKILL from a
+    restarted timer, from the first instant such a timer could fire. An immediate row refuses it
+    from 1.8 s after cancellation: the last repeat goes no earlier than 80 percent of grace, so a
+    timer it restarted fires no earlier than that plus the grace. Name that repeat's offset once,
+    for lifecycleRepeatedSignals and this limit. A delayed row refuses it from the delay plus the
+    grace after the first signal's At in the journal: the hold begins only after that arrival, and
+    an acknowledgement-relative timer begins after the hold. Neither limit can pass such a timer at
+    any runner speed. The delayed limit reads At, not Replied, because a cut hold has no Replied. It
+    moves with slow teardown, as the honest SIGKILL does, so it clears unless the work from that
+    arrival to the SIGKILL, less the delay, takes a full second. An immediate row's SIGKILL keeps
+    800 ms, four times today's 200 ms, which since T-33 only the delayed rows have been seen to
+    exceed. Keep each error's 'SIGKILL at' and name the limit it passed, with the measured times, so
+    a failure read from a log says which limit moved.
+
+    Considered and left. The single tolerance of about 500 ms first proposed for this item also
+    refuses both timers, but at 1.5 s it refuses an honest delayed SIGKILL once the work above
+    passes 900 ms, some 300 ms over a measurement taken before anchors, so the flake would return
+    under load. Two seconds alone keeps green by weakening the scenario. Widening does give
+    something up: a timer started late without being restarted by these events, at teardown or at
+    signal delivery, was refused past 200 ms and now passes below these limits, as does one
+    restarted only by the 20 percent repeat. No check found for this spec holds those, since
+    TestEngineFixtureBudgetContract, TestLifecycleLocalContract's lost-signal row and
+    TestLifecycleContract's grace case spend no time before their first signal; that is a separate
+    item, returned to the coordinator. Their exact assertions that an acknowledgement does not
+    restart grace stay, and nothing here touches product code or a budget.
+
+    A second false failure sits beside the window, and widening alone would leave it. The recorder
+    holds the acknowledgement after the daemon's reply and the fixture's call limit is 1 s, so the
+    delay is inside the call limit by 400 ms less everything before the hold: the product's request,
+    the recorder's own inspection and record read, and the daemon's kill. When that runs out the
+    product rightly stops waiting and escalates (retryableSignal), and the recorder journals Status
+    204, Cancelled and a zero Replied. lifecycleSignals then reads Replied.Sub(At) as about
+    -2562047h and fails with 'signal acknowledgement delay did not execute', though the delay ran as
+    long as the product waited. A throwaway request through the recorder's real socket produced that
+    journal. Whether a CI failure took this path is unknown. That check proves the fault ran; it is
+    no timing assertion. It now also accepts a first signal with Cancelled and Status 204, the
+    engine having accepted it before the product stopped waiting. It still refuses a reply sooner
+    than the delay, a zero Replied without Cancelled, and Cancelled without that 204.
+
+    TestLifecycleSignalWindow goes in features/lifecycle_grace_test.go. It calls the real
+    w.lifecycleSignals(true) on a journal it writes, with no engine and no waiting, naming only what
+    exists today, so it compiles now and fails at its assertions. Its world holds a doctorWorld with
+    engineID and imageID, an approvalWorld with project, a sessionWorld with token, a recoveryNative
+    with worker, an offlineAPI with w and that worker created, and a lifecycleNative with first
+    SIGTERM, signalled, delay, aliveBeforeGrace true, journalAtReturn and an empty signalTrace file.
+    Each kill follows its own GET /info and GET /containers/<worker>/json, carries the observation
+    and 0600 record that lifecycleRevalidated checks, and is otherwise Status 204 with Replied its
+    At plus the row's delay. Times below are after cancellation, F is the first signal's arrival,
+    each immediate row's delay is zero and each delayed row's 600 ms. Accepted, marking the rows
+    that fail today: 'immediate at the grace' F 50 ms, SIGKILL 1 s; 'immediate past the old window'
+    F 50 ms, 1.201 s (fails); 'immediate just before a repeat restart' F 50 ms, 1.799 s (fails);
+    'delayed slow teardown' F 500 ms, 1.3 s (fails); 'delayed just before an acknowledgement
+    restart' F 300 ms, 1.899 s (fails); 'delayed at the absolute tolerance' F 1.5 s, 3 s (fails);
+    'delayed acknowledgement cut by the call limit' F 50 ms, Cancelled, zero Replied, 1.1 s (fails,
+    at the delay check). Refused naming 'SIGKILL at': 'immediate before the grace' F 50 ms, 999 ms;
+    'delayed before the grace' F 50 ms, 999 ms; 'immediate at a repeat restart' F 50 ms, 1.8 s;
+    'delayed at an acknowledgement restart' F 300 ms, 1.9 s; 'delayed as an acknowledgement timer on
+    a hosted runner' F 500 ms, 2.2 s; 'delayed past the absolute tolerance' F 1.5 s, 3.001 s. Each
+    immediate at F 50 ms, refused naming 'signal request count': 'no SIGKILL' with no second kill
+    and 'second SIGKILL' at 1 s and 1.1 s; refused naming 'literal first signal': 'first signal
+    repeated instead of SIGKILL', SIGTERM at 1 s. Each delayed at F 50 ms with SIGKILL at 1.1 s,
+    refused naming 'delay did not execute': 'acknowledgement replied early', Replied 100 ms after F;
+    'cancelled before the engine accepted', Cancelled, Status 502, zero Replied; 'no reply and not
+    cancelled', zero Replied.
+
+    Correct the words with the rule. Lines 361-365 and 711-718 of features/README.md say the
+    tolerance is 20 percent of grace, and 1 s to 1.2 s; they must state the two-second tolerance,
+    the 1.8 s limit (with '1.8 s' on one line) and the delayed row's limit, and why a delayed row's
+    SIGKILL follows its acknowledgement. The comment at features/lifecycle.feature:216 says 20
+    percent. No scenario text, tag or step changes. T-42 supersedes T-33's 'escalation tolerance is
+    20 percent' alone; T-33's entry stays as the record, as T-36's did under T-41. Fixture budgets
+    stay 1/3/1 s, the 20 and 80 percent repeats and the 60 percent delay stay, and so do
+    lifecycleBound and the recorder.
+
+    Commit TestLifecycleSignalWindow alone first, red, with test --item T-42, and report each
+    failing row's assertion. Then commit the rule, the named offset and the corrected words with
+    test --task T-42. features/lifecycle_grace_test.go,
+    features/lifecycle_native_assertions_test.go, features/lifecycle_native_actions_test.go,
+    features/engine_budgets_test.go, features/README.md and the comment in
+    features/lifecycle.feature are the whole change. Before stopping, without -race and under the
+    feature lock, run the neighbours that read these helpers and words: go test ./features -count=1
+    -run '^(TestLifecycle|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)'. The range
+    touches no proof.code path, so its CI judges no mutant. Native proof is CI's and one green
+    engine run cannot show an intermittent failure gone, so closure rests on the checks below and
+    the pushed head's engine tier passing. If a LIFECYCLE-09 row still fails, that is new evidence:
+    read its assertion from the job log, and never raise a limit on inference again.
+
+    The checks replace the promoted one, which reports done today, running only the
+    TestLifecycleGrace tests, and names a lock file under one machine's path; flock exits 66 where
+    that folder is missing, as on a hosted runner. They take that lock only where it exists, so they
+    run in CI, through sh -c under dash, and keep the shared machine's rule. At cedb5b2 both fail.
+    The first: go test exits 0 with no TestLifecycleSignalWindow and awk exits 1 finding none; once
+    committed red, the six rows marked above fail, five at 'SIGKILL at ... (at most 200ms scheduling
+    tolerance)' and the cut row at 'signal acknowledgement delay did not execute', and the other
+    thirteen pass. The second: features/README.md says 20 percent at lines 364 and 716 and 1.2 s at
+    716, features/lifecycle.feature says 20 percent at line 216, and the README has no 1.8 s. With a
+    throwaway rule and words, since reverted, both pass and the neighbours above stay green, and
+    each of 16 variants of the rule fails the first at named rows: today's share, a plain 2 s, a
+    plain 500 ms, tolerances of 1 s and 3 s, no lower bound, no upper bound, inclusive limits, the
+    acknowledgement limit on every row, the repeat limit on every row, the repeat limit from its 20
+    percent send, the acknowledgement limit from Replied, no cut path, any cancellation accepted, no
+    hold check and no exact count. dash is not installed where this was written, so the checks ran
+    under sh as bash in POSIX mode; they use only POSIX constructs.
   done_when:
-    - run: flock /home/yorch/src/os/github/donvargax/itos-container/.git/itos/loop/features.lock go test ./features -count=1 -run 'TestLifecycle(Grace|Signal)'
+    - run: |
+        set -- go test ./features -run '^TestLifecycle(Grace|Signal)' -count=1 -v
+        lock=$(git rev-parse --git-common-dir)/itos/loop/features.lock
+        if [ -e "$lock" ]; then set -- flock "$lock" "$@"; fi
+        out=$("$@") || { printf '%s\n' "$out"; exit 1; }
+        printf '%s\n' "$out" | awk '/^--- PASS: TestLifecycleSignalWindow /{top=1} /^    --- PASS: TestLifecycleSignalWindow\//{print; rows++} /\/delayed_slow_teardown /{slow=1} /\/delayed_at_an_acknowledgement_restart /{ack=1} /\/immediate_at_a_repeat_restart /{rep=1} /\/delayed_acknowledgement_cut_by_the_call_limit /{cut=1} END{exit !(top && rows>=19 && slow && ack && rep && cut)}'
+    - run: "! grep -Eq '20 percent|1\\.2 s' features/README.md features/lifecycle.feature && grep -q '1\\.8 s' features/README.md"
