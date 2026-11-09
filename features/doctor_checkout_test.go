@@ -29,9 +29,9 @@ func (w *world) doctorCheckoutForHost(hostOS string, uid int) error {
 	w.doctor = d
 	// The real product reads the account home from /etc/passwd. The probe
 	// assembly honors the isolated one the fixture names, so every scenario that
-	// builds a checkout runs it instead; sessionProbeBinary compiles it once.
+	// builds a checkout runs it instead, compiled once for the suite.
 	if !isProbeBinary(w.bin) {
-		binary, err := w.sessionProbeBinary()
+		binary, err := w.productProbeBinary()
 		if err != nil {
 			return err
 		}

@@ -18,15 +18,19 @@ const (
 // engineTreeName is the fixture's folder, beside the engine tier's product.
 const engineTreeName = "T-33-engine-tree"
 
-// probeSuffix marks the test assembly that stands in for the product where a
-// fixture isolates the account home (see sessionProbeBinary).
-const probeSuffix = "-session-probe"
+// The two kinds of test assembly that stand in for the product where a fixture
+// isolates the account home. The session contract assembly always compiles the
+// checkout; a world's product assembly compiles the engine tier's fixture tree.
+const (
+	sessionProbeSuffix = "-session-probe"
+	engineProbeSuffix  = "-engine-probe"
+)
 
-// productSource is the module a harness-built assembly of the product compiles:
-// the engine tier's shortened-budget copy when one sits beside bin, which only
-// that tier's buildProduct creates, else the checkout. An assembly compiled from
-// the checkout carries the production limits, so a scenario that waits out a
-// call, startup or grace budget would wait for the full length.
+// productSource is the module a world's product is compiled from: the engine
+// tier's shortened-budget copy when one sits beside bin, which only that tier's
+// buildProduct creates, else the checkout. A product compiled from the checkout
+// carries the production limits, so a native scenario that waits out a call,
+// startup or grace budget would wait for the full length.
 func productSource(root, bin string) string {
 	if filepath.IsAbs(bin) {
 		tree := filepath.Join(filepath.Dir(bin), engineTreeName)
@@ -37,15 +41,20 @@ func productSource(root, bin string) string {
 	return root
 }
 
-func isProbeBinary(bin string) bool { return strings.Contains(filepath.Base(bin), probeSuffix) }
+func isProbeBinary(bin string) bool {
+	name := filepath.Base(bin)
+	return strings.Contains(name, sessionProbeSuffix) || strings.Contains(name, engineProbeSuffix)
+}
 
-// probeProduct names the product that bin, or the probe built from it, stands
-// for. A world that already runs the probe derives the same path again instead
+// probeProduct names the product that bin, or the assembly built from it, stands
+// for. A world already running an assembly derives the same paths again instead
 // of compiling a second assembly of the same sources.
 func probeProduct(bin string) string {
 	dir, name := filepath.Split(bin)
-	if i := strings.Index(name, probeSuffix); i >= 0 {
-		name = name[:i]
+	for _, suffix := range []string{sessionProbeSuffix, engineProbeSuffix} {
+		if i := strings.Index(name, suffix); i >= 0 {
+			name = name[:i]
+		}
 	}
 	return dir + name
 }
