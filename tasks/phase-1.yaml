@@ -4541,3 +4541,17 @@
     from p1-credentials-passed-in.
   done_when:
     - run: test -f docs/decisions/0025-credentials-passed-in.md && grep -qi 'docker inspect' docs/decisions/0025-credentials-passed-in.md && grep -qi 'auth.json' docs/decisions/0025-credentials-passed-in.md && grep -qi 'fingerprint' docs/decisions/0025-credentials-passed-in.md
+- id: T-48
+  type: feat
+  title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
+  why: >
+    The shared seam every credential slice needs, built before them, as T-40 is for the proxy. A
+    port method, a stateful fake in porttest and a docker adapter hand secret bytes or a
+    bind-mounted host file to one worker for one command, by the mechanism the decision record
+    chose. The port's shared contract runs against the fake and the adapter. It asserts that the
+    created container's configuration, mounts list, labels and recovery records hold no secret
+    value, that the secret is gone with the session, and that a failed delivery stops the workload
+    before it starts. Real-engine proof runs in CI only, on a synthetic marker, and the agent never
+    receives the Docker socket. The fake does no I/O. Broken down from p1-credentials-passed-in.
+  done_when:
+    - run: go test ./internal/engine/session/...
