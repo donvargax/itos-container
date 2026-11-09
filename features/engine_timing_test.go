@@ -1,6 +1,7 @@
 package features
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,22 @@ type scenarioTimingRecord struct {
 	Line       int64  `json:"line"`
 	DurationNS int64  `json:"duration_ns"`
 	Outcome    string `json:"outcome"`
+	// Only a row of LIFECYCLE-09 carries its signals' offsets (signalOffsets).
+	Signals *[]signalOffset `json:"signals,omitempty"`
+}
+
+// The scenario's After hook in initializeScenario takes the offsets from its
+// world before it resets it, and hands them on through the context godog gives the
+// hooks registered after it, so that the timing collector's hook writes them.
+type signalOffsetsKey struct{}
+
+func withSignalOffsets(ctx context.Context, offsets *[]signalOffset) context.Context {
+	return context.WithValue(ctx, signalOffsetsKey{}, offsets)
+}
+
+func signalOffsetsOf(ctx context.Context) *[]signalOffset {
+	offsets, _ := ctx.Value(signalOffsetsKey{}).(*[]signalOffset)
+	return offsets
 }
 
 type suiteTimingRecord struct {
@@ -54,7 +71,7 @@ func (timing *engineTiming) write(kind string, record any) {
 	timing.failed = timing.failed || err != nil
 }
 
-func (timing *engineTiming) complete(scenario *godog.Scenario, started time.Time, failed bool) {
+func (timing *engineTiming) complete(scenario *godog.Scenario, started time.Time, failed bool, signals *[]signalOffset) {
 	record := scenarioTimingRecord{Feature: scenario.Uri, DurationNS: int64(time.Since(started)), Outcome: timingOutcome(failed)}
 	for _, tag := range scenario.Tags {
 		if strings.HasPrefix(tag.Name, "@ID-") {
@@ -64,6 +81,9 @@ func (timing *engineTiming) complete(scenario *godog.Scenario, started time.Time
 	}
 	if scenario.Location != nil {
 		record.Line = scenario.Location.Line
+	}
+	if record.ID == "@ID-LIFECYCLE-09" {
+		record.Signals = signals
 	}
 	timing.completed++
 	timing.failed = timing.failed || failed
