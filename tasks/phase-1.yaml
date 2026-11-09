@@ -4120,12 +4120,25 @@
     Cancelled and Status 204, the engine having accepted it before the product stopped waiting, but
     only if the cut could be the call limit. The journal records no time for the cut, so
     heldAcknowledgement infers it from the product's next request, which follows the cut at once
-    (its own wait, made the moment the signal call returns) and must come a call limit or more
-    after the later of cancellation and the request before the signal, the daemon check that
-    recoverySignal makes just before it signals, since the call limit runs from the signal call's
-    start; a product that gave up after 100 ms leaves the same cut journal and is refused. Measured
-    from cancellation alone, a first signal at 1.2 s, a wait at 1.25 s and a SIGKILL at 1.3 s passed
-    though the hold lasted 50 ms, so detection depended on runner speed. That inference is a gap. A recorder that journaled the cut's instant would let the
+    and must come a call limit or more after the later of cancellation and the request before the
+    signal, the daemon check that recoverySignal makes just before it signals, since the call limit
+    runs from the signal call's start; a product that gave up after 100 ms leaves the same cut
+    journal and is refused. Measured from cancellation alone, a first signal at 1.2 s and a SIGKILL
+    at 1.25 s passed though the hold lasted 50 ms, so detection depended on runner speed.
+
+    That next request is never a wait, and a wait there is refused whenever it comes. The grace
+    deadline is the teardown's start plus the grace (registered_run.go:121), the signal call starts
+    after that, and the call limit equals the grace (1 s each in the fixture, 10 s in production),
+    so the cut falls after the deadline. terminateSession's wait on the expired grace then returns
+    without a request (finite_wait.go:19), and the next request is inspectSession's GET /info. A
+    throwaway run of terminateSession over a fake connection and finiteConnection showed the order
+    kill, info, inspect, info, inspect, info, SIGKILL, with the only wait after the SIGKILL. A wait
+    after a cut therefore comes only from a grace restarted at the cut or a hold given up before
+    the deadline. Accepting one let a first signal at 600 ms with the daemon check at 100 ms, a wait
+    at 1.1 s and a SIGKILL at 2.15 s pass: a timer restarted at the cut, as if the foreground
+    deadline were dropped, 50 ms inside the delayed limit. A product that sleeps instead of waiting
+    still passes, so that gap narrows but stays. The detection of the cut remains an inference, a
+    gap. A recorder that journaled the cut's instant would let the
     delayed limit start at the cut, so that it refused an acknowledgement-relative timer after a cut
     at any arrival, and would let the check read the cut instead of inferring it. The recorder is
     outside T-42's range, so the gap goes back to the coordinator as an idea. The check still
@@ -4177,27 +4190,29 @@
     after F; 'cancelled before the engine accepted', Cancelled, Status 502, zero Replied; 'no reply
     and not cancelled', zero Replied. The cut holds' next request decides whether the cut could be
     the call limit: the accepted cut case has none of the product's own waits, so its next request
-    is the SIGKILL's inspection, a call limit or more after the request before it. Two delayed
-    cases, each Cancelled, Status 204 and zero Replied at F 50 ms with a wait of the product's at
-    150 ms, are refused naming 'delay did not execute': 'delayed hold abandoned before the call
-    limit', SIGKILL at 1 s, and 'delayed hold abandoned, then a timer from the abandonment', SIGKILL
-    at 1.15 s.
+    is the SIGKILL's inspection, a call limit or more after the request before it, as an honest
+    cut's is. Two delayed cases, each Cancelled, Status 204 and zero Replied at F 50 ms, are refused
+    naming 'delay did not execute': 'delayed hold abandoned before the call limit', SIGKILL at 1 s
+    with no wait, which comes 950 ms after the request, and 'delayed hold abandoned, then a timer
+    from the abandonment', a wait of the product's at 150 ms and SIGKILL at 1.15 s.
 
     The call limit runs from the signal call's start, not from cancellation, so a first signal that
     arrives late spends most of it before the hold begins. Each signal's requests follow
     recoverySignal's order, inspection, daemon check, kill, and the bound is measured from the
     request before the kill. Four more delayed cases with Cancelled, Status 204 and zero Replied are
     refused naming 'delay did not execute': 'delayed hold abandoned after a late first signal', F
-    1.2 s, wait 1.25 s, SIGKILL 1.3 s; 'delayed hold abandoned after a late first signal, then a
-    timer from the abandonment', the same with SIGKILL at 2.25 s; 'delayed hold abandoned within the
-    call limit of a first signal at 600 ms', F 600 ms, wait 1.1 s, SIGKILL 1.2 s, which is what a
-    500 ms call limit produces; and 'delayed hold abandoned just before the call limit', F 600 ms,
-    wait 1.599 s, SIGKILL 1.7 s. Two honest cuts after a late first signal stay accepted so a
-    repair cannot tighten past the product's limit: 'delayed acknowledgement cut by the call limit
-    after a late first signal', F 600 ms, SIGKILL 1.65 s, and 'delayed hold cut at the call limit
-    after a late first signal', F 600 ms, wait 1.6 s, SIGKILL 1.7 s.
+    1.2 s, SIGKILL 1.25 s; 'delayed hold abandoned after a late first signal, then a timer from the
+    abandonment', F 1.2 s, a wait at 1.25 s and SIGKILL at 2.25 s; 'delayed hold abandoned within the
+    call limit of a first signal at 600 ms', F 600 ms, SIGKILL 1.1 s, which is what a 500 ms call
+    limit produces; and 'delayed hold abandoned just before the call limit', F 600 ms, SIGKILL
+    1.599 s. Only the second sends a wait; the bound alone refuses the other three. An honest cut after
+    a late first signal stays accepted so a repair cannot tighten past the product's limit:
+    'delayed acknowledgement cut by the call limit after a late first signal', F 600 ms, SIGKILL
+    1.65 s. 'Delayed hold cut at the call limit after a late first signal', F 600 ms, wait 1.6 s,
+    SIGKILL 1.7 s, was listed as a second honest cut and is refused naming 'delay did not execute',
+    since an honest cut sends no wait.
 
-    Those two put the daemon check and the kill at one instant, so they cannot tell a bound
+    The accepted cases put the daemon check and the kill at one instant, so they cannot tell a bound
     measured from the daemon check from one measured from the kill's arrival, and the second is
     tighter than the call limit allows: the call starts after the daemon check, the recorder sees
     the kill some time later, and the product's next request follows the cut at once. A throwaway
@@ -4207,13 +4222,13 @@
     the first signal's daemon check a lead before its kill and its inspection a lead before the
     check. Three more delayed cases with Cancelled, Status 204 and zero Replied, each with F 650
     ms and the daemon check at 600 ms: 'delayed acknowledgement cut a call limit after the daemon
-    check', SIGKILL 1.62 s, and 'delayed hold cut a call limit after the daemon check', wait 1.62
-    s, SIGKILL 1.7 s, stay accepted; 'delayed hold abandoned within a call limit of the daemon
-    check', the inspection at 560 ms, wait 1.59 s, SIGKILL 1.7 s, is refused naming 'delay did not
-    execute', which pins the check, not the inspection, as the start. Against the committed file
-    the mutant from the kill's arrival passes and the mutant from the inspection passes; against
-    the new file the first fails exactly the two accepted cases and the second the refused one, in
-    both delayed rows.
+    check', SIGKILL 1.62 s, stays accepted; 'delayed hold cut a call limit after the daemon check',
+    wait 1.62 s, SIGKILL 1.7 s, is refused naming 'delay did not execute' as a wait, whatever its
+    time; 'delayed hold abandoned within a call limit of the daemon check', the inspection at 560
+    ms, SIGKILL 1.59 s, is refused naming 'delay did not execute', which pins the check, not the
+    inspection, as the start. Against the committed file the mutant from the kill's arrival passes
+    and the mutant from the inspection passes; against the new file the first fails the accepted
+    case and the second the refused one, in both delayed rows.
 
     A subtest 'recorder journals a cut acknowledgement' ties the cut cases to the recorder, and
     passes today. On recoveryRecorderWorld with newLifecycleFaults("ignore", "", time.Hour), a.serve
