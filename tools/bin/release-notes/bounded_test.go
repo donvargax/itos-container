@@ -167,6 +167,37 @@ func TestBoundedReleaseNotes(t *testing.T) {
 		}
 	})
 
+	t.Run("many changes retain the fitting prefix", func(t *testing.T) {
+		for _, first := range []bool{false, true} {
+			n := boundedFixture(first)
+			n.Commits, n.Changed = nil, "### Features"
+			var entries []string
+			for id := 1; id <= 300; id++ {
+				entry := changeEntry(id, fmt.Sprintf("Change %d %s", id, strings.Repeat("é", 500)))
+				entries = append(entries, entry)
+				n.Changed += "\n" + entry
+				n.Commits = append(n.Commits, commit{SHA: fmt.Sprintf("%040d", id), Header: fmt.Sprintf("feat: change %d", id), Type: "feat"})
+			}
+			got := renderNotes(t, n)
+			checkBounded(t, n, got)
+			requireText(t, got, "300 commits", "300 feats", "omitted", entries[0])
+			kept, ended := 0, false
+			for _, entry := range entries {
+				if strings.Contains(got, entry) {
+					kept++
+					if ended {
+						t.Error("an earlier fitting change was displaced by a later change")
+					}
+				} else {
+					ended = true
+				}
+			}
+			if kept < 100 || kept >= len(entries) {
+				t.Errorf("expected a substantial fitting prefix, got %d entries", kept)
+			}
+		}
+	})
+
 	t.Run("impossible early entries do not displace fitting ones", func(t *testing.T) {
 		n := boundedFixture(false)
 		n.Changed = "### Features\n" + changeEntry(9, "Huge "+strings.Repeat("界", notesLimit)) + "\n" + changeEntry(1, "Keep this small change")
@@ -208,6 +239,37 @@ func TestBoundedReleaseNotes(t *testing.T) {
 		requireText(t, got, n.Moved[0], n.Moved[1], "which makes a patch", "Keep build guidance.", "omitted")
 		if strings.Contains(got, "last-toolchain") {
 			t.Error("last dependency entry was not removed whole")
+		}
+	})
+
+	t.Run("impossible dependency does not displace small details", func(t *testing.T) {
+		n := boundedFixture(false)
+		n.Commits[0].Type = "build"
+		n.Moved = []string{"giant-module " + strings.Repeat("界", notesLimit), "small-module v1 to v2", "the toolchain go1.24.0 to go1.24.1"}
+		got := renderNotes(t, n)
+		checkBounded(t, n, got)
+		requireText(t, got, n.Moved[1], n.Moved[2], changeEntry(1, "Stable change"), "omitted")
+		if strings.Contains(got, "giant-module") {
+			t.Error("individually impossible dependency survived")
+		}
+	})
+
+	t.Run("first groups consolidate in commit order", func(t *testing.T) {
+		n := boundedFixture(true)
+		n.Commits = nil
+		for i, kind := range []string{"fix", "feat", "feat", "fix", "feature"} {
+			n.Commits = append(n.Commits, commit{SHA: fmt.Sprintf("%040d", i+1), Type: kind})
+		}
+		n.Changed = "### Features\n" + changeEntry(3, "Third") + "\n" + changeEntry(5, "Not a feat") +
+			"\n\n### Fixes\n" + changeEntry(4, "Fourth") + "\n\n### Features\n" + changeEntry(2, "Second") +
+			"\n" + changeEntry(3, "Third") + "\n\n### Fixes\n" + changeEntry(1, "First")
+		got := renderNotes(t, n)
+		checkBounded(t, n, got)
+		want := "### Features\n" + changeEntry(2, "Second") + "\n" + changeEntry(3, "Third") +
+			"\n\n### Fixes\n" + changeEntry(1, "First") + "\n" + changeEntry(4, "Fourth")
+		requireText(t, got, want)
+		if strings.Count(got, "### Features") != 1 || strings.Count(got, "### Fixes") != 1 || strings.Contains(got, "Not a feat") {
+			t.Error("first groups contain duplicates or an inexact commit type")
 		}
 	})
 
@@ -267,27 +329,45 @@ func TestBoundedReleaseNotesCommandFailures(t *testing.T) {
 	}
 	repo := releasetest.Example(t, false)
 	releasetest.Git(t, repo, "commit", "--quiet", "--allow-empty", "-m", "feat: first")
+	// A native fixture executable also works on Windows, where a shell script
+	// cannot stand in for the launcher. Its output is fixed, synthetic data.
+	helperDir := t.TempDir()
+	helperSource, helper := filepath.Join(helperDir, "fixture.go"), filepath.Join(helperDir, "fixture.exe")
+	releasetest.Change(t, helperSource, "", `package main
+import ("fmt"; "os")
+func main() {
+ if len(os.Args) > 1 && os.Args[1] == "git-cliff" {
+  fmt.Println("### Features\n- First")
+ } else {
+  fmt.Println("{\"footers\":[]}")
+ }
+}
+`)
+	if out, err := exec.Command("go", "build", "-o", helper, helperSource).CombinedOutput(); err != nil {
+		t.Fatalf("build fixture: %v\n%s", err, out)
+	}
+	helperBytes, err := os.ReadFile(helper)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
-		name, dir, itos string
-		args            []string
+		name, dir, itos, diagnostic string
+		args                        []string
 	}{
-		{name: "Git", dir: t.TempDir(), itos: "unused"},
-		{name: "pinned", dir: repo, itos: "unused"},
-		{name: "itos", dir: repo, itos: filepath.Join(t.TempDir(), "missing-itos")},
-		{name: "framing", dir: repo, itos: "fixture-itos", args: []string{"-version", strings.Repeat("1", 44000) + ".0.0"}},
+		{name: "Git", dir: t.TempDir(), itos: "unused", diagnostic: "git tag"},
+		{name: "pinned", dir: repo, itos: "unused", diagnostic: "pinned"},
+		{name: "itos", dir: repo, itos: filepath.Join(t.TempDir(), "missing-itos"), diagnostic: "missing-itos"},
+		{name: "framing", dir: repo, itos: helper, diagnostic: "framing", args: []string{"-version", strings.Repeat("1", 32000) + ".0.0"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.name == "itos" || tc.name == "framing" {
-				releasetest.Change(t, filepath.Join(repo, "tools/bin/pinned"), "", "#!/bin/sh\nprintf '### Features\\n- First\\n'\n")
-				if err := os.Chmod(filepath.Join(repo, "tools/bin/pinned"), 0o700); err != nil {
+				if err := os.MkdirAll(filepath.Join(repo, "tools/bin"), 0o700); err != nil {
 					t.Fatal(err)
 				}
-			}
-			if tc.name == "framing" {
-				tc.itos = filepath.Join(repo, "fixture-itos")
-				releasetest.Change(t, tc.itos, "", "#!/bin/sh\nprintf '{\"footers\":[]}'\n")
-				if err := os.Chmod(tc.itos, 0o700); err != nil {
-					t.Fatal(err)
+				for _, name := range []string{"pinned", "pinned.exe"} {
+					if err := os.WriteFile(filepath.Join(repo, "tools/bin", name), helperBytes, 0o700); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 			args := append([]string{"-version", "0.1.0", "-itos", tc.itos}, tc.args...)
@@ -296,7 +376,7 @@ func TestBoundedReleaseNotesCommandFailures(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &stdout, &stderr
 			err := cmd.Run()
-			if err == nil || cmd.ProcessState.ExitCode() != 2 || stdout.Len() != 0 || stderr.Len() == 0 {
+			if err == nil || cmd.ProcessState == nil || cmd.ProcessState.ExitCode() != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), tc.diagnostic) {
 				t.Errorf("want exit 2, empty stdout and useful stderr; got %v, stdout=%d bytes, stderr=%q", err, stdout.Len(), stderr.String())
 			}
 		})
