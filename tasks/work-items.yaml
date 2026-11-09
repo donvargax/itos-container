@@ -1318,6 +1318,14 @@ items:
       re-run. Only a repeat on its own justifies a separate item, and then it should be treated as a
       possible real race in anchor cleanup, not a timing flake. One unexplained failure in a run
       that was already failing for load is too thin to track separately.
+
+      That item already owns the Engine failure diagnostics step in .github/workflows/ci.yml. Its
+      notes say to print each `--- FAIL` block with its godog step error beside the streamed `engine
+      scenario timing:` records, to emit one `::error title=<scenario>` annotation per failed
+      scenario because job logs return 403 without a token and agents have no gh, and not to wait
+      for the itos extractor fix tracked upstream. This idea is the same ci.yml edit. T-42's 'nobody
+      read the failing assertion' complaint is the gap that note describes, so no second item is
+      needed.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
@@ -1375,6 +1383,15 @@ items:
       before charter step 4 (p1-interactive-tty) changes Ctrl-C handling. Prefer this to sending
       both signals at 80 percent, which changes a schedule T-42 fixes and two tests pin, and leaves
       the repeat untimed.
+
+      That item already adds a fake-clock lifecycle row that asserts the exact SIGKILL instant, and
+      its latest note extends the row to send a repeat signal before grace ends and assert the kill
+      still falls at first signal plus grace. A fake clock is the controlled-time test this idea
+      asks for, so the gap T-42's widened window leaves is already covered. One detail to carry
+      over: the idea's repeat at 20 percent of grace is a concrete schedule. The row should pick a
+      repeat point well inside grace (the idea's 20 percent), not the 80 percent that T-42 fixes and
+      two tests pin. The item is p2 and the note says to land it before charter step 4
+      (p1-interactive-tty) changes Ctrl-C handling.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
