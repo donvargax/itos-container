@@ -20,6 +20,8 @@ import (
 )
 
 type runConnection struct {
+	proxyConfig *container.Config
+	proxyRecord port.Record
 	*connection
 	expected *container.Config
 	record   port.Record
@@ -34,7 +36,10 @@ func (e Engine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection
 }
 
 func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []string) (string, port.Outcome) {
-	if r.Schema != 2 || !r.ValidAnchor(c.binding) || r.Anchor.Stage != "owned" {
+	if (r.Schema == 3) != (c.binding.Egress != (port.EgressGrant{})) {
+		return "", port.Refused
+	}
+	if (r.Schema != 2 && r.Schema != 3) || !r.ValidAnchor(c.binding) || r.Anchor.Stage != "owned" {
 		return "", port.MountRefused
 	}
 	if !c.pin.Unchanged() {
@@ -56,6 +61,16 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 	if json.Unmarshal([]byte(c.binding.Environment), &env) != nil {
 		return "", port.Invalid
 	}
+	networking, address, failure := c.workerNetwork(call, r)
+	if failure != "" {
+		return "", failure
+	}
+	if address != "" {
+		for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
+			env[key] = "http://" + address + ":3128"
+		}
+		env["NO_PROXY"], env["no_proxy"] = "localhost,127.0.0.1,::1", "localhost,127.0.0.1,::1"
+	}
 	environment := environment(image.Config.Env, env)
 	pids, init := int64(4096), false
 	config := &container.Config{
@@ -72,7 +87,10 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: r.Anchor.Name, Target: "/workspace", VolumeOptions: &mount.VolumeOptions{NoCopy: true}}},
 		Tmpfs:  map[string]string{"/tmp": "rw,nosuid,nodev,mode=1777"},
 	}
-	result, err := c.api.ContainerCreate(call, client.ContainerCreateOptions{Name: r.Name, Config: config, HostConfig: host})
+	if r.Schema == 3 {
+		host.NetworkMode = container.NetworkMode(r.Egress.Internal.Name)
+	}
+	result, err := c.api.ContainerCreate(call, client.ContainerCreateOptions{Name: r.Name, Config: config, HostConfig: host, NetworkingConfig: networking})
 	if err != nil || !c.pin.Unchanged() || !port.HexID(result.ID) {
 		return "", port.Uncertain
 	}
@@ -118,8 +136,14 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 		!sameEnvironment(r.Config.Env, c.expected.Env) || r.Config.Tty || !r.Config.OpenStdin || !r.Config.StdinOnce ||
 		len(r.Config.Volumes) != 0 || r.Config.Healthcheck == nil || !slices.Equal(r.Config.Healthcheck.Test, []string{"NONE"}) ||
 		r.State.Status != "created" || r.State.Running || r.State.Pid != 0 || (r.State.StartedAt != "" && r.State.StartedAt != "0001-01-01T00:00:00Z") ||
-		!safeHost(r.HostConfig, c.record.Anchor.Name) || !safeMounts(r.Mounts, c.record.Anchor.Name) {
+		!safeWorkerHost(r.HostConfig, c.record) || !safeMounts(r.Mounts, c.record.Anchor.Name) {
 		return port.IsolationUnverified
+	}
+	if c.record.Schema == 3 {
+		if !egressEndpoints(r.NetworkSettings, map[string]string{c.record.Egress.Internal.Name: c.record.Egress.Internal.ID}) {
+			return port.IsolationUnverified
+		}
+		return ""
 	}
 	for name := range r.NetworkSettings.Networks {
 		if name != "none" {
