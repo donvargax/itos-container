@@ -1220,3 +1220,12 @@ items:
       scenario timing:` records, or the slowest examples sorted, in that step, and say in the README
       that a goroutine blocked a minute or more is labelled with its minutes. It is a small ci.yml
       change and does not need its own item.
+
+      Control transaction re-validates every pinned path chain about 11 times per Begin. Treat this
+      as a lead on that item, not a new item. A steady-state write Begin is about 2,800 syscalls and
+      41 fsyncs, and a run takes five of them. That costs about 12 ms natively, but the engine
+      harness traces every syscall and the engine call budget is 1 s. If the Engine step stays near
+      its 4-minute timeout once slice-21's control transaction lands, or Begin hits state.busy under
+      the tracer, that item should consider cutting the redundant back-to-back Unchanged() walks.
+      The checks are the anti-substitution guards, so any such change needs a security review by the
+      person. Nothing is measured to be wrong today, so it should not be tracked separately.
