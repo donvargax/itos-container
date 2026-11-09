@@ -2,9 +2,7 @@
 phases:
   1: null
 queue:
-  - T-45
   - T-44
-  - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
 items:
@@ -413,106 +411,9 @@ items:
     title: Revisit who may approve a sandbox before it can grant network or credentials
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The person's q-2, 2026-11-04: an agent on the host can approve its own sandbox through
-      --fingerprint or a faked terminal. Offline-only permissions make that cheap for now. Before
-      the egress and credentials stages, when an approval grants something worth taking, weigh a
-      host-side confirmation an agent cannot drive, per the stage.
-
-      p3-approval-before-egress already holds this: q-2, an agent self-approving through
-      --fingerprint or a faked terminal, to be weighed before egress and credentials, when an
-      approval grants something worth taking. The new point is that it has depends_on [] and
-      slice-26 (approval binds the allowlist) and slice-27 (the first run that grants network) do
-      not wait for it, so nothing forces the revisit. The coordinator should add that edge from
-      slice-26 or slice-27, or ask the person to decide before slice-26 is taken. The phase is p3
-      but it now gates phase-1 work, so it needs raising to p1 or the edge needs a reason.
-
-      That item already holds this exact point: its why says it has depends_on [] while slice-26 and
-      slice-27 do not wait for it, and that the coordinator should add the edge or ask the person.
-      Nothing has acted on it yet. Its p3 phase is now wrong, since slice-26 is the first approval
-      that grants network and the item gates phase-1 work. The coordinator should raise it to p1 and
-      either add the dependency from slice-26 or have the person decide before slice-26 is taken.
-
-      The edges are coordinator edits to depends_on, not a new item. p3-approval-before-egress
-      already holds the slice-26 and slice-27 edge and the person's decision, and says its p3 phase
-      is wrong now that it gates phase-1 work. p1-acceptance-static-binary already ends with
-      'slice-27 should depend on it'. Remaining edit: add T-38 to slice-26's depends_on, because
-      slice-26's drafter takes the digest binding and the network-granting profile from T-38's
-      record. Also add p1-acceptance-static-binary to slice-27's depends_on (T-39 and T-40 already
-      depend on T-38). Raise p3-approval-before-egress to p1 and give slice-26 the edge on it, or
-      ask the person to decide before slice-26 is taken.
-
-      This item already holds the edges and the open decision; the T-38 review confirms they are
-      still absent on origin/main and at T-38's head. For the coordinator to apply as depends_on
-      edits: slice-26 gets T-38, because its drafter takes the digest binding and the
-      network-granting profile from T-38's record. slice-26 also gets this item, unless the person
-      decides first who may approve a network-granting sandbox. slice-27 gets
-      p1-acceptance-static-binary, because the harness binary was measured dynamically linked and
-      cannot serve as the proxy in an inert root filesystem; that item's own why already says
-      slice-27 should depend on it. The phase field here is already 1, so only the edges and the
-      person's decision remain. Until slice-26 has them, it can start before the record it builds on
-      exists, with nothing holding it back.
-
-      This is coordinator registry housekeeping, not a work item. The slice-27 edge is already held:
-      p3-approval-before-egress lists the depends_on edits (slice-26 gets T-38 and that item;
-      slice-27 gets p1-acceptance-static-binary, because the harness binary was measured dynamically
-      linked), and p1-acceptance-static-binary's why already ends with 'slice-27 should depend on
-      it'. Record 0022 (commit 1770912, delivery as the host's own static executable) confirms the
-      edge, so the coordinator applies it to slice-27 now. The rest is stale text in T-39, T-40 and
-      slice-26 to slice-28: T-39 still says 'library', its done_when lacks the fuzz run that q-51
-      requires, and the whys predate the record. Each item's own drafter rewrites that in its spec
-      round, and T-39-notes.md already carries the q-51 and review notes into it. Registry and owner
-      edits are the coordinator's act, so no new item is needed.
-
-      This item already holds the open question of whether the edge goes on slice-26 or slice-27, or
-      whether the person decides before slice-26 is taken. This idea only argues the placement.
-      After slice-26, run still refuses every version 2 file, so an agent that self-approves an
-      allowlist through --fingerprint or a faked terminal gains no route. Slice-27 is where that
-      approval first becomes a route, so the person's decision must land before slice-27. Weigh that
-      when the edge is placed. docs/security.md and q-2 both say to revisit this before egress.
-
-      Its why already lists this exact coordinator edit: slice-26 gets T-38 in depends_on, because
-      the drafter takes the digest binding and the network-granting profile from T-38's record,
-      docs/decisions/0022-egress-proxy.md. The registry still shows slice-26 with depends_on
-      [slice-25], so the edit has not been made. The new point is why it matters. That record exists
-      only on T-38's branch and is still proposed. Without the edge, slice-26 could land with a
-      dangling link, or bind text the person later overturns. It is a coordinator edit, not a new
-      item.
-
-      That item's text already holds this reconciliation. It says T-39, T-40 and slice-26 to
-      slice-28 carry stale text that predates the record. T-39 still says 'library' and its
-      done_when lacks the fuzz run. Each item's own drafter rewrites its entry in its spec round,
-      and the registry edits are the coordinator's act. What this idea adds is the content of that
-      rewrite. The record (docs/decisions/0022-egress-proxy.md, on origin/T-38 and not yet on main)
-      now holds three things the entries don't mention: (1) a per-process `seq` in the refusal log,
-      with the copy checking it and reporting a gap. (2) A four-step classification of a failed
-      dial, DNS failure first and then the Control hook's flags, which the error `Dial` returns
-      cannot decide. (3) The disclosed limit that a lost log tail cannot be detected. When the
-      coordinator makes the registry edits, add these three points and tell each drafter to read the
-      record rather than the entry. T-39's check is `go test ./internal/engine/egress/...`, so the
-      dial classification belongs in its done_when. The log-store limit must be disclosed by
-      slice-26, slice-27 and slice-28 until p2-proxy-log-lost-tail-sink is answered. The coordinator
-      applies this once T-38 is merged. No new item is needed.
-
-      p3-approval-before-egress already holds both edges and the reasons for them. Slice-27 gets
-      p1-acceptance-static-binary because the harness binary was measured dynamically linked, so it
-      cannot be the proxy in an inert root filesystem; that item's why already ends 'slice-27 should
-      depend on it'. Slice-26 or slice-27 gets p3-approval-before-egress because a self-approved
-      list first becomes a route in slice-27; its why states that point and cites AC-02 and
-      docs/security.md. Nothing is new here. What remains is the coordinator's depends_on edit,
-      since slice-27 still lists [slice-26, T-39, T-40], together with the person's decision on who
-      may approve a network-granting sandbox. Neither needs a new item.
-
-      This item already holds the point, and the edge now exists: slice-27's depends_on lists
-      p3-approval-before-egress (commit f5f9e58), so slice-27 cannot be taken before it. Slice-26's
-      spec confirms the placement: run keeps refusing version 2 after slice-26, so a self-approved
-      allowlist grants no route until slice-27 lifts that refusal. One thing remains, and it is the
-      person's: decide who may approve a network-granting sandbox, and whether allowlist-v1 records
-      written before the gate lifts stay valid or are retired by a new profile name. The coordinator
-      should put that to the person (itos decision) before slice-27 is taken. No new item is needed.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -985,15 +886,9 @@ items:
     title: Credentials passed in per command, never injected and never in the checkout
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Milestone two, step 2 (docs/charter.md). Per command, so they never appear in the container's
-      configuration or docker inspect: Claude's long-lived token from a host file the person keeps;
-      Codex shares the host login, its auth.json bind-mounted read-write as a single file (Codex
-      rewrites it in place) plus its lock file when present; a GitHub token for gh and pushes,
-      passed the same way. No scenario uses a real credential.
   - id: p1-harness-home
     title: A home of the harness's own inside the container, seeded so a first run neither stops nor calls home
     phase: 1
@@ -1064,8 +959,8 @@ items:
   - id: T-39
     title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-38]
     kind: task
   - id: T-40
@@ -1080,7 +975,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-26, T-39, T-40, p3-approval-before-egress]
+    depends_on: [slice-26, T-39, T-40]
     kind: slice
     why: >
       Was p1-egress-run-through-proxy.
@@ -1553,15 +1448,15 @@ items:
   - id: T-44
     title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-45
     title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: p2-harness-env-clears-columns
@@ -1635,3 +1530,209 @@ items:
       the charter takes only when it does not delay the next step. It stays inside the first
       milestone because it is a suite-speed fix for the engine tier, whose compile time sits inside
       the gate.
+  - id: p2-lint-each-release-goos
+    title: golangci-lint runs for every GOOS the release builds, so depguard sees the OS-specific production files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks no charter step, so p2. CI's static tier runs `tools/bin/pinned golangci-lint run
+      ./...` once, for linux, and the linter skips files Go ignores for the build target. So
+      depguard, gosec and revive have never read the five OS-specific production files:
+      internal/engine/policy/disk/open_windows.go, manifest/disk/open_windows.go,
+      approval/disk/calls_windows.go, approval/disk/private_other.go and
+      session/disk/anchor_other.go. .goreleaser.yaml builds linux, darwin and windows, so a
+      forbidden import (another engine, `crypto/tls` outside egress, `os/exec`) in a new
+      `_windows.go` or `_darwin.go` adapter file passes CI and ships. A spec review measured it: an
+      `os` import in an engine domain's probe_windows.go gave no depguard issue on Linux and one
+      under GOOS=windows. This is not p2-architecture-stdlib-on-go-list. That item changes
+      tools/architecture so domains, ports and handlers hold per-role stdlib allowlists and refuses
+      `//go:build` lines there. All five files above are adapters, which it does not cover. The
+      architecture check's `--siblings --outside --linked --toplevel` arrows also run on the host's
+      build only, so a cross-slice import in an adapter's `_windows.go` is seen by neither gate.
+      Linting each release GOOS closes it for every depguard rule and every other linter at once.
+      T-39's raw-walk tests close it only for egress's TLS rule. Add `GOOS=windows` and
+      `GOOS=darwin` runs of the same lint command to the static tier in itos.yaml, with a
+      compile-first fixture for each: a forbidden import in a `_windows.go` and a `_darwin.go` file
+      in an adapter that fails only under that GOOS. itos.yaml is an enforcement input, so this runs
+      the full fixture matrix; do it in one change with p2-architecture-stdlib-on-go-list if both
+      are taken together. Measure the added static-tier time first, since lint is one of the longest
+      static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
+      own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
+      already ships.
+  - id: p3-workspace-copy-mode
+    title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person, 2026-11-09, after reading tryboxi (delta sync into a microVM, .git sanitizing, a
+      three-way apply back) and cloudycloud (a clone on a cloud machine, results pushed as a
+      branch): 'an alternative way of working'. Not now, and not instead of the mount. A copy mode
+      would clone or bundle the checkout into the sandbox's own volume and return the work as
+      commits (a bundle or a branch the host fetches), never writing the host checkout during the
+      run. That removes by construction the class milestone one hardened one case at a time (inode
+      swaps, host sockets, hard links, control state reached through the mount) and planted .git
+      hooks, lets several runs share one checkout, and is the only shape a microVM or remote
+      provider can use, since those share no filesystem with the host. Costs: sync time on large
+      repositories, no live view in the host editor, and divergence when the person edits the
+      checkout meanwhile (commits merge; uncommitted edits don't).
+  - id: p1-engine-timing-notice-every-run
+    title: Every engine job run publishes its slowest scenario timings and the runner's identity as a ::notice annotation, green runs included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks T-45, the head of the queue and a suite-speed fix the charter finishes before milestone
+      two step 1 gets far. Main ran the engine tier at 4 min 5 s against a 4 min test timeout, so
+      any slow runner fails every pull request's engine job, step 1's included. T-45 must read where
+      the time goes from a CI run on its own head. T-44's slowest-first section sits in the `if:
+      failure()` diagnostics step, so a green or merely slow run prints nothing. Job logs return 403
+      without a token, so an agent cannot read the log anyway. Add a step that runs on every engine
+      job, green included, and publishes a bounded number of `::notice` lines. `::notice` is a
+      separate annotation type from `::error`, so it does not use the ten errors per step that
+      T-43's report fills. Each line carries scenario name, duration and outcome only. One more line
+      carries the step's duration_ms, its 240000 ms limit, and the runner's identity: name, image
+      version, OS, architecture and CPU count. That identity lets the 162–196 s fast runners be told
+      apart from the 199–245 s slow ones, so runner variance is not mistaken for a regression. Print
+      no credentials, environment dump or file contents. Leave the failure-only step and its pins
+      unchanged except where the new step needs them. The `if: failure()` gate,
+      TestEngineFixtureWorkflow and TestEngineWorkflow pin the engine steps, so the change needs a
+      ledger task whose check extends TestEngineDiagnostics or TestEngineScenarioTiming. Land it
+      after T-43 and T-44, which edit the same workflow region, and rebase on them.
+
+      That item already adds a step that runs on every engine job, green included, and publishes a
+      ::notice line with the runner's name, image version, OS, architecture and CPU count, so a
+      runner-image change can be told from a regression. Engine jobs are now the three engine-shard
+      legs, and that item should cover each leg. Two notes for it. First, add the Docker server
+      version to the same line. Each leg's preflight prints it only in the token-gated job log.
+      Second, the preflight is an exact allowlist in validEnginePreflight, so it should leave the
+      preflight alone and read the image and Docker version in the new step. Reading /etc/os-release
+      in the preflight would need a reviewed allowlist change, and T-44's diagnostics step prints
+      only on failure, so it cannot carry this.
+
+      This belongs inside p1-engine-timing-notice-every-run, which already adds a step on every
+      engine job, failures included, publishing duration_ms and the 240000 ms limit as a notice.
+      That reaches a reader without the token-gated log. What the notice lacks is a label saying the
+      step failed on time alone. Fold that in: the engine_finish trap in ci.yml, at the branch that
+      sets result=1 when elapsed exceeds 240000 with a passing test run, also prints `::error
+      title=Engine step over its time limit` with measured and limit seconds and nothing else. Cover
+      it in TestEngineSuiteBudget's over-budget cases. Public data only. It edits the same workflow
+      region and pins, so it is one change with the notice step, not a separate item.
+  - id: T-46
+    title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
+    phase: 1
+    owner: null
+    status: dropped
+    depends_on: []
+    kind: task
+  - id: T-47
+    title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: slice-29
+    title: The policy file accepts named credential sources and doctor validates them without reading their contents
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-47]
+    kind: slice
+    why: >
+      Was p1-credentials-policy-sources.
+      Charter step 2: the credential grants are part of the approved settings, so they start in
+      itos-container.yaml, as the egress allowlist did in slice-25. Scenarios first: a closed
+      credentials section naming each source by kind (Claude token file, Codex auth file, GitHub
+      token file) with an absolute host path. Unknown kinds, duplicates, relative or empty paths,
+      and paths inside the checkout or any mount are refused with a located diagnostic. Doctor
+      reports a missing, non-regular, group- or world-accessible, or foreign-owned source, and shows
+      the effective grants. It never prints, hashes or logs contents. It does not execute checkout
+      code and starts no engine. Offline policies without the section are unchanged. docs/CONFIG.md
+      and docs/CLI.md are updated, and the published policy schema moves with it. It takes the keys
+      and checks from the decision record. Broken down from p1-credentials-passed-in.
+  - id: slice-30
+    title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-29, slice-26]
+    kind: slice
+    why: >
+      Was p1-credentials-approval-grant.
+      Charter step 2 plus q-52: approve shows exactly which credential kinds and host paths the
+      worker will receive and asks for yes at a real terminal. --fingerprint is refused, with a fix
+      naming the interactive form, for any grant that includes credentials (and, per slice-26, an
+      egress allowlist). The canonical approved-settings record gains the grants as a set of names,
+      kinds and paths and never contents. Adding, removing or repointing a grant invalidates an
+      existing approval, and run refuses with the change explained. Reordering does not. Offline
+      approvals keep their identity. Status shows grants without secrets. Records, presentation and
+      refusal only: nothing is delivered to a worker yet. It follows the policy slice for the
+      validated grants and slice-26 for the shared canonical record and refusal rule. Broken down
+      from p1-credentials-passed-in.
+  - id: T-48
+    title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-47]
+    kind: task
+  - id: slice-31
+    title: run hands the approved Claude token to the workload; it appears nowhere in docker inspect, the checkout, status or logs
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48]
+    kind: slice
+    why: >
+      Was p1-credentials-claude-token-run.
+      The first user-visible credential behaviour, charter step 2. Scenarios first, real-engine ones
+      in CI, using a synthetic token marker and no real account. With an approved Claude grant, run
+      makes the token readable by the workload in the form the decision record chose. A scenario
+      that fails without the isolation shows that docker inspect of the worker, the session's
+      recovery and approval records, status output, doctor output, the refusal log and run's own
+      diagnostics never contain the marker, and that nothing is written under the checkout. Without
+      an approved grant, or after the source file changes mode or owner, run refuses before creating
+      anything. A second worker or project does not receive it. Offline runs without grants are
+      unchanged. Broken down from p1-credentials-passed-in.
+  - id: slice-32
+    title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48]
+    kind: slice
+    why: >
+      Was p1-credentials-codex-auth-run.
+      Charter step 2: Codex shares the host's own login and rewrites auth.json in place, so the
+      mount is the single file read-write (a directory mount would expose the host home), plus the
+      lock file when the host has one. Scenarios first, real-engine ones in CI, on a synthetic file
+      with no real login. A write by the workload reaches the host file in place. Nothing else from
+      the host directory is visible. A missing or replaced source, a symlink or a path outside the
+      approved one is refused before create. The mount appears in the session's records by path and
+      never by contents. The grant needs approval from a terminal. It also states, in approve's
+      review, that the worker can alter this file, since a read-write mount is the person's chosen
+      design. Broken down from p1-credentials-passed-in.
+  - id: slice-33
+    title: run hands the approved GitHub token to the workload the same way, for gh and pushes
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-31]
+    kind: slice
+    why: >
+      Was p1-credentials-github-token-run.
+      Charter step 2: a GitHub token for gh and pushes, passed like Claude's. Scenarios first, on a
+      synthetic marker. With an approved grant the workload can read the token where gh expects it.
+      The same absence properties hold: docker inspect, records, status, logs and the checkout. Git
+      push over the network needs the egress allowlist, so only the credential's delivery is in
+      scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
+      Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
+      approved grant. Broken down from p1-credentials-passed-in.

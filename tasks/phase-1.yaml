@@ -4847,22 +4847,222 @@
   type: test
   title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
   why: >
-    Measured on 2026-11-09: 2 min 49 s before T-41, 3 min 44 s on T-41's own green run, and 4 min 5
-    s on main after it merged. TestFeatures ran 239.55 s against -test.timeout=4m, so any slow
-    runner fails the engine tier as a timeout, whatever the range changes. The cause is unconfirmed.
-    Candidates are T-41's 35 s overlapDrainBound, now waiting for each covered controller's real
-    drain, and the product's 30 s teardown that drain follows. The 30 s teardown cannot be shortened
-    in product code. T-33 already shortened the engine grace from 10 s to 1 s through the
-    harness-only budget seam in features/engine_budgets_test.go, and this item should use that seam,
-    not raise the limit or change product code. After the two diagnostics items land, read the
-    slowest-examples output from a CI run on the item's head and shorten whichever step it shows,
-    keeping every scenario row, assertion and cleanup. The overlap drain bound stays a
-    stuck-controller bound, per T-41. A lead, if the suite stays near 4 minutes: the control
-    transaction re-validates every pinned path chain about 11 times per Begin, about 2,800 syscalls
-    and 41 fsyncs, five Begins per run, under the syscall tracer against the 1 s call budget.
-    Cutting the redundant back-to-back Unchanged() walks would loosen the anti-substitution guards,
-    so it needs the person's security review and is not part of this item unless the timings show
-    it. Nothing is measured to be wrong there today. Broken down from
+    T-41 lengthened nothing the engine step runs, so this title's premise is wrong and the
+    coordinator retitles the item. The step has run at its limit on slow runners since T-33 landed.
+    Public job metadata, read without a token on 2026-11-09, gives the Engine scenarios step's time
+    for 33 main pushes sampled from T-33's merge (4641ad4, 10:00 UTC) to T-42's (19a188f, 17:12
+    UTC): 162 to 196 s on 11 runs and 199 to 245 s on 22. Before T-41 merged (d1099fc, 12:37 UTC)
+    they split 5 and 8, at 162 to 173 s and 199 to 242 s; after it, 6 and 14, at 164 to 196 s and
+    212 to 245 s. T-33's own merge took 238 s, inside its 240 s budget by about two seconds. The
+    2 min 49 s before T-41 (run 42615366138 at 966e456) was a fast runner, and T-41's 3 min 44 s
+    (42617313777) and main's 4 min 5 s (42618748581, where TestFeatures ran 239.55 s against
+    -test.timeout=4m) were slow ones. Run 42635414385 at b62c89d took 245 s and its job's public
+    annotation reads exit code 2, the test binary's timeout; the other slow failures read exit
+    code 1, which the 240 s budget and a failed scenario both give. Broken down from
     p1-engine-suite-under-its-limit-again.
+
+    The code says the same. finishLocalWorkloads, the only reader of T-41's overlapDrainBound, runs
+    from closeOverlap only for a covered fixture that is not native
+    (features/overlap_fixture_test.go:393). The engine step runs TestFeatures alone, whose
+    selectScenarios keeps only @engine rows, and both @engine overlap scenarios, OVERLAP-06 and -07,
+    set up native fixtures (features/overlap_steps_test.go:64 and 66). T-41's other change,
+    features/overlap_cleanup_test.go, holds unit tests the step's -test.run '^TestFeatures$' never
+    runs. From 966e456 to d1099fc those two files are the only code that changed.
+
+    The step runs 75 examples one at a time (runScenarios sets Concurrency 1 in the engine tier),
+    28 more than the 47 T-33 measured at cdd3897; the README's suite near 100 seconds was an
+    estimate, never measured. The same 75 ran in every run above. Nothing measured points at one
+    step. The seam already holds call, startup and grace at 1/3/1 s and the quiet observation at
+    4 s, and the engine steps' other waits end on their events, costing time only on a fault. T-42
+    showed that a slow runner can cut LIFECYCLE-09's acknowledgement hold at the 1 s call budget,
+    so shorter budgets would leave slow runners less room still. Compilation is a fraction of the
+    step: on four CPUs of the drafting host a cold-cache compile of the features test binary took
+    21 s and the covered product build after it 16 s, 4.7 s and 0.8 s warm. The rest is engine
+    work under -cover, and under the ptrace syscall observer for recovery processes, which a slow
+    runner slows throughout. Every engine log streams its 'engine scenario timing:' records, but
+    logs need a token, and nothing here depends on them.
+
+    The coordinator decided, 2026-11-09 15:18 UTC: the promoted check already passed on main before
+    any work, as every test it named existed, so as written the task would close with nothing done.
+    The spec must replace it with a check that fails on today's main and passes only once the work
+    is in: one that measures the engine suite's time against a budget well under the 4-minute
+    limit, or that fails while T-41's lengthened wait is still there. The second cannot be written,
+    since that wait is not in the engine step, and the drain bound stays a stuck-controller bound
+    per T-41, so this entry takes the first.
+
+    The rule is T-33's own. features/README.md says that if the measured unsharded suite still
+    exceeds 240 s, T-33 calls for whole-feature shards on separate native runners with an exact
+    parsed-example partition check, and main's has, at 242, 244 and 245 s and in that timeout. So
+    the engine tier runs in three shards on separate native ubuntu-latest runners and daemons, each
+    of whole feature files: offline (offline.feature, 24 examples), lifecycle (lifecycle.feature,
+    19, its four LIFECYCLE-09 rows still nested in LIFECYCLE-13's quiet row) and other (anchors,
+    checkout-overlap, doctor, hardlinks, recovery, session and sockets, 32, of which 12 are
+    SOCKETS-01 refusals before any worker exists). Each shard's measured step fails above 180 s
+    instead of 240 s: that is the budget well under the 4-minute limit, measured by the step's
+    existing wrapper on every run. Job, step and Go test limits stay 10, 5 and 4 minutes, and
+    fixture preparation keeps its own. An estimate from the shares of examples and a cold compile,
+    no measurement, puts the slowest shard between two and two and a half minutes on today's
+    slowest runner. Move whole features between the three shards only with measured shard times
+    that show the need, and never split a feature.
+
+    In .github/workflows/ci.yml the engine job becomes two. engine-shard, named 'Engine shard
+    (${{ matrix.shard }})', keeps the event guard, ubuntu-latest with no container or services, the
+    10-minute timeout and the seven steps, and adds strategy fail-fast false and a matrix whose
+    include lists the three shards, each a shard name and its features as whitespace-separated
+    basenames. Its Engine scenarios step gains ITOS_CONTAINER_ENGINE_FEATURES:
+    ${{ matrix.features }} in its step env and the 180 s budget, and changes nothing else. engine
+    keeps its id and the stable name Engine scenarios (Linux amd64) that ci, release and the
+    repository's settings use. It needs engine-shard alone and runs if always() and the event guard
+    hold, with a 1-minute timeout and one step, 'Require every engine shard', running
+    test "$SHARD_RESULT" = success with SHARD_RESULT: ${{ needs.engine-shard.result }}. GitHub's
+    contexts reference does not spell out a matrix job's result in needs; the gate takes success to
+    mean every shard succeeded, and the loop confirms that on the first red shard. ci's gate and
+    release's needs stay as they are. Each shard keeps what T-33 required of one: checkout at TO,
+    the pinned setup, the read-only preflight, its own guarded fixture preparation and final
+    cleanup, step-local environment, setsid --wait, -test.paniconexit0, the timing records, the
+    coverage check of its own IDs, the log and signal diagnostics with T-43's and T-44's steps, and
+    the test's and capture's exit statuses. No daemon, state or fixture output crosses runners,
+    exactly one engine switch remains, in that step, and manual red input reaches every shard's
+    step.
+
+    The selector is an environment input rather than T-33's -engine-feature flag, so that it stays
+    data in featureEnvironment, read through readFeatureEnvironment's lookup as
+    ITOS_CONTAINER_RED_SCENARIOS is, and tests can hold it without a process environment.
+    ITOS_CONTAINER_ENGINE_FEATURES holds whitespace-separated feature file basenames; unset or
+    blank is today's complete tier. Before any build or fixture, selectScenarios refuses, with an
+    error naming it, a nonempty value outside the engine tier, a name that is not a basename ending
+    in .feature, a name given twice, and a name that no feature file with an effective @engine
+    case, live or @wip, bears. In the engine tier it keeps only the named files' rows, intersected
+    with the tier, platform, -scenarios and red selection as today. Red IDs and a -scenarios
+    expression are still validated against the full inventory: an unknown one fails, and one
+    matching only other shards' rows leaves this shard the existing explicit skip, which names the
+    red IDs it left to them. selectScenarios reads the shard's files alone for both its selection
+    and its check of godog's filtered pickles, and the run reads the same files: that check keys
+    rows by URI and godog's pickle ID, so a check over other paths than the selection's never
+    matches. Exact completion counts, the nested schedule, the timing records and the coverage
+    check follow the shard's selection. The ITOS_CONTAINER_ENGINE_ prefix already keeps the
+    variable from product children and harness subprocesses (world.env and
+    sessionChildEnvironment).
+
+    Considered and left. Lowering the unsharded budget: today's suite took at most 180 s on 9 of
+    those 33 runs, so a check of it would pass about one run in four with nothing done, and no
+    known wait would bring the slow runs under it. Shorter seam budgets, for the reason above. One
+    shard per feature, as T-33 wrote: nine engine runners a run beside its other jobs, while the
+    loop keeps several runs going at once; three shards keep each under half the examples at a
+    third of the runners. Raising a limit is the person's call, not a fix, and T-33 excludes a
+    larger runner, a retry or a reduced assertion. The control transaction's repeated Unchanged()
+    walks stay as they are: cutting them needs the person's security review, and nothing measured
+    points at them. No product code, seam value, scenario, assertion, cleanup or overlap drain
+    bound changes.
+
+    The tests are engine-free. TestEngineShards, in a new features/engine_shards_test.go, names
+    only what exists today, so it compiles now and fails at its assertions. Its 'workflow shards'
+    subtest parses the actual workflow and holds both jobs as above: the shard job's guard, runner,
+    timeout, fail-fast false, three named shards, step-local feature input and 180 s step, and the
+    aggregate's id, name, need, guard, timeout and exact gate. 'partition' takes each shard's
+    selection through readFeatureEnvironment and selectScenarios over the real feature files, the
+    engine tier's values entering as data as in TestLifecycleSignalWindow. It requires each shard's
+    count and IDs to equal those of the unsharded selection's rows in its files, the counts to sum
+    to the unsharded count, the IDs' union to equal the unsharded IDs with none in two shards,
+    every feature with an effective @engine case, live or @wip, in exactly one shard, and
+    LIFECYCLE-09 and -13 both in lifecycle's. 'selector' runs fixture features with memory-only
+    steps through runFeatureScenarios, as the schedule regressions do: only the named files' rows
+    run, each refusal above errors before any run, a red ID of another file leaves the explicit
+    skip naming it, an unknown red ID still fails, and a -scenarios expression intersects. 'broken
+    workflows' first finds the unmodified workflow clean, then refuses each of a feature dropped
+    from every shard, a feature in two shards, an unknown feature, a path, an empty shard, a fourth
+    shard, the aggregate without always() or the event guard, needing more or less, a gate
+    accepting another result, continue-on-error on either job, fail-fast true, the feature input
+    moved to job env, and a second engine switch. TestEngineSuiteBudget keeps every case, reads the
+    shard job's step and moves each clock value tied to the budget down 60 s (279.99, 280.00 and
+    280.01 against its 100.00 start). TestEngineWorkflow, TestEngineFixtureWorkflow,
+    TestEngineRedWorkflow and TestEngineDiagnostics keep every assertion and negative control,
+    applied to the shard job; the exact job set gains engine-shard, and its exactly-one-engine-job
+    rule becomes the shard job and its aggregate.
+
+    Words. features/README.md describes the shards, the aggregate, the feature input and the
+    180-second budget, with '180-second' and ITOS_CONTAINER_ENGINE_FEATURES each on one line, the
+    measurements above and the coordinator's measurement command per shard. It drops 'The sole
+    engine job', 'rejects a total above 240 seconds', 'The single engine job remains' and 'If the
+    measured result still exceeds 240 seconds'. docs/architecture/arc42.md's paragraph on the
+    dedicated job under Future behaviour evidence says what the shards and the aggregate do, with
+    'engine shard' on one line. A decision record,
+    docs/decisions/<next free number>-engine-tier-shards.md, names that section as the one it
+    overrides, as the charter asks, with these measurements and the alternatives left.
+
+    T-43 and T-44 change the step this item moves into every shard; each of the three rebases on
+    whichever landed before it, and their steps then run in each shard. Commit TestEngineShards and
+    TestEngineSuiteBudget's 180 s boundary alone first, red, with test --item T-45, and report each
+    failing assertion. Then commit the selector in features/features_test.go and the schedule, the
+    workflow and the adapted workflow tests with test --task T-45, and the words with docs --item
+    T-45. Before stopping, without -race, run go test ./features -count=1 -run
+    '^(TestEngine|TestFeatureSignalDiagnostics|TestLifecycleSignalWindow|TestPlatformSelection)'
+    and the whole feature suite once. The range touches no proof.code path, so its CI judges no
+    mutant. Closure rests on the checks below and the pushed head's engine tier: all three shards
+    green, each measured step within 180 s. The loop records each shard's step time from the public
+    job metadata and, from each job's log, its runner image and the preflight's Docker version, so
+    a later image change is not taken for a regression (triage, 2026-11-09). The unsharded runs
+    above stay the before measurement. Agents run no engine and no Docker.
+
+    The checks capture go test's status rather than use set -o pipefail and use only POSIX
+    constructs, as T-41's and T-42's do. dash is not installed where this was written, so they ran
+    under sh as bash in POSIX mode, their awk under gawk --posix. At 255bc2b all three fail. The
+    first: go test exits 0, the six kept tests pass and awk exits 1, finding no TestEngineShards.
+    The second: TestEngineSuiteBudget passes, but ci.yml says elapsed > 240000 at line 111 and has
+    no 180000. The third: features/README.md says 'The sole engine job' at line 242, 'above 240
+    seconds' at 296, 'The single engine job remains' at 395 and 'still exceeds 240 seconds' at 403,
+    and has neither '180-second' nor ITOS_CONTAINER_ENGINE_FEATURES; arc42.md has no 'engine
+    shard' and no decision record exists. A throwaway selector in a scratch copy, since discarded,
+    split the real inventory into 24, 19 and 32 examples with 12, 7 and 16 IDs, together the
+    unsharded 75 and 35, refused each bad name and the non-engine tier, ran only its file's rows
+    and left the selection, schedule, timing and LIFECYCLE-09 window regressions green. It also
+    showed that the selection and its check must read the same files, and that its red skip lost
+    the names of the red IDs left to other shards, hence those rules.
+- id: T-46
+  type: ci
+  title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
+  why: >
+    Codex's PR reviews stopped on 2026-11-09 (the person's usage reached 100%). push.pr.review_by
+    and push.pr.reviewers still name chatgpt-codex-connector, so itos push --ready would wait for a
+    review that never comes, re-ask after review_stall and stop, and no pull request could land.
+    Empty both; the loop's own Claude review (run by the driver before landing, once per head) stays
+    the review, and an open thread still blocks landing. Recorded in .git/itos/weakened-gates.md.
+    Undo: restore both lists when an outside reviewer is available again.
   done_when:
-    - run: go test ./features -count=1 -run '^(TestEngineSuiteBudget|TestEngineFixtureQuietBudget|TestEngineFixtureGraceBudget|TestOverlapDrainBound)$'
+    - run: "! grep -q chatgpt-codex-connector itos.yaml"
+- id: T-47
+  type: docs
+  title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
+  why: >
+    Charter milestone two step 2 fixes the shape (Claude token from a host file, Codex auth.json
+    bind-mounted read-write as one file plus its lock file, a GitHub token for gh, all passed per
+    command, never in container configuration, docker inspect or the checkout). The mechanism,
+    though, is open: with no exec command and a workload that may be the container's main process,
+    how does a secret reach the worker without entering the create config? Candidates are a
+    pre-start archive copy, stdin handoff and an exec-time environment. The record is documentation
+    only, like T-38 and 0022. It settles the policy keys that name a credential source, the
+    host-file checks (regular file, owner, mode, outside the checkout and every mount), the
+    in-worker names and paths, redaction in status and logs, what the approval record binds and
+    shows (names and kinds, never contents), the refusal of --fingerprint for any credential grant
+    per q-52, and the synthetic-marker test approach. It states plainly what stays open for the
+    person (refresh ownership and revocation, deletion, the GitHub token's scope, and the contract's
+    rule that account-management contracts are settled before real credentials are used) and asks
+    through itos decision rather than inventing protections. It updates the arc42 sections it
+    overrides under the charter's drift rule. Later items take their design from it. Broken down
+    from p1-credentials-passed-in.
+  done_when:
+    - run: test -f docs/decisions/0025-credentials-passed-in.md && grep -qi 'docker inspect' docs/decisions/0025-credentials-passed-in.md && grep -qi 'auth.json' docs/decisions/0025-credentials-passed-in.md && grep -qi 'fingerprint' docs/decisions/0025-credentials-passed-in.md
+- id: T-48
+  type: feat
+  title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
+  why: >
+    The shared seam every credential slice needs, built before them, as T-40 is for the proxy. A
+    port method, a stateful fake in porttest and a docker adapter hand secret bytes or a
+    bind-mounted host file to one worker for one command, by the mechanism the decision record
+    chose. The port's shared contract runs against the fake and the adapter. It asserts that the
+    created container's configuration, mounts list, labels and recovery records hold no secret
+    value, that the secret is gone with the session, and that a failed delivery stops the workload
+    before it starts. Real-engine proof runs in CI only, on a synthetic marker, and the agent never
+    receives the Docker socket. The fake does no I/O. Broken down from p1-credentials-passed-in.
+  done_when:
+    - run: go test ./internal/engine/session/...
