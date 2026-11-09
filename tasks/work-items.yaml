@@ -488,6 +488,14 @@ items:
       docs/security.md. Nothing is new here. What remains is the coordinator's depends_on edit,
       since slice-27 still lists [slice-26, T-39, T-40], together with the person's decision on who
       may approve a network-granting sandbox. Neither needs a new item.
+
+      This item already holds the point, and the edge now exists: slice-27's depends_on lists
+      p3-approval-before-egress (commit f5f9e58), so slice-27 cannot be taken before it. Slice-26's
+      spec confirms the placement: run keeps refusing version 2 after slice-26, so a self-approved
+      allowlist grants no route until slice-27 lifts that refusal. One thing remains, and it is the
+      person's: decide who may approve a network-granting sandbox, and whether allowlist-v1 records
+      written before the gate lifts stay valid or are retired by a new profile name. The coordinator
+      should put that to the person (itos decision) before slice-27 is taken. No new item is needed.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
