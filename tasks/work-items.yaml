@@ -967,8 +967,8 @@ items:
   - id: T-39
     title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-38]
     kind: task
   - id: T-40
@@ -1589,3 +1589,38 @@ items:
       provider can use, since those share no filesystem with the host. Costs: sync time on large
       repositories, no live view in the host editor, and divergence when the person edits the
       checkout meanwhile (commits merge; uncommitted edits don't).
+  - id: p1-engine-timing-notice-every-run
+    title: Every engine job run publishes its slowest scenario timings and the runner's identity as a ::notice annotation, green runs included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks T-45, the head of the queue and a suite-speed fix the charter finishes before milestone
+      two step 1 gets far. Main ran the engine tier at 4 min 5 s against a 4 min test timeout, so
+      any slow runner fails every pull request's engine job, step 1's included. T-45 must read where
+      the time goes from a CI run on its own head. T-44's slowest-first section sits in the `if:
+      failure()` diagnostics step, so a green or merely slow run prints nothing. Job logs return 403
+      without a token, so an agent cannot read the log anyway. Add a step that runs on every engine
+      job, green included, and publishes a bounded number of `::notice` lines. `::notice` is a
+      separate annotation type from `::error`, so it does not use the ten errors per step that
+      T-43's report fills. Each line carries scenario name, duration and outcome only. One more line
+      carries the step's duration_ms, its 240000 ms limit, and the runner's identity: name, image
+      version, OS, architecture and CPU count. That identity lets the 162–196 s fast runners be told
+      apart from the 199–245 s slow ones, so runner variance is not mistaken for a regression. Print
+      no credentials, environment dump or file contents. Leave the failure-only step and its pins
+      unchanged except where the new step needs them. The `if: failure()` gate,
+      TestEngineFixtureWorkflow and TestEngineWorkflow pin the engine steps, so the change needs a
+      ledger task whose check extends TestEngineDiagnostics or TestEngineScenarioTiming. Land it
+      after T-43 and T-44, which edit the same workflow region, and rebase on them.
+
+      That item already adds a step that runs on every engine job, green included, and publishes a
+      ::notice line with the runner's name, image version, OS, architecture and CPU count, so a
+      runner-image change can be told from a regression. Engine jobs are now the three engine-shard
+      legs, and that item should cover each leg. Two notes for it. First, add the Docker server
+      version to the same line. Each leg's preflight prints it only in the token-gated job log.
+      Second, the preflight is an exact allowlist in validEnginePreflight, so it should leave the
+      preflight alone and read the image and Docker version in the new step. Reading /etc/os-release
+      in the preflight would need a reviewed allowlist change, and T-44's diagnostics step prints
+      only on failure, so it cannot carry this.
