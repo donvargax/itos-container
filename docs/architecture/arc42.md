@@ -678,10 +678,10 @@ and measurements are in [the egress proxy record](../decisions/0022-egress-proxy
    see the HTTP Host or anything after that hello.
 4. **Failure closes; there is no fallback network.** A missing ready, a proxy exit or an
    unverifiable resource creates no worker. The proxy recovers no panic and ends on an
-   Accept error, a failed log write or the 20,000th refusal (`log-full`). During a run the
-   controller also waits on the proxy, and its exit is a typed failure: the worker gets the
-   existing termination, an observed exit keeps its precedence and run returns nonzero.
-   Nothing reconnects the worker or restarts the proxy. Under A3 a lost controller leaves
+   Accept error, a failed write to its stdout or the 20,000th refusal (`log-full`). During a
+   run the controller also waits on the proxy, and its exit is a typed failure: the worker
+   gets the existing termination, an observed exit keeps its precedence and run returns
+   nonzero. Nothing reconnects the worker or restarts the proxy. Under A3 a lost controller leaves
    both running under the frozen list until stop.
 5. **Teardown reverses creation.** The worker, then stop the proxy and confirm it has
    exited, then copy its refusal log to `sessions/<lookup>/<id>/egress-refusals.jsonl`
@@ -808,15 +808,20 @@ changing resource absence or the authoritative workload exit. Open security
 choices follow the charter stop rule, not a blanket reopening of settled limits.
 
 **Refusal log (proposed).** The egress proxy writes one JSON object per line on stdout, at
-most 2 KiB each: schema 1, time, and an event of `ready`, `refused`, `upstream-failed` or
-`log-full`, with method, target, port and a reason only on the two failure events. Target
-and port appear only for a plain host and a one-to-five-digit port; nothing else of the
+most 2 KiB each: schema 1, a per-process `seq`, time, and an event of `ready`, `refused`,
+`upstream-failed` or `log-full`, with method, target, port and a reason only on the two
+failure events. Target and port appear only for a plain host and a one-to-five-digit port; nothing else of the
 request is written, and never URL paths or queries, userinfo, headers, bodies, the hello's
-SNI or client addresses. An allowed tunnel writes nothing. A failed write ends the proxy.
-During the run the log is the proxy's json-file log; at teardown the controller copies every
-record but `ready` to `egress-refusals.jsonl` under the protected session directory, with a
-streaming writer slice-28 adds. The proxy stops after 20,000 records. Retention across
-sessions is open (`p3-session-state-retention`). See [the record](../decisions/0022-egress-proxy.md).
+SNI or client addresses. An allowed tunnel writes nothing. A failed write to the proxy's
+stdout ends the proxy; a failure of dockerd's json-file store behind that write is not
+visible to it. During the run the log is the proxy's json-file log; at teardown the
+controller copies every record but `ready` to `egress-refusals.jsonl` under the protected
+session directory, with a streaming writer slice-28 adds, and a gap in `seq` is a reported
+failure. A lost tail is not detectable (a disk full to teardown, or the copier cut off at
+10 s), so the count status shows is the records stored, not a proof that every refusal is
+in it; approve, status and `docs/security.md` say so (slice-26 and slice-27). The proxy
+stops after 20,000 records. Retention across sessions is open
+(`p3-session-state-retention`). See [the record](../decisions/0022-egress-proxy.md).
 
 **Dependencies and platforms.** Owning behaviour specs choose maintained libraries,
 record reasons and pin versions before adapters are implemented. Policy's v4 selection

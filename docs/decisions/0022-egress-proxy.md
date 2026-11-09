@@ -144,6 +144,19 @@ addresses dials only the valid ones; one with none valid is a refusal with reaso
 `address`. IPv6 is out of this step: both networks have it off, so a listed name with only
 AAAA answers fails as `dns`.
 
+The adapter classifies a failed dial from a flag, never from the error `Dial` returns. The
+Control hook sets an atomic flag for the dial when any address passes the table, and
+`address` applies only when the dial failed with that flag still unset. If a valid address
+was dialed and the dial failed, the failure is `connect`, whichever order the answer lists the
+refused addresses in. The returned error cannot decide it, because `net.Dialer` keeps the
+first address's error: for the answer 10.0.0.1 then 203.0.113.1, with the second timing out,
+the error is the hook's, and for the reverse order it is the timeout (measured twice on Go
+1.27.3 against a fake resolver: in the review, and again here with a fake DNS server). By the
+error alone one upstream fault would read `address` and 403, or `connect` and 502, by answer
+order. T-39's adapter tests cover both orders of that answer, expecting `connect` each time,
+besides an answer with none valid (`address`), no such host (`dns`) and a refused connection
+(`connect`).
+
 T-39's adapter tests reach their loopback listeners by giving its constructor a test
 resolver and dial function, and test the table directly. Porttest fakes stay free of I/O,
 cmd always binds the real ones, and no flag, variable or build tag relaxes the table in the
@@ -328,7 +341,9 @@ existing 120 s startup budget. A missing ready, a proxy exit or an unverifiable 
 means no worker is created. Policy is compiled into the same process, so the contract's
 addon-failure window does not arise: an invalid list exits nonzero before the listener
 opens. The proxy recovers no panic, so a panic in any goroutine ends the process, and an
-Accept error or a failed log write ends it too; each is the same closure.
+Accept error or a failed write to its stdout ends it too; each is the same closure. (A
+store failure behind that write is not visible to the proxy: see "What the log cannot
+promise".)
 
 During a run the controller also waits on the proxy, and its exit is a typed failure: the
 worker gets the existing termination (first signal, 10 s from cancellation, SIGKILL), an
@@ -349,19 +364,22 @@ v28.5.2, not run).
 
 The stop is SIGKILL, then the engine's not-running wait and a fresh inspection, as for the
 worker's exit: each record is one write with nothing buffered in the process, so the kill
-loses none, and a proxy that has already exited goes straight to the copy. This stop is the
-controller's own act once the worker is gone, not the typed proxy failure, so it changes
-neither the run's result nor its exit code. A failed step retains its recovery record and
-exact retry. Removal is authorized as arc42's protocol has it, by durable intent with a
-random name before each create and then the inspected full ID, recorded before any
-instruction, never by labels or names alone (T-40).
+loses none the proxy wrote, and a proxy that has already exited goes straight to the copy.
+What dockerd's copier did with a record after that write is another matter ("What the log
+cannot promise"). This stop is the controller's own act once the worker is gone, not the
+typed proxy failure, so it changes neither the run's result nor its exit code. A failed
+step retains its recovery record and exact retry. Removal is authorized as arc42's protocol
+has it, by durable intent with a random name before each create and then the inspected full
+ID, recorded before any instruction, never by labels or names alone (T-40).
 
 ## The refusal log
 
-One JSON object per line on the proxy's stdout, at most 2 KiB: schema 1, time (RFC 3339
-UTC) and event, which is one of `ready`, `refused`, `upstream-failed` or `log-full`. A
+One JSON object per line on the proxy's stdout, at most 2 KiB: schema 1, seq, time (RFC
+3339 UTC) and event, which is one of `ready`, `refused`, `upstream-failed` or `log-full`. A
 `refused` or `upstream-failed` record adds method, target, port and reason; `ready` and
-`log-full` add nothing.
+`log-full` add nothing. `seq` is a per-process counter: `ready` is 1 and every later
+record, of any event, is the previous plus one, so a gap in what is stored shows that
+records were lost.
 
 - A `refused` record's reason is one of `not-listed`, `literal-ip`, `port`,
   `not-canonical`, `not-connect`, `malformed`, `address`, `not-tls`, `tls-name`,
@@ -383,7 +401,9 @@ bytes, the hello's SNI, client address or Go error text. Every way a head can fa
 one `malformed` record, a partial head and a deadline expiry included; a connection closed
 before its first byte asked for nothing and leaves none. An allowed tunnel writes no
 record. Each record is one write, made before the client is answered, and a failed write
-ends the process, because a refusal that cannot be recorded must stop the session.
+to the proxy's stdout ends the process, because a refusal that cannot be written must stop
+the session. That covers the proxy's own write only: whether dockerd then stores the
+record is not visible to the proxy ("What the log cannot promise").
 
 ### What the client is told
 
@@ -405,17 +425,49 @@ to `sessions/<lookup>/<id>/egress-refusals.jsonl` under the protected state root
 `Publish` in `internal/engine/approval/disk/storage.go` refuses more than 1 MiB, which this
 log can exceed, so slice-28 adds a streaming writer with the same private-file, fsync,
 rename and parent-fsync rules. A failed copy keeps the stopped proxy, its log and its
-recovery record, so stop retries and nothing is lost. Cleanup never deletes that file;
-status names it and its count, and display escapes a hostile name as approval's does
-(slice-28).
+recovery record, so stop retries and the stored log is not lost. Cleanup never deletes that
+file; status names it and the number of records stored, and display escapes a hostile name
+as approval's does (slice-28).
+
+The copy also checks `seq`, with `ready` included, and a gap is a reported failure: the
+copy still writes every record it holds, each with its `seq`, status names the missing
+range instead of a clean count, and the run or stop that tore the session down exits
+nonzero with a typed error naming it. Retrying cannot recover a record dockerd never
+stored, so a gap does not hold the proxy or its resources. slice-28 owns the check, its
+error and a scenario with a log that has a hole.
 
 The proxy stops after 20,000 refused or upstream-failed records, writing one `log-full`
-record and exiting nonzero, which the run treats as a proxy failure. Every refusal stays
-recorded, and a hostile workload can end its own session but cannot rotate away its earlier
-attempts, since a session's records, each at most 2 KiB, stay under the 64m cap even after
-Docker's escaping. That bounds one session at about 40 MiB of host disk. Retention across
+record and exiting nonzero, which the run treats as a proxy failure. Every refusal the
+proxy writes stays in the log, and a hostile workload can end its own session but cannot
+rotate away its earlier attempts, since a session's records, each at most 2 KiB, stay under
+the 64m cap even after Docker's escaping. That bounds one session at about 40 MiB of host
+disk. Retention across
 sessions stays open (`p3-session-state-retention`): completed sessions are not
 garbage-collected (`features/recovery.feature`), so these files accumulate with them.
+
+### What the log cannot promise
+
+The proxy knows its own write to the pipe to dockerd, not what the json-file driver does
+with it. When a store fails, dockerd's log copier reports the error and carries on
+(`daemon/logger/copier.go` at v28.5.2 and v29.4.2, read in the review, not run), and
+`handleContainerExit` bounds the copier's wait at exit to 10 s. So the proxy can write a
+refusal that never reaches the json-file, and the teardown copy then succeeds on a log with
+a hole. The case to expect: Docker's data root shares a filesystem with the checkout and
+has no root reserve, as on XFS or btrfs, or the host disk is simply full; a hostile worker
+fills it through its unquota'd checkout and sends refused CONNECTs, and every pipe write
+still succeeds, so the proxy never exits and the session continues.
+
+`seq` makes a hole inside the stored records visible. It cannot show a lost tail, since no
+later record exists to reveal the gap, and a disk that stays full to teardown, or a copier
+cut off at 10 s, loses exactly the tail. A log that ends early reads as a complete one.
+The copy fails loudly only if its own write under the state root fails, which a full Docker
+data root does not cause unless the two share a filesystem.
+
+So the count that status shows is the number of records stored, not proof that every
+refusal made it in, and the record's other claims about the log read that way. This is a
+disclosed limit, not a closed one: approve, status and `docs/security.md` say so beside the
+handshake guarantee (slice-26 and slice-27), and a closure that sees the store's failure,
+such as a separate sink the proxy can check, stays open for a later step.
 
 ## The handshake guarantee (q-49)
 
@@ -519,7 +571,10 @@ Docker, so it is no runtime evidence, and T-39's tests replace it.
 - Half-close carried both ways, and strace showed splice(2) on a 200,000-byte tunnel.
 - The real resolver through the Control hook connected a mixed answer to its valid address,
   and gave `address` with none valid, `dns` for no such host and `connect` for a refused
-  connection.
+  connection. A mixed answer whose valid address then timed out returned the hook's error
+  when the refused address came first and the timeout when it came last, in the review's
+  run and in a second scratch run with a fake DNS server on loopback, which is why the
+  adapter classifies from the hook's flag.
 
 Read, not run: Docker's port-publishing documentation, moby's `TestIsolated`, libnetwork's
 resolver code and `handleContainerExit`. The topology, the missing IPAM gateway on inspect,
