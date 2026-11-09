@@ -60,3 +60,12 @@ mutation:
       replacement: "1"
       reason: openCandidate calls os.Root.OpenFile with O_RDONLY|O_NOFOLLOW|O_NONBLOCK and no creation flag. The os.OpenFile contract uses perm only when creating a file; Root.OpenFile rejects only bits outside 0777, so both 0 and 1 pass validation. Either value opens the same existing file read-only or returns the same error for a missing, unsafe or inaccessible path. Neither creates a file, changes contents or permissions, nor alters no-follow, nonblocking or subsequent identity checks. TestFilesContract, TestNoFollowAndPathFailures and TestCandidateChangesAfterInspection preserve these behaviors but cannot distinguish this equivalent mutant.
       line_text: return root.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+    - file: internal/engine/readiness/domain/inspect.go
+      function: github.com/donvargax/itos-container/internal/engine/readiness/domain.Inspector#InspectBeforeEngine
+      hash: 7716a814eaca5296
+      line_in_function: 21
+      column: 24
+      original: "||"
+      replacement: "&&"
+      reason: InspectBeforeEngine obtains m directly from manifest/domain.Inspect, not from an injected Result. That function returns read, parse and non-object failures with Effective nil and nonempty Issues. Its final return assigns Effective only when len(Issues) == 0, using a newly allocated Settings; otherwise Effective stays nil. Thus m.Effective == nil and len(m.Issues) != 0 always have the same truth value at this guard. Both OR and AND return on every failure and continue on every success, with identical diagnostics, checkout lifetime and engine access. Neither operand has side effects. Existing manifest domain success/refusal tests and readiness prerequisite tests exercise both outcomes; no reachable input can distinguish this mutant. Reassess this exception if manifest.Inspect changes its result invariant.
+      line_text: if m.Effective == nil || len(m.Issues) != 0 {
