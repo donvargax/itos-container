@@ -569,6 +569,16 @@ items:
       a name alone is not proof. It is not needed for correctness, because Names skips the temporary
       and bd383fd reads the record around it. The item's scenario should check that a retired
       temporary leaves the record intact and that a live publisher's temporary is never removed.
+
+      This is the same family: a session that status and stop can never finish, because an uncertain
+      create keeps its intent and a name-only miss is not proof of absence. That item already covers
+      the crash gaps around registration and intent. Add the case where the daemon answered a create
+      with an error (an exhausted address pool, say) as another way to reach it. Whether an error
+      reply proves no create was made is a security decision, so it is for the person or coordinator
+      to settle, and a drafter must not invent that rule. T-40's spec says the uncertain-create rule
+      is the worker's and the anchor's today and is not T-40's to change. But T-40 adds two network
+      creates per egress run, so slice-27 makes the stuck session reachable and nested checkouts
+      then stay blocked. The item is p3; its phase is worth revisiting once slice-27 is queued.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
