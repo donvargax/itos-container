@@ -18,16 +18,9 @@ import (
 
 // What the cut row of LIFECYCLE-09 records (the "delayed acknowledgement cut a
 // call limit after the daemon check" case of TestLifecycleSignalWindow): its
-// signals, in milliseconds after cancellation, as the record writes them.
+// signals as the record writes them, in nanoseconds after cancellation.
 const lifecycleCutSignals = `[{"signal":"SIGTERM","at_ns":650000000,"status":204,"cancelled":true,"previous_ns":600000000,"next_ns":1620000000},` +
 	`{"signal":"SIGKILL","at_ns":1620000000,"replied_ns":1620000000,"status":204,"cancelled":false,"previous_ns":1620000000}]`
-
-// A timing record as engineTiming writes it for a row of LIFECYCLE-09, which also
-// holds its signals. The embedded record is written first, as the real one is.
-type signalledTimingRecord struct {
-	scenarioTimingRecord
-	Signals json.RawMessage `json:"signals"`
-}
 
 // A log record the step reads: what engineTiming wrote, the text after its prefix,
 // which is what the section prints, and the nanoseconds it sorts and shows.
@@ -69,9 +62,13 @@ func testEngineFailureTimings(t *testing.T, hostOS string) {
 	timing := &engineTiming{output: &buffer}
 	record := func(feature, id string, ns int64, signals string) failureLogRecord {
 		buffer.Reset()
-		value := any(scenarioTimingRecord{Feature: feature, ID: id, Line: 7, DurationNS: ns, Outcome: "passed"})
+		value := scenarioTimingRecord{Feature: feature, ID: id, Line: 7, DurationNS: ns, Outcome: "passed"}
 		if signals != "" {
-			value = signalledTimingRecord{scenarioTimingRecord{Feature: feature, ID: id, Line: 7, DurationNS: ns, Outcome: "failed"}, json.RawMessage(signals)}
+			var offsets []signalOffset
+			if err := json.Unmarshal([]byte(signals), &offsets); err != nil {
+				t.Fatal(err)
+			}
+			value.Outcome, value.Signals = "failed", &offsets
 		}
 		timing.write("scenario", value)
 		written := buffer.String()
