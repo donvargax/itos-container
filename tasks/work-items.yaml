@@ -440,6 +440,13 @@ items:
       requires, and the whys predate the record. Each item's own drafter rewrites that in its spec
       round, and T-39-notes.md already carries the q-51 and review notes into it. Registry and owner
       edits are the coordinator's act, so no new item is needed.
+
+      This item already holds the open question of whether the edge goes on slice-26 or slice-27, or
+      whether the person decides before slice-26 is taken. This idea only argues the placement.
+      After slice-26, run still refuses every version 2 file, so an agent that self-approves an
+      allowlist through --fingerprint or a faked terminal gains no route. Slice-27 is where that
+      approval first becomes a route, so the person's decision must land before slice-27. Weigh that
+      when the edge is placed. docs/security.md and q-2 both say to revisit this before egress.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
