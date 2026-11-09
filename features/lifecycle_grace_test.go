@@ -67,11 +67,14 @@ var lifecycleWindowRows = []struct {
 }{{"SIGINT", 0}, {"SIGTERM", 0}, {"SIGINT", 60}, {"SIGTERM", 60}}
 
 // One journal of a row, built by hand: the first signal at first after
-// cancellation, then each of kills, SIGKILL unless repeat names the first signal.
-// refuses is empty where the journal is accepted, else the text the error names.
+// cancellation, the product's own waits at waits (it makes one the moment its
+// signal call returns), then each of kills, SIGKILL unless repeat names the first
+// signal. refuses is empty where the journal is accepted, else the text the error
+// names.
 type lifecycleWindowCase struct {
 	name    string
 	first   time.Duration
+	waits   []time.Duration
 	kills   []time.Duration
 	repeat  bool
 	ack     lifecycleWindowAck
@@ -228,6 +231,13 @@ func lifecycleDelayedWindowCases(delay time.Duration) []lifecycleWindowCase {
 		{name: "delayed past the absolute tolerance", first: 1500 * ms, kills: []time.Duration{grace + tolerance + ms}, refuses: "SIGKILL at"},
 		{name: "delayed cut at an acknowledgement restart", first: first, kills: []time.Duration{restart(first)}, ack: ackCut, refuses: "SIGKILL at"},
 		{name: "delayed cut before the grace", first: first, kills: []time.Duration{grace - ms}, ack: ackCut, refuses: "SIGKILL at"},
+		// The cut is not journaled, but the product's next request follows it, so
+		// that request cannot come before the call limit has run out. Here the
+		// product gave up 100 ms after the request arrived and waited at once.
+		{name: "delayed hold abandoned before the call limit", first: first, waits: []time.Duration{first + 100*ms},
+			kills: []time.Duration{grace}, ack: ackCut, refuses: "delay did not execute"},
+		{name: "delayed hold abandoned, then a timer from the abandonment", first: first, waits: []time.Duration{first + 100*ms},
+			kills: []time.Duration{first + 100*ms + grace}, ack: ackCut, refuses: "delay did not execute"},
 		{name: "acknowledgement replied early", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackEarly, refuses: "delay did not execute"},
 		{name: "cancelled before the engine accepted", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackStalled, refuses: "delay did not execute"},
 		{name: "no reply and not cancelled", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackNone, refuses: "delay did not execute"},
@@ -277,6 +287,10 @@ func lifecycleWindowWorld(t *testing.T, signal string, delay time.Duration, c li
 		first.Replied = first.At.Add(100 * time.Millisecond)
 	case ackNone:
 		first.Replied = time.Time{}
+	}
+	for _, after := range c.waits {
+		journal = append(journal, offlineRequest{Method: "POST", Path: "/containers/" + worker + "/wait", Status: 200,
+			At: cancelled.Add(after)})
 	}
 	for _, after := range c.kills {
 		next := signal
