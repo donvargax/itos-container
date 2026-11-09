@@ -698,10 +698,12 @@ still returns at cancellation or its ten-second call bound, before the blocked
 operation is released. Late completion cannot resume launch.
 
 LIFECYCLE-09's independent liveness read starts immediately after cancellation,
-with repeated signals still scheduled at two and eight seconds. Observer I/O does
+with repeated signals still scheduled at 20 and 80 percent of the run's grace
+budget (200 ms and 800 ms against the 1-second fixture grace). Observer I/O does
 not hold the request recorder's lock, and a delayed running reply remains evidence
-for the same never-restarted primary. The journal still rejects SIGKILL before ten
-seconds or after twelve. Controlled-time harness tests cover delayed replies and
+for the same never-restarted primary. The journal still rejects SIGKILL before
+the grace budget or after it plus 20 percent (1 s to 1.2 s with the fixture
+grace). Controlled-time harness tests cover delayed replies and
 early controller exit; fresh native-engine evidence remains CI-only.
 
 LIFECYCLE-18/19 cover teardown diagnostics and primary-cause preservation through
