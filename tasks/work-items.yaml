@@ -1546,8 +1546,8 @@ items:
   - id: T-43
     title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-44
