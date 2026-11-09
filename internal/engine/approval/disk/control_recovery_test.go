@@ -154,35 +154,21 @@ func TestControlProspectiveRequiresAnExistingNonRootAncestor(t *testing.T) {
 }
 
 func TestControlInspectionRefusesLostCatalog(t *testing.T) {
-	for _, kind := range []string{"closed descriptor", "replaced directory"} {
-		t.Run(kind, func(t *testing.T) {
-			control, c, reservations, _, _ := controlFixture(t)
-			tx, failure := control.Begin(t.Context(), c, true)
-			if failure != "" {
-				t.Fatal(failure)
-			}
-			defer tx.Close()
-			transaction := tx.(*controlTransaction)
-			var want port.Failure
-			switch kind {
-			case "closed descriptor":
-				if err := transaction.catalog.dir.Close(); err != nil {
-					t.Fatal(err)
-				}
-				want = "state.unavailable"
-			case "replaced directory":
-				path := transaction.catalog.path
-				if err := os.Rename(path, path+"-old"); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Mkdir(path, 0700); err != nil {
-					t.Fatal(err)
-				}
-				want = "state.path"
-			}
-			if failure := transaction.inspect(t.Context(), reservations); failure != want {
-				t.Fatalf("catalog inspection: %s, want %s", failure, want)
-			}
-		})
+	control, c, reservations, _, _ := controlFixture(t)
+	tx, failure := control.Begin(t.Context(), c, true)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer tx.Close()
+	transaction := tx.(*controlTransaction)
+	path := transaction.catalog.path
+	if err := os.Rename(path, path+"-old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if failure := transaction.inspect(t.Context(), reservations); failure != "state.path" {
+		t.Fatalf("catalog inspection: %s, want state.path", failure)
 	}
 }

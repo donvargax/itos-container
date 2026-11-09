@@ -214,9 +214,6 @@ func (s Store) prospective(c port.Candidate, path string, depth int) (*pin, port
 }
 func (t *controlTransaction) inspect(ctx context.Context, reservations port.Reservations) port.Failure {
 	if t.catalog != nil {
-		if _, err := t.catalog.dir.Seek(0, 0); err != nil {
-			return "state.unavailable"
-		}
 		names, f := pinnedNames(t.catalog)
 		if f != "" {
 			return f

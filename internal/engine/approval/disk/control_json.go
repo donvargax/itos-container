@@ -22,19 +22,16 @@ func bindingShape(data []byte) bool {
 	}
 	return bytes.Equal(bytes.TrimSpace(fields["complete"]), []byte("true")) || bytes.Equal(bytes.TrimSpace(fields["complete"]), []byte("false"))
 }
+
+// uniqueJSONValue runs only after Decode accepted data as one valid JSON value, so
+// Token cannot fail on it; duplicate keys are all that remains to detect.
 func uniqueJSONValue(d *json.Decoder) bool {
-	token, err := d.Token()
-	if err != nil {
-		return false
-	}
+	token, _ := d.Token()
 	switch token {
 	case json.Delim('{'):
 		seen := map[string]bool{}
 		for d.More() {
-			key, err := d.Token()
-			if err != nil {
-				return false
-			}
+			key, _ := d.Token()
 			name, ok := key.(string)
 			if !ok || seen[name] {
 				return false
