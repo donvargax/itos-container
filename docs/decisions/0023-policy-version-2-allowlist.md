@@ -23,9 +23,11 @@ published [version 2 schema](../schemas/itos-container-v2.schema.json) sits besi
 
 ## Names are canonicalised, then checked as full DNS names
 
-Each entry passes, in order: a limit of 1024 bytes before any mapping; `idna.Lookup`;
-removal of one trailing dot; at least two labels of 1 to 63 bytes and at most 253 bytes in
-all; and a final label that is neither all digits nor `0x` plus hexadecimal digits. The
+Each entry passes, in order: a limit of 1024 bytes before any mapping; `idna.Lookup`,
+which the adapter also makes refuse a final `xn--` because the library reads it as an
+empty label and returns what a written trailing dot gives; removal of one trailing dot;
+at least two labels of 1 to 63 bytes and at most 253 bytes in all; and a final label that
+is neither all digits nor `0x` plus hexadecimal digits. The
 first limit exists because punycode encoding is quadratic: a 64 KiB name of distinct
 characters took the library four to six seconds on 2026-11-09, and refusing it first
 takes milliseconds. Literal addresses in any spelling, wildcards, suffix shortcuts,
@@ -51,8 +53,12 @@ slice-27 can.
 ## Fix texts depend on the version read
 
 Each issue records the supported version the file declared (zero when none was read), so
-a version 2 file never gets a fix naming version 1, a version 1 file never gets one that
-offers `allowlist`, and a file with no supported version gets fixes naming both.
+a version 2 file read by `doctor --policy-only` never gets a fix naming version 1, a
+version 1 file never gets one that offers `allowlist`, and a file with no supported
+version gets fixes naming both. The one exception is the refusal in the section above:
+the fix of `policy.version` for a valid version 2 file, which ordinary doctor, approve and
+run cannot act on yet, says to use policy version 1 or to read what the file requests with
+`doctor --policy-only`.
 
 ## The library
 

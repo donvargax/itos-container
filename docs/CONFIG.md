@@ -218,7 +218,9 @@ here.
 2. `golang.org/x/net/idna` Lookup: lower case, UTS 46 non-transitional mapping
    (full-width forms, ideographic dots, ignored code points such as the soft hyphen),
    STD3 host-name characters, hyphen and Bidi rules and valid A-labels. A refusal refuses
-   the entry; its error text quotes the label and is never shown.
+   the entry; its error text quotes the label and is never shown. A final `xn--` is
+   refused too: Lookup reads it as an empty label and returns what a written trailing dot
+   gives, so `a.example.xn--` would otherwise be listed as `a.example`.
 3. One trailing dot is removed, after mapping, so an ideographic final dot counts as well.
 4. At least two labels, each of 1 to 63 bytes, and at most 253 bytes in all. Lookup checks
    none of this: it accepts `.example.com`, `example.com..` and a 64-byte label.
@@ -244,11 +246,14 @@ and a diagnostic never echoes the rejected value. Independent problems are colle
 in version 1, and the existing depth, node and path budgets bound the list: it has no
 limit of its own.
 
-A fix names the schema the file was read against. For a version 2 file no fix names
-version 1, and `policy.network_mode` says to use offline or allowlist mode. Where no
-supported version was read, the fix names both: `use policy version 1 or 2` for an
-unsupported number, and `use the field type defined by policy version 1 or 2` for a
-wrongly typed version or a root that is not an object.
+A fix names the schema the file was read against. For a version 2 file read by
+`doctor --policy-only`, no fix names version 1, and `policy.network_mode` says to use
+offline or allowlist mode. The one exception is the refusal below, which ordinary doctor,
+approve and run give a valid version 2 file: its fix says `use policy version 1, or read
+what a version 2 file requests with doctor --policy-only`. Where no supported version was
+read, the fix names both: `use policy version 1 or 2` for an unsupported number, and
+`use the field type defined by policy version 1 or 2` for a wrongly typed version or a
+root that is not an object.
 
 Only `doctor --policy-only` and `doctor --manifest-only` read a valid version 2 file for
 now. Ordinary doctor, approve and run refuse it with `policy.version` at `/version`, exit
