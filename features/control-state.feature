@@ -173,8 +173,13 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # a per-root lock or process mutex alone cannot implement this contract.
   #
   # This item supplies the catalog and atomic publication/registration exclusion.
-  # Slice-22 consumes retained locations to refuse subsequent exposing mounts,
-  # including approval-first operation order and real mount evidence. Slice-23
+  # Reject a candidate checkout equal to or containing any cataloged location,
+  # including pending claims, before read or write authority. This extends the
+  # own-checkout state.path exclusion to every retained location, even with no
+  # outstanding worker or a different selected state root. Recheck under the
+  # common lock when publication follows run preflight. Preserve path-component
+  # boundaries: textual prefixes and equal basenames alone do not expose state.
+  # Slice-22 supplies broader mount enforcement and real mount evidence. Slice-23
   # checks separation before trusting recovery records. CONTROL-06 cancels its
   # waiting contender before releasing publication: it tests the transaction,
   # not that later mount decision. No runtime-isolation claim is added here.
@@ -272,6 +277,23 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # @wip for local assertion-level red, then implement and obtain green. Each
   # scenario's expected first failing Then is documented beside it. An undefined
   # step, setup failure or an already-passing control is not red evidence.
+
+  # PRRT_kwDOVkB0ws61FpuQ: publication can precede an exposing worker. The second
+  # schedule holds W after preflight so admission must rediscover P's binding.
+  # Both schedules currently grant worker authority instead of the refusal Then.
+  @wip @slice-21 @ID-CONTROL-16 @local-engine-fixture
+  Scenario Outline: Retained control state blocks a later exposing checkout
+    Given a control-state fixture with P approval "absent" and managed location "<location>" relative to W on "distinct daemons"
+    When P publishes approval before W admission using the "<schedule>" schedule
+    Then P approval succeeds and W reports "<rule>" with exit 1 before registration or engine mutation
+    And W preserves the enrolled catalog approvals and both projects without creating launch authority
+
+    Examples:
+      | location        | schedule        | rule                  |
+      | equal to W root | fresh run       | approval.state.path   |
+      | below W root    | fresh run       | approval.state.path   |
+      | equal to W root | after preflight | run.ownership-unsafe  |
+      | below W root    | after preflight | run.ownership-unsafe  |
 
   # The production host observation is tested read-only, without the fixture's
   # substituted account port. Child-only syscall faults hide account evidence;
