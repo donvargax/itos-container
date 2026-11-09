@@ -714,3 +714,22 @@ items:
       type, or classifies merges by their first parent's type. A merge of main into an item branch
       changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
       own subject names the item).
+  - id: p2-profile-non-engine-feature-suite
+    title: Profile the non-engine feature suite and cut its roughly 300 s wall time
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. T-35 recorded 303 s for the uncached `go test ./features -count=1` (1,274
+      scenario rows plus the harness regressions), and the current work step saw 298 s on Linux.
+      T-33 shortens only the engine tier, and T-36 only the coverage pass. Every slice adds rows,
+      and the same suite runs on the Linux, macOS and Windows platform jobs, so each pull request
+      pays it three times, and the loop pays it whenever there is no green base to select from. The
+      charter keeps suite-speed fixes in the first milestone, ahead of milestone 2. First measure
+      per-scenario and per-harness-test durations in the non-engine tier, reusing T-33's
+      timing-record approach. Then cut only demonstrated harness overhead, such as redundant fixture
+      builds or fixed waits in the recovery and lifecycle fixtures. Keep every row, assertion and
+      cleanup, and add no sharding or reduced selection. Phase p2: nothing blocks the current step,
+      and no CI job's limit is near 300 s.
