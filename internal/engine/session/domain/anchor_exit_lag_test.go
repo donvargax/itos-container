@@ -6,6 +6,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
@@ -47,7 +48,7 @@ func TestAnchorDetectorDelayedExitReconciliation(t *testing.T) {
 				engine.AfterWait = func() {
 					switch name {
 					case "wait ignores cancellation":
-						time.Sleep(11 * time.Second)
+						time.Sleep(budget.CallDuration + time.Second)
 					case "still running after wait":
 						change(func(o *port.Observation) { o.Running, o.Status, o.PID = true, "running", 123 })
 					case "foreign worker after wait":
@@ -96,7 +97,7 @@ func TestAnchorDetectorDelayedExitReconciliation(t *testing.T) {
 				if runner.Registry != nil && registry.Records[id].MountDetector != want {
 					t.Fatal("wrong detector observation", registry.Records[id])
 				}
-				if (name == "wait timeout" || name == "wait ignores cancellation") && time.Since(start) != 10*time.Second {
+				if (name == "wait timeout" || name == "wait ignores cancellation") && time.Since(start) != budget.CallDuration {
 					t.Fatal("exit reconciliation exceeded its single call budget", time.Since(start))
 				}
 				if (name == "changed PID before wait" || name == "absent pid changed" || name == "absent pid inspection unavailable" || name == "ended reference observation failed") && waits != 0 {
