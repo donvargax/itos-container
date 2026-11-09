@@ -87,3 +87,12 @@ mutation:
       replacement: <=
       reason: Changing colon < 0 to colon <= 0 differs only when strings.LastIndexByte returns 0. Then target[:colon] is the empty host. The original returns the same empty host, empty port and false either from the port validation or from the following host == empty check; the mutant returns that triple earlier. All other colon indices take identical branches. splitTarget is pure, so neither the Judge verdict nor its logged fields can change. TestJudge already covers CONNECT :443 as malformed with no target or port.
       line_text: if colon < 0 {
+    - file: internal/engine/readiness/domain/inspect.go
+      function: github.com/donvargax/itos-container/internal/engine/readiness/domain.Inspector#InspectBeforeEngine
+      hash: 7716a814eaca5296
+      line_in_function: 16
+      column: 21
+      original: "||"
+      replacement: "&&"
+      reason: InspectBeforeEngine obtains p directly from policy/domain.Inspect, not from an injected Result. Inspect returns source issues only when nonempty; refused always supplies one issue; inspectFields returns nonempty Issues without Policy on failure and a newly allocated Policy without Issues on success. The intervening version guard replaces a successful non-v1 result with a nil Policy and one Version issue. Thus p.Policy == nil and len(p.Issues) != 0 always have the same truth value here. OR and AND both return on every refusal and continue on every accepted policy, with identical diagnostics, checkout lifetime, manifest reads and engine access; neither operand has side effects. Policy domain success/refusal tests and readiness version/prerequisite tests exercise these outcomes. No reachable input distinguishes this mutant. Reassess if policy.Inspect or the version guard changes that invariant.
+      line_text: if p.Policy == nil || len(p.Issues) != 0 {
