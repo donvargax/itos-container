@@ -1439,6 +1439,15 @@ items:
       recorder outside T-42's range. The new rationale (an acknowledgement-relative timer refused at
       any arrival, the wait-after-cut rule and the bound reading the cut) is about making the native
       tier's checks sharper, which the item has already ruled out as a separate piece of work.
+
+      This belongs inside the item. Its fake-clock row, with a hold longer than the call limit
+      leaves, asserts the exact SIGKILL instant at first signal plus grace. A product that sleeps a
+      grace after the cut, or restarts its grace without sending a request, kills at the cut plus
+      grace, so the exact assertion catches it. The idea's proposed check, that no grace timer
+      starts after the signal call returns, is another way to read the same row. Note on the item:
+      this sleeping or silent-restart product sends no /wait, so lifecycleSignals' wait rule does
+      not refuse it and only the fake-clock row's exact instant does. Make that the row's
+      failing-first case alongside the repeated-SIGINT restart.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
