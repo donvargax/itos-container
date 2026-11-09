@@ -1,7 +1,8 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue: []
+queue:
+  - T-37
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -692,5 +693,12 @@ items:
     phase: 1
     owner: donvargax
     status: done
+    depends_on: []
+    kind: task
+  - id: T-37
+    title: Release notes stay within GitHub's body limit, the first release included
+    phase: 1
+    owner: null
+    status: todo
     depends_on: []
     kind: task

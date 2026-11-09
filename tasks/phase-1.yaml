@@ -3210,3 +3210,17 @@
     passes for 320 listed IDs in 188.3 seconds, then collection fails at OVERLAP-10's missing
     covmeta files. That exposes the controller-teardown gap above; passing product assertions
     alone does not satisfy the per-ID collection check.
+- id: T-37
+  type: ci
+  title: Release notes stay within GitHub's body limit, the first release included
+  why: >
+    The first release run (42554343999, 2026-11-09) built and uploaded v0.1.0 as a draft, then
+    failed to publish: gh release edit got HTTP 422, 'body is too long (maximum is 125000
+    characters)', because tools/bin/release-notes with no previous tag (LAST empty) writes every
+    commit body since the root. Bound the notes: for a first release, the feat and fix subjects
+    grouped by kind, the known limits from docs/security.md, and a link to the history instead of
+    every body; for later releases the same bodies as now, cut to a total below the limit with a
+    link to the rest. Test it against this repository's real history so the first-release case is
+    covered.
+  done_when:
+    - run: go run ./tools/bin/release-notes -version 0.1.0 -from '' | wc -c | awk '$1 < 125000 {ok=1} END {exit !ok}'
