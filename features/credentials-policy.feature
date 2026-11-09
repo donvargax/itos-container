@@ -522,6 +522,54 @@ Feature: Named credential requests and read-only source inspection
     And inspection has no host side effects
     And the engine recorder has no connections
 
+  # Missing-source success in 12 cannot detect metadata calls whose errors are
+  # discarded. Reuse 29/31's raw observation fixture and per-invocation call log
+  # to prove both file-only scopes leave credential observation untouched.
+  # The new manifest Given supplies .devcontainer/devcontainer.json with the
+  # existing pinned fixture image and valid workspace observations, and updates
+  # only the policy's manifest path. It preserves the v3 request, source, topology
+  # and selected failure; it neither invokes validation nor supplies its result.
+  # The new parameterized When passes the literal doctor argv through the real
+  # scope dispatcher in the same cached test-only command assembly as 29/31.
+  # All scopes receive the same ports; the runner must not omit the observer or
+  # choose a validator/presenter instead of letting the command select its scope.
+  # Reset call logs at command entry, never in Then. Counts cover failed calls too.
+  # The new scope Then checks schema:1, ok:true, the named scope and problems:[].
+  # For policy it compares the complete v3 effective policy, including the literal
+  # requested source; for manifest it checks the selected path, valid:true and
+  # the fixture's complete effective manifest, without inventing a grants field.
+  # No-source-metadata excludes every source path stat/open and source ancestor
+  # walk. No-checkout-traversal excludes the exposure inventory, not the policy
+  # and selected manifest/workspace reads that file-only inspection requires.
+  # No-state-mount-table means no topology read. The credentials-only invocation
+  # then proves the unchanged fault and both observers are reachable; merely
+  # discarding observation errors in a file-only mode cannot pass the zero counts.
+  # Today each row fails at the first exit-0 assertion: version 3 is unsupported.
+  # The implementer adds these steps in the red-first test commit, not this spec.
+  @wip @slice-29 @ID-CREDENTIALS-36
+  Scenario Outline: file-only scopes never observe requested credential sources or exposure
+    Given a credential observation fixture for "<boundary>" with "<layout>"
+    And credential observation includes a valid selected manifest
+    When the credential observation contract runs "doctor <flag> --json"
+    Then it exits with code 0
+    And its credential observation JSON reports a valid "<scope>" inspection
+    And the credential observation recorded no source metadata checkout traversal or state mount-table calls
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                   | path                  | exit |
+      | credential.unavailable | /credentials/0/source | 3    |
+    And it exits with code 3
+    And the credential observation recorded "source metadata" calls
+    And the credential observation recorded "<operation>" calls
+    And the engine recorder has no connections
+
+    Examples:
+      | flag            | scope    | boundary        | layout                  | operation          |
+      | --policy-only   | policy   | checkout        | unreadable descendant   | checkout traversal |
+      | --policy-only   | policy   | protected state | unavailable mount table | state mount-table  |
+      | --manifest-only | manifest | checkout        | unreadable descendant   | checkout traversal |
+      | --manifest-only | manifest | protected state | unavailable mount table | state mount-table  |
+
   # New fixture steps for metadata and command gates below:
   # - "a private credential inspection fixture" creates a standalone scratch
   #   checkout with .git, a valid manifest and separate private HOME/state/source
