@@ -826,3 +826,16 @@ items:
       Codex shares the host login, its auth.json bind-mounted read-write as a single file (Codex
       rewrites it in place) plus its lock file when present; a GitHub token for gh and pushes,
       passed the same way. No scenario uses a real credential.
+  - id: p1-harness-home
+    title: A home of the harness's own inside the container, seeded so a first run neither stops nor calls home
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, step 3 (docs/charter.md). A writable volume or tmpfs, never the host home and
+      never the checkout; Claude's onboarding flags and Codex's update checks, analytics and plugins
+      off (its own sandbox off, the container being the sandbox); executable /tmp. Open for the
+      spec: a named volume per checkout (keeps sessions, so resume works across runs) or a tmpfs
+      (keeps nothing); the coordinator recommends the volume.
