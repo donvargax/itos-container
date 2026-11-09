@@ -284,6 +284,24 @@ items:
       blocks. One check closes most: tools/bin/architecture-check reads each role's stdlib imports
       from go list, with an allowlist per role, including IgnoredGoFiles. Details at the
       coordinator.
+
+      This belongs inside p2-architecture-stdlib-on-go-list. That item already plans a go list based
+      change to tools/architecture and already names build-tagged files as an evasion ('a
+      build-tagged handler file with os/exec passes'). Closing this gap is the same
+      enforcement-input edit: it triggers the full fixture matrix, so it should be one change, not
+      two. One correction to the idea's example. I checked with go list on this Linux host: a lone
+      x_darwin.go is already reported in IgnoredGoFiles, so the current check
+      (tools/architecture/graph.go) does refuse it. The real gap is a file that matches the host.
+      x_linux.go, x_amd64.go and //go:build linux all pass on Linux CI, yet the file is dropped on
+      the other release targets (.goreleaser.yaml builds linux, darwin and windows). So the domain
+      or port behaves differently per OS without any ignored file showing up. The idea's measured
+      remedy still applies: run go/build MatchFile over the goreleaser targets, plus a refusal of
+      any //go:build line in domains and ports, because //go:build !relaxed matches on all five
+      targets. The charter's supported host is Linux amd64, so this is p2 at most and blocks
+      nothing. Backport candidate for the coordinator to file on go-template-itos after searching
+      its issues: tools/architecture has been reworked in this project, and the template renders the
+      same checker (.itos-template.yaml names go-template-itos). This project's copy was changed
+      after rendering.
   - id: T-17
     title: Bugbot is not requested for the rest of 2026-11-04
     phase: 1
@@ -1528,8 +1546,8 @@ items:
   - id: T-43
     title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-44
@@ -1592,3 +1610,28 @@ items:
       slice-27 makes an approved list a live route. Slice-26's spec chose the whole-array form on
       purpose, so this is a follow-up that changes that scenario in a feat commit, not an edit to
       slice-26.
+  - id: p2-ci-go-build-cache-rolling-key
+    title: CI jobs restore a Go build cache that follows main, not one frozen at go.sum's first save
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. ci.yml uses actions/setup-go with cache-dependency-path: go.sum in every
+      job (lines 40, 68, 184, 207, 230). The cache key is go.sum's hash, and as I read setup-go it
+      saves only when that key missed. The build cache is therefore frozen at the first save for
+      each go.sum, so every job recompiles all of this module's packages changed since then. The
+      engine step's 240 s gate (T-33) includes `go test -c`, so compile cost counts against the same
+      budget T-45 is trying to free. A work step measured it locally on 4 CPUs. The features binary
+      took 21 s cold and 4.7 s warm. The covered product build took 16 s cold and 0.8 s warm. That
+      is up to about 30 s in a step that has run at 199–245 s on slow runners. It was not measured
+      in CI. First read the `engine compilation timing:` lines from recent main and pull request
+      runs to confirm the share. If it holds, settle in the spec the key that rolls with main and
+      the restore order. Also settle whether it needs a pinned actions/cache in place of setup-go's
+      cache option, with the reason and version. Branch scoping must keep a pull request's cache
+      from feeding main. Keep the 240 s gate, the 4 m test timeout and compilation inside the
+      measurement unchanged. Phase p2: nothing blocks milestone two step 1, and it is CI polish that
+      the charter takes only when it does not delay the next step. It stays inside the first
+      milestone because it is a suite-speed fix for the engine tier, whose compile time sits inside
+      the gate.
