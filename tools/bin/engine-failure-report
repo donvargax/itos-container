@@ -10,6 +10,12 @@
 #
 # Always exits 0 after reporting; the step that calls it runs under set +e.
 set -euo pipefail
+# Bytes, not characters: in a UTF-8 locale `.` and a pattern's bracket match no
+# invalid byte sequence, and the steps that quote a workload's stderr with %s
+# can put one on a block's first line, which would then start no block and hide
+# its scenario. The cut below counts bytes too, which for ASCII is the runner's
+# measure and otherwise keeps no more than it does.
+export LC_ALL=C
 
 if [[ $# != 1 ]]; then
   printf 'usage: engine-failure-report <log>\n' >&2
@@ -126,16 +132,9 @@ else
         panic_full=$((${#panic_text} >= limit ? 1 : 0))
         ;;
       ' '*)
-        if [[ $line == *'--- FAIL: '* ]]; then
-          # Cheap tests first: the regular expressions below are the slow part.
-          if [[ $line =~ ^\ *---\ FAIL:\ (.+)\ \([0-9.]+s\)$ ]]; then
-            name=${BASH_REMATCH[1]}
-            if is_own "$name"; then
-              own_line
-              if [[ $name == "$run" ]]; then run_failed=1; else mark_failed "$name"; fi
-            fi
-          fi
-        elif [[ $line == '    '[!\ ]*.go:[0-9]*': '* && $line =~ ^\ {4}([^\ ]+\.go):[0-9]+:\ (.*)$ ]]; then
+        # Cheap tests first: the regular expressions are the slow part. A block
+        # start is tried before a failure line, as its first line may quote one.
+        if [[ $line == '    '[!\ ]*.go:[0-9]*': '* && $line =~ ^\ {4}([^\ ]+\.go):[0-9]+:\ (.*)$ ]]; then
           # A block start is the run's own line wherever it stands.
           own_line
           in_block=1
@@ -145,6 +144,12 @@ else
           block_full=$((${#block_text} >= limit ? 1 : 0))
           if [[ -n $current && $current != "$run" && $block_file == suite.go ]]; then
             mark_failed "$current"
+          fi
+        elif [[ $line == *'--- FAIL: '* && $line =~ ^\ *---\ FAIL:\ (.+)\ \([0-9.]+s\)$ ]]; then
+          name=${BASH_REMATCH[1]}
+          if is_own "$name"; then
+            own_line
+            if [[ $name == "$run" ]]; then run_failed=1; else mark_failed "$name"; fi
           fi
         fi
         ;;
