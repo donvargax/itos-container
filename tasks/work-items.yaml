@@ -1237,3 +1237,28 @@ items:
       the tracer, that item should consider cutting the redundant back-to-back Unchanged() walks.
       The checks are the anti-substitution guards, so any such change needs a security review by the
       person. Nothing is measured to be wrong today, so it should not be tracked separately.
+  - id: p2-admission-nested-checkouts-across-state-roots
+    title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Isolation, first milestone. It does not block milestone two step 1 (the egress proxy), so p2.
+      Found in slice-21's PR review. checkAdmission in internal/engine/session/disk/admission.go
+      compares a candidate checkout with other workers' checkouts only through the admission records
+      and public registrations of the selected XDG_STATE_HOME tree. Two workers whose checkouts
+      nest, started under different XDG_STATE_HOME values, are therefore both admitted. Slice-16
+      (done) made nested checkouts a refusal, but only inside one state tree. A nested checkout
+      exposes the other worker's checkout and lets the outer worker modify what the inner worker
+      runs, which is the exposure slice-16 closed. Slice-21 now records every control-state location
+      in a catalog that is discoverable under the common control lock. Slice-22 consumes that
+      tracking at run admission for control state, and does not cover worker checkouts, so this
+      stays apart from it. Specify first: black-box scenarios, committed red, for nested checkouts
+      under different state roots in both start orders and with concurrent launches. Then decide,
+      with the person (itos decision), whether admission compares against every enrolled location's
+      admission and registry records, and what it does when an enrolled location is unreadable or
+      lost (compare p2-control-state-upgrade-contract). Depends on slice-21, and should be sequenced
+      with slice-22 because both change run admission. Real mount-isolation evidence runs only in
+      CI.
