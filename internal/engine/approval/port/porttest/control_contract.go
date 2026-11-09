@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -12,6 +13,7 @@ import (
 type ControlFixture struct {
 	First, Second port.Control
 	Candidate     port.Candidate
+	Location      string
 	Expose        func(bool)
 	WriteFault    func(bool)
 	Snapshot      func() string
@@ -101,6 +103,7 @@ func ControlContract(t Reporter, open func() ControlFixture) {
 		return
 	}
 	other.Close()
+	ControlCandidateContract(t, f.Second, f.Candidate, f.Location, f.Snapshot)
 	tx, failure = f.First.Begin(ctx, f.Candidate, false)
 	if failure != "" {
 		t.Errorf("retained first root: %s", failure)
@@ -117,5 +120,38 @@ func ControlContract(t Reporter, open func() ControlFixture) {
 	}
 	if failure != "state.path" {
 		t.Errorf("replaced cataloged root: %s", failure)
+	}
+}
+
+// ControlCandidateContract checks retained protection without any outstanding
+// reservation, for both inspection and admission from another selected root.
+// It also applies to a pending claim whose managed directory does not yet exist.
+func ControlCandidateContract(t Reporter, control port.Control, candidate port.Candidate, location string, snapshot func() string) {
+	t.Helper()
+	parent := location[:strings.LastIndex(location, "/")]
+	for _, test := range []struct {
+		root string
+		want port.Failure
+	}{
+		{location, "state.path"},
+		{parent, "state.path"},
+		{location[:len(location)-1], ""}, // textual prefix, not a path component
+		{parent + "-more/itos-container", ""},
+		{parent + "/other/itos-container", ""}, // same basename, disjoint tree
+	} {
+		candidate.Root = test.root
+		for _, write := range []bool{false, true} {
+			before := snapshot()
+			tx, failure := control.Begin(context.Background(), candidate, write)
+			if tx != nil {
+				tx.Close()
+			}
+			if failure != test.want || (tx == nil) != (test.want != "") {
+				t.Errorf("candidate %q write=%t: %s, want %s", test.root, write, failure, test.want)
+			}
+			if test.want != "" && snapshot() != before {
+				t.Errorf("refused candidate changed retained state")
+			}
+		}
 	}
 }

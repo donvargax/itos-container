@@ -21,7 +21,11 @@ func TestAdmissionPublicationExcludesOtherProjectsUntilDurable(t *testing.T) {
 		t.Fatal(f)
 	}
 	done := make(chan port.Failure, 1)
-	go func() { done <- d.Publish(strings.Repeat("a", 64)+".json", nil, []byte("reservation")); d.Close() }()
+	go func() {
+		failure := d.Publish(strings.Repeat("a", 64)+".json", nil, []byte("reservation"))
+		d.Close()
+		done <- failure
+	}()
 	<-entered
 	other := c
 	other.Project = strings.Repeat("b", 64)

@@ -40,7 +40,7 @@ func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.S
 	if ctx.Err() != nil {
 		return approval.Durable{}, context.Cause(ctx)
 	}
-	if strings.HasPrefix(string(view.Failure), "identity.") || hasIssues(view) {
+	if strings.HasPrefix(string(view.Failure), "identity.") || view.Failure == "state.path" || hasIssues(view) {
 		return approval.Durable{}, Prerequisite{view}
 	}
 	if view.Failure == "state.busy" {

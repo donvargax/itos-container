@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
+	"github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
 )
 
 func TestControlRetryCompletesPendingLocation(t *testing.T) {
@@ -52,6 +53,11 @@ func TestControlRetryCompletesPendingLocation(t *testing.T) {
 		t.Fatalf("selected tree exists despite failed mkdir: %v", err)
 	}
 	control.Store.ops = nil
+	other := control
+	other.Store.StateHome = filepath.Join(filepath.Dir(home), "other")
+	porttest.ControlCandidateContract(t, other, c, selected, func() string {
+		return controlSnapshot(t, filepath.Dir(home))
+	})
 	tx, failure = control.Begin(t.Context(), c, true)
 	if failure != "" {
 		t.Fatal("retry", failure)

@@ -13,7 +13,7 @@ func TestControlContract(t *testing.T) {
 		first := Control{State: state, Account: &Account{Home: "/account"}, Reservations: reservations, Fixed: "/account/.local/state/itos-container", Selected: "/selected/itos-container"}
 		second := first
 		second.Selected = "/other/itos-container"
-		return ControlFixture{First: first, Second: second, Candidate: port.Candidate{Root: "/checkout"},
+		return ControlFixture{First: first, Second: second, Candidate: port.Candidate{Root: "/checkout"}, Location: first.Selected,
 			Expose: func(on bool) {
 				if on {
 					tx, f := second.Begin(context.Background(), port.Candidate{Root: "/checkout"}, true)
@@ -29,4 +29,11 @@ func TestControlContract(t *testing.T) {
 			WriteFault: func(on bool) { state.WriteFault = on }, Snapshot: state.Snapshot, Durable: func() bool { return state.Bound[first.Selected] }, Replace: func() { state.Replaced = true },
 		}
 	})
+}
+
+func TestControlPendingLocationProtectsCandidate(t *testing.T) {
+	state := NewControlState()
+	state.Bound["/selected/itos-container"] = false
+	control := Control{State: state, Account: &Account{Home: "/account"}, Reservations: &Reservations{}, Fixed: "/account/.local/state/itos-container", Selected: "/other/itos-container"}
+	ControlCandidateContract(t, control, port.Candidate{Root: "/checkout"}, "/selected/itos-container", state.Snapshot)
 }

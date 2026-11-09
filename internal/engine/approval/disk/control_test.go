@@ -69,7 +69,7 @@ func TestProtectedControlContract(t *testing.T) {
 			return write(file, data)
 		}
 		first.Store.ops = &ops
-		return porttest.ControlFixture{First: first, Second: second, Candidate: c,
+		return porttest.ControlFixture{First: first, Second: second, Candidate: c, Location: selected,
 			Expose: func(on bool) {
 				if on {
 					tx, f := second.Begin(t.Context(), c, true)

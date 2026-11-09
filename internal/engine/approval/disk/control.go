@@ -260,6 +260,9 @@ func (t *controlTransaction) inspect(ctx context.Context, reservations port.Rese
 			continue
 		}
 		seen[path] = true
+		if domain.Exposed(path, t.candidate.Root) {
+			return "state.path"
+		}
 		end, depth := path, 1
 		binding, enrolled := t.bindings[path]
 		if enrolled && path == t.fixed {

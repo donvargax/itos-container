@@ -63,6 +63,19 @@ func TestPreflightReturnsSelectedValueAndDurableReference(t *testing.T) {
 	}
 }
 
+func TestPreflightPreservesControlPathRefusal(t *testing.T) {
+	a := &porttest.Approval{View: approval.View{Status: "invalid", Inspection: af.Ready(), Failure: "state.path"}}
+	snapshots := &af.Snapshots{}
+	durable, err := Preflight(a, snapshots)
+	var prerequisite Prerequisite
+	if !errors.As(err, &prerequisite) || prerequisite.View.Failure != "state.path" {
+		t.Fatalf("control-state path refusal lost its shared diagnostic: %v", err)
+	}
+	if durable != (approval.Durable{}) || a.Selections != 0 || len(snapshots.Values) != 0 || len(snapshots.Events) != 0 {
+		t.Fatal("unsafe checkout obtained approval selection or snapshot authority")
+	}
+}
+
 type stalledSelectionApproval struct {
 	*porttest.Approval
 	release <-chan struct{}

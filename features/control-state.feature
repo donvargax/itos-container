@@ -179,6 +179,8 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # outstanding worker or a different selected state root. Recheck under the
   # common lock when publication follows run preflight. Preserve path-component
   # boundaries: textual prefixes and equal basenames alone do not expose state.
+  # Run preserves the shared approval.state.path diagnostic at preflight; a
+  # refusal after preflight uses its existing run.ownership-unsafe classification.
   # Slice-22 supplies broader mount enforcement and real mount evidence. Slice-23
   # checks separation before trusting recovery records. CONTROL-06 cancels its
   # waiting contender before releasing publication: it tests the transaction,
@@ -281,7 +283,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # PRRT_kwDOVkB0ws61FpuQ: publication can precede an exposing worker. The second
   # schedule holds W after preflight so admission must rediscover P's binding.
   # Both schedules currently grant worker authority instead of the refusal Then.
-  @wip @slice-21 @ID-CONTROL-16 @local-engine-fixture
+  @slice-21 @ID-CONTROL-16 @local-engine-fixture
   Scenario Outline: Retained control state blocks a later exposing checkout
     Given a control-state fixture with P approval "absent" and managed location "<location>" relative to W on "distinct daemons"
     When P publishes approval before W admission using the "<schedule>" schedule

@@ -95,6 +95,18 @@ and worker registration use the same private lock, so cancellation while publica
 holds exclusion creates neither an intent nor public launch authority. Location
 bindings remain after controller exit and worker cleanup.
 
+Review PRRT_kwDOVkB0ws61FpuQ extends the own-checkout exclusion to every cataloged
+location in the common transaction. A candidate root equal to or containing any
+retained location refuses with state.path, including pending claims for absent
+trees, even when no worker reservation remains. Reads check this before trusting
+approval; admission repeats it under exclusion after preflight. This closes the
+approval-first ordering in which a later worker could otherwise mount another
+project's control records. Whole-component comparison retains harmless textual
+prefixes and equal basenames. No catalog, approval or worker authority is created
+by this refusal. Run carries state.path through its shared prerequisite presenter
+as approval.state.path instead of reducing it to generic invalid approval and
+suggesting reapproval. Admission keeps run.ownership-unsafe; both exit 1.
+
 Known exposure reports approval.state.exposed with exit 1 and invalid approval,
 retaining the independently validated candidate. Guidance selects an unexposed
 location or recovery from the blocking worker's original checkout. Reapproval alone
@@ -122,7 +134,9 @@ approval inventories validate exact new bindings rather than exempting catalog t
 
 Only enrolled roots and the explicitly selected legacy root are discoverable. An
 upgrade contract for unseen old XDG roots and mixed old/new controllers is still
-required before claiming protection for existing installations. Slice-22 consumes
-retained locations for later exposing mount decisions; slice-23 protects recovery
-record trust. Neither behavior is silently added here. Fresh changed-code proof,
-real-engine evidence, push and closure remain with the coordinator's CI loop.
+required before claiming protection for existing installations. CONTROL-16 proves
+the retained-location refusal with recording engines in both fresh-run and
+publication-after-preflight schedules. Slice-22 retains broader mount enforcement
+and native runtime evidence; slice-23 protects recovery record trust. Fresh
+changed-code proof, real-engine evidence, push and closure remain with the
+coordinator's CI loop.

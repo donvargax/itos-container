@@ -635,10 +635,14 @@ Doctor inspects without writes, taking a shared lock when present; approve
 and validated run enrollment complete durable self-binding and selected-location
 claims before ordinary state writes. Existing reservation completion semantics are
 shared with separation checks, without operation locks or engine calls. The
+transaction also refuses a candidate checkout containing any retained managed
+location, including pending claims without a directory. Both read inspection and
+admission enforce this by whole path components; admission rechecks under exclusion
+after preflight, preventing a later worker from exposing an earlier publication. The
 [control-state decision](../decisions/0021-control-state-publication.md) defines
-bootstrap/retry ordering and the legacy discovery limit. Later exposing mounts and
-recovery trust checks remain slices 22 and 23; unseen pre-upgrade roots and mixed
-controller versions require a separate upgrade contract.
+bootstrap/retry ordering and the legacy discovery limit. Broader mount enforcement,
+native evidence and recovery trust checks remain slices 22 and 23; unseen pre-upgrade
+roots and mixed controller versions require a separate upgrade contract.
 
 ## Deployment view
 

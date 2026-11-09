@@ -284,3 +284,47 @@ ownership; the sandboxed attempt reported unrelated ownership refusals, and the
 same tests pass with unremapped ownership. CONTROL uses disposable state and local
 recording HTTP fixtures. Fresh changed-code proof and pushed-head CI remain the
 coordinator's responsibility; no mutation or coverage evidence was generated locally.
+
+## Retained location inside a later checkout (PRRT_kwDOVkB0ws61FpuQ)
+
+Test commits `81a8210` and `b5b1788` add pending CONTROL-16. P publishes a
+managed location equal to or beneath W's checkout, using a different selected
+state root and daemon. The fresh-run schedule starts W after P exits; the other
+holds W after successful preflight until P finishes publication. The child syscall
+observer preserves the barrier and verifies P's binding durability independently.
+No Given runs a product command, and all state is disposable.
+
+With `@wip` removed on `b5b1788`, all four examples fail at the first Then:
+P's approval and durable binding succeed, but W reaches create and remains live
+instead of returning exit 1 with the specified refusal. Eight setup/action steps
+pass, four assertions fail and four preservation checks are skipped. There are no
+undefined steps. Earlier fixture attempts are not red evidence: sandbox ownership
+remapping prevented publication, the ordinary process helper dropped the barrier,
+and an overly broad permission observer included ordinary checkout hooks when the
+managed tree equaled W's root. The corrected committed observer fixes those causes.
+
+The common transaction now checks every retained location against the candidate
+root before granting read or write authority, including pending absent locations.
+Run preserves the specified shared state.path preflight diagnostic; admission uses
+its existing ownership-unsafe classification. All four examples now pass, including
+zero registration or engine mutation and exact post-publication state preservation:
+
+```sh
+go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-16$'
+```
+
+The shared disk/fake contract also checks equality, ancestor containment, pending
+claims, harmless textual prefixes and equal basenames without worker reservations.
+The changed approval disk, approval porttest and run domain packages pass under
+`-race`. That targeted check found a preexisting admission-test race: its goroutine
+sent completion before closing the captured directory, allowing the receiver to
+reassign it. Completion now follows close, retaining all exclusion assertions.
+Neighboring session packages and command assembly tests pass. No race detector was
+run over the whole feature package; no real engine, real approval state or local
+mutation proof was used.
+
+The full `go test ./features -count=1 -json` package passes in 291.694 seconds:
+all 1,434 scenario examples and the harness controls pass, with zero failing tests.
+Configured gates run through the final fix commit's hooks. Fresh pushed-head CI
+and changed-code proof remain with the coordinator; the branch already includes
+origin/main's settled engine time limits.
