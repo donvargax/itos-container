@@ -1635,3 +1635,35 @@ items:
       the charter takes only when it does not delay the next step. It stays inside the first
       milestone because it is a suite-speed fix for the engine tier, whose compile time sits inside
       the gate.
+  - id: p2-lint-each-release-goos
+    title: golangci-lint runs for every GOOS the release builds, so depguard sees the OS-specific production files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks no charter step, so p2. CI's static tier runs `tools/bin/pinned golangci-lint run
+      ./...` once, for linux, and the linter skips files Go ignores for the build target. So
+      depguard, gosec and revive have never read the five OS-specific production files:
+      internal/engine/policy/disk/open_windows.go, manifest/disk/open_windows.go,
+      approval/disk/calls_windows.go, approval/disk/private_other.go and
+      session/disk/anchor_other.go. .goreleaser.yaml builds linux, darwin and windows, so a
+      forbidden import (another engine, `crypto/tls` outside egress, `os/exec`) in a new
+      `_windows.go` or `_darwin.go` adapter file passes CI and ships. A spec review measured it: an
+      `os` import in an engine domain's probe_windows.go gave no depguard issue on Linux and one
+      under GOOS=windows. This is not p2-architecture-stdlib-on-go-list. That item changes
+      tools/architecture so domains, ports and handlers hold per-role stdlib allowlists and refuses
+      `//go:build` lines there. All five files above are adapters, which it does not cover. The
+      architecture check's `--siblings --outside --linked --toplevel` arrows also run on the host's
+      build only, so a cross-slice import in an adapter's `_windows.go` is seen by neither gate.
+      Linting each release GOOS closes it for every depguard rule and every other linter at once.
+      T-39's raw-walk tests close it only for egress's TLS rule. Add `GOOS=windows` and
+      `GOOS=darwin` runs of the same lint command to the static tier in itos.yaml, with a
+      compile-first fixture for each: a forbidden import in a `_windows.go` and a `_darwin.go` file
+      in an adapter that fails only under that GOOS. itos.yaml is an enforcement input, so this runs
+      the full fixture matrix; do it in one change with p2-architecture-stdlib-on-go-list if both
+      are taken together. Measure the added static-tier time first, since lint is one of the longest
+      static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
+      own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
+      already ships.
