@@ -38,6 +38,7 @@ type world struct {
 	timedOut       bool
 
 	stdin               string // the text the run reads from its standard input, "" for none
+	credentials         *credentialWorld
 	policy              *policyWorld
 	manifest            *manifestWorld
 	doctor              *doctorWorld
@@ -74,6 +75,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		// one whose offsets matter, and godog skips the steps after a failure.
 		ctx = withSignalOffsets(ctx, w.lifecycle.signalOffsets())
 		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession())
+		w.closeCredentials()
 		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
@@ -169,6 +171,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	})
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
 	w.policySteps(sc)
+	w.credentialSteps(sc)
 	w.manifestSteps(sc)
 	w.doctorSteps(sc)
 	w.runSteps(sc)
