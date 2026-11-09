@@ -1727,14 +1727,15 @@ items:
       never by contents. The grant needs approval from a terminal. It also states, in approve's
       review, that the worker can alter this file, since a read-write mount is the person's chosen
       design. Broken down from p1-credentials-passed-in.
-  - id: p1-credentials-github-token-run
+  - id: slice-33
     title: run hands the approved GitHub token to the workload the same way, for gh and pushes
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-31]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-credentials-github-token-run.
       Charter step 2: a GitHub token for gh and pushes, passed like Claude's. Scenarios first, on a
       synthetic marker. With an approved grant the workload can read the token where gh expects it.
       The same absence properties hold: docker inspect, records, status, logs and the checkout. Git
