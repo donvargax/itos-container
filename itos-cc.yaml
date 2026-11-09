@@ -42,15 +42,6 @@ mutation:
       replacement: ">="
       reason: The only differing input length is exactly 1048576 settings bytes. Noncanonical or invalid settings still return state.invalid. Canonical matching settings are wrapped by Encode with additional required envelope fields, so Decode rejects the larger-than-1048576-byte record with the same empty Record and state.invalid. The adapter performs no I/O. Boundary tests cover accepted complete envelopes at the limit and rejected settings at that limit; changing this early bound cannot change the result.
       line_text: if len(f.Settings) > 1024*1024 || !bounded([]byte(f.Settings)) {
-    - file: internal/slices/run/command/command.go
-      function: github.com/donvargax/itos-container/internal/slices/run/command.CLI#Run
-      hash: 8dcb7a314b26cd92
-      line_in_function: 3
-      column: 27
-      original: "0"
-      replacement: "1"
-      reason: The changed predicate differs only for a single argument. Unless that argument is --, both paths set separated false. For the lone --, the original passes separated true and empty argv, while the mutant passes separated false and argv containing --. Refuse returns ErrCommandRequired in both cases, or ErrJSONUnsupported first when JSON is requested. Neither path reaches Preflight or mutates caller arguments, and the UI receives the same failure and JSON flag. Live ID-RUN-01 and ID-RUN-05 exercise these separator-only refusals.
-      line_text: separated := len(args) > 0 && args[0] == "--"
     - file: internal/engine/approval/disk/store.go
       function: github.com/donvargax/itos-container/internal/engine/approval/disk.pin#readNamed
       hash: 6703da9607a2dbc1
