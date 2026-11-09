@@ -1699,3 +1699,20 @@ items:
       refusal only: nothing is delivered to a worker yet. It follows the policy slice for the
       validated grants and slice-26 for the shared canonical record and refusal rule. Broken down
       from p1-credentials-passed-in.
+  - id: p1-credentials-delivery-port
+    title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-credentials-decision-record]
+    kind: idea
+    why: >
+      The shared seam every credential slice needs, built before them, as T-40 is for the proxy. A
+      port method, a stateful fake in porttest and a docker adapter hand secret bytes or a
+      bind-mounted host file to one worker for one command, by the mechanism the decision record
+      chose. The port's shared contract runs against the fake and the adapter. It asserts that the
+      created container's configuration, mounts list, labels and recovery records hold no secret
+      value, that the secret is gone with the session, and that a failed delivery stops the workload
+      before it starts. Real-engine proof runs in CI only, on a synthetic marker, and the agent
+      never receives the Docker socket. The fake does no I/O. Broken down from
+      p1-credentials-passed-in.
