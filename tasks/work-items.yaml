@@ -1733,3 +1733,20 @@ items:
       an approved grant, or after the source file changes mode or owner, run refuses before creating
       anything. A second worker or project does not receive it. Offline runs without grants are
       unchanged. Broken down from p1-credentials-passed-in.
+  - id: p1-credentials-codex-auth-run
+    title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-credentials-approval-grant, p1-credentials-delivery-port]
+    kind: idea
+    why: >
+      Charter step 2: Codex shares the host's own login and rewrites auth.json in place, so the
+      mount is the single file read-write (a directory mount would expose the host home), plus the
+      lock file when the host has one. Scenarios first, real-engine ones in CI, on a synthetic file
+      with no real login. A write by the workload reaches the host file in place. Nothing else from
+      the host directory is visible. A missing or replaced source, a symlink or a path outside the
+      approved one is refused before create. The mount appears in the session's records by path and
+      never by contents. The grant needs approval from a terminal. It also states, in approve's
+      review, that the worker can alter this file, since a read-write mount is the person's chosen
+      design. Broken down from p1-credentials-passed-in.
