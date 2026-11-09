@@ -943,3 +943,20 @@ items:
       fallback. The Docker adapter implements it with unit coverage against its fake transport.
       Real-engine proof belongs to the run slices, in CI only. It is session engine work with no new
       command behaviour, so it is a task with a check. Broken down from p1-egress-allowlist-proxy.
+  - id: p1-egress-run-through-proxy
+    title: run reaches only the approved names through the proxy; every other route out is closed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-egress-allowlist-approval, p1-egress-connect-proxy, p1-egress-network-lifecycle]
+    kind: idea
+    why: >
+      The first user-visible egress behaviour, charter step 1 (contract AC-09, AC-10, AC-13).
+      Scenarios first, with the real-engine ones in CI only, run against a fake endpoint the proxy
+      allows and never a real model or credential. With an approved allowlist, itos container run
+      reaches an allowed host name over CONNECT on 443. A direct route out (ignoring proxy
+      variables, a literal IP, the default gateway, UDP, another port) fails independent of client
+      cooperation. A name outside the list, or a spelling variant, is refused. Offline runs are
+      unchanged. It wires the approved allowlist from the approval slice, the proxy package and the
+      lifecycle port into the run slice, and doctor says what a run will use. Each property is
+      proven by a scenario that fails without it. Broken down from p1-egress-allowlist-proxy.
