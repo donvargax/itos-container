@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - p1-overlap-drain-flake
   - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
@@ -393,6 +394,14 @@ items:
       --fingerprint or a faked terminal. Offline-only permissions make that cheap for now. Before
       the egress and credentials stages, when an approval grants something worth taking, weigh a
       host-side confirmation an agent cannot drive, per the stage.
+
+      p3-approval-before-egress already holds this: q-2, an agent self-approving through
+      --fingerprint or a faked terminal, to be weighed before egress and credentials, when an
+      approval grants something worth taking. The new point is that it has depends_on [] and
+      slice-26 (approval binds the allowlist) and slice-27 (the first run that grants network) do
+      not wait for it, so nothing forces the revisit. The coordinator should add that edge from
+      slice-26 or slice-27, or ask the person to decide before slice-26 is taken. The phase is p3
+      but it now gates phase-1 work, so it needs raising to p1 or the edge needs a reason.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -779,6 +788,16 @@ items:
       working that item should not invent a repair, and slice-21 deliberately offers only the host
       user's manual remedy. Specify any recovery with scenarios covering a lost retained location,
       legacy records and no live worker.
+
+      Records with no catalog are that item's subject, and its recovery decision is the person's
+      (itos decision): documented manual cleanup or a migration step. The 'never adopts' wording in
+      CONFIG.md and the code at internal/engine/approval/disk/control.go:303, where the evidence
+      check runs only when t.data[t.fixed] is nil, are a guarantee and a recovery procedure at once.
+      Whether the refusal lasts only until a catalog exists, or the code must enforce 'never
+      adopted', cannot be settled by a doc edit. Add to that item: a later approve under another
+      selection enrolls the original tree with its records in place, validated by the reservation
+      scan. The reviewer found no exposure bypass. Until the person decides, slice-21 should word
+      CONFIG.md to say only what the code does now.
   - id: p2-fixture-worlds-inherit-scenario-coverdir
     title: A fixture world that drops the scenario coverage destination fails in go test, not in CI
     phase: 1
@@ -938,3 +957,21 @@ items:
       leaves a recovery record with the exact retry command, and stop recovers it without touching
       foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
       from p1-egress-allowlist-proxy.
+  - id: p1-overlap-drain-flake
+    title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      features/overlap_fixture_test.go:419 waits a fixed 5 s for 'local controllers drain after
+      assertions'. Under the code proof's per-ID coverage measurement the drain is slower and the
+      hook times out ('bounded overlap observation timed out'), so the proof's preparation fails
+      with no mutant judged. It failed slice-21's CI twice (runs 42573174685 and 42582818914) and
+      T-33's at 082884c (run 42589518540), each costing a CI cycle and a repair round on work that
+      had nothing to do with it. Fix the wait (a budget that holds under coverage, or waiting on the
+      drain's own completion signal), not the proof. Found by the coordinator, 2026-11-09.
+
+      Correction: of slice-21's runs, 42582818914 hit this hook; 42573174685 failed for another
+      reason (not this flake), so it counts once for slice-21, not twice.
