@@ -72,7 +72,10 @@ when XDG_STATE_HOME is absent or empty. A relative nonempty XDG_STATE_HOME refus
 does a relative HOME when XDG_STATE_HOME is absent or empty, and a selection whose path is
 not valid UTF-8. Doctor and approve report `approval.state.location` (exit 2); run refuses
 as `run.approval-invalid` (exit 1) before starting resources.
-Managed directories are owned mode 0700 and records mode 0600. One active generation
+Managed directories are owned mode 0700 and records mode 0600. A record with a second
+link is `approval.state.unsafe`, except when the other link is the `.intent-<hex>.tmp`
+file that a controller killed while publishing the record left beside it: that record is
+read as usual and the leftover is ignored. One active generation
 supersedes the previous approval; an old historical record cannot authorize a run.
 Independently of that selection, the first approve or run also creates one fixed account
 anchor, `<account home>/.local/state/itos-container`, even when XDG_STATE_HOME is set. Its
