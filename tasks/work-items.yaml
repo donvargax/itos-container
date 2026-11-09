@@ -1456,15 +1456,15 @@ items:
   - id: T-44
     title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-45
     title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-harness-env-clears-columns
@@ -1570,3 +1570,22 @@ items:
       static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
       own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
       already ships.
+  - id: p3-workspace-copy-mode
+    title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person, 2026-11-09, after reading tryboxi (delta sync into a microVM, .git sanitizing, a
+      three-way apply back) and cloudycloud (a clone on a cloud machine, results pushed as a
+      branch): 'an alternative way of working'. Not now, and not instead of the mount. A copy mode
+      would clone or bundle the checkout into the sandbox's own volume and return the work as
+      commits (a bundle or a branch the host fetches), never writing the host checkout during the
+      run. That removes by construction the class milestone one hardened one case at a time (inode
+      swaps, host sockets, hard links, control state reached through the mount) and planted .git
+      hooks, lets several runs share one checkout, and is the only shape a microVM or remote
+      provider can use, since those share no filesystem with the host. Costs: sync time on large
+      repositories, no live view in the host editor, and divergence when the person edits the
+      checkout meanwhile (commits merge; uncommitted edits don't).
