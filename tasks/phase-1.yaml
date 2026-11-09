@@ -2895,11 +2895,17 @@
 
     OVERLAP-10 leaves both local controllers active through its final assertion. Cancelling
     them immediately in teardown kills them before Go can export counters. After all scenario
-    assertions, end still-running simulated overlap workloads through the fixture's existing
-    wait replies and give their controllers one shared five-second drain bound before the
-    existing forced cleanup. A drain timeout fails cleanup. Keep native teardown unchanged,
+    assertions in a coverage-enabled world, end still-running simulated overlap workloads
+    through the fixture's existing wait replies and give their controllers one shared
+    five-second drain bound before the existing forced cleanup. A drain timeout fails
+    cleanup. Keep native teardown unchanged,
     retain every scenario assertion, and add no product calls just to obtain coverage. Include
     OVERLAP-10 in the focused coverage regression to hold this post-assertion export path.
+    Plain worlds have no counters to export and retain their original cancellation-and-join
+    cleanup; do not impose the coverage drain on uninstrumented controllers. Add a focused
+    cleanup regression which holds plain/native cancellation and joining, covered normal exit,
+    and failure plus forced cleanup when a covered controller cannot drain. Keep the existing
+    five-second coverage bound and every scenario assertion unchanged.
 
     The older-kernel approval helper and run's child-umask helper must stage restrictive-mask
     output beneath the effective scenario destination and export it there after child exit.
