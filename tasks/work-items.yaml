@@ -1030,3 +1030,22 @@ items:
       scenarios; any that now fail show a real leak to fix in the product, never a reason to loosen
       the step. This is a test-support change with no new behavior and needs a ledger task and its
       checks. Phase 2: it hardens existing proof and does not block charter step 1.
+  - id: p2-pin-ledger-check-shell
+    title: Pin the shell itos runs ledger and CI checks with, so a check passes locally only if it passes in CI
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      itos runs each check through the `shell` key, which defaults to `sh -c` (`itos config get
+      shell`), and itos.yaml sets none. `sh` is bash on the person's host and dash on ubuntu-latest.
+      A bash-only check such as `set -o pipefail` can pass `itos task` locally and first fail in a
+      CI cycle. Late checks, T-41's among them, run automatically only in CI, and T-41 exists to
+      stop that cost. Pin `shell` in itos.yaml, for example to bash, which both environments have.
+      Before pinning, confirm whether the CI image's dash refuses `set -o pipefail`; the idea left
+      that unconfirmed. This is a foundation, CI-polish change with a ledger task and its checks.
+      itos.yaml is an enforcement input, so it also runs the architecture fixtures (see
+      p2-architecture-fixtures-load). It is p2: it blocks no step of charter milestone two. The
+      itos-side warning, from `itos config check` or `itos work promote --check`, is a gap in itos
+      itself; the coordinator files it after searching existing issues.
