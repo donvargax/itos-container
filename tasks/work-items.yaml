@@ -429,6 +429,17 @@ items:
       slice-27 should depend on it. The phase field here is already 1, so only the edges and the
       person's decision remain. Until slice-26 has them, it can start before the record it builds on
       exists, with nothing holding it back.
+
+      This is coordinator registry housekeeping, not a work item. The slice-27 edge is already held:
+      p3-approval-before-egress lists the depends_on edits (slice-26 gets T-38 and that item;
+      slice-27 gets p1-acceptance-static-binary, because the harness binary was measured dynamically
+      linked), and p1-acceptance-static-binary's why already ends with 'slice-27 should depend on
+      it'. Record 0022 (commit 1770912, delivery as the host's own static executable) confirms the
+      edge, so the coordinator applies it to slice-27 now. The rest is stale text in T-39, T-40 and
+      slice-26 to slice-28: T-39 still says 'library', its done_when lacks the fuzz run that q-51
+      requires, and the whys predate the record. Each item's own drafter rewrites that in its spec
+      round, and T-39-notes.md already carries the q-51 and review notes into it. Registry and owner
+      edits are the coordinator's act, so no new item is needed.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
