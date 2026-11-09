@@ -212,6 +212,22 @@ prerequisite diagnostic, whose guidance says reapproval alone cannot resolve exp
 Unsafe, invalid, unavailable and write failures keep their existing classifications.
 CONTROL-24 covers run with P's state below, equal to and above an active worker.
 
+Review PRRT_kwDOVkB0ws61J5Fi widens the guidance for state.unavailable beyond the
+missing-account cause. The same rule and exit 3 also report a retained location that is
+missing or unreadable and session evidence with no catalog beside it. A missing retained
+location refuses every selection on the account, not only its own: after
+`XDG_STATE_HOME=/tmp/x approve` and a reboot that clears /tmp, doctor, approve and run all
+exit 3, and recreating the directory yields state.path because its inode changed.
+Pointing that person at /etc/passwd and at approve, which also refuses, hid the lockout.
+The fix text now names the three causes and says approve cannot clear them. This work
+authorizes no repair: the product never forgets, relocates or rewrites a retained
+location. The only remedy offered is the host user's own: restore the original
+directory, or remove that location's record from the coordination directory after
+confirming no worker uses it. A supported command for that remedy needs a consent
+surface this item does not have, and is left to the person. The state.path text likewise
+says the account home's own path must contain no symbolic link, which XDG_STATE_HOME
+cannot change.
+
 Known exposure reports approval.state.exposed with exit 1 and invalid approval,
 retaining the independently validated candidate. Guidance selects an unexposed
 location or recovery from the blocking worker's original checkout. Reapproval alone

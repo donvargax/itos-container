@@ -57,7 +57,7 @@ func Problems(v View) []Problem {
 		p.Field = "state"
 	case "state.path":
 		p.Message = "Approval state path is unsafe or was substituted"
-		p.Fix = "use a stable state tree outside the checkout without symbolic links"
+		p.Fix = "use a stable state tree outside the checkout without symbolic links; the account home's own path must have none either, and XDG_STATE_HOME cannot move that anchor"
 	case "state.unsafe":
 		p.Message = "Approval state ownership, permissions or file type is unsafe"
 		p.Fix = "have the host user inspect the state; managed directories must be owned mode 0700 and regular records mode 0600"
@@ -67,7 +67,9 @@ func Problems(v View) []Problem {
 	case "state.unavailable":
 		p.Exit = 3
 		p.Message = "Approval state is unavailable"
-		p.Fix += "; the effective user needs a local /etc/passwd entry with an absolute home directory, so LDAP or SSSD-only accounts are refused"
+		p.Fix = "resolve the cause and inspect again with itos container doctor; approve cannot clear it. The effective user needs a local /etc/passwd entry with an existing absolute home directory, so LDAP or SSSD-only accounts are refused. " +
+			"A state location the catalog retains may be missing or unreadable, which refuses every selection on the account until the host user restores the original directory or removes its record under the account home's .local/state/itos-container/coordination after confirming no worker uses it. " +
+			"Session records with no catalog refuse that selection only, so choose another XDG_STATE_HOME"
 	case "state.busy":
 		p.Exit = 75
 		p.Message = "Approval state lock wait exceeded the call budget"
