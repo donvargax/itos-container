@@ -21,6 +21,8 @@ func (w *world) controlEncodingSteps(sc *godog.ScenarioContext) {
 		}
 		f := w.control
 		bad := filepath.Join(f.parent, "selected-\xff")
+		// Nothing creates this tree, and the refusal must not either.
+		f.watch(bad)
 		switch source {
 		case "XDG_STATE_HOME":
 			f.p.doctor.env["XDG_STATE_HOME"] = bad

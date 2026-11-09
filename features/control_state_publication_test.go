@@ -88,6 +88,7 @@ func (w *world) controlPublicationSteps(sc *godog.ScenarioContext) {
 		f.err = errors.Join(f.err, f.captureBootstrap())
 		f.p.doctor.env["HOME"] = filepath.Join(f.parent, "third-home")
 		f.err = errors.Join(f.err, os.Mkdir(f.p.doctor.env["HOME"], 0700))
+		f.watch(f.p.doctor.env["HOME"])
 		delete(f.p.doctor.env, "XDG_STATE_HOME")
 		f.inspect("doctor", "JSON")
 	})
@@ -98,7 +99,17 @@ func (w *world) controlPublicationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^selecting a state root changes neither the independently calculated candidate fingerprint nor the authority of approvals in other roots$`, func() error {
 		f := w.control
 		before := f.p.approval.fingerprint
-		if err := f.p.approvalOracle(); err != nil {
+		// The third doctor's own output is what a state root could change: compare
+		// the fingerprint it reported with the one both earlier approvals matched,
+		// then its candidate with the oracle recalculated for the third root.
+		view, err := f.p.approvalView()
+		if err != nil {
+			return err
+		}
+		if view["fingerprint"] != before {
+			return fmt.Errorf("selected control state changed the reported fingerprint %v, want %s", view["fingerprint"], before)
+		}
+		if err := f.p.approvalCandidate(); err != nil {
 			return err
 		}
 		if f.p.approval.fingerprint != before {

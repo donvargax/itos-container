@@ -3,9 +3,11 @@ package features
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -26,6 +28,7 @@ type controlFixture struct {
 	bootstrapBefore           map[string]string
 	publisher                 *recoveryProcess
 	admissionEvents           int
+	watched                   []string
 }
 
 func (w *world) controlSetup(approval, location, engines string) error {
@@ -156,6 +159,12 @@ func (f *controlFixture) exposed() error {
 	return f.p.approvalCandidate()
 }
 
+// watch adds trees that a command selects but the fixture's own folders do not
+// hold, such as a state root outside the projects. The claims that a refusal or a
+// read creates no entry are about exactly the trees nothing has created yet, so
+// an absent one is inventoried too and an entry that appears in it is a change.
+func (f *controlFixture) watch(paths ...string) { f.watched = append(f.watched, paths...) }
+
 // Compare every entry, including ownership, links, file identity and mtime.
 // The API fixture does not write worker heartbeat files. Its process journals
 // and stream captures live in the fixture directory, outside these inventories.
@@ -165,7 +174,11 @@ func (f *controlFixture) inventory() (map[string]string, error) {
 	for _, p := range f.workers.worlds {
 		roots = append(roots, p.doctor.host)
 	}
-	for _, root := range roots {
+	for _, root := range append(roots, f.watched...) {
+		if _, err := os.Lstat(root); errors.Is(err, fs.ErrNotExist) && slices.Contains(f.watched, root) {
+			result[root] = "absent"
+			continue
+		}
 		tree, err := doctorTree(root)
 		if err != nil {
 			return nil, err
