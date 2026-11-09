@@ -960,3 +960,20 @@ items:
       unchanged. It wires the approved allowlist from the approval slice, the proxy package and the
       lifecycle port into the run slice, and doctor says what a run will use. Each property is
       proven by a scenario that fails without it. Broken down from p1-egress-allowlist-proxy.
+  - id: p1-egress-refusals-and-failure
+    title: Refusals are logged, a proxy failure stops the run, and cleanup removes the proxy and network
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-egress-run-through-proxy]
+    kind: idea
+    why: >
+      Charter step 1's remaining properties (contract AC-17 and the cleanup rule). Scenarios first,
+      the real-engine ones in CI. Every refused CONNECT leaves a log record, containing the name and
+      port the client gave and no payload or secret, that the person can read after the run. If the
+      proxy crashes, never becomes ready or exits mid-run, the workload stops or never starts, with
+      no unrestricted network and a clear diagnostic that separates policy refusal from DNS failure.
+      Normal exit, failure and interruption remove the worker, proxy and network. A cleanup failure
+      leaves a recovery record with the exact retry command, and stop recovers it without touching
+      foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
+      from p1-egress-allowlist-proxy.
