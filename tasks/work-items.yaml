@@ -1471,5 +1471,5 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [T-44]
+    depends_on: []
     kind: task
