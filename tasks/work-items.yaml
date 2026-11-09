@@ -1430,31 +1430,19 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-engine-diagnostics-timings
+  - id: T-44
     title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      The same step must show where the engine tier's 4-minute budget goes, so the slowdown after
-      T-41 (2 min 49 s, then 3 min 44 s, then 4 min 5 s on main) can be located from a red run's
-      output. Print the last `engine scenario timing:` records, or the slowest examples sorted,
-      instead of only `tail -100`. Add LIFECYCLE-09's per-row signal and SIGKILL offsets to the same
-      `engine scenario timing:` output. They show how close real calls come to T-33's 1 s call
-      budget, and they inform review of T-42's limits. In features/README.md, say that a goroutine
-      blocked a minute or more is labelled with its minutes in a timeout dump. Keep the limit at 4
-      minutes and the engine harness's syscall tracer as it is. Leave the diagnostics step's
-      failure-block printing to p1-engine-diagnostics-failures. Both items edit the one step in
-      ci.yml, so whichever lands second rebases on the other. Broken down from
-      p1-engine-suite-under-its-limit-again.
+    kind: task
   - id: p1-engine-suite-cut-t41-wait
     title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-engine-diagnostics-timings]
+    depends_on: [T-44]
     kind: idea
     why: >
       Measured on 2026-11-09: 2 min 49 s before T-41, 3 min 44 s on T-41's own green run, and 4 min
