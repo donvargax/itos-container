@@ -90,6 +90,17 @@ every checkout on the account. Compare whole path components so the fixed defaul
 tree and a coordination-more sibling remain usable. Inspection and direct write
 transactions enforce the same rule; refusal preserves all existing state.
 
+Review PRRT_kwDOVkB0ws61F-IT extends arc42's **Recovery** selection boundary to
+the sessions and admission collections of the fixed tree and every enrolled
+location, including pending claims. A nested selected tree would introduce names
+that reservation discovery cannot interpret, blocking future control transactions
+across the account even after changing XDG_STATE_HOME. Refuse with state.path before
+bootstrap, binding publication or selected-tree creation. Check the prospective
+fixed tree before bootstrap and discovered locations under the common lock before
+enrollment. Preserve exact path-component boundaries: sessions-more and
+admission-more siblings remain usable. Reads and direct writes share the rule,
+leave existing records unchanged, and do not repair previously corrupted state.
+
 Before creating an absent selected tree, durably publish its pending claim; retain
 that protection after interruption and complete its root identity before success.
 Completed missing, replaced, malformed, unsafe or unreadable bindings refuse.

@@ -88,11 +88,14 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	if exposed(s.Fixed, c.Root) || exposed(s.Selected, c.Root) {
 		return nil, "state.path"
 	}
-	if exposed(s.Selected, s.Fixed+"/coordination") {
+	reserved := func(root string) bool {
+		return exposed(s.Selected, root+"/sessions") || exposed(s.Selected, root+"/admission")
+	}
+	if exposed(s.Selected, s.Fixed+"/coordination") || reserved(s.Fixed) {
 		return nil, "state.path"
 	}
 	for location := range s.State.Bound {
-		if exposed(location, c.Root) {
+		if exposed(location, c.Root) || reserved(location) {
 			return nil, "state.path"
 		}
 	}

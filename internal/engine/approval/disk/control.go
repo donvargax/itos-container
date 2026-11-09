@@ -113,9 +113,9 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	if domain.Exposed(fixed, c.Root) {
 		return nil, "state.path"
 	}
-	// Catalog metadata cannot also contain an ordinary selected state tree.
-	// Refuse before bootstrap or claims can make the account-wide catalog invalid.
-	if domain.Exposed(selected, filepath.Join(fixed, "coordination")) {
+	// Metadata cannot also contain an ordinary selected state tree. Refuse before
+	// bootstrap or claims can invalidate the catalog or its reservation scans.
+	if domain.Exposed(selected, filepath.Join(fixed, "coordination")) || inReservationCollection(selected, fixed) {
 		return nil, "state.path"
 	}
 	store := s.Store
@@ -182,6 +182,11 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	}
 	success = true
 	return t, ""
+}
+
+func inReservationCollection(selected, root string) bool {
+	return domain.Exposed(selected, filepath.Join(root, "sessions")) ||
+		domain.Exposed(selected, filepath.Join(root, "admission"))
 }
 
 // prospective retains every existing ancestor even when the managed tree is
@@ -265,7 +270,7 @@ func (t *controlTransaction) inspect(ctx context.Context, reservations port.Rese
 			continue
 		}
 		seen[path] = true
-		if domain.Exposed(path, t.candidate.Root) {
+		if domain.Exposed(path, t.candidate.Root) || inReservationCollection(t.selected, path) {
 			return "state.path"
 		}
 		end, depth := path, 1

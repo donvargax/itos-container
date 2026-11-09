@@ -58,6 +58,11 @@ func TestControlRetryCompletesPendingLocation(t *testing.T) {
 	porttest.ControlCandidateContract(t, other, c, selected, func() string {
 		return controlSnapshot(t, filepath.Dir(home))
 	})
+	porttest.ControlCollectionContract(t, selected, c, func(path string) port.Control {
+		next := control
+		next.Store.StateHome = filepath.Dir(path)
+		return next
+	}, func() string { return controlSnapshot(t, filepath.Dir(home)) })
 	tx, failure = control.Begin(t.Context(), c, true)
 	if failure != "" {
 		t.Fatal("retry", failure)

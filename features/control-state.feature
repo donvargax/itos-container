@@ -295,7 +295,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # PRRT_kwDOVkB0ws61F-IT: ordinary state entries inside sessions or admission
   # poison subsequent reservation scans. Each first Then must fail on the old
   # implementation's successful doctor inspection or approval publication.
-  @wip @slice-21 @ID-CONTROL-18 @local-engine-fixture
+  @slice-21 @ID-CONTROL-18 @local-engine-fixture
   Scenario Outline: Selected state cannot occupy session or admission collection namespaces
     Given a control-state fixture selecting "<collection>" at "<depth>" depth in the "<location>" managed tree
     When P inspects that selection with "<command>" using valid approval inputs

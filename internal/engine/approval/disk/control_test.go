@@ -152,7 +152,7 @@ func TestControlAccountAndPrerequisites(t *testing.T) {
 func TestControlNamespaceContract(t *testing.T) {
 	for _, initialized := range []bool{false, true} {
 		t.Run(fmt.Sprint(initialized), func(t *testing.T) {
-			control, c, _, home, _ := controlFixture(t)
+			control, c, _, home, enrolled := controlFixture(t)
 			if initialized {
 				tx, failure := control.Begin(t.Context(), c, true)
 				if failure != "" {
@@ -161,11 +161,17 @@ func TestControlNamespaceContract(t *testing.T) {
 				tx.Close()
 			}
 			fixed := filepath.Join(home, ".local/state/itos-container")
-			porttest.ControlNamespaceContract(t, fixed, c, func(selected string) port.Control {
+			at := func(selected string) port.Control {
 				next := control
 				next.Store.StateHome = filepath.Dir(selected)
 				return next
-			}, func() string { return controlSnapshot(t, filepath.Dir(home)) })
+			}
+			snapshot := func() string { return controlSnapshot(t, filepath.Dir(home)) }
+			porttest.ControlCollectionContract(t, fixed, c, at, snapshot)
+			if initialized {
+				porttest.ControlCollectionContract(t, enrolled, c, at, snapshot)
+			}
+			porttest.ControlNamespaceContract(t, fixed, c, at, snapshot)
 		})
 	}
 }

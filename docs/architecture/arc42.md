@@ -635,6 +635,10 @@ The coordination directory is reserved for metadata: selected managed roots equa
 to or below it refuse with state.path before bootstrap or enrollment, preventing
 ordinary state entries from invalidating the shared catalog. This whole-component
 rule still permits the default tree and similarly named sibling directories.
+Session and admission collection namespaces are likewise reserved in the fixed
+tree and every enrolled location, including pending claims. Selections inside
+these collections refuse before any binding or selected-tree creation; discovery
+rechecks them under the common lock so subsequent reservation scans remain usable.
 Doctor inspects without writes, taking a shared lock when present; approve
 and validated run enrollment complete durable self-binding and selected-location
 claims before ordinary state writes. Existing reservation completion semantics are

@@ -37,6 +37,11 @@ func TestControlPendingLocationProtectsCandidate(t *testing.T) {
 	state.Bound["/selected/itos-container"] = false
 	control := Control{State: state, Account: &Account{Home: "/account"}, Reservations: &Reservations{}, Fixed: "/account/.local/state/itos-container", Selected: "/other/itos-container"}
 	ControlCandidateContract(t, control, port.Candidate{Root: "/checkout"}, "/selected/itos-container", state.Snapshot)
+	ControlCollectionContract(t, "/selected/itos-container", port.Candidate{Root: "/checkout"}, func(selected string) port.Control {
+		next := control
+		next.Selected = selected
+		return next
+	}, state.Snapshot)
 }
 
 func TestControlNamespaceContract(t *testing.T) {
@@ -52,11 +57,16 @@ func TestControlNamespaceContract(t *testing.T) {
 				}
 				tx.Close()
 			}
-			ControlNamespaceContract(t, control.Fixed, candidate, func(selected string) port.Control {
+			at := func(selected string) port.Control {
 				next := control
 				next.Selected = selected
 				return next
-			}, state.Snapshot)
+			}
+			ControlCollectionContract(t, control.Fixed, candidate, at, state.Snapshot)
+			if initialized {
+				ControlCollectionContract(t, control.Selected, candidate, at, state.Snapshot)
+			}
+			ControlNamespaceContract(t, control.Fixed, candidate, at, state.Snapshot)
 		})
 	}
 }

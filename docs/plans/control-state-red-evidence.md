@@ -367,3 +367,45 @@ passes in 262.360 seconds without race detection. Configured gates run through
 the final fix commit's hooks. No real engine, real state folder or local mutation
 proof is used. Fresh pushed-head CI and changed-code proof remain with the
 coordinator; origin/main is already an ancestor of this branch.
+
+## Selected state inside reservation collections (PRRT_kwDOVkB0ws61F-IT)
+
+Test commit `fe55866738fd9430cf3dafae6577d826f8e61dad` adds pending CONTROL-18
+and its steps. Its 24 examples select sessions or admission, directly or through
+a child, in absent fixed trees, initialized fixed trees and previously enrolled
+locations. Each selection is inspected by doctor or exact-fingerprint approve.
+Every command uses disposable account and state trees and recording engine fixtures.
+
+With only `@wip` removed, all 24 examples fail at the first Then, which requires
+approval.state.path, exit 1 and invalid approval. Each instead exits 0: doctor
+reports missing approval and approve publishes a matching approval. All 48
+setup/action steps pass, 24 behavior assertions fail and 96 later steps are
+skipped. There are no undefined steps or setup failures.
+
+```sh
+rtk proxy go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-18$'
+```
+
+The shared disk/fake contracts also fail before implementation: reads and direct
+writes accept these selections, and writes alter state. The pending-claim case
+reproduces the same failure before its managed root has been created.
+
+The common transaction now refuses fixed-tree collection collisions before
+bootstrap and checks discovered locations under the common lock before enrollment.
+The fake implements the same contract, including pending claims. CONTROL-18's
+24 examples and CONTROL-17's eight neighboring examples pass in 5.664 seconds,
+including unchanged inventories and successful fresh commands using the default
+tree, collection-prefix siblings, a catalog-prefix sibling and another checkout's
+existing approval. The changed disk and porttest packages pass with race detection.
+
+```sh
+rtk proxy go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-(17|18)$'
+rtk proxy go test -race ./internal/engine/approval/disk ./internal/engine/approval/port/porttest -count=1
+```
+
+The full `rtk proxy go test ./features -count=1 -json` package passes in
+258.394 seconds without race detection: all 1,466 scenario examples and harness
+checks pass, with no failing tests. Configured gates run through the final fix
+commit's hooks. T-32's settled timeout change is already an ancestor of this
+branch. No real engine, real state folder or local mutation proof is used;
+push and fresh changed-code CI proof remain with the coordinator.

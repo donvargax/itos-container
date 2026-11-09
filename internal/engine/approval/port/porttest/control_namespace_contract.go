@@ -37,3 +37,27 @@ func ControlNamespaceContract(t Reporter, fixed string, candidate port.Candidate
 		}
 	}
 }
+
+// ControlCollectionContract protects reservation metadata in both prospective
+// fixed trees and enrolled locations, including incomplete location claims.
+func ControlCollectionContract(t Reporter, root string, candidate port.Candidate, at func(string) port.Control, snapshot func() string) {
+	t.Helper()
+	for _, collection := range []string{"sessions", "admission"} {
+		for _, suffix := range []string{"/itos-container", "/nested/itos-container"} {
+			selected := root + "/" + collection + suffix
+			for _, write := range []bool{false, true} {
+				before := snapshot()
+				tx, failure := at(selected).Begin(context.Background(), candidate, write)
+				if tx != nil {
+					tx.Close()
+				}
+				if failure != "state.path" || tx != nil {
+					t.Errorf("collection selection %q write=%t: %s, want state.path", selected, write, failure)
+				}
+				if before != snapshot() {
+					t.Errorf("collection selection wrote state")
+				}
+			}
+		}
+	}
+}
