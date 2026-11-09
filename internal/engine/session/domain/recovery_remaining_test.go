@@ -19,7 +19,7 @@ func TestStopRetainsUncertaintyWhenAuthorityOrDurabilityFails(t *testing.T) {
 		{"exit write failed", port.IntentWrite},
 		{"stopping write failed", port.IntentWrite},
 		{"daemon changed before remove", port.Refused},
-		{"absence write failed", port.IntentWrite},
+		{"absence write failed", port.CompletionWrite},
 		{"budget expired after open", port.Incomplete},
 		{"removal inspection unavailable", port.Incomplete},
 	} {
@@ -76,11 +76,25 @@ func TestStopRetainsUncertaintyWhenAuthorityOrDurabilityFails(t *testing.T) {
 				t.Fatal("stop lost the boundary failure", result)
 			}
 			e := result.Entries[0]
-			if e.Cleanup != "unknown" || e.Resource != "unknown" || e.State != "failed" || e.WorkloadExit != nil || !slices.Equal(e.Retry, []string{"itos", "container", "stop", id}) {
+			wantResource := "unknown"
+			switch tc.name {
+			case "exit write failed", "stopping write failed":
+				wantResource = "running"
+			case "daemon changed before remove":
+				wantResource = "created"
+			case "absence write failed":
+				wantResource = "absent"
+			}
+			wantEvents := []string{"open"}
+			if tc.name != "session changed" && tc.name != "daemon changed before inspect" && tc.name != "budget expired after open" {
+				wantEvents = append(wantEvents, "anchor inspect")
+			}
+
+			if e.Cleanup != "unknown" || e.Resource != wantResource || e.State != "failed" || e.WorkloadExit != nil || !slices.Equal(e.Retry, []string{"itos", "container", "stop", id}) {
 				t.Fatal("refused stop claimed completion or lost its exact retry", e)
 			}
 			r := registry.Records[id]
-			if r.State == "stopped" || r.WorkloadExit != nil || r.Intent != original.Intent || registry.Locks[id] || registry.Store.Locked || engine.Removed != (tc.name == "removal inspection unavailable") || !slices.Equal(engine.Events, []string{"open"}) {
+			if r.State == "stopped" || r.WorkloadExit != nil || r.Intent != original.Intent || registry.Locks[id] || registry.Store.Locked || engine.Removed != (tc.name == "removal inspection unavailable") || !slices.Equal(engine.Events, wantEvents) {
 				t.Fatal("refused stop changed authority, mutated a worker or leaked a lock", r, engine.Events)
 			}
 			if tc.name == "budget expired after open" && (r != original || registry.Writes != 3) {
@@ -123,9 +137,12 @@ func TestTerminationRechecksAfterLostKillWait(t *testing.T) {
 			}
 
 			result := (Recovery{Registry: registry, Engine: engine}).Stop(t.Context(), id)
-			wantEvents := []string{"open", "SIGTERM", "wait", "SIGKILL"}
+			wantEvents := []string{"open", "anchor inspect", "SIGTERM", "wait", "SIGKILL"}
 			if name != "kill refused" {
 				wantEvents = append(wantEvents, "wait")
+			}
+			if name == "exited without wait result" {
+				wantEvents = append(wantEvents, "anchor inspect", "anchor inspect", "anchor remove", "anchor inspect")
 			}
 			if !slices.Equal(engine.Events, wantEvents) || registry.Locks[id] || len(result.Entries) != 1 || result.Entries[0].WorkloadExit != nil || registry.Records[id].WorkloadExit != nil {
 				t.Fatal("termination repeated signals, leaked locks or invented an exit", result, engine.Events)

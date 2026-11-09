@@ -1,8 +1,9 @@
 @phase-1 @linux
 Feature: Foreground failures retain owned cleanup authority
-  Slice-10 review regressions exercise the product binary against a local HTTP
-  engine fixture. Deadline and trailing-output cases use the real command through
-  a test-only cmd assembly for short budgets and drain barriers. They prove
+  Slice-10 review regressions exercise the real command against a local HTTP
+  engine fixture through test-only cmd assemblies. Their syscall seam supplies
+  the fixture's simulated mounted identity; deadline and trailing-output cases
+  also shorten budgets and observe drain barriers. They prove
   controller decisions, not native signal delivery
   or isolation; slice-12 and slice-14 retain their CI runtime proof obligations.
   Use the existing SDK and standard-library signal/stream support, with no dependency.

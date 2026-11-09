@@ -34,6 +34,9 @@ func (e Engine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection
 }
 
 func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []string) (string, port.Outcome) {
+	if r.Schema != 2 || !r.ValidAnchor(c.binding) || r.Anchor.Stage != "owned" {
+		return "", port.MountRefused
+	}
 	if !c.pin.Unchanged() {
 		return "", port.Refused
 	}
@@ -66,7 +69,7 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges"},
 		Resources: container.Resources{PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: "no"},
 		IpcMode: "private", CgroupnsMode: "private", Init: &init, LogConfig: container.LogConfig{Type: "none"},
-		Mounts: []mount.Mount{{Type: mount.TypeBind, Source: c.binding.Checkout.Root, Target: "/workspace", BindOptions: &mount.BindOptions{Propagation: mount.PropagationRPrivate, NonRecursive: true}}},
+		Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: r.Anchor.Name, Target: "/workspace", VolumeOptions: &mount.VolumeOptions{NoCopy: true}}},
 		Tmpfs:  map[string]string{"/tmp": "rw,nosuid,nodev,mode=1777"},
 	}
 	result, err := c.api.ContainerCreate(call, client.ContainerCreateOptions{Name: r.Name, Config: config, HostConfig: host})
@@ -115,7 +118,7 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 		!sameEnvironment(r.Config.Env, c.expected.Env) || r.Config.Tty || !r.Config.OpenStdin || !r.Config.StdinOnce ||
 		len(r.Config.Volumes) != 0 || r.Config.Healthcheck == nil || !slices.Equal(r.Config.Healthcheck.Test, []string{"NONE"}) ||
 		r.State.Status != "created" || r.State.Running || r.State.Pid != 0 || (r.State.StartedAt != "" && r.State.StartedAt != "0001-01-01T00:00:00Z") ||
-		!safeHost(r.HostConfig, c.binding.Checkout.Root) || !safeMounts(r.Mounts, c.binding.Checkout.Root) {
+		!safeHost(r.HostConfig, c.record.Anchor.Name) || !safeMounts(r.Mounts, c.record.Anchor.Name) {
 		return port.IsolationUnverified
 	}
 	for name := range r.NetworkSettings.Networks {
@@ -152,16 +155,20 @@ func safeHost(h *container.HostConfig, root string) bool {
 	if len(h.SecurityOpt) != 1 || (h.SecurityOpt[0] != "no-new-privileges" && h.SecurityOpt[0] != "no-new-privileges=true") {
 		return false
 	}
-	m := h.Mounts[0]
-	return m.Type == mount.TypeBind && m.Source == root && m.Target == "/workspace" && !m.ReadOnly &&
-		m.BindOptions != nil && m.BindOptions.Propagation == mount.PropagationRPrivate && m.BindOptions.NonRecursive && !m.BindOptions.CreateMountpoint
+	return safeAnchorMount(h.Mounts[0], root)
+}
+
+func safeAnchorMount(m mount.Mount, root string) bool {
+	return root != "" && m.Type == mount.TypeVolume && m.Source == root && m.Target == "/workspace" && !m.ReadOnly &&
+		m.BindOptions == nil && m.VolumeOptions != nil && m.VolumeOptions.NoCopy && m.VolumeOptions.Subpath == "" &&
+		m.VolumeOptions.DriverConfig == nil && len(m.VolumeOptions.Labels) == 0
 }
 
 func safeMounts(mounts []container.MountPoint, root string) bool {
 	bind, tmp := false, false
 	for _, m := range mounts {
 		switch {
-		case m.Type == mount.TypeBind && m.Source == root && m.Destination == "/workspace" && m.RW && m.Propagation == mount.PropagationRPrivate && !bind:
+		case m.Type == mount.TypeVolume && m.Name == root && m.Driver == "local" && m.Destination == "/workspace" && m.RW && (m.Propagation == "" || m.Propagation == mount.PropagationRPrivate) && !bind:
 			bind = true
 		case m.Type == mount.TypeTmpfs && m.Destination == "/tmp" && !tmp:
 			tmp = true

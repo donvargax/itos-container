@@ -2,17 +2,18 @@ package domain
 
 import (
 	"context"
-	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"slices"
 	"time"
 
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
 // Recovery observes and removes registered sessions; it has no launch path.
 type Recovery struct {
-	Registry port.Registry
-	Engine   port.RunEngine
+	Registry  port.Registry
+	Engine    port.RunEngine
+	immediate bool
 }
 
 func recoveryResult() port.RecoveryResult {
@@ -55,17 +56,30 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	}
 	defer entry.Close()
 	e, failure := sessionEntry(entry)
-	if failure == "" && uncreated(entry) {
+	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
+	noCreate := uncreated(entry)
+	if failure == "" && noCreate {
 		failure = entry.Validate()
-		e.Resource = "absent"
-	} else if failure == "" {
+		if failure == "" {
+			e.Resource = "absent"
+		}
+	}
+	// Validated no-create evidence proves worker absence for either schema.
+	// An anchored session still needs an independent volume observation.
+	if failure == "" && (!noCreate || entry.Intent().Record().Schema == 2) {
 		connection, f := s.Engine.OpenRun(ctx, entry.Intent().Binding())
 		failure = f
 		if failure == "" {
 			defer connection.Close()
-			var observation port.Observation
-			observation, e.Resource, failure = inspectSession(ctx, entry, connection)
-			_ = observation
+			if !noCreate {
+				_, e.Resource, failure = inspectSession(ctx, entry, connection)
+			}
+			if entry.Intent().Record().Schema == 2 {
+				_, anchorFailure := inspectRecoveryAnchor(ctx, entry.Intent(), connection)
+				if anchorFailure != "" {
+					failure = anchorFailure
+				}
+			}
 		}
 	}
 	if failure == "" {
@@ -77,7 +91,7 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 			e.State = "running"
 		}
 		if r.State == "stopped" {
-			if e.Resource == "absent" && entry.Intent().Record().Completed() {
+			if e.Resource == "absent" && entry.Intent().Record().Completed() && (e.Anchor == "" || e.Anchor == "absent") {
 				e.Cleanup = "complete"
 			} else {
 				failure = port.Incomplete
@@ -85,7 +99,10 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 		}
 	}
 	if failure != "" {
-		e.State, e.Resource, e.Cleanup = "failed", "unknown", "unknown"
+		e.State, e.Cleanup = "failed", "unknown"
+		if e.Anchor == "" {
+			e.Resource = "unknown"
+		}
 	}
 	finishEntry(&e)
 	r := recoveryResult()
@@ -98,7 +115,11 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 func sessionEntry(s port.Session) (port.RecoveryEntry, port.Outcome) {
 	r := s.Record()
 	controller, failure := s.Controller()
-	return port.RecoveryEntry{ID: r.ID, Project: r.Project, Fingerprint: s.Intent().Record().Fingerprint, State: r.State, Resource: "unknown", Controller: controller, Cleanup: "unknown", WorkloadExit: r.WorkloadExit}, failure
+	e := port.RecoveryEntry{ID: r.ID, Project: r.Project, Fingerprint: s.Intent().Record().Fingerprint, State: r.State, Resource: "unknown", Controller: controller, Cleanup: "unknown", WorkloadExit: r.WorkloadExit, MountDetector: r.MountDetector}
+	if s.Intent().Record().Schema == 2 {
+		e.Anchor = "unknown"
+	}
+	return e, failure
 }
 func finishEntry(e *port.RecoveryEntry) {
 	e.StopCandidate = e.Controller == "absent" && e.Cleanup != "complete"
@@ -109,7 +130,12 @@ func finishEntry(e *port.RecoveryEntry) {
 	}
 }
 
-func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (port.Observation, string, port.Outcome) {
+func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (observation port.Observation, resource string, failure port.Outcome) {
+	defer func() {
+		if state, ok := ctx.Value(recoveryAnchorKey{}).(recoveryAnchorState); ok {
+			state.entry.Resource = resource
+		}
+	}()
 	// A wait or prior engine call may have exhausted the total. Expired
 	// storage handles cannot distinguish changed ownership from lost time.
 	if budget.Cause(ctx) != nil {
@@ -146,7 +172,7 @@ func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (
 	if status != port.Observed || !o.StatePresent {
 		return o, "unknown", port.Incomplete
 	}
-	if o.ID != id || !owns(r, o) || r.Stage == "absent" {
+	if o.ID != id || !owns(r, o) || r.Stage == "absent" || (r.Schema == 2 && (!o.AnchorExact || o.AnchorName != r.Anchor.Name)) {
 		return o, "unknown", port.Refused
 	}
 	switch {
@@ -180,14 +206,19 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	// Controller presence is advisory for explicit cleanup. Original authority
 	// is independently revalidated by stopSession before any mutation.
 	e, _ := sessionEntry(entry)
-	if uncreated(entry) {
+	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
+	if uncreated(entry) && entry.Intent().Record().Schema == 1 {
 		failure = cancelUncreated(entry)
 	} else {
 		var connection port.RunConnection
 		connection, failure = s.Engine.OpenRun(ctx, entry.Intent().Binding())
 		if failure == "" {
 			defer connection.Close()
-			failure = stopSession(ctx, entry, connection, signal, exit, remove)
+			if entry.Intent().Record().Schema == 2 {
+				failure = stopAnchoredSession(ctx, entry, connection, signal, exit, remove, s.immediate)
+			} else {
+				failure = stopSession(ctx, entry, connection, signal, exit, remove)
+			}
 		}
 	}
 	if failure == "" {
@@ -196,7 +227,10 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 			e.State, e.Resource, e.Cleanup = entry.Record().State, "unknown", "pending"
 		}
 	} else {
-		e.State, e.Resource, e.Cleanup = "failed", "unknown", "unknown"
+		e.State, e.Cleanup = "failed", "unknown"
+		if e.Anchor == "" {
+			e.Resource = "unknown"
+		}
 		// Persist uncertainty only for safely held, incomplete sessions. Never
 		// replace a completed tombstone or overwrite substituted authority.
 		r := entry.Record()
@@ -269,7 +303,7 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 		return failure
 	}
 	if resource == "absent" {
-		return finishSession(s)
+		return finishOwnedSession(ctx, s, c)
 	}
 	if r.State == "stopped" {
 		return port.Refused
@@ -303,7 +337,7 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 		return failure
 	}
 	if resource == "absent" {
-		return finishSession(s)
+		return finishOwnedSession(ctx, s, c)
 	}
 	if resource == "running" {
 		return port.Incomplete
@@ -322,12 +356,12 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 	if resource != "absent" {
 		return port.Incomplete
 	}
-	return finishSession(s)
+	return finishOwnedSession(ctx, s, c)
 }
 
 func retryableRecovery(f port.Outcome) bool {
 	switch f {
-	case port.Incomplete, port.Uncertain, port.IntentWrite, port.OwnershipWrite, port.EnvironmentMissing:
+	case port.Incomplete, port.Uncertain, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.EnvironmentMissing:
 		return true
 	default:
 		return false
@@ -416,6 +450,9 @@ func recordExit(s port.Session, exit int) port.Outcome {
 }
 func finishSession(s port.Session) port.Outcome {
 	i := s.Intent().Record()
+	if i.Schema == 2 && i.Anchor.Stage != "absent" {
+		return port.Refused
+	}
 	if !port.HexID(i.ContainerID) {
 		return port.Uncertain
 	}

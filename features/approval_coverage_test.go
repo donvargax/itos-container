@@ -18,6 +18,7 @@ func TestApprovalContractCoverage(t *testing.T) {
 	if filteredFeatureRun(*scenarios, readFeatureEnvironment(os.Getenv, runtime.GOOS, runtime.GOARCH)) {
 		t.Skip("whole-suite harness regression; filtered runs must execute only their selected scenarios")
 	}
+	isolateProductCoverage(t)
 	root, err := moduleRoot()
 	if err != nil {
 		t.Fatal(err)
@@ -65,6 +66,7 @@ func TestApprovalKernelCoverage(t *testing.T) {
 	if filteredFeatureRun(*scenarios, env) || env.os != "linux" || env.arch != "amd64" || env.engine == "1" {
 		t.Skip("whole-suite Linux fixture regression; preserve filtered and engine selections")
 	}
+	isolateProductCoverage(t)
 	root, err := moduleRoot()
 	if err != nil {
 		t.Fatal(err)

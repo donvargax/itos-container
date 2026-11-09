@@ -150,6 +150,10 @@ func (w *world) offlineLaunch() error {
 			if err := w.sessionExactRecord(r.Record, "intent", ""); err != nil {
 				return err
 			}
+			v := a.anchorVolumes()["itos-container-anchor-"+w.session.token]
+			if v == nil || !anchorVolumeMatches(v, r.Anchor) {
+				return fmt.Errorf("create lacks its independently observed original anchor")
+			}
 			if !a.safeCreate(r.Body) || r.Body["WorkingDir"] != object(w.approval.settings["manifest"])["workspaceFolder"] ||
 				!reflect.DeepEqual(r.Body["Cmd"], offlineStrings(o.argv)) || !reflect.DeepEqual(r.Body["Entrypoint"], []any{}) {
 				return fmt.Errorf("create did not preserve the frozen command and runtime settings")
@@ -172,6 +176,10 @@ func (w *world) offlineLaunch() error {
 			}
 			if err := w.sessionExactRecord(r.Record, "owned", id); err != nil {
 				return err
+			}
+			v := a.anchorVolumes()["itos-container-anchor-"+w.session.token]
+			if v == nil || !anchorVolumeMatches(v, r.Anchor) {
+				return fmt.Errorf("start lacks its independently observed original anchor")
 			}
 		}
 	}

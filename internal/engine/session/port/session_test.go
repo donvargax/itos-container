@@ -82,7 +82,7 @@ func TestRecordCompletionRequiresTerminalEvidence(t *testing.T) {
 		{"empty record", "", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := port.Record{Stage: tc.stage, ContainerID: tc.id}
+			r := port.Record{Schema: 1, Stage: tc.stage, ContainerID: tc.id}
 			if got := r.Completed(); got != tc.complete {
 				t.Fatalf("completion = %v, want %v for %#v", got, tc.complete, r)
 			}

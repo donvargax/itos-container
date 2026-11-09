@@ -58,7 +58,7 @@ func (w *world) overlapSetup(child, engines string, native bool) error {
 	}
 	paths := map[string]string{"ancestor": filepath.Join(base, "projects", "work"), "descendant": filepath.Join(base, "projects", "work", child), "prefix": filepath.Join(base, "projects", "work-more"), "basename": filepath.Join(base, "other", "work")}
 	for _, name := range []string{"ancestor", "descendant", "prefix", "basename"} {
-		p := &world{root: w.root, bin: w.bin, dir: filepath.Join(base, "control", name)}
+		p := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: filepath.Join(base, "control", name)}
 		f.worlds[name] = p
 		if err := os.MkdirAll(p.dir, 0700); err != nil {
 			return err
@@ -289,8 +289,13 @@ func (r *overlapRun) active() bool {
 	if r.w.offline.api.identity(observed, r.worker) != nil || object(observed["State"])["Running"] != true {
 		return false
 	}
-	mounts, _ := observed["Mounts"].([]any)
-	if len(mounts) != 1 || object(mounts[0])["Source"] != r.w.doctor.checkout || object(mounts[0])["Destination"] != "/workspace" {
+	a := r.w.offline.api
+	a.mu.Lock()
+	anchor, err := a.observeMountAnchor(observed)
+	a.mu.Unlock()
+	record, recordErr := sessionReadRecord(r.intent)
+	view := &isolationRun{id: r.worker, sessionID: r.id, requests: []offlineRequest{{Method: "POST", Path: "/containers/" + r.worker + "/start", Observation: observed, Anchor: anchor, Record: record}}}
+	if err != nil || recordErr != nil || (&isolationWorld{w: r.w}).mountBoundary(view) != nil {
 		return false
 	}
 	data, err := os.ReadFile(filepath.Join(r.w.doctor.checkout, r.marker))
@@ -375,6 +380,9 @@ func (w *world) closeOverlap() error {
 		}
 	}
 	var err error
+	if !f.native && w.coverageDir() != "" {
+		err = f.finishLocalWorkloads()
+	}
 	for _, p := range f.worlds {
 		err = errors.Join(err, p.closeRecoveryNative(), p.closeOfflineRuntime(), p.closeSession())
 		p.closeDoctor()
@@ -387,6 +395,35 @@ func (w *world) closeOverlap() error {
 		}
 	}
 	return err
+}
+
+// Called only after a covered scenario's assertions. Complete the existing
+// simulated workloads so their controllers can export measured counters on
+// normal exit. Plain worlds retain cancellation and joining without waiting for
+// product teardown that has no counters to export. Forced cleanup
+// still joins every process if the bounded coverage drain fails.
+func (f *overlapFixture) finishLocalWorkloads() error {
+	var draining []*overlapRun
+	for _, r := range f.runs {
+		if r.ended() {
+			continue
+		}
+		r.engine.mu.Lock()
+		worker := r.engine.workers[r.worker]
+		if worker != nil && !worker.removed && object(worker.value["State"])["Running"] == true {
+			worker.exit()
+			draining = append(draining, r)
+		}
+		r.engine.mu.Unlock()
+	}
+	return overlapAwait("local controllers drain after assertions", 5*time.Second, func() bool {
+		for _, r := range draining {
+			if !r.ended() {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 func (f *overlapFixture) preserved() error {
@@ -414,6 +451,12 @@ func (f *overlapFixture) preserved() error {
 		var owned []string
 		for _, r := range f.runs {
 			owned = append(owned, r.worker)
+		}
+		for _, w := range f.worlds {
+			resources, err = w.recoveryWithoutRetainedAnchor(resources)
+			if err != nil {
+				return err
+			}
 		}
 		if !reflect.DeepEqual(recoveryWithoutWorkers(resources, owned), recoveryWithoutWorkers(f.resources, owned)) {
 			return errors.New("overlap operation changed unrelated native resources")

@@ -13,13 +13,16 @@ import (
 )
 
 func TestPublicCodecContract(t *testing.T) {
-	for _, result := range []string{"unknown", "observed"} {
+	for _, result := range []string{"unknown", "observed", sp.DetectorVerified, sp.DetectorExited, sp.DetectorRootChanged, sp.DetectorRefused} {
 		t.Run(result, func(t *testing.T) {
 			record := sp.PublicRecord{Schema: 1, ID: strings.Repeat("a", 64), Project: strings.Repeat("b", 64),
 				Intent: sp.Reference(strings.Repeat("b", 64), strings.Repeat("c", 64)), State: "failed"}
 			if result == "observed" {
 				exit, problem := 7, sp.Incomplete
 				record.WorkloadExit, record.LastProblem = &exit, &problem
+			}
+			if sp.ValidDetector(result) {
+				record.MountDetector = result
 			}
 			data := (JSON{}).EncodePublic(record)
 			for name, codec := range map[string]sp.PublicCodec{
@@ -42,6 +45,8 @@ func TestPublicCodecRejectsInvalidRecoveryFacts(t *testing.T) {
 		{"state", `"future"`}, {"workload_exit", `-1`}, {"workload_exit", `256`},
 		{"workload_exit", `-0`}, {"workload_exit", `"7"`}, {"last_problem", `"engine body"`},
 		{"intent", `"intents/foreign/record.json"`}, {"workload_exit", `1.5`},
+		{"mount_detector", `""`}, {"mount_detector", `"engine body"`},
+		{"mount_detector", `null`}, {"mount_detector", `true`},
 	} {
 		t.Run(tc.field+"="+tc.raw, func(t *testing.T) {
 			data := (JSON{}).EncodePublic(valid)

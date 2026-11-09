@@ -200,16 +200,20 @@ func (w *world) contractInspections() error {
 	})
 }
 func (w *world) runProbe(kind string) error {
+	bin, err := w.sessionProbeBinary()
+	if err != nil {
+		return err
+	}
 	path := filepath.Join(w.dir, "slice-8-contract.json")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	args := []string{"test", "./cmd/itos-container", "-run", "^TestRunPreflightContractProbe$", "-count=1"}
-	if cover := os.Getenv("GOCOVERDIR"); cover != "" {
-		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...", "-args", "-test.gocoverdir="+cover)
+	args := []string{"-test.run=^TestRunPreflightContractProbe$", "-test.count=1"}
+	if cover := w.coverageDir(); cover != "" {
+		args = append(args, "-test.gocoverdir="+cover)
 	}
-	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = w.root
-	cmd.Env = os.Environ()
+	cmd.Env = w.coverageEnv(os.Environ())
 	for key, value := range map[string]string{"SLICE_8_PROBE_OUTPUT": path, "SLICE_8_PROBE_KIND": kind, "SLICE_8_PROBE_CONDITION": w.run.condition, "SLICE_8_PROBE_UID": w.run.uid, "SLICE_8_PROBE_GID": w.run.gid} {
 		cmd.Env = setEnv(cmd.Env, key, value)
 	}

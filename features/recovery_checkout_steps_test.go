@@ -32,8 +32,10 @@ func (w *world) recoveryCheckoutSteps(sc *godog.ScenarioContext) {
 			return err
 		}
 		defer func() { _ = os.Chmod(w.doctor.checkout, info.Mode().Perm()) }()
+		w.session.api.mu.Lock()
 		w.recoveryLocal.invocationDir = w.dir
 		w.doctor.env["ITOS_ROOT"] = w.doctor.checkout
+		w.session.api.mu.Unlock()
 		if err := w.recoveryStatusStop(); err != nil {
 			return err
 		}

@@ -20,7 +20,7 @@ func TestRegisteredLaunchRetainsEvidenceAtEveryFailedBoundary(t *testing.T) {
 	}{
 		{"session changed before create", port.Refused, "failed", "open", false, false, false},
 		{"workspace changed before create", port.Refused, "preparing", "open", false, false, false},
-		{"create boundary write failed", port.IntentWrite, "preparing", "open", false, false, false},
+		{"create boundary write failed", port.IntentWrite, "preparing", "anchor inspect", false, false, false},
 		{"invalid create identity", port.Uncertain, "preparing", "create", false, false, false},
 		{"missing resource state", port.IsolationInspection, "preparing", "create", false, false, false},
 		{"foreign resource", port.Refused, "preparing", "create", false, false, false},

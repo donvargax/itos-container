@@ -111,7 +111,7 @@ func (l *lifecycleLocal) invokeWithStreams(ctx context.Context, out, errout sp.W
 	}
 	workspace := l.workspace
 	if workspace == nil {
-		workspace = &sf.Workspace{}
+		workspace = sf.MountWorkspace(l.m.b)
 	}
 	runner := domain.Runner{Store: l.store, Registry: lifecycleRegistry{l.registry, l}, Engine: engine, Workspace: workspace, Entropy: &publicMemoryEntropy{}}
 	var selected runport.Approval = lifecycleApproval{approval, l, ctx}

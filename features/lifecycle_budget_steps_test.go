@@ -39,11 +39,11 @@ func (w *world) lifecycleBudgetSteps(sc *godog.ScenarioContext) {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		args := []string{"-test.run=^TestLifecycleBudgetContract$", "-test.v", "-test.count=1"}
-		if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+		if cover := w.coverageDir(); cover != "" {
 			args = append(args, "-test.gocoverdir="+cover)
 		}
 		cmd := exec.CommandContext(ctx, bin, args...)
-		cmd.Env = append(os.Environ(), "SLICE_12_BUDGET="+name, "SLICE_12_ARGUMENT="+operation)
+		cmd.Env = append(w.coverageEnv(os.Environ()), "SLICE_12_BUDGET="+name, "SLICE_12_ARGUMENT="+operation)
 		data, err := cmd.CombinedOutput()
 		result = doctorResult{stdout: string(data)}
 		if err != nil {

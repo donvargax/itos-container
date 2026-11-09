@@ -66,7 +66,7 @@ func TestRegisteredLaunchCancellationAfterSuccessfulAcquisition(t *testing.T) {
 				}
 				wantEvents, wantState, wantWorker := []string{"open"}, "preparing", ""
 				if phase == "attach" {
-					wantEvents, wantState, wantWorker = []string{"open", "create", "verify", "attach"}, "ready", engine.CreateID
+					wantEvents, wantState, wantWorker = []string{"open", "anchor allocate", "anchor inspect", "anchor inspect", "create", "verify", "attach"}, "ready", engine.CreateID
 				}
 				if failure != port.ExecutionFailed || connection == nil || (attachment != nil) != (phase == "attach") || worker != wantWorker || context.Cause(ctx) != (port.Interrupt{Signal: signal}) {
 					t.Fatal("cancelled acquisition lost its cause or cleanup handles", worker, failure)
@@ -111,7 +111,7 @@ func registeredSessionFixture(t *testing.T) (Runner, *f.Registry, *f.RunEngine, 
 		t.Fatal(failure)
 	}
 	intent.Close()
-	runEngine, workspace := &f.RunEngine{Engine: engine}, &f.Workspace{}
+	runEngine, workspace := &f.RunEngine{Engine: engine}, f.MountWorkspace(b)
 	return Runner{Store: store, Registry: registry, Engine: runEngine, Workspace: workspace}, registry, runEngine, workspace, id
 }
 
@@ -128,10 +128,10 @@ func TestRegisteredLaunchRefusesBeforeStartAndReleasesAuthority(t *testing.T) {
 		{"checkout socket", port.IsolationUnverified, nil, "preparing", false, true, false},
 		{"checkout scan unavailable", port.IsolationInspection, nil, "preparing", false, true, false},
 		{"daemon unavailable", port.Incomplete, nil, "preparing", false, true, false},
-		{"create refused", port.Refused, []string{"open", "create"}, "preparing", true, true, false},
-		{"stop won before start", launchSuperseded, []string{"open", "create"}, "stopping", true, true, true},
-		{"worker ID changed", port.Refused, []string{"open", "create"}, "ready", true, true, true},
-		{"isolation unverified", port.IsolationUnverified, []string{"open", "create", "verify"}, "ready", true, true, true},
+		{"create refused", port.Refused, []string{"open", "anchor allocate", "anchor inspect", "anchor inspect", "create"}, "preparing", true, true, false},
+		{"stop won before start", launchSuperseded, []string{"open", "anchor allocate", "anchor inspect", "anchor inspect", "create"}, "stopping", true, true, true},
+		{"worker ID changed", port.Refused, []string{"open", "anchor allocate", "anchor inspect", "anchor inspect", "create"}, "ready", true, true, true},
+		{"isolation unverified", port.IsolationUnverified, []string{"open", "anchor allocate", "anchor inspect", "anchor inspect", "create", "verify"}, "ready", true, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			runner, registry, engine, workspace, id := registeredSessionFixture(t)

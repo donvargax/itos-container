@@ -53,10 +53,70 @@ IDs; do not prescribe numbered IDs by hand. Stage only explicit paths and commit
 A plain `itos push` does not publish tags; deliberate tag publication requires `--tag`. The
 existing release workflow creates its tag locally, uploads a draft, then publishes it through
 GitHub, which creates the remote tag. It does not call `itos push`. Preserve that sequence and
-the nonempty-version condition; this migration neither enables releases nor adds a tag-push step.
+the nonempty-version condition. T-3's migration did not enable releases; T-25 separately
+authorizes the caller described below, without a tag-push step.
 
-This branch has no CLI binary release yet. Template releases and the generator's adoption/update
-workflow are separate from made-project binary release tooling and are not claimed here.
+## Binary releases (T-25)
+
+On a push to `main`, CI calls the reusable release workflow only after `ci`, `engine` and the
+automatic Linux `platform` job all succeed at that SHA. Failed, cancelled or skipped prerequisites
+do not qualify. Pull requests and manual dispatch never publish; manual macOS/Windows jobs are
+not release prerequisites. Only the release caller and reusable job have write permissions.
+The workflow checks out that SHA with complete history and tags, calculates a version, then
+creates a local tag, builds a GoReleaser draft, attests the archives, generates notes and publishes.
+GitHub creates the remote tag on publication; the tools themselves only read and calculate.
+
+The first releasable history selects `v0.1.0`, including fix-only and breaking-only histories.
+With a stable reachable release tag, breaking changes take major precedence, then features
+minor, then fixes patch. Otherwise a changed linked module or Go toolchain selects a patch;
+prose, test-only dependencies and tool updates alone do not release. Empty `next` skips
+publication. Shallow history, read errors and a module-major mismatch fail before any tag.
+
+The five Linux/macOS/Windows archives and SHA-256 checksums distribute binaries; they do not
+establish container-host support. Template-generator releases are separate. This guidance
+enables the workflow but is not evidence that a tag or published release already exists.
+
+The helpers and git-cliff configuration come from the owner's
+[itos-template revision 79301eba](https://github.com/donvargax/itos-template/tree/79301eba51b9768a27906c720e39c49b08491e67),
+inspected alongside [itos's release workflow](https://github.com/donvargax/itos/blob/0dfbdf2e80d1bafb08a884edaa3171c5bbfe2a14/.github/workflows/release.yml).
+They reuse this project's `internal/release` under T-25's narrow q-44 architecture exception.
+Attribution and AGPL-3.0 permission remain in force. Git-cliff stays at 2.14.2 with the template's
+four verified archive hashes; acquisition uses the existing binary asset API and checksum check.
+
+First-release notes summarize only feature and fix subjects, grouped in that order and
+oldest first within each group, with full-SHA commit links. They retain the complete range
+counts and bootstrap explanation, link the complete history at `commits/v<version>`, and
+include the checkout-socket and approval limitations from [security.md](security.md).
+There is no comparison with a nonexistent previous release. Breaking instructions, including
+those from other commit types, and non-none `Upgrading` footers remain quoted in full while
+they fit. Ordinary commit bodies are available through the history link.
+
+T-37 bounds the complete generated document to nonempty, valid UTF-8 below 125000 bytes,
+including its final newline, links and verification instructions. Later releases retain
+their existing content unchanged while it fits. Oversized notes first omit entries that
+cannot fit individually, then remove whole change entries and dependency/toolchain details
+from the end before removing migration entries. Empty groups disappear; retained entries
+stay intact. Every size-driven omission has a notice and a complete-history or comparison
+link. Omitted migration instructions are explicitly flagged in Upgrading, directing readers
+to the history before upgrading. Mandatory framing and first-release limits remain; if that
+framing cannot fit, generation fails with exit 2 and empty stdout. Read/tool failures also
+fail without output, so zero bytes must never count as a successful size check.
+
+For a release dry run, inspect `go run ./tools/bin/release-version` at the candidate HEAD
+and run `itos task T-37`. T-37 supersedes T-25's every-commit assertion for first releases
+and its unconditional completeness assertion for oversized notes; version calculation and
+publication prerequisites remain unchanged. The task builds the current notes tool and
+tests complete real history ending at `056d0c721f462bce3bf33cdda9ec71ca038f6bef` in a
+disposable local clone without imported tags. It checks the byte cap, exact first-release
+feature/fix link sets, limits and verification sections, then repeats after adding the
+release's own fixture tag. An oversized later range must retain its comparison link and
+disclose omissions, with byte-identical output on repetition. The tool's package tests cover
+exact byte boundaries, UTF-8, complete-entry removal and empty stdout on failure.
+
+Neither helper may change HEAD, refs or working files in the source or fixture; fixture
+setup creates tags only in the disposable clone. No archive build or publication occurs.
+Report the candidate SHA and exact last/next/bump/range; the coordinator alone verifies the
+eventual pushed main run and released assets. Local notes generation is not publication proof.
 
 ## itos-cc 0.5.0 to 0.47.2
 
@@ -89,10 +149,20 @@ runner's shell tools directly; RTK is not a CI dependency.
 `itos-cc.yaml` now lists live scenarios through `itos tests list scenario --tsv` and preserves
 the two T-8 equivalent-mutant exceptions and their reasons. The omitted format version means
 version 1. The strict parser rejects unknown keys, anchors, aliases, merge keys, non-JSON tags,
-non-string keys and extra documents. The existing harness builds with coverage when itos-cc
-sets `GOCOVERDIR`; its documented individual-test fallback collects each listed scenario's
-counters alongside own-test coverage. A failed or missing collection is not proof. Coverage
-is produced in the `ci` job; platform jobs keep running all tests without unused coverage output.
+non-string keys and extra documents. T-36 makes the harness collect the listed scenarios in
+one run when itos-cc sets `ITOS_CC_TEST_COVERDIR`, writing atomic product counters to
+`<root>/<ID>`. Both the CLI and command test assembly use covered builds. The per-ID root
+takes precedence over `GOCOVERDIR`, whose aggregate route remains available. See the
+[feature coverage contract](../features/README.md#product-coverage) for routing, secondary
+worlds and cleanup. This replaces reliance on the collector's individual-test fallback
+without changing the pinned tool or its mutation contract.
+
+The existing engine CI run also collects and checks its selected IDs. Platform jobs keep
+running all tests without unused coverage output. Local collection is not code proof:
+T-36 closure still requires a fresh pinned-itos-cc CI run on the actual pushed head over
+a production-changing judged range, reporting "the listed tests ran in" under 600 seconds,
+with no missing-ID error. The coordinator records its URL, SHA, base, count and elapsed
+time. A failed or missing collection, cached result or no-code-change skip is not proof.
 
 T-4's results are historical. Its launcher/docs range from
 `ebd187e7f0722f65d9aadda7a13d27048e4e03f6` passed with no source files, proving compatibility

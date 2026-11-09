@@ -1,8 +1,7 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue:
-  - p1-feature-suite-race-memory
+queue: []
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -169,6 +168,10 @@ items:
       unrestricted-push and automatic three-platform claims with the implemented CI policy. T-9's
       completed refresh predates this change. Defer unless it blocks the charter's configuration,
       doctor and approval step.
+
+      Already covers hook registration and verification instructions. Include the reported unset
+      core.hooksPath and missing pre-commit/commit-msg hooks in that verification, confirming how
+      subsequent commits enforce configured gates.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -426,7 +429,7 @@ items:
     title: Release a version on each feat or fix once run works
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-14, slice-15, slice-17, slice-19]
     kind: task
   - id: slice-13
@@ -487,18 +490,9 @@ items:
     title: Host Unix sockets under the checkout are not reachable from the worker
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-host-sockets-in-checkout.
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. The whole checkout is
-      bind-mounted (docker/run.go:64) and network none does not isolate filesystem Unix sockets, so
-      a tmux server, SSH control socket or other host service with its socket under the checkout is
-      reachable from /workspace as the host UID: host command execution or network access without
-      another mount. A startup scan is not enough, as host processes can create sockets later; deny
-      connecting to host sockets, or expose a materialised checkout with no host IPC objects.
   - id: slice-20
     title: Hard links to files outside the checkout are refused
     phase: 1
@@ -552,17 +546,9 @@ items:
     title: Run binds its mount to the validated checkout inode
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-launch-with-inode-bound-checkout.
-      Close the gap between final validation and Docker resolving the mount pathname. Provide a
-      protected inode-bound source through engine ports and adapters, record its ownership before
-      use, and cover normal teardown and failure retention. Preserve checkout edits and the
-      sole-host-mount contract. Require CI red/green scenarios for substitution after the final
-      identity check; update affected architecture sections and record the decision. Broken down
-      from null.
   - id: slice-18
     title: Status and stop recover owned checkout mount anchors
     phase: 1
@@ -670,7 +656,7 @@ items:
     title: Native stop confined to one of two equal-basename projects passes reliably
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-33
@@ -687,24 +673,44 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p1-feature-suite-race-memory
+  - id: T-35
     title: The feature suite stays within a few GB, with or without the race detector
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-34
+    title: Engine fixture preparation passes again on today's CI runners
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-36
+    title: The feature harness writes per-scenario coverage when itos-cc asks, so the code proof's coverage pass takes minutes
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-37
+    title: Release notes stay within GitHub's body limit, the first release included
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p3-release-notes-skip-merges
+    title: Release notes leave out merges of main into an item branch
     phase: 1
     owner: null
     status: todo
     depends_on: []
     kind: idea
     why: >
-      Measured 2026-11-08 by the loop's memory sampler: an implementer's go test -race ./features
-      -count=1 -json (1,348 scenarios, one process) grew features.test from 0.3 GB to 12.6 GB in a
-      minute and to 22 GB the next, leaving 1.5 GB of 31 GB free and pushing 3.5 GB into swap; the
-      day before, the same pressure got the loop killed. The race detector multiplies memory, but 22
-      GB also points at state kept across scenarios (buffers, fixtures, goroutines) that a long
-      suite accumulates. Find what grows per scenario (a heap profile across the suite) and release
-      it, so a full race run fits comfortably; until then agents race only the packages they change.
-
-      Worse than first measured (2026-11-08 06:10 UTC): without -race too, a full go test ./features
-      run grew features.test to 9.3 GB anonymous RSS, and the loop's 10 GB per-agent memory cap
-      OOM-killed it. So agents cannot currently run the full feature suite inside a sane limit; the
-      growth is in the suite, not only in the race detector. Profile the heap across the suite and
-      release what each scenario keeps.
+      v0.1.0's generated notes (2026-11-09) list 'Merge main into slice-13', 'slice-14' and
+      'slice-11' under Features: release-notes counts a merge commit whose subject carries a feat
+      type, or classifies merges by their first parent's type. A merge of main into an item branch
+      changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
+      own subject names the item).
