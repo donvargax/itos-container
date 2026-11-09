@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 )
 
 func TestControlPrivateLockRefusesUnsafeEvidence(t *testing.T) {
@@ -227,6 +229,81 @@ func TestControlPrivateLockDeadlineAndReplacement(t *testing.T) {
 	if tx.Unchanged() {
 		t.Fatal("substituted lock retained publication authority")
 	}
+}
+
+// Begin's lock wait is bounded by the shared call budget the harness substitutes
+// at build time, never by a literal of its own: a worker that waits on a held
+// lock gives up with the retryable state.busy at that budget, no sooner and no
+// later. The fake clock makes the boundary exact without waiting for it.
+func TestControlLockWaitEndsAtTheSharedCallBudget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		control, c, _, _, _ := controlFixture(t)
+		peer, failure := control.Begin(t.Context(), c, true)
+		if failure != "" {
+			t.Fatal(failure)
+		}
+		defer peer.Close()
+		for _, write := range []bool{false, true} {
+			result := make(chan port.Failure, 1)
+			go func() {
+				tx, f := control.Begin(context.Background(), c, write)
+				if tx != nil {
+					tx.Close()
+				}
+				result <- f
+			}()
+			time.Sleep(budget.CallDuration - time.Millisecond)
+			synctest.Wait()
+			select {
+			case f := <-result:
+				t.Fatalf("write=%v gave up before the budget ended: %q", write, f)
+			default:
+			}
+			time.Sleep(2 * time.Millisecond)
+			synctest.Wait()
+			select {
+			case f := <-result:
+				if f != "state.busy" {
+					t.Fatalf("write=%v after the budget: %q, want state.busy", write, f)
+				}
+			default:
+				t.Fatalf("write=%v still waiting after the budget ended", write)
+			}
+		}
+	})
+}
+
+// The same budget also ends a discovery scan that outlasts it, whoever called.
+func TestControlScanEndsAtTheSharedCallBudget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		control, c, reservations, _, _ := controlFixture(t)
+		control.Reservations = &controlBudgetScan{Reservations: reservations, end: func() {}, failure: "state.path", slow: func() bool { return true }}
+		result := make(chan port.Failure, 1)
+		go func() {
+			tx, f := control.Begin(context.Background(), c, false)
+			if tx != nil {
+				tx.Close()
+			}
+			result <- f
+		}()
+		time.Sleep(budget.CallDuration - time.Millisecond)
+		synctest.Wait()
+		select {
+		case f := <-result:
+			t.Fatalf("scan was given up before the budget ended: %q", f)
+		default:
+		}
+		time.Sleep(2 * time.Millisecond)
+		synctest.Wait()
+		select {
+		case f := <-result:
+			if f != "state.busy" {
+				t.Fatalf("scan after the budget: %q, want state.busy", f)
+			}
+		default:
+			t.Fatal("scan still running after the budget ended")
+		}
+	})
 }
 
 func TestControlRacingBootstrapUsesOnePrivateInode(t *testing.T) {

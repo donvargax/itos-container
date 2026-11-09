@@ -13,11 +13,11 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/domain"
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 )
 
 // Control owns the per-account transaction through a validated private lock file.
@@ -96,7 +96,7 @@ func accountDirectory(p *pin) bool {
 	return ok && owner == p.uid && info.Mode().Perm()&0022 == 0
 }
 func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.ControlTransaction, port.Failure) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, budget.CallDuration)
 	defer cancel()
 	if s.Account == nil || s.Reservations == nil {
 		return nil, "state.unavailable"

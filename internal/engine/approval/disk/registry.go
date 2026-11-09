@@ -285,7 +285,7 @@ func (d *sessionDirectory) Close() {
 	d.directoryStore.Close()
 }
 func sessionLock(ctx context.Context, file *os.File, shared bool) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, budget.CallDuration)
 	defer cancel()
 	for {
 		if ctx.Err() != nil {

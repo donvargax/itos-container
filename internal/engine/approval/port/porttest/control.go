@@ -58,6 +58,8 @@ type Control struct {
 }
 
 func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.ControlTransaction, port.Failure) {
+	// A port fixture may not import another engine's domain, where the product's
+	// call budget lives, so the fake models that budget at its production length.
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if s.Account.Failure != "" || s.Account.Home == "" {

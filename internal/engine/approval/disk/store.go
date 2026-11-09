@@ -12,9 +12,9 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 )
 
 // Store receives path selection and canonical encoding from cmd assembly.
@@ -353,7 +353,7 @@ func (p *pin) readNamed(c port.Candidate, records port.Records, name string) (po
 // Read never creates a directory, lock or record. Existing private coordination
 // and selected-directory locks serialize readers with publication.
 func (s Store) Read(c port.Candidate) (port.Record, port.Failure) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), budget.CallDuration)
 	defer cancel()
 	s.ctx = ctx
 	transaction, failure := s.control(ctx, c, false)
@@ -375,7 +375,7 @@ func (s Store) Read(c port.Candidate) (port.Record, port.Failure) {
 
 // Commit compares generation and publishes only a complete durable record.
 func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Failure) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), budget.CallDuration)
 	defer cancel()
 	s.ctx = ctx
 	transaction, failure := s.control(ctx, c, true)
@@ -462,7 +462,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 // Select atomically verifies the active generation, exact bytes and fingerprint.
 // Its returned string owns the bytes; it never consults checkout request files.
 func (s Store) Select(c port.Candidate, generation string) (port.Frozen, port.Failure) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), budget.CallDuration)
 	defer cancel()
 	s.ctx = ctx
 	// Establish existing approval before any enrollment, then recheck it while
