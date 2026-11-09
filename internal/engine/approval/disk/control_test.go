@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -476,5 +477,37 @@ func TestControlCatalogReadFailures(t *testing.T) {
 				t.Fatal(f, want)
 			}
 		})
+	}
+}
+
+// A visible binding that was never synced can be empty or truncated after a
+// crash, and one unreadable binding refuses every command on the account. The
+// control.lock sync that enroll performs first says nothing about a binding.
+func TestControlSyncsEachBindingFileBeforeItsRename(t *testing.T) {
+	control, c, _, _, selected := controlFixture(t)
+	ops := control.Store.operations()
+	syncFile, rename := ops.syncFile, ops.rename
+	synced := map[string]bool{}
+	var published []string
+	ops.syncFile = func(f *os.File) error {
+		synced[filepath.Base(f.Name())] = true
+		return syncFile(f)
+	}
+	ops.rename = func(r *os.Root, from, to string) error {
+		if !synced[from] {
+			t.Errorf("%s was renamed to %s before its own fsync", from, to)
+		}
+		published = append(published, to)
+		return rename(r, from, to)
+	}
+	control.Store.ops = &ops
+	tx, f := control.Begin(t.Context(), c, true)
+	if f != "" {
+		t.Fatal(f)
+	}
+	tx.Close()
+	// The selected tree is absent, so its pending claim and completion both publish.
+	if !slices.Equal(published, []string{"self.json", locationName(selected), locationName(selected)}) {
+		t.Fatal("unexpected binding publications", published)
 	}
 }
