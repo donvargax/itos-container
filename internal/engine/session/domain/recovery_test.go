@@ -272,6 +272,11 @@ func TestInterruptNeverSignalsForeignOrUnverifiableOwnership(t *testing.T) {
 			if r.Outcome != "" || r.Signal != "SIGTERM" || (fault != "signal" && slices.Contains(e.Events, "SIGTERM")) {
 				t.Fatal(r, e.Events)
 			}
+			// An interruption that could not be authorized or delivered observed no
+			// exit, so it reports none rather than a status of its own.
+			if fault != "non-running" && (r.Exited || r.Exit != 0) {
+				t.Fatal("refused interruption reported an exit", r.Exited, r.Exit)
+			}
 		})
 	}
 }

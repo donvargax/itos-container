@@ -30,8 +30,10 @@ func (a fixtureStartupApproval) FreezeContext(_ context.Context, v ap.View) (ap.
 	return a.Freeze(v)
 }
 
-// Runs both normally and in the harness's overlaid compilation. Every assertion
-// goes through the real run command and shared-contract fakes, with no engine I/O.
+// Runs both normally and in the harness's engine product copy, where only the
+// limits file differs (a build overlay would be ignored under -cover). Every
+// assertion goes through the real run command and shared-contract fakes, with no
+// engine I/O.
 func TestEngineFixtureBudgetContract(t *testing.T) {
 	t.Logf("compiled budgets: call=%s startup=%s grace=%s", budget.CallDuration, budget.StartupDuration, budget.GraceDuration)
 	for _, phase := range []string{"startup", "drain", "quiet and delayed signal"} {
