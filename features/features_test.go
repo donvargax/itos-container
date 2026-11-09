@@ -41,6 +41,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -75,12 +76,13 @@ func TestFeatures(t *testing.T) {
 	if selection.skip != "" {
 		t.Skip(selection.skip)
 	}
+	selection.started = time.Now()
 	t.Cleanup(removeCallerPath)
 	root, err := moduleRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
-	bin, err := build(root, t.TempDir())
+	bin, err := buildProduct(root, t.TempDir(), selection.engine)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +153,8 @@ type scenarioSelection struct {
 	count    int
 	skip     string
 	excluded []string
+	started  time.Time
+	timing   *engineTiming
 }
 
 func (env featureEnvironment) engineEnabled() (bool, error) {
@@ -171,6 +175,9 @@ func (env featureEnvironment) engineEnabled() (bool, error) {
 // The repository's macOS/Windows jobs are manual; Linux proof never runs them.
 func (env featureEnvironment) excludedPlatforms() []string {
 	var tags []string
+	if env.os != "linux" && env.os != "darwin" {
+		tags = append(tags, "@unix")
+	}
 	if env.os != "linux" || env.arch != "amd64" {
 		tags = append(tags, "@local-engine-fixture")
 	}
@@ -340,15 +347,30 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 	}
 	completed, unsuccessful := 0, false
 	suite := godog.TestSuite{Name: "itos-container", Options: &options, ScenarioInitializer: func(sc *godog.ScenarioContext) {
+		var started time.Time
+		rowFailed := false
+		if selection.timing != nil {
+			// Register before fixture setup, including a failing setup hook.
+			sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
+				started, rowFailed = time.Now(), false
+				return ctx, nil
+			})
+		}
 		initialize(sc)
 		if selection.engine || selection.red {
 			sc.StepContext().After(func(ctx context.Context, _ *godog.Step, status godog.StepResultStatus, err error) (context.Context, error) {
 				unsuccessful = unsuccessful || status != godog.StepPassed || err != nil
+				rowFailed = rowFailed || status != godog.StepPassed || err != nil
 				return ctx, nil
 			})
-			sc.After(func(ctx context.Context, _ *godog.Scenario, err error) (context.Context, error) {
+			sc.After(func(ctx context.Context, scenario *godog.Scenario, err error) (context.Context, error) {
 				completed++
 				unsuccessful = unsuccessful || err != nil
+				if selection.timing != nil {
+					// Godog runs After hooks in registration order. This is after
+					// all fixture cleanup and receives any cleanup error as well.
+					selection.timing.complete(scenario, started, rowFailed || err != nil)
+				}
 				return ctx, nil
 			})
 		}
@@ -370,6 +392,12 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 // git of the caller's. Either coverage input requests a -cover build (see the
 // package's comment).
 func build(root, dir string) (string, error) {
+	return buildProduct(root, dir, false)
+}
+
+// buildProduct is build, except that the engine tier's product is built from a
+// copy of the sources with the shortened budget fixture (engineBudgetTree).
+func buildProduct(root, dir string, engine bool) (string, error) {
 	name := "itos-container"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
@@ -377,11 +405,18 @@ func build(root, dir string) (string, error) {
 	bin := filepath.Join(dir, name)
 	args := []string{"build", "-trimpath", "-buildvcs=false",
 		"-ldflags", "-X " + versionSymbol + "=" + stampedVersion + " -X " + commitSymbol + "=" + stampedCommit}
+	source := root
+	if engine {
+		var err error
+		if source, err = engineBudgetTree(root, dir); err != nil {
+			return "", err
+		}
+	}
 	if productCoverageRequested() {
 		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	}
 	cmd := exec.Command("go", append(args, "-o", bin, "./cmd/itos-container")...)
-	cmd.Dir = root
+	cmd.Dir = source
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("building itos-container: %v\n%s", err, out)
 	}

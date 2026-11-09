@@ -268,7 +268,7 @@ go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
 ITOS_CC_TEST_COVERDIR=$(mktemp -d "$RUNNER_TEMP/T-36-engine-coverage.XXXXXX")
 export ITOS_CC_TEST_COVERDIR
 cd features
-ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$'
+ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=4m -test.paniconexit0 -test.run '^TestFeatures$'
 ```
 
 After the selected scenarios succeed, the same `TestFeatures` invocation checks
@@ -296,31 +296,108 @@ while each engine run must still establish its own runtime evidence.
 `TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
 and `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
-T-32 temporarily gives the step an eight-minute budget and the job a thirteen-minute budget.
-The test binary's seven-minute timeout leaves time for Go's panic and goroutine dump before
-the step limit. This coordinator-authorized stopgap is recorded in `weakened-gates.md` until
-`p1-engine-suite-within-its-limit` speeds up the suite and restores the limits. These are
-test-infrastructure budgets, not product startup/resource limits. With no red input the step
+T-33 restores the step's five-minute limit and the job's ten-minute limit. The test
+binary's four-minute timeout leaves time for Go's panic and goroutine dump before the
+step limit. The workflow measures the entire Engine scenarios step, starting before
+test compilation and ending after output capture and exit diagnostics. It separately
+prints compilation time and rejects a total above 240 seconds even if the binary and
+capture both succeed. The shell reads monotonic Linux uptime at 10 ms resolution;
+missing, invalid or backwards timing fails. Compilation, test, signal and capture
+failures keep their original exit status. Fixture preparation retains its separate
+budget, followed by the existing failure diagnostics and unconditional owned cleanup.
+These are test-infrastructure budgets, not product startup/resource limits. With no red input the step
 selects every live engine case, independent of smoke selections, changed IDs or a green
 baseline. A manual red list narrows it to the named eligible IDs, live or `@wip`.
 Pending, undefined, failed or skipped
 runtime steps fail; losing selected engine cases also fails. Manual non-engine red runs
 apply the same completion checks.
 
-Ordinary engine runs that select both `ID-LIFECYCLE-09` and `ID-LIFECYCLE-13`
-execute the four escalation rows during the quiet worker's required 125-second
-observation. The quiet worker reaches readiness first and is not cancelled until
-every escalation assertion and cleanup has finished. Each escalation still runs
-serially, with its own checkout, controller and full-ID worker, so unrelated-resource
-snapshots see the same running quiet worker before and after. The quiet row retains
-its original observation duration and process guard, and all cases retain their
-original deadlines. This removes repeated wall-clock waiting that exhausted run
-42396452598 at `a030be0`; it neither shortens the quiet interval nor increases the
-five-minute gate. If quiet startup fails, the deferred rows run after the main suite
-and both failures are retained. Separate completion counts cover the entire original
-selection. Filtered selections missing either ID and manual red runs remain serial.
-`TestEngineSchedule` regressions exercise scheduling, cleanup ordering, exact selection
-and failure propagation using memory-only steps, without native engine access.
+Each completed engine scenario example streams an `engine scenario timing:` JSON
+record after its final cleanup, including failed setup, steps and cleanup. Records
+contain only feature URI, stable scenario ID, source row line, monotonic duration in
+nanoseconds and outcome. Identical outline names/values still have distinct row lines;
+a later failure does not hide earlier records. The single `engine suite timing:`
+summary gives selected/completed example counts, outcome and elapsed time from before
+the product build through the scheduled suites. Nested row durations overlap and must
+not be added to obtain elapsed suite time. The whole-step measurement also includes
+test compilation, remaining test-process cleanup and log capture. Ordinary non-engine
+runs emit no engine timing records.
+
+`TestEngineScenarioTiming` exercises these records using memory-only steps and controlled
+Go time. `TestEngineSuiteBudget` parses the actual workflow and executes its timing and
+failure wrapper with disposable compiler/program fixtures and a controlled uptime read.
+Its cases include successful but over-budget execution, missing timing, compilation,
+capture and signal failures. Neither test enables an engine or waits four real minutes.
+Run the full feature suite without `-race`; use `-race` only on changed focused tests.
+
+The coordinator's before measurement is run `42457394504` at
+`cdd38978c57440d0a8d6328614acc5d84d68adf3`: 47 engine examples, 285 seconds overall
+and 246 seconds in the measured step, which correctly failed the 240-second gate.
+The quiet `ID-LIFECYCLE-13` row took 128 seconds; the other slow stream rows took
+22 and 12 seconds. The four `ID-LIFECYCLE-09` rows took 11–14 seconds each.
+
+Following q-40, the engine harness builds its disposable product from a copy of
+`cmd`, `internal`, `go.mod` and `go.sum` in which only
+`internal/engine/budget/domain/limits.go` differs. That fixture
+uses call/startup/grace budgets of 1/3/1 seconds. Normal builds, releases and
+ordinary contract tests retain 10/120/10 seconds, checked by
+`TestProductionBudgetLimits`. No product environment variable, argument or policy
+can enable the fixture. The copy and binary live outside the writable scenario
+checkouts, and their preparation and compilation remain inside the measured step.
+The 30-second teardown budget and independent process guards are unchanged.
+
+The fixture reaches only the disposable product, the `w.bin` that `buildProduct`
+returns. The session contract test assembly does not use it: `sessionProbeBinary`
+runs `go test -c ./cmd/itos-container` in the checkout, so that assembly compiles
+the checkout's `limits.go` and keeps 10/120/10 seconds even in the engine tier. The
+engine rows `ID-SESSION-11` and `ID-SESSION-12` run it through `sessionRun`, so a
+wait in those rows follows the production limits, not 1/3/1 seconds.
+The contract compilation `TestEngineSuiteBudget` checks is the copy's, not this
+checkout assembly. Those rows were not among the slow rows measured above, and
+building the assembly from the copy would change what they exercise, so it stays
+on the production limits.
+
+The first version used `go build -overlay` instead of a copy and never took effect in
+CI: with `-cover`, which the engine step always sets, `cmd/go` passes the cover tool
+each package file's path on disk and ignores the overlay, so the product kept its
+production limits. Worse, the build cache keyed the overlay's text while holding the
+production build, so a cache restored from such a run served production limits to
+any build of the same text. The fixture's text therefore carries a header no overlay
+ever had. Run 42566251698 spent its whole four minutes in the unshortened waits.
+
+The quiet observation lasts at least four real seconds after readiness, beyond
+both configured budgets. Repeated signals occur at 20 and 80 percent of grace;
+delayed acknowledgements take 60 percent. Escalation cannot occur early, and its
+scheduling tolerance is 20 percent of grace, so an acknowledgement-relative timer
+still fails. Blocked pipes remain blocked until independent controller termination.
+`TestEngineSuiteBudget` also compiles the actual command contract in that copy,
+under the engine step's `-cover -coverpkg=./...` instrumentation, and checks startup
+expiry, drain expiry, quiet lifetime, delayed acknowledgement and owned cleanup
+against the fixture durations. These checks use memory backends
+and controlled time; they do not supply native runtime proof.
+
+Ordinary engine runs selecting both `ID-LIFECYCLE-09` and `ID-LIFECYCLE-13` retain
+the existing schedule: the four escalation rows run serially inside the quiet
+worker's stable lifetime, each with its own checkout, controller and full-ID worker.
+The quiet worker is cancelled only after every nested assertion and cleanup and
+its own minimum observation interval. Inventory audits still see a stable unrelated
+worker. If quiet startup fails, the deferred rows run after the main suite, retaining
+both failures. Exact completion counts cover the full selection. Filtered selections
+missing either ID and manual red runs remain serial. One observed quiet control may
+be reused only within the stream outline and the same product build.
+
+The single engine job remains until the coordinator measures this revision. A suite
+near 100 seconds is an estimate, not a measured result. In the prepared CI tier only,
+the coordinator measures the complete unsharded selection with:
+
+```sh
+env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 timeout --signal=TERM --kill-after=5s 240s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
+```
+
+If the measured result still exceeds 240 seconds, T-33 calls for whole-feature shards
+on separate native runners with an exact parsed-example partition check. The loop
+owns native CI runs and closure. No local engine or mutation run substitutes for
+that evidence.
 
 Doctor's ID-DOCTOR-23 and ID-DOCTOR-24 are live engine scenarios for cached-image
 inspection and a missing digest. They run after preflight and fixture preparation,
@@ -558,7 +635,8 @@ A nonempty list selects only its exact IDs, live or `@wip`, while retaining ever
 platform restriction. Inherited Feature, Rule, Outline and Examples tags apply; an outline ID
 selects all eligible rows. The input never enables the engine. The same list may reach all
 three jobs: engine IDs skip on manual platforms, non-engine IDs skip in the engine job, and
-`@linux` cases remain excluded on macOS/Windows. A wholly excluded selection reports its IDs,
+`@linux` cases remain excluded on macOS/Windows. The `@unix` examples for manifest
+FIFOs run on Linux and macOS; Windows retains every portable manifest-path example. A wholly excluded selection reports its IDs,
 reasons and count, runs no scenario setup and supplies no red evidence. Eligible selections must finish
 all expected cases successfully for the test command to pass; actual failures stay failed.
 
@@ -605,7 +683,7 @@ deadline. A missing barrier aborts immediately; collection caps teardown at 32 s
 from the recorded cancellation/exit origin, including the two-second scheduling
 tolerance, and os/exec capture waits are bounded after process death. Harness aborts
 remain failures, never successful product cancellation or cleanup. One observed
-125-second quiet control may be shared within the stream outline, as its spec permits.
+budget-relative quiet control may be shared within the stream outline, as q-40 permits.
 
 Local `TestLifecycle*` checks verify step registration, probe compilation, recorder
 forwarding/faults and rejection of incorrect observations. They do not execute the probe
@@ -638,10 +716,12 @@ still returns at cancellation or its ten-second call bound, before the blocked
 operation is released. Late completion cannot resume launch.
 
 LIFECYCLE-09's independent liveness read starts immediately after cancellation,
-with repeated signals still scheduled at two and eight seconds. Observer I/O does
+with repeated signals still scheduled at 20 and 80 percent of the run's grace
+budget (200 ms and 800 ms against the 1-second fixture grace). Observer I/O does
 not hold the request recorder's lock, and a delayed running reply remains evidence
-for the same never-restarted primary. The journal still rejects SIGKILL before ten
-seconds or after twelve. Controlled-time harness tests cover delayed replies and
+for the same never-restarted primary. The journal still rejects SIGKILL before
+the grace budget or after it plus 20 percent (1 s to 1.2 s with the fixture
+grace). Controlled-time harness tests cover delayed replies and
 early controller exit; fresh native-engine evidence remains CI-only.
 
 LIFECYCLE-18/19 cover teardown diagnostics and primary-cause preservation through

@@ -77,7 +77,7 @@ func (c CLI) Run(ui *cli.UI) int {
 	if _, ok := context.Cause(ctx).(session.Interrupt); ok {
 		return reportRun(ui, session.RunResult{Signal: context.Cause(ctx).(session.Interrupt).Signal, Deadline: time.Now().Add(30 * time.Second)})
 	}
-	startup, end := budget.Start(ctx, 120*time.Second, "startup")
+	startup, end := budget.Start(ctx, budget.StartupDuration, "startup")
 	defer end()
 	frozen, err := domain.PreflightContext(startup, c.Approval, c.Snapshots)
 	if err != nil {

@@ -2,7 +2,7 @@
 phases:
   1: null
 queue:
-  - p1-overlap-drain-flake
+  - T-41
   - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
@@ -681,7 +681,7 @@ items:
     title: main's engine scenarios finish well inside the job's 5-minute limit
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-32
@@ -963,37 +963,13 @@ items:
       leaves a recovery record with the exact retry command, and stop recovers it without touching
       foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
       from p1-egress-allowlist-proxy.
-  - id: p1-overlap-drain-flake
+  - id: T-41
     title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      features/overlap_fixture_test.go:419 waits a fixed 5 s for 'local controllers drain after
-      assertions'. Under the code proof's per-ID coverage measurement the drain is slower and the
-      hook times out ('bounded overlap observation timed out'), so the proof's preparation fails
-      with no mutant judged. It failed slice-21's CI twice (runs 42573174685 and 42582818914) and
-      T-33's at 082884c (run 42589518540), each costing a CI cycle and a repair round on work that
-      had nothing to do with it. Fix the wait (a budget that holds under coverage, or waiting on the
-      drain's own completion signal), not the proof. Found by the coordinator, 2026-11-09.
-
-      Correction: of slice-21's runs, 42582818914 hit this hook; 42573174685 failed for another
-      reason (not this flake), so it counts once for slice-21, not twice.
-
-      p1-overlap-drain-flake already covers the 5 s drain wait in features/overlap_fixture_test.go
-      timing out under coverage, and names 'a budget that holds under coverage' as a fix. Add this
-      to it: size the bound against the product's 30 s teardown budget, since the sibling waits are
-      20, 35 and 40 s. A drain takes up to 1.2 s locally under 4-way load, and a larger bound only
-      lengthens the wait on a hung controller. T-36's text in tasks/phase-1.yaml (around lines
-      3074-3096) says to keep the five-second bound, so the fix has to amend that spec.
-
-      This belongs inside p1-overlap-drain-flake, because raising the bound there makes the
-      TestOverlapCleanup 'covered timeout' case wait that long. The fix should make the drain bound
-      a per-fixture duration, with zero meaning the default, so that case runs in milliseconds.
-      Otherwise a bound near 35 s adds that much to every run. That case currently waits the real
-      5.0 s.
+    kind: task
   - id: p1-docs-admit-milestone-two-egress
     title: PLAN.md, README and the orchestration docs stop saying proxy egress is outside the scope
     phase: 1
@@ -1016,3 +992,21 @@ items:
       decision record, per the charter's architecture rule. AGENTS.md's opening paragraph is also
       stale ("container commands and isolation are not implemented yet", v0.1.0 is published), but
       whether to edit AGENTS.md is the person's. Documentation only: it touches no proof.code path.
+  - id: p1-acceptance-static-binary
+    title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy), through
+      slice-27. features/features_test.go buildProduct runs go build with no CGO_ENABLED setting,
+      and the binary it builds measured dynamically linked here. .goreleaser.yaml ships
+      CGO_ENABLED=0. Scenarios therefore exercise cgo paths for DNS and user lookup that no released
+      binary uses, so a pass does not prove the shipped binary, which matters beyond egress.
+      slice-27 needs a static binary for the proxy container and its real-engine scenarios. Landing
+      the fix first lets the existing suite show any static-versus-dynamic difference before the
+      egress work is mixed in. Set CGO_ENABLED=0 for the build, including the -cover variant used by
+      the code proof. Add a check that the built binary is static or matches the release setting.
+      The existing scenarios must still pass, with no gate weakened. slice-27 should depend on it.

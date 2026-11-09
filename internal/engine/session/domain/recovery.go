@@ -30,7 +30,7 @@ func recoveryFailure(id string, failure port.Outcome) port.RecoveryResult {
 func (s Recovery) Status(ctx context.Context) port.RecoveryResult {
 	s.Registry = finiteRegistry{s.Registry}
 	s.Engine = finiteEngine{s.Engine}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, budget.CallDuration)
 	defer cancel()
 	ids, failure := s.Registry.List(ctx)
 	if failure != "" {
@@ -375,7 +375,7 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 	if failure != "" && (!foreground || !retryableSignal(failure)) {
 		return failure
 	}
-	grace, end := context.WithTimeout(ctx, 10*time.Second)
+	grace, end := context.WithTimeout(ctx, budget.GraceDuration)
 	if foreground {
 		end()
 		grace, end = context.WithDeadline(ctx, deadline)

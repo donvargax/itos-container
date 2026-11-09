@@ -2,7 +2,10 @@ package features
 
 import (
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/cucumber/godog"
 )
 
 const platformFixture = `Feature: platform selection
@@ -66,5 +69,48 @@ func TestPlatformSelection(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestManifestFIFOPlatformSelection(t *testing.T) {
+	for _, platform := range []string{"linux", "darwin", "windows"} {
+		t.Run(platform, func(t *testing.T) {
+			for _, red := range []string{"", "@ID-MANIFEST-04"} {
+				pattern := "^@ID-MANIFEST-04$"
+				if red != "" {
+					pattern = ""
+				}
+				selection, err := selectScenarios(pattern, ".", featureEnvironment{os: platform, ci: "true", actions: "true", event: "workflow_dispatch", red: red})
+				if err != nil {
+					t.Fatal(err)
+				}
+				suite := godog.TestSuite{Options: &godog.Options{Paths: []string{"."}, Tags: selection.filter}}
+				features, err := suite.RetrieveFeatures()
+				if err != nil {
+					t.Fatal(err)
+				}
+				fifo, other := 0, 0
+				for _, feature := range features {
+					for _, scenario := range feature.Pickles {
+						found := false
+						for _, step := range scenario.Steps {
+							found = found || strings.Contains(step.Text, "FIFO at the selected candidate")
+						}
+						if found {
+							fifo++
+						} else {
+							other++
+						}
+					}
+				}
+				want := 2
+				if platform == "windows" {
+					want = 0
+				}
+				if fifo != want || other != 10 || selection.count != want+10 {
+					t.Fatalf("FIFO/portable selection = %d/%d, want %d/10", fifo, other, want)
+				}
+			}
+		})
 	}
 }

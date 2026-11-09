@@ -272,6 +272,11 @@ func TestInterruptNeverSignalsForeignOrUnverifiableOwnership(t *testing.T) {
 			if r.Outcome != "" || r.Signal != "SIGTERM" || (fault != "signal" && slices.Contains(e.Events, "SIGTERM")) {
 				t.Fatal(r, e.Events)
 			}
+			// An interruption that could not be authorized or delivered observed no
+			// exit, so it reports none rather than a status of its own.
+			if fault != "non-running" && (r.Exited || r.Exit != 0) {
+				t.Fatal("refused interruption reported an exit", r.Exited, r.Exit)
+			}
 		})
 	}
 }
@@ -290,7 +295,9 @@ func TestEscalationRevalidatesAfterGrace(t *testing.T) {
 			}
 		}
 		r := s.Run(ctx, d, []string{"probe"}, port.Streams{})
-		if r.Exited || r.Cleanup == port.Complete || slices.Contains(e.Events, "SIGKILL") || slices.Contains(e.Events, "remove") {
+		// The escalation that revalidation refused observed no exit, so the run
+		// reports none rather than a status of its own.
+		if r.Exited || r.Exit != 0 || r.Cleanup == port.Complete || slices.Contains(e.Events, "SIGKILL") || slices.Contains(e.Events, "remove") {
 			t.Fatal(r, e.Events)
 		}
 	})

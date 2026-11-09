@@ -54,6 +54,30 @@ func TestDoctorPlatformSelection(t *testing.T) {
 	}
 }
 
+func TestDoctorWindowsFixtureReachesHostCheck(t *testing.T) {
+	root, err := moduleRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin, err := build(root, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &world{root: root, bin: bin, dir: t.TempDir()}
+	// Windows has no Unix effective UID: Go returns -1. The unsupported-host
+	// scenario still needs a valid manifest to reach its host refusal assertion.
+	if err := w.doctorCheckoutForHost("windows", -1); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.closeDoctor)
+	if err := w.runWith(w.env(), "doctor --manifest-only --json"); err != nil {
+		t.Fatal(err)
+	}
+	if w.exit != 0 {
+		t.Fatalf("Windows fixture fails before host inspection: %s", w.report())
+	}
+}
+
 func TestDoctorFixtureJournal(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Unix fixture is selected only on Linux")

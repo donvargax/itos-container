@@ -44,7 +44,7 @@ func lifecycleRepeatedSignals(p *recoveryProcess, cancelled time.Time, signal fu
 		for _, item := range []struct {
 			after  time.Duration
 			signal string
-		}{{2 * time.Second, "SIGINT"}, {8 * time.Second, "SIGTERM"}} {
+		}{{engineGraceBudget / 5, "SIGINT"}, {4 * engineGraceBudget / 5, "SIGTERM"}} {
 			if !lifecycleUntil(p, cancelled.Add(item.after)) {
 				break
 			}
@@ -218,7 +218,7 @@ func (w *world) lifecycleStreams() {
 		if w.duringQuiet != nil {
 			w.duringQuiet()
 		}
-		if !lifecycleUntil(l.run, l.ready.Add(125*time.Second)) || !w.recoveryNativePresent(true) {
+		if !lifecycleUntil(l.run, l.ready.Add(engineQuietInterval)) || !w.recoveryNativePresent(true) {
 			w.lifecycleAbortEarly()
 			return
 		}
@@ -272,7 +272,7 @@ var lifecycleQuietControls = struct {
 
 // A healthy control executes the same command/transport/recorder path in an
 // independent disposable checkout. It is an action, never a successful Given.
-// The spec permits sharing one 125 s quiet control within the stream outline.
+// The spec permits sharing one budget-relative quiet control within the stream outline.
 // Cache only observed duration and a checked native result, scoped to the built
 // binary. Every row still executes its own product invocation and coverage.
 func (w *world) lifecycleControl(quiet bool) error {
