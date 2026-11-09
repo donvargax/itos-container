@@ -237,18 +237,24 @@ func lifecycleDelayedWindowCases(delay time.Duration) []lifecycleWindowCase {
 		{name: "delayed past the absolute tolerance", first: 1500 * ms, kills: []time.Duration{grace + tolerance + ms}, refuses: "SIGKILL at"},
 		// A late first signal leaves the product's call limit running from the
 		// request before the signal, not from cancellation. The cut is journaled
-		// nowhere, so the next request decides: at the call limit after that
-		// request it is accepted, any sooner it is the product giving up.
+		// nowhere, so the next request decides. An honest cut is followed by the
+		// SIGKILL's inspection, because the call limit equals the grace and the
+		// call starts after teardown does: the grace deadline has passed by the
+		// cut, and the product's wait returns without a request. At the call limit
+		// after the request before the signal that inspection is accepted, any
+		// sooner it is the product giving up; and a wait is refused whenever it
+		// comes, since only a restarted or abandoned grace sends one.
 		{name: "delayed acknowledgement cut by the call limit after a late first signal", first: 600 * ms,
 			kills: []time.Duration{600*ms + call + 50*ms}, ack: ackCut},
 		{name: "delayed hold cut at the call limit after a late first signal", first: 600 * ms, waits: []time.Duration{600*ms + call},
-			kills: []time.Duration{600*ms + call + 100*ms}, ack: ackCut},
+			kills: []time.Duration{600*ms + call + 100*ms}, ack: ackCut, refuses: "delay did not execute"},
 		{name: "delayed cut at an acknowledgement restart", first: first, kills: []time.Duration{restart(first)}, ack: ackCut, refuses: "SIGKILL at"},
 		{name: "delayed cut before the grace", first: first, kills: []time.Duration{grace - ms}, ack: ackCut, refuses: "SIGKILL at"},
 		// The cut is not journaled, but the product's next request follows it, so
 		// that request cannot come before the call limit has run out. Here the
-		// product gave up 100 ms after the request arrived and waited at once.
-		{name: "delayed hold abandoned before the call limit", first: first, waits: []time.Duration{first + 100*ms},
+		// product gave up 50 ms before the call limit and went straight to its
+		// SIGKILL; the same journal with a wait at 150 ms is refused as a wait.
+		{name: "delayed hold abandoned before the call limit", first: first,
 			kills: []time.Duration{grace}, ack: ackCut, refuses: "delay did not execute"},
 		{name: "delayed hold abandoned, then a timer from the abandonment", first: first, waits: []time.Duration{first + 100*ms},
 			kills: []time.Duration{first + 100*ms + grace}, ack: ackCut, refuses: "delay did not execute"},
@@ -256,14 +262,14 @@ func lifecycleDelayedWindowCases(delay time.Duration) []lifecycleWindowCase {
 		// from cancellation the product's next request is a call limit on, so the
 		// hold looks as if it ran; measured from the request before the signal it
 		// is not.
-		{name: "delayed hold abandoned after a late first signal", first: 1200 * ms, waits: []time.Duration{1250 * ms},
-			kills: []time.Duration{1300 * ms}, ack: ackCut, refuses: "delay did not execute"},
+		{name: "delayed hold abandoned after a late first signal", first: 1200 * ms,
+			kills: []time.Duration{1250 * ms}, ack: ackCut, refuses: "delay did not execute"},
 		{name: "delayed hold abandoned after a late first signal, then a timer from the abandonment", first: 1200 * ms,
 			waits: []time.Duration{1250 * ms}, kills: []time.Duration{2250 * ms}, ack: ackCut, refuses: "delay did not execute"},
 		{name: "delayed hold abandoned within the call limit of a first signal at 600 ms", first: 600 * ms,
-			waits: []time.Duration{1100 * ms}, kills: []time.Duration{1200 * ms}, ack: ackCut, refuses: "delay did not execute"},
-		{name: "delayed hold abandoned just before the call limit", first: 600 * ms, waits: []time.Duration{600*ms + call - ms},
-			kills: []time.Duration{600*ms + call + 100*ms}, ack: ackCut, refuses: "delay did not execute"},
+			kills: []time.Duration{1100 * ms}, ack: ackCut, refuses: "delay did not execute"},
+		{name: "delayed hold abandoned just before the call limit", first: 600 * ms,
+			kills: []time.Duration{600*ms + call - ms}, ack: ackCut, refuses: "delay did not execute"},
 		// The call limit runs from the signal call's start, which the recorder
 		// cannot see: the kill reaches it some time later, and the daemon check
 		// before the call is the last request that precedes the start. So the bound
@@ -271,17 +277,17 @@ func lifecycleDelayedWindowCases(delay time.Duration) []lifecycleWindowCase {
 		// is at 600 ms and the kill at 650 ms. A next request at 1.62 s comes 1.02 s
 		// after the check but 970 ms after the kill, and an honest cut leaves just
 		// that: the product's next request follows the cut at once, while the
-		// kill's arrival lags the start of the call.
+		// kill's arrival lags the start of the call. The second case sends a wait
+		// there, which is refused as a wait whatever its time.
 		{name: "delayed acknowledgement cut a call limit after the daemon check", first: 650 * ms, checkLead: 50 * ms,
 			kills: []time.Duration{1620 * ms}, ack: ackCut},
 		{name: "delayed hold cut a call limit after the daemon check", first: 650 * ms, checkLead: 50 * ms,
-			waits: []time.Duration{1620 * ms}, kills: []time.Duration{1700 * ms}, ack: ackCut},
+			waits: []time.Duration{1620 * ms}, kills: []time.Duration{1700 * ms}, ack: ackCut, refuses: "delay did not execute"},
 		// And not from the inspection before the daemon check: the call starts after
 		// the check, so a next request a call limit after the inspection but short
 		// of one after the check is the product giving up early.
 		{name: "delayed hold abandoned within a call limit of the daemon check", first: 650 * ms, checkLead: 50 * ms,
-			inspectLead: 40 * ms, waits: []time.Duration{1590 * ms}, kills: []time.Duration{1700 * ms}, ack: ackCut,
-			refuses: "delay did not execute"},
+			inspectLead: 40 * ms, kills: []time.Duration{1590 * ms}, ack: ackCut, refuses: "delay did not execute"},
 		{name: "acknowledgement replied early", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackEarly, refuses: "delay did not execute"},
 		{name: "cancelled before the engine accepted", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackStalled, refuses: "delay did not execute"},
 		{name: "no reply and not cancelled", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackNone, refuses: "delay did not execute"},
