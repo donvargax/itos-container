@@ -47,10 +47,8 @@ func (p *Proxy) Serve(ctx context.Context, names []string) error {
 		return port.ListInvalid
 	}
 	ready := port.Record{Schema: 1, Seq: 1, Time: time.Now().UTC().Format(time.RFC3339), Event: port.Ready}
-	line, err := json.Marshal(ready)
-	if err == nil {
-		_, err = p.fixture.Log.Write(append(line, '\n'))
-	}
+	line, _ := json.Marshal(ready)
+	_, err := p.fixture.Log.Write(append(line, '\n'))
 	if err != nil {
 		return port.LogFailed
 	}

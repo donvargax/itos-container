@@ -50,10 +50,8 @@ func (r *recorder) write(record port.Record) bool {
 
 // emit encodes a record and writes it in one call.
 func (r *recorder) emit(record port.Record) error {
-	line, err := json.Marshal(record)
-	if err == nil {
-		_, err = r.out.Write(append(line, '\n'))
-	}
+	line, _ := json.Marshal(record)
+	_, err := r.out.Write(append(line, '\n'))
 	return err
 }
 
