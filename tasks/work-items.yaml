@@ -846,6 +846,21 @@ items:
       selection enrolls the original tree with its records in place, validated by the reservation
       scan. The reviewer found no exposure bypass. Until the person decides, slice-21 should word
       CONFIG.md to say only what the code does now.
+
+      Same decision that item already holds: how a retained control-state location can be recovered,
+      because the product never forgets one and a supported repair needs a consent surface the
+      charter does not yet authorize, so it is the person's call (itos decision). That item already
+      says the lost-location lockout (state.unavailable after /tmp is cleared) is the same decision
+      and that its contract should cover both cases. This is a third lockout cause with the same
+      mechanism. enroll publishes an incomplete binding, then pinPath(create=true) hits a
+      foreign-owned directory (another UID won the mkdir race under a shared-writable
+      XDG_STATE_HOME). Every later inspect re-pins every enrolled path, gets state.unsafe, and
+      refuses doctor, approve and run for every selection until the binding is removed by hand. Add
+      to the item: the claim-retention rule is open (skip an incomplete claim whose unbound tail is
+      foreign-owned, since no state tree of ours exists there, or secure a UID-private ancestor
+      before persisting the claim). A test needs a seam between the prospective pin and
+      pinPath(create) to simulate the race. It is availability only, on a multi-UID host with a
+      shared-writable state home, and slice-21 deliberately did not repair it.
   - id: p2-fixture-worlds-inherit-scenario-coverdir
     title: A fixture world that drops the scenario coverage destination fails in go test, not in CI
     phase: 1
