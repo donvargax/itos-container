@@ -429,6 +429,17 @@ items:
       slice-27 should depend on it. The phase field here is already 1, so only the edges and the
       person's decision remain. Until slice-26 has them, it can start before the record it builds on
       exists, with nothing holding it back.
+
+      This is coordinator registry housekeeping, not a work item. The slice-27 edge is already held:
+      p3-approval-before-egress lists the depends_on edits (slice-26 gets T-38 and that item;
+      slice-27 gets p1-acceptance-static-binary, because the harness binary was measured dynamically
+      linked), and p1-acceptance-static-binary's why already ends with 'slice-27 should depend on
+      it'. Record 0022 (commit 1770912, delivery as the host's own static executable) confirms the
+      edge, so the coordinator applies it to slice-27 now. The rest is stale text in T-39, T-40 and
+      slice-26 to slice-28: T-39 still says 'library', its done_when lacks the fuzz run that q-51
+      requires, and the whys predate the record. Each item's own drafter rewrites that in its spec
+      round, and T-39-notes.md already carries the q-51 and review notes into it. Registry and owner
+      edits are the coordinator's act, so no new item is needed.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -1163,6 +1174,15 @@ items:
       The YAML syntax limits stay outside the schema, as the policy spec says. It does not block
       milestone two step 1 and should follow slice-25, which publishes the version 2 schema, so p2.
       Slice-25 stays unchanged.
+
+      This item already asks for a check that runs a maintained, pinned JSON Schema validator over
+      the policy examples doctor accepts and refuses, for every published version including
+      slice-25's version 2 schema. Its why already says the YAML syntax limits stay outside the
+      schema. It also leaves the validator choice and pin to the spec, which is where the
+      new-dependency question belongs. One note to add: the version 2 schema cannot express the
+      1024-byte limit or the host-name canonicalisation rules. The check should therefore compare
+      accept and refuse outcomes only where the schema can speak, and the dependency choice is the
+      person's to review.
   - id: p2-doctor-absent-state-root-is-missing
     title: Doctor reports a missing approval, not state.unavailable, when XDG_STATE_HOME sits under an absent top-level directory
     phase: 1
@@ -1185,6 +1205,14 @@ items:
       p2-control-state-upgrade-contract, which covers a location that was once approved and then
       lost; this is a first run under a root that does not exist yet. Phase p2: no current step
       depends on it.
+
+      Doctor refuses an absent selection under a missing top-level directory. This is that item's
+      own finding: Store.prospective in internal/engine/approval/disk/control.go returns
+      state.unavailable at "/" when no ancestor exists, so `XDG_STATE_HOME=/data/state` with /data
+      absent makes doctor exit 3 where main reported `missing`. The item already has the decision: a
+      read-only Begin treats the absent selection as absent, a writer still refuses, and the red
+      scenario row comes first. Note for it: the person sees an unexplained refusal today, and no
+      CONTROL scenario covers the case.
   - id: p1-engine-suite-under-its-limit-again
     title: The engine suite fits its 4-minute test timeout again after T-41
     phase: 1
@@ -1201,3 +1229,80 @@ items:
       what T-41 lengthened (its overlap drain wait or the cleanup it added) and bring the suite back
       near 3 minutes through the harness-only budget seam; don't raise the limit. Milestone two's
       egress step needs a green engine tier.
+
+      Engine failure diagnostics (print the streamed timings). This belongs inside
+      p1-engine-suite-under-its-limit-again. That item has to find which step T-41 lengthened, and
+      the Engine failure diagnostics step in .github/workflows/ci.yml shows only `tail -100` of the
+      log, which on a timeout is a goroutine dump. Note for that item: print the last `engine
+      scenario timing:` records, or the slowest examples sorted, in that step, and say in the README
+      that a goroutine blocked a minute or more is labelled with its minutes. It is a small ci.yml
+      change and does not need its own item.
+
+      Control transaction re-validates every pinned path chain about 11 times per Begin. Treat this
+      as a lead on that item, not a new item. A steady-state write Begin is about 2,800 syscalls and
+      41 fsyncs, and a run takes five of them. That costs about 12 ms natively, but the engine
+      harness traces every syscall and the engine call budget is 1 s. If the Engine step stays near
+      its 4-minute timeout once slice-21's control transaction lands, or Begin hits state.busy under
+      the tracer, that item should consider cutting the redundant back-to-back Unchanged() walks.
+      The checks are the anti-substitution guards, so any such change needs a security review by the
+      person. Nothing is measured to be wrong today, so it should not be tracked separately.
+
+      That item already owns the small change to the Engine failure diagnostics step in
+      .github/workflows/ci.yml, which today shows only `tail -100` of the log. Make the same edit
+      print each `--- FAIL` block with its godog step error, beside the streamed `engine scenario
+      timing:` records, so a red run shows its failing assertion. Do not wait for the extractor fix
+      tracked upstream in itos. No separate item is needed for a second print in the same step.
+
+      That item already prints the streamed engine timings and carries the lead on the 1 s engine
+      call budget under the syscall tracer. Per-row signal and SIGKILL offsets for LIFECYCLE-09
+      belong in the same `engine scenario timing:` output and the same diagnostics step. They are
+      data for reviewing T-42's limits and for seeing how close real calls come to T-33's 1 s limit,
+      so they are not a task of their own. No failure has been tied to the 1 s limit yet. T-42's fix
+      is already decided and does not wait on them.
+  - id: p2-admission-nested-checkouts-across-state-roots
+    title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Isolation, first milestone. It does not block milestone two step 1 (the egress proxy), so p2.
+      Found in slice-21's PR review. checkAdmission in internal/engine/session/disk/admission.go
+      compares a candidate checkout with other workers' checkouts only through the admission records
+      and public registrations of the selected XDG_STATE_HOME tree. Two workers whose checkouts
+      nest, started under different XDG_STATE_HOME values, are therefore both admitted. Slice-16
+      (done) made nested checkouts a refusal, but only inside one state tree. A nested checkout
+      exposes the other worker's checkout and lets the outer worker modify what the inner worker
+      runs, which is the exposure slice-16 closed. Slice-21 now records every control-state location
+      in a catalog that is discoverable under the common control lock. Slice-22 consumes that
+      tracking at run admission for control state, and does not cover worker checkouts, so this
+      stays apart from it. Specify first: black-box scenarios, committed red, for nested checkouts
+      under different state roots in both start orders and with concurrent launches. Then decide,
+      with the person (itos decision), whether admission compares against every enrolled location's
+      admission and registry records, and what it does when an enrolled location is unreadable or
+      lost (compare p2-control-state-upgrade-contract). Depends on slice-21, and should be sequenced
+      with slice-22 because both change run admission. Real mount-isolation evidence runs only in
+      CI.
+  - id: p2-grace-origin-fake-clock-row
+    title: A fake-clock lifecycle row pins the SIGKILL grace origin when work precedes the first signal
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone one's cancellation rules (slice-12, done) say SIGKILL follows one fixed grace
+      counted from the first signal, never restarted. T-42 widens the native SIGKILL window to an
+      absolute tolerance so the engine tier stops flaking, and that lets a timer started a little
+      late, at teardown or at signal delivery, pass the native rows. Nothing else catches it.
+      TestLifecycleContract's grace case, TestLifecycleLocalContract's lost-signal row and
+      TestEngineFixtureBudgetContract, all in cmd/itos-container, spend no time before the first
+      signal, so the timer origin never differs between a correct and a late start. Add a fake-clock
+      row where work takes time before the first signal, and assert the exact kill instant. A fake
+      clock has no jitter, so the assertion can be exact. The coordinator's throwaway probe found
+      the right-origin case not held at 1.00 of grace and held at 1.10 and 1.30. The code lives
+      under cmd/, a proof.code path, so it gets the changed-code mutation and coverage proof and is
+      separate from T-42's features-only range. It tests existing behaviour, so it is a ledger task
+      with its checks, not a new scenario. Land it after T-42. It blocks no step of milestone two,
+      so p2.
