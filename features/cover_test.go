@@ -116,6 +116,7 @@ func TestScenarioCoverageContract(t *testing.T) {
 			cases["ID-LIFECYCLE-14"] = "/internal/engine/session/domain/"
 			cases["ID-RUN-13"] = "/internal/engine/approval/disk/"
 			cases["ID-OVERLAP-10"] = "/internal/engine/session/domain/"
+			cases["ID-OVERLAP-02"] = "/internal/engine/session/domain/"
 			if env.arch == "amd64" {
 				cases["ID-APPROVAL-32"] = "/internal/engine/approval/disk/private.go:"
 			}
@@ -138,6 +139,9 @@ func TestScenarioCoverageContract(t *testing.T) {
 			}
 		}
 	})
+	if env.os == "linux" {
+		t.Run("recovery probe reports stay private", func(t *testing.T) { testRecoveryProbeCoverage(t, root) })
+	}
 
 	t.Run("plain covered plain assembly cache", func(t *testing.T) {
 		w := &world{root: root, bin: filepath.Join(t.TempDir(), "product")}

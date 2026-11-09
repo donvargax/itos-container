@@ -2885,6 +2885,17 @@
     runEnv. Share harness-only routing helpers under features, without changing product
     assembly, environment sanitization, package import arrows or fixture assertions.
 
+    Returning recovery probes run under the syscall observer. Go's test runner rereads all
+    counters in -test.gocoverdir to report coverage after printing PASS; sharing the final
+    scenario directory makes that work grow with sibling invocations. Stage each returning
+    probe's matching GOCOVERDIR and -test.gocoverdir in its own directory beneath the world's
+    destination, then move its generated files into that captured destination after joining
+    the child. Preserve their measured bytes and remove the staging directory. Export errors
+    fail cleanup; deliberately killed controllers need not have completed counters. Extend
+    the focused regression with OVERLAP-02 and concurrent returning probes to hold private
+    reporting, each child's retained counters and removal of staging directories. Keep the
+    shared five-second drain bound, native teardown and all task checks unchanged.
+
     Secondary worlds created inside a scenario inherit its coverage destination before any
     fixture setup can launch product code. This includes the memory/disk children in
     sessionLocalFixture and the recovery, anchor, overlap, offline and lifecycle control
