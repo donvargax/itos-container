@@ -911,14 +911,15 @@ items:
     status: todo
     depends_on: [T-38]
     kind: task
-  - id: p1-egress-run-through-proxy
+  - id: slice-27
     title: run reaches only the approved names through the proxy; every other route out is closed
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-26, T-39, T-40]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-egress-run-through-proxy.
       The first user-visible egress behaviour, charter step 1 (contract AC-09, AC-10, AC-13).
       Scenarios first, with the real-engine ones in CI only, run against a fake endpoint the proxy
       allows and never a real model or credential. With an approved allowlist, itos container run
@@ -933,7 +934,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-egress-run-through-proxy]
+    depends_on: [slice-27]
     kind: idea
     why: >
       Charter step 1's remaining properties (contract AC-17 and the cleanup rule). Scenarios first,
