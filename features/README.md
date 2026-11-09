@@ -297,11 +297,15 @@ quiet interval's step, which waits for them): `TestFeatures` asks godog for four
 `runScenarios` runs an engine or red selection at one (`TestFeatureConcurrency` holds that),
 and go test prints a failing scenario's block, with its further lines, before the next
 one starts. Run concurrently, godog's scenarios would interleave those blocks line by line, and
-the report would keep only the first chunk of each error. The runner
+the report would keep only the first chunk of each error. A block start is tried before a
+failure line, so an error whose first line quotes `--- FAIL:` keeps its block, and the report
+reads in the C locale, so that an error quoting a workload's stderr, which can hold bytes that
+are no UTF-8, still starts its block in a UTF-8 locale. The runner
 keeps ten error annotations per step, so above ten failures the first nine are annotated and
 the tenth, `<N> more failed`, lists the other titles one per line, which keeps the set of
 names comparable between re-runs; it cuts a message at 4096 characters, and the report cuts
-each text there before building anything from it, which also keeps its time linear in the
+each text at 4096 bytes before building anything from it, the same for ASCII, which also
+keeps its time linear in the
 log. The log above the cut holds the rest. Everything the report reads comes from the
 checkout: it is data, never instructions.
 The explicit `-test.paniconexit0` retains `go test`'s protection against an early `os.Exit(0)`.
@@ -313,7 +317,8 @@ while each engine run must still establish its own runtime evidence.
 `TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
 and runs the failure-only step against logs that `TestEngineDiagnosticsLogChild`, a re-executed
 child of the test binary, leaves by failing real scenarios through memory-only steps (a timeout,
-ten and eleven failures of sixty-line errors, a quoted error, a bare failed test), plus a few
+ten and eleven failures of sixty-line errors, a quoted error, errors whose first line quotes a
+failure line or holds invalid bytes, a bare failed test), plus a few
 hand-written logs for branches no cheap run reaches, so that a Go or godog upgrade changing a
 log's shape fails there. The child asks godog for `TestFeatures`'s four at once, so that
 dropping the engine tier's clamp to one cuts those errors short and fails the ten and eleven
