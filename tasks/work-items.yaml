@@ -1665,14 +1665,15 @@ items:
       code and starts no engine. Offline policies without the section are unchanged. docs/CONFIG.md
       and docs/CLI.md are updated, and the published policy schema moves with it. It takes the keys
       and checks from the decision record. Broken down from p1-credentials-passed-in.
-  - id: p1-credentials-approval-grant
+  - id: slice-30
     title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-29, slice-26]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-credentials-approval-grant.
       Charter step 2 plus q-52: approve shows exactly which credential kinds and host paths the
       worker will receive and asks for yes at a real terminal. --fingerprint is refused, with a fix
       naming the interactive form, for any grant that includes credentials (and, per slice-26, an
@@ -1705,7 +1706,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-credentials-approval-grant, p1-credentials-delivery-port]
+    depends_on: [slice-30, p1-credentials-delivery-port]
     kind: idea
     why: >
       The first user-visible credential behaviour, charter step 2. Scenarios first, real-engine ones
@@ -1722,7 +1723,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-credentials-approval-grant, p1-credentials-delivery-port]
+    depends_on: [slice-30, p1-credentials-delivery-port]
     kind: idea
     why: >
       Charter step 2: Codex shares the host's own login and rewrites auth.json in place, so the
