@@ -182,3 +182,4 @@ questions:
   - id: q-45
     item: "T-36"
     question: "T-36: the spec's count-reach check fails for ID-CLI-01, which runs count's Help() during Kong setup; correct the spec?"
+    answer: "Yes: judge counting by internal/slices/count/domain/ only, in the spec and the task check together, then apply the stashed harness repair (git stash list in .wt/w1), finish docs and checks, and push. See T-36-steer.md."
