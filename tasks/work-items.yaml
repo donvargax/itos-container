@@ -1080,7 +1080,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-26, T-39, T-40, p3-approval-before-egress]
+    depends_on: [slice-26, T-39, T-40]
     kind: slice
     why: >
       Was p1-egress-run-through-proxy.
