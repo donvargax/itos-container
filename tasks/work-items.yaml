@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
 items:
