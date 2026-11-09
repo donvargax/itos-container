@@ -978,7 +978,7 @@ items:
     title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: slice-25

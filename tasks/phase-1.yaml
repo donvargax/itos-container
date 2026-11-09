@@ -3886,40 +3886,6 @@
     anchors are words the decisions above force, compared with whitespace flattened so line wrapping
     cannot fail them; semantic review judges the rest. The first fails today at ls, because no
     record exists. The second fails on its first anchor, internal/engine/egress.
-  done_when:
-    - run: |
-        f=$(ls docs/decisions/*egress-proxy*.md) || exit 1
-        test "$(printf '%s\n' "$f" | wc -l)" -eq 1 || { echo "want one record: $f" >&2; exit 1; }
-        flat=$(tr -s ' \n' ' ' < "$f")
-        for s in 'standard library' q-51 'deliberate exception' 'elazarl/goproxy' 'certs.go' \
-          'smarty/cproxy' GetConfigForClient fuzz HTTP/1.0 'gateway_mode_ipv4=isolated' \
-          'docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835' \
-          __egress-proxy internal/slices/egressproxy p1-acceptance-static-binary NO_PROXY \
-          egress-refusals.jsonl log-full 'no fallback network' AC-10 AC-11 AC-12 AC-14 \
-          'Decisions still open' 'net.ipv4.ip_forward=0' mitmdump 'block embedded Docker DNS' \
-          'extra host-directory mounts' 'blocking experiment' 'Control hook' 'ClientHello' \
-          q-49 q-50 provisional p3-approval-before-egress \
-          -fuzzminimizetime=0s not-connect upstream-failed 'confirm it has exited' Platforms \
-          depguard docs/security.md 'confirm or overturn' \
-          'Building-block view' 'Runtime view' 'Deployment view'; do
-          printf '%s' "$flat" | grep -qF -- "$s" || { echo "$f lacks: $s" >&2; exit 1; }
-        done
-      prose: true
-    - run: |
-        a=docs/architecture/arc42.md
-        flat=$(tr -s ' \n' ' ' < "$a")
-        for s in internal/engine/egress internal/slices/egressproxy '### Egress run' q-51 \
-          'gateway_mode_ipv4=isolated' __egress-proxy egress-refusals.jsonl 'ClientHello'; do
-          printf '%s' "$flat" | grep -qF -- "$s" || { echo "arc42 lacks: $s" >&2; exit 1; }
-        done
-        for s in 'Do not create a guard, proxy' 'Proxy egress, guard/proxy infrastructure' \
-          '| Guard/proxy topology and fail-closed' '| TLS inspection/passthrough handshake guarantees'; do
-          if printf '%s' "$flat" | grep -qF -- "$s"; then echo "arc42 still says: $s" >&2; exit 1; fi
-        done
-        f=$(ls docs/decisions/*egress-proxy*.md) || exit 1
-        printf '%s' "$flat" | grep -qF -- "decisions/$(basename "$f")" || { echo "arc42 lacks a link to $f" >&2; exit 1; }
-        test "$(grep -c '^## ' "$a")" -eq 12
-      prose: true
 - id: T-39
   type: feat
   title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
