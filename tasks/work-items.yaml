@@ -284,6 +284,24 @@ items:
       blocks. One check closes most: tools/bin/architecture-check reads each role's stdlib imports
       from go list, with an allowlist per role, including IgnoredGoFiles. Details at the
       coordinator.
+
+      This belongs inside p2-architecture-stdlib-on-go-list. That item already plans a go list based
+      change to tools/architecture and already names build-tagged files as an evasion ('a
+      build-tagged handler file with os/exec passes'). Closing this gap is the same
+      enforcement-input edit: it triggers the full fixture matrix, so it should be one change, not
+      two. One correction to the idea's example. I checked with go list on this Linux host: a lone
+      x_darwin.go is already reported in IgnoredGoFiles, so the current check
+      (tools/architecture/graph.go) does refuse it. The real gap is a file that matches the host.
+      x_linux.go, x_amd64.go and //go:build linux all pass on Linux CI, yet the file is dropped on
+      the other release targets (.goreleaser.yaml builds linux, darwin and windows). So the domain
+      or port behaves differently per OS without any ignored file showing up. The idea's measured
+      remedy still applies: run go/build MatchFile over the goreleaser targets, plus a refusal of
+      any //go:build line in domains and ports, because //go:build !relaxed matches on all five
+      targets. The charter's supported host is Linux amd64, so this is p2 at most and blocks
+      nothing. Backport candidate for the coordinator to file on go-template-itos after searching
+      its issues: tools/architecture has been reworked in this project, and the template renders the
+      same checker (.itos-template.yaml names go-template-itos). This project's copy was changed
+      after rendering.
   - id: T-17
     title: Bugbot is not requested for the rest of 2026-11-04
     phase: 1
@@ -1528,8 +1546,8 @@ items:
   - id: T-43
     title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-44
