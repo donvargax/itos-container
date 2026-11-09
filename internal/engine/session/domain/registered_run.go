@@ -67,7 +67,16 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		result.Outcome = failure
 		return result
 	}
+	binding := i.Binding()
 	i.Close()
+	if !binding.Egress.Valid() {
+		result.Outcome = port.Invalid
+		return result
+	}
+	if binding.Egress != (port.EgressGrant{}) && s.Refusals == nil {
+		result.Outcome = port.Internal
+		return result
+	}
 	type leased struct {
 		lease   port.Lease
 		failure port.Outcome
@@ -113,7 +122,11 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		defer attachment.Close()
 	}
 	if result.Outcome == "" && !result.Exited {
-		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, c, attachment, id, result.ID)
+		if binding.Egress != (port.EgressGrant{}) {
+			result.Exit, result.Exited, result.Outcome = s.waitEgress(ctx, c, attachment, state.binding, state.record)
+		} else {
+			result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, c, attachment, id, result.ID)
+		}
 	}
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer finish()
@@ -285,6 +298,12 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if failure = verifyAnchor(ctx, intent.Record(), c); failure != "" {
 		return c, a, "", failure
 	}
+	if failure = verifyEgressStart(ctx, intent, c); failure != "" {
+		return c, a, "", failure
+	}
+	if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
+		state.binding, state.record = intent.Binding(), intent.Record()
+	}
 	if failure = startupOperation(ctx, "start acknowledgement", func(call context.Context) port.Outcome {
 		if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
 			state.started = true
@@ -328,6 +347,9 @@ func createRegistered(ctx context.Context, entry port.Session, c port.RunConnect
 	r := i.Record()
 	if r.Stage == "reserved" && r.ContainerID == "" {
 		if failure := prepareAnchor(ctx, i, c, workspace, entry.Record().ID); failure != "" {
+			return "", failure
+		}
+		if failure := prepareEgress(ctx, i, c); failure != "" {
 			return "", failure
 		}
 		r = i.Record()

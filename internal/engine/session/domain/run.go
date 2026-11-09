@@ -233,6 +233,10 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 		return result, nil, nil
 	}
 	defer intent.Close()
+	if intent.Binding().Egress != (port.EgressGrant{}) {
+		result.Outcome = port.Refused
+		return result, nil, nil
+	}
 	result.Reference = port.Reference(frozen.Frozen.Project, token)
 	if failure = s.Workspace.Pin(intent.Binding()); failure != "" {
 		result.Outcome = failure
