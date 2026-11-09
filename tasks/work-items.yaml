@@ -872,3 +872,20 @@ items:
       secrets logged. It names the contract's open decisions it settles and stops for the person if
       one is a security property the charter leaves open. The library, topology and delivery are
       then fixed before any code. Broken down from p1-egress-allowlist-proxy.
+  - id: p1-egress-allowlist-policy
+    title: The policy file accepts an exact host-name egress allowlist and doctor validates it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Charter step 1: the allowlist is part of the approved settings, so it starts in
+      itos-container.yaml. Today network is a closed object whose only mode is offline
+      (docs/CONFIG.md, internal/engine/policy). Scenarios first: a network mode that routes through
+      the proxy, with a list of host names. Each name is canonicalised (case, trailing dot, IDNA)
+      and must be a full DNS name. Literal IPs, wildcards and suffix shortcuts, ports, URLs, empty
+      or duplicate names and an empty list in allowlist mode are refused with a located doctor
+      diagnostic. Offline stays the default and is unchanged. Doctor shows the effective allowlist
+      without executing checkout code. It reads and validates only, with no engine or proxy. Update
+      docs/CONFIG.md and docs/CLI.md for the new field. Broken down from p1-egress-allowlist-proxy.
