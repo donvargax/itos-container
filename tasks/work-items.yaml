@@ -1646,14 +1646,15 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-credentials-policy-sources
+  - id: slice-29
     title: The policy file accepts named credential sources and doctor validates them without reading their contents
     phase: 1
     owner: null
     status: todo
     depends_on: [T-47]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-credentials-policy-sources.
       Charter step 2: the credential grants are part of the approved settings, so they start in
       itos-container.yaml, as the egress allowlist did in slice-25. Scenarios first: a closed
       credentials section naming each source by kind (Claude token file, Codex auth file, GitHub
@@ -1669,7 +1670,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-credentials-policy-sources, slice-26]
+    depends_on: [slice-29, slice-26]
     kind: idea
     why: >
       Charter step 2 plus q-52: approve shows exactly which credential kinds and host paths the
