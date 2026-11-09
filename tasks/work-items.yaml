@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - T-44
   - p1-harness-home
   - p1-interactive-tty
 items:
@@ -1466,7 +1465,7 @@ items:
     title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-45

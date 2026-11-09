@@ -233,13 +233,6 @@ func TestEngineWorkflow(t *testing.T) {
 
 const eventGuard = "${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}"
 const ciGuard = "${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}"
-const engineFailureDiagnostics = `set +e
-sudo dmesg | tail -50
-free -m
-if [[ -f "$RUNNER_TEMP/slice-11-features.log" ]]; then
-  tail -100 "$RUNNER_TEMP/slice-11-features.log"
-fi
-`
 
 func changeStep(w *engineWorkflow, job, name string, change func(*workflowStep)) {
 	j := w.Jobs[job]
