@@ -813,3 +813,16 @@ items:
       CONNECT proxy chosen in the spec, not squid (the person, 2026-11-09). Each property is proven
       by a scenario that fails without it; harness traffic in scenarios goes to a fake endpoint the
       proxy allows.
+  - id: p1-credentials-passed-in
+    title: Credentials passed in per command, never injected and never in the checkout
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, step 2 (docs/charter.md). Per command, so they never appear in the container's
+      configuration or docker inspect: Claude's long-lived token from a host file the person keeps;
+      Codex shares the host login, its auth.json bind-mounted read-write as a single file (Codex
+      rewrites it in place) plus its lock file when present; a GitHub token for gh and pushes,
+      passed the same way. No scenario uses a real credential.
