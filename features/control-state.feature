@@ -703,7 +703,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # still refuses a changed inode. The first Then fails on the old refusal with
   # approval.state.path instead of matching approval. The fixture changes only the
   # recorded device of each ancestor, in place, so inode, owner and mode are kept.
-  @slice-21 @ID-CONTROL-23 @local-engine-fixture @wip
+  @slice-21 @ID-CONTROL-23 @local-engine-fixture
   Scenario Outline: Renumbered filesystem devices do not invalidate enrolled control state
     Given a control-state fixture whose "<bindings>" record device numbers the live filesystem no longer uses
     When fresh P doctor and exact-fingerprint approve inspect the renumbered catalog as JSON

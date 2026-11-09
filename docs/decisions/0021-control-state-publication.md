@@ -123,6 +123,24 @@ approval.state.exposed (exit 1) before any binding, tree entry or approval recor
 Completed and pending-without-record reservations keep their existing semantics, and
 whole-component boundaries keep textual-prefix siblings usable.
 
+Review PRRT_kwDOVkB0ws61JLQ0 stops treating a persisted st_dev as identity. Device
+numbers are not stable across boots: btrfs subvolumes receive anonymous numbers and
+device-mapper or NVMe minors can follow activation or enumeration order. Comparing
+the recorded device refused every doctor, approve and run on the account after a
+renumbering of the device holding the account home or an enrolled location, and
+nothing repaired the binding. A binding is now matched by path and inode. Its device
+stays in schema 1 as a shape-checked diagnostic, so existing records remain readable
+and a non-numeric device is still invalid. A changed inode, symlink, ownership, mode,
+link count, path or ancestor chain still refuses, and the live pins of one transaction
+still compare device and inode together. The limit is that a directory on another
+filesystem that happens to reuse an enrolled inode number is no longer distinguished
+by this record; creating one at an ancestor needs mount privileges, which this
+project's hostile-checkout model does not grant a worker. A stable filesystem ID from
+statfs is not uniformly populated or stable across filesystem types, and a
+person-consented rebind needs a new command and consent surface that the charter does
+not authorize here. CONTROL-23 specifies the renumbered rows; CONTROL-07 keeps the
+replaced-root refusal.
+
 Before creating an absent selected tree, durably publish its pending claim; retain
 that protection after interruption and complete its root identity before success.
 Completed missing, replaced, malformed, unsafe or unreadable bindings refuse.

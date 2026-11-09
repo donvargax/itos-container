@@ -286,8 +286,9 @@ func TestControlBindingsRefuseMalformedOrReplacedEvidence(t *testing.T) {
 			case "bad inode":
 				b.Ancestors[0].Inode = "invalid"
 			case "changed device":
+				// A renumbered device alone is not a substitution; see CONTROL-23.
 				b.Ancestors[0].Device = "999999999"
-				want = "state.path"
+				want = ""
 			case "changed inode":
 				b.Ancestors[0].Inode = "999999999"
 				want = "state.path"

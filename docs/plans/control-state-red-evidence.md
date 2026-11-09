@@ -481,3 +481,18 @@ packages pass with race detection on the changed packages only:
 go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-'
 go test -race ./internal/engine/approval/disk ./internal/engine/approval/port/porttest ./internal/engine/approval/domain -count=1
 ```
+
+## Renumbered devices (review PRRT_kwDOVkB0ws61JLQ0)
+
+CONTROL-23 rewrites only the recorded device of every ancestor in the fixed tree's
+self-binding, an enrolled location's binding or both, in place, then runs doctor and
+a matching exact-fingerprint approve. With only `@wip` removed and the production
+change absent, all 3 rows fail at the first Then, `itos-container exited 1, not 0`:
+doctor reported `approval.state.path` for a tree that had not changed. Every Given
+and When step passed; there were no undefined steps or setup failures. After the
+change the 3 rows and the CONTROL-07 refusal rows pass, and the disk unit case that
+used to pin a changed device now accepts it while a changed inode still refuses.
+
+```sh
+go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-(07|23)$'
+```

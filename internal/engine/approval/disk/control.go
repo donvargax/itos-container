@@ -357,7 +357,12 @@ func validateLocation(b locationBinding, p *pin, end string) port.Failure {
 		if _, err := strconv.ParseUint(bound.Inode, 10, 64); err != nil {
 			return "state.invalid"
 		}
-		if bound != identities[i] {
+		// st_dev is not stable across boots: btrfs subvolumes get anonymous
+		// numbers and device-mapper or NVMe minors follow enumeration order.
+		// The recorded device is only shape-checked; the path and inode, with the
+		// owner and mode checks of the live pins, decide whether this is the tree
+		// that was enrolled. Within one transaction the pins still compare device.
+		if bound.Inode != identities[i].Inode {
 			return "state.path"
 		}
 	}
