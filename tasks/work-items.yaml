@@ -860,14 +860,15 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-egress-allowlist-policy
+  - id: slice-25
     title: The policy file accepts an exact host-name egress allowlist and doctor validates it
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p1-egress-allowlist-policy.
       Charter step 1: the allowlist is part of the approved settings, so it starts in
       itos-container.yaml. Today network is a closed object whose only mode is offline
       (docs/CONFIG.md, internal/engine/policy). Scenarios first: a network mode that routes through
@@ -882,7 +883,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-egress-allowlist-policy]
+    depends_on: [slice-25]
     kind: idea
     why: >
       Charter step 1: the allowlist is part of the approved settings, and the contract's AC-02
