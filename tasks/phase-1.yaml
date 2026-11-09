@@ -3501,19 +3501,391 @@
   type: docs
   title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
   why: >
-    Charter step 1 says the proxy is a small, maintained Go CONNECT proxy chosen in the spec, not
-    squid. This task writes a docs/decisions record and updates the arc42 building-block view and
-    runtime/network text. It picks one library with a pinned version, an AGPL-compatible licence and
-    a stated maintenance reason. It fixes the topology: an internal Docker network with no route
-    out, a proxy container dual-homed beside the worker, and the worker attached to the internal
-    network only. It states how the proxy binary or image reaches the proxy container and how it
-    stays out of the worker's reach. It defines fail-closed behaviour, with no fallback network when
-    the proxy fails. It gives the refusal log format and where it lands, with no secrets logged. It
-    names the contract's open decisions it settles and stops for the person if one is a security
-    property the charter leaves open. The library, topology and delivery are then fixed before any
-    code. Broken down from p1-egress-allowlist-proxy.
-  done_when:
-    - run: ls docs/decisions/*egress-proxy*.md && grep -qi 'egress' docs/architecture/arc42.md
+    Charter step 1 says the proxy is our own, on Go's standard library with no dependencies, beside
+    the worker on an internal network, allowing CONNECT to listed host names on port 443 only, with
+    no TLS interception, matching the name the client gave, checking the TLS ClientHello's SNI
+    against that name, and logging every refusal. T-39 and T-40 need its design, topology, delivery,
+    failure closure and refusal log fixed before any code. The title's "library" is the first of
+    those questions, and the answer is none. This entry holds every decision. The implementer writes
+    them as one record, docs/decisions/0022-egress-proxy.md (slice-21 holds 0021 on its branch; take
+    the next free number), and updates docs/architecture/arc42.md. This is documentation only: no
+    code, dependency, scenario, step definition, workflow or engine run. Nothing here is runtime
+    evidence or a support claim; real-engine proof belongs to slice-27 and slice-28, in CI. Read the
+    charter, the contract's "Runtime and network boundary", "Decisions still open" and acceptance
+    matrix, arc42, docs/architecture.md's Slices, then T-39, T-40 and slice-25 to slice-28. PLAN.md,
+    README.md and docs/ORCHESTRATING.md still call egress out of scope; the charter's "Specify and
+    start step 1 now" governs, and p1-docs-admit-milestone-two-egress owns their edit, so that
+    wording is no reason to stop here.
+
+    The proxy is our own code on Go's standard library (the person, q-51): no library, no go.mod
+    change, nothing new in THIRD_PARTY_NOTICES.md, and no network service. Its flow, in this order:
+    read the CONNECT head; check the name against the allowlist and the port against 443; dial;
+    answer 200; peek the ClientHello through crypto/tls; replay the peeked bytes upstream untouched;
+    splice both ways; log each refusal as one JSON line. The person's estimate is about 300 lines.
+    This is a deliberate exception to the charter's "prefer an existing, maintained library", and
+    the charter says so. The record repeats q-51's reasons: the proxy is security-critical and
+    small, the libraries either carry MITM machinery (goproxy) or are unmaintained (cproxy), and
+    q-49's check needs custom code anyway. If TLS interception is ever wanted, the charter moves the
+    proxy to a repository of its own first, and this code seeds it.
+
+    No interception code exists anywhere in the tree. The proxy holds no CA, certificate or key and
+    never completes a handshake: its one tls.Config sets GetConfigForClient, which always returns an
+    error, so crypto/tls stops once the ClientHello has parsed, before it chooses a version. T-39
+    proves this three ways. A contract test has a client verify through the tunnel and see the
+    upstream's own certificate. A check finds none of tls.Certificate, tls.LoadX509KeyPair,
+    tls.X509KeyPair, tls.Listen, tls.NewListener, tls.Client, GetCertificate or
+    x509.CreateCertificate in the production sources under cmd and internal, where no Go file
+    mentions crypto/tls or x509 today. And go list -deps of internal/engine/egress's packages shows
+    no module but this one and no net/http (measured: crypto/tls, net, io, os and encoding/json do
+    not import it). Those checks run only for T-39's own range, so T-39 also adds a depguard rule
+    with its fixture, which holds on every later push: production code may import crypto/tls only in
+    egress's adapter, and crypto/x509 nowhere. Test fakes generate their upstream's certificate in
+    memory, so no key enters a file.
+
+    Rejected. github.com/elazarl/goproxy v1.9.3 (BSD-3-Clause), the maintained candidate with eleven
+    tags since 2026-01-17: certs.go's init parses CA_CERT and CA_KEY on import, unconditionally, and
+    its MITM path and signer are linked, so "no interception code" could not be said of it. It also
+    brings about 3,700 production lines, golang.org/x/net and x/text at versions with OSV
+    advisories, acceptance when a handler returns nil, plain-HTTP forwarding and HTTPS_PROXY read
+    from the environment. github.com/smarty/cproxy/v2 v2.1.1 (MIT), CONNECT only with no TLS code:
+    its last tag is 2024-07-09, its production files are unchanged since v2.1.0 of 2023-06-22, and
+    q-49's check would still have needed a guard socket, a replaying connector and one handler per
+    request around it. wzshiming/httpproxy v0.6.1 (MIT): one maintainer, a plain-HTTP forwarding
+    path and a tunnel that closes both directions at the first EOF. stripe/smokescreen v0.1.0 (MIT):
+    purpose-built but with its own ACL engine and roles, Datadog, Prometheus, logrus and a private
+    goproxy fork, so neither small nor a fit for a domain that owns the decision.
+    caddyserver/forwardproxy: a Caddy plugin with no tagged release.
+
+    The proxy reads the head itself and imports no net/http, a choice q-51's "parse CONNECT" leaves
+    open. Nothing of the head is ever forwarded, so no second parser can disagree with it, and all
+    that is judged is one literal string against a list. net/http's server would only add what this
+    design must then close: ErrorLog lines holding client addresses, recovered handler panics, its
+    own 400, 431 and 505 answers, and a parsed URL that hides the target, since it reads
+    user:pw@name:443 as userinfo and host, and name:443/x and name:0443 also carry a usable URL.Host
+    (each measured). The adapter reads the socket up to the first CRLF CRLF, at most 8 KiB, under a
+    10 s read deadline from accept, and every byte after that terminator belongs to the tunnel. The
+    domain parses the head as pure code, within its allowlist, so a domain test and the fuzz test
+    reach it. The request line is exactly a non-empty method, one space, a non-empty target, one
+    space, a version and CRLF, where the version is HTTP/1.1 or HTTP/1.0: curl and Python 3.14 send
+    1.1 and openssl s_client sends 1.0 (measured), as Python 3.11's http.client does (read in its
+    source). A bare LF or CR in that line is malformed. Headers are skipped unread: never judged,
+    logged or forwarded, Host and Proxy-Authorization included.
+
+    A request passes only when its method is exactly CONNECT and its target is exactly a listed name
+    followed by :443. Anything else is refused with the first reason that fits, in this order:
+    malformed (no complete head, or a request line of any other shape); not-connect (any other
+    method, compared exactly, whatever its target); malformed (a CONNECT whose target is not a plain
+    host, a colon and a port as the log's rule below defines them); literal-ip (dotted IPv4 or
+    bracketed IPv6); not-canonical (its lowercase form without one trailing dot is listed);
+    not-listed; and port (the name is listed and the port is not the exact text 443, so name:0443
+    and name:80). So GET http://listed.example/path HTTP/1.1, what curl and urllib send for any
+    http:// URL once http_proxy is set, reads not-connect, not malformed. These are labels for the
+    person: only the exact match admits anything. T-39's domain decides on the name first, so a
+    refused name is never resolved and refusals are no DNS channel.
+
+    The contract's address rule stands, since the charter does not change it (AC-12). The adapter
+    dials with net.Dialer, network tcp4 and a 10 s timeout, giving the rooted name to the proxy's
+    resolver, and checks each address in net.Dialer's Control hook, which sees the address actually
+    connected, including CNAME targets and changed answers, with no second lookup. It refuses the
+    IANA IPv4 special-purpose registry, including 10/8, 172.16/12, 192.168/16, 127/8, 169.254/16 and
+    100.64/10, plus multicast, from a table in the adapter: net/netip is outside the domain
+    allowlist, and a table this small needs no library (code.dny.dev/ssrf rejected for that reason).
+    An answer mixing valid and refused addresses dials only the valid ones; one with none valid is a
+    refusal with reason address. IPv6 is out of this step: both networks have it off, so a listed
+    name with only AAAA answers fails as dns. T-39's adapter tests reach their loopback listeners by
+    giving its constructor a test resolver and dial function, and test the table directly; porttest
+    fakes stay free of I/O, cmd always binds the real ones, and no flag, variable or build tag
+    relaxes the table in the product.
+
+    The peek follows q-49, which q-51 takes up. After the 200 the proxy holds the upstream socket
+    and moves nothing in either direction until the hello passes, so a server that speaks first
+    reaches no client. It sets a 10 s read deadline on the client and runs tls.Server over a shim, a
+    small net.Conn whose Read serves the bytes that came after the head, then the socket, recording
+    every byte and stopping at 64 KiB, and whose Write discards, because crypto/tls sends an alert
+    when the callback aborts (measured: 7 bytes) and a client must get nothing forged by the proxy.
+    GetConfigForClient captures ClientHelloInfo's ServerName and Extensions. The domain then judges
+    them, in this order: extension 0xfe0d, encrypted_client_hello, is tls-ech; no ServerName is
+    tls-no-name; a ServerName other than the CONNECT name, byte for byte, is tls-name. If the
+    callback never ran the reason is not-tls, however that happened: bytes that are not TLS, bytes
+    that start like TLS and then fail to parse, a truncated hello, a client that closes or stays
+    silent to the deadline, or more than 64 KiB. Each refusal writes a record, then closes both
+    sockets with no byte forwarded. On a pass the proxy writes every recorded byte upstream
+    unchanged, including any beyond the hello, clears the deadline and splices. A failed replay is
+    event upstream-failed, reason connect, and closes.
+
+    The splice is two goroutines, each an io.Copy between the raw *net.TCPConn pair, which Go turns
+    into splice(2) on Linux. The shim never reaches them and no wrapper type touches the tunnel, so
+    nothing can copy around the peek, which has finished before either starts. When one direction
+    reaches EOF the proxy calls CloseWrite on the other socket, so half-close carries, and both
+    sockets close once both directions have ended or either has failed. There is no idle timeout,
+    because agents stream for long periods; the contract's resource limits stay open.
+
+    A scratch spike of this flow ran on loopback under Go 1.27.3, outside the tree: no Docker, so it
+    is no runtime evidence, and T-39's tests replace it. curl 8.23.0, Python 3.14's http.client,
+    openssl s_client and Go's client each completed a verified handshake with the upstream's own
+    certificate through it. A wrong SNI (curl --connect-to included), no SNI, an ECH hello from Go's
+    client, plain HTTP, an SSH banner, silence, truncation, unparseable records and 70 KB of
+    one-byte records each put 0 bytes upstream and none to the client after the 200, and left one
+    record. A hello sent with the CONNECT, split byte by byte, split across two TLS records or
+    followed by more bytes reached the upstream exactly as sent. Half-close carried both ways, and
+    strace showed splice(2) on a 200,000-byte tunnel. The real resolver through the Control hook
+    connected a mixed answer to its valid address, and gave address with none valid, dns for no such
+    host and connect for a refused connection.
+
+    T-39 requires fuzz tests for CONNECT parsing and the ClientHello peek (q-51), beside slice-27's
+    real-engine scenarios. The proxy is the one process of this project a hostile worker can talk
+    to, and it has a route out, so a parser bug there is the boundary failing. There is one target
+    over the domain's head parser and one over the adapter's peek, written as
+    internal/engine/policy/yaml/fuzz_test.go is, with real hellos among the seeds. The head target
+    asserts that nothing panics, that only an exact CONNECT of a listed name on 443 passes, and that
+    the method, target and port it would log obey the log's rule below. The peek target asserts that
+    nothing panics, that no byte reaches the client, that the recording is a prefix of the input
+    within 64 KiB, and that a pass has the exact ServerName and no 0xfe0d. Plain go test only
+    replays seeds, which CI's go test ./cmd/... ./internal/... does on every push, and every crash a
+    run finds is committed as a seed under testdata/fuzz. So T-39's done_when also runs each target
+    with -fuzz for 30 s at -parallel 2 and -fuzzminimizetime=0s, which itos ci run runs for T-39's
+    own range. Go's default spends up to 60 s minimizing an interesting input while fuzzing waits:
+    from a fresh corpus the spike's peek target did 11,141 executions in its first 3 s and none in
+    the other 27 s, against 226,151 in all with the flag, and its head target found 18 new inputs
+    against 109 (measured). A crash is still written to the corpus with the flag, just not minimized
+    (measured). Thirty seconds of each target found nothing and peaked at 120 MiB a process here and
+    159 MiB in the spec review's runs, which is no firm bound, since the cached corpus grows. This
+    repository has no nightly tier for fresh runs after that, and this record adds none.
+
+    The code proof measures changed lines with the engine off (arc42's check tiers), so the proxy
+    container never starts under it, and its exact Env and lack of a writable mount would stop a
+    -cover binary writing counters anyway (reasoned from the design, not run). T-39 therefore covers
+    its serve loop with tests over loopback listeners, and slice-27 covers the slice's handler and
+    cmd's binding with tests that need no engine.
+
+    The topology has two owned per-session bridge networks. The internal network is created with
+    Internal true, EnableIPv6 false and com.docker.network.bridge.gateway_mode_ipv4=isolated. Plain
+    internal is not enough: Docker's port-publishing documentation says containers on an internal
+    network can reach host services on the bridge address, including those bound to 0.0.0.0, which
+    is AC-10's host gateway, and features/offline_isolation_network_test.go binds host listeners on
+    just such an address. Isolated mode assigns the bridge no address while containers on it still
+    reach each other (moby's TestIsolated), so the worker's closure depends on neither iptables nor
+    the proxy. It needs Docker 28.0, API 1.48; the recorded runners are 28.0.4 and 29.4.2. Doctor
+    and run refuse an older engine as an unavailable control, and verify after create that the
+    network is internal, IPv6-off, isolated and has no IPAM gateway, because old daemons ignore
+    unknown options. The egress network is a plain bridge with IPv6 off and only the proxy on it. It
+    is owned rather than the default bridge, which other containers share and a daemon may disable;
+    Docker's inter-bridge isolation keeps other networks from the proxy's port.
+
+    The proxy joins both networks at create, publishes no port and listens on 3128. Its default
+    route comes from the egress network, the only one of the two with a gateway. Its HostConfig sets
+    Sysctls net.ipv4.ip_forward=0, verified by inspect before start, so its kernel cannot route
+    between the two networks: a new network namespace inherits the host's value, and a Docker host
+    runs with forwarding on (measured under unshare -rn: 1 on a host at 1). The worker joins the
+    internal network only, with no published port and its existing CapDrop ALL, so it can neither
+    craft packets nor change routes. Its environment carries HTTP_PROXY, HTTPS_PROXY and their
+    lowercase forms with the proxy's literal internal address, read by inspect after ready, plus
+    NO_PROXY and no_proxy set to localhost,127.0.0.1,::1; the manifest already reserves these names
+    in any letter case. Without the last two a test suite's local server would go to the proxy,
+    since curl and Python's urllib both send localhost through http_proxy (each measured), and each
+    such request would count toward the log's cap. Loopback stays inside the worker, so this does
+    not touch the boundary. The variables help cooperating clients and are not the boundary: a
+    client ignoring them has no route. Docker's embedded resolver at 127.0.0.11 cannot be removed
+    from a user-defined network, so the contract's "block embedded Docker DNS" gives way to its
+    result, AC-11's no unauthorized resolution path (the coordinator, provisional for the person's
+    review, q-50): for a sandbox with only internal endpoints libnetwork starts it with proxyDNS
+    false, skips host-loopback servers and sends the rest from the container's own namespace, where
+    no route exists (sandbox_dns_unix.go and resolver.go). Clients need no DNS, since the proxy
+    resolves. slice-27's AC-11 scenario must prove this on the real engine; if it cannot, the
+    topology reopens. Offline runs keep NetworkMode none, with no proxy or network.
+
+    For delivery, the proxy container runs the host's own itos-container executable, at its resolved
+    os.Executable path, bind-mounted read-only at /itos-container as that container's only mount,
+    through a hidden __egress-proxy command. That command is a slice of its own,
+    internal/slices/egressproxy, which slice-27 creates with only a command package: a thin handler
+    over the engine's port, with cmd binding the adapter. An owner needs no empty domain or port
+    directory, and a command cannot import net, so listener, dial, peek and splice stay in
+    internal/engine/egress's adapter, which is T-39's "entrypoint". The hidden __complete, which cmd
+    handles itself, is no precedent: arc42's cmd row exempts only version and completion
+    infrastructure, and this is a long-running network server. No image is built, published or
+    pulled by a command, no second artifact ships, and a scenario exercises the proxy of its own
+    commit. The root filesystem is inert:
+    docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835,
+    T-20's pinned image, which the engine job already pulls. Docker needs some image; nothing in
+    this one runs. It is a product constant that neither policy nor manifest can change, because the
+    contract says the manifest cannot configure or replace the trusted proxy. The person pulls it as
+    they pull the worker's image, so this project distributes none of its GPL-2.0 content; doctor
+    names the exact pull when it is absent, commands only inspect it, and approval binds the digest,
+    so changing it needs a new approval. slice-26 names the network-granting profile. The executable
+    must be a static Linux amd64 ELF, and doctor and run refuse anything else (debug/elf behind a
+    port). .goreleaser.yaml already builds with CGO_ENABLED=0. features/features_test.go does not,
+    and its build measured dynamically linked here; p1-acceptance-static-binary makes the harness
+    build what the release ships, and slice-27 depends on it. Rejected: the worker image as root
+    filesystem, which puts a checkout-requested image and its ENV under the trusted proxy; a
+    published proxy image, which adds a registry service (the charter's stop) and a digest-in-source
+    cycle; importing an image at run, which the contract's "no automatic pull/build path" bars.
+
+    The proxy stays out of the worker's reach. The worker's mounts remain exactly the checkout and
+    tmpfs, as VerifyRun already enforces; the two containers share no volume or namespace; the
+    worker has no engine access; and run refuses an executable whose resolved path lies inside the
+    checkout, which a worker could replace for the next session (slice-20's scan already refuses
+    hard links there). The proxy runs as the effective host UID/GID like the worker, with read-only
+    root, CapDrop ALL, no-new-privileges, pids limit 4096, restart policy no, no tmpfs, and no
+    checkout, state volume or socket. The frozen allowlist is its Cmd, its Env is exact, and both
+    are verified by inspect before start, so nothing the worker does can change them and a restart
+    cannot widen them.
+
+    Failure closure has no fallback network: nothing reconnects the worker, changes its network or
+    restarts the proxy. Creation order is the anchor as today, internal network, egress network,
+    proxy, verify, start, ready, then the worker as today, with durable intent before each. The
+    checkout's pin, its socket scan and the anchor stay first, so a refused checkout starts no
+    proxy; the scan's known race (q-30) only grows by the proxy's start. Ready is one record, event
+    ready, that the proxy prints on stdout only after validating the list and listening; the
+    controller reads it with bounded log calls inside run's existing 120 s startup budget. A missing
+    ready, a proxy exit or an unverifiable resource means no worker is created. Policy is compiled
+    into the same process, so the contract's addon-failure window does not arise: an invalid list
+    exits nonzero before the listener opens. The proxy recovers no panic, so a panic in any
+    goroutine ends the process, and an Accept error or a failed log write ends it too; each is the
+    same closure. During a run the controller also waits on the proxy, and its exit is a typed
+    failure: the worker gets the existing termination (first signal, 10 s from cancellation,
+    SIGKILL), an observed exit keeps its precedence and run returns nonzero. With the proxy gone the
+    worker has no peer. Under A3 a lost controller leaves both running under the frozen list until
+    stop, with no watchdog and no new route.
+
+    Teardown reverses creation: worker, stop the proxy and confirm it has exited, refusal-log copy,
+    remove the proxy, egress network, internal network, then the anchor. The copy waits for that
+    exit because a record reaches the json-file asynchronously, through a pipe to dockerd's log
+    copier, so a log read of a running proxy could miss a workload's last refusal and removing the
+    proxy would then lose it for good. Docker waits for that path only when a container exits:
+    handleContainerExit in moby's daemon/monitor.go waits up to 2 s for the streams and up to 10 s
+    for the copier before it marks the container stopped (read at v27.5.1 and v28.5.2, not run). The
+    stop is SIGKILL, then the engine's not-running wait and a fresh inspection, as for the worker's
+    exit: each record is one write with nothing buffered in the process, so the kill loses none, and
+    a proxy that has already exited goes straight to the copy. This stop is the controller's own act
+    once the worker is gone, not the typed proxy failure, so it changes neither the run's result nor
+    its exit code. A failed step retains its recovery record and exact retry. Removal is authorized
+    as arc42's protocol has it, by durable intent with a random name before each create and then the
+    inspected full ID, recorded before any instruction, never by labels or names alone (T-40).
+
+    The refusal log is one JSON object per line on the proxy's stdout, at most 2 KiB: schema 1, time
+    (RFC 3339 UTC) and event, which is one of ready, refused, upstream-failed or log-full. A refused
+    or upstream-failed record adds method, target, port and reason; ready and log-full add nothing.
+    A refused record's reason is one of not-listed, literal-ip, port, not-canonical, not-connect,
+    malformed, address, not-tls, tls-name, tls-no-name, tls-ech, and an upstream-failed record's is
+    dns or connect. Method is written only when it is one to 16 ASCII uppercase letters. Target and
+    port are written only when the text before the request target's last colon is a non-empty plain
+    host, at most 255 bytes of ASCII letters, digits, hyphen, underscore and dot or a bracketed IPv6
+    literal, and the text after it is one to 5 digits; otherwise both are omitted. A request line of
+    any other shape writes none of the three. So secret-token@listed.example:443,
+    a/b?token=secret:443, listed.example:443/path?token=secret and
+    http://listed.example/path?token=secret write neither target nor port, though net.SplitHostPort
+    accepts all four (measured), and slice-28's AC-36 marker scenario uses these forms. Never
+    written: URL path or query, userinfo, headers, Proxy-Authorization, bodies, tunnel bytes, the
+    hello's SNI, client address or Go error text. Every way a head can fail leaves one malformed
+    record, a partial head and a deadline expiry included; a connection closed before its first byte
+    asked for nothing and leaves none. An allowed tunnel writes no record. Each record is one write,
+    made before the client is answered, and a failed write ends the process, because a refusal that
+    cannot be recorded must stop the session.
+
+    A refusal decided before the 200 answers HTTP/1.1 403 Forbidden, an address refusal included. A
+    DNS or connect failure on a listed name is event upstream-failed, reason dns or connect,
+    answered HTTP/1.1 502 Bad Gateway, so the status and the log both tell policy from failure. Both
+    answers carry Content-Length: 0 and Connection: close with no body, and the proxy then closes.
+    The tunnel's answer is HTTP/1.1 200 Connection Established. Handshake refusals come after that
+    200, so they close the connection with no answer.
+
+    The log lands in two places. During the run it is the proxy's json-file log (max-size 64m,
+    max-file 1), which survives controller loss. At teardown, after stopping the proxy and before
+    removing it, the controller copies every record but ready, fsynced and mode 0600, to
+    sessions/<lookup>/<id>/egress-refusals.jsonl under the protected state root. Publish in
+    internal/engine/approval/disk/storage.go refuses more than 1 MiB, which this log can exceed, so
+    slice-28 adds a streaming writer with the same private-file, fsync, rename and parent-fsync
+    rules. A failed copy keeps the stopped proxy, its log and its recovery record, so stop retries
+    and nothing is lost. Cleanup never deletes that file; status names it and its count, and display
+    escapes a hostile name as approval's does (slice-28). The proxy stops after 20,000 refused or
+    upstream-failed records, writing one log-full record and exiting nonzero, which the run treats
+    as a proxy failure. Every refusal stays recorded, and a hostile workload can end its own session
+    but cannot rotate away its earlier attempts, since a session's records, each at most 2 KiB, stay
+    under the 64m cap even after Docker's escaping. That bounds one session at about 40 MiB of host
+    disk. Retention across sessions stays open (p3-session-state-retention): completed sessions are
+    not garbage-collected (features/recovery.feature), so these files accumulate with them.
+
+    Handshake guarantee (q-49): the proxy reads the ClientHello without terminating TLS or holding a
+    key or CA, which the charter's "no TLS interception" permits, and T-39's "opaque tunnelling"
+    means opaque after that hello. The guarantee to disclose in approve, status and
+    docs/security.md: the proxy verifies the CONNECT name and the first ClientHello's SNI. It cannot
+    see the HTTP Host inside TLS or anything after that hello, a second hello after a
+    HelloRetryRequest included, so fronting remains a limit, as does a hello the upstream's TLS
+    stack reads differently from crypto/tls, and it cannot stop data sent to an allowed service.
+    Clients that omit SNI or send ECH, Chromium's GREASE included, and SSH over 443 are refused
+    until a later mode names them. That Codex and Claude Code send SNI without ECH is not yet known:
+    the person's smoke check confirms it, since no scenario uses a real harness. The disclosure has
+    owners: slice-26 puts it in approve's presentation, and slice-27 puts it in status and edits
+    docs/security.md, which p1-docs-admit-milestone-two-egress does not cover. This settles the
+    contract's "Which passthrough handshake guarantees can be enforced".
+
+    From the contract's "Decisions still open" this record settles the concrete guard/proxy topology
+    and its fail-closed handling, and for the guard only its versions, digests, provenance and
+    acquisition. Worker versions, final destinations, resource limits and the platform matrix stay
+    open. It does not settle who may approve a sandbox that grants network, which stays with
+    p3-approval-before-egress; the record says so, so that no one reads it as settled. q-49 began as
+    the coordinator's provisional answer, and the person's q-51 and the charter have since taken up
+    its check, so the record treats it as settled. q-50 stays provisional for the person's review,
+    and the record says that too. The record lists each contract passage it supersedes or defers, so
+    the person can edit the contract: the Agreed scope's Proxy row (mitmdump) and TLS row
+    (inspection per destination), which give way to the charter by the person's 2026-11-09 choice;
+    its Images row, for the proxy only; its Mounts row's "do not bind-mount additional host paths"
+    and the "Not included" list's "extra host-directory mounts", which must now read as the
+    worker's, since the proxy has one read-only executable mount; its Platforms row, since delivery
+    needs the host's own static Linux amd64 ELF, so the darwin, windows and arm64 builds in
+    .goreleaser.yaml cannot run egress this way, which the charter's "Not yet" allows for now, and a
+    later platform needs another delivery; "The precise guard/worker network topology is a blocking
+    experiment" with Experiments item 1 (mitmdump), since this record settles the topology from
+    reading and a loopback spike and leaves its proof to slice-27; the sentence "block embedded
+    Docker DNS" (q-50); and the HTTPS inspection and SSH tunnel modes with AC-15, AC-19 and AC-20,
+    deferred.
+
+    The record also says which of these rest on an answered question and which it decides itself.
+    The Proxy and TLS rows rest on q-51 and the DNS sentence on q-50. The Images and Mounts
+    readings, the two-network topology and the delivery have no question behind them, though the
+    charter's stop rule names contract changes and "Decisions still open". The coordinator told the
+    drafter to finish, and slice-27 must prove the topology and delivery on the real engine, so the
+    work goes on, but the record marks all of these as its own decisions for the person to confirm
+    or overturn.
+
+    Scenarios need no product seam. In the engine job the harness creates its own bridge network
+    with a subnet outside the refused table (for example 11.22.33.0/24) and a fake TLS endpoint on
+    it whose network alias equals a listed name, then connects the running proxy container to that
+    network, so the proxy's embedded resolver answers the alias. A second network with a private
+    subnet and alias proves the address refusal. The workload waits on a checkout sentinel until the
+    harness has connected. No flag, variable or build tag enters the product; this is the charter's
+    "fake endpoint the proxy allows in tests".
+
+    In arc42, Constraints keeps offline's limits, names this record for the egress profile, and
+    names q-51's exception beside its rule on dependencies. Context and scope replaces "Proxy
+    egress, guard/proxy infrastructure" and "Do not create a guard, proxy or session network" with
+    egress's status. Building-block view adds internal/engine/egress (proposed, T-39, importing no
+    other engine), internal/slices/egressproxy (proposed, slice-27) and session's networks and proxy
+    (proposed, T-40). The work-item table adds T-38 to T-40 and slice-25 to slice-28. Runtime view
+    adds a subsection headed ### Egress run with the order and failure closure. Deployment view adds
+    the proxy and both networks and confines NetworkMode none to offline runs. Cross-cutting
+    concepts adds the refusal log and, under dependencies, q-51's exception. Decisions links the
+    record. Quality requirements maps AC-09 to AC-14, AC-16 to AC-18, AC-23 and AC-36 to slice-27
+    and slice-28, marked unproven. Risks replaces the topology and handshake rows with pointers to
+    the record, leaving TLS interception deferred. Use the record's exact terms for the isolated
+    mode, the hidden command and the log file. Keep the twelve headings and all offline text that
+    still holds; label everything proposed. The record names these sections as the ones it updates,
+    under the charter's drift rule.
+
+    The drafter changes only this entry. The implementer changes only the record and arc42, in docs
+    commits with Task T-38 as T-26's implementation was, and leaves the registry and sibling specs
+    alone, reporting a conflict rather than resolving it. T-39's, T-40's, slice-26's, slice-27's and
+    slice-28's drafters take these decisions from the record, including our own proxy and its fuzz
+    tests, the crypto/tls depguard rule, the second network, the forwarding sysctl, NO_PROXY, the
+    address check, the hello peek, the egressproxy slice, the inert image, the static harness build,
+    the stop before the log copy, the streaming log writer and the handshake disclosure, all of
+    which their whys predate.
+
+    Both checks read only those two documents, with grep, and declare prose: true, because on a
+    prose-only range CI leaves out any other late check and itos work done never runs one. Their
+    anchors are words the decisions above force, compared with whitespace flattened so line wrapping
+    cannot fail them; semantic review judges the rest. The first fails today at ls, because no
+    record exists. The second fails on its first anchor, internal/engine/egress.
 - id: T-39
   type: feat
   title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
