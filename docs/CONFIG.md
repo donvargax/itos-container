@@ -4,16 +4,20 @@ These are format and validation requirements for the planned `itos-container.yam
 sandbox policy. The [charter](charter.md) selects the milestone from the binding
 [pilot contract](plans/container-pilot.md); they take precedence over upstream
 examples. Strict policy validation is implemented through `doctor --policy-only`, and
-policy plus manifest validation through `doctor --manifest-only`. The inherited count,
+policy plus manifest validation through `doctor --manifest-only`. A policy can request an
+exact host-name egress allowlist (version 2 below); nothing approves or grants it yet. The inherited count,
 version and completion commands remain. Ordinary doctor inspects host readiness and approval. Explicit approval is implemented;
 runtime isolation remains unimplemented.
 
 The milestone is an offline owned run with no network, an approved hardened container,
 the checkout as its only host mount, a non-root identity and owned cleanup. Linux amd64
 with native Docker is a target requiring passing runtime evidence, not a supported-host
-claim. Network egress, credentials/accounts, network Git, LAN ingress, Compose and
-other platforms remain deferred. Describing the wider pilot does not authorize its
-later slices or settle an open security decision. Real-engine scenarios run only in CI.
+claim. A policy may request network egress to an allowlist of host names, but no
+approval binds that request, no proxy enforces it and no run starts with it: ordinary
+doctor, approve and run refuse a valid version 2 file for now. Credentials/accounts,
+network Git, LAN ingress, Compose and other platforms remain deferred. Describing the
+wider pilot does not authorize its later slices or settle an open security decision.
+Real-engine scenarios run only in CI.
 
 Files owned by other tools retain their formats: `itos.yaml` configures core itos's
 workflow, and the restricted `devcontainer.json` is JSON-with-comments, not YAML.
@@ -168,6 +172,106 @@ inspection. Structural errors prevent schema projection; an invalid version prev
 interpreting other fields. Independent version 1 errors are collected. No partial
 effective policy is returned. Safe filesystem identity belongs to the later host slice.
 
+### Implemented version 2
+
+Version 2 is version 1's closed object with a wider `network`, so a policy can request
+egress to named hosts. A new key needs a new version (rule 7), and version 1 keeps its
+written meaning in every command: its `network` still accepts only `offline`, and a
+version 1 file naming `allowlist` or `allow` is refused. The
+[versioned schema](schemas/itos-container-v2.schema.json) sits beside version 1's. The
+policy only requests: it does not approve a route, start a proxy or open a network.
+
+| Key | Type and requirement | Default |
+| --- | --- | --- |
+| version | Required integer, exactly 2; integral numeric spellings are equivalent | None |
+| manifest | As version 1 | None |
+| network | Optional closed object containing only mode and allow | {mode: offline} |
+| network.mode | Optional string, exactly `offline` or `allowlist`; never case folded | offline |
+| network.allow | List of strings. Required and nonempty when mode is `allowlist`; refused, even when empty, in offline mode | None |
+
+```yaml
+version: 2
+manifest: .devcontainer/devcontainer.json
+network:
+  mode: allowlist
+  allow:
+    - api.example.com
+    - registry.example.org
+```
+
+Offline stays the default, so `{version: 2, manifest: a.json}` is the same offline
+request as version 1's, and its effective network is `{mode: offline}` with no list. A
+list in offline mode is refused so that a forgotten mode cannot look like a granted
+list; its entries are not interpreted. An absent list in allowlist mode is
+`policy.required`, a list of the wrong type is `policy.type` and an empty one is
+`policy.allow_empty`. A wrong mode, or a mode of the wrong type, reports only the mode,
+whatever the list beside it holds: allow means nothing without a mode. Entries are
+strings, not objects, because per-destination settings would need a new version.
+
+Each entry is checked in this order. The check is lexical: there is no DNS lookup, no
+public-suffix list and no list of special names. What a listed name may resolve to
+belongs to whatever enforces the list, so a name such as `host.internal` is not refused
+here.
+
+1. At most 1024 bytes of decoded UTF-8, before any mapping, because punycode encoding is
+   quadratic in the name. Only ignored code points can reach the limit with a valid name.
+2. `golang.org/x/net/idna` Lookup: lower case, UTS 46 non-transitional mapping
+   (full-width forms, ideographic dots, ignored code points such as the soft hyphen),
+   STD3 host-name characters, hyphen and Bidi rules and valid A-labels. A refusal refuses
+   the entry; its error text quotes the label and is never shown. A final `xn--` is
+   refused too: Lookup reads it as an empty label and returns what a written trailing dot
+   gives, so `a.example.xn--` would otherwise be listed as `a.example`.
+3. One trailing dot is removed, after mapping, so an ideographic final dot counts as well.
+4. At least two labels, each of 1 to 63 bytes, and at most 253 bytes in all. Lookup checks
+   none of this: it accepts `.example.com`, `example.com..` and a 64-byte label.
+5. The final label is not all digits, nor `0x` followed only by hexadecimal digits.
+   Address parsers read those as IPv4 (`127.1`, `0x7f.0.0.1`, `1.2.3.0X4`) and Lookup
+   passes them. IPv6 already fails step 2 on its colons.
+
+A look-alike keeps its own A-label, so it stays visibly different from what it imitates,
+and nothing is trimmed: surrounding space is refused like any other character outside a
+name. A name appears once, in ascending byte order of its canonical spelling, so
+reordering or respelling a list changes nothing. Plain output gives one `network.allow`
+line per name in that order, and JSON gives `network.allow` as a sorted array.
+
+| Rule | Location | Meaning |
+| --- | --- | --- |
+| `policy.host_name` | `/network/allow/<index>` | Entry is not a full DNS host name |
+| `policy.host_duplicate` | `/network/allow/<index>` | Entry's canonical name repeats an earlier entry's |
+| `policy.allow_empty` | `/network/allow` | Empty list in allowlist mode |
+| `policy.allow_offline` | `/network/allow` | List present in offline mode |
+
+All exit 2. A refused entry has no canonical name to repeat, so it is never a duplicate,
+and a diagnostic never echoes the rejected value. Independent problems are collected as
+in version 1, and the existing depth, node and path budgets bound the list: it has no
+limit of its own.
+
+A fix names the schema the file was read against. For a version 2 file read by
+`doctor --policy-only`, no fix names version 1, and `policy.network_mode` says to use
+offline or allowlist mode. The one exception is the refusal below, which ordinary doctor,
+approve and run give a valid version 2 file: its fix says `use policy version 1, or read
+what a version 2 file requests with doctor --policy-only`. Where no supported version was
+read, the fix names both: `use policy version 1 or 2` for an unsupported number, and
+`use the field type defined by policy version 1 or 2` for a wrongly typed version or a
+root that is not an object.
+
+Only `doctor --policy-only` and `doctor --manifest-only` read a valid version 2 file for
+now. Ordinary doctor, approve and run refuse it with `policy.version` at `/version`, exit
+2, whatever its mode, before the manifest, the engine or host state, and the fix names
+`doctor --policy-only` so the request can still be read. Approval's canonical settings
+describe an offline profile only, so without this refusal approve would record offline
+settings for a request that asks for network, and an offline approval would appear to
+match it. A version 2 file that fails validation is refused for its own problems instead,
+as any invalid policy is. Binding the list into approval, enforcing it with a proxy and
+running with it are later slices; they must keep run from starting a version 2 policy
+until a run can honour it.
+
+The canonicalising library is `golang.org/x/net v0.60.0` (BSD-3-Clause, maintained by the
+Go team; `net/http` uses the same Lookup profile for host names) with
+`golang.org/x/text v0.42.0` as its indirect dependency. It sits behind a policy port with
+an adapter in `internal/engine/policy/idna`; the notices are in THIRD_PARTY_NOTICES.md.
+The record is [decision 0023](decisions/0023-policy-version-2-allowlist.md).
+
 ### Implemented restricted manifest
 
 The policy has no image or UID. Its `manifest` selects exactly one relative file;
@@ -287,12 +391,12 @@ do not establish sandbox argv or credential rules.
 
 13. Document every supported key's type, requirements, default and example before
     implementing it. Examples must reflect specified behaviour; this page provides
-    the settled version 1 catalog above (OWNER).
+    the settled version 1 and 2 catalogs above (OWNER).
 14. Make the effective configuration, including all defaults, reviewable without
     executing checkout code or revealing secrets. This is a required capability for
     doctor/approval design; policy-only inspection shows effective defaults (OWNER, CLIG).
 15. Publish a JSON Schema versioned with the settled format so editors and producers
-    can validate it (SCHEMA). Version 1 is linked above.
+    can validate it (SCHEMA). Versions 1 and 2 are linked above.
     Schema validation alone cannot establish host approval or runtime isolation.
 16. Make generated writes stable and deterministic, in the format's defined key
     order, one key per line, using only the permitted JSON-compatible data. Preserve

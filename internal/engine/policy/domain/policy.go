@@ -1,4 +1,4 @@
-// Package domain validates the closed offline policy and supplies its defaults.
+// Package domain validates the closed policy versions and supplies their defaults.
 package domain
 
 import (
@@ -8,8 +8,9 @@ import (
 )
 
 // Inspect checks representation first, then the supported version, then all
-// independent fields. A rejected version cannot select another schema.
-func Inspect(source port.Source) port.Result {
+// independent fields. A rejected version cannot select another schema. Names
+// canonicalises the host names of a version 2 allowlist, and only those.
+func Inspect(source port.Source, names port.Names) port.Result {
 	root, issues := source.Read()
 	if len(issues) != 0 {
 		return port.Result{Issues: issues}
@@ -24,25 +25,39 @@ func Inspect(source port.Source) port.Result {
 	if version.Kind != port.Number || strings.HasPrefix(version.Number.Exponent, "-") {
 		return refused(port.Type, "version")
 	}
-	if version.Number != (port.Decimal{Coefficient: "1", Exponent: "0"}) {
-		return refused(port.Version, "version")
+	switch version.Number {
+	case port.Decimal{Coefficient: "1", Exponent: "0"}:
+		return inspectFields(root, 1, names)
+	case port.Decimal{Coefficient: "2", Exponent: "0"}:
+		return inspectFields(root, 2, names)
 	}
+	return refused(port.Version, "version")
+}
 
-	policy := port.Policy{Version: 1, Network: port.Network{Mode: "offline"}}
-	issues = unknown(root, nil, "version", "manifest", "network")
+// inspectFields projects a root whose supported version has been read. Every
+// issue records that version, so its fix names the schema the file was judged by.
+func inspectFields(root port.Value, version int, names port.Names) port.Result {
+	policy := port.Policy{Version: version, Network: port.Network{Mode: "offline"}}
+	issues := unknown(root, nil, version, "version", "manifest", "network")
 	manifest, exists := root.Fields["manifest"]
 	switch {
 	case !exists:
-		issues = append(issues, port.Issue{Kind: port.Required, Path: []string{"manifest"}})
+		issues = append(issues, port.Issue{Kind: port.Required, Path: []string{"manifest"}, Version: version})
 	case manifest.Kind != port.String:
-		issues = append(issues, port.Issue{Kind: port.Type, Path: []string{"manifest"}})
+		issues = append(issues, port.Issue{Kind: port.Type, Path: []string{"manifest"}, Version: version})
 	case !validPath(manifest.Text):
-		issues = append(issues, port.Issue{Kind: port.Path, Path: []string{"manifest"}})
+		issues = append(issues, port.Issue{Kind: port.Path, Path: []string{"manifest"}, Version: version})
 	default:
 		policy.Manifest = manifest.Text
 	}
 	if network, exists := root.Fields["network"]; exists {
-		issues = append(issues, inspectNetwork(network)...)
+		var found []port.Issue
+		if version == 1 {
+			found = inspectOfflineNetwork(network)
+		} else {
+			policy.Network, found = inspectNetwork(network, names)
+		}
+		issues = append(issues, found...)
 	}
 	if len(issues) != 0 {
 		return port.Result{Issues: issues}
@@ -54,7 +69,7 @@ func refused(kind port.Failure, path ...string) port.Result {
 	return port.Result{Issues: []port.Issue{{Kind: kind, Path: path}}}
 }
 
-func unknown(value port.Value, path []string, allowed ...string) []port.Issue {
+func unknown(value port.Value, path []string, version int, allowed ...string) []port.Issue {
 	var issues []port.Issue
 	for key := range value.Fields {
 		found := false
@@ -65,23 +80,24 @@ func unknown(value port.Value, path []string, allowed ...string) []port.Issue {
 			}
 		}
 		if !found {
-			issues = append(issues, port.Issue{Kind: port.UnknownKey, Path: append(append([]string{}, path...), key)})
+			issues = append(issues, port.Issue{Kind: port.UnknownKey, Path: append(append([]string{}, path...), key), Version: version})
 		}
 	}
 	return issues
 }
 
-func inspectNetwork(value port.Value) []port.Issue {
+// inspectOfflineNetwork is version 1's network: a closed object whose only mode is offline.
+func inspectOfflineNetwork(value port.Value) []port.Issue {
 	if value.Kind != port.Object {
-		return []port.Issue{{Kind: port.Type, Path: []string{"network"}}}
+		return []port.Issue{{Kind: port.Type, Path: []string{"network"}, Version: 1}}
 	}
-	issues := unknown(value, []string{"network"}, "mode")
+	issues := unknown(value, []string{"network"}, 1, "mode")
 	if mode, exists := value.Fields["mode"]; exists {
 		switch {
 		case mode.Kind != port.String:
-			issues = append(issues, port.Issue{Kind: port.Type, Path: []string{"network", "mode"}})
+			issues = append(issues, port.Issue{Kind: port.Type, Path: []string{"network", "mode"}, Version: 1})
 		case mode.Text != "offline":
-			issues = append(issues, port.Issue{Kind: port.NetworkMode, Path: []string{"network", "mode"}})
+			issues = append(issues, port.Issue{Kind: port.NetworkMode, Path: []string{"network", "mode"}, Version: 1})
 		}
 	}
 	return issues

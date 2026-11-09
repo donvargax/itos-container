@@ -433,7 +433,7 @@ func cleanHarnessEnvironment() []string {
 	var env []string
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if key != "ITOS_CONTAINER_ENGINE_TESTS" && key != "ITOS_CONTAINER_RED_SCENARIOS" && key != "DOCKER_HOST" && key != "DOCKER_CONTEXT" && key != "GOCOVERDIR" {
+		if key != "ITOS_CONTAINER_ENGINE_TESTS" && key != "ITOS_CONTAINER_RED_SCENARIOS" && key != "ITOS_CONTAINER_ENGINE_FEATURES" && key != "DOCKER_HOST" && key != "DOCKER_CONTEXT" && key != "GOCOVERDIR" {
 			env = append(env, entry)
 		}
 	}

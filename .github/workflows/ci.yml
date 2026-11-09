@@ -54,13 +54,25 @@ jobs:
       - run: itos verify "$FROM" "$TO"
       - run: itos ci run "$FROM" "$TO"
 
-  # This is readiness infrastructure until live @engine scenarios are implemented.
+  # The engine tier runs in three shards (T-45), each on its own native runner and daemon
+  # and each of whole feature files, so that no shard's step passes 180 seconds. A feature
+  # moves between shards only on measured shard times, and is never split.
   # The preflight is read-only; it does not acquire images or create containers.
-  engine:
-    name: Engine scenarios (Linux amd64)
+  engine-shard:
+    name: Engine shard (${{ matrix.shard }})
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: offline
+            features: offline.feature
+          - shard: lifecycle
+            features: lifecycle.feature
+          - shard: other
+            features: anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,6 +101,7 @@ jobs:
         shell: bash
         env:
           ITOS_CONTAINER_ENGINE_TESTS: "1"
+          ITOS_CONTAINER_ENGINE_FEATURES: ${{ matrix.features }}
           ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}
           ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE: ${{ steps.fixture.outputs.image }}
           ITOS_CONTAINER_ENGINE_FIXTURE_ID: ${{ steps.fixture.outputs.image_id }}
@@ -108,7 +121,7 @@ jobs:
             trap - EXIT
             if finished=$(engine_now) && [[ -n $engine_started ]] && (( finished >= engine_started )); then
               elapsed=$(((finished - engine_started) * 10))
-              if (( elapsed > 240000 && result == 0 )); then result=1; fi
+              if (( elapsed > 180000 && result == 0 )); then result=1; fi
             elif (( result == 0 )); then
               result=1
             fi
@@ -155,9 +168,26 @@ jobs:
         timeout-minutes: 1
         run: |
           set +e
+          timeout 40 tools/bin/engine-failure-report "$RUNNER_TEMP/slice-11-features.log"
           sudo dmesg | tail -50
           free -m
           if [[ -f "$RUNNER_TEMP/slice-11-features.log" ]]; then
+            # Every timing record, slowest first, so a timeout's rows show where the time went.
+            # grep -a reads a NUL or invalid UTF-8 in the log as text; the sequence number keeps
+            # equal durations in log order; a record with no duration counts as zero.
+            printf 'Engine scenario timing records, slowest first: %s\n' "$(grep -ac '^engine scenario timing: ' "$RUNNER_TEMP/slice-11-features.log")"
+            n=0
+            grep -a '^engine scenario timing: ' "$RUNNER_TEMP/slice-11-features.log" | while IFS= read -r record; do
+              record=${record#engine scenario timing: }
+              ns=0
+              if [[ $record =~ \"duration_ns\":([0-9]+) ]]; then ns=${BASH_REMATCH[1]}; fi
+              ns=${ns#"${ns%%[!0]*}"}
+              ns=${ns:-0}
+              padded=000000000$ns
+              whole=${padded:0:${#padded}-9}
+              whole=${whole#"${whole%%[!0]*}"}
+              printf '%s\t%s\t%4s.%s s %s\n' "$ns" "$((++n))" "${whole:-0}" "${padded:${#padded}-9:3}" "$record"
+            done | LC_ALL=C sort -t $'\t' -k1,1nr -k2,2n | cut -f3-
             tail -100 "$RUNNER_TEMP/slice-11-features.log"
           fi
       - name: Clean up engine fixture
@@ -165,6 +195,20 @@ jobs:
         shell: bash
         timeout-minutes: 1
         run: tools/bin/engine-fixture cleanup
+
+  # The one check name that ci, release and the repository's settings use. It takes the
+  # matrix job's result in needs to be success only when every shard succeeded.
+  engine:
+    name: Engine scenarios (Linux amd64)
+    needs: [engine-shard]
+    if: ${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require every engine shard
+        env:
+          SHARD_RESULT: ${{ needs.engine-shard.result }}
+        run: test "$SHARD_RESULT" = success
 
   # Unit tests and the non-engine godog tier run automatically on Linux for
   # main pushes and non-draft pull requests. Manual dispatch also runs this Linux suite.

@@ -1,6 +1,9 @@
 package port
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Problem is the stable public diagnostic contract for this inspection.
 type Problem struct {
@@ -49,19 +52,44 @@ func Diagnostic(issue Issue) Problem {
 	case Required:
 		p.Rule, p.Message, p.Fix = "required", "Required field is absent", "provide the required field"
 	case Type:
-		p.Rule, p.Message, p.Fix = "type", "Value has the wrong type", "use the field type defined by policy version 1"
+		p.Rule, p.Message, p.Fix = "type", "Value has the wrong type", "use the field type defined by policy version "+versions(issue.Version)
 	case Version:
-		p.Rule, p.Message, p.Fix = "version", "Policy version is unsupported", "use policy version 1"
+		p.Rule, p.Message, p.Fix = "version", "Policy version is unsupported", "use policy version "+versions(issue.Version)
+		if issue.Version != 0 {
+			// A valid file some commands cannot act on yet: they can still show what it asks for.
+			p.Message = "Policy version is not accepted by this command yet"
+			p.Fix = "use policy version 1, or read what a version " + versions(issue.Version) + " file requests with doctor --policy-only"
+		}
 	case UnknownKey:
-		p.Rule, p.Message, p.Fix = "unknown_key", "Field is not supported", "remove fields absent from the version 1 schema"
+		p.Rule, p.Message, p.Fix = "unknown_key", "Field is not supported", "remove fields absent from the version "+versions(issue.Version)+" schema"
 	case NetworkMode:
 		p.Rule, p.Message, p.Fix = "network_mode", "Network mode is unsupported", "use offline mode"
+		if issue.Version == 2 {
+			p.Fix = "use offline or allowlist mode"
+		}
 	case Path:
 		p.Rule, p.Message, p.Fix = "path", "Manifest path is invalid", "use a relative slash-separated path without empty or dot components, drives, backslashes or controls"
+	case HostName:
+		p.Rule, p.Message, p.Fix = "host_name", "Host name is not a full DNS name", "use a full DNS host name such as api.example.com, without a wildcard, address, port, URL or space"
+	case HostDuplicate:
+		p.Rule, p.Message, p.Fix = "host_duplicate", "Host name repeats an earlier entry", "list each host name once"
+	case AllowEmpty:
+		p.Rule, p.Message, p.Fix = "allow_empty", "Allowlist is empty", "list at least one host name, or use offline mode"
+	case AllowOffline:
+		p.Rule, p.Message, p.Fix = "allow_offline", "Allowlist needs allowlist mode", "set network.mode to allowlist, or remove allow"
 	default:
 		p.Rule, p.Message, p.Fix = "internal", "Unknown policy failure", "report this as a bug"
 		p.Exit = 70
 	}
 	p.Rule = "policy." + p.Rule
 	return p
+}
+
+// versions names the schemas a fix may point at: the one the file was read
+// against, or both supported ones where it declared none.
+func versions(version int) string {
+	if version == 0 {
+		return "1 or 2"
+	}
+	return strconv.Itoa(version)
 }

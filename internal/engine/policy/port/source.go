@@ -25,9 +25,11 @@ type Decimal struct {
 }
 
 // Value retains exact numbers so version checks cannot round a fractional input.
+// Items holds an array's elements in order, and is nil for an empty array.
 type Value struct {
 	Kind   Kind
 	Fields map[string]Value
+	Items  []Value
 	Text   string
 	Number Decimal
 }
@@ -56,12 +58,19 @@ const (
 	UnknownKey
 	NetworkMode
 	Path
+	HostName
+	HostDuplicate
+	AllowEmpty
+	AllowOffline
 )
 
-// Issue locates one failure using decoded path components.
+// Issue locates one failure using decoded path components. Version is the
+// supported policy version the file declared, or zero where none was read: the
+// fix a person needs depends on which schema the file was judged against.
 type Issue struct {
-	Kind Failure
-	Path []string
+	Kind    Failure
+	Path    []string
+	Version int
 }
 
 // Files supplies the policy bytes without exposing filesystem errors.
@@ -81,8 +90,12 @@ type Policy struct {
 	Network  Network
 }
 
-// Network describes the requested network boundary.
-type Network struct{ Mode string }
+// Network describes the requested network boundary. Allow holds the canonical
+// host names of an allowlist in ascending byte order, and is nil when offline.
+type Network struct {
+	Mode  string
+	Allow []string
+}
 
 // Result contains either a complete policy or issues, never partial policy data.
 type Result struct {

@@ -17,6 +17,7 @@ import (
 type Inspector struct {
 	Checkout   port.Checkout
 	Policy     policyport.Source
+	Names      policyport.Names
 	Files      manifestport.Files
 	Parser     manifestport.Parser
 	References manifestport.References
@@ -36,7 +37,13 @@ func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result)
 		return result
 	}
 	defer i.Checkout.Close()
-	p := policy.Inspect(i.Policy)
+	p := policy.Inspect(i.Policy, i.Names)
+	if p.Policy != nil && p.Policy.Version != 1 {
+		// Canonical settings v1 hardcode an offline profile: recording them for a
+		// request that asks for network would approve what was never reviewed.
+		// Only doctor --policy-only reads such a file until approval can bind it.
+		p = policyport.Result{Issues: []policyport.Issue{{Kind: policyport.Version, Path: []string{"version"}, Version: p.Policy.Version}}}
+	}
 	result.Policy = &p
 	if p.Policy == nil || len(p.Issues) != 0 {
 		return result

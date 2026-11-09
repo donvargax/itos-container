@@ -86,7 +86,7 @@ engine_finish() {
   trap - EXIT
   if finished=$(engine_now) && [[ -n $engine_started ]] && (( finished >= engine_started )); then
     elapsed=$(((finished - engine_started) * 10))
-    if (( elapsed > 240000 && result == 0 )); then result=1; fi
+    if (( elapsed > 180000 && result == 0 )); then result=1; fi
   elif (( result == 0 )); then
     result=1
   fi
@@ -146,14 +146,20 @@ func testEngineDiagnostics(t *testing.T, hostOS string) {
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
 		t.Fatal(err)
 	}
-	var script string
-	for _, step := range workflow.Jobs["engine"].Steps {
-		if step.Name == "Engine scenarios" {
+	var script, diagnostics string
+	for _, step := range workflow.Jobs["engine-shard"].Steps {
+		switch step.Name {
+		case "Engine scenarios":
 			script = step.Run
+		case "Engine failure diagnostics":
+			diagnostics = step.Run
 		}
 	}
 	if script == "" {
 		t.Fatal("missing engine invocation")
+	}
+	if diagnostics == "" {
+		t.Fatal("missing engine failure diagnostics")
 	}
 	// Execute the actual workflow shell with a disposable compiler/test program.
 	// No engine switch, CI spoof, product command or Docker access is involved.
@@ -240,6 +246,7 @@ printf 'feature stderr marker\n' >&2
 			}
 		})
 	}
+	t.Run("failure report", func(t *testing.T) { testEngineFailureReport(t, diagnostics) })
 }
 
 func diagnosticExitCode(err error) int {
