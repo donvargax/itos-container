@@ -394,6 +394,14 @@ items:
       --fingerprint or a faked terminal. Offline-only permissions make that cheap for now. Before
       the egress and credentials stages, when an approval grants something worth taking, weigh a
       host-side confirmation an agent cannot drive, per the stage.
+
+      p3-approval-before-egress already holds this: q-2, an agent self-approving through
+      --fingerprint or a faked terminal, to be weighed before egress and credentials, when an
+      approval grants something worth taking. The new point is that it has depends_on [] and
+      slice-26 (approval binds the allowlist) and slice-27 (the first run that grants network) do
+      not wait for it, so nothing forces the revisit. The coordinator should add that edge from
+      slice-26 or slice-27, or ask the person to decide before slice-26 is taken. The phase is p3
+      but it now gates phase-1 work, so it needs raising to p1 or the edge needs a reason.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
