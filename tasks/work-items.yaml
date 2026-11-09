@@ -981,3 +981,25 @@ items:
 
       Correction: of slice-21's runs, 42582818914 hit this hook; 42573174685 failed for another
       reason (not this flake), so it counts once for slice-21, not twice.
+  - id: p1-docs-admit-milestone-two-egress
+    title: PLAN.md, README and the orchestration docs stop saying proxy egress is outside the scope
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy). The charter
+      (ef653e7, 2026-11-09) says to specify and start it, but PLAN.md's milestone limits ("Proxy
+      egress, credentials/accounts, Git over the network... remain outside this milestone"),
+      README.md:38 and docs/ORCHESTRATING.md:12 still say it is deferred or unauthorized. AGENTS.md
+      sends every agent to the charter and then PLAN.md, so each drafter and reviewer of T-38 and
+      slice-25 to slice-28 meets two authorities that disagree, and may stop or refuse. Update
+      PLAN.md (current state, order of work, milestone limits), README and ORCHESTRATING to match
+      the charter: milestone two's steps in the charter's order, egress first and the rest when
+      reached, while LAN ingress, Compose, other platforms and the Docker socket stay out. Do not
+      touch the charter. Leave the 'deferred' headers in docs/CONFIG.md and docs/CLI.md to slice-25,
+      which edits those files for the allowlist field. Leave arc42's deferral text to T-38's
+      decision record, per the charter's architecture rule. AGENTS.md's opening paragraph is also
+      stale ("container commands and isolation are not implemented yet", v0.1.0 is published), but
+      whether to edit AGENTS.md is the person's. Documentation only: it touches no proof.code path.
