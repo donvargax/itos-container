@@ -473,7 +473,7 @@ Feature: Review and record approval of exact offline settings
   #   Run cannot start this profile yet: it refuses every version 2 policy for now.
   # The handshake and log lines are T-38's disclosure, and slice-27 repeats them in status and
   # docs/security.md. Plain approve status prints the same lines from allowlist-v1: down, after
-  # the canonical settings, so the fingerprint route is told too. Slice-27's feat commit removes
+  # the canonical settings, so an unchanged approval is told too. Slice-27's feat commit removes
   # the last line and the rows that read it, in the commit that makes the lines above it true of a
   # run: they speak of the proxy in the present tense, which only that last line keeps honest until
   # then. An offline-v1 candidate keeps its review and status exactly at either version, including
@@ -484,17 +484,15 @@ Feature: Review and record approval of exact offline settings
   # lines this block adds need no further escaping. The canonical settings and the differences can
   # hold anything a manifest holds, so ID-APPROVAL-58 holds them as ID-APPROVAL-33 does for offline.
   #
-  # Who may approve stays open. q-2's limitation now reaches a network grant: a host agent can
-  # approve an allowlist through --fingerprint or a faked terminal, and approval still records
-  # what, not who. T-38's record leaves this to p3-approval-before-egress, and this slice takes no
-  # position. It grants no route while run refuses version 2, so slice-27 is where a
-  # self-approved list would become one. A record written under this slice outlives the gate: the
-  # canonical settings do not bind the line saying run cannot start the profile, and nothing here
-  # makes an older record expire. So when slice-27 lifts the gate, a list self-approved now, or
-  # approved on words saying run cannot start it, would be a live route with no new consent unless
-  # slice-27 says otherwise. Slice-27's spec must say whether earlier allowlist-v1 records are
-  # honoured; a new profile name is the means this spec gives it to ask for new consent. Who may
-  # approve is the person's decision, to be taken before slice-27 is, not this slice's.
+  # q-52 (the person, 2026-11-09): only changed settings ask for approval again. A grant
+  # with an egress allowlist or credentials requires the person at a real terminal.
+  # --fingerprint is only for offline grants without credentials. For an exact network
+  # fingerprint, refuse approve.interactive-required (exit 1), with a fix naming
+  # "itos container approve" and "terminal". Bare nonterminal or JSON network approval
+  # gives the same refusal, never suggesting --fingerprint as a way around it. Fingerprint
+  # syntax and mismatch checks still precede this refusal. Matching terminal approval
+  # neither prompts nor rewrites. No keys or signatures. docs/security.md records the
+  # remaining gap: an unsandboxed host agent can fake a terminal.
   #
   # What this makes untrue. ID-POLICY-60 and ID-POLICY-61 (ordinary doctor and approve refuse
   # version 2) were written to last until this slice. The feat commit removes both and says so,
@@ -518,7 +516,7 @@ Feature: Review and record approval of exact offline settings
   # Solution strategy's sentence that doctor, approve and run "must agree on accepted/rejected
   # inputs and effective settings". The gate contradicts that sentence until slice-27, because
   # doctor and approve accept a valid version 2 file that run refuses, so the decision names that
-  # section and says why. docs/security.md stays with slice-27, as T-38's record says.
+  # section and says why. docs/security.md records q-52 here; runtime disclosure remains with slice-27.
   #
   # A nil names port panics on the first allowlist, in a file a hostile checkout controls. Both
   # sites are assembled in cmd/itos-container/main.go, and the gate above re-wires one of them, so
@@ -916,28 +914,35 @@ Feature: Review and record approval of exact offline settings
       | 2        | 1         |
 
   @wip @slice-26 @ID-APPROVAL-45 @local-engine-fixture
-  Scenario Outline: The optional exact fingerprint approves the allowlist without a terminal
+  Scenario Outline: The optional exact fingerprint refuses an allowlist grant without a terminal
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
+    And approval state is "<state>"
     When approve runs without a terminal with the independently calculated exact fingerprint and "<mode>"
-    Then it reports matching approval for that fingerprint without a prompt and exits with code 0
-    And the sole active approval is the exact candidate at generation "1" in protected host state
-    And its approval output follows the requested plain or JSON mode
+    Then it reports approval problem "approve.interactive-required" with exit 1
+    And its guidance names "itos container approve" and "terminal"
+    And it never prompts or records approval
+    And the approval checkout and host state are unchanged
     And no engine mutation or image acquisition was attempted
 
     Examples:
-      | mode   |
-      | plain  |
-      | --json |
+      | state    | mode                      |
+      | missing  | plain                     |
+      | missing  | --json                    |
+      | missing  | inherited ITOS_JSON=1     |
+      | missing  | ITOS_JSON=1 with --no-json |
+      | matching | --json                    |
 
-  # The fingerprint route has no review, so its plain status has to say the same things: these are
-  # ID-APPROVAL-42's rows, after the canonical settings, which the first row places.
+  # Unchanged settings need no second consent. The terminal status still discloses
+  # the full grant, and the remembered record is not rewritten.
   @wip @slice-26 @ID-APPROVAL-46 @local-engine-fixture
   Scenario: Plain approval status says what the allowlist profile grants and cannot do
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
-    When approve runs without a terminal with the independently calculated exact fingerprint and "plain"
-    Then it exits with code 0
+    And a seeded matching approval at generation "1"
+    When bare approve runs at a terminal with no answer available
+    Then it reports matching approval without prompting and exits with code 0
+    And the active approval bytes and generation are unchanged
     And its standard output says, in this order:
       | text |
       | "profile":"allowlist-v1" |
@@ -998,8 +1003,9 @@ Feature: Review and record approval of exact offline settings
   Scenario Outline: The longest list and the longest name the policy admits can be approved and still match
     Given an approval checkout and isolated host state
     And the checkout requests <request>
-    When approve runs without a terminal with the independently calculated exact fingerprint and "--json"
-    Then it reports matching approval for that fingerprint without a prompt and exits with code 0
+    When bare approve runs at a terminal and receives "y" after the review
+    Then the transcript shows all effective settings and the worker's restrictions before exactly one y/N prompt
+    And it exits with code 0
     And the sole active approval is the exact candidate at generation "1" in protected host state
     When itos-container runs with "doctor --json"
     Then doctor reports the independently calculated fingerprint and complete effective settings
@@ -1484,3 +1490,21 @@ Feature: Review and record approval of exact offline settings
       | bidirectional | containerEnv |
       | C1            | name         |
       | bidirectional | name         |
+
+  @wip @slice-26 @ID-APPROVAL-59 @local-engine-fixture
+  Scenario Outline: A network grant requires both review terminals and plain output
+    Given an approval checkout and isolated host state
+    And the checkout requests the allowlist "api.example.com"
+    When approve runs at a terminal in "<mode>" with streams "<streams>"
+    Then it reports approval problem "approve.interactive-required" with exit 1
+    And its guidance names "itos container approve" and "terminal"
+    And it never prompts or records approval
+    And the approval checkout and host state are unchanged
+
+    Examples:
+      | mode                  | streams                           |
+      | plain                 | redirected stdin and stdout       |
+      | plain                 | terminal stdin, redirected stdout |
+      | plain                 | redirected stdin, terminal stdout |
+      | --json                | terminal stdin and stdout         |
+      | inherited ITOS_JSON=1 | terminal stdin and stdout         |

@@ -10,6 +10,7 @@ import (
 )
 
 func (w *world) approvalSteps(sc *godog.ScenarioContext) {
+	w.approvalNetworkSteps(sc)
 	sc.Step(`^an approval checkout and isolated host state$`, w.approvalCheckout)
 	sc.Step(`^a seeded matching approval at generation "([^"]*)"$`, func(g string) error { return w.approvalSeed(g, false) })
 	sc.Step(`^a seeded prior approval at generation "([^"]*)" with a different application environment and workspace$`, func(g string) error { return w.approvalSeed(g, true) })
@@ -104,9 +105,15 @@ func (w *world) approvalSteps(sc *godog.ScenarioContext) {
 		switch defect {
 		case "unsupported manifest initializeCommand":
 			w.doctor.manifest["initializeCommand"] = "./forbidden"
-			return w.approvalManifest()
+			if err := w.approvalManifest(); err != nil {
+				return err
+			}
 		case "hidden image label requests a user":
 			w.doctor.engine.config()["Labels"] = map[string]string{"devcontainer.metadata": `[{"containerUser":"1000"}]`}
+		case "the selected manifest is absent":
+			if err := os.Remove(filepath.Join(w.doctor.checkout, ".devcontainer/devcontainer.json")); err != nil {
+				return err
+			}
 		case "cached image is absent":
 			w.doctor.engine.imageStatus = 404
 		case "daemon identity changes during inspection", "checkout root changes during inspection":
@@ -114,7 +121,7 @@ func (w *world) approvalSteps(sc *godog.ScenarioContext) {
 		default:
 			return fmt.Errorf("unknown prerequisite %q", defect)
 		}
-		return nil
+		return w.approvalCapture()
 	})
 	sc.Step(`^doctor inspects before and after the (?:equivalent|effective) edit "([^"]*)"$`, w.approvalTwoInspections)
 	sc.Step(`^doctor inspects the second checkout as JSON$`, func() error { return w.runDoctor(w.env(), "doctor", "--json") })
