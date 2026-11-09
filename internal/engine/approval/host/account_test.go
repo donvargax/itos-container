@@ -5,12 +5,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/iotest"
 )
 
 func TestAccountHomeRequiresLocalEffectiveUIDRecord(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux account database target")
+	}
 	for _, tc := range []struct {
 		name, passwd, want string
 	}{
@@ -67,6 +71,9 @@ type accountReader struct {
 func (r accountReader) Close() error { *r.closed = true; return nil }
 
 func TestAccountHomeUnavailableEvidence(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux account database target")
+	}
 	for _, kind := range []string{"unavailable UID", "open failure", "read failure"} {
 		t.Run(kind, func(t *testing.T) {
 			ops := Process{}.operations()
