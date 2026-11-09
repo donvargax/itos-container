@@ -206,9 +206,14 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Runtime @engine cases require the guarded Linux amd64 native-Docker CI tier
   # in features/README.md. Actual signals go to the product controller only in
   # When; native engine observations and probe receipts establish worker effects.
+  # T-33 / q-40 builds this tier's disposable product from a harness-only copy of
+  # the sources: call/startup/grace are 1/3/1 s, while ordinary and release builds
+  # retain 10/120/10 s. No runtime environment, flag or policy can enable it.
+  # Quiet observations exceed the configured call and startup budgets; repeated
+  # signals, acknowledgement delays and grace checks use that same fixture.
   # Product-facing disconnects never shut down the shared daemon or independent
   # observer. Add only identity-checked kill/wait fault forwarding to the recorder.
-  # Runtime timing allows at most 2 s scheduling tolerance per measured bound,
+  # Grace timing allows 20 percent scheduling tolerance; other bounds allow 2 s,
   # never early escalation; no resetting deadlines or widening product defaults.
   # Fixed-seed domain contracts cover exact boundaries; CI proves real delivery.
   # Network denial after controller loss uses slice-14's SAME clients and controlled
@@ -426,10 +431,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | SIGTERM | 17    |
 
   # An ignoring probe records signals but keeps running. Send repetitions at
-  # elapsed 2 s and 8 s, including the other signal; no repeated input extends grace.
+  # 20 and 80 percent of grace, including the other signal; repeats cannot extend it.
   # The recorder forwards the first signal immediately, then delays only its
   # acknowledgement by the example duration. Native receipts prove delivery.
-  # Six seconds is inside the 10 s call limit but makes acknowledgement-relative
+  # A 60 percent grace delay is inside the call limit but makes acknowledgement-relative
   # grace observably late. The immediate rows retain the healthy timing control.
   # Regression attribution: slice-10 supplies first-signal/repeat suppression;
   # slice-11 supplies shared owned termination and escalation. The standing rule
@@ -437,9 +442,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # native receipts and timings; fixture exit values are not that evidence.
   @slice-12 @ID-LIFECYCLE-09 @engine
   Scenario Outline: Ignored and repeated cancellation escalates once after the fixed grace
-    Given a CI lifecycle checkout with a ready signal-recording probe that keeps running and a signal acknowledgement delayed <delay> seconds
+    Given a CI lifecycle checkout with a ready signal-recording probe that keeps running and a signal acknowledgement delayed <delay> percent of grace
     When run launches the probe and the harness sends "<signal>" followed by repeated SIGINT and SIGTERM during grace
-    Then the worker records only the first "<signal>" and native observations show it alive before the 10 second grace expires
+    Then the worker records only the first "<signal>" and native observations show it alive before the configured grace expires
     And the journal records exactly one original signal request and one SIGKILL request at the original grace deadline and the product returns the engine-observed exit 137
     And run reports "run.cancelled" with the first signal separately from the authoritative workload exit and cleanup result
     And owned removal and durable absence complete within the original 30 second teardown budget
@@ -449,8 +454,8 @@ Feature: Bounded offline lifecycle, cancellation and loss
       | signal  | delay |
       | SIGINT  | 0     |
       | SIGTERM | 0     |
-      | SIGINT  | 6     |
-      | SIGTERM | 6     |
+      | SIGINT  | 60    |
+      | SIGTERM | 60    |
 
   # The first signal's acknowledgement stays unavailable for 10 s. Grace starts
   # at cancellation, not acknowledgement; the cancellation result is NOT 137
@@ -547,10 +552,10 @@ Feature: Bounded offline lifecycle, cancellation and loss
     And checkout edits approvals snapshots and unrelated resources remain intact
 
   # Signal responsiveness must survive actual pipe backpressure. For the quiet
-  # row wait 125 s after ready with no output/input; for blocked rows fill only
-  # the named pipe after ready. The handler writes its signal receipt to checkout
+  # row wait past both configured budgets after ready with no output/input. For
+  # blocked rows fill only the named pipe after ready. The handler writes its receipt
   # and exits 17 without waiting on a blocked writer. Include a same-path quiet
-  # control; one 125 s control may be shared by this outline's runtime cases.
+  # control; one budget-relative quiet control may be shared by this outline's runtime cases.
   # The harness observes controller termination independently before unblocking
   # drains. Do not make a test-owned reader unblock the product before its bound.
   # Quiet work and open stdin are slice-10 controls. Readable diagnostics must

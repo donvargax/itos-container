@@ -118,7 +118,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer finish()
 	result.Deadline, _ = teardown.Deadline()
-	teardown = context.WithValue(teardown, runGraceKey{}, result.Deadline.Add(-20*time.Second))
+	teardown = context.WithValue(teardown, runGraceKey{}, result.Deadline.Add(-30*time.Second+budget.GraceDuration))
 	// Keep the final second of the original total for diagnostic delivery. The
 	// command must be able to report exhaustion before main exits, while an
 	// unread diagnostic sink still cannot extend the thirty-second deadline.

@@ -40,7 +40,7 @@ func (w *world) lifecycleFixture(mode, condition, barrier string, child, delay i
 	if err := w.recoveryFixtureWithProbe("lifecycle", w.buildLifecycleProbe); err != nil {
 		return err
 	}
-	l := &lifecycleNative{mode: mode, condition: condition, barrier: barrier, child: child, delay: time.Duration(delay) * time.Second}
+	l := &lifecycleNative{mode: mode, condition: condition, barrier: barrier, child: child, delay: time.Duration(delay) * engineGraceBudget / 100}
 	w.lifecycle = l
 	l.fault = newLifecycleFaults(mode, barrier, l.delay)
 	w.offline.api.lifecycle = l.fault
@@ -74,7 +74,7 @@ func (w *world) lifecycleStart() {
 		close(p.done)
 		return
 	}
-	// Only the quiet control needs its specified 125 s observation. Collection
+	// The quiet control retains its independent, generous process guard. Collection
 	// separately caps teardown at its original origin plus the 2 s tolerance.
 	guard := 75 * time.Second
 	if l.condition == "quiet workload and stdin" {

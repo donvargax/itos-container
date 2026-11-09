@@ -393,11 +393,15 @@ Feature: Inspect the restricted single-worker manifest
       | .devcontainer/devcontainer.json | .devcontainer directory symlink           |
       | .devcontainer/devcontainer.json | dangling .devcontainer directory symlink  |
       | .devcontainer/devcontainer.json | directory at the selected candidate       |
-      | .devcontainer/devcontainer.json | FIFO at the selected candidate            |
       | .devcontainer.json              | file symlink to an in-checkout file        |
       | .devcontainer.json              | file symlink outside the checkout         |
       | .devcontainer.json              | dangling file symlink                     |
       | .devcontainer.json              | directory at the selected candidate       |
+
+    @unix
+    Examples: POSIX named pipes on Linux and macOS
+      | file                           | layout                                   |
+      | .devcontainer/devcontainer.json | FIFO at the selected candidate            |
       | .devcontainer.json              | FIFO at the selected candidate            |
 
   @slice-2 @ID-MANIFEST-05
