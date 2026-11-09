@@ -2840,3 +2840,21 @@
     agents never use Docker, approve real state or fabricate CI context. No mutation run or
     generated evidence is part of this test-only task. Agents commit and stop; the loop owns
     pushing, CI watching and closure.
+- id: T-36
+  type: test
+  title: The feature harness writes per-scenario coverage when itos-cc asks, so the code proof's coverage pass takes minutes
+  why: >
+    Issue #29: itos-cc's whole-run coverage sets ITOS_CC_TEST_COVERDIR and expects each listed
+    test's processes to write to <dir>/<ID>; features/features_test.go builds with -cover only under
+    GOCOVERDIR and ignores that variable, so itos-cc falls back to one go test per scenario (320
+    runs, about 4 hours per proof in runs 42471183432 and 42505641988). Build with -cover
+    -covermode=atomic -coverpkg=./... when ITOS_CC_TEST_COVERDIR is set too, give each scenario
+    <ITOS_CC_TEST_COVERDIR>/<its ID without @> as GOCOVERDIR for every command it starts (w.env
+    drops ITOS_ variables, so read it in the harness), keep a selected run with neither variable a
+    plain build, and correct the package comment. Model: features/cover_test.go in donvargax/itos
+    (about 1,400 listed scenarios in about 130 s). Watch the issue's list: every listed scenario
+    must write data, the umask-0777 approval fixture's files must stay readable, and
+    TestManifestContractCoverage and the engine tests must still hold. Done when a proof log says
+    'the listed tests ran in', not 'ran one at a time'.
+  done_when:
+    - run: grep -q ITOS_CC_TEST_COVERDIR features/features_test.go
