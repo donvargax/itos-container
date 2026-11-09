@@ -1681,3 +1681,21 @@ items:
       code and starts no engine. Offline policies without the section are unchanged. docs/CONFIG.md
       and docs/CLI.md are updated, and the published policy schema moves with it. It takes the keys
       and checks from the decision record. Broken down from p1-credentials-passed-in.
+  - id: p1-credentials-approval-grant
+    title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-credentials-policy-sources, slice-26]
+    kind: idea
+    why: >
+      Charter step 2 plus q-52: approve shows exactly which credential kinds and host paths the
+      worker will receive and asks for yes at a real terminal. --fingerprint is refused, with a fix
+      naming the interactive form, for any grant that includes credentials (and, per slice-26, an
+      egress allowlist). The canonical approved-settings record gains the grants as a set of names,
+      kinds and paths and never contents. Adding, removing or repointing a grant invalidates an
+      existing approval, and run refuses with the change explained. Reordering does not. Offline
+      approvals keep their identity. Status shows grants without secrets. Records, presentation and
+      refusal only: nothing is delivered to a worker yet. It follows the policy slice for the
+      validated grants and slice-26 for the shared canonical record and refusal rule. Broken down
+      from p1-credentials-passed-in.
