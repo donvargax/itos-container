@@ -4,6 +4,8 @@
 This architecture is a hypothesis under the charter, not runtime isolation evidence.
 Acceptance did not settle every security mechanism. The decisions below distinguish
 what landed, what the person and coordinator settled, and what still needs specification.
+The egress design added by T-38 is **proposed**, not accepted: the person confirms or
+overturns it, as [the egress proxy record](../decisions/0022-egress-proxy.md) says.
 
 The [charter](../charter.md) selects the milestone from the binding
 [pilot contract](../plans/container-pilot.md); the [plan](../../PLAN.md) records that
@@ -76,10 +78,17 @@ mounts, remote engine or linked worktree. It provides no host-home, engine-socke
 SSH-agent forwarding, arbitrary engine flags or Docker-in-Docker. No missing input,
 unsupported setting or failed check can select an unrestricted fallback.
 
+Those limits are the offline run's and stay as written. The second milestone's egress
+profile is **proposed** and follows [the egress proxy record](../decisions/0022-egress-proxy.md):
+it adds one owned proxy and its networks, grants the worker no other route, and widens none
+of the worker's other limits. Nothing in it is implemented or proven.
+
 Work follows ports and in-memory fakes; agents have no Docker socket and real-engine
 scenarios run only in CI. Dependencies need a maintained library, a reason in the owning
-behaviour spec and a pinned version. This update records existing parser choices and
-adds no library or network service.
+behaviour spec and a pinned version. The one deliberate exception is q-51's: the egress
+proxy is our own code on Go's standard library with no dependencies, as the charter and
+[the record](../decisions/0022-egress-proxy.md) state. This update records existing parser
+choices and adds no library or network service.
 
 Preserve donvargax's attribution and the project's [AGPL-3.0 license](../../LICENSE) and
 [contributors record](../../CONTRIBUTORS.md). Permission to reuse the owner's itos and
@@ -129,7 +138,7 @@ The controller validates data crossing from the checkout; it must not execute th
 data. The worker cannot access host approval/recovery records, host credentials or
 engine control. The control arrow through the engine is trusted orchestration, not an
 API exposed to the worker. The mount is intentionally writable, so edits return to the
-checkout. No worker-to-network path exists in the required target, but the
+checkout. No worker-to-network path exists in the offline run's required target, but the
 accepted milestone limit above permits indirect access through host listeners
 created or swapped into the checkout after inspection.
 
@@ -138,11 +147,17 @@ host controller. `ITOS_ROOT` does not establish safe checkout identity; `ITOS_CO
 names core configuration, not `itos-container.yaml`. Inheriting host environment at
 dispatch does not authorize forwarding it to the worker.
 
-Proxy egress, guard/proxy infrastructure, accounts, network Git, LAN publishing,
-Compose services and other platforms are **deferred**. Do not create a guard, proxy
-or session network merely to reproduce the online pilot's topology. Init, lifecycle
-hooks and persistent worker project state are also deferred. Isolates, WASM,
-a restricted shell and a capability broker remain deferred research. Later pilot
+Accounts, network Git, LAN publishing, Compose services and other platforms are
+**deferred**, as are the pilot's mitmdump guard and its HTTPS inspection and SSH tunnel
+modes. Egress through an allowlisting proxy is the charter's second-milestone step 1 and is
+**proposed**: [the egress proxy record](../decisions/0022-egress-proxy.md) fixes its design,
+slice-25 to slice-28 and T-39 and T-40 would build it, and nothing of it is implemented.
+Its context differs from the diagram above only for a run whose approved policy lists host
+names: one owned proxy container, on its own egress network, reaches the listed names on
+port 443, and the worker, on an internal network with no gateway, reaches only that proxy.
+An offline run creates no proxy and no session network, and stays on `NetworkMode` `none`.
+Init, lifecycle hooks and persistent worker project state are also deferred. Isolates,
+WASM, a restricted shell and a capability broker remain deferred research. Later pilot
 components and experiments require their own authorization and specifications.
 
 ## Solution strategy
@@ -186,7 +201,7 @@ record schemas. Settled choices constrain them without proving their implementat
 
 | Building block | Status | Responsibility | Dependencies and contracts |
 | --- | --- | --- | --- |
-| `cmd/itos-container` | Implemented assembly root, including policy-only doctor and run refusals | Assemble commands, ports, concrete adapters and classifiers. Preserve version/completion infrastructure without turning it into container slices. | Existing count, doctor, run, policy, generic UI and version leaf; remaining wiring only as specified. |
+| `cmd/itos-container` | Implemented assembly root, including policy-only doctor and run refusals | Assemble commands, ports, concrete adapters and classifiers. Preserve version/completion infrastructure without turning it into container slices. | Existing count, doctor, run, policy, generic UI and version leaf; remaining wiring only as specified. Slice-27 would also bind the proposed egress adapter for the hidden `__egress-proxy` command. |
 | `internal/cli` | Implemented | Generic output/error rendering, flag rules and completion helpers. | No project imports; command model and classifiers supplied by `cmd`. |
 | `internal/version` | Implemented leaf | Build/version information. | No container responsibility. |
 | `internal/slices/count` | Implemented | Preserve counting behaviour and Files contract. | `command`, `domain`, `port`, `disk`, `input` siblings; `port/porttest` fake and shared contract are test support. Input's disk port is wired by `cmd`. |
@@ -204,6 +219,9 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/engine/approval` | Implemented by slice-4 | Effective host identity and UID/GID resolution, review/differences, recording, matching/supersession and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
 | `internal/engine/budget` | Implemented by slice-12 | Shared phase and finite-operation deadlines, late-result handling and retained handle lifetimes. | Context/time only; typed values in ports, policy in domain. |
 | `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, cross-project checkout admission, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
+| `internal/engine/egress` | **Proposed**, T-39; real-engine proof in slice-27/28 | Our own CONNECT proxy on Go's standard library: CONNECT head parsing, exact name and port 443 decision, address check, ClientHello peek, replay and splice, and one-line JSON refusal records. No TLS interception, library or `net/http`. | Own domain, port, adapter siblings and porttest fake; imports no other engine. Only its adapter may import `crypto/tls`. Fuzz tests cover head parsing and the peek. [Record](../decisions/0022-egress-proxy.md). |
+| `internal/slices/egressproxy` | **Proposed**, slice-27; command package only | The hidden `__egress-proxy` command the proxy container runs: a thin handler over the egress engine's port, with `cmd` binding its adapter. | No domain or port directory of its own; no network I/O in the command. Not a public command. |
+| Session networks and proxy (in `internal/engine/session`) | **Proposed**, T-40 | Create, verify, own and tear down the internal network, the egress network and the proxy container beside the worker, with durable intent before each and no fallback network. | Extends the session ports, fake and Docker adapter; ownership by durable intent, random name and inspected full ID, never labels alone. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
 or runtime permission. Doctor composes readiness and approval inspection; readiness
@@ -251,6 +269,7 @@ flowchart LR
     session --> manifest
     session --> readiness
     session --> approval
+    egress["egress (proposed, T-39): imports no other engine"]
 ```
 
 The [registry](../../tasks/work-items.yaml) records slice-1, slice-2, slice-3 and slice-5
@@ -278,6 +297,13 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | slice-11 — planned status/stop | slice-10 | Actionable recovery, controller-loss candidates, foreign/repeated/two-project cases and safe diagnostics; protected records, random hex IDs, per-session lock and mutation-time revalidation. |
 | slice-12 — budgets/cancellation/loss in progress | slice-11 | Calls 10 s, startup 120 s, teardown 30 s; reuse shared termination, forward once, 10 s grace, then SIGKILL; observed exit wins. |
 | slice-15 — active controller-loss isolation regression | slice-12 and slice-14 | LIFECYCLE-15 retains isolation until explicit stop, using slice-14's independent boundary probes. All eight steps passed at e22aa63; q-32 accepts slice-12's existing behavior as regression coverage. [Evidence and activation checks](../../features/README.md). |
+| T-38 — egress proxy record | Charter step 1 of the second milestone | [The egress proxy record](../decisions/0022-egress-proxy.md) fixes library (none: our own proxy, q-51), topology, delivery, failure closure and refusal log for T-39, T-40 and slices 26 to 28. Documentation only; no runtime evidence. |
+| slice-25 — proposed egress allowlist in policy | None | Exact host-name allowlist in `itos-container.yaml`, validated by doctor without an engine or proxy. Offline stays the default. |
+| slice-26 — proposed approval of the allowlist | slice-25 | Approval binds the allowlist and the network-granting profile; approve presents the handshake guarantee. Who may approve a sandbox that grants network stays with `p3-approval-before-egress`. |
+| T-39 — proposed egress engine | T-38 | `internal/engine/egress`: domain, port, adapter and fake, its depguard rule and fixture, and fuzz tests, all driven over loopback listeners without Docker. |
+| T-40 — proposed session networks and proxy | T-38 | Session ports, fake and Docker adapter gain the two networks and the proxy container, with creation order, teardown and recovery as the record fixes them. |
+| slice-27 — proposed run through the proxy | slice-26, T-39, T-40; the record also names `p1-acceptance-static-binary` | `internal/slices/egressproxy`, the hidden `__egress-proxy` command, the static harness build, and the real-engine scenarios, in CI only, that prove the topology, DNS and address rules. It edits `docs/security.md`. |
+| slice-28 — proposed refusal log, failure stop and cleanup | slice-27 | The streaming writer for `egress-refusals.jsonl`, status and cleanup of the proxy and networks, and the proxy-failure scenarios (AC-17, AC-23 and AC-36), in CI only. |
 
 The coordinator accepted the slice-10/13/14 scenario split on 2026-11-06.
 [The offline feature](../../features/offline.feature) is the scenario ownership
@@ -622,6 +648,51 @@ There is no detached lifetime or unattended restart. Preserve the future exec in
 primary exit refuses new exec and tears down active exec commands without extending
 lifetime. Exec implementation remains deferred.
 
+### Egress run
+
+**Proposed**, for a run whose approved policy lists host names; nothing here is built,
+and every claim awaits slice-27 and slice-28 evidence on the real engine, in CI. An offline
+run keeps the sequence above with `NetworkMode` `none`, no proxy and no network. The reasons
+and measurements are in [the egress proxy record](../decisions/0022-egress-proxy.md).
+
+1. **Create, in order.** The checkout pin, its socket scan and the anchor come first, so a
+   refused checkout starts no proxy. Then the internal network (Internal true, IPv6 off,
+   `com.docker.network.bridge.gateway_mode_ipv4=isolated`, which needs Docker 28.0), the
+   egress network, and the proxy, each with durable intent before it. The proxy joins both
+   networks, publishes no port and runs the host's own static itos-container executable,
+   bind-mounted read-only, as the hidden `__egress-proxy` command over an inert, digest-pinned
+   root filesystem. Run verifies the networks (internal, IPv6-off, isolated, no IPAM
+   gateway) and the proxy (exact Cmd and Env, `net.ipv4.ip_forward=0`) by inspect before
+   starting it.
+2. **Ready, then the worker.** The proxy prints one `ready` record only after validating the
+   list and listening; the controller reads it inside the existing 120 s startup budget.
+   Only then is the worker created, on the internal network alone, with the proxy's literal
+   address in `HTTP_PROXY`, `HTTPS_PROXY` and their lowercase forms and `NO_PROXY` set to
+   loopback. The variables help cooperating clients; the worker's closure rests on its having
+   no route, not on them.
+3. **Each connection.** The proxy reads a CONNECT head, admits only a listed name on port
+   443, dials with every address checked against the special-purpose table, answers 200,
+   reads the first ClientHello without completing a handshake, requires its SNI to equal
+   the CONNECT name (a missing SNI, ECH and non-TLS bytes are refused), replays those bytes
+   upstream untouched and splices both ways. It holds no CA, certificate or key. It cannot
+   see the HTTP Host or anything after that hello.
+4. **Failure closes; there is no fallback network.** A missing ready, a proxy exit or an
+   unverifiable resource creates no worker. The proxy recovers no panic and ends on an
+   Accept error, a failed write to its stdout or the 20,000th refusal (`log-full`). During a
+   run the controller also waits on the proxy, and its exit is a typed failure: the worker
+   gets the existing termination, an observed exit keeps its precedence and run returns
+   nonzero. Nothing reconnects the worker or restarts the proxy. Under A3 a lost controller leaves
+   both running under the frozen list until stop.
+5. **Teardown reverses creation.** The worker, then stop the proxy and confirm it has
+   exited, then copy its refusal log to `sessions/<lookup>/<id>/egress-refusals.jsonl`
+   under the protected state root, then remove the proxy, the egress network, the internal
+   network and the anchor. A failed step keeps its recovery record and exact retry, and a
+   failed copy keeps the stopped proxy and its log. Removal is authorized by durable intent
+   and the inspected full ID, never by labels or names alone.
+
+The refusal log is described under Cross-cutting concepts. Offline recovery, status and stop
+keep the rules above; slice-28 extends them to the proxy and the networks.
+
 ## Deployment view
 
 The selected slice-17 anchor uses the already trusted native dockerd to perform
@@ -643,7 +714,9 @@ settings require independent runtime probes; inspecting a flag cannot prove enfo
 | Local engine image store | Approved cached manifest digest, checked for architecture, compatibility and metadata. | The person pulls the manifest's digest and approval binds that content. Control commands inspect, never pull/build/substitute, keeping acquisition a deliberate host operation. Slice-3 owns checks; T-20 owns fixture preparation. |
 | Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces, engine/SSH-agent sockets or host credentials. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Slice-10 still owes runtime proof. |
 | Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its sole nonrecursive bind source. | No persistent worker volumes/caches/profiles, host `/tmp`, extra host bind mount or host-wide chown. A2 narrows broader pilot state to this milestone. |
-| Worker network boundary | `NetworkMode` `none`, inspected before start; no external network path or published port from the first instruction. | Independent network/DNS probes must prove denial through controller loss. No proxy, guard or session network. |
+| Worker network boundary, offline run | `NetworkMode` `none`, inspected before start; no external network path or published port from the first instruction. | Independent network/DNS probes must prove denial through controller loss. An offline run has no proxy, guard or session network; `NetworkMode` `none` is confined to offline runs. |
+| Session networks, egress run (**proposed**, T-40) | Two owned per-session bridge networks. The internal one has Internal true, IPv6 off and `com.docker.network.bridge.gateway_mode_ipv4=isolated`, so its bridge has no address; the worker joins it alone. The egress one is a plain bridge with IPv6 off and only the proxy on it. | Docker 28.0 or newer, else an unavailable control. Docker's embedded resolver at 127.0.0.11 stays, with no route behind it; AC-11 is the result to prove (q-50, provisional). Nothing is proven until slice-27 runs on the real engine. |
+| Egress proxy container (**proposed**, T-40 and slice-27) | Runs the host's own static Linux amd64 itos-container executable as `__egress-proxy`; that read-only bind mount is its only mount. Both networks, no published port, listening on 3128, forwarding sysctl off. The root filesystem is the inert pinned busybox. Host UID/GID, read-only root, CapDrop ALL, no-new-privileges, pids limit 4096, no restart, no checkout, state volume or socket. | The person pulls the image; commands only inspect it, and approval binds its digest. Platforms other than Linux amd64 cannot run egress this way. The worker cannot reach the executable, Cmd or Env. Refusal records land in the json-file log and, at teardown, in `egress-refusals.jsonl`. |
 | Disposable CI runtime environment | Prepared trusted test images, disposable checkouts/state, controlled probes and independent engine observations. | T-16 implemented the guarded engine tier, separate from socket-free agent work. T-20 still owns images; there are no live runtime cases. No valuable credentials or checkout-controlled host setup. |
 
 Engine access in CI does not extend to the coding agent. Local domain/contract tests
@@ -734,13 +807,34 @@ even in a completed cleanup tombstone. This records delivery failure without
 changing resource absence or the authoritative workload exit. Open security
 choices follow the charter stop rule, not a blanket reopening of settled limits.
 
+**Refusal log (proposed).** The egress proxy writes one JSON object per line on stdout, at
+most 2 KiB each: schema 1, a per-process `seq`, time, and an event of `ready`, `refused`,
+`upstream-failed` or `log-full`, with method, target, port and a reason only on the two
+failure events. Target and port appear only for a plain host and a one-to-five-digit port; nothing else of the
+request is written, and never URL paths or queries, userinfo, headers, bodies, the hello's
+SNI or client addresses. An allowed tunnel writes nothing. A failed write to the proxy's
+stdout ends the proxy; a failure of dockerd's json-file store behind that write is not
+visible to it. During the run the log is the proxy's json-file log; at teardown the
+controller copies every record but `ready` to `egress-refusals.jsonl` under the protected
+session directory, with a streaming writer slice-28 adds, and a gap in `seq` is a reported
+failure. A lost tail is not detectable (a disk full to teardown, or the copier cut off at
+10 s), so the count status shows is the records stored, not a proof that every refusal is
+in it; approve, status and `docs/security.md` say so (slice-26 and slice-27), and closing
+that gap is an open decision for the person. The proxy stops after 20,000 records. Retention across sessions is open
+(`p3-session-state-retention`). See [the record](../decisions/0022-egress-proxy.md).
+
 **Dependencies and platforms.** Owning behaviour specs choose maintained libraries,
 record reasons and pin versions before adapters are implemented. Policy's v4 selection
 and tooling's v3 pin are settled; manifest and Docker-client choices belong to slices
-2 and 3. Pass the OS as a value to OS-dependent logic; do not branch on `runtime.GOOS`
-inside it. Build tags hold only an
-unavailable OS call, with no mutation site, under the existing architecture rules.
-Fakes perform no I/O and runtime scenarios remain CI-only.
+2 and 3. The one deliberate exception is q-51's: the egress proxy is our own code on Go's
+standard library, with no dependency and no interception code anywhere in the tree; if TLS
+interception is ever wanted, the charter moves the proxy to a repository of its own first.
+Only the egress adapter may import `crypto/tls`, under a depguard rule T-39 adds, and
+`crypto/x509` nowhere. Egress delivery needs the host's own static Linux amd64 executable,
+so other platforms cannot run it this way. Pass the OS as a value to OS-dependent logic;
+do not branch on `runtime.GOOS` inside it. Build tags hold only an unavailable OS call,
+with no mutation site, under the existing architecture rules. Fakes perform no I/O and
+runtime scenarios remain CI-only.
 
 ## Decisions
 
@@ -756,7 +850,8 @@ Fakes perform no I/O and runtime scenarios remain CI-only.
 | A3 | Person's settled controller-loss choice | Leave worker isolated until stop; status identifies lost-controller sessions as candidates. No watchdog, immediate cleanup, restart or invented child exit. |
 | A4 | Person's settled resource choice | Pids limit 4096, no memory or CPU quota claim; distinct from parser and CI budgets. |
 | Effective UID and host UID/GID | Settled loop choice; specified in slice-4, consumed by slices 8/10 | Refuse root; resolve omissions to effective host UID, override image user and require manifest equality without chown. [Allocation decision](../decisions/0003-approval-identity-and-frozen-input.md) supersedes slices 3/8 as resolver owners. |
-| Image acquisition and offline boundary | Settled loop choice; T-20 and slices 3/4/10 | Person pulls manifest digest; commands inspect cached content and approval binds it. NetworkMode none is inspected before start and must be proven by network/DNS probes from first instruction through loss, without a guard/proxy/session network. |
+| Image acquisition and offline boundary | Settled loop choice; T-20 and slices 3/4/10 | Person pulls manifest digest; commands inspect cached content and approval binds it. NetworkMode none is inspected before start and must be proven by network/DNS probes from first instruction through loss, without a guard/proxy/session network in an offline run. |
+| [Egress proxy record (T-38)](../decisions/0022-egress-proxy.md) | **Proposed**; rests on q-51 (the person: our own proxy on the standard library) and q-49 (taken up by q-51 and the charter), with q-50 still provisional for the person's review. Its topology, delivery and contract readings are its own decisions, for the person to confirm or overturn | Fixes the proxy's flow, parsing and address rule, the ClientHello check, the two networks, delivery as the host's own executable through `__egress-proxy`, failure closure, teardown and the refusal log. Supersedes the contract's mitmdump, inspection-per-destination, blocking-experiment and embedded-DNS wording, which the record lists. Settles no approver for a sandbox that grants network (`p3-approval-before-egress`). |
 | Durable create intent | Settled loop choice; slice-9 | fsync before unstarted create; reconcile lost response by trusted record plus random name, then record concrete identity before execution. Close the untracked window; names/labels alone confer no authority. |
 | Budgets and signal escalation | Settled loop choice; slice-12 | Calls 10 s, startup 120 s, teardown 30 s without resetting totals; forward once, 10 s grace, SIGKILL, observed exit wins. Bound controller transitions without imposing workload lifetime. |
 | Recovery placement and serialization | Settled loop choice, implemented by slice-11 | [Public session recovery](../decisions/0010-public-session-recovery.md) specifies 32-byte random IDs, strict referenced records, separate controller/operation descriptor locks, bounded observation and durable cleanup. Native support still requires CI evidence. |
@@ -786,6 +881,7 @@ The table maps required evidence to the current gates and the work still absent.
 | Literal argv and verified-before-launch ordering | T-11 argv and explicit-shell cases; AC-21. Slice-7 local refusals plus fake sequencing; actual execution in CI. | No run implementation. Unknown-command errors are not the specified refusal. AC-42 lifecycle hooks are deferred. |
 | Durable ownership, bounded cleanup and independent projects | T-11 write-failure, uncertain-create, cancellation, repeated/foreign stop and two-project cases; AC-06/22/23/28 offline portions. | Settled intent/recovery/budget/signal choices need slice-9/11/12 implementation and proof; remaining details stay with those specs. |
 | Safe diagnostics and honest outcomes | Synthetic marker exclusion and unknown/zero/nonzero outcome cases; AC-22/36 offline portions, with foreground streams captured separately. | No controller/recovery implementation; no credential-scan claim. |
+| Egress through the proxy (**proposed**) | AC-09 to AC-14, AC-16 to AC-18, AC-23 and AC-36, owned by slice-27 and slice-28 with the real-engine cases in CI only; T-39's loopback, contract and fuzz tests for the proxy itself. Fake endpoints and positive controls pair every denied probe. | **Unproven.** No scenario, engine run or support claim exists; AC-15, AC-19 and AC-20 (inspection and SSH tunnel) are deferred. AC-11 on the embedded resolver must pass on the real engine or the topology reopens. |
 | Package dependency boundaries | Depguard and structural `architecture-check`; compile-first [fixtures](../../tools/testdata/architecture) for enforcement-input changes. | Implemented T-14 gates, not isolation proof. Ordinary code takes the cheap structural check. |
 | Domain correctness and contract fidelity | I/O-free fakes and shared contracts against fakes/adapters; unit/property tests and [per-domain coverage](../../tools/bin/domain-coverage), 80% per domain including nested domains. | Count and policy/doctor evidence exists. Product adapters still need their own tests; porttest fakes never do I/O. |
 | Docker-client adapter mapping and failures without Docker | Slice-3's HTTP Engine API fixture, controlled responses/errors and transport failures, tested beside the real adapter; shared contracts wherever applicable. | Required test support, not a product endpoint or domain fake. Needed for engine-disabled ordinary CI coverage/mutation; not runtime enforcement proof. |
@@ -855,13 +951,18 @@ with no red input. The failed dispatch is never a merge/closure prerequisite or 
 
 T-16 implemented the engine-test tier. [features/README.md](../../features/README.md)
 is its operational authority: ordinary, smoke, coverage and mutation runs exclude
-`@engine`. The dedicated `Engine scenarios (Linux amd64)` CI job enables
+`@engine`. The dedicated engine tier runs in three engine shards
+([T-45's decision](../decisions/0024-engine-tier-shards.md)): a matrix of the
+`engine-shard` job, each shard a native runner and daemon of whole feature files
+(offline, lifecycle and other) with a 180-second step budget, and no feature split. The
+`Engine scenarios (Linux amd64)` job only aggregates them: it needs the shards alone and
+fails unless every shard succeeded, and `ci` requires its success. Each shard enables
 `ITOS_CONTAINER_ENGINE_TESTS=1` only under the guarded Linux amd64 GitHub Actions
-context; ordinary runs never enable it, and `ci` requires that job's success. Its
-read-only preflight acquires no images and starts no resources. No live engine cases
-means infrastructure readiness, not isolation proof or fixture-image availability.
-T-20 implements fixture preparation in that guarded CI job, including output wiring
-and cleanup; availability depends on successful preparation for that run. `@wip` alone
+context and takes its files from `ITOS_CONTAINER_ENGINE_FEATURES`; ordinary runs never
+enable either. Its read-only preflight acquires no images and starts no resources. No live
+engine cases means infrastructure readiness, not isolation proof or fixture-image
+availability. T-20 implements fixture preparation in each guarded shard, including output
+wiring and cleanup; availability depends on successful preparation for that run. `@wip` alone
 is not an engine-access boundary. This update
 adds no cases or runtime evidence and changes no gates. Agents commit and stop; only the
 coordinating loop pushes, verifies the actual pushed head and its required proof, and
@@ -886,8 +987,9 @@ mechanism. Deferred categories remain outside this milestone.
 | Exact temporary-location mapping and independent enforcement probes | slice-14, consuming slice-2/3/8/10 | Prove host UID/GID, checkout-only host mount, read-only root, tmpfs, pids 4096 and NetworkMode none. No persistent worker state, memory/CPU quota claim, proxy or new network topology. |
 | Intent/resource record schema and uncertain-create protocol details | slice-9 | Implement fsynced pre-create intent, unstarted create and reconciliation by trusted record plus random name. Concrete identity precedes execution; labels/names alone cannot authorize cleanup. |
 | Recovery totals, retry accounting, stream backpressure and remaining cancellation/result mappings | slice-11/12 | Bounded recovery and honest outcomes. Calls/startup/teardown 10/120/30 s and once-forwarded signal, 10 s grace, SIGKILL are settled; observed exit wins. No workload lifetime limit or new signal code selected here. |
-| Guard/proxy topology and fail-closed addon/runtime failures | Person through later approved-egress experiment/spec — deferred | Online egress only; not a reason to add a guard or session network to offline run. |
-| TLS inspection/passthrough handshake guarantees, unverifiable clients, trust and downgrade refusal | Person through later proxy/TLS spec — deferred | Online destination modes and truthful authority guarantees; no mode chosen here. |
+| Egress topology, delivery and fail-closed handling | Proposed in [the egress proxy record](../decisions/0022-egress-proxy.md); the person confirms or overturns it, and slice-27 and slice-28 prove it on the real engine | The egress profile only; not a reason to add a proxy or session network to an offline run. Unproven until those slices pass in CI. |
+| Who may approve a sandbox that grants network or credentials | `p3-approval-before-egress` | The record settles no approver. Approval still records what, not who. |
+| Passthrough handshake guarantee: the record settles the proxy's ClientHello check; whether Codex and Claude Code send SNI without ECH is not yet known | The person's smoke check; slice-26 and slice-27 disclose the limit in approve, status and `docs/security.md` | Real-harness egress. TLS interception, inspection and SSH tunnel modes stay deferred, and if interception is ever wanted the proxy first moves to a repository of its own. |
 | Minimal auth provisioning/refresh, account management, callbacks, revocation/deletion and CA/SSH-key rotation | Person through later credential lifecycle specs and explicit live-account consent — deferred | Accounts, network Git and credential-bearing work; no generic host shell/HTTP bridge. |
 | Pinned client/tool versions, download destinations, redirect chains and TLS compatibility | Person through later worker/download specs — deferred | Online dependency/tool workflows; installer metadata cannot grant destinations. |
 | Failed Actions-log redirects: narrow destination approval or reviewed run/artifact-specific retrieval | Person through later CI-log retrieval spec — deferred | Online failed-CI inspection; generic host fetching remains excluded. |

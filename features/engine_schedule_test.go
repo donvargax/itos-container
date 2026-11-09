@@ -28,6 +28,7 @@ func runFeatureScenarios(selection scenarioSelection, options godog.Options, ini
 
 func runScheduledScenarios(selection scenarioSelection, options godog.Options, initialize func(*godog.ScenarioContext, func())) int {
 	plain := func(sc *godog.ScenarioContext) { initialize(sc, nil) }
+	options = selection.scope(options)
 	const escalation = "@ID-LIFECYCLE-09"
 	if !selection.engine || selection.red || selection.skip != "" ||
 		!slices.Contains(selection.ids, escalation) || !slices.Contains(selection.ids, "@ID-LIFECYCLE-13") {
