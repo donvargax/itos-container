@@ -71,6 +71,17 @@ value printed by doctor. State uses canonical JSON SHA-256 under absolute
 when XDG_STATE_HOME is absent or empty. A relative nonempty XDG_STATE_HOME refuses.
 Managed directories are owned mode 0700 and records mode 0600. One active generation
 supersedes the previous approval; an old historical record cannot authorize a run.
+Independently of that selection, the first approve or run also creates one fixed account
+anchor, `<account home>/.local/state/itos-container`, even when XDG_STATE_HOME is set. Its
+`coordination` directory (mode 0700) holds the private `control.lock` (mode 0600) and a
+catalog of every state location selected on the account, so commands keep one common
+exclusion across HOME and XDG_STATE_HOME choices. The account home is the home field of
+the effective UID's local `/etc/passwd` record, never HOME, USER or LOGNAME. The home must
+be owned by that user and not writable by others; it may be mode 0755 or 0750. An account
+with no local `/etc/passwd` record, such as one served only by LDAP or SSSD, cannot use
+doctor, approve or run: they refuse with `approval.state.unavailable` (exit 3, and
+`run.approval-invalid` for run). Doctor never creates the anchor; its policy-only and
+manifest-only modes never read it.
 The effective UID supplies host identity, independently of HOME or user environment.
 
 
