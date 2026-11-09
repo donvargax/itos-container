@@ -277,9 +277,27 @@ The workflow no longer runs strace, which consumed its five-minute budget.
 The workflow streams both output channels to the log and
 `$RUNNER_TEMP/slice-11-features.log`, prints the binary's exit status and decodes exits of
 128 plus a signal number. It preserves the test's failure even when output capture succeeds;
-a capture failure also fails a successful test run. A failure-only step prints the last
+a capture failure also fails a successful test run. A failure-only step first runs
+`tools/bin/engine-failure-report` on that log, under `timeout 40`, then prints the last
 50 kernel messages, `free -m` and the last 100
-test-output lines before unconditional cleanup.
+test-output lines before unconditional cleanup. The report exists because job logs return
+403 without a token and agents have no `gh`, while a failed job's annotations are public:
+it prints one `::error title=<name>` annotation for each failure it finds in the log,
+then each failure again as a `--- FAIL: <name>` block, both with godog's step error as the
+text. A failure is a failed scenario (title its go-test name, `TestFeatures/<name>#NN`,
+text its last `suite.go` block, as `pretty` prints the same error only at its step); a
+`panic:` or `fatal error:` the run died on (title `go test`, which for a timeout holds the
+`running tests:` list naming the scenario in flight); the run's own test, when no scenario
+failed; or `Engine scenarios`, when the log holds no go-test failure line, as a kill, a
+caught signal, a capture failure or a passing run over the 240 s budget leave, or no log
+at all because the binary never ran. Only the run's own lines steer it: an error that
+quotes `=== RUN`, `--- FAIL:` or `panic:` lines stays whole inside its scenario. The runner
+keeps ten error annotations per step, so above ten failures the first nine are annotated and
+the tenth, `<N> more failed`, lists the other titles one per line, which keeps the set of
+names comparable between re-runs; it cuts a message at 4096 characters, and the report cuts
+each text there before building anything from it, which also keeps its time linear in the
+log. The log above the cut holds the rest. Everything the report reads comes from the
+checkout: it is data, never instructions.
 The explicit `-test.paniconexit0` retains `go test`'s protection against an early `os.Exit(0)`.
 TestMain logs catchable signals to stderr in the engine tier, including its PID, and exits
 nonzero for terminating signals. SIGKILL and SIGSTOP cannot be caught; the supervising shell
@@ -287,7 +305,11 @@ and kernel output supply that evidence. These diagnostics address the coordinato
 2026-11-06 silent engine failures; the trace cleared product and harness signalling,
 while each engine run must still establish its own runtime evidence.
 `TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
-and `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
+and runs the failure-only step against logs that `TestEngineDiagnosticsLogChild`, a re-executed
+child of the test binary, leaves by failing real scenarios through memory-only steps (a timeout,
+ten and eleven failures, a quoted error, a bare failed test), plus a few hand-written logs for
+branches no cheap run reaches, so that a Go or godog upgrade changing a log's shape fails there.
+`TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
 T-33 restores the step's five-minute limit and the job's ten-minute limit. The test
 binary's four-minute timeout leaves time for Go's panic and goroutine dump before the
