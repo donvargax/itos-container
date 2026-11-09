@@ -5434,24 +5434,414 @@
   type: docs
   title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
   why: >
-    Charter milestone two step 2 fixes the shape (Claude token from a host file, Codex auth.json
-    bind-mounted read-write as one file plus its lock file, a GitHub token for gh, all passed per
-    command, never in container configuration, docker inspect or the checkout). The mechanism,
-    though, is open: with no exec command and a workload that may be the container's main process,
-    how does a secret reach the worker without entering the create config? Candidates are a
-    pre-start archive copy, stdin handoff and an exec-time environment. The record is documentation
-    only, like T-38 and 0022. It settles the policy keys that name a credential source, the
-    host-file checks (regular file, owner, mode, outside the checkout and every mount), the
-    in-worker names and paths, redaction in status and logs, what the approval record binds and
-    shows (names and kinds, never contents), the refusal of --fingerprint for any credential grant
-    per q-52, and the synthetic-marker test approach. It states plainly what stays open for the
-    person (refresh ownership and revocation, deletion, the GitHub token's scope, and the contract's
-    rule that account-management contracts are settled before real credentials are used) and asks
-    through itos decision rather than inventing protections. It updates the arc42 sections it
-    overrides under the charter's drift rule. Later items take their design from it. Broken down
-    from p1-credentials-passed-in.
+    Charter milestone two, step 2: credentials passed in, never injected and never in the checkout,
+    per command, so that they never appear in the container's configuration or docker inspect;
+    Claude's long-lived token from a host file the person keeps; Codex sharing the host's own login,
+    its auth.json bind-mounted read-write as one file under the charter's now-stale premise that
+    Codex rewrites it in place, plus its lock file when the host has one; a GitHub token for gh and
+    pushes, passed the same way. The workload is the worker's main process and there is no exec
+    command, so how a secret reaches it without entering the create configuration is open, and
+    slice-29 to slice-33 and T-48 need that and the rest fixed before any code. This entry holds
+    every decision. The implementer writes them as one record,
+    docs/decisions/0025-credentials-passed-in.md (the next free number with that name if
+    another record takes 0025 first: slice-21 holds 0021 and slice-25 0023 on their branches, and
+    slice-26's implementation records one too), and updates docs/architecture/arc42.md. This is
+    documentation only, like T-38: no code, dependency, scenario, step definition, workflow or
+    engine run, and nothing here is runtime evidence or a support claim. Read the charter, the
+    contract's "Credentials and Git", "Approval and session state", "Decisions still open" and
+    acceptance matrix (AC-29 to AC-31, AC-36), arc42, docs/decisions/0022-egress-proxy.md,
+    docs/CONFIG.md's rules 6, 7 and 12, q-52, slice-26's spec on its branch
+    (features/approval.feature), and slice-29 to slice-33 and T-48. PLAN.md, README.md and
+    docs/ORCHESTRATING.md still call credentials out of scope; the charter governs and their edit is
+    not this item's, so that wording is no reason to stop. Broken down from
+    p1-credentials-passed-in.
+
+    Codex first, because the charter's shape for it cannot work as stated with today's Codex, and
+    this record decides nothing in its place. Codex rewrote auth.json in place (OpenOptions with
+    truncate, mode 0600) until openai/codex commit 582a8812e023b08cbf10b4603ac41644b8d99261 of
+    2026-10-30 (#58251, which "replaces auth.json atomically"), and the latest release,
+    rust-v0.167.0 of 2026-11-06, contains it: FileAuthStorage::save in
+    codex-rs/login/src/auth/storage.rs now writes a temporary file beside the target and renames it
+    over auth.json, and storage_file.rs follows symlinks and refuses a hard-linked or read-only
+    target. Its write lock is auth.lock in CODEX_HOME, opened without truncating and locked, never
+    renamed. All of this was read on GitHub at that tag and at the commit's parent, c15d0ce, not
+    run. With auth.json bind-mounted as a single file, that rename targets a mount point, which the
+    kernel refuses with EBUSY (vfs_rename in fs/namei.c), so the worker cannot keep a refreshed
+    login; and once the host's own Codex renames a new file into place, the worker's mount keeps the
+    old inode, so each side holds a login the other never sees. Only the lock file would still work
+    as a single-file mount. The record states this, defines no Codex kind and no Codex delivery, and
+    asks the person (question 1 below); slice-32 and the bind-mounted-file half of T-48 wait for the
+    answer.
+
+    The two token kinds reach the worker as read-only single-file bind mounts of staged copies,
+    which is this record's own decision, for the person to confirm or overturn. For each approved
+    grant, run reads the source once, through the descriptor that passed the checks below, and
+    writes exactly those bytes, untrimmed, to a new file of mode 0400 (O_CREAT, O_EXCL, O_NOFOLLOW)
+    in a staging directory it makes for that run under /dev/shm: itos-container- followed by 32
+    random lowercase hexadecimal digits, mode 0700, owned by the host UID and validated by
+    descriptor after mkdir as q-35's coordination directory is, except that an existing name
+    refuses. /dev/shm is a tmpfs on every Linux host Docker runs on, so a copy reaches no disk
+    unless the host swaps, and statfs must confirm it is one or delivery is unavailable;
+    XDG_RUNTIME_DIR is not always set, and the protected state root is on disk. No worker reaches
+    the host's /dev/shm: each has its own (IpcMode private) and sees only its own staged files,
+    bound in. Durable intent names the directory before it exists. The worker is created with one
+    bind mount per grant (HostConfig.Mounts, type bind, read-only, source the staged file, target
+    the kind's fixed path below); Docker checks at create that each source exists and binds it at
+    start, so the file must exist until then. VerifyRun checks by inspect before start that the
+    mounts are exactly today's checkout volume and /tmp tmpfs (safeHost and safeMounts in
+    internal/engine/session/docker/run.go) plus those binds, each with its exact source, target and
+    read-only flag. After the controller's start wait returns and any applicable existing mount
+    detector has run, whatever either answered, run attempts to unlink every staged file and remove
+    the directory, recording absence only after it is confirmed. Unlink removes a pathname, not an
+    acquired mount or open reference: a runtime that has already opened or bound the file can still
+    complete a delayed start with those bytes. Neither unlink, restart policy no, a start error or timeout,
+    nor a lost start acknowledgement proves that no workload ran. An uncertain start follows the
+    existing reconciliation and owned-cleanup contract in features/lifecycle.feature and decision
+    0017: retain the original protected identity, do not retry start, reconcile the owned full ID
+    under the existing budgets and attempt owned termination/removal. Keep an unobserved workload
+    outcome unknown; staging-path absence is not worker absence or completed credential cleanup.
+    Completion needs confirmed owned-worker removal and staged-path removal; an unavailable
+    observation or incomplete cleanup keeps the recovery record and exact stop retry. The acquired
+    copy remains accessible to the worker until its mount is torn down; no restart is authorized.
+    docker inspect and the create configuration show the staged source path and target, never a
+    value. Checks, reads, staging, create and verification failures before any start attempt
+    prevent launch and enter owned cleanup as needed. Once start may have been accepted, a refusal
+    cannot claim nothing ran. A controller lost before unlink leaves the staged path until stop,
+    which removes it by the intent's name after checking its owner and mode and that it holds only
+    the expected names, and otherwise refuses and keeps recovery with its exact retry. A reboot
+    clears /dev/shm too, but does not establish a prior workload outcome. This reads "per command"
+    as each run reading the current sources when it starts and dropping its copies with its worker,
+    keeping nothing between runs and nothing in an image, a volume or the checkout. It assumes
+    rootful dockerd in the host's mount namespace, as slice-17's anchor does.
+
+    Rejected, each read in source and not run. A pre-start archive copy (PUT
+    /containers/{id}/archive): moby's checkWritablePath (daemon/archive_unix.go) accepts only a
+    writable entry of the container's MountPoints, which HostConfig.Tmpfs's /tmp is not, and
+    otherwise refuses a read-only root ("container rootfs is marked read-only"); a tmpfs given as a
+    Mounts entry exists only once the container runs, so a copy made before start cannot land in
+    it; a tmpfs-typed local volume is unmounted and emptied when its last user unmounts (Unmount in
+    daemon/volume/local/local.go), which happens between the copy and start; only a disk-backed
+    volume keeps the copy, which puts the token on disk under Docker's data root until teardown or
+    stop, needs a worker mount Docker can write, and adds an owned resource with intent and
+    recovery. A stdin handoff: the workload is the literal argv, so an init of ours would have to
+    read the frame first, which needs the host's executable mounted into the worker (decision 0020
+    calls such a gate a forbidden extra mount in milestone one; charter step 5 brings one later for
+    Landlock), and under step 4's TTY the pty echoes the frame into the output stream before
+    anything can turn echo off. An exec-time environment: an exec's Env stays out of container
+    inspect and of exec inspect (ProcessConfig has no Env in the pinned moby API v1.56.1 types), but
+    an exec needs a running container whose main process is something else, and run rests on the
+    workload being that main process: its wait, its signals (ContainerKill reaches PID 1 and no
+    endpoint signals an exec), its exit status and its isolation after controller loss, built and
+    proven by slice-10 to slice-17. The deferred exec command inherits the session's mounts, so it
+    needs no delivery of its own. A direct read-only bind of the source: no copy, but it mounts the
+    source, which the contract's Authentication row forbids ("Do not mount the sources directly"),
+    puts the person's path in docker inspect, shows the worker later edits and binds whatever the
+    path names at start, not the inode checked. A descriptor as the source (/proc/<pid>/fd/<n>, as
+    slice-17's anchor uses): the anchor works because dockerd's local volume driver binds in the
+    host's mount namespace, onto a directory, which a file cannot be bound onto (ENOTDIR); a bind
+    mount is made by the runtime in the worker's new mount namespace, where the kernel refuses a
+    source that resolves into another namespace's mount (may_copy_tree in fs/namespace.c).
+
+    In the worker, kind claude-token is /run/itos-container/credentials/claude-token and kind
+    github-token is /run/itos-container/credentials/github-token, each a read-only regular file of
+    the host UID, mode 0400, whose mount point the runtime creates in the root filesystem before
+    making it read-only, as for /tmp; the approved image is trusted for that path as for /tmp
+    (contract, "Goal and limits"). No environment variable is set, since the create
+    configuration's Env would show its value. Claude Code reads a long-lived token from
+    CLAUDE_CODE_OAUTH_TOKEN, which claude setup-token generates, and ignores it in project settings
+    (code.claude.com/docs/en/env-vars); gh reads GH_TOKEN (gh help environment); neither documents a
+    file form. So the person's argv exports each from its file, for example sh -c
+    'CLAUDE_CODE_OAUTH_TOKEN="$(cat /run/itos-container/credentials/claude-token)" exec claude -p
+    "$1"' sh <task>. The manifest already reserves the CLAUDE_, GH_ and GITHUB_ prefixes, so a
+    checkout cannot set or shadow those names. Exporting them for the workload is left to step 3
+    (p1-harness-home) and step 5's init if their specs choose it; this record fixes only the files.
+
+    The policy requests grants in a new version, since a new key needs one (docs/CONFIG.md rule 7):
+    version 3 is slice-25's version 2 (decision 0023, on its branch) plus an optional top-level
+    credentials list, and versions 1 and 2 keep their meaning and refuse the key as unknown. Each
+    entry is a closed object of exactly kind and source. kind is claude-token or github-token,
+    compared exactly and never case folded, each at most once. source is the absolute host path of
+    the file the person keeps, written literally with no ~, variable or expansion (rule 6), slash
+    separated, at most 4096 bytes, with no empty, dot or dot-dot component, no trailing slash, no
+    backslash and no ASCII control. Absent means no grants; an empty list is refused, as slice-25
+    refuses an empty allowlist, so a file never carries a section that grants nothing. Entries keep
+    their written order for diagnostics and are a set keyed by kind everywhere else. A valid file
+    reads nothing on the host. Problems are located at /credentials/<index>/kind or /source and
+    collected as in version 1, never echoing a rejected value. slice-29 names the rule IDs and owns
+    the version 3 schema beside version 2's and the edits to docs/CONFIG.md and docs/CLI.md. A Codex
+    kind is defined only once question 1 is answered, by that answer's spec, which also says whether
+    it needs version 4; until then version 3 refuses one as an unknown kind.
+
+    The host-file checks, which doctor, approve and run share through one observation in readiness,
+    beside slice-20's checkout scan, and which never read contents, in this order for each grant:
+    open the source with O_PATH and O_NOFOLLOW at every component, so a symbolic link anywhere in
+    the path is refused (openat2 with RESOLVE_NO_SYMLINKS, or a component walk); every ancestor
+    directory owned by root or the host UID and not writable by group or other unless it is
+    root-owned and sticky, the rule that directory() in internal/engine/approval/disk/store.go
+    applies to the state root's ancestors; neither the file nor any ancestor the checkout root or
+    the protected state root, compared by device and inode, so an alias of the checkout through
+    another host mount is refused too; the file regular, owned by the host UID, with no group or
+    other permission bits, one link (a second name could expose or replace it, the checkout's
+    included), and 1 to 65536 bytes; and no two grants naming the same device and inode. A missing
+    source or a failed check is a located problem: doctor reports it and still shows the effective
+    grants, approve records nothing, and run refuses before staging or creating anything. Only run
+    reads, only after every check passed, by reopening the checked descriptor for reading
+    (/proc/self/fd/<n>), so the bytes come from the inode checked; a short read, or a size other
+    than fstat's, refuses. No command prints, hashes, logs or compares contents, so a changed token
+    needs no new approval, and rotation is the person's (question 2).
+
+    Approval binds grants as slice-26 binds the allowlist, and slice-30 builds it. A candidate with
+    grants takes one of two new profiles, offline-credentials-v1 or allowlist-credentials-v1, each
+    offline-v1's or allowlist-v1's boundary except for two of its clauses
+    (internal/engine/approval/presentation/presentation.go): "checkout-only host mount at
+    /workspace" becomes the checkout as the only host directory, at /workspace, plus the read-only
+    credential files under /run/itos-container/credentials, and "no ports, grants or hooks" becomes
+    no ports or hooks. That is a boundary a person consents to, hence the new names. They add one
+    canonical member, credentials, an array of {kind, source, target} ascending by kind, target
+    being the kind's fixed path, so a release that moved a target reads as a change and needs new
+    consent, as proxy.image does under slice-26. A candidate without grants keeps offline-v1 or
+    allowlist-v1 and their bytes, so existing approvals keep their identity, and policy.version is
+    the declared version (slice-26's rule), so moving a file to version 3 without grants changes
+    only /policy/version. valid() accepts either new profile only with a nonempty, strictly
+    ascending set of known kinds and lexically valid sources, and the differences walk reports any
+    change as one difference at /credentials with the whole old and new arrays. Approve's review and
+    status show each grant's kind, source and in-worker path, and say what a person consents to: the
+    worker can read each file and use it for anything the provider permits, since approval does not
+    narrow a token's scopes (contract, "Credentials and Git"); each run copies the source's current
+    contents when it starts, holds the copy in memory, drops it with the worker and never writes the
+    source; nothing redacts what the workload prints or sends, and under allowlist-credentials-v1 it
+    can send a credential to any listed host. slice-30 fixes those lines' exact words, as slice-26
+    did for the allowlist. Status shows the grants from the frozen snapshot and, during recovery,
+    whether the staging directory is present, absent or unknown.
+
+    q-52 (the person) settles who may approve. For a candidate with any grant, approve refuses
+    --fingerprint with approve.terminal-required, exit 1, whatever the value's format, whether it
+    matches and whether the candidate is already approved, so no answer depends on state and no
+    non-interactive credential grant can exist; its fix names bare itos container approve at a
+    terminal. The rule follows inspection, so an unready candidate keeps its own problem. Bare
+    approve without a terminal, or with --json, keeps approve.confirmation-required, but for such a
+    candidate its fix names the terminal form only, never --fingerprint. The same rule covers an
+    allowlist grant under q-52; whichever of slice-26, slice-27 and slice-30 lands first adds it and
+    the others widen its condition. A credential approval can therefore only have been given at a
+    terminal over the same canonical grants, so one recorded before a delivery slice lifts run's
+    refusal carries forward. The disclosed gap stays: an agent running unsandboxed on the host can
+    fake a terminal, and approval records what, not who. slice-30 carries both into approve's help
+    and docs/security.md, whose "Revisit this limitation before adding egress or credentials" q-52
+    answers.
+
+    Each slice refuses what the next must build, as slice-25 and slice-26 do for version 2. Under
+    slice-29 only doctor --policy-only and --manifest-only read a valid version 3 file, and ordinary
+    doctor, approve and run refuse it with policy.version; slice-30 lets ordinary doctor and approve
+    read it; run refuses a grant of a kind whose delivery has not landed (slice-31 claude-token,
+    slice-33 github-token) and an allowlist until slice-27, before the manifest, the engine and host
+    state.
+
+    Redaction. The controller's provisioning path copies a credential's bytes only from the checked
+    descriptor to the staged file: never into a policy, approval or snapshot record, an intent or
+    recovery record, a label, the create configuration, an environment variable or argv, an Engine
+    API request body, status, doctor, approve or run diagnostics, an error text, a log line, or any
+    file under the checkout or the state root. Sources and targets are paths, not secrets, and may
+    appear wherever grants are shown. A problem about a source names its rule, location and path,
+    never bytes or a wrapped Go error. The controller holds the bytes in one buffer between the read
+    and the write and overwrites it after; Go may still keep copies, so that is hygiene, not a
+    guarantee. The workload's streams and what it sends stay unredacted (arc42, "Diagnostics and
+    streaming"); a workload can copy a credential into anything it can write or send.
+
+    The refusal log conflicts with an unconditional credential-absence claim. Decision 0022 omits
+    userinfo, paths, queries and headers, but records a syntactically permitted target hostname
+    verbatim. A hostile workload can send CONNECT <synthetic-marker>.example.com:443 for an unlisted
+    name; the marker's letters, digits and hyphens pass that target filter. Its refusal therefore
+    puts the marker in proxy stdout, dockerd's json-file log and the teardown copy at
+    sessions/<lookup>/<id>/egress-refusals.jsonl under protected state. This is a persisted-log path,
+    not just an unredacted workload stream, and omitting the other request fields does not close it.
+    The record documents this conflict with AC-36 and asks the person question 6 below. It neither
+    changes decision 0022 nor selects a sanitization scheme or a weaker acceptance rule. No
+    credential absence from refusal logs is promised pending that answer and downstream proof.
+
+    Tests never use a real token or account (charter). Each credential scenario writes a synthetic
+    marker, itos-synthetic-credential- followed by 32 random lowercase hexadecimal digits made for
+    that scenario, into a source the harness creates in a private temporary home; letters, digits
+    and hyphens pass JSON and shell quoting unchanged. The workload proves what it read by printing
+    the marker's SHA-256, never the marker, so its streams stay clean. The absence checks search the
+    marker's bytes, and its base64 at all three offsets, in the worker's docker inspect output,
+    every request and response the harness's Engine API recorder holds, the whole host state tree
+    (approval, snapshot, intent and recovery records), status in text and JSON, doctor, approve and
+    run's error output, the proxy's stdout and both persisted refusal-log copies when present,
+    and every file in the checkout; and they find no staging directory under /dev/shm after
+    acknowledged startup and staging cleanup, nor after confirmed teardown. Each search has a
+    positive control: the same search over a file seeded with the marker finds it, so a broken
+    search cannot pass. In addition to the cooperative workload that prints only the hash, require
+    an adversarial hostname-marker probe: the workload sends the marker as a label of an unlisted,
+    syntactically valid CONNECT hostname, and the same searches cover the refusal through proxy
+    output, Docker logs and the protected-state copy. This probe must fail credential absence under
+    decision 0022 as written; do not avoid the hostname, omit either persisted copy, skip the probe
+    or treat the expected leak as evidence of absence. T-39 and slice-28 own the affected logging
+    contract; slice-31 and slice-33 need the integrated credential probe after the person's answer
+    to question 6, before promising credential absence from refusal logs. Their drafters reconcile
+    that answer; T-47 changes none of their specs and claims no AC-36 closure here.
+
+    Domain tests use the session port's fake, which does no I/O, for staging before create, unlink
+    after the start attempt, refusal before any start attempt on a provisioning failure, and no
+    marker in recorded configuration or recovery values. T-48's shared fake/adapter contract must
+    also cover a lost start acknowledgement after the runtime acquired the credential mount,
+    including delayed start completion after unlink. The fake models that acquisition without I/O.
+    Slice-31 and slice-33 require the corresponding CI real-engine case: the acquired mount can
+    still supply the synthetic bytes, proved by their hash, despite the missing acknowledgement.
+    Assert no repeated start, reconciliation of the original owned full ID, an observed outcome or
+    explicit uncertainty, and bounded owned cleanup. A failed cleanup retains recovery and its
+    exact stop retry; successful cleanup confirms both worker absence and staging-path removal.
+    Neither an absent staging pathname nor a failed acknowledgement may satisfy an assertion that
+    no workload ran or that cleanup completed. These extend LIFECYCLE-03/07's start-acknowledgement
+    and accepted-start coverage for credential mounts; they do not replace its lifecycle rules.
+    Real-engine proof runs in CI only, and no agent receives the Docker socket. This is AC-22/23
+    for uncertain start and cleanup, AC-36 for credentials subject to question 6, AC-29's
+    approved-material-only and source-modification probes, and AC-31's HTTPS and API half; the SSH
+    identity and AC-30's login and refresh flows stay deferred. No search here is a credential
+    scanner.
+
+    What stays open is the person's, asked through itos decision rather than decided here, and the
+    record lists each with what waits on it. 1, Codex: how does the worker share the host's Codex
+    login now that Codex replaces auth.json by rename? It names the options without choosing: a
+    Codex that still rewrites in place, pinned on the host and in the worker image; a host
+    directory holding only auth.json, which both installs reach through a symlink Codex follows,
+    mounted read-write, with auth.lock as a single file (read in the source, not run); the worker's
+    own login or API key, delivered like the tokens; or a copy in and back out, which loses a
+    refresh made on the other side. slice-32 and T-48's file half wait. 2, refresh and revocation:
+    neither token kind refreshes, revoking a token is the provider's, and removing a grant refuses
+    the next run until an approval without it, while a live session keeps its copy; is that enough,
+    and who owns refresh when a later kind has one? 3, deletion: no command creates, rotates or
+    deletes a source, and the only copies are the staged ones; does the person want
+    account-management commands, or is deleting a file theirs? 4, the GitHub token's scope: nothing
+    requires or checks one, since checking needs a call to GitHub; should approval require a
+    fine-grained token limited to the checkout's repository, or an expiry? 5, the contract's rule
+    that "the explicit contracts for granting/revoking accounts, deleting profiles, rotating the
+    sandbox SSH key and the inspection CA must be settled before real credentials are used": does
+    this record meet it for the two token kinds? Until the person answers 5, no real credential is
+    used, the person's smoke check included; the scenarios need none. 6, credential-bearing
+    refusal hostnames: how should the refusal log represent a hostile CONNECT hostname that
+    contains credential bytes, given decision 0022's verbatim target and AC-36's marker exclusion?
+    Changing the target representation or explicitly revising the credential-absence guarantee is
+    the person's decision, not this record's. Passing the hostname-marker probe and accepting
+    credential-bearing egress under AC-36 wait for that answer and the affected logging specs.
+    Documentation must disclose the current leak until the chosen rule has downstream proof.
+    No question here authorizes silent weakening of the contract or its probes.
+
+    The record lists each contract passage it supersedes or defers, so the person can edit the
+    contract. Agreed scope's Mounts row ("do not bind-mount additional host paths") and "Credentials
+    and Git"'s "This is not an exception allowing host-file mounts", for the staged binds, since
+    their alternative, copying into isolated container-managed storage, fails as above. The
+    Authentication row's "Do not mount the sources directly" and "The worker cannot directly read
+    or write the host-side source" hold for the token kinds and would give way to Codex's read-write
+    mount, as would "Do not share ... a writable credential store between projects"; question 1
+    leaves all three open. "Safe provisioning, OAuth callback paths, refresh ownership and
+    account-source updates are unresolved", the auth provisioning, account-management, callback and
+    revocation/deletion entry of "Decisions still open", and Experiments item 3: provisioning is
+    settled for the two token kinds, no login runs in the worker so no callback exists, and the rest
+    is questions 2 to 5. The Logging row and AC-36 remain required; the conflict between decision
+    0022's verbatim target and marker exclusion stays open in question 6, not superseded here. The
+    Git row's sandbox SSH identity, AC-31's SSH half and OpenCode stay deferred.
+
+    What rests on an answered question, and what the record decides itself. The approval rule is
+    q-52's. The shape is the charter's, and its Codex premise no longer holds, which only the person
+    can change. Grants in itos-container.yaml with absolute host paths, and approval binding kinds
+    and paths and never contents, are the coordinator's breakdown (slice-29, slice-30). The staged
+    binds and /dev/shm, the unlink after start, the in-worker paths, the kind names, version 3, the
+    host checks, the two profiles, approve.terminal-required and its precedence, the carried-forward
+    approvals, the redaction rules and the marker approach are the record's own, for the person to
+    confirm or overturn, and it marks them so. T-48 and slice-31 must prove the mechanism on the
+    real engine in CI; if Docker refuses a staged bind, or a copy outlives its worker there, the
+    mechanism reopens with that evidence rather than a fallback.
+
+    In arc42 the opening says the credentials design added by T-47 is proposed, as T-38's is.
+    Constraints keeps the offline limits and names the record for credential grants. Context and
+    scope replaces "Accounts, network Git, LAN publishing" with credentials passed in per command,
+    proposed, and account management and network Git deferred, and qualifies "The worker cannot
+    access ... host credentials" by its approved grants. Building-block view adds the policy's
+    credentials and readiness's source observation (slice-29), approval's grants with
+    offline-credentials-v1, allowlist-credentials-v1 and the terminal rule (slice-30) and session's
+    credential staging (T-48), all proposed, and the work-item table adds T-47, slice-29 to slice-33
+    and T-48, with slice-32 waiting on question 1. Runtime view adds the terminal rule to its
+    Approve row and a subsection headed ### Credential run with the order and its failure closure,
+    explicitly naming uncertain start and a lost start acknowledgement after mount acquisition.
+    It distinguishes staged-path removal from owned-worker removal, keeps unknown outcomes unknown
+    and carries the existing reconciliation, budgets and recovery retry instead of a late-start
+    fencing claim.
+    Deployment view names the credential files in the Worker row, replaces "extra host bind mount
+    or host-wide chown" in container-managed storage with the grants' staged read-only binds, and
+    adds a row for the /dev/shm staging. Cross-cutting concepts states q-52 in "Approval and
+    ownership are distinct", the provisioning redaction rule under "Diagnostics and streaming",
+    the hostname-marker probe and unresolved persisted-log conflict under "Refusal log", and a
+    credentials paragraph that includes auth.lock and the Codex finding. Decisions links the record
+    and says q-52 revisited A1, so no text still asks to revisit before egress or credentials. Quality
+    requirements maps AC-29, AC-31's HTTPS half and AC-36 to slice-31 and slice-33, unproven, with
+    AC-36's hostname-marker case awaiting question 6 and the logging owners, and AC-22/23's lost
+    start acknowledgement to T-48 and those credential slices. Risks and open questions replaces
+    "The record settles no approver" with q-52's answer, replaces the row beginning "Minimal auth
+    provisioning/refresh" with rows for questions 1 to 6, and drops
+    p3-approval-before-egress, which q-52 closed, wherever arc42 names it. Keep the twelve headings
+    and all text that still holds, and label everything proposed. The record names these sections
+    as the ones it updates, under the charter's drift rule.
+
+    The drafter changes only this entry. The implementer changes only the record and arc42, in docs
+    commits with Task T-47 as T-38's were, and leaves the registry, decision 0022 and sibling specs
+    alone, reporting a conflict rather than resolving it. slice-29's, slice-30's, T-48's,
+    slice-31's and slice-33's drafters take these decisions from the record, though their whys
+    predate it: slice-29's names a Codex kind, which waits on question 1; slice-33's "where gh
+    expects it" is GH_TOKEN exported from the file; T-48's "or a bind-mounted host file" waits on
+    question 1. T-48's "a failed delivery stops the workload before it starts" holds only before
+    any start attempt; its drafter must distinguish uncertain start and require the acquired-mount,
+    lost-acknowledgement case above. T-39 and slice-28 must take question 6's eventual answer into
+    their logging specs before slice-31 or slice-33 can claim the hostname-marker probe passes.
+    Slice-26's spec on its branch says who may approve stays open, which q-52 has since settled.
+
+    Both checks read only those two documents, with grep, and declare prose: true, because on a
+    prose-only range CI leaves out any other late check and itos work done never runs one (T-38).
+    Their anchors are words the decisions above force, compared case-insensitively with whitespace
+    flattened, so wrapping and capitals cannot fail them; semantic review judges the rest. Both
+    checks require the uncertain-start and hostname-marker anchors added after spec review; these
+    are presence checks, not proof that either conflict is resolved or a runtime probe passes. The
+    first replaces the promoted check, which a file holding its three phrases would pass, and keeps
+    them. It fails today at ls, because no record exists. The second fails today on its first anchor,
+    ### Credential run.
   done_when:
-    - run: test -f docs/decisions/0025-credentials-passed-in.md && grep -qi 'docker inspect' docs/decisions/0025-credentials-passed-in.md && grep -qi 'auth.json' docs/decisions/0025-credentials-passed-in.md && grep -qi 'fingerprint' docs/decisions/0025-credentials-passed-in.md
+    - run: |
+        f=$(ls docs/decisions/*-credentials-passed-in.md) || exit 1
+        test "$(printf '%s\n' "$f" | wc -l)" -eq 1 || { echo "want one record: $f" >&2; exit 1; }
+        flat=$(tr -s ' \n' ' ' < "$f")
+        for s in 'docker inspect' 'per command' auth.json auth.lock 0.167.0 \
+          582a8812e023b08cbf10b4603ac41644b8d99261 EBUSY /dev/shm 0400 \
+          /run/itos-container/credentials/claude-token /run/itos-container/credentials/github-token \
+          CLAUDE_CODE_OAUTH_TOKEN 'claude setup-token' GH_TOKEN O_PATH sticky 'version 3' \
+          offline-credentials-v1 allowlist-credentials-v1 approve.terminal-required \
+          approve.confirmation-required --fingerprint q-52 'pre-start archive copy' \
+          checkWritablePath 'stdin handoff' 'exec-time environment' may_copy_tree unlink \
+          'uncertain start' 'lost start acknowledgement' 'hostname-marker probe' \
+          itos-synthetic-credential- 'synthetic marker' 'itos decision' revocation deletion \
+          fine-grained 'before real credentials are used' 'Do not mount the sources directly' \
+          'isolated container-managed storage' 'confirm or overturn' AC-29 AC-31 AC-36 \
+          slice-29 slice-30 slice-31 slice-32 slice-33 T-48 docs/security.md \
+          'Building-block view' 'Runtime view' 'Deployment view' 'Cross-cutting concepts' \
+          'Risks and open questions'; do
+          printf '%s' "$flat" | grep -qiF -- "$s" || { echo "$f lacks: $s" >&2; exit 1; }
+        done
+      prose: true
+    - run: |
+        a=docs/architecture/arc42.md
+        flat=$(tr -s ' \n' ' ' < "$a")
+        for s in '### Credential run' /run/itos-container/credentials /dev/shm \
+          approve.terminal-required q-52 offline-credentials-v1 allowlist-credentials-v1 auth.lock \
+          T-48 slice-33 'uncertain start' 'lost start acknowledgement' 'hostname-marker probe'; do
+          printf '%s' "$flat" | grep -qiF -- "$s" || { echo "arc42 lacks: $s" >&2; exit 1; }
+        done
+        for s in 'The record settles no approver' 'revisit before egress' 'revisit it before egress' \
+          'Accounts, network Git, LAN publishing' '| Minimal auth provisioning/refresh' \
+          'extra host bind mount or host-wide chown' p3-approval-before-egress; do
+          if printf '%s' "$flat" | grep -qiF -- "$s"; then echo "arc42 still says: $s" >&2; exit 1; fi
+        done
+        f=$(ls docs/decisions/*-credentials-passed-in.md) || exit 1
+        printf '%s' "$flat" | grep -qF -- "decisions/$(basename "$f")" || { echo "arc42 lacks a link to $f" >&2; exit 1; }
+        test "$(grep -c '^## ' "$a")" -eq 12
+      prose: true
 - id: T-48
   type: feat
   title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
