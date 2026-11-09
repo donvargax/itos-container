@@ -698,7 +698,7 @@ items:
   - id: T-37
     title: Release notes stay within GitHub's body limit, the first release included
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
