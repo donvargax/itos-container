@@ -1132,3 +1132,21 @@ items:
       non-gating: it sits beside, not in, the required job. The project has so far written "no
       nightly" (the T-37 and mutation-proof items); that was about the gating mutation proof, and
       this item is the exploring tier. The person should confirm that reading when reviewing it.
+  - id: p2-schema-conforms-to-parser
+    title: A check ties each published policy schema to what doctor accepts and refuses
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      docs/schemas/itos-container-v1.schema.json is a published data contract. docs/CONFIG.md links
+      it for editors and producers, and slice-25 adds a version 2 schema beside it. Nothing reads
+      either file in a test or gate, so a schema can drift from what the strict parser enforces and
+      every check stays green. That has a real cost: an editor accepts a file doctor refuses, or the
+      reverse. Version 3 and later slices will extend the contract again. Specify a check that runs
+      a maintained JSON Schema validator, chosen and pinned in the spec, over the policy examples
+      that doctor accepts and refuses, and fails when the two disagree for any published version.
+      The YAML syntax limits stay outside the schema, as the policy spec says. It does not block
+      milestone two step 1 and should follow slice-25, which publishes the version 2 schema, so p2.
+      Slice-25 stays unchanged.
