@@ -1463,6 +1463,19 @@ items:
       this sleeping or silent-restart product sends no /wait, so lifecycleSignals' wait rule does
       not refuse it and only the fake-clock row's exact instant does. Make that the row's
       failing-first case alongside the repeated-SIGINT restart.
+
+      This item already holds the idea. Its fake-clock row, extended with a hold longer than what is
+      left of the call limit so the cut really happens, asserts SIGKILL at exactly first signal plus
+      grace. A fake clock has no jitter, so no recorded cut instant is needed. The new rationale is
+      covered by that row. A timer started at the acknowledgement or the cut kills at the cut plus
+      grace, whenever the first signal arrives. A product that sleeps instead of waiting after a cut
+      kills at the same wrong instant. Neither sends the /wait request that lifecycleSignals' wait
+      rule looks for, so only the exact instant refuses them. Make both the row's failing-first
+      cases, alongside the repeated-SIGINT restart. The earlier notes already settle that a recorded
+      cut instant is not worth its own item, because it touches the recorder outside T-42's range
+      and only sharpens the native tier's inference. The item is not in the queue (T-45, T-42,
+      p1-credentials-passed-in, p1-harness-home, p1-interactive-tty). The person or coordinator
+      should queue it before p1-interactive-tty or accept the gap.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
