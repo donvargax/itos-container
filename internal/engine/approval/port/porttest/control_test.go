@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"context"
+	"fmt"
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 	"testing"
 )
@@ -36,4 +37,26 @@ func TestControlPendingLocationProtectsCandidate(t *testing.T) {
 	state.Bound["/selected/itos-container"] = false
 	control := Control{State: state, Account: &Account{Home: "/account"}, Reservations: &Reservations{}, Fixed: "/account/.local/state/itos-container", Selected: "/other/itos-container"}
 	ControlCandidateContract(t, control, port.Candidate{Root: "/checkout"}, "/selected/itos-container", state.Snapshot)
+}
+
+func TestControlNamespaceContract(t *testing.T) {
+	for _, initialized := range []bool{false, true} {
+		t.Run(fmt.Sprint(initialized), func(t *testing.T) {
+			state := NewControlState()
+			control := Control{State: state, Account: &Account{Home: "/account"}, Reservations: &Reservations{}, Fixed: "/account/.local/state/itos-container", Selected: "/selected/itos-container"}
+			candidate := port.Candidate{Root: "/checkout"}
+			if initialized {
+				tx, failure := control.Begin(t.Context(), candidate, true)
+				if failure != "" {
+					t.Fatal(failure)
+				}
+				tx.Close()
+			}
+			ControlNamespaceContract(t, control.Fixed, candidate, func(selected string) port.Control {
+				next := control
+				next.Selected = selected
+				return next
+			}, state.Snapshot)
+		})
+	}
 }

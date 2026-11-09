@@ -113,6 +113,11 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	if domain.Exposed(fixed, c.Root) {
 		return nil, "state.path"
 	}
+	// Catalog metadata cannot also contain an ordinary selected state tree.
+	// Refuse before bootstrap or claims can make the account-wide catalog invalid.
+	if domain.Exposed(selected, filepath.Join(fixed, "coordination")) {
+		return nil, "state.path"
+	}
 	store := s.Store
 	store.Control = nil
 	ops := store.operations()

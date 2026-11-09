@@ -9,6 +9,8 @@ type Account interface{ AccountHome() (string, Failure) }
 // Lock waits respect the caller deadline and a maximum 10-second call budget;
 // contention returns state.busy. A read transaction never creates or syncs state. Writers
 // require prior consent or independently validated existing approval/ownership.
+// Selected managed roots equal to or below catalog metadata refuse with state.path
+// before creating bootstrap entries, location bindings or the selected tree.
 type Control interface {
 	Begin(context.Context, Candidate, bool) (ControlTransaction, Failure)
 }

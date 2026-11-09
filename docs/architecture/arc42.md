@@ -631,6 +631,10 @@ account evidence, including NSS-only accounts in the CGO-disabled release.
 HOME, USER and LOGNAME cannot supply a fallback account home. After validated mkdir
 bootstrap, its private 0600 control.lock inode supplies bounded exclusion for catalog access
 and selected-root publication across HOME/XDG selections; the home is never locked.
+The coordination directory is reserved for metadata: selected managed roots equal
+to or below it refuse with state.path before bootstrap or enrollment, preventing
+ordinary state entries from invalidating the shared catalog. This whole-component
+rule still permits the default tree and similarly named sibling directories.
 Doctor inspects without writes, taking a shared lock when present; approve
 and validated run enrollment complete durable self-binding and selected-location
 claims before ordinary state writes. Existing reservation completion semantics are

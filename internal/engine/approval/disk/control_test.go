@@ -149,6 +149,26 @@ func TestControlAccountAndPrerequisites(t *testing.T) {
 		})
 	}
 }
+func TestControlNamespaceContract(t *testing.T) {
+	for _, initialized := range []bool{false, true} {
+		t.Run(fmt.Sprint(initialized), func(t *testing.T) {
+			control, c, _, home, _ := controlFixture(t)
+			if initialized {
+				tx, failure := control.Begin(t.Context(), c, true)
+				if failure != "" {
+					t.Fatal(failure)
+				}
+				tx.Close()
+			}
+			fixed := filepath.Join(home, ".local/state/itos-container")
+			porttest.ControlNamespaceContract(t, fixed, c, func(selected string) port.Control {
+				next := control
+				next.Store.StateHome = filepath.Dir(selected)
+				return next
+			}, func() string { return controlSnapshot(t, filepath.Dir(home)) })
+		})
+	}
+}
 func TestControlBootstrapWriteFaultsRetainSafeRetry(t *testing.T) {
 	for _, kind := range []string{"mkdir", "directory sync", "nonce", "create", "chmod", "write", "short write", "file sync", "close", "rename", "parent sync"} {
 		t.Run(kind, func(t *testing.T) {

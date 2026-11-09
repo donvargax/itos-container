@@ -328,3 +328,42 @@ all 1,434 scenario examples and the harness controls pass, with zero failing tes
 Configured gates run through the final fix commit's hooks. Fresh pushed-head CI
 and changed-code proof remain with the coordinator; the branch already includes
 origin/main's settled engine time limits.
+
+## Selected state inside catalog metadata (PRRT_kwDOVkB0ws61FzgB)
+
+Test commit `ff3a49e` adds pending CONTROL-17 and its step definitions. Eight
+examples select the coordination directory or a child as XDG_STATE_HOME, with
+an absent or initialized catalog, through doctor or exact-fingerprint approve.
+Every checkout, account home and selected state tree is disposable; the engine
+is a local recording fixture.
+
+With only `@wip` removed, all eight examples fail at the first Then, which requires
+approval.state.path and exit 1. Each command instead exits 0: doctor reports missing
+approval and approve publishes into the catalog namespace. All 16 setup/action
+steps pass, eight behavior assertions fail and 24 later steps are skipped, with
+no undefined steps. The first restricted-runner attempt is not red evidence:
+it remaps /tmp ownership to UID 65534, triggering unrelated state.unsafe refusals.
+Normal host metadata restores the existing CONTROL-10 baseline and produces the
+assertion-level red above.
+
+The shared disk/fake contract also failed before implementation. Direct write
+transactions accepted the unsafe selection and changed state; disk transactions
+then refused safe selections with state.invalid, reproducing account-wide damage.
+
+The common transaction now refuses selected managed roots equal to or below
+coordination before bootstrap, bindings or selected-tree creation. The fake follows
+the same contract. All eight examples pass, including exact refusal inventories,
+default-tree and catalog-prefix sibling approval, read-only matching inspection,
+and preserved matching approval in another checkout.
+
+```sh
+rtk proxy go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-17$'
+rtk proxy go test -race ./internal/engine/approval/disk ./internal/engine/approval/port/porttest -count=1
+```
+
+The focused feature selection passes in 4.253 seconds, and both changed packages
+pass with race detection. The full `rtk proxy go test ./features -count=1` suite
+passes in 262.360 seconds without race detection. Configured gates run through
+the final fix commit's hooks. No real engine, real state folder or local mutation
+proof is used. Fresh pushed-head CI and changed-code proof remain with the
+coordinator; origin/main is already an ancestor of this branch.

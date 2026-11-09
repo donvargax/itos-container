@@ -81,6 +81,15 @@ binding is resynced without replacing its bytes or inode. Inspection never repai
 
 The catalog records schema, UID, absolute path, completion and ordered pinned
 ancestor identities. A separate location name is SHA-256 of the JSON-encoded path.
+Review PRRT_kwDOVkB0ws61FzgB clarifies arc42's **Recovery** selection boundary:
+the coordination directory is reserved for catalog metadata. Reject a selected
+managed root equal to or below it with state.path before bootstrap, binding
+publication or selected-tree creation, even when the catalog does not exist.
+Otherwise ordinary state directories become unexpected catalog entries and block
+every checkout on the account. Compare whole path components so the fixed default
+tree and a coordination-more sibling remain usable. Inspection and direct write
+transactions enforce the same rule; refusal preserves all existing state.
+
 Before creating an absent selected tree, durably publish its pending claim; retain
 that protection after interruption and complete its root identity before success.
 Completed missing, replaced, malformed, unsafe or unreadable bindings refuse.

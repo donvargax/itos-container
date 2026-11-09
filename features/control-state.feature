@@ -289,7 +289,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # PRRT_kwDOVkB0ws61FzgB: selecting catalog metadata as the state parent can
   # poison every later account-wide transaction. The first Then fails because
   # doctor reports missing approval or approve publishes into the catalog.
-  @wip @slice-21 @ID-CONTROL-17 @local-engine-fixture
+  @slice-21 @ID-CONTROL-17 @local-engine-fixture
   Scenario Outline: Selected state cannot occupy the coordination catalog namespace
     Given a control-state fixture with an "<catalog>" catalog and XDG_STATE_HOME "<selection>" inside its metadata namespace
     When P inspects that selection with "<command>" using valid approval inputs
