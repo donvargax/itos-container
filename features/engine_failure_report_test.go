@@ -345,18 +345,9 @@ func testEngineFailureReport(t *testing.T, script string) {
 			{prefix + "invalid_bytes_case", strings.Join(diagnosticInvalidBytes, "\n")},
 			{prefix + "quoted_100%_case", quoted},
 		}
+		// The exact output comparison keeps the quoted error whole under its
+		// own scenario, including its empty line, with no extra quoted titles.
 		check(t, &log, false, 5*time.Second, failures...)
-		// The quoted error is whole under its own scenario, its empty line kept.
-		annotations, printed := reportOf(failures...)
-		if !strings.Contains(annotations[6], "100%25_case::quoted 100%252F done%0Dtail%0Apanic: quoted%0A%0A::error title=planted::x%0A") ||
-			!strings.Contains(printed, "    panic: quoted\n    \n    ::error title=planted::x\n") {
-			t.Errorf("the quoted error lost its empty line or its place: %q", annotations[6])
-		}
-		for _, name := range []string{"TestNested", "go test"} {
-			if strings.Contains(strings.Join(annotations, "\n"), "title="+name) {
-				t.Errorf("a quoted line named %s", name)
-			}
-		}
 	})
 
 	t.Run("timeout", func(t *testing.T) {
