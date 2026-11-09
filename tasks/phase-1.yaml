@@ -2871,7 +2871,10 @@
     ID accumulate in that ID's directory; different IDs never share counters. Preserve data
     until the external collector reads it, beyond world cleanup. A missing/ambiguous ID or
     directory-creation failure during a requested product coverage run is a harness failure,
-    never a silent fallback, a skip or an empty successful result.
+    never a silent fallback, a skip or an empty successful result. Accept exactly one complete
+    tag matching ^@ID-[A-Z]+-[0-9]+$, the existing registry/listing format, before deriving a
+    directory name. Reject malformed ID-prefixed tags, including path separators, rather than
+    sanitizing them into another ID or writing outside the requested root.
 
     Give every product invocation that scenario's effective GOCOVERDIR, including launches
     through modified w.env, raw os.Environ, implicit inherited environments, fresh recovery
@@ -2882,12 +2885,23 @@
     runEnv. Share harness-only routing helpers under features, without changing product
     assembly, environment sanitization, package import arrows or fixture assertions.
 
+    Secondary worlds created inside a scenario inherit its coverage destination before any
+    fixture setup can launch product code. This includes the memory/disk children in
+    sessionLocalFixture and the recovery, anchor, overlap, offline and lifecycle control
+    worlds, which bypass initializeScenario. They belong to their parent's ID; independent
+    scenarios entered by the nested native scheduler still select their own IDs. The focused
+    regression must exercise an existing secondary-world path and verify its product counters
+    reach the parent ID without ambient GOCOVERDIR.
+
     The older-kernel approval helper and run's child-umask helper must stage restrictive-mask
     output beneath the effective scenario destination and export it there after child exit.
     Preserve exportApprovalKernelCoverage's validation and restoration of owner access only
     on generated coverage files. In particular ID-APPROVAL-32 must run both 0022 and 0777
     examples, and ID-RUN-13 must retain its 0000/0777 cases. Do not relax the child's umask,
-    change approval/snapshot permissions, chown state or fabricate metadata/counters.
+    change approval/snapshot permissions, chown state or fabricate metadata/counters. Common
+    launch routing must preserve these explicit per-invocation staging destinations instead
+    of overwriting them with the world's final directory. Export back to that same world's
+    destination after joining the child, never to an ambient process-global directory.
 
     Whole runs also execute independent harness tests. Isolate their coverage in private
     temporary roots and restore the caller's variables afterward, so synthetic memory cases
@@ -2920,7 +2934,7 @@
     regression name before running it, so Go's successful 'no tests to run' cannot pass.
     The third obtains the unchanged live/native-platform inventory from tools/bin/scenario-list
     and runs the configured whole command once with only ITOS_CC_TEST_COVERDIR. Require a
-    nonempty unique inventory and readable executed product coverage for every listed ID,
+    nonempty unique inventory and readable executed atomic product coverage for every listed ID,
     with no extra IDs or root-level data. Never prune the inventory, retag scenarios, copy one
     ID's coverage into another or add no-op product calls to make collection pass.
 
@@ -2928,11 +2942,14 @@
     dependency in CI. Keep the focused checks at the task tier and the complete collection
     check in task/CI validation, not a new commit hook. The whole non-engine command has a
     600-second wall limit, matching Go's existing ten-minute test bound; report its elapsed
-    time and listed-ID count. Run it without -race. Race checking, if needed for the routing
-    change, selects only the new/changed harness tests. Retain T-35's memory checks and world
-    cleanup, the existing four-world scheduler, native serial/nested scheduling, selectors,
-    deadlines, CI guards and gates. A memory kill requires reducing test memory use, never
-    raising the limit. Correct the package comment and features/README.md's coverage guidance.
+    time and listed-ID count even when the test command fails or times out, while preserving
+    that failure before checking coverage. Both end-to-end checks verify the converted
+    profile's mode is atomic as well as its executed product blocks. Run without -race.
+    Race checking, if needed for the routing change, selects only the new/changed harness
+    tests. Retain T-35's memory checks and world cleanup, the existing four-world scheduler,
+    native serial/nested scheduling, selectors, deadlines, CI guards and gates. A memory kill
+    requires reducing test memory use, never raising the limit. Correct the package comment
+    and features/README.md's coverage guidance.
 
     Native engine validation remains CI-only. Preserve the existing engine job's selection,
     preflight, fixture lifecycle, timeouts and required gate. For coverage-enabled evidence,
@@ -2965,6 +2982,14 @@
     environment with normal ancestor ownership, or CI; never weaken approval checks or
     chmod/chown those ancestors to make the fixture pass. The small routing red above does
     not need host-state fixtures. No native-engine or mutation test ran during drafting.
+
+    Rechecking with the unchanged harness at 81d681acdf9ee7794ed0d60d1ed1c37608381e32
+    confirms the first check's missing-directory assertion after both selected scenarios
+    pass, and the second check's missing-regression discovery failure. The revised third
+    check reports 320 listed IDs and 101.4 seconds before propagating go test's exit 1;
+    existing approval/session fixtures still report state.unsafe in this UID-mapped sandbox.
+    It does not reach coverage validation. These observations neither prove atomic/per-ID
+    collection nor replace the implementer's regression red, CI engine run or fresh code proof.
   done_when:
     - run: |
         python3 - <<'PY'
@@ -2989,7 +3014,9 @@
                     assert files and all(p.is_file() and p.stat().st_size > 0 for p in files), name + " lacks " + pattern
                 profile = top / (name + ".out")
                 subprocess.run(["go", "tool", "covdata", "textfmt", "-i=" + str(directory), "-o=" + str(profile)], env=env, check=True, timeout=30)
-                rows = [line.split() for line in profile.read_text().splitlines()[1:]]
+                lines = profile.read_text().splitlines()
+                assert lines and lines[0] == "mode: atomic", name + " lacks atomic coverage"
+                rows = [line.split() for line in lines[1:]]
                 product = [row for row in rows if len(row) == 3 and "/internal/" in row[0] and int(row[2]) > 0]
                 assert product, name + " has no executed product coverage"
                 counted = any("/internal/slices/count/" in row[0] for row in product)
@@ -3026,9 +3053,11 @@
             cover.mkdir()
             env["ITOS_CC_TEST_COVERDIR"] = str(cover)
             start = time.monotonic()
-            subprocess.run(["go", "test", "./features", "-count=1"], env=env, check=True, timeout=600)
-            elapsed = time.monotonic() - start
-            print("T-36 whole run: %d listed IDs in %.1fs" % (len(ids), elapsed), flush=True)
+            try:
+                subprocess.run(["go", "test", "./features", "-count=1"], env=env, check=True, timeout=600)
+            finally:
+                elapsed = time.monotonic() - start
+                print("T-36 whole run attempted: %d listed IDs in %.1fs" % (len(ids), elapsed), flush=True)
             actual = {p.name for p in cover.iterdir()}
             missing = set(ids) - actual
             extra = actual - set(ids)
@@ -3041,7 +3070,9 @@
                     assert files and all(p.is_file() and p.stat().st_size > 0 for p in files), name + " lacks " + pattern
                 profile = top / (name + ".out")
                 subprocess.run(["go", "tool", "covdata", "textfmt", "-i=" + str(directory), "-o=" + str(profile)], env=env, check=True, timeout=30)
-                counters = [line.split() for line in profile.read_text().splitlines()[1:]]
+                lines = profile.read_text().splitlines()
+                assert lines and lines[0] == "mode: atomic", name + " lacks atomic coverage"
+                counters = [line.split() for line in lines[1:]]
                 assert any(len(row) == 3 and ("/internal/" in row[0] or "/cmd/" in row[0]) and "/porttest/" not in row[0] and not row[0].split(":", 1)[0].endswith("_test.go") and int(row[2]) > 0 for row in counters), name + " has no executed product coverage"
             print("T-36 collected readable executed product coverage for every listed ID", flush=True)
         PY
