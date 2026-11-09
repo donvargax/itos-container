@@ -1124,6 +1124,12 @@ items:
       'escalation tolerance is 20 percent' and the matching lines in features/README.md with it.
       This keeps the engine tier from failing unrelated ranges, which matters for milestone two's
       egress proof, which relies on it.
+
+      Coordinator, 2026-11-09 12:12 UTC: now red on main too (runs 42605880158 and 42605822567, row
+      #02), besides T-41's run 42609794543 and T-33's 7e30371: it fails on any range, so it goes
+      first. Widen the SIGKILL acceptance to an absolute tolerance that holds under -cover on a
+      hosted runner (as the teardown assertion's 2 s does), keeping the assertion that SIGKILL comes
+      after the grace and exactly once; don't lengthen the grace back to 10 s.
   - id: p2-scheduled-fuzz-egress-parser
     title: A scheduled CI job fuzzes the egress proxy's CONNECT parser and ClientHello peek with fresh seeds, and each find becomes a committed seed
     phase: 1
