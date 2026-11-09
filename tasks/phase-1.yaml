@@ -4073,3 +4073,59 @@
     absolute tolerance. A new item or a promotion would add nothing.
   done_when:
     - run: flock /home/yorch/src/os/github/donvargax/itos-container/.git/itos/loop/features.lock go test ./features -count=1 -run 'TestLifecycle(Grace|Signal)'
+- id: T-43
+  type: ci
+  title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
+  why: >
+    Job logs return 403 without a token and agents have no gh, so a red engine job shows only
+    'Process completed with exit code 1' and a goroutine dump from `tail -100`. In
+    .github/workflows/ci.yml, make the step print each `--- FAIL` block with its godog step error.
+    Also emit one `::error title=<scenario>` annotation per failed scenario or go-test failure line,
+    so the coordinator can tell an unchanged flake from a new failure on a re-run. This is
+    project-side and does not wait for the itos summary-extractor fix tracked upstream. Cover it in
+    the existing TestEngineDiagnostics, which runs the workflow shell against disposable fixtures.
+    Record in the item that anchors.feature:410 (ANCHORS-09, exit 75, cleanup 409) failed on
+    e2faafd, so the next unchanged re-run can show whether ANCHORS-09 or ANCHORS-10 repeat. A repeat
+    on its own would justify a separate item for a possible real race in anchor cleanup. Broken down
+    from p1-engine-suite-under-its-limit-again.
+  done_when:
+    - run: go test ./features -count=1 -run '^TestEngineDiagnostics$'
+- id: T-44
+  type: test
+  title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
+  why: >
+    The same step must show where the engine tier's 4-minute budget goes, so the slowdown after T-41
+    (2 min 49 s, then 3 min 44 s, then 4 min 5 s on main) can be located from a red run's output.
+    Print the last `engine scenario timing:` records, or the slowest examples sorted, instead of
+    only `tail -100`. Add LIFECYCLE-09's per-row signal and SIGKILL offsets to the same `engine
+    scenario timing:` output. They show how close real calls come to T-33's 1 s call budget, and
+    they inform review of T-42's limits. In features/README.md, say that a goroutine blocked a
+    minute or more is labelled with its minutes in a timeout dump. Keep the limit at 4 minutes and
+    the engine harness's syscall tracer as it is. Leave the diagnostics step's failure-block
+    printing to p1-engine-diagnostics-failures. Both items edit the one step in ci.yml, so whichever
+    lands second rebases on the other. Broken down from p1-engine-suite-under-its-limit-again.
+  done_when:
+    - run: go test ./features -count=1 -run '^(TestEngineDiagnostics|TestEngineScenarioTiming)$'
+- id: T-45
+  type: test
+  title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
+  why: >
+    Measured on 2026-11-09: 2 min 49 s before T-41, 3 min 44 s on T-41's own green run, and 4 min 5
+    s on main after it merged. TestFeatures ran 239.55 s against -test.timeout=4m, so any slow
+    runner fails the engine tier as a timeout, whatever the range changes. The cause is unconfirmed.
+    Candidates are T-41's 35 s overlapDrainBound, now waiting for each covered controller's real
+    drain, and the product's 30 s teardown that drain follows. The 30 s teardown cannot be shortened
+    in product code. T-33 already shortened the engine grace from 10 s to 1 s through the
+    harness-only budget seam in features/engine_budgets_test.go, and this item should use that seam,
+    not raise the limit or change product code. After the two diagnostics items land, read the
+    slowest-examples output from a CI run on the item's head and shorten whichever step it shows,
+    keeping every scenario row, assertion and cleanup. The overlap drain bound stays a
+    stuck-controller bound, per T-41. A lead, if the suite stays near 4 minutes: the control
+    transaction re-validates every pinned path chain about 11 times per Begin, about 2,800 syscalls
+    and 41 fsyncs, five Begins per run, under the syscall tracer against the 1 s call budget.
+    Cutting the redundant back-to-back Unchanged() walks would loosen the anti-substitution guards,
+    so it needs the person's security review and is not part of this item unless the timings show
+    it. Nothing is measured to be wrong there today. Broken down from
+    p1-engine-suite-under-its-limit-again.
+  done_when:
+    - run: go test ./features -count=1 -run '^(TestEngineSuiteBudget|TestEngineFixtureQuietBudget|TestEngineFixtureGraceBudget|TestOverlapDrainBound)$'
