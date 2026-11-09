@@ -3679,9 +3679,12 @@
     attempts at 0a1d85c could not show. Annotations are public: read without a token on 2026-11-09,
     e2faafd's failed engine job (check run 129190393996) returns its annotations, whose only failure
     text is that exit-code line, and 403 for its log. This is project-side and does not wait for the
-    itos summary-extractor fix tracked upstream. Cover it in the existing TestEngineDiagnostics,
-    which runs the workflow shell against disposable fixtures. Broken down from
-    p1-engine-suite-under-its-limit-again.
+    itos summary-extractor fix tracked upstream. Runs 42609794543 and 42626087465 are further
+    instances of the unreadable message: LIFECYCLE-09's assertion stays unread until a red run after
+    this lands, and T-44 adds its signal and SIGKILL offsets to the same output. A log artifact itos
+    can fetch is no separate upstream item, as that fix is already tracked. Cover it in the existing
+    TestEngineDiagnostics, which runs the workflow shell against disposable fixtures. Broken down
+    from p1-engine-suite-under-its-limit-again.
 
     Record for the next re-run: anchors.feature:410 (ANCHORS-09, exit 75, cleanup 409) failed on
     e2faafd, at the step 'Then status identifies the original running session', still line 410
@@ -3693,32 +3696,64 @@
     runFeatureScenarios with TestFeatures's godog options and the step's flags, on go1.27.3 and
     godog v0.16.0. Under -test.v, go test streams t.Errorf where it happens, so every `--- FAIL:`
     line at the end of the log is bare: that is the empty `go-test TestFeatures/...#03:` body of run
-    42626087465. A scenario's error stands only in a `    suite.go:640: <first line>` block, with
-    further lines indented eight spaces, beneath the last `=== RUN` or `=== NAME` line, which names
-    its test. `=== NAME` matters: LIFECYCLE-13's step can fail after LIFECYCLE-09's nested rows ran.
-    A timeout prints no `--- FAIL:` line at all, only the blocks so far and then `panic: test timed
-    out after 4m0s` and a tab-indented `running tests:` list naming the scenario in flight. godog's
-    `--- Failed steps:` summary cannot stand in, as it omits undefined and pending steps and a
-    timeout never reaches it. So the report below pairs each failure with its block itself; -test.v
-    and the rest of engineInvocation stay.
+    42626087465. A scenario's error reaches the log up to three times. `pretty` prints it at its
+    step, in bold red with its later lines at their original indent. Then comes go test's
+    `    suite.go:640: <first line>` block, with further lines indented eight spaces, beneath the
+    last `=== RUN` or `=== NAME` line, which names its test: the one copy that says whose it is.
+    `pretty` prints it again under `--- Failed steps:` when the suite completes. So what an error
+    quotes can stand at column 0: features/offline_anchor_assertions_test.go:159 and
+    features/sockets_run_test.go:101 quote raw stderr with `%s`, where a later line can be a panic,
+    and features/lifecycle_local_steps_test.go:49 quotes nested -test.v output, though in non-engine
+    steps only today. `=== NAME` matters: LIFECYCLE-13's step can fail after LIFECYCLE-09's nested
+    rows ran. A timeout prints no `--- FAIL:` line at all, only the blocks so far and then `panic:
+    test timed out after 4m0s` and a tab-indented `running tests:` list naming the scenario in
+    flight. A real `panic: ` or `fatal error: ` ends the process: a panicking test prints its `---
+    FAIL:` lines before it, and only a goroutine dump follows, as seen on subtest, top-level,
+    goroutine, cleanup and double panics, a nil dereference and a misused mutex. godog's `--- Failed
+    steps:` summary cannot stand in, as it omits undefined and pending steps and a timeout never
+    reaches it. So the report below pairs each failure with its block itself; -test.v and the rest
+    of engineInvocation stay.
 
     The rule. A new executable tools/bin/engine-failure-report <log>, in bash like
     tools/bin/engine-fixture, reads the log once into an ordered list of failures, each a title and
-    a text. First, so that the cap below never hides a timeout's list, each `panic: ` or `fatal
-    error: ` line at column 0: title `go test`, text that line and the tab-indented lines after it,
-    less one tab. Then each failed scenario, in the order the log first shows it failed: title its
-    go-test name as printed (`TestFeatures/<name>#NN`), text its last `<file>.go:<line>:` block
-    without location or indents, or `no error text in the log`. A scenario, a test name holding a
-    `/`, has failed when the log holds `--- FAIL: <name>` at any indent or a `suite.go` block
-    beneath it, the second for the timeout. Then, only if no scenario failed, each top-level `---
-    FAIL: <test>`: title that name, text its last block, as TestFeatures logs its excluded scenarios
-    first (features/features_test.go:74) and fails last. When a scenario did fail, its `a scenario
-    failed` adds nothing and would take a slot. Last, only if the log has no go-test failure line,
-    meaning none of `panic: `, `fatal error: ` or top-level `--- FAIL:`: title `Engine scenarios`,
-    text `the log holds no go-test failure line; its last line: <last non-blank line>`. That is what
-    a kill, a caught signal, a capture failure or a passing run over the 240 s budget leave. A
-    missing log file gives one failure, title `Engine scenarios`, text `no test log: the test binary
-    never ran`, for a failed preflight, preparation or compilation.
+    a text.
+
+    Only the run's own lines steer it, so that a quoted line is plain text. The run's test is the
+    one the log's first `=== RUN` line names, as both invocations select exactly one. Its own lines
+    are a column-0 `=== RUN   <name>` or `=== NAME  <name>` and a `--- FAIL: <name> (<time>)` at any
+    indent, each naming that test or a subtest of it, and a block start, `<file>.go:<line>: ` after
+    exactly four spaces. A block belongs to the test named by the last own `=== RUN` or `=== NAME`,
+    and goes on through the lines right after it that are indented eight spaces. Go test prints
+    three spaces after `=== RUN`, two after `=== NAME` and four before a block's file; `itos work
+    show` collapses such runs, so read these literals in tasks/phase-1.yaml itself.
+
+    The list, in order. First, so that the cap below never hides a timeout's list, each `panic: ` or
+    `fatal error: ` line at column 0 with no own line anywhere after it: title `go test`, text that
+    line and the tab-indented lines after it, less one tab. A quoted one has its block or the run's
+    `=== NAME` after it, unless the run dies first, when it is reported as one more `go test`, which
+    is accepted. Then each failed scenario, in the order the log first shows it failed: title its
+    go-test name as printed (`TestFeatures/<name>#NN`), text its last `suite.go` block without
+    location or indents, or `no error text in the log`. A scenario, a subtest of the run's test, has
+    failed when the log holds its `--- FAIL:` line or a `suite.go` block beneath it, the second for
+    the timeout. No step here uses godog.T, so another file's block beneath a scenario can only be a
+    quote. Then, only if no scenario failed and the run's test has a `--- FAIL:` line: title that
+    name, text its last block of any file or `no error text in the log`, as TestFeatures logs its
+    excluded scenarios first (features/features_test.go:74) and fails last. When a scenario did
+    fail, its `a scenario failed` adds nothing and would take a slot. Last, only if the log has no
+    go-test failure line, meaning no `panic: ` or `fatal error: ` line counted above and no `---
+    FAIL:` line of the run's test: title `Engine scenarios`, text `the log holds no go-test failure
+    line; its last line: <last non-blank line>`. That is what a kill, a caught signal, a capture
+    failure or a passing run over the 240 s budget leave. A missing log file gives one failure,
+    title `Engine scenarios`, text `no test log: the test binary never ran`, for a failed preflight,
+    preparation or compilation.
+
+    Each text keeps only its first 4096 characters, all the runner keeps of a message; the log above
+    it holds the rest. That bound is what keeps the report's time linear in the log. A long error is
+    reachable, as offlineBuffer (features/offline_runtime_fixture_test.go:122) has no cap and the
+    `%s` errors above quote it, and bash is quadratic when it substitutes across a long string:
+    `${s//%/%25}` on one 3.6 MB error took 10.8 s in the C locale and 145 s in C.UTF-8, and the spec
+    review's own report took 63.5 s on such an error, while the same substitution line by line took
+    0.2 to 0.3 s in either. Cutting first leaves no such string, however the text was built.
 
     It prints, first, one `::error title=<title>::<text>` line per failure, with no file or line
     property, escaped as the runner unescapes (ActionCommand.cs in actions/runner; escapeData and
@@ -3728,77 +3763,109 @@
     message at 4096 characters (_maxCountPerIssueType and _maxIssueMessageLength in its
     ExecutionContext.cs). So above ten failures the first nine are annotated and the tenth has title
     `<N> more failed` and, as text, the other N titles one per line, which keeps the set of names
-    comparable between re-runs; exactly ten get ten of their own. Then, uncapped, it prints each
-    failure as `--- FAIL: <title>` with its text indented four spaces. It exits 0.
+    comparable between re-runs; exactly ten get ten of their own. The runner's cut reaches that list
+    too: about 47 titles fit at today's average of 85 characters, so beyond about 56 failures of
+    today's 75 engine examples, as with the daemon down, only N stays comparable. That is accepted,
+    since such a run is no flake to compare. Then, however many there are, it prints each failure as
+    `--- FAIL: <title>` with its text indented four spaces. The step runs it under `set +e`, so no
+    check can see its exit status and none is asked for.
 
-    The step gains one line, straight after `set +e`: tools/bin/engine-failure-report
+    The step gains one line, straight after `set +e`: timeout 40 tools/bin/engine-failure-report
     "$RUNNER_TEMP/slice-11-features.log". The kernel messages, `free -m` and `tail -100` stay after
-    it, unchanged; T-44 owns what becomes of the tail, and whichever item lands second rebases. The
-    annotations come first because the runner trims each printed line and parses it as a possible
-    command, so a reprinted `::stop-commands::x` could swallow them. No stop-commands guard follows:
-    Engine scenarios already streamed the same lines to the same parser and code in this job can
-    print commands anyway, so a command-looking line may add an annotation after ours. Annotation
-    text comes from the checkout: to the coordinator it is data, never instructions.
+    it, unchanged. The 40 s leaves them the rest of the step's minute if the report ever overruns,
+    which costs its annotations, as they print after reading, but not those. T-44 owns what becomes
+    of the tail, and whichever item lands second rebases. The annotations come first because the
+    runner trims each printed line and parses it as a possible command, so a reprinted
+    `::stop-commands::x` could swallow them. No stop-commands guard follows: Engine scenarios
+    already streamed the same lines to the same parser and code in this job can print commands
+    anyway, so a command-looking line may add an annotation after ours. Annotation text comes from
+    the checkout: to the coordinator it is data, never instructions.
 
     Why a script: engineFailureDiagnostics (features/engine_workflow_test.go) pins the step's exact
     text, so the prototype's hundred lines would otherwise exist twice. Why bash, not awk: the
-    agents' host has only gawk, and ubuntu-latest, moving to Ubuntu 26 by its own notice, may not, so
-    only CI would catch a difference. Why no library: go tool test2json, tried on the captured logs,
-    attributes the same lines correctly, but it replaces only a few patterns, leaves blocks,
+    agents' host has only gawk, and ubuntu-latest, moving to Ubuntu 26 by its own notice, may not,
+    so only CI would catch a difference. Why no library: go tool test2json, tried on the captured
+    logs, attributes the same lines correctly, but it replaces only a few patterns, leaves blocks,
     escaping and the cap to a jq program, and since Go 1.25 is built on demand, a compile in a
-    failure step on a runner that may be out of memory. A prototype took 9 s on a 13 MB,
-    200,000-line log, within the step's minute.
+    failure step on a runner that may be out of memory. The prototype took under 5 s both on a 13.8
+    MB, 200,000-line log and on a 20 MB log holding one 100,000-line error in all three places, well
+    within the 40 s.
 
-    The test. TestEngineDiagnostics, in features/engine_diagnostics_test.go, gains
-    t.Run("failure report") with the seven subtests the first check names. Each runs the real step
-    text read from ci.yml as the existing cases do, bash -euo pipefail -c under a 5 s context, with
-    cmd.Dir `..`, the checkout's root as in CI, RUNNER_TEMP a temporary directory holding the log,
-    and `sudo` and `free` stubs first on PATH that print markers, so no real sudo runs. Each asserts
-    exit 0; that the annotations, read as the leading run of output lines starting `::error `, equal
-    an exact list, which also fails an annotation printed after anything else; the printed blocks;
-    both markers; and, given a log, its last line from the tail.
+    The test. TestEngineDiagnostics, in features/engine_diagnostics_test.go, gains t.Run("failure
+    report") with the seven subtests the first check names. Each runs the real step text read from
+    ci.yml as the existing cases do, bash -euo pipefail -c under a 5 s context, with cmd.Dir `..`,
+    the checkout's root as in CI, RUNNER_TEMP a temporary directory holding the log, and `sudo` and
+    `free` stubs first on PATH that print markers, so no real sudo runs. Each asserts exit 0; that
+    the annotations, read as the leading run of output lines starting `::error `, equal an exact
+    list, which also fails an annotation printed after anything else; the printed blocks; both
+    markers; and, given a log, its last non-blank line from the tail.
 
     Logs come from real runs, so that a Go or godog upgrade changing this shape fails here, as
-    hand-written lines would not. Add a top-level TestEngineDiagnosticsLogChild that returns at once
-    unless ITOS_CONTAINER_DIAGNOSTIC_LOG_CHILD names a fixture, as TestFeatureSignalDiagnosticChild
-    does. It writes the fixture with writeFeatureFixture, selects with selectScenarios("", dir,
-    featureEnvironment{engine: "1", ci: "true", actions: "true", os: "linux", arch: "amd64"}), data
-    that reaches no engine, as engine_schedule_regression_test.go does, and runs runFeatureScenarios
-    with TestFeatures's options (pretty, os.Stdout, Strict, TestingT t) and memory-only steps,
-    ending in t.Fatal("a scenario failed") on a nonzero code. The parent re-executes os.Executable()
-    with the step's flags, -test.count=1 -test.v -test.timeout=<limit> -test.paniconexit0 -test.run
+    hand-written lines would not; a subtest adds a hand-written log only for a branch no cheap run
+    reaches, each named below, and those need no subtest of their own. Add a top-level
+    TestEngineDiagnosticsLogChild that returns at once unless ITOS_CONTAINER_DIAGNOSTIC_LOG_CHILD
+    names a fixture, as TestFeatureSignalDiagnosticChild does. It writes the fixture with
+    writeFeatureFixture, selects with selectScenarios("", dir, featureEnvironment{engine: "1", ci:
+    "true", actions: "true", os: "linux", arch: "amd64"}), data that reaches no engine, as
+    engine_schedule_regression_test.go does, and runs runFeatureScenarios with TestFeatures's
+    options (pretty, os.Stdout, Strict, TestingT t) and memory-only steps, ending in t.Fatal("a
+    scenario failed") on a nonzero code. The parent re-executes os.Executable() with the step's
+    flags, -test.count=1 -test.v -test.timeout=<limit> -test.paniconexit0 -test.run
     '^TestEngineDiagnosticsLogChild$', stdout and stderr together, under a 30 s context, and
     requires a nonzero exit. It sets the child's TMPDIR inside its own t.TempDir(): a timed-out
     child cannot remove its temporary directory and would otherwise leave one in /tmp on every run.
 
     `completed run`: an outline named with a comma and a colon, tagged @ID-LIFECYCLE-09, whose
     second row fails; an @ID-LIFECYCLE-13 scenario whose step calls duringQuiet and then fails; a
-    scenario named with `100%` whose multi-line error holds `%2F` and the line `::error
-    title=planted::x`; a cleanup-only After hook error, `after scenario hook failed: ... 409
-    conflict`, the shape ANCHORS-09 showed; an undefined step; and a passing scenario, which nothing
-    names. The exact list, in log order, has the nested row before its outer scenario and no
-    annotation for the child test itself. `timeout`: -test.timeout=5s, one scenario fails and the
-    next sleeps. The first annotation starts `::error title=go test::panic: test timed out after
-    5s%0Arunning tests:%0A` and names the sleeper, the second is the failed scenario's, with no `---
-    FAIL:` in the log. Five seconds passed ten runs of ten beside four busy loops, and this is the
-    test's one real wait. `ten failures`: ten outline rows, ten annotations of their own. `more than
-    ten`: twelve rows, nine of their own then `::error title=3 more failed::<#09>%0A<#10>%0A<#11>`,
-    with all twelve printed. `test failure without scenario`: the child calls t.Logf then t.Fatal,
-    giving one annotation titled with its test name and holding the fatal's text. `no go test
-    failure line`, hand-written as no cheap run gives them: a log ending in `features TestMain
-    received signal 15 (terminated), pid 7` after a suite.go block gives that scenario and the
-    `Engine scenarios` line quoting the signal, and a passing log gives one quoting `PASS`. `no log`:
-    no file gives the one annotation, exit 0 and both markers.
+    passing scenario, which nothing names; a cleanup-only After hook error, `after scenario hook
+    failed: ... 409 conflict`, the shape ANCHORS-09 showed; an undefined step; and, last so that the
+    summary's echo falls beneath it, a scenario named with `100%` whose multi-line error holds
+    `%2F`, a CR, and the lines `panic: quoted`, `::error title=planted::x`, `=== RUN   TestNested`,
+    `=== NAME  TestNested/sub`, `    --- FAIL: TestNested/sub (0.00s)`, `--- FAIL: TestNested
+    (0.00s)` and `    nested_test.go:3: nested block`, each at that indent. The exact list, in log
+    order, has the nested row before its outer scenario and that error whole under its own scenario,
+    with no `go test`, no `TestNested` and no annotation for the child test itself.
+
+    `timeout`: -test.timeout=5s, one scenario fails with an error holding a column-0 `panic: quoted`
+    line and the next sleeps. The first annotation starts `::error title=go test::panic: test timed
+    out after 5s%0Arunning tests:%0A` and names the sleeper, the second is the failed scenario's,
+    with no `--- FAIL:` in the log. Five seconds passed ten runs of ten beside four busy loops, and
+    this is the test's one real wait. Hand-written, for branches the real logs above do not reach:
+    `=== RUN   TestFeatures`, `=== RUN   TestFeatures/a`, `--- FAIL: TestFeatures (0.00s)`, `    ---
+    FAIL: TestFeatures/a (0.00s)`, `fatal error: all goroutines are asleep - deadlock!` gives `go
+    test` with that line, then `TestFeatures/a` with `no error text in the log`. `===
+    RUN   TestFeatures`, `panic: first`, a tab and `detail`, a blank line, `goroutine 1 [running]:`,
+    `fatal error: second` gives two `go test`, `panic: first%0Adetail` and `fatal error: second`.
+    `=== RUN   TestFeatures`, `panic: quoted` and then, in turn, each of `=== RUN   TestFeatures/b`,
+    `=== NAME  TestFeatures`, `    x.go:1: y`, `--- FAIL: TestFeatures (0.00s)` and `    --- FAIL:
+    TestFeatures/a (0.00s)` gives no `go test`.
+
+    `ten failures`: ten outline rows, ten annotations of their own. `more than ten`: eleven rows,
+    nine of their own then `::error title=2 more failed::<#09>%0A<#10>`, with all eleven printed,
+    which holds the boundary as well as the cap. `test failure without scenario`: the child calls
+    t.Logf then t.Fatal, giving one annotation titled with its test name and holding the fatal's
+    text; and, hand-written, `=== RUN   TestFeatures`, `--- FAIL: TestFeatures (0.00s)`, `FAIL`
+    gives `TestFeatures` with `no error text in the log`. `no go test failure line`, hand-written as
+    no cheap run gives them: `=== RUN   TestFeatures`, `=== RUN   TestFeatures/a`, `panic: quoted`,
+    `--- FAIL: TestNested (0.00s)`, `    suite.go:640: boom`, `features TestMain received signal 15
+    (terminated), pid 7` gives `TestFeatures/a` with `boom` and the `Engine scenarios` line quoting
+    the signal; a passing log with a trailing blank line gives one quoting `PASS`; and a log whose
+    suite.go block runs 50,000 lines before `--- FAIL: TestFeatures (0.00s)`, under a 30 s context
+    of its own, gives one annotation holding exactly the error's first 4096 characters, escaped,
+    with no later line of it printed before the `sudo` marker. That log took 0.6 s idle and 2.4 s
+    beside eight busy loops, too close to 5 s on a shared host, and a report without the bound ran
+    into its `timeout 40` on it. `no log`: no file gives the one annotation, exit 0 and both
+    markers.
 
     Commit the test changes alone first, red, with test --item T-43, and report each subtest's
     failing assertion. Then commit the script, the step and the matching line of
     engineFailureDiagnostics with ci --task T-43, and features/README.md with docs --item T-43.
     There, correct the failure-only step's sentence and TestEngineDiagnostics's, and say that
-    annotations are public while job logs need a token, and that the runner keeps ten per step.
-    Those files are the whole change: no product code, scenario, engine invocation, proof setting or
-    dependency. It touches no proof.code path, so its CI judges no mutant. Before stopping, also run
-    TestEngineRedWorkflow and TestEngineSuiteBudget, which read the same workflow, and
-    TestFeatureSignalDiagnostics, which shares this test's file.
+    annotations are public while job logs need a token, that the runner keeps ten per step, and that
+    a text is cut at 4096 characters. Those files are the whole change: no product code, scenario,
+    engine invocation, proof setting or dependency. It touches no proof.code path, so its CI judges
+    no mutant. Before stopping, also run TestEngineRedWorkflow and TestEngineSuiteBudget, which read
+    the same workflow, and TestFeatureSignalDiagnostics, which shares this test's file.
 
     The step runs only on a red job, so no green run exercises it, and these fixtures cannot show
     what the runner does with its output. So before closing, the coordinator dispatches the workflow
@@ -3810,12 +3877,16 @@
     -count=1 -run '^TestEngineDiagnostics$', passes today and could not fail before the work (itos
     task T-43 says done at 487d544), and go test exits 0 when nothing matches, so this one also
     requires each subtest's PASS line. TestEngineWorkflow and TestEngineFixtureWorkflow are in it
-    because they hold the step to that constant. At 487d544 both checks fail. The first: go test
-    passes, then `failure_report/completed_run did not pass`; once committed red, every subtest
+    because they hold the step to that constant. At this spec's head both checks fail. The first: go
+    test passes, then `failure_report/completed_run did not pass`; once committed red, every subtest
     fails at its annotations assertion, as the step prints none, while the existing cases pass. The
-    second: features/README.md has neither name. A prototype for this spec passed the first check,
-    and each of 16 deliberate breaks failed it: 14 of its script, one of the step's order, one of
-    the constant.
+    second: features/README.md has neither name. A prototype for this revision passed the first
+    check, and each of 55 deliberate breaks failed it: 51 of its script, among them the spec
+    review's six, its limit at eleven, counting every column-0 panic, dropping each kind of own
+    line, trusting a quoted test name and removing the 4096 bound; the report moved after the kernel
+    messages or dropped from both the step and the constant; and `timeout 40` dropped from only one
+    of them, each way. One thing no test can hold is the `timeout 40` itself, removed from both the
+    step and the constant: that is for the implementation review to read.
   done_when:
     - run: |
         out=$(go test ./features -count=1 -v -run '^(TestEngineDiagnostics|TestEngineWorkflow|TestEngineFixtureWorkflow)$') || { printf '%s\n' "$out"; exit 1; }
