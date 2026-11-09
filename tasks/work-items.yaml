@@ -798,3 +798,18 @@ items:
       literals through one constructor if that is the smallest repair. Keep every scenario,
       assertion and the pinned itos-cc contract unchanged. Phase p2: nothing blocks the current
       step, since slice-21's own fix has landed on its branch.
+  - id: p1-egress-allowlist-proxy
+    title: Egress through an allowlisting Go CONNECT proxy beside the worker
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, step 1 (docs/charter.md). The worker gets no direct route out: an owned proxy
+      on an internal network allows CONNECT to listed host names on port 443 only, with no TLS
+      interception, matching the name the client gave (never a reverse-DNS lookup), and logs every
+      refusal. The allowlist is part of the approved settings. The proxy is a small, maintained Go
+      CONNECT proxy chosen in the spec, not squid (the person, 2026-11-09). Each property is proven
+      by a scenario that fails without it; harness traffic in scenarios goes to a fake endpoint the
+      proxy allows.
