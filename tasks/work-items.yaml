@@ -2,7 +2,7 @@
 phases:
   1: null
 queue:
-  - p1-engine-suite-under-its-limit-again
+  - T-45
   - T-42
   - p1-credentials-passed-in
   - p1-harness-home
@@ -440,6 +440,21 @@ items:
       requires, and the whys predate the record. Each item's own drafter rewrites that in its spec
       round, and T-39-notes.md already carries the q-51 and review notes into it. Registry and owner
       edits are the coordinator's act, so no new item is needed.
+
+      This item already holds the open question of whether the edge goes on slice-26 or slice-27, or
+      whether the person decides before slice-26 is taken. This idea only argues the placement.
+      After slice-26, run still refuses every version 2 file, so an agent that self-approves an
+      allowlist through --fingerprint or a faked terminal gains no route. Slice-27 is where that
+      approval first becomes a route, so the person's decision must land before slice-27. Weigh that
+      when the edge is placed. docs/security.md and q-2 both say to revisit this before egress.
+
+      Its why already lists this exact coordinator edit: slice-26 gets T-38 in depends_on, because
+      the drafter takes the digest binding and the network-granting profile from T-38's record,
+      docs/decisions/0022-egress-proxy.md. The registry still shows slice-26 with depends_on
+      [slice-25], so the edit has not been made. The new point is why it matters. That record exists
+      only on T-38's branch and is still proposed. Without the edge, slice-26 could land with a
+      dangling link, or bind text the person later overturns. It is a coordinator edit, not a new
+      item.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -861,6 +876,14 @@ items:
       before persisting the claim). A test needs a seam between the prospective pin and
       pinPath(create) to simulate the race. It is availability only, on a multi-UID host with a
       shared-writable state home, and slice-21 deliberately did not repair it.
+
+      This is the same recovery decision that item already has to make, in the other direction.
+      v0.1.0 is published, so older binaries exist. Once slice-26 writes an allowlist-v1 record, an
+      older binary reads an active one as approval.state.invalid, and approve stops on that failure.
+      The person then cannot re-approve with that binary until they remove the record by hand. It
+      fails closed, but it is a lockout. The item's upgrade contract should also decide downgrade:
+      documented manual removal, or a version marker an older binary can recognise. Its scenarios
+      should cover an older controller running beside a record it cannot read.
   - id: p2-fixture-worlds-inherit-scenario-coverdir
     title: A fixture world that drops the scenario coverage destination fails in go test, not in CI
     phase: 1
@@ -1242,90 +1265,9 @@ items:
     title: The engine suite fits its 4-minute test timeout again after T-41
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Measured by the coordinator, 2026-11-09: the Engine scenarios step took 2 min 49 s on main at
-      966e456 (run 42615366138, before T-41), 3 min 44 s on T-41's own green run (42617313777), and
-      4 min 5 s on main after T-41 merged (42618748581), where TestFeatures ran 239.55 s against
-      -test.timeout=4m. T-41's drain wait added about a minute, so every pull request's engine tier
-      now runs at the limit and fails as a timeout on any slow runner, whatever it changes. Find
-      what T-41 lengthened (its overlap drain wait or the cleanup it added) and bring the suite back
-      near 3 minutes through the harness-only budget seam; don't raise the limit. Milestone two's
-      egress step needs a green engine tier.
-
-      Engine failure diagnostics (print the streamed timings). This belongs inside
-      p1-engine-suite-under-its-limit-again. That item has to find which step T-41 lengthened, and
-      the Engine failure diagnostics step in .github/workflows/ci.yml shows only `tail -100` of the
-      log, which on a timeout is a goroutine dump. Note for that item: print the last `engine
-      scenario timing:` records, or the slowest examples sorted, in that step, and say in the README
-      that a goroutine blocked a minute or more is labelled with its minutes. It is a small ci.yml
-      change and does not need its own item.
-
-      Control transaction re-validates every pinned path chain about 11 times per Begin. Treat this
-      as a lead on that item, not a new item. A steady-state write Begin is about 2,800 syscalls and
-      41 fsyncs, and a run takes five of them. That costs about 12 ms natively, but the engine
-      harness traces every syscall and the engine call budget is 1 s. If the Engine step stays near
-      its 4-minute timeout once slice-21's control transaction lands, or Begin hits state.busy under
-      the tracer, that item should consider cutting the redundant back-to-back Unchanged() walks.
-      The checks are the anti-substitution guards, so any such change needs a security review by the
-      person. Nothing is measured to be wrong today, so it should not be tracked separately.
-
-      That item already owns the small change to the Engine failure diagnostics step in
-      .github/workflows/ci.yml, which today shows only `tail -100` of the log. Make the same edit
-      print each `--- FAIL` block with its godog step error, beside the streamed `engine scenario
-      timing:` records, so a red run shows its failing assertion. Do not wait for the extractor fix
-      tracked upstream in itos. No separate item is needed for a second print in the same step.
-
-      That item already prints the streamed engine timings and carries the lead on the 1 s engine
-      call budget under the syscall tracer. Per-row signal and SIGKILL offsets for LIFECYCLE-09
-      belong in the same `engine scenario timing:` output and the same diagnostics step. They are
-      data for reviewing T-42's limits and for seeing how close real calls come to T-33's 1 s limit,
-      so they are not a task of their own. No failure has been tied to the 1 s limit yet. T-42's fix
-      is already decided and does not wait on them.
-
-      This item already owns the Engine failure diagnostics step in .github/workflows/ci.yml. Its
-      text says to print each `--- FAIL` block with its godog step error beside the streamed `engine
-      scenario timing:` records, so a red run shows its failing assertion. It also says not to wait
-      for the extractor fix already tracked upstream in itos. The empty `go-test
-      TestFeatures/...#03:` body in run 42626087465 is that same gap. The project-side fix is the
-      existing ci.yml edit. The summary extractor belongs in itos and is already noted there as
-      tracked. When the coordinator files upstream, it should search itos's open and closed issues
-      first and comment on the existing one instead of opening a second.
-
-      This item already owns the Engine failure diagnostics step in .github/workflows/ci.yml and
-      says to print each `--- FAIL` block with its godog step error beside the streamed `engine
-      scenario timing:` records. New detail for it: job logs return 403 without a token, so an
-      implementer without gh sees only 'Process completed with exit code 1'. Also emit one `::error
-      title=<scenario>` workflow annotation per failed scenario (or go-test failure line) from that
-      same step. Annotations are public, so a red engine job becomes diagnosable without log access.
-      The coordinator can then tell an unchanged flake from a new failure when a re-run fails
-      differently, as the two attempts at 0a1d85c did. It is the same small ci.yml edit, so it needs
-      no separate item.
-
-      The idea is conditional ("if the anchor scenario also flakes") and rests on one failure, in a
-      run where LIFECYCLE-09 rows #02 and #03 also failed. That points to a slow or loaded runner,
-      not to a fault in the anchor scenario. Exit 75 is run.cleanup-temporary and HTTP 409 is the
-      worker-removal conflict, which fits a worker that had not finished dying under that load. T-42
-      is scoped to LIFECYCLE-09 only and no item covers anchors.feature, but this item is the one
-      that makes the failure diagnosable. It owns the Engine failure diagnostics step in ci.yml: the
-      --- FAIL blocks with godog step errors, the streamed engine timings, and one ::error
-      annotation per failed scenario. It also carries the lead on the 1 s engine call budget under
-      the syscall tracer, which could explain a 409 or state.busy. Note for it: record that
-      anchors.feature:410 (ANCHORS-09, exit 75, cleanup 409) failed on the engine job for e2faafd.
-      When that step lands, check whether ANCHORS-09 or ANCHORS-10 fail again on an unchanged
-      re-run. Only a repeat on its own justifies a separate item, and then it should be treated as a
-      possible real race in anchor cleanup, not a timing flake. One unexplained failure in a run
-      that was already failing for load is too thin to track separately.
-
-      That item already owns the Engine failure diagnostics step in .github/workflows/ci.yml. Its
-      notes say to print each `--- FAIL` block with its godog step error beside the streamed `engine
-      scenario timing:` records, to emit one `::error title=<scenario>` annotation per failed
-      scenario because job logs return 403 without a token and agents have no gh, and not to wait
-      for the itos extractor fix tracked upstream. This idea is the same ci.yml edit. T-42's 'nobody
-      read the failing assertion' complaint is the gap that note describes, so no second item is
-      needed.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
@@ -1423,3 +1365,24 @@ items:
       choice changes the log schema (a terminal record or final count) and the proxy's hardening, so
       the person must decide it before slice-28 writes its copy check, and the drafter must stop for
       it rather than invent a protection.
+  - id: T-43
+    title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: T-44
+    title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: T-45
+    title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-44]
+    kind: task
