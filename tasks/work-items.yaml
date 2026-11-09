@@ -939,8 +939,8 @@ items:
   - id: slice-26
     title: Approval binds the egress allowlist, and any change to it needs a new approval
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-25]
     kind: slice
     why: >
