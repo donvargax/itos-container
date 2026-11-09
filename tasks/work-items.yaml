@@ -1610,3 +1610,28 @@ items:
       slice-27 makes an approved list a live route. Slice-26's spec chose the whole-array form on
       purpose, so this is a follow-up that changes that scenario in a feat commit, not an edit to
       slice-26.
+  - id: p2-ci-go-build-cache-rolling-key
+    title: CI jobs restore a Go build cache that follows main, not one frozen at go.sum's first save
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. ci.yml uses actions/setup-go with cache-dependency-path: go.sum in every
+      job (lines 40, 68, 184, 207, 230). The cache key is go.sum's hash, and as I read setup-go it
+      saves only when that key missed. The build cache is therefore frozen at the first save for
+      each go.sum, so every job recompiles all of this module's packages changed since then. The
+      engine step's 240 s gate (T-33) includes `go test -c`, so compile cost counts against the same
+      budget T-45 is trying to free. A work step measured it locally on 4 CPUs. The features binary
+      took 21 s cold and 4.7 s warm. The covered product build took 16 s cold and 0.8 s warm. That
+      is up to about 30 s in a step that has run at 199–245 s on slow runners. It was not measured
+      in CI. First read the `engine compilation timing:` lines from recent main and pull request
+      runs to confirm the share. If it holds, settle in the spec the key that rolls with main and
+      the restore order. Also settle whether it needs a pinned actions/cache in place of setup-go's
+      cache option, with the reason and version. Branch scoping must keep a pull request's cache
+      from feeding main. Keep the 240 s gate, the 4 m test timeout and compilation inside the
+      measurement unchanged. Phase p2: nothing blocks milestone two step 1, and it is CI polish that
+      the charter takes only when it does not delay the next step. It stays inside the first
+      milestone because it is a suite-speed fix for the engine tier, whose compile time sits inside
+      the gate.
