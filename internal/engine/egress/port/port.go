@@ -30,7 +30,7 @@ const (
 )
 
 // Error returns the failure's text.
-func (f Failure) Error() string { return "" }
+func (f Failure) Error() string { return string(f) }
 
 // Event is the kind of one log record.
 type Event string
