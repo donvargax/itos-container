@@ -1419,6 +1419,17 @@ items:
       it blocks no step on its own. Note on the item: a product whose repeated SIGINT restarts grace
       fires at about 1.2 s and passes every LIFECYCLE-09 row under the widened 1 s to 3 s window, so
       that timing is the row's failing-first case.
+
+      This item already covers the idea. Its notes say a recorder that journals the cut would only
+      sharpen the native tier's inference, and that a recorded cut instant is not worth its own item
+      because it touches the recorder outside T-42's range. The defect to catch is a grace timer
+      started at the acknowledgement or the cut instead of the first signal. A fake clock has no
+      jitter, so the item's fake-clock row can assert the exact SIGKILL instant (first signal plus
+      grace) without the recorder stamping either the cut or the start of the kill call. Extend that
+      row with a hold longer than what is left of the call limit, so the cut really happens. T-42's
+      escalationWindow comment already names this gap. The row's exact assertion also catches a
+      timer started late, which the delayed limit only refuses when the kill arrives early. The
+      recorder stays unchanged, so the idea is not a separate item.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
