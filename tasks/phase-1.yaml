@@ -3350,3 +3350,20 @@
     only heads (--no-tags), so it starts with an empty ref set; a local clone has a branch
     and never shows this. The snapshot now uses git for-each-ref, which exits 0 on an empty
     set and lists the same refs, so the state comparison proves what it did before.
+- id: T-38
+  type: docs
+  title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
+  why: >
+    Charter step 1 says the proxy is a small, maintained Go CONNECT proxy chosen in the spec, not
+    squid. This task writes a docs/decisions record and updates the arc42 building-block view and
+    runtime/network text. It picks one library with a pinned version, an AGPL-compatible licence and
+    a stated maintenance reason. It fixes the topology: an internal Docker network with no route
+    out, a proxy container dual-homed beside the worker, and the worker attached to the internal
+    network only. It states how the proxy binary or image reaches the proxy container and how it
+    stays out of the worker's reach. It defines fail-closed behaviour, with no fallback network when
+    the proxy fails. It gives the refusal log format and where it lands, with no secrets logged. It
+    names the contract's open decisions it settles and stops for the person if one is a security
+    property the charter leaves open. The library, topology and delivery are then fixed before any
+    code. Broken down from p1-egress-allowlist-proxy.
+  done_when:
+    - run: ls docs/decisions/*egress-proxy*.md && grep -qi 'egress' docs/architecture/arc42.md

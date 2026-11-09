@@ -853,25 +853,13 @@ items:
     why: >
       Milestone two, step 4 (docs/charter.md), built on slice-12's cancellation rules. A terminal or
       multiplexer outside the sandbox is the window onto an agent inside it.
-  - id: p1-egress-proxy-spec
+  - id: T-38
     title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Charter step 1 says the proxy is a small, maintained Go CONNECT proxy chosen in the spec, not
-      squid. This task writes a docs/decisions record and updates the arc42 building-block view and
-      runtime/network text. It picks one library with a pinned version, an AGPL-compatible licence
-      and a stated maintenance reason. It fixes the topology: an internal Docker network with no
-      route out, a proxy container dual-homed beside the worker, and the worker attached to the
-      internal network only. It states how the proxy binary or image reaches the proxy container and
-      how it stays out of the worker's reach. It defines fail-closed behaviour, with no fallback
-      network when the proxy fails. It gives the refusal log format and where it lands, with no
-      secrets logged. It names the contract's open decisions it settles and stops for the person if
-      one is a security property the charter leaves open. The library, topology and delivery are
-      then fixed before any code. Broken down from p1-egress-allowlist-proxy.
+    kind: task
   - id: p1-egress-allowlist-policy
     title: The policy file accepts an exact host-name egress allowlist and doctor validates it
     phase: 1
@@ -912,7 +900,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-egress-proxy-spec]
+    depends_on: [T-38]
     kind: idea
     why: >
       Charter step 1's core decision logic, built once as shared engine code under
@@ -930,7 +918,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-egress-proxy-spec]
+    depends_on: [T-38]
     kind: idea
     why: >
       Charter step 1: an owned proxy on an internal network, so the worker has no direct route out.
