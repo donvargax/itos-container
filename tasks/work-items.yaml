@@ -408,6 +408,15 @@ items:
       Nothing has acted on it yet. Its p3 phase is now wrong, since slice-26 is the first approval
       that grants network and the item gates phase-1 work. The coordinator should raise it to p1 and
       either add the dependency from slice-26 or have the person decide before slice-26 is taken.
+
+      The edges are coordinator edits to depends_on, not a new item. p3-approval-before-egress
+      already holds the slice-26 and slice-27 edge and the person's decision, and says its p3 phase
+      is wrong now that it gates phase-1 work. p1-acceptance-static-binary already ends with
+      'slice-27 should depend on it'. Remaining edit: add T-38 to slice-26's depends_on, because
+      slice-26's drafter takes the digest binding and the network-granting profile from T-38's
+      record. Also add p1-acceptance-static-binary to slice-27's depends_on (T-39 and T-40 already
+      depend on T-38). Raise p3-approval-before-egress to p1 and give slice-26 the edge on it, or
+      ask the person to decide before slice-26 is taken.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -966,8 +975,8 @@ items:
   - id: T-41
     title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p1-docs-admit-milestone-two-egress
@@ -1049,3 +1058,48 @@ items:
       p2-architecture-fixtures-load). It is p2: it blocks no step of charter milestone two. The
       itos-side warning, from `itos config check` or `itos work promote --check`, is a gap in itos
       itself; the coordinator files it after searching existing issues.
+  - id: p3-session-state-retention
+    title: Decide how long completed sessions' host state is kept, egress-refusals.jsonl included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Outside charter milestone two step 1, so p3: nothing in step 1 needs it, and it is recorded
+      rather than specified now. T-38's record bounds one session's egress-refusals.jsonl at about
+      40 MiB of host disk. Cleanup never deletes it, and completed sessions stay listed and are
+      never garbage-collected: features/recovery.feature says 'no retention/GC policy is added
+      here', and features/session.feature says 'Later retention/GC belongs to a separate
+      specification'. No registry item holds that specification, and slice-28 covers writing the
+      log, not how long it lives. The charter's purpose is an agent loop running unattended, which
+      accumulates session state and these logs on the host without bound. The rule must keep a
+      hostile run's refusal evidence until the person has read it, so any deletion has to be an
+      explicit act by the person, never silent automatic pruning. It also has to keep the
+      exact-ownership guarantee: it may touch only this project's own session state, never foreign
+      resources. Decide the rule, then specify it by scenarios.
+  - id: p2-lifecycle-09-escalation-window-jitter
+    title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Run 42609794543 (T-41's range, which touches nothing LIFECYCLE-09 uses) failed the engine tier
+      at row #03 of 'Ignored and repeated cancellation escalates once after the fixed grace'
+      (SIGTERM, acknowledgement delayed 60% of grace), while T-33 to T-37 each passed it. T-33
+      shortened the engine grace from 10 s to 1 s and kept the SIGKILL tolerance proportional:
+      lifecycleSignals in features/lifecycle_native_assertions_test.go accepts SIGKILL only from 1.0
+      s to 1.2 s after cancellation. The 30 s teardown assertion kept an absolute 2 s tolerance.
+      Controller wake-up and request latency under -cover on a shared runner do not shrink with the
+      grace, so 200 ms is a plausible flake source. The same run's engine step took 235 s against
+      its 240 s gate, so the runner was busy. The cause is not confirmed: the failing assertion was
+      not visible to the implementer (no gh access) or to this triage. The coordinator should put
+      the failing assertion's text from the job log in the brief before the item is taken. If it is
+      the SIGKILL window, replace the 20% share with an absolute floor. A tolerance up to about 500
+      ms still rejects an acknowledgement-relative timer, which fires at 1.6 s with a 60% delay.
+      Keep the lower bound, the native receipts and the 60% delay row. Change the T-33 wording
+      'escalation tolerance is 20 percent' and the matching lines in features/README.md with it.
+      This keeps the engine tier from failing unrelated ranges, which matters for milestone two's
+      egress proof, which relies on it.
