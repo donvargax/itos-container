@@ -4,7 +4,6 @@ phases:
 queue:
   - T-45
   - T-44
-  - T-42
   - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
@@ -307,6 +306,14 @@ items:
       commit. Capture a failure first.
 
       From arc42's review: go.mod is an enforcement input, so slices 2 and 3 hit this.
+
+      That item already holds the problem that the whole fixture matrix is slow and can fail under
+      load. Add this measurement: T-39's 24 probes ran in under 10 s with a hand-built checker and
+      ARCHITECTURE_CHECKER set by hand, against 124 s for the whole matrix. A filter, or a split of
+      the matrix, is a candidate remedy once that item has captured a failure. Do not add a flag to
+      the gate tool on its own: touching tools/architecture/check is an enforcement-input change
+      that triggers the full matrix, and agents do not run the gate by hand. It is not worth a
+      separate item.
   - id: slice-5
     title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
     phase: 1
@@ -480,6 +487,14 @@ items:
       docs/security.md. Nothing is new here. What remains is the coordinator's depends_on edit,
       since slice-27 still lists [slice-26, T-39, T-40], together with the person's decision on who
       may approve a network-granting sandbox. Neither needs a new item.
+
+      This item already holds the point, and the edge now exists: slice-27's depends_on lists
+      p3-approval-before-egress (commit f5f9e58), so slice-27 cannot be taken before it. Slice-26's
+      spec confirms the placement: run keeps refusing version 2 after slice-26, so a self-approved
+      allowlist grants no route until slice-27 lifts that refusal. One thing remains, and it is the
+      person's: decide who may approve a network-granting sandbox, and whether allowlist-v1 records
+      written before the gate lifts stay valid or are retired by a new profile name. The coordinator
+      should put that to the person (itos decision) before slice-27 is taken. No new item is needed.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -1207,7 +1222,7 @@ items:
     title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-scheduled-fuzz-egress-parser
@@ -1229,6 +1244,13 @@ items:
       non-gating: it sits beside, not in, the required job. The project has so far written "no
       nightly" (the T-37 and mutation-proof items); that was about the gating mutation proof, and
       this item is the exploring tier. The person should confirm that reading when reviewing it.
+
+      Add `go test -race ./internal/engine/egress/...` to the same scheduled, non-gating job. The
+      item already covers what T-39's one-off checks leave unrepeated, and it needs a schedule
+      trigger that ci.yml lacks. The egress adapter's concurrency faces a hostile client, like the
+      parser does. ci.yml has no race run, so after T-39 closes nothing runs the race detector
+      there. Run it over the egress package only, never over ./features (the 22 GB incident of
+      2026-11-08).
   - id: p2-schema-conforms-to-parser
     title: A check ties each published policy schema to what doctor accepts and refuses
     phase: 1
@@ -1448,6 +1470,19 @@ items:
       this sleeping or silent-restart product sends no /wait, so lifecycleSignals' wait rule does
       not refuse it and only the fake-clock row's exact instant does. Make that the row's
       failing-first case alongside the repeated-SIGINT restart.
+
+      This item already holds the idea. Its fake-clock row, extended with a hold longer than what is
+      left of the call limit so the cut really happens, asserts SIGKILL at exactly first signal plus
+      grace. A fake clock has no jitter, so no recorded cut instant is needed. The new rationale is
+      covered by that row. A timer started at the acknowledgement or the cut kills at the cut plus
+      grace, whenever the first signal arrives. A product that sleeps instead of waiting after a cut
+      kills at the same wrong instant. Neither sends the /wait request that lifecycleSignals' wait
+      rule looks for, so only the exact instant refuses them. Make both the row's failing-first
+      cases, alongside the repeated-SIGINT restart. The earlier notes already settle that a recorded
+      cut instant is not worth its own item, because it touches the recorder outside T-42's range
+      and only sharpens the native tier's inference. The item is not in the queue (T-45, T-42,
+      p1-credentials-passed-in, p1-harness-home, p1-interactive-tty). The person or coordinator
+      should queue it before p1-interactive-tty or accept the gap.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
@@ -1535,3 +1570,25 @@ items:
       and leave ID-APPROVAL-56's explicit width alone. Phase p2: nothing blocks the current step,
       and CI normally exports no COLUMNS. The harness came from go-template-itos, so once this lands
       the coordinator files it there as a backport issue.
+  - id: p2-approve-allowlist-added-removed-names
+    title: Approve's review shows an allowlist change as the names added and removed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Charter milestone two, step 1: the allowlist is part of the approved settings, and the
+      contract's AC-02 makes a change to network permissions need a new approval. The checkout is
+      hostile and can edit itos-container.yaml, so the person's re-approval review is the one place
+      a hostile added name is caught. Slice-26's spec compares /policy/network/allow as one value,
+      so a change prints as one difference holding the whole old and new arrays. The policy admits
+      lists of up to 2037 names, and one added name among them is hard to see before y/N. Show the
+      names added and the names removed, in sorted order, beside or instead of the whole arrays, in
+      bare approve's review and in the plain output of approve and doctor. Decide in the spec
+      whether the schema-1 JSON differences keep their {path,before,after} shape, which scenarios
+      already hold. It changes presentation only; it grants and binds nothing. It follows slice-26,
+      which supplies the record and the comparison. It is not a blocker, but it should land before
+      slice-27 makes an approved list a live route. Slice-26's spec chose the whole-array form on
+      purpose, so this is a follow-up that changes that scenario in a feat commit, not an edit to
+      slice-26.
