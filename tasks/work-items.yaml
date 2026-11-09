@@ -413,106 +413,9 @@ items:
     title: Revisit who may approve a sandbox before it can grant network or credentials
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The person's q-2, 2026-11-04: an agent on the host can approve its own sandbox through
-      --fingerprint or a faked terminal. Offline-only permissions make that cheap for now. Before
-      the egress and credentials stages, when an approval grants something worth taking, weigh a
-      host-side confirmation an agent cannot drive, per the stage.
-
-      p3-approval-before-egress already holds this: q-2, an agent self-approving through
-      --fingerprint or a faked terminal, to be weighed before egress and credentials, when an
-      approval grants something worth taking. The new point is that it has depends_on [] and
-      slice-26 (approval binds the allowlist) and slice-27 (the first run that grants network) do
-      not wait for it, so nothing forces the revisit. The coordinator should add that edge from
-      slice-26 or slice-27, or ask the person to decide before slice-26 is taken. The phase is p3
-      but it now gates phase-1 work, so it needs raising to p1 or the edge needs a reason.
-
-      That item already holds this exact point: its why says it has depends_on [] while slice-26 and
-      slice-27 do not wait for it, and that the coordinator should add the edge or ask the person.
-      Nothing has acted on it yet. Its p3 phase is now wrong, since slice-26 is the first approval
-      that grants network and the item gates phase-1 work. The coordinator should raise it to p1 and
-      either add the dependency from slice-26 or have the person decide before slice-26 is taken.
-
-      The edges are coordinator edits to depends_on, not a new item. p3-approval-before-egress
-      already holds the slice-26 and slice-27 edge and the person's decision, and says its p3 phase
-      is wrong now that it gates phase-1 work. p1-acceptance-static-binary already ends with
-      'slice-27 should depend on it'. Remaining edit: add T-38 to slice-26's depends_on, because
-      slice-26's drafter takes the digest binding and the network-granting profile from T-38's
-      record. Also add p1-acceptance-static-binary to slice-27's depends_on (T-39 and T-40 already
-      depend on T-38). Raise p3-approval-before-egress to p1 and give slice-26 the edge on it, or
-      ask the person to decide before slice-26 is taken.
-
-      This item already holds the edges and the open decision; the T-38 review confirms they are
-      still absent on origin/main and at T-38's head. For the coordinator to apply as depends_on
-      edits: slice-26 gets T-38, because its drafter takes the digest binding and the
-      network-granting profile from T-38's record. slice-26 also gets this item, unless the person
-      decides first who may approve a network-granting sandbox. slice-27 gets
-      p1-acceptance-static-binary, because the harness binary was measured dynamically linked and
-      cannot serve as the proxy in an inert root filesystem; that item's own why already says
-      slice-27 should depend on it. The phase field here is already 1, so only the edges and the
-      person's decision remain. Until slice-26 has them, it can start before the record it builds on
-      exists, with nothing holding it back.
-
-      This is coordinator registry housekeeping, not a work item. The slice-27 edge is already held:
-      p3-approval-before-egress lists the depends_on edits (slice-26 gets T-38 and that item;
-      slice-27 gets p1-acceptance-static-binary, because the harness binary was measured dynamically
-      linked), and p1-acceptance-static-binary's why already ends with 'slice-27 should depend on
-      it'. Record 0022 (commit 1770912, delivery as the host's own static executable) confirms the
-      edge, so the coordinator applies it to slice-27 now. The rest is stale text in T-39, T-40 and
-      slice-26 to slice-28: T-39 still says 'library', its done_when lacks the fuzz run that q-51
-      requires, and the whys predate the record. Each item's own drafter rewrites that in its spec
-      round, and T-39-notes.md already carries the q-51 and review notes into it. Registry and owner
-      edits are the coordinator's act, so no new item is needed.
-
-      This item already holds the open question of whether the edge goes on slice-26 or slice-27, or
-      whether the person decides before slice-26 is taken. This idea only argues the placement.
-      After slice-26, run still refuses every version 2 file, so an agent that self-approves an
-      allowlist through --fingerprint or a faked terminal gains no route. Slice-27 is where that
-      approval first becomes a route, so the person's decision must land before slice-27. Weigh that
-      when the edge is placed. docs/security.md and q-2 both say to revisit this before egress.
-
-      Its why already lists this exact coordinator edit: slice-26 gets T-38 in depends_on, because
-      the drafter takes the digest binding and the network-granting profile from T-38's record,
-      docs/decisions/0022-egress-proxy.md. The registry still shows slice-26 with depends_on
-      [slice-25], so the edit has not been made. The new point is why it matters. That record exists
-      only on T-38's branch and is still proposed. Without the edge, slice-26 could land with a
-      dangling link, or bind text the person later overturns. It is a coordinator edit, not a new
-      item.
-
-      That item's text already holds this reconciliation. It says T-39, T-40 and slice-26 to
-      slice-28 carry stale text that predates the record. T-39 still says 'library' and its
-      done_when lacks the fuzz run. Each item's own drafter rewrites its entry in its spec round,
-      and the registry edits are the coordinator's act. What this idea adds is the content of that
-      rewrite. The record (docs/decisions/0022-egress-proxy.md, on origin/T-38 and not yet on main)
-      now holds three things the entries don't mention: (1) a per-process `seq` in the refusal log,
-      with the copy checking it and reporting a gap. (2) A four-step classification of a failed
-      dial, DNS failure first and then the Control hook's flags, which the error `Dial` returns
-      cannot decide. (3) The disclosed limit that a lost log tail cannot be detected. When the
-      coordinator makes the registry edits, add these three points and tell each drafter to read the
-      record rather than the entry. T-39's check is `go test ./internal/engine/egress/...`, so the
-      dial classification belongs in its done_when. The log-store limit must be disclosed by
-      slice-26, slice-27 and slice-28 until p2-proxy-log-lost-tail-sink is answered. The coordinator
-      applies this once T-38 is merged. No new item is needed.
-
-      p3-approval-before-egress already holds both edges and the reasons for them. Slice-27 gets
-      p1-acceptance-static-binary because the harness binary was measured dynamically linked, so it
-      cannot be the proxy in an inert root filesystem; that item's why already ends 'slice-27 should
-      depend on it'. Slice-26 or slice-27 gets p3-approval-before-egress because a self-approved
-      list first becomes a route in slice-27; its why states that point and cites AC-02 and
-      docs/security.md. Nothing is new here. What remains is the coordinator's depends_on edit,
-      since slice-27 still lists [slice-26, T-39, T-40], together with the person's decision on who
-      may approve a network-granting sandbox. Neither needs a new item.
-
-      This item already holds the point, and the edge now exists: slice-27's depends_on lists
-      p3-approval-before-egress (commit f5f9e58), so slice-27 cannot be taken before it. Slice-26's
-      spec confirms the placement: run keeps refusing version 2 after slice-26, so a self-approved
-      allowlist grants no route until slice-27 lifts that refusal. One thing remains, and it is the
-      person's: decide who may approve a network-granting sandbox, and whether allowlist-v1 records
-      written before the gate lifts stay valid or are retired by a new profile name. The coordinator
-      should put that to the person (itos decision) before slice-27 is taken. No new item is needed.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -1080,7 +983,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-26, T-39, T-40, p3-approval-before-egress]
+    depends_on: [slice-26, T-39, T-40]
     kind: slice
     why: >
       Was p1-egress-run-through-proxy.
@@ -1553,15 +1456,15 @@ items:
   - id: T-44
     title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-45
     title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-harness-env-clears-columns
@@ -1610,3 +1513,104 @@ items:
       slice-27 makes an approved list a live route. Slice-26's spec chose the whole-array form on
       purpose, so this is a follow-up that changes that scenario in a feat commit, not an edit to
       slice-26.
+  - id: p2-ci-go-build-cache-rolling-key
+    title: CI jobs restore a Go build cache that follows main, not one frozen at go.sum's first save
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. ci.yml uses actions/setup-go with cache-dependency-path: go.sum in every
+      job (lines 40, 68, 184, 207, 230). The cache key is go.sum's hash, and as I read setup-go it
+      saves only when that key missed. The build cache is therefore frozen at the first save for
+      each go.sum, so every job recompiles all of this module's packages changed since then. The
+      engine step's 240 s gate (T-33) includes `go test -c`, so compile cost counts against the same
+      budget T-45 is trying to free. A work step measured it locally on 4 CPUs. The features binary
+      took 21 s cold and 4.7 s warm. The covered product build took 16 s cold and 0.8 s warm. That
+      is up to about 30 s in a step that has run at 199–245 s on slow runners. It was not measured
+      in CI. First read the `engine compilation timing:` lines from recent main and pull request
+      runs to confirm the share. If it holds, settle in the spec the key that rolls with main and
+      the restore order. Also settle whether it needs a pinned actions/cache in place of setup-go's
+      cache option, with the reason and version. Branch scoping must keep a pull request's cache
+      from feeding main. Keep the 240 s gate, the 4 m test timeout and compilation inside the
+      measurement unchanged. Phase p2: nothing blocks milestone two step 1, and it is CI polish that
+      the charter takes only when it does not delay the next step. It stays inside the first
+      milestone because it is a suite-speed fix for the engine tier, whose compile time sits inside
+      the gate.
+  - id: p2-lint-each-release-goos
+    title: golangci-lint runs for every GOOS the release builds, so depguard sees the OS-specific production files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks no charter step, so p2. CI's static tier runs `tools/bin/pinned golangci-lint run
+      ./...` once, for linux, and the linter skips files Go ignores for the build target. So
+      depguard, gosec and revive have never read the five OS-specific production files:
+      internal/engine/policy/disk/open_windows.go, manifest/disk/open_windows.go,
+      approval/disk/calls_windows.go, approval/disk/private_other.go and
+      session/disk/anchor_other.go. .goreleaser.yaml builds linux, darwin and windows, so a
+      forbidden import (another engine, `crypto/tls` outside egress, `os/exec`) in a new
+      `_windows.go` or `_darwin.go` adapter file passes CI and ships. A spec review measured it: an
+      `os` import in an engine domain's probe_windows.go gave no depguard issue on Linux and one
+      under GOOS=windows. This is not p2-architecture-stdlib-on-go-list. That item changes
+      tools/architecture so domains, ports and handlers hold per-role stdlib allowlists and refuses
+      `//go:build` lines there. All five files above are adapters, which it does not cover. The
+      architecture check's `--siblings --outside --linked --toplevel` arrows also run on the host's
+      build only, so a cross-slice import in an adapter's `_windows.go` is seen by neither gate.
+      Linting each release GOOS closes it for every depguard rule and every other linter at once.
+      T-39's raw-walk tests close it only for egress's TLS rule. Add `GOOS=windows` and
+      `GOOS=darwin` runs of the same lint command to the static tier in itos.yaml, with a
+      compile-first fixture for each: a forbidden import in a `_windows.go` and a `_darwin.go` file
+      in an adapter that fails only under that GOOS. itos.yaml is an enforcement input, so this runs
+      the full fixture matrix; do it in one change with p2-architecture-stdlib-on-go-list if both
+      are taken together. Measure the added static-tier time first, since lint is one of the longest
+      static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
+      own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
+      already ships.
+  - id: p3-workspace-copy-mode
+    title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person, 2026-11-09, after reading tryboxi (delta sync into a microVM, .git sanitizing, a
+      three-way apply back) and cloudycloud (a clone on a cloud machine, results pushed as a
+      branch): 'an alternative way of working'. Not now, and not instead of the mount. A copy mode
+      would clone or bundle the checkout into the sandbox's own volume and return the work as
+      commits (a bundle or a branch the host fetches), never writing the host checkout during the
+      run. That removes by construction the class milestone one hardened one case at a time (inode
+      swaps, host sockets, hard links, control state reached through the mount) and planted .git
+      hooks, lets several runs share one checkout, and is the only shape a microVM or remote
+      provider can use, since those share no filesystem with the host. Costs: sync time on large
+      repositories, no live view in the host editor, and divergence when the person edits the
+      checkout meanwhile (commits merge; uncommitted edits don't).
+  - id: p1-engine-timing-notice-every-run
+    title: Every engine job run publishes its slowest scenario timings and the runner's identity as a ::notice annotation, green runs included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks T-45, the head of the queue and a suite-speed fix the charter finishes before milestone
+      two step 1 gets far. Main ran the engine tier at 4 min 5 s against a 4 min test timeout, so
+      any slow runner fails every pull request's engine job, step 1's included. T-45 must read where
+      the time goes from a CI run on its own head. T-44's slowest-first section sits in the `if:
+      failure()` diagnostics step, so a green or merely slow run prints nothing. Job logs return 403
+      without a token, so an agent cannot read the log anyway. Add a step that runs on every engine
+      job, green included, and publishes a bounded number of `::notice` lines. `::notice` is a
+      separate annotation type from `::error`, so it does not use the ten errors per step that
+      T-43's report fills. Each line carries scenario name, duration and outcome only. One more line
+      carries the step's duration_ms, its 240000 ms limit, and the runner's identity: name, image
+      version, OS, architecture and CPU count. That identity lets the 162–196 s fast runners be told
+      apart from the 199–245 s slow ones, so runner variance is not mistaken for a regression. Print
+      no credentials, environment dump or file contents. Leave the failure-only step and its pins
+      unchanged except where the new step needs them. The `if: failure()` gate,
+      TestEngineFixtureWorkflow and TestEngineWorkflow pin the engine steps, so the change needs a
+      ledger task whose check extends TestEngineDiagnostics or TestEngineScenarioTiming. Land it
+      after T-43 and T-44, which edit the same workflow region, and rebase on them.
