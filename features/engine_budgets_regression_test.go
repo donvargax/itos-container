@@ -15,12 +15,14 @@ func testEngineBudgetFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	overlay, err := engineBudgetOverlay(root, t.TempDir())
+	tree, err := engineBudgetTree(root, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("go", "test", "-overlay", overlay, "./cmd/itos-container", "-count=1", "-v", "-run", "^TestEngineFixtureBudgetContract$")
-	cmd.Dir = root
+	// The harness's CI product build always requests coverage, so check the
+	// fixture under the same instrumentation: it is what dropped an overlay.
+	cmd := exec.Command("go", "test", "-cover", "-coverpkg=./...", "./cmd/itos-container", "-count=1", "-v", "-run", "^TestEngineFixtureBudgetContract$")
+	cmd.Dir = tree
 	output, err := cmd.CombinedOutput()
 	want := fmt.Sprintf("compiled budgets: call=%s startup=%s grace=%s", engineCallBudget, engineStartupBudget, engineGraceBudget)
 	if err != nil || !strings.Contains(string(output), want) || !strings.Contains(string(output), "--- PASS: TestEngineFixtureBudgetContract") {

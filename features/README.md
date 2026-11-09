@@ -329,23 +329,33 @@ and 246 seconds in the measured step, which correctly failed the 240-second gate
 The quiet `ID-LIFECYCLE-13` row took 128 seconds; the other slow stream rows took
 22 and 12 seconds. The four `ID-LIFECYCLE-09` rows took 11–14 seconds each.
 
-Following q-40, the engine harness builds its disposable product with a Go build
-overlay that replaces only `internal/engine/budget/domain/limits.go`. That fixture
+Following q-40, the engine harness builds its disposable product from a copy of
+`cmd`, `internal`, `go.mod` and `go.sum` in which only
+`internal/engine/budget/domain/limits.go` differs. That fixture
 uses call/startup/grace budgets of 1/3/1 seconds. Normal builds, releases and
 ordinary contract tests retain 10/120/10 seconds, checked by
 `TestProductionBudgetLimits`. No product environment variable, argument or policy
-can enable the fixture. The overlay and binary live outside the writable scenario
+can enable the fixture. The copy and binary live outside the writable scenario
 checkouts, and their preparation and compilation remain inside the measured step.
 The 30-second teardown budget and independent process guards are unchanged.
+
+The first version used `go build -overlay` instead of a copy and never took effect in
+CI: with `-cover`, which the engine step always sets, `cmd/go` passes the cover tool
+each package file's path on disk and ignores the overlay, so the product kept its
+production limits. Worse, the build cache keyed the overlay's text while holding the
+production build, so a cache restored from such a run served production limits to
+any build of the same text. The fixture's text therefore carries a header no overlay
+ever had. Run 42566251698 spent its whole four minutes in the unshortened waits.
 
 The quiet observation lasts at least four real seconds after readiness, beyond
 both configured budgets. Repeated signals occur at 20 and 80 percent of grace;
 delayed acknowledgements take 60 percent. Escalation cannot occur early, and its
 scheduling tolerance is 20 percent of grace, so an acknowledgement-relative timer
 still fails. Blocked pipes remain blocked until independent controller termination.
-`TestEngineSuiteBudget` also compiles the actual command contract with the overlay
-and checks startup expiry, drain expiry, quiet lifetime, delayed acknowledgement
-and owned cleanup against the fixture durations. These checks use memory backends
+`TestEngineSuiteBudget` also compiles the actual command contract in that copy,
+under the engine step's `-cover -coverpkg=./...` instrumentation, and checks startup
+expiry, drain expiry, quiet lifetime, delayed acknowledgement and owned cleanup
+against the fixture durations. These checks use memory backends
 and controlled time; they do not supply native runtime proof.
 
 Ordinary engine runs selecting both `ID-LIFECYCLE-09` and `ID-LIFECYCLE-13` retain

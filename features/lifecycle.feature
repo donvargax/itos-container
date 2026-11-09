@@ -206,8 +206,8 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # Runtime @engine cases require the guarded Linux amd64 native-Docker CI tier
   # in features/README.md. Actual signals go to the product controller only in
   # When; native engine observations and probe receipts establish worker effects.
-  # T-33 / q-40 builds this tier's disposable product with a harness-only Go
-  # overlay: call/startup/grace are 1/3/1 s, while ordinary and release builds
+  # T-33 / q-40 builds this tier's disposable product from a harness-only copy of
+  # the sources: call/startup/grace are 1/3/1 s, while ordinary and release builds
   # retain 10/120/10 s. No runtime environment, flag or policy can enable it.
   # Quiet observations exceed the configured call and startup budgets; repeated
   # signals, acknowledgement delays and grace checks use that same fixture.

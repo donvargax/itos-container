@@ -395,6 +395,8 @@ func build(root, dir string) (string, error) {
 	return buildProduct(root, dir, false)
 }
 
+// buildProduct is build, except that the engine tier's product is built from a
+// copy of the sources with the shortened budget fixture (engineBudgetTree).
 func buildProduct(root, dir string, engine bool) (string, error) {
 	name := "itos-container"
 	if runtime.GOOS == "windows" {
@@ -403,18 +405,18 @@ func buildProduct(root, dir string, engine bool) (string, error) {
 	bin := filepath.Join(dir, name)
 	args := []string{"build", "-trimpath", "-buildvcs=false",
 		"-ldflags", "-X " + versionSymbol + "=" + stampedVersion + " -X " + commitSymbol + "=" + stampedCommit}
+	source := root
 	if engine {
-		overlay, err := engineBudgetOverlay(root, dir)
-		if err != nil {
+		var err error
+		if source, err = engineBudgetTree(root, dir); err != nil {
 			return "", err
 		}
-		args = append(args, "-overlay", overlay)
 	}
 	if productCoverageRequested() {
 		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	}
 	cmd := exec.Command("go", append(args, "-o", bin, "./cmd/itos-container")...)
-	cmd.Dir = root
+	cmd.Dir = source
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("building itos-container: %v\n%s", err, out)
 	}
