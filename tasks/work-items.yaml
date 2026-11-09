@@ -2,8 +2,8 @@
 phases:
   1: null
 queue:
-  - p2-lifecycle-09-escalation-window-jitter
-  - T-41
+  - p1-engine-suite-under-its-limit-again
+  - T-42
   - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
@@ -418,6 +418,17 @@ items:
       record. Also add p1-acceptance-static-binary to slice-27's depends_on (T-39 and T-40 already
       depend on T-38). Raise p3-approval-before-egress to p1 and give slice-26 the edge on it, or
       ask the person to decide before slice-26 is taken.
+
+      This item already holds the edges and the open decision; the T-38 review confirms they are
+      still absent on origin/main and at T-38's head. For the coordinator to apply as depends_on
+      edits: slice-26 gets T-38, because its drafter takes the digest binding and the
+      network-granting profile from T-38's record. slice-26 also gets this item, unless the person
+      decides first who may approve a network-granting sandbox. slice-27 gets
+      p1-acceptance-static-binary, because the harness binary was measured dynamically linked and
+      cannot serve as the proxy in an inert root filesystem; that item's own why already says
+      slice-27 should depend on it. The phase field here is already 1, so only the edges and the
+      person's decision remain. Until slice-26 has them, it can start before the record it builds on
+      exists, with nothing holding it back.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -892,15 +903,15 @@ items:
   - id: T-38
     title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: slice-25
     title: The policy file accepts an exact host-name egress allowlist and doctor validates it
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
@@ -987,7 +998,7 @@ items:
     title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-docs-admit-milestone-two-egress
@@ -1012,6 +1023,15 @@ items:
       decision record, per the charter's architecture rule. AGENTS.md's opening paragraph is also
       stale ("container commands and isolation are not implemented yet", v0.1.0 is published), but
       whether to edit AGENTS.md is the person's. Documentation only: it touches no proof.code path.
+
+      This item is already a documentation-only edit of docs/ORCHESTRATING.md, whose empty 'Lessons'
+      section is the repository's place for this. Add one lesson there: a docs task whose checks
+      read documents declares `prose: true` on each such check, because on a prose-only range CI
+      leaves out any other late check and `itos work done` never runs one. Evidence: the T-38 spec
+      review's P1 (itos 8.46.4); T-26 and T-6 had the same gap. Give it the section's required
+      fields (recorded date, last-seen date, and permanent status or the exit item). Its exit is the
+      upstream itos fix, so say that. The lesson is measured, not invented. It touches no proof.code
+      path and is too small to be its own item.
   - id: p1-acceptance-static-binary
     title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
     phase: 1
@@ -1099,46 +1119,13 @@ items:
       explicit act by the person, never silent automatic pruning. It also has to keep the
       exact-ownership guarantee: it may touch only this project's own session state, never foreign
       resources. Decide the rule, then specify it by scenarios.
-  - id: p2-lifecycle-09-escalation-window-jitter
+  - id: T-42
     title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Run 42609794543 (T-41's range, which touches nothing LIFECYCLE-09 uses) failed the engine tier
-      at row #03 of 'Ignored and repeated cancellation escalates once after the fixed grace'
-      (SIGTERM, acknowledgement delayed 60% of grace), while T-33 to T-37 each passed it. T-33
-      shortened the engine grace from 10 s to 1 s and kept the SIGKILL tolerance proportional:
-      lifecycleSignals in features/lifecycle_native_assertions_test.go accepts SIGKILL only from 1.0
-      s to 1.2 s after cancellation. The 30 s teardown assertion kept an absolute 2 s tolerance.
-      Controller wake-up and request latency under -cover on a shared runner do not shrink with the
-      grace, so 200 ms is a plausible flake source. The same run's engine step took 235 s against
-      its 240 s gate, so the runner was busy. The cause is not confirmed: the failing assertion was
-      not visible to the implementer (no gh access) or to this triage. The coordinator should put
-      the failing assertion's text from the job log in the brief before the item is taken. If it is
-      the SIGKILL window, replace the 20% share with an absolute floor. A tolerance up to about 500
-      ms still rejects an acknowledgement-relative timer, which fires at 1.6 s with a 60% delay.
-      Keep the lower bound, the native receipts and the 60% delay row. Change the T-33 wording
-      'escalation tolerance is 20 percent' and the matching lines in features/README.md with it.
-      This keeps the engine tier from failing unrelated ranges, which matters for milestone two's
-      egress proof, which relies on it.
-
-      Coordinator, 2026-11-09 12:12 UTC: now red on main too (runs 42605880158 and 42605822567, row
-      #02), besides T-41's run 42609794543 and T-33's 7e30371: it fails on any range, so it goes
-      first. Widen the SIGKILL acceptance to an absolute tolerance that holds under -cover on a
-      hosted runner (as the teardown assertion's 2 s does), keeping the assertion that SIGKILL comes
-      after the grace and exactly once; don't lengthen the grace back to 10 s.
-
-      This item is already first in the queue, and its coordinator note of 2026-11-09 12:12 UTC says
-      it fails on any range and goes first. It already records the T-41 failures on different rows
-      (#03, then #02) and the main-branch failures on runs 42605880158 and 42605822567. It already
-      covers the engine step running near its 240 s gate (235 s) and the link to milestone two's
-      egress proof. New evidence to add as a note: run 42613812662 is a further engine-tier failure,
-      and its failing assertion text is still not visible (it depends on the upstream extractor
-      fix). The item's own fix does not wait on that text. The coordinator's instruction is to widen
-      the SIGKILL acceptance to an absolute tolerance. A new item or a promotion would add nothing.
+    kind: task
   - id: p2-scheduled-fuzz-egress-parser
     title: A scheduled CI job fuzzes the egress proxy's CONNECT parser and ClientHello peek with fresh seeds, and each find becomes a committed seed
     phase: 1
@@ -1198,3 +1185,19 @@ items:
       p2-control-state-upgrade-contract, which covers a location that was once approved and then
       lost; this is a first run under a root that does not exist yet. Phase p2: no current step
       depends on it.
+  - id: p1-engine-suite-under-its-limit-again
+    title: The engine suite fits its 4-minute test timeout again after T-41
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Measured by the coordinator, 2026-11-09: the Engine scenarios step took 2 min 49 s on main at
+      966e456 (run 42615366138, before T-41), 3 min 44 s on T-41's own green run (42617313777), and
+      4 min 5 s on main after T-41 merged (42618748581), where TestFeatures ran 239.55 s against
+      -test.timeout=4m. T-41's drain wait added about a minute, so every pull request's engine tier
+      now runs at the limit and fails as a timeout on any slow runner, whatever it changes. Find
+      what T-41 lengthened (its overlap drain wait or the cleanup it added) and bring the suite back
+      near 3 minutes through the harness-only budget seam; don't raise the limit. Milestone two's
+      egress step needs a green engine tier.
