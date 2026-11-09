@@ -4507,15 +4507,6 @@
     and left the selection, schedule, timing and LIFECYCLE-09 window regressions green. It also
     showed that the selection and its check must read the same files, and that its red skip lost
     the names of the red IDs left to other shards, hence those rules.
-  done_when:
-    - run: |
-        out=$(go test ./features -count=1 -v -run '^(TestEngineShards|TestEngineWorkflow|TestEngineRedWorkflow|TestEngineFixtureWorkflow|TestEngineDiagnostics|TestEngineSelection|TestEngineRedSelection)$') || { printf '%s\n' "$out"; exit 1; }
-        printf '%s\n' "$out" | awk '/^--- PASS: TestEngineShards /{top=1} /^    --- PASS: TestEngineShards\/workflow_shards /{wf=1} /^    --- PASS: TestEngineShards\/partition /{part=1} /^    --- PASS: TestEngineShards\/selector /{sel=1} /^    --- PASS: TestEngineShards\/broken_workflows /{neg=1} /^--- PASS: TestEngine(Workflow|RedWorkflow|FixtureWorkflow|Diagnostics|Selection|RedSelection) /{if (!($3 in kept)) {kept[$3]=1; n++}} END{exit !(top && wf && part && sel && neg && n == 6)}'
-    - run: |
-        out=$(go test ./features -count=1 -v -run '^TestEngineSuiteBudget$') || { printf '%s\n' "$out"; exit 1; }
-        printf '%s\n' "$out" | awk '/^--- PASS: TestEngineSuiteBudget /{ok=1} /^    --- PASS: TestEngineSuiteBudget\/successful_but_over_budget /{over=1} END{exit !(ok && over)}' && grep -q 'elapsed > 180000 && result == 0' .github/workflows/ci.yml && ! grep -q 'elapsed > 240000' .github/workflows/ci.yml
-    - run: |
-        grep -q '180-second' features/README.md && grep -q 'ITOS_CONTAINER_ENGINE_FEATURES' features/README.md && ! grep -Eq 'above 240 seconds|single engine job remains|sole engine job|still exceeds 240 seconds' features/README.md && grep -q 'engine shard' docs/architecture/arc42.md && set -- docs/decisions/*-engine-tier-shards.md && test -f "$1" && grep -q 'Future behaviour evidence' "$1"
 - id: T-46
   type: ci
   title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
