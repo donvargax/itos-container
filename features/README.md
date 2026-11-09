@@ -339,6 +339,17 @@ can enable the fixture. The copy and binary live outside the writable scenario
 checkouts, and their preparation and compilation remain inside the measured step.
 The 30-second teardown budget and independent process guards are unchanged.
 
+The fixture reaches only the disposable product, the `w.bin` that `buildProduct`
+returns. The session contract test assembly does not use it: `sessionProbeBinary`
+runs `go test -c ./cmd/itos-container` in the checkout, so that assembly compiles
+the checkout's `limits.go` and keeps 10/120/10 seconds even in the engine tier. The
+engine rows `ID-SESSION-11` and `ID-SESSION-12` run it through `sessionRun`, so a
+wait in those rows follows the production limits, not 1/3/1 seconds.
+The contract compilation `TestEngineSuiteBudget` checks is the copy's, not this
+checkout assembly. Those rows were not among the slow rows measured above, and
+building the assembly from the copy would change what they exercise, so it stays
+on the production limits.
+
 The first version used `go build -overlay` instead of a copy and never took effect in
 CI: with `-cover`, which the engine step always sets, `cmd/go` passes the cover tool
 each package file's path on disk and ignores the overlay, so the product kept its
