@@ -2919,8 +2919,12 @@
     rows, retained data after cleanup, and useful errors before launch for invalid IDs or an
     unusable destination. Check readable atomic metadata/counters and positive product-code
     blocks with go tool covdata, not just directory creation or coverage of the test harness.
-    COUNT-01 and CLI-01 must have disjoint count reach; metadata, approval, session and
-    lifecycle contract probes must contribute their own executed domain/command blocks.
+    COUNT-01 must execute internal/slices/count/domain/ blocks and CLI-01 must not. Judge
+    counting reach only by that domain, not the command package: Kong initialization for
+    CLI-01's --version legitimately calls count's Help() at command/command.go:38-44.
+    This is the settled q-45 correction (2026-11-09); shared command-help coverage is not
+    cross-ID counter contamination. Metadata, approval, session and lifecycle contract
+    probes must contribute their own executed domain/command blocks.
     Exercise ID-APPROVAL-32's restrictive child, the run umask route and plain/covered cache
     transitions. Bound these fixtures; do not recursively invoke the whole features suite.
     Isolate this regression's own coverage, retain platform/engine guards, and skip its
@@ -3019,8 +3023,8 @@
                 rows = [line.split() for line in lines[1:]]
                 product = [row for row in rows if len(row) == 3 and "/internal/" in row[0] and int(row[2]) > 0]
                 assert product, name + " has no executed product coverage"
-                counted = any("/internal/slices/count/" in row[0] for row in product)
-                assert counted == (name == "ID-COUNT-01"), name + " has mixed or missing count coverage"
+                counted = any("/internal/slices/count/domain/" in row[0] for row in product)
+                assert counted == (name == "ID-COUNT-01"), name + " has mixed or missing count domain coverage"
             assert {p.name for p in cover.iterdir()} == set(ids), "unexpected coverage outside selected IDs"
         PY
     - run: |

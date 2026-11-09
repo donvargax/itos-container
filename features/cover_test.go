@@ -80,16 +80,18 @@ func TestScenarioCoverageContract(t *testing.T) {
 				assertCoverageEntries(t, perID, ids)
 				for _, id := range ids {
 					profile := readProductCoverage(t, filepath.Join(perID, id))
-					if got := executedCoverage(profile, "/internal/slices/count/"); got != (id == "ID-COUNT-01") {
-						t.Errorf("%s mixed or missing count coverage", id)
+					// Kong calls count's Help even for --version; only domain
+					// execution distinguishes counting from CLI initialization.
+					if got := executedCoverage(profile, "/internal/slices/count/domain/"); got != (id == "ID-COUNT-01") {
+						t.Errorf("%s mixed or missing count domain coverage", id)
 					}
 				}
 			} else {
 				assertCoverageEntries(t, perID, nil)
 			}
 			if mode == "aggregate" {
-				if !executedCoverage(readProductCoverage(t, aggregate), "/internal/slices/count/") {
-					t.Error("aggregate coverage lacks executed count code")
+				if !executedCoverage(readProductCoverage(t, aggregate), "/internal/slices/count/domain/") {
+					t.Error("aggregate coverage lacks executed count domain code")
 				}
 			} else {
 				assertCoverageEntries(t, aggregate, nil)
