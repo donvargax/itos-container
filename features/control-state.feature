@@ -117,6 +117,12 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # before bootstrap, binding publication or selected-tree creation, even if the
   # catalog is absent. The fixed default tree and whole-component sibling paths
   # remain valid selections. Refusal must leave other checkouts usable.
+  # Session and admission collection namespaces are reserved in the fixed tree
+  # and every enrolled location, including pending claims. Reject a selected
+  # managed root equal to or beneath either collection with approval.state.path
+  # before bootstrap, binding publication or selected-tree creation. Recheck
+  # discovered locations under the common lock. Whole-component siblings such
+  # as sessions-more and admission-more remain valid and independently usable.
   #
   # The shared catalog binds each absolute managed location to its validated
   # filesystem identity and host UID. For an absent tree, a pending claim binds
@@ -285,6 +291,46 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # @wip for local assertion-level red, then implement and obtain green. Each
   # scenario's expected first failing Then is documented beside it. An undefined
   # step, setup failure or an already-passing control is not red evidence.
+
+  # PRRT_kwDOVkB0ws61F-IT: ordinary state entries inside sessions or admission
+  # poison subsequent reservation scans. Each first Then must fail on the old
+  # implementation's successful doctor inspection or approval publication.
+  @wip @slice-21 @ID-CONTROL-18 @local-engine-fixture
+  Scenario Outline: Selected state cannot occupy session or admission collection namespaces
+    Given a control-state fixture selecting "<collection>" at "<depth>" depth in the "<location>" managed tree
+    When P inspects that selection with "<command>" using valid approval inputs
+    Then P reports approval.state.path with exit 1 and invalid approval
+    And the namespace refusal creates no bootstrap binding or selected-tree entry and preserves existing state
+    When fresh commands select collection-prefix siblings of the "<location>" managed tree
+    And fresh commands select the default tree a catalog-prefix sibling and another checkout's safe state
+    Then all safe selections remain usable without engine mutation or checkout execution
+
+    Examples:
+      | location          | collection | depth  | command |
+      | absent fixed      | sessions   | direct | doctor  |
+      | absent fixed      | sessions   | direct | approve |
+      | absent fixed      | sessions   | nested | doctor  |
+      | absent fixed      | sessions   | nested | approve |
+      | absent fixed      | admission  | direct | doctor  |
+      | absent fixed      | admission  | direct | approve |
+      | absent fixed      | admission  | nested | doctor  |
+      | absent fixed      | admission  | nested | approve |
+      | initialized fixed | sessions   | direct | doctor  |
+      | initialized fixed | sessions   | direct | approve |
+      | initialized fixed | sessions   | nested | doctor  |
+      | initialized fixed | sessions   | nested | approve |
+      | initialized fixed | admission  | direct | doctor  |
+      | initialized fixed | admission  | direct | approve |
+      | initialized fixed | admission  | nested | doctor  |
+      | initialized fixed | admission  | nested | approve |
+      | enrolled          | sessions   | direct | doctor  |
+      | enrolled          | sessions   | direct | approve |
+      | enrolled          | sessions   | nested | doctor  |
+      | enrolled          | sessions   | nested | approve |
+      | enrolled          | admission  | direct | doctor  |
+      | enrolled          | admission  | direct | approve |
+      | enrolled          | admission  | nested | doctor  |
+      | enrolled          | admission  | nested | approve |
 
   # PRRT_kwDOVkB0ws61FzgB: selecting catalog metadata as the state parent can
   # poison every later account-wide transaction. The first Then fails because

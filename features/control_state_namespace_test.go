@@ -9,6 +9,7 @@ import (
 )
 
 func (w *world) controlNamespaceSteps(sc *godog.ScenarioContext) {
+	w.controlCollectionSteps(sc)
 	sc.Step(`^a control-state fixture with an "([^"]*)" catalog and XDG_STATE_HOME "([^"]*)" inside its metadata namespace$`, func(catalog, selection string) error {
 		if err := w.controlSetup("absent", "below W root", "distinct daemons"); err != nil {
 			return err
