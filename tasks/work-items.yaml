@@ -585,6 +585,16 @@ items:
       discoverable session. Include a black-box scenario and safe retirement based on durable
       evidence that creation was never issued, preserving active reservations; a name-only 404 must
       not establish absence.
+
+      This is crash debris with no supported way to clear it, which is what
+      p3-registration-before-intent is about. Add this to that item's safe-retirement part. A
+      publisher killed anywhere in Publish (before the write, during it, or after the link) leaves a
+      .intent-<nonce>.tmp, either alone or as the second link of its record. The next control-lock
+      holder can retire it on durable evidence: the name Publish makes, in the pinned private
+      directory, and either an orphan or the same inode as its record. Keep to the item's rule that
+      a name alone is not proof. It is not needed for correctness, because Names skips the temporary
+      and bd383fd reads the record around it. The item's scenario should check that a retired
+      temporary leaves the record intact and that a live publisher's temporary is never removed.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
@@ -1174,6 +1184,15 @@ items:
       The YAML syntax limits stay outside the schema, as the policy spec says. It does not block
       milestone two step 1 and should follow slice-25, which publishes the version 2 schema, so p2.
       Slice-25 stays unchanged.
+
+      This item already asks for a check that runs a maintained, pinned JSON Schema validator over
+      the policy examples doctor accepts and refuses, for every published version including
+      slice-25's version 2 schema. Its why already says the YAML syntax limits stay outside the
+      schema. It also leaves the validator choice and pin to the spec, which is where the
+      new-dependency question belongs. One note to add: the version 2 schema cannot express the
+      1024-byte limit or the host-name canonicalisation rules. The check should therefore compare
+      accept and refuse outcomes only where the schema can speak, and the dependency choice is the
+      person's to review.
   - id: p2-doctor-absent-state-root-is-missing
     title: Doctor reports a missing approval, not state.unavailable, when XDG_STATE_HOME sits under an absent top-level directory
     phase: 1
@@ -1237,6 +1256,19 @@ items:
       the tracer, that item should consider cutting the redundant back-to-back Unchanged() walks.
       The checks are the anti-substitution guards, so any such change needs a security review by the
       person. Nothing is measured to be wrong today, so it should not be tracked separately.
+
+      That item already owns the small change to the Engine failure diagnostics step in
+      .github/workflows/ci.yml, which today shows only `tail -100` of the log. Make the same edit
+      print each `--- FAIL` block with its godog step error, beside the streamed `engine scenario
+      timing:` records, so a red run shows its failing assertion. Do not wait for the extractor fix
+      tracked upstream in itos. No separate item is needed for a second print in the same step.
+
+      That item already prints the streamed engine timings and carries the lead on the 1 s engine
+      call budget under the syscall tracer. Per-row signal and SIGKILL offsets for LIFECYCLE-09
+      belong in the same `engine scenario timing:` output and the same diagnostics step. They are
+      data for reviewing T-42's limits and for seeing how close real calls come to T-33's 1 s limit,
+      so they are not a task of their own. No failure has been tied to the 1 s limit yet. T-42's fix
+      is already decided and does not wait on them.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
@@ -1262,3 +1294,56 @@ items:
       lost (compare p2-control-state-upgrade-contract). Depends on slice-21, and should be sequenced
       with slice-22 because both change run admission. Real mount-isolation evidence runs only in
       CI.
+  - id: p2-grace-origin-fake-clock-row
+    title: A fake-clock lifecycle row pins the SIGKILL grace origin when work precedes the first signal
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone one's cancellation rules (slice-12, done) say SIGKILL follows one fixed grace
+      counted from the first signal, never restarted. T-42 widens the native SIGKILL window to an
+      absolute tolerance so the engine tier stops flaking, and that lets a timer started a little
+      late, at teardown or at signal delivery, pass the native rows. Nothing else catches it.
+      TestLifecycleContract's grace case, TestLifecycleLocalContract's lost-signal row and
+      TestEngineFixtureBudgetContract, all in cmd/itos-container, spend no time before the first
+      signal, so the timer origin never differs between a correct and a late start. Add a fake-clock
+      row where work takes time before the first signal, and assert the exact kill instant. A fake
+      clock has no jitter, so the assertion can be exact. The coordinator's throwaway probe found
+      the right-origin case not held at 1.00 of grace and held at 1.10 and 1.30. The code lives
+      under cmd/, a proof.code path, so it gets the changed-code mutation and coverage proof and is
+      separate from T-42's features-only range. It tests existing behaviour, so it is a ledger task
+      with its checks, not a new scenario. Land it after T-42. It blocks no step of milestone two,
+      so p2.
+  - id: p2-proxy-log-lost-tail-sink
+    title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      For the person to decide before slice-28 is drafted. The per-process `seq` in the proxy's
+      refusal log exposes a hole inside the stored records but not a lost tail. A hostile worker can
+      fill a Docker data root that shares the checkout's filesystem. The proxy then keeps writing
+      without seeing a failure, the session continues, and the teardown copy succeeds on a truncated
+      log. That undermines the 'every refused CONNECT leaves a log record the person can read'
+      property that slice-28 builds on (AC-17). Only a second sink the proxy can see fail would
+      close it, for example a final count written somewhere the controller reads. That is a security
+      decision, so the drafter must stop for it and not invent a protection. It is p2 because T-39's
+      record discloses the limit, so step 1 can ship with the disclosure. It is separate from
+      p3-session-state-retention, which covers how long the log is kept, not whether it is complete.
+      The answer shapes T-40's teardown copy and slice-28's reading of the log, so settle it before
+      slice-28 is taken.
+
+      This item already records the problem and the open decision: a hostile worker fills a Docker
+      data root that shares the checkout's filesystem, the proxy's writes keep succeeding, and the
+      teardown copy succeeds on a truncated log. It is p2 and must be settled before slice-28 is
+      taken. Note to add: the open decision has two concrete candidates. (1) A proxy-held fsynced
+      volume sink that fails closed mid-run but gives the proxy a writable mount, which cuts against
+      its hardening. (2) A terminal record the proxy writes on clean stop, which shows a lost tail
+      at teardown without a new mount, but cannot stop a run that is already losing records. The
+      choice changes the log schema (a terminal record or final count) and the proxy's hardening, so
+      the person must decide it before slice-28 writes its copy check, and the drafter must stop for
+      it rather than invent a protection.
