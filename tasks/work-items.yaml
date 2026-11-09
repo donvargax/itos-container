@@ -1736,3 +1736,28 @@ items:
       scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
       Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
       approved grant. Broken down from p1-credentials-passed-in.
+  - id: p1-egress-refusal-log-writer
+    title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks charter milestone two, step 1 (egress through an allowlisting proxy), at slice-27.
+      T-40's spec has the controller copy the stopped proxy's stdout through port.RefusalLog before
+      removing it. It refuses an egress run with no log bound (nil is port.Internal), and a failed
+      copy keeps the stopped proxy, both networks, the anchor and the intent. So slice-27 can
+      neither run nor tear down an egress session until a real writer exists. cmd binds none in
+      T-40. The record (docs/decisions/0022-egress-proxy.md, 'Where the log lands') and arc42's
+      slice-28 row give the writer to slice-28, which depends on slice-27. No item schedules it
+      earlier. Approval's Publish refuses more than 1 MiB, so it cannot be reused. Build the adapter
+      as a task before slice-27: the streaming writer for
+      sessions/<lookup>/<id>/egress-refusals.jsonl, with Publish's private-file, fsync, rename and
+      parent-fsync rules, passing T-40's RefusalLogContract unchanged. It adds no command behaviour,
+      so it is a ledger task with a check, not part of slice-27's scenarios. It depends on T-40, and
+      slice-27 should depend on it. Slice-28 keeps the seq check and its typed gap error, status's
+      record count, display escaping of hostile names, and the proxy-failure scenarios. Update the
+      record and arc42 rows that now give the writer to slice-28. The writer does not wait for
+      p2-proxy-log-lost-tail-sink, since T-40 says either candidate is one more stdout line the
+      reader and copy carry unchanged. Retention stays with p3-session-state-retention.
