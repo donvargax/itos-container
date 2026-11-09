@@ -17,7 +17,8 @@ type effectivePolicy struct {
 }
 
 type effectiveNetwork struct {
-	Mode string `json:"mode"`
+	Mode  string   `json:"mode"`
+	Allow []string `json:"allow,omitempty"`
 }
 
 // presentPolicy presents policy-only success or a policy refusal that prevents
@@ -32,7 +33,7 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 	}
 	var policy *effectivePolicy
 	if result.Policy != nil {
-		policy = &effectivePolicy{result.Policy.Version, result.Policy.Manifest, effectiveNetwork{result.Policy.Network.Mode}}
+		policy = &effectivePolicy{result.Policy.Version, result.Policy.Manifest, effectiveNetwork{result.Policy.Network.Mode, result.Policy.Network.Allow}}
 	}
 	if withJSON {
 		u.JSON(struct {
@@ -44,8 +45,13 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 		}{1, code == 0, "policy", problems, policy})
 	} else if policy != nil {
 		manifest := strconv.Quote(policy.Manifest)
-		_, _ = fmt.Fprintf(u.Stdout, "Policy only\nversion: %d\nmanifest: %s\nnetwork.mode: %s\nHost readiness and approval were not checked\n",
+		_, _ = fmt.Fprintf(u.Stdout, "Policy only\nversion: %d\nmanifest: %s\nnetwork.mode: %s\n",
 			policy.Version, manifest[1:len(manifest)-1], policy.Network.Mode)
+		// Canonical names are ASCII host-name characters, so they need no escaping.
+		for _, name := range policy.Network.Allow {
+			_, _ = fmt.Fprintf(u.Stdout, "network.allow: %s\n", name)
+		}
+		_, _ = fmt.Fprintln(u.Stdout, "Host readiness and approval were not checked")
 	}
 	for _, problem := range problems {
 		// Keys are untrusted text. Escape the terminal location separately from

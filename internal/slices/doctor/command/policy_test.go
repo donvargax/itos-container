@@ -44,7 +44,7 @@ func TestPolicyDiagnosticExitPrecedence(t *testing.T) {
 func TestPolicyPlainFailureAndPointers(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	ui := cli.UI{Stdout: &stdout, Stderr: &stderr}
-	code := presentPolicy(&ui, port.Result{Issues: []port.Issue{{Kind: port.UnknownKey, Path: []string{"a~/b", "1"}}}}, false)
+	code := presentPolicy(&ui, port.Result{Issues: []port.Issue{{Kind: port.UnknownKey, Path: []string{"a~/b", "1"}, Version: 1}}}, false)
 	if code != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "itos-container: itos-container.yaml/a~0~1b/1:") ||
 		!strings.Contains(stderr.String(), "remove fields") {
 		t.Fatalf("%d %q %q", code, stdout.String(), stderr.String())
@@ -63,7 +63,7 @@ func TestPolicyDiagnosticEscapesOnlyPresentation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			ui := cli.UI{Stdout: &stdout, Stderr: &stderr}
-			result := port.Result{Issues: []port.Issue{{Kind: port.UnknownKey, Path: []string{tc.key}}}}
+			result := port.Result{Issues: []port.Issue{{Kind: port.UnknownKey, Path: []string{tc.key}, Version: 1}}}
 			if code := presentPolicy(&ui, result, true); code != 2 {
 				t.Fatalf("exit %d, want 2", code)
 			}
@@ -79,5 +79,45 @@ func TestPolicyDiagnosticEscapesOnlyPresentation(t *testing.T) {
 				t.Fatalf("problems %#v, want path %q", output.Problems, tc.pointer)
 			}
 		})
+	}
+}
+
+func TestPolicyPresentsTheAllowlistInOrder(t *testing.T) {
+	result := port.Result{Policy: &port.Policy{Version: 2, Manifest: "a.json", Network: port.Network{
+		Mode: "allowlist", Allow: []string{"api.example.com", "registry.example.org", "xn--bcher-kva.example"},
+	}}}
+	var stdout, stderr bytes.Buffer
+	ui := cli.UI{Stdout: &stdout, Stderr: &stderr}
+	if code := presentPolicy(&ui, result, false); code != 0 || stderr.Len() != 0 {
+		t.Fatalf("exit %d, stderr %q", code, stderr.String())
+	}
+	want := "Policy only\nversion: 2\nmanifest: a.json\nnetwork.mode: allowlist\n" +
+		"network.allow: api.example.com\nnetwork.allow: registry.example.org\nnetwork.allow: xn--bcher-kva.example\n" +
+		"Host readiness and approval were not checked\n"
+	if stdout.String() != want {
+		t.Fatalf("stdout %q, want %q", stdout.String(), want)
+	}
+	stdout.Reset()
+	if code := presentPolicy(&ui, result, true); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	wantJSON := `{"schema":1,"ok":true,"scope":"policy","problems":[],"policy":{"version":2,"manifest":"a.json",` +
+		`"network":{"mode":"allowlist","allow":["api.example.com","registry.example.org","xn--bcher-kva.example"]}}}` + "\n"
+	if stdout.String() != wantJSON {
+		t.Fatalf("stdout %q, want %q", stdout.String(), wantJSON)
+	}
+}
+
+func TestOfflinePolicyHasNoAllowLine(t *testing.T) {
+	result := port.Result{Policy: &port.Policy{Version: 2, Manifest: "a.json", Network: port.Network{Mode: "offline"}}}
+	var stdout, stderr bytes.Buffer
+	ui := cli.UI{Stdout: &stdout, Stderr: &stderr}
+	if code := presentPolicy(&ui, result, false); code != 0 || strings.Contains(stdout.String(), "network.allow") {
+		t.Fatalf("exit %d, stdout %q", code, stdout.String())
+	}
+	stdout.Reset()
+	presentPolicy(&ui, result, true)
+	if strings.Contains(stdout.String(), "allow") || !strings.Contains(stdout.String(), `"network":{"mode":"offline"}`) {
+		t.Fatalf("stdout %q", stdout.String())
 	}
 }

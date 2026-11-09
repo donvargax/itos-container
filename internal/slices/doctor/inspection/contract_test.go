@@ -13,7 +13,7 @@ import (
 
 func TestPoliciesContract(t *testing.T) {
 	porttest.PoliciesContract(t, func(f porttest.Fixture) port.Policies {
-		return inspection.Policies{Source: &policytest.Source{Value: f.Value, Issues: f.Issues}}
+		return inspection.Policies{Source: &policytest.Source{Value: f.Value, Issues: f.Issues}, Names: &policytest.Names{Table: f.Names}}
 	})
 }
 
