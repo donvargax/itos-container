@@ -4,7 +4,6 @@ phases:
 queue:
   - T-45
   - T-44
-  - T-42
   - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
