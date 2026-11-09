@@ -309,8 +309,12 @@ func checkDiagnostics(t *testing.T, out string, log *string, annotations []strin
 		t.Errorf("after the annotations, want the printed blocks and both markers:\nwant %q\n got %.3000q", printed+markers, rest)
 	}
 	if log == nil || *log == "" {
-		if !strings.HasSuffix(out, markers) {
-			t.Errorf("the tail of nothing must leave the output ending with the markers: %.500q", out)
+		ending := markers
+		if log != nil {
+			ending += "Engine scenario timing records, slowest first: 0\n"
+		}
+		if !strings.HasSuffix(out, ending) {
+			t.Errorf("the tail of nothing must leave the output ending with %q: %.500q", ending, out)
 		}
 		return
 	}
