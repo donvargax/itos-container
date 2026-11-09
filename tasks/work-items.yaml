@@ -1750,3 +1750,18 @@ items:
       never by contents. The grant needs approval from a terminal. It also states, in approve's
       review, that the worker can alter this file, since a read-write mount is the person's chosen
       design. Broken down from p1-credentials-passed-in.
+  - id: p1-credentials-github-token-run
+    title: run hands the approved GitHub token to the workload the same way, for gh and pushes
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-credentials-claude-token-run]
+    kind: idea
+    why: >
+      Charter step 2: a GitHub token for gh and pushes, passed like Claude's. Scenarios first, on a
+      synthetic marker. With an approved grant the workload can read the token where gh expects it.
+      The same absence properties hold: docker inspect, records, status, logs and the checkout. Git
+      push over the network needs the egress allowlist, so only the credential's delivery is in
+      scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
+      Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
+      approved grant. Broken down from p1-credentials-passed-in.
