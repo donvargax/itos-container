@@ -37,6 +37,7 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
 	"github.com/donvargax/itos-container/internal/engine/manifest/reference"
 	"github.com/donvargax/itos-container/internal/engine/policy/disk"
+	policyidna "github.com/donvargax/itos-container/internal/engine/policy/idna"
 	policyyaml "github.com/donvargax/itos-container/internal/engine/policy/yaml"
 	readinessdisk "github.com/donvargax/itos-container/internal/engine/readiness/disk"
 	"github.com/donvargax/itos-container/internal/engine/readiness/docker"
@@ -71,7 +72,7 @@ type commandLine struct {
 
 	Approve    approve.CLI       `cmd:"" help:"Review and remember exact offline settings."`
 	Count      command.CLI       `cmd:"" help:"Count the lines and words of a file, or of standard input."`
-	Doctor     doctor.CLI        `cmd:"" help:"Inspect the strict offline policy and restricted worker manifest."`
+	Doctor     doctor.CLI        `cmd:"" help:"Inspect the policy file and restricted worker manifest."`
 	Run        runcommand.CLI    `cmd:"" help:"Run a literal command in an approved offline worker."`
 	Status     statuscommand.CLI `cmd:"" help:"Inspect owned sessions in the effective project."`
 	Stop       stopcommand.CLI   `cmd:"" help:"Stop and clean one registered project session."`
@@ -133,7 +134,7 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	case "count":
 		return c.Count.Run(ui)
 	case "doctor":
-		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}}
+		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}, Names: policyidna.Names{}}
 		c.Doctor.Manifests = inspection.Manifests{Files: manifestdisk.Files{}, Parser: jsonc.Parser{}, References: reference.References{}}
 		service, presentation := approvalServices(in, stdout, stderr)
 		c.Doctor.Readiness = service.Readiness
@@ -274,7 +275,7 @@ func approvalServices(in io.Reader, out, errout io.Writer) (approvaldomain.Servi
 		root, _ = os.Getwd()
 	}
 	source := inspection.Readiness{Inspector: readiness.Inspector{
-		Checkout: checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}},
+		Checkout: checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}}, Names: policyidna.Names{},
 		Files: manifestdisk.Files{OpenRoot: checkout.OpenRoot}, Parser: jsonc.Parser{}, References: reference.References{}, Engine: docker.Engine{},
 		Digests: readinessreference.Digests{},
 	}, Input: readinessport.Input{Root: root, OS: runtime.GOOS, Architecture: runtime.GOARCH,

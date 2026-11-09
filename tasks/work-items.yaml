@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - p1-lifecycle-shard-flakes-on-main
   - p1-harness-home
   - p1-interactive-tty
 items:
@@ -932,25 +933,14 @@ items:
     title: The policy file accepts an exact host-name egress allowlist and doctor validates it
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-egress-allowlist-policy.
-      Charter step 1: the allowlist is part of the approved settings, so it starts in
-      itos-container.yaml. Today network is a closed object whose only mode is offline
-      (docs/CONFIG.md, internal/engine/policy). Scenarios first: a network mode that routes through
-      the proxy, with a list of host names. Each name is canonicalised (case, trailing dot, IDNA)
-      and must be a full DNS name. Literal IPs, wildcards and suffix shortcuts, ports, URLs, empty
-      or duplicate names and an empty list in allowlist mode are refused with a located doctor
-      diagnostic. Offline stays the default and is unchanged. Doctor shows the effective allowlist
-      without executing checkout code. It reads and validates only, with no engine or proxy. Update
-      docs/CONFIG.md and docs/CLI.md for the new field. Broken down from p1-egress-allowlist-proxy.
   - id: slice-26
     title: Approval binds the egress allowlist, and any change to it needs a new approval
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-25]
     kind: slice
     why: >
@@ -975,8 +965,8 @@ items:
   - id: T-40
     title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-38]
     kind: task
   - id: slice-27
@@ -1658,8 +1648,8 @@ items:
   - id: slice-29
     title: The policy file accepts named credential sources and doctor validates them without reading their contents
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-47]
     kind: slice
     why: >
@@ -1791,3 +1781,24 @@ items:
       re-run of the same head passed. A positive control that times out makes the boundary check red
       with nothing wrong; give it a retry or a readiness wait before the dial, or say why one try is
       the contract.
+  - id: p1-lifecycle-shard-flakes-on-main
+    title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      2026-11-09, main push runs: 42713010342 at 1b310df (a registry-only commit) failed Engine
+      transport loss reports an unknown workload outcome and retains recovery (worker readiness did
+      not reach the controller's foreground stream); 42716948746 at 1ca4e45 (slice-25's merge)
+      failed both rows of The primary receives the first signal and its observed exit wins
+      (lifecycle.feature:420; product did not reach the handle lifecycle barrier; lifecycle changed
+      unrelated native resources or image references). Both are waits on a barrier with a fixed
+      bound, like LIFECYCLE-09 before T-42. A red main run blocks itos work done on every item
+      merged onto it, so each flake stops a worker. Find which bound the hosted runner misses and
+      give it room through the harness budget seam, as T-42 did.
+
+      Belongs in the existing investigation of lifecycle barrier failures. Include controller exit
+      code, stderr and the request journal in failure messages to distinguish early controller exits
+      from missed timing bounds; T-43 already exposes those step errors in CI annotations.

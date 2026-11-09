@@ -40,7 +40,7 @@ func TestProblemsPreservesDiagnostics(t *testing.T) {
 	result := port.Result{
 		Policy: &policy.Result{Issues: []policy.Issue{
 			{Kind: policy.Unreadable},
-			{Kind: policy.UnknownKey, Path: []string{"extra/~field"}},
+			{Kind: policy.UnknownKey, Path: []string{"extra/~field"}, Version: 1},
 		}},
 		Manifest: &manifest.Result{Path: "worker.json", Image: "image-subject", Issues: []manifest.Issue{
 			{Kind: manifest.Unsupported, Path: []string{"initializeCommand"}},
