@@ -200,12 +200,14 @@ func (w *world) anchorsPair() {
 	}
 	w.anchorsStatus()
 	if offlineHex(r.id) {
-		// B's status and A's cross stop are whole traced product processes. They run
-		// before A's stop is parked: the park holds the product's volume-delete call,
-		// which the product abandons at its call budget (1 s in the engine fixture),
-		// so only the second stop's start and B's heartbeat and volume observations
-		// may happen inside it. Each keeps its assertions.
-		other.anchorsStatus()
+		// A's cross stop and B's status are whole traced product processes. The park
+		// holds the product's volume-delete call, which the product abandons at its
+		// call budget (1 s in the engine fixture), so only the second stop's start
+		// and B's heartbeat and volume observations may happen inside it. The cross
+		// stop runs before the park, on the B ID B's live fixture already recorded.
+		// B's status runs after both A stops, once A's worker and anchor are gone:
+		// that is the one public status of B, so it must see any damage A's recovery
+		// did to B's resources, lease or session. Each keeps its assertions.
 		if offlineHex(other.recovery.id) {
 			s.cross = w.recoveryStart("stop", other.recovery.id, "--json")
 			s.cross.wait()
@@ -226,6 +228,7 @@ func (w *world) anchorsPair() {
 		close(s.release)
 		first.wait()
 		second.wait()
+		other.anchorsStatus()
 		a := w.offline.api
 		a.mu.Lock()
 		if s.parkLost {
