@@ -585,6 +585,16 @@ items:
       discoverable session. Include a black-box scenario and safe retirement based on durable
       evidence that creation was never issued, preserving active reservations; a name-only 404 must
       not establish absence.
+
+      This is crash debris with no supported way to clear it, which is what
+      p3-registration-before-intent is about. Add this to that item's safe-retirement part. A
+      publisher killed anywhere in Publish (before the write, during it, or after the link) leaves a
+      .intent-<nonce>.tmp, either alone or as the second link of its record. The next control-lock
+      holder can retire it on durable evidence: the name Publish makes, in the pinned private
+      directory, and either an orphan or the same inode as its record. Keep to the item's rule that
+      a name alone is not proof. It is not needed for correctness, because Names skips the temporary
+      and bd383fd reads the record around it. The item's scenario should check that a retired
+      temporary leaves the record intact and that a live publisher's temporary is never removed.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
