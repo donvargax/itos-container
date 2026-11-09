@@ -141,6 +141,13 @@ keep independent counters without changing the process environment.
 CLI launches, contract probes and recovery controllers use the same destination.
 The approval older-kernel and run umask helpers stage their counters there before
 exporting them after child exit, preserving the child's umask and state permissions.
+Returning recovery probes also stage each invocation's `GOCOVERDIR` and matching
+`-test.gocoverdir` in a private subdirectory. Go's test runner rereads that directory
+to report coverage after printing `PASS`; under the syscall observer, rereading
+sibling counters can exceed the drain bound even after product cleanup completes.
+After joining each probe, cleanup moves its generated files into the captured
+scenario destination and removes the staging directory. Export failures fail cleanup;
+deliberately killed controllers need not have completed counters.
 Scenario cleanup removes fixture state but leaves coverage for the collector.
 When coverage is requested, local overlap fixtures end their simulated workloads
 after the final assertion and give active controllers a shared five-second drain

@@ -31,14 +31,15 @@ type recoveryNative struct {
 }
 
 type recoveryProcess struct {
-	cmd               *exec.Cmd
-	cancel            context.CancelFunc
-	done              chan struct{}
-	out, errout       offlineBuffer
-	exit              int
-	err               error
-	journal, pid      string
-	started, finished time.Time
+	cmd                                 *exec.Cmd
+	cancel                              context.CancelFunc
+	done                                chan struct{}
+	out, errout                         offlineBuffer
+	exit                                int
+	err                                 error
+	journal, pid                        string
+	started, finished                   time.Time
+	coverageSource, coverageDestination string
 }
 
 func (w *world) recoveryNativeFixture(mode string) error {
@@ -403,13 +404,15 @@ func (w *world) closeRecoveryNative() error {
 		return nil
 	}
 	r := w.recovery
+	var coverageErr error
 	for _, p := range r.processes {
 		if p.cancel != nil {
 			p.cancel() // tracer death kills only its controller, not another PID
 		}
 		p.wait()
+		coverageErr = errors.Join(coverageErr, p.exportCoverage())
 	}
-	anchorErr := w.closeAnchorsForeign()
+	anchorErr := errors.Join(coverageErr, w.closeAnchorsForeign())
 	if r.second != nil {
 		other := r.second
 		err := errors.Join(anchorErr, other.closeRecoveryNative(), other.closeOfflineRuntime(), other.closeAnchor(), other.closeSession())
