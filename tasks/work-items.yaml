@@ -471,6 +471,15 @@ items:
       dial classification belongs in its done_when. The log-store limit must be disclosed by
       slice-26, slice-27 and slice-28 until p2-proxy-log-lost-tail-sink is answered. The coordinator
       applies this once T-38 is merged. No new item is needed.
+
+      p3-approval-before-egress already holds both edges and the reasons for them. Slice-27 gets
+      p1-acceptance-static-binary because the harness binary was measured dynamically linked, so it
+      cannot be the proxy in an inert root filesystem; that item's why already ends 'slice-27 should
+      depend on it'. Slice-26 or slice-27 gets p3-approval-before-egress because a self-approved
+      list first becomes a route in slice-27; its why states that point and cites AC-02 and
+      docs/security.md. Nothing is new here. What remains is the coordinator's depends_on edit,
+      since slice-27 still lists [slice-26, T-39, T-40], together with the person's decision on who
+      may approve a network-granting sandbox. Neither needs a new item.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -1410,6 +1419,17 @@ items:
       it blocks no step on its own. Note on the item: a product whose repeated SIGINT restarts grace
       fires at about 1.2 s and passes every LIFECYCLE-09 row under the widened 1 s to 3 s window, so
       that timing is the row's failing-first case.
+
+      This item already covers the idea. Its notes say a recorder that journals the cut would only
+      sharpen the native tier's inference, and that a recorded cut instant is not worth its own item
+      because it touches the recorder outside T-42's range. The defect to catch is a grace timer
+      started at the acknowledgement or the cut instead of the first signal. A fake clock has no
+      jitter, so the item's fake-clock row can assert the exact SIGKILL instant (first signal plus
+      grace) without the recorder stamping either the cut or the start of the kill call. Extend that
+      row with a hold longer than what is left of the call limit, so the cut really happens. T-42's
+      escalationWindow comment already names this gap. The row's exact assertion also catches a
+      timer started late, which the delayed limit only refuses when the kill arrives early. The
+      recorder stays unchanged, so the idea is not a separate item.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
@@ -1473,3 +1493,27 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p2-harness-env-clears-columns
+    title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. world.env() (features/steps_test.go:223) copies the caller's environment
+      and drops only GIT_, ITOS_, ITOS_CONTAINER_, GITHUB_, GH_, CI and PATH, so an inherited
+      COLUMNS reaches the product and Kong wraps help to it. Measured under COLUMNS=30:
+      ID-APPROVAL-29 fails a correct build at its step 'its standard output says "an agent on the
+      host can approve"', because the wrap splits the phrase. Only ID-APPROVAL-56 names its own
+      width (COLUMNS=200). Six other help scenarios are exposed: completion --help, count --help,
+      doctor --help in manifest.feature and policy.feature, and the product status/stop help in
+      recovery.feature. A suite that fails a correct build on a caller's terminal setting breaks the
+      charter's rule that suite and proof reliability fixes stay inside the first milestone. Fix:
+      have env() drop COLUMNS, or set a fixed wide value, and add a harness regression committed red
+      that runs a help scenario under a narrow inherited COLUMNS and fails before the fix. Check
+      that fixtures building their environment from os.Environ() directly, such as
+      sessionChildEnvironment, do not reintroduce it. Keep every scenario and assertion unchanged
+      and leave ID-APPROVAL-56's explicit width alone. Phase p2: nothing blocks the current step,
+      and CI normally exports no COLUMNS. The harness came from go-template-itos, so once this lands
+      the coordinator files it there as a backport issue.
