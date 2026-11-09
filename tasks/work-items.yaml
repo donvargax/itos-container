@@ -876,6 +876,14 @@ items:
       before persisting the claim). A test needs a seam between the prospective pin and
       pinPath(create) to simulate the race. It is availability only, on a multi-UID host with a
       shared-writable state home, and slice-21 deliberately did not repair it.
+
+      This is the same recovery decision that item already has to make, in the other direction.
+      v0.1.0 is published, so older binaries exist. Once slice-26 writes an allowlist-v1 record, an
+      older binary reads an active one as approval.state.invalid, and approve stops on that failure.
+      The person then cannot re-approve with that binary until they remove the record by hand. It
+      fails closed, but it is a lockout. The item's upgrade contract should also decide downgrade:
+      documented manual removal, or a version marker an older binary can recognise. Its scenarios
+      should cover an older controller running beside a record it cannot read.
   - id: p2-fixture-worlds-inherit-scenario-coverdir
     title: A fixture world that drops the scenario coverage destination fails in go test, not in CI
     phase: 1
