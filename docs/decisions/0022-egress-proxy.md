@@ -3,9 +3,11 @@
 Recorded for T-38 on 2026-11-09. This is the design the second milestone's first step
 needs fixed before any code: the [charter](../charter.md), "The second milestone", step 1.
 It is a proposal under the architecture hypothesis, not runtime evidence and not a support
-claim. Nothing here is built, and nothing in this record changes code, a dependency, a
-scenario, a step definition, a workflow or an engine run. Real-engine proof belongs to
-slice-27 and slice-28, in CI only. T-39 and T-40 take their design from this record.
+claim. T-39 has since built only the engine package this design names,
+`internal/engine/egress`: nothing binds it until slice-27, and none of it is runtime
+evidence. The record itself changed no dependency, scenario, step definition, workflow or
+engine run, and the rest of the design is unbuilt. Real-engine proof belongs to slice-27 and
+slice-28, in CI only. T-39 and T-40 take their design from this record.
 
 [PLAN.md](../../PLAN.md), [README.md](../../README.md) and
 [docs/ORCHESTRATING.md](../ORCHESTRATING.md) still call egress out of scope. The charter's
@@ -53,20 +55,35 @@ The proxy holds no CA, certificate or key and never completes a handshake. Its o
 stops once the ClientHello has parsed, before it chooses a version. T-39 proves this three
 ways:
 
-- A contract test has a client verify through the tunnel and see the upstream's own
-  certificate.
-- A check finds none of `tls.Certificate`, `tls.LoadX509KeyPair`, `tls.X509KeyPair`,
-  `tls.Listen`, `tls.NewListener`, `tls.Client`, `GetCertificate` or
-  `x509.CreateCertificate` in the production sources under cmd and internal, where no Go
-  file mentions `crypto/tls` or x509 today.
+- A contract test in the adapter, `TestVerifiedThroughTheTunnel`, has a client verify
+  through the tunnel and see the upstream's own certificate.
+- `TestNoInterceptionCode`, an ordinary Go test in the adapter's package, parses every
+  production Go file under cmd and internal, files go ignores on the runner included, and
+  refuses any `crypto/x509` import, any `crypto/tls` import outside the adapter, any rename
+  of `crypto/tls`, any `tls.` name in a file importing it but `Config`, `ClientHelloInfo` and
+  `Server` (which refuses `tls.Certificate`, `tls.LoadX509KeyPair`, `tls.X509KeyPair`,
+  `tls.Listen`, `tls.NewListener` and `tls.Client`), any key but `GetConfigForClient` in a
+  `tls.Config` literal (which refuses `GetCertificate`), `ListenAndServeTLS` and `ServeTLS`
+  in a file importing `net/http`, and `net/http/httptest`. It first proves itself on a table
+  of offending sources, and fails unless it read at least 100 files, among them one under
+  cmd and one in the adapter. This replaces the search for names this record first proposed:
+  a correct peek writes `tls.ClientHelloInfo`, so `grep -F tls.Client` matches it, and a
+  check in the ledger leaves it when the task closes. `TestNoRelaxingCode` holds the rest of
+  "no flag, variable or build tag" and "recovers no panic" the same way, over egress's own
+  production sources.
 - `go list -deps` of `internal/engine/egress`'s packages shows no module but this one and
   no `net/http` (measured: `crypto/tls`, `net`, `io`, `os` and `encoding/json` do not
   import it).
 
-Those checks run only for T-39's own range, so T-39 also adds a depguard rule with its
-fixture, which holds on every later push: production code may import `crypto/tls` only in
-egress's adapter, and `crypto/x509` nowhere. Test fakes generate their upstream's
-certificate in memory, so no key enters a file.
+The `go list` check runs only for T-39's own range. The two Go tests are ordinary tests, so
+CI's `go test ./cmd/... ./internal/...` runs them on every later push. T-39 also adds three
+depguard rules with fixtures, which hold the imports on every later push: `egress-tls` lets
+production code import `crypto/tls` only in egress's adapter, `egress-x509` lets it import
+`crypto/x509` nowhere, and `egress-imports` holds egress's own packages to a short list of
+standard-library packages and their own, so `net/http`, `flag`, a library or another engine
+needs a reviewed change. depguard cannot see a file go ignores on the runner, such as an
+`_windows.go` file under cmd that the Windows release still compiles; the Go test walk reads
+those. Test fakes generate their upstream's certificate in memory, so no key enters a file.
 
 ### Libraries considered and rejected
 
@@ -203,9 +220,15 @@ then judges them, in this order:
 If the callback never ran the reason is `not-tls`, however that happened: bytes that are
 not TLS, bytes that start like TLS and then fail to parse, a truncated hello, a client that
 closes or stays silent to the deadline, or more than 64 KiB. Each refusal writes a record,
-then closes both sockets with no byte forwarded. On a pass the proxy writes every recorded
-byte upstream unchanged, including any beyond the hello, clears the deadline and splices. A
-failed replay is event `upstream-failed`, reason `connect`, and closes.
+then closes both sockets with no byte forwarded. On a pass the proxy clears the deadline,
+writes upstream the recorded bytes and then any unserved bytes from after the head, and
+splices. The unserved bytes are those read with the head that `crypto/tls` never asked for:
+they are never recorded, and the splice reads only the socket, so a replay of the recording
+alone loses them. T-39 measured it: CONNECT, Go's 1,518-byte hello and a trailer in one write
+gave the upstream 2,048 of 7,518 bytes at a 6,000-byte trailer, and this record first said
+that a pass writes every recorded byte. Nothing crosses the boundary, since only the sender's
+own stream breaks, but every byte after the head's terminator belongs to the tunnel. A failed
+replay is event `upstream-failed`, reason `connect`, and closes.
 
 ## The splice
 
@@ -229,8 +252,10 @@ as `internal/engine/policy/yaml/fuzz_test.go` is, with real hellos among the see
   on 443 passes, and that the method, target and port it would log obey the log's rule
   below.
 - The peek target asserts that nothing panics, that no byte reaches the client, that the
-  recording is a prefix of the input within 64 KiB, and that a pass has the exact
-  ServerName and no 0xfe0d.
+  recording is a prefix of the input within 64 KiB, that a pass has the exact ServerName and
+  no 0xfe0d, and that a pass forwards the whole input: its recording, its unserved bytes and
+  what the socket still holds together equal the input. The recording being a prefix cannot
+  show the loss the replay sentence above describes, so that last assertion does.
 
 Plain `go test` only replays seeds, which CI's `go test ./cmd/... ./internal/...` does on
 every push, and every crash a run finds is committed as a seed under `testdata/fuzz`. So
@@ -512,7 +537,10 @@ inside TLS or anything after that hello, a second hello after a HelloRetryReques
 so fronting remains a limit, as does a hello the upstream's TLS stack reads differently from
 `crypto/tls`, and it cannot stop data sent to an allowed service. Clients that omit SNI or
 send ECH, Chromium's GREASE included, and SSH over 443 are refused until a later mode names
-them.
+them. Only the extension code point 0xfe0d is refused as ECH: a hello with ECH's older code
+points 0xfe0a or 0xffce and the exact SNI passes (`TestOlderECHCodePointsPass`), because no
+upstream is known to honour them, fronting is already disclosed here, and widening the
+refused set is a security decision T-39 did not take.
 
 That Codex and Claude Code send SNI without ECH is not yet known: the person's smoke check
 confirms it, since no scenario uses a real harness. The disclosure has owners: slice-26
