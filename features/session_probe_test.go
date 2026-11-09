@@ -210,11 +210,7 @@ func (w *world) probeAssembly(source, suffix string) (string, error) {
 	return featureBinary(path, func(target string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		args := []string{"test", "-c", "./cmd/itos-container", "-o", target}
-		if covered {
-			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
-		}
-		cmd := exec.CommandContext(ctx, "go", args...)
+		cmd := exec.CommandContext(ctx, "go", probeBuildArgs(target, covered)...)
 		cmd.Dir, cmd.Env = source, sessionChildEnvironment(os.Environ())
 		data, err := cmd.CombinedOutput()
 		if err != nil {
@@ -222,6 +218,20 @@ func (w *world) probeAssembly(source, suffix string) (string, error) {
 		}
 		return nil
 	})
+}
+
+// probeBuildArgs compiles the test assembly the way the suite's product is
+// built. -trimpath keeps the source folder out of every compiled package's cache
+// key, so the assembly reuses the packages that product build (and the other
+// assembly) already compiled instead of compiling the whole module again. Without
+// it each cold covered assembly costs about as much as the product build itself;
+// the engine tier compiles two of them inside its measured step.
+func probeBuildArgs(target string, covered bool) []string {
+	args := []string{"test", "-c", "-trimpath", "./cmd/itos-container", "-o", target}
+	if covered {
+		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
+	}
+	return args
 }
 
 func sessionChildEnvironment(env []string) []string {

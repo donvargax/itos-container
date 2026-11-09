@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -122,6 +123,27 @@ func TestProbeProductIsStable(t *testing.T) {
 	}
 	if isProbeBinary("/x-session-probe/itos-container") || !isProbeBinary("/x/itos-container-session-probe.exe") || !isProbeBinary("/x/itos-container-engine-probe.exe") {
 		t.Error("only the file name marks an assembly")
+	}
+}
+
+// The engine tier compiles two covered test assemblies inside its measured step.
+// Built with -trimpath like the tier's product, they reuse that build's compiled
+// packages; built without it each one recompiles the module from nothing.
+func TestProbeAssemblySharesTheProductBuildCache(t *testing.T) {
+	for _, covered := range []bool{false, true} {
+		args := probeBuildArgs("/x/probe", covered)
+		has := func(flag string) bool { return slices.Contains(args, flag) }
+		if !has("-trimpath") || !has("-c") || args[0] != "test" || args[len(args)-1] == "" {
+			t.Errorf("covered=%t: %v does not compile a test assembly with -trimpath", covered, args)
+		}
+		if i := slices.Index(args, "-o"); i < 0 || args[i+1] != "/x/probe" || !slices.Contains(args, "./cmd/itos-container") {
+			t.Errorf("covered=%t: %v does not build the command into the target", covered, args)
+		}
+		for _, flag := range []string{"-cover", "-covermode=atomic", "-coverpkg=./..."} {
+			if has(flag) != covered {
+				t.Errorf("covered=%t: %v, coverage flag %s present=%t", covered, args, flag, has(flag))
+			}
+		}
 	}
 }
 

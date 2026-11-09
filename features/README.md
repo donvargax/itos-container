@@ -365,6 +365,13 @@ from the copy would change what they exercise, so it stays on the production lim
 product assembly must report 1/3/1 seconds and the session assembly 10/120/10. The
 contract compilation it checks first is the copy's.
 
+Both assemblies are compiled with `-trimpath`, as the product is, so the product build
+and the two assemblies share one build cache. Without the flag each covered assembly
+recompiled the whole module: with the product built first and an empty cache, a
+covered assembly took about 20 s to the product's 15 s on a fast machine, and 5 s with
+the flag. The engine tier builds two assemblies inside its measured step;
+`TestProbeAssemblySharesTheProductBuildCache` pins the flag.
+
 The first version used `go build -overlay` instead of a copy and never took effect in
 CI: with `-cover`, which the engine step always sets, `cmd/go` passes the cover tool
 each package file's path on disk and ignores the overlay, so the product kept its
