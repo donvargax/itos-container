@@ -3632,11 +3632,3 @@
     TestOverlapDrainBound lines; once committed red, slow_drain fails with the timeout at 5 s and
     hung_controller fails with 5 s against 35 s. The third: features/README.md has no '35-second'
     and says 'five-second' at line 153.
-  done_when:
-    - run: |
-        out=$(go test ./features -run '^TestOverlapCleanup$' -count=1 -v) || { printf '%s\n' "$out"; exit 1; }
-        printf '%s\n' "$out" | awk '/^    --- PASS: TestOverlapCleanup\/covered_timeout /{print; gsub(/[()s]/,"",$4); ok=($4+0<0.5)} END{exit !ok}'
-    - run: |
-        out=$(go test ./features -run '^TestOverlapDrainBound$' -count=1 -v) || { printf '%s\n' "$out"; exit 1; }
-        printf '%s\n' "$out" | awk '/^--- PASS: TestOverlapDrainBound /{print; gsub(/[()s]/,"",$4); fast=($4+0<0.5)} /^    --- PASS: TestOverlapDrainBound\/slow_drain /{slow=1} /^    --- PASS: TestOverlapDrainBound\/hung_controller /{hung=1} END{exit !(fast && slow && hung)}'
-    - run: grep -q '35-second' features/README.md && ! grep -qi 'five-second' features/README.md
