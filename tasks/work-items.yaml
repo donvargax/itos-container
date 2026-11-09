@@ -1078,3 +1078,28 @@ items:
       explicit act by the person, never silent automatic pruning. It also has to keep the
       exact-ownership guarantee: it may touch only this project's own session state, never foreign
       resources. Decide the rule, then specify it by scenarios.
+  - id: p2-lifecycle-09-escalation-window-jitter
+    title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Run 42609794543 (T-41's range, which touches nothing LIFECYCLE-09 uses) failed the engine tier
+      at row #03 of 'Ignored and repeated cancellation escalates once after the fixed grace'
+      (SIGTERM, acknowledgement delayed 60% of grace), while T-33 to T-37 each passed it. T-33
+      shortened the engine grace from 10 s to 1 s and kept the SIGKILL tolerance proportional:
+      lifecycleSignals in features/lifecycle_native_assertions_test.go accepts SIGKILL only from 1.0
+      s to 1.2 s after cancellation. The 30 s teardown assertion kept an absolute 2 s tolerance.
+      Controller wake-up and request latency under -cover on a shared runner do not shrink with the
+      grace, so 200 ms is a plausible flake source. The same run's engine step took 235 s against
+      its 240 s gate, so the runner was busy. The cause is not confirmed: the failing assertion was
+      not visible to the implementer (no gh access) or to this triage. The coordinator should put
+      the failing assertion's text from the job log in the brief before the item is taken. If it is
+      the SIGKILL window, replace the 20% share with an absolute floor. A tolerance up to about 500
+      ms still rejects an acknowledgement-relative timer, which fires at 1.6 s with a 60% delay.
+      Keep the lower bound, the native receipts and the 60% delay row. Change the T-33 wording
+      'escalation tolerance is 20 percent' and the matching lines in features/README.md with it.
+      This keeps the engine tier from failing unrelated ranges, which matters for milestone two's
+      egress proof, which relies on it.
