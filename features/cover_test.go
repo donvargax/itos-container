@@ -77,9 +77,9 @@ func TestScenarioCoverageContract(t *testing.T) {
 				return nil
 			})
 			if mode == "per-ID" || mode == "both" {
-				assertCoverageEntries(t, perID, ids)
+				profiles := readScenarioCoverage(t, perID, ids)
 				for _, id := range ids {
-					profile := readProductCoverage(t, filepath.Join(perID, id))
+					profile := profiles[id]
 					// Kong calls count's Help even for --version; only domain
 					// execution distinguishes counting from CLI initialization.
 					if got := executedCoverage(profile, "/internal/slices/count/domain/"); got != (id == "ID-COUNT-01") {
@@ -115,6 +115,7 @@ func TestScenarioCoverageContract(t *testing.T) {
 			cases["ID-SESSION-01"] = "/internal/engine/session/domain/session.go:"
 			cases["ID-LIFECYCLE-14"] = "/internal/engine/session/domain/"
 			cases["ID-RUN-13"] = "/internal/engine/approval/disk/"
+			cases["ID-OVERLAP-10"] = "/internal/engine/session/domain/"
 			if env.arch == "amd64" {
 				cases["ID-APPROVAL-32"] = "/internal/engine/approval/disk/private.go:"
 			}
@@ -244,6 +245,22 @@ func assertCoverageEntries(t *testing.T, dir string, want []string) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("coverage entries: got %v, want %v", got, want)
 	}
+}
+
+// Reuse the execution selector's IDs, including manual red selections in CI.
+// Metadata alone cannot stand in for executed product coverage.
+func readScenarioCoverage(t *testing.T, dir string, tags []string) map[string]string {
+	t.Helper()
+	ids := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		ids = append(ids, strings.TrimPrefix(tag, "@"))
+	}
+	assertCoverageEntries(t, dir, ids)
+	profiles := make(map[string]string, len(ids))
+	for _, id := range ids {
+		profiles[id] = readProductCoverage(t, filepath.Join(dir, id))
+	}
+	return profiles
 }
 
 func readProductCoverage(t *testing.T, dir string) string {

@@ -2893,6 +2893,14 @@
     regression must exercise an existing secondary-world path and verify its product counters
     reach the parent ID without ambient GOCOVERDIR.
 
+    OVERLAP-10 leaves both local controllers active through its final assertion. Cancelling
+    them immediately in teardown kills them before Go can export counters. After all scenario
+    assertions, end still-running simulated overlap workloads through the fixture's existing
+    wait replies and give their controllers one shared five-second drain bound before the
+    existing forced cleanup. A drain timeout fails cleanup. Keep native teardown unchanged,
+    retain every scenario assertion, and add no product calls just to obtain coverage. Include
+    OVERLAP-10 in the focused coverage regression to hold this post-assertion export path.
+
     The older-kernel approval helper and run's child-umask helper must stage restrictive-mask
     output beneath the effective scenario destination and export it there after child exit.
     Preserve exportApprovalKernelCoverage's validation and restoration of owner access only
@@ -2994,6 +3002,12 @@
     existing approval/session fixtures still report state.unsafe in this UID-mapped sandbox.
     It does not reach coverage validation. These observations neither prove atomic/per-ID
     collection nor replace the implementer's regression red, CI engine run or fresh code proof.
+
+    After q-45's correction and restoring attempt 1's harness repair, the selected check
+    and focused regression pass with normal ancestor ownership. The full non-engine suite
+    passes for 320 listed IDs in 188.3 seconds, then collection fails at OVERLAP-10's missing
+    covmeta files. That exposes the controller-teardown gap above; passing product assertions
+    alone does not satisfy the per-ID collection check.
   done_when:
     - run: |
         python3 - <<'PY'
