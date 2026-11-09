@@ -307,6 +307,14 @@ items:
       commit. Capture a failure first.
 
       From arc42's review: go.mod is an enforcement input, so slices 2 and 3 hit this.
+
+      That item already holds the problem that the whole fixture matrix is slow and can fail under
+      load. Add this measurement: T-39's 24 probes ran in under 10 s with a hand-built checker and
+      ARCHITECTURE_CHECKER set by hand, against 124 s for the whole matrix. A filter, or a split of
+      the matrix, is a candidate remedy once that item has captured a failure. Do not add a flag to
+      the gate tool on its own: touching tools/architecture/check is an enforcement-input change
+      that triggers the full matrix, and agents do not run the gate by hand. It is not worth a
+      separate item.
   - id: slice-5
     title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
     phase: 1
@@ -471,6 +479,15 @@ items:
       dial classification belongs in its done_when. The log-store limit must be disclosed by
       slice-26, slice-27 and slice-28 until p2-proxy-log-lost-tail-sink is answered. The coordinator
       applies this once T-38 is merged. No new item is needed.
+
+      p3-approval-before-egress already holds both edges and the reasons for them. Slice-27 gets
+      p1-acceptance-static-binary because the harness binary was measured dynamically linked, so it
+      cannot be the proxy in an inert root filesystem; that item's why already ends 'slice-27 should
+      depend on it'. Slice-26 or slice-27 gets p3-approval-before-egress because a self-approved
+      list first becomes a route in slice-27; its why states that point and cites AC-02 and
+      docs/security.md. Nothing is new here. What remains is the coordinator's depends_on edit,
+      since slice-27 still lists [slice-26, T-39, T-40], together with the person's decision on who
+      may approve a network-granting sandbox. Neither needs a new item.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -1038,7 +1055,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-26, T-39, T-40]
+    depends_on: [slice-26, T-39, T-40, p3-approval-before-egress]
     kind: slice
     why: >
       Was p1-egress-run-through-proxy.
@@ -1220,6 +1237,13 @@ items:
       non-gating: it sits beside, not in, the required job. The project has so far written "no
       nightly" (the T-37 and mutation-proof items); that was about the gating mutation proof, and
       this item is the exploring tier. The person should confirm that reading when reviewing it.
+
+      Add `go test -race ./internal/engine/egress/...` to the same scheduled, non-gating job. The
+      item already covers what T-39's one-off checks leave unrepeated, and it needs a schedule
+      trigger that ci.yml lacks. The egress adapter's concurrency faces a hostile client, like the
+      parser does. ci.yml has no race run, so after T-39 closes nothing runs the race detector
+      there. Run it over the egress package only, never over ./features (the 22 GB incident of
+      2026-11-08).
   - id: p2-schema-conforms-to-parser
     title: A check ties each published policy schema to what doctor accepts and refuses
     phase: 1
@@ -1410,6 +1434,48 @@ items:
       it blocks no step on its own. Note on the item: a product whose repeated SIGINT restarts grace
       fires at about 1.2 s and passes every LIFECYCLE-09 row under the widened 1 s to 3 s window, so
       that timing is the row's failing-first case.
+
+      This item already covers the idea. Its notes say a recorder that journals the cut would only
+      sharpen the native tier's inference, and that a recorded cut instant is not worth its own item
+      because it touches the recorder outside T-42's range. The defect to catch is a grace timer
+      started at the acknowledgement or the cut instead of the first signal. A fake clock has no
+      jitter, so the item's fake-clock row can assert the exact SIGKILL instant (first signal plus
+      grace) without the recorder stamping either the cut or the start of the kill call. Extend that
+      row with a hold longer than what is left of the call limit, so the cut really happens. T-42's
+      escalationWindow comment already names this gap. The row's exact assertion also catches a
+      timer started late, which the delayed limit only refuses when the kill arrives early. The
+      recorder stays unchanged, so the idea is not a separate item.
+
+      The item's notes already settle this. A recorder that journals the cut only sharpens the
+      native tier's inference. The defect it guards against, a grace timer started at the
+      acknowledgement or the cut and not at the first signal, is what the item's fake-clock row
+      catches. That row takes a hold longer than what is left of the call limit and asserts SIGKILL
+      at first signal plus grace. A recorded cut instant is not worth its own item and touches the
+      recorder outside T-42's range. The new rationale (an acknowledgement-relative timer refused at
+      any arrival, the wait-after-cut rule and the bound reading the cut) is about making the native
+      tier's checks sharper, which the item has already ruled out as a separate piece of work.
+
+      This belongs inside the item. Its fake-clock row, with a hold longer than the call limit
+      leaves, asserts the exact SIGKILL instant at first signal plus grace. A product that sleeps a
+      grace after the cut, or restarts its grace without sending a request, kills at the cut plus
+      grace, so the exact assertion catches it. The idea's proposed check, that no grace timer
+      starts after the signal call returns, is another way to read the same row. Note on the item:
+      this sleeping or silent-restart product sends no /wait, so lifecycleSignals' wait rule does
+      not refuse it and only the fake-clock row's exact instant does. Make that the row's
+      failing-first case alongside the repeated-SIGINT restart.
+
+      This item already holds the idea. Its fake-clock row, extended with a hold longer than what is
+      left of the call limit so the cut really happens, asserts SIGKILL at exactly first signal plus
+      grace. A fake clock has no jitter, so no recorded cut instant is needed. The new rationale is
+      covered by that row. A timer started at the acknowledgement or the cut kills at the cut plus
+      grace, whenever the first signal arrives. A product that sleeps instead of waiting after a cut
+      kills at the same wrong instant. Neither sends the /wait request that lifecycleSignals' wait
+      rule looks for, so only the exact instant refuses them. Make both the row's failing-first
+      cases, alongside the repeated-SIGINT restart. The earlier notes already settle that a recorded
+      cut instant is not worth its own item, because it touches the recorder outside T-42's range
+      and only sharpens the native tier's inference. The item is not in the queue (T-45, T-42,
+      p1-credentials-passed-in, p1-harness-home, p1-interactive-tty). The person or coordinator
+      should queue it before p1-interactive-tty or accept the gap.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
@@ -1473,3 +1539,27 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p2-harness-env-clears-columns
+    title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. world.env() (features/steps_test.go:223) copies the caller's environment
+      and drops only GIT_, ITOS_, ITOS_CONTAINER_, GITHUB_, GH_, CI and PATH, so an inherited
+      COLUMNS reaches the product and Kong wraps help to it. Measured under COLUMNS=30:
+      ID-APPROVAL-29 fails a correct build at its step 'its standard output says "an agent on the
+      host can approve"', because the wrap splits the phrase. Only ID-APPROVAL-56 names its own
+      width (COLUMNS=200). Six other help scenarios are exposed: completion --help, count --help,
+      doctor --help in manifest.feature and policy.feature, and the product status/stop help in
+      recovery.feature. A suite that fails a correct build on a caller's terminal setting breaks the
+      charter's rule that suite and proof reliability fixes stay inside the first milestone. Fix:
+      have env() drop COLUMNS, or set a fixed wide value, and add a harness regression committed red
+      that runs a help scenario under a narrow inherited COLUMNS and fails before the fix. Check
+      that fixtures building their environment from os.Environ() directly, such as
+      sessionChildEnvironment, do not reintroduce it. Keep every scenario and assertion unchanged
+      and leave ID-APPROVAL-56's explicit width alone. Phase p2: nothing blocks the current step,
+      and CI normally exports no COLUMNS. The harness came from go-template-itos, so once this lands
+      the coordinator files it there as a backport issue.
