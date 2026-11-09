@@ -471,6 +471,15 @@ items:
       dial classification belongs in its done_when. The log-store limit must be disclosed by
       slice-26, slice-27 and slice-28 until p2-proxy-log-lost-tail-sink is answered. The coordinator
       applies this once T-38 is merged. No new item is needed.
+
+      p3-approval-before-egress already holds both edges and the reasons for them. Slice-27 gets
+      p1-acceptance-static-binary because the harness binary was measured dynamically linked, so it
+      cannot be the proxy in an inert root filesystem; that item's why already ends 'slice-27 should
+      depend on it'. Slice-26 or slice-27 gets p3-approval-before-egress because a self-approved
+      list first becomes a route in slice-27; its why states that point and cites AC-02 and
+      docs/security.md. Nothing is new here. What remains is the coordinator's depends_on edit,
+      since slice-27 still lists [slice-26, T-39, T-40], together with the person's decision on who
+      may approve a network-granting sandbox. Neither needs a new item.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
