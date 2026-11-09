@@ -1243,6 +1243,13 @@ items:
       print each `--- FAIL` block with its godog step error, beside the streamed `engine scenario
       timing:` records, so a red run shows its failing assertion. Do not wait for the extractor fix
       tracked upstream in itos. No separate item is needed for a second print in the same step.
+
+      That item already prints the streamed engine timings and carries the lead on the 1 s engine
+      call budget under the syscall tracer. Per-row signal and SIGKILL offsets for LIFECYCLE-09
+      belong in the same `engine scenario timing:` output and the same diagnostics step. They are
+      data for reviewing T-42's limits and for seeing how close real calls come to T-33's 1 s limit,
+      so they are not a task of their own. No failure has been tied to the 1 s limit yet. T-42's fix
+      is already decided and does not wait on them.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
