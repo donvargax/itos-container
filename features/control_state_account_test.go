@@ -90,7 +90,7 @@ func (w *world) controlAccountBinary() (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		args := []string{"test", "-c", "./cmd/itos-container", "-o", output}
-		if os.Getenv("GOCOVERDIR") != "" {
+		if productCoverageRequested() || w.coverdir != "" {
 			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 		}
 		cmd := exec.CommandContext(ctx, "go", args...)
