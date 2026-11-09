@@ -67,6 +67,7 @@ func Problems(v View) []Problem {
 	case "state.unavailable":
 		p.Exit = 3
 		p.Message = "Approval state is unavailable"
+		p.Fix += "; the effective user needs a local /etc/passwd entry with an absolute home directory, so LDAP or SSSD-only accounts are refused"
 	case "state.busy":
 		p.Exit = 75
 		p.Message = "Approval state lock wait exceeded the call budget"

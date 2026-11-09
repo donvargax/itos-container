@@ -17,7 +17,7 @@ func TestProblemsDistinguishesUnavailableStateFromUncertainPublication(t *testin
 			want: port.Problem{
 				Rule: "approval.state.unavailable", Exit: 3, Field: "approval",
 				Message: "Approval state is unavailable",
-				Fix:     "inspect with itos container doctor and run itos container approve after resolving the problem",
+				Fix:     "inspect with itos container doctor and run itos container approve after resolving the problem; the effective user needs a local /etc/passwd entry with an absolute home directory, so LDAP or SSSD-only accounts are refused",
 			},
 		},
 		{
