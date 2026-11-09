@@ -149,13 +149,15 @@ Control hook sets an atomic flag for the dial when any address passes the table,
 `address` applies only when the dial failed with that flag still unset. If a valid address
 was dialed and the dial failed, the failure is `connect`, whichever order the answer lists the
 refused addresses in. The returned error cannot decide it, because `net.Dialer` keeps the
-first address's error: for the answer 10.0.0.1 then 203.0.113.1, with the second timing out,
+first address's error: for the answer 10.0.0.1 then 11.22.33.44, with the second timing out,
 the error is the hook's, and for the reverse order it is the timeout (measured twice on Go
-1.27.3 against a fake resolver: in the review, and again here with a fake DNS server). By the
-error alone one upstream fault would read `address` and 403, or `connect` and 502, by answer
-order. T-39's adapter tests cover both orders of that answer, expecting `connect` each time,
-besides an answer with none valid (`address`), no such host (`dns`) and a refused connection
-(`connect`).
+1.27.3 against a fake resolver: in the review, and again here with a fake DNS server, whose
+hook refused 10/8 and let 11.22.33.44 pass). By the error alone one upstream fault would
+read `address` and 403, or `connect` and 502, by answer order. T-39's adapter tests cover
+both orders of that answer, expecting `connect` each time, besides an answer with none
+valid (`address`), no such host (`dns`) and a refused connection (`connect`). The valid
+address in that test must pass the adapter's own table, so it cannot come from a
+documentation range such as 203.0.113.0/24, which the table refuses; 11.22.33.44 passes.
 
 T-39's adapter tests reach their loopback listeners by giving its constructor a test
 resolver and dial function, and test the table directly. Porttest fakes stay free of I/O,
@@ -466,8 +468,21 @@ data root does not cause unless the two share a filesystem.
 So the count that status shows is the number of records stored, not proof that every
 refusal made it in, and the record's other claims about the log read that way. This is a
 disclosed limit, not a closed one: approve, status and `docs/security.md` say so beside the
-handshake guarantee (slice-26 and slice-27), and a closure that sees the store's failure,
-such as a separate sink the proxy can check, stays open for a later step.
+handshake guarantee (slice-26 and slice-27).
+
+Closing it takes a security decision this record does not take, because either way changes
+what the proxy may hold, and the project's rule is to stop for such decisions rather than
+invent a protection. There are two candidates. A sink the proxy writes and fsyncs itself,
+such as a volume mounted only into the proxy, lets it see a full disk and exit, so the
+session fails closed mid-run; but it gives a proxy that now has one read-only mount a
+writable one, and a Docker volume lives in the same data root, so it must be sized and
+cleaned up as the proxy's own. A terminal record the proxy writes on a clean stop would
+expose a lost tail at teardown, because the copy would find no such record and report the
+log incomplete, with no second sink and no new mount; but it detects after the fact, so the
+session is not stopped mid-run, and a killed proxy would read as incomplete too. Neither
+is built or specified here. The person confirms or overturns this with the record's other
+decisions ("What rests on an answered question"), and until they do, the limit above
+stands and no claim in this record depends on a closure.
 
 ## The handshake guarantee (q-49)
 
@@ -527,7 +542,9 @@ The Images and Mounts readings, the two-network topology and the delivery have n
 behind them, though the charter's stop rule names contract changes and "Decisions still
 open". The coordinator told the drafter to finish, and slice-27 must prove the topology and
 delivery on the real engine, so the work goes on. This record marks all of these as its own
-decisions, for the person to confirm or overturn.
+decisions, for the person to confirm or overturn. The refusal log's lost store is the one
+thing it leaves open instead of deciding, and it is the person's ("What the log cannot
+promise").
 
 ## Documents updated, under the charter's drift rule
 

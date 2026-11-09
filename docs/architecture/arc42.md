@@ -819,8 +819,8 @@ controller copies every record but `ready` to `egress-refusals.jsonl` under the 
 session directory, with a streaming writer slice-28 adds, and a gap in `seq` is a reported
 failure. A lost tail is not detectable (a disk full to teardown, or the copier cut off at
 10 s), so the count status shows is the records stored, not a proof that every refusal is
-in it; approve, status and `docs/security.md` say so (slice-26 and slice-27). The proxy
-stops after 20,000 records. Retention across sessions is open
+in it; approve, status and `docs/security.md` say so (slice-26 and slice-27), and closing
+that gap is an open decision for the person. The proxy stops after 20,000 records. Retention across sessions is open
 (`p3-session-state-retention`). See [the record](../decisions/0022-egress-proxy.md).
 
 **Dependencies and platforms.** Owning behaviour specs choose maintained libraries,
