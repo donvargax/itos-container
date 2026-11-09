@@ -2425,25 +2425,30 @@
     or the full permanent regression suite exists. Keep every boundary and link requirement
     above when implementing it.
 
-    The first check below discovers both named regressions before running them, preserves go
+    The task check below discovers both named regressions before running them, preserves go
     test's exit status and refuses an empty selection. At f0122e8 it failed with missing
-    TestRecoveryProtectedHeartbeatRename; both new tests remain absent. The separate focused
+    TestRecoveryProtectedHeartbeatRename; both new tests were absent then. The separate focused
     run of TestOfflineRegistryPreservation and TestAdmissionPreservationRequiresExactProtectedBinding
     passed, including their negative cases. Keep the new tests in the existing ordinary Linux
     go test ./... tier; the focused task check needs no engine and no new gate. Commands use
     plain Go and existing runner shell tools, with no RTK requirement in CI.
 
-    Retain the supplied RECOVERY-23 command as the second check. It runs only in the existing
-    Linux amd64 GitHub Actions engine context with its prepared cached-image inputs and native
-    guard; never spoof that context or run it on the agent host. The coordinator's reported
-    lstat failure is its pre-work evidence; a flaky native check need not fail on every run.
-    This refresh did not execute the native check. An earlier local invocation was refused by
-    the selection guard before native fixture setup; that refusal supplies neither native red
-    evidence nor a pass. Use itos work show to read the entry, since itos task executes both
-    checks. Require actual selected execution and successful preservation at the pushed head,
-    not a skip or zero selected scenarios. The normal engine suite also covers the neighbouring
-    RECOVERY-21/22 and lifecycle consumers; keep that tier and its budgets unchanged rather than
-    adding repeated native runs.
+    Commit 1f8471a adds the permanent regressions and the pre-inspection exclusions. Its
+    pre-repair controls failed at the capture assertion with lstat and open on the renamed
+    staging path, and at one Info call per excluded heartbeat. The focused check passes after
+    the repair, including the snapshot boundary and existing registry/admission controls.
+
+    The coordinator's q-46 decision (2026-11-09) assigns only the engine-free regression to
+    done_when. Task checks run through itos ci run in the ci job; cached-image fixture inputs
+    exist only in the Engine job. Running RECOVERY-23 as a task check therefore fails with
+    absent or malformed CI cached-image fixture inputs. Leave the workflow and native guards
+    unchanged. ID-RECOVERY-23 needs no task check because the Engine job runs every live engine
+    scenario on each non-draft pull request and on main. Its actual green RECOVERY-23 execution
+    at the pushed branch head is the native evidence the coordinator accepts, not a skip or
+    zero selected scenarios. That suite also covers RECOVERY-21/22 and lifecycle consumers;
+    preserve its selection and budgets without adding repeated native runs. The coordinator's
+    reported lstat failure remains the native pre-work evidence; a flaky scenario need not fail
+    on every run. Never spoof the engine context or run the native scenario on the agent host.
 
     Report the deterministic failing assertion, passing controlled regression and audit controls,
     and the coordinator's native CI result when available. No local mutation run, generated
@@ -2459,7 +2464,6 @@
           printf '%s\n' "$listed" | grep -Fxq "$name" || { printf 'missing %s\n' "$name" >&2; exit 1; }
         done
         go test ./features -run '^(TestRecoveryProtected(HeartbeatRename|SnapshotBoundaries)|TestOfflineRegistryPreservation|TestAdmissionPreservationRequiresExactProtectedBinding)$' -count=1
-    - run: ITOS_CONTAINER_ENGINE_TESTS=1 go test ./features -count=1 -scenarios='^@ID-RECOVERY-23$'
 - id: T-32
   type: ci
   title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
