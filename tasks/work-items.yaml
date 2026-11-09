@@ -1404,6 +1404,17 @@ items:
       choice changes the log schema (a terminal record or final count) and the proxy's hardening, so
       the person must decide it before slice-28 writes its copy check, and the drafter must stop for
       it rather than invent a protection.
+
+      That item already puts this exact question to the person. A hostile worker fills a Docker data
+      root that shares the checkout's filesystem, and the proxy's writes keep succeeding. The
+      session continues, and the teardown copy succeeds on a truncated log. Its note names the two
+      candidates: a proxy-held fsynced volume sink that fails closed mid-run but gives the proxy a
+      writable mount, or a terminal record written on clean stop that needs no new mount but cannot
+      stop a run already losing records. It also says the drafter must stop for the person rather
+      than invent a protection, and that the answer must come before slice-28's copy check. The one
+      point to add is the order of work. Until the person answers, T-40's teardown copy and
+      slice-26, slice-27 and slice-28 must carry the disclosure that an incomplete log cannot be
+      detected. Slice-28 shows a count as complete only after the decision.
   - id: T-43
     title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
     phase: 1
