@@ -1058,3 +1058,23 @@ items:
       p2-architecture-fixtures-load). It is p2: it blocks no step of charter milestone two. The
       itos-side warning, from `itos config check` or `itos work promote --check`, is a gap in itos
       itself; the coordinator files it after searching existing issues.
+  - id: p3-session-state-retention
+    title: Decide how long completed sessions' host state is kept, egress-refusals.jsonl included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Outside charter milestone two step 1, so p3: nothing in step 1 needs it, and it is recorded
+      rather than specified now. T-38's record bounds one session's egress-refusals.jsonl at about
+      40 MiB of host disk. Cleanup never deletes it, and completed sessions stay listed and are
+      never garbage-collected: features/recovery.feature says 'no retention/GC policy is added
+      here', and features/session.feature says 'Later retention/GC belongs to a separate
+      specification'. No registry item holds that specification, and slice-28 covers writing the
+      log, not how long it lives. The charter's purpose is an agent loop running unattended, which
+      accumulates session state and these logs on the host without bound. The rule must keep a
+      hostile run's refusal evidence until the person has read it, so any deletion has to be an
+      explicit act by the person, never silent automatic pruning. It also has to keep the
+      exact-ownership guarantee: it may touch only this project's own session state, never foreign
+      resources. Decide the rule, then specify it by scenarios.
