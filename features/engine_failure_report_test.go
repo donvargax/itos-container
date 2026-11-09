@@ -38,6 +38,25 @@ var diagnosticQuoted = []string{
 	"    nested_test.go:3: nested block",
 }
 
+// diagnosticFirstLineQuote is the error of a scenario whose first line quotes
+// go test output, and whose later line quotes a failure line naming a scenario
+// that passed: a report that takes the first line for an own failure line drops
+// the block, then reads the later line as an own one.
+var diagnosticFirstLineQuote = []string{
+	"nested go test said --- FAIL: TestX (0.00s)",
+	"    --- FAIL: " + diagnosticChild + "/passing_case (0.00s)",
+	"more detail",
+}
+
+// diagnosticInvalidBytes is the error of a scenario that quotes raw stderr with
+// bytes that are no UTF-8, on its first line and on a later one, as the steps
+// that print a workload's stderr with %s can: a report that matches in a UTF-8
+// locale finds no block start in the first line.
+var diagnosticInvalidBytes = []string{
+	"completed anchored workload returned 75: \xff\xfe stderr",
+	"more \xc3 detail",
+}
+
 // outlineRowError is what the nth outline row fails with: a long error of
 // short lines, so that go test blocks of failures that overlapped would cut
 // one another short, as they do when godog runs scenarios concurrently.
@@ -84,6 +103,14 @@ Feature: failures
   @ID-MEMORY-03
   Scenario: undefined case
     Then nothing defines this step
+
+  @ID-MEMORY-05
+  Scenario: first line quoting case
+    Then it fails quoting a failure line first
+
+  @ID-MEMORY-06
+  Scenario: invalid bytes case
+    Then it fails with invalid bytes
 
   @ID-MEMORY-04
   Scenario: quoted 100% case
@@ -157,6 +184,8 @@ func TestEngineDiagnosticsLogChild(t *testing.T) {
 			return errors.New("quiet interval failed after its rows")
 		})
 		sc.Step(`^it fails with quoted output$`, func() error { return errors.New(strings.Join(diagnosticQuoted, "\n")) })
+		sc.Step(`^it fails quoting a failure line first$`, func() error { return errors.New(strings.Join(diagnosticFirstLineQuote, "\n")) })
+		sc.Step(`^it fails with invalid bytes$`, func() error { return errors.New(strings.Join(diagnosticInvalidBytes, "\n")) })
 		sc.Step(`^it fails with a quoted panic$`, func() error { return errors.New("failed first\npanic: quoted") })
 		sc.Step(`^it sleeps$`, func() { time.Sleep(time.Minute) })
 		sc.After(func(ctx context.Context, scenario *godog.Scenario, _ error) (context.Context, error) {
@@ -208,7 +237,9 @@ func lastNonBlankFrom(log string) string {
 
 // runDiagnosticsStep runs the real Engine failure diagnostics step as CI does,
 // from the checkout's root, with sudo and free printing markers so that no real
-// sudo runs. A nil log leaves no file, as a failed compilation does.
+// sudo runs. It runs in a UTF-8 locale, as CI's runner may, which is where a
+// byte that is no UTF-8 cuts a pattern short. A nil log leaves no file, as a
+// failed compilation does.
 func runDiagnosticsStep(t *testing.T, script string, log *string, limit time.Duration) string {
 	t.Helper()
 	runner, stubs := t.TempDir(), t.TempDir()
@@ -226,7 +257,7 @@ func runDiagnosticsStep(t *testing.T, script string, log *string, limit time.Dur
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "bash", "-euo", "pipefail", "-c", script)
 	cmd.Dir = ".."
-	cmd.Env = append(os.Environ(), "RUNNER_TEMP="+runner, "PATH="+stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8", "RUNNER_TEMP="+runner, "PATH="+stubs+string(os.PathListSeparator)+os.Getenv("PATH"))
 	out, err := cmd.CombinedOutput()
 	if code := diagnosticExitCode(err); code != 0 {
 		t.Fatalf("diagnostics exit = %d, want 0: %.2000s", code, out)
@@ -312,14 +343,16 @@ func testEngineFailureReport(t *testing.T, script string) {
 			{prefix + "quiet_interval", "quiet interval failed after its rows"},
 			{prefix + "cleanup_failure", "after scenario hook failed: remove anchor: 409 conflict"},
 			{prefix + "undefined_case", "step is undefined: nothing defines this step"},
+			{prefix + "first_line_quoting_case", strings.Join(diagnosticFirstLineQuote, "\n")},
+			{prefix + "invalid_bytes_case", strings.Join(diagnosticInvalidBytes, "\n")},
 			{prefix + "quoted_100%_case", quoted},
 		}
 		check(t, &log, false, 5*time.Second, failures...)
 		// The quoted error is whole under its own scenario, its empty line kept.
 		annotations, printed := reportOf(failures...)
-		if !strings.Contains(annotations[4], "100%25_case::quoted 100%252F done%0Dtail%0Apanic: quoted%0A%0A::error title=planted::x%0A") ||
+		if !strings.Contains(annotations[6], "100%25_case::quoted 100%252F done%0Dtail%0Apanic: quoted%0A%0A::error title=planted::x%0A") ||
 			!strings.Contains(printed, "    panic: quoted\n    \n    ::error title=planted::x\n") {
-			t.Errorf("the quoted error lost its empty line or its place: %q", annotations[4])
+			t.Errorf("the quoted error lost its empty line or its place: %q", annotations[6])
 		}
 		for _, name := range []string{"TestNested", "go test"} {
 			if strings.Contains(strings.Join(annotations, "\n"), "title="+name) {
@@ -338,6 +371,20 @@ func testEngineFailureReport(t *testing.T, script string) {
 			handWritten(t, "=== RUN   TestFeatures\n=== RUN   TestFeatures/a\n--- FAIL: TestFeatures (0.00s)\n    --- FAIL: TestFeatures/a (0.00s)\nfatal error: all goroutines are asleep - deadlock!\n",
 				diagnosticFailure{"go test", "fatal error: all goroutines are asleep - deadlock!"},
 				diagnosticFailure{"TestFeatures/a", "no error text in the log"})
+		})
+		// With no --- FAIL: line in a timeout's log, only a scenario's block says
+		// it failed, so a block a report cannot read is a scenario it cannot name.
+		timedOut := "=== RUN   TestFeatures/b\npanic: test timed out after 4m0s\n\trunning tests:\n\t\tTestFeatures/b (4m0s)\n"
+		timeoutList := diagnosticFailure{"go test", "panic: test timed out after 4m0s\nrunning tests:\n\tTestFeatures/b (4m0s)"}
+		t.Run("a block whose first line quotes a failure line", func(t *testing.T) {
+			handWritten(t, "=== RUN   TestFeatures\n=== RUN   TestFeatures/a\n    suite.go:640: nested go test said --- FAIL: TestX (0.00s)\n        more detail\n"+timedOut,
+				timeoutList,
+				diagnosticFailure{"TestFeatures/a", "nested go test said --- FAIL: TestX (0.00s)\nmore detail"})
+		})
+		t.Run("a block whose first line holds invalid bytes", func(t *testing.T) {
+			handWritten(t, "=== RUN   TestFeatures\n=== RUN   TestFeatures/a\n    suite.go:640: returned 75: \xff\xfe stderr\n        more\n"+timedOut,
+				timeoutList,
+				diagnosticFailure{"TestFeatures/a", "returned 75: \xff\xfe stderr\nmore"})
 		})
 		t.Run("two panics", func(t *testing.T) {
 			handWritten(t, "=== RUN   TestFeatures\npanic: first\n\tdetail\n\ngoroutine 1 [running]:\nfatal error: second\n",
