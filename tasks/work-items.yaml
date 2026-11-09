@@ -839,3 +839,13 @@ items:
       off (its own sandbox off, the container being the sandbox); executable /tmp. Open for the
       spec: a named volume per checkout (keeps sessions, so resume works across runs) or a tmpfs
       (keeps nothing); the coordinator recommends the volume.
+  - id: p1-interactive-tty
+    title: "run and exec with a TTY: raw mode, resizes, Ctrl-C as input, no harness left running after a disconnect"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, step 4 (docs/charter.md), built on slice-12's cancellation rules. A terminal or
+      multiplexer outside the sandbox is the window onto an agent inside it.
