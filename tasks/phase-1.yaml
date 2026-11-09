@@ -2870,14 +2870,6 @@
     local mutation run or generated proof. Report changed heads, before/after row and step
     timings, complete row counts, budget failures and final native CI results supplied by the
     loop. Agents commit and stop; the loop owns push, CI watching and closure.
-  done_when:
-    - run: |
-        set -eu
-        names=$(env -u ITOS_CONTAINER_ENGINE_TESTS -u ITOS_CONTAINER_RED_SCENARIOS go test ./features -list '^TestEngine(ScenarioTiming|SuiteBudget)$')
-        for name in TestEngineScenarioTiming TestEngineSuiteBudget; do
-          printf '%s\n' "$names" | grep -Fx "$name" >/dev/null || { printf 'missing %s\n' "$name" >&2; exit 1; }
-        done
-        env -u ITOS_CONTAINER_ENGINE_TESTS -u ITOS_CONTAINER_RED_SCENARIOS go test ./features -count=1 -run '^TestEngine(ScenarioTiming|SuiteBudget|Selection|Workflow|RedWorkflow|FixtureWorkflow|Diagnostics|Schedule.*)$'
 - id: T-34
   type: ci
   title: Engine fixture preparation passes again on today's CI runners

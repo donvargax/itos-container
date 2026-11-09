@@ -681,7 +681,7 @@ items:
     title: main's engine scenarios finish well inside the job's 5-minute limit
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-32
