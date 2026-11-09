@@ -1306,3 +1306,23 @@ items:
       separate from T-42's features-only range. It tests existing behaviour, so it is a ledger task
       with its checks, not a new scenario. Land it after T-42. It blocks no step of milestone two,
       so p2.
+  - id: p2-proxy-log-lost-tail-sink
+    title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      For the person to decide before slice-28 is drafted. The per-process `seq` in the proxy's
+      refusal log exposes a hole inside the stored records but not a lost tail. A hostile worker can
+      fill a Docker data root that shares the checkout's filesystem. The proxy then keeps writing
+      without seeing a failure, the session continues, and the teardown copy succeeds on a truncated
+      log. That undermines the 'every refused CONNECT leaves a log record the person can read'
+      property that slice-28 builds on (AC-17). Only a second sink the proxy can see fail would
+      close it, for example a final count written somewhere the controller reads. That is a security
+      decision, so the drafter must stop for it and not invent a protection. It is p2 because T-39's
+      record discloses the limit, so step 1 can ship with the disclosure. It is separate from
+      p3-session-state-retention, which covers how long the log is kept, not whether it is complete.
+      The answer shapes T-40's teardown copy and slice-28's reading of the log, so settle it before
+      slice-28 is taken.
