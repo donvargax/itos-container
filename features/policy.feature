@@ -599,7 +599,9 @@ Feature: Strict offline sandbox policy
   # 2. idna.Lookup.ToASCII: lower case, UTS 46 non-transitional mapping (full-width forms,
   #    ideographic dots, ignored code points), STD3 host-name characters, hyphen and Bidi
   #    rules and valid A-labels. An error refuses the entry. Never show the error's text:
-  #    it quotes the label.
+  #    it quotes the label. A final xn-- is also refused: Lookup reads it as an empty label
+  #    and returns what a written trailing dot gives, so only the adapter, which still sees
+  #    the spelling, can tell them apart (a.example.xn--).
   # 3. Remove one trailing dot, after mapping, so an ideographic final dot counts as well.
   # 4. At least two labels, each of 1 to 63 bytes, at most 253 bytes in all. Lookup checks
   #    none of this: it accepts .example.com, example.com.. and a 64-byte label, and it
@@ -914,6 +916,7 @@ Feature: Strict offline sandbox policy
       | two trailing dots                    | 'example.com..'           |
       | empty inner label                    | 'api..example.com'        |
       | empty A-label                        | 'xn--.example'            |
+      | empty final A-label                  | 'a.example.xn--'          |
       | single label                         | example                   |
       | top-level domain alone               | com                       |
       | localhost                            | localhost                 |

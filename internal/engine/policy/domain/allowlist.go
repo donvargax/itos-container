@@ -98,6 +98,7 @@ func canonicalHost(text string, names port.Names) (string, bool) {
 	// Lookup accepts .example.com, example.com.. and a 64-byte label, and turns
 	// xn--.example into .example, so the shape of the name is checked here. The
 	// dot is removed after mapping, so an ideographic final dot counts as well.
+	// A final xn-- would read as that dot, so the port refuses it before this point.
 	name := strings.TrimSuffix(ascii, ".")
 	if len(name) > maxNameBytes {
 		return "", false
