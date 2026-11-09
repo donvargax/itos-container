@@ -938,3 +938,18 @@ items:
       leaves a recovery record with the exact retry command, and stop recovers it without touching
       foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
       from p1-egress-allowlist-proxy.
+  - id: p1-overlap-drain-flake
+    title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      features/overlap_fixture_test.go:419 waits a fixed 5 s for 'local controllers drain after
+      assertions'. Under the code proof's per-ID coverage measurement the drain is slower and the
+      hook times out ('bounded overlap observation timed out'), so the proof's preparation fails
+      with no mutant judged. It failed slice-21's CI twice (runs 42573174685 and 42582818914) and
+      T-33's at 082884c (run 42589518540), each costing a CI cycle and a repair round on work that
+      had nothing to do with it. Fix the wait (a budget that holds under coverage, or waiting on the
+      drain's own completion signal), not the proof. Found by the coordinator, 2026-11-09.
