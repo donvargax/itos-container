@@ -1212,3 +1212,11 @@ items:
       what T-41 lengthened (its overlap drain wait or the cleanup it added) and bring the suite back
       near 3 minutes through the harness-only budget seam; don't raise the limit. Milestone two's
       egress step needs a green engine tier.
+
+      Engine failure diagnostics (print the streamed timings). This belongs inside
+      p1-engine-suite-under-its-limit-again. That item has to find which step T-41 lengthened, and
+      the Engine failure diagnostics step in .github/workflows/ci.yml shows only `tail -100` of the
+      log, which on a timeout is a goroutine dump. Note for that item: print the last `engine
+      scenario timing:` records, or the slowest examples sorted, in that step, and say in the README
+      that a goroutine blocked a minute or more is labelled with its minutes. It is a small ci.yml
+      change and does not need its own item.
