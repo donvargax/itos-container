@@ -39,12 +39,10 @@ var diagnosticQuoted = []string{
 }
 
 // diagnosticFirstLineQuote is the error of a scenario whose first line quotes
-// go test output, and whose later line quotes a failure line naming a scenario
-// that passed: a report that takes the first line for an own failure line drops
-// the block, then reads the later line as an own one.
+// go test output: a report that takes that line for an own failure line drops
+// the block.
 var diagnosticFirstLineQuote = []string{
 	"nested go test said --- FAIL: TestX (0.00s)",
-	"    --- FAIL: " + diagnosticChild + "/passing_case (0.00s)",
 	"more detail",
 }
 
@@ -376,10 +374,14 @@ func testEngineFailureReport(t *testing.T, script string) {
 		// it failed, so a block a report cannot read is a scenario it cannot name.
 		timedOut := "=== RUN   TestFeatures/b\npanic: test timed out after 4m0s\n\trunning tests:\n\t\tTestFeatures/b (4m0s)\n"
 		timeoutList := diagnosticFailure{"go test", "panic: test timed out after 4m0s\nrunning tests:\n\tTestFeatures/b (4m0s)"}
+		// The pretty copy of an error, which a real log holds before the block,
+		// would let a quoted failure line naming a scenario steer, as the rule
+		// accepts, so only a log with no such copy shows that the block's own
+		// later lines are text.
 		t.Run("a block whose first line quotes a failure line", func(t *testing.T) {
-			handWritten(t, "=== RUN   TestFeatures\n=== RUN   TestFeatures/a\n    suite.go:640: nested go test said --- FAIL: TestX (0.00s)\n        more detail\n"+timedOut,
+			handWritten(t, "=== RUN   TestFeatures\n=== RUN   TestFeatures/a\n    suite.go:640: nested go test said --- FAIL: TestX (0.00s)\n            --- FAIL: TestFeatures/c (0.00s)\n        more detail\n"+timedOut,
 				timeoutList,
-				diagnosticFailure{"TestFeatures/a", "nested go test said --- FAIL: TestX (0.00s)\nmore detail"})
+				diagnosticFailure{"TestFeatures/a", "nested go test said --- FAIL: TestX (0.00s)\n    --- FAIL: TestFeatures/c (0.00s)\nmore detail"})
 		})
 		t.Run("a block whose first line holds invalid bytes", func(t *testing.T) {
 			handWritten(t, "=== RUN   TestFeatures\n=== RUN   TestFeatures/a\n    suite.go:640: returned 75: \xff\xfe stderr\n        more\n"+timedOut,
