@@ -763,6 +763,19 @@ items:
       internal/engine/approval/port/diagnostic.go:72. That advice cannot work for this case, so
       slice-21 should correct or remove it before merge, and the upgrade contract then supplies the
       real recovery.
+
+      This is the recovery decision that item already has to make, which it frames as 'documented
+      manual cleanup or a migration step'. Legacy v0.1.0 records with no catalog are its subject.
+      The lost-location lockout is the same decision: after `XDG_STATE_HOME=/tmp/x approve` and a
+      reboot that clears /tmp, doctor, approve and run all fail on state.unavailable, and stop exits
+      75 with no retry that can succeed. Any recovery needs the same consent surface, so the upgrade
+      contract should cover both cases. One correction to the idea: v0.1.0 is already published, so
+      'before v0.1.0 ships' is stale. The item must land before any claim that existing
+      installations are protected. A supported recovery command is a new command and consent surface
+      the charter does not yet authorize, so the person decides it (`itos decision`). The agent
+      working that item should not invent a repair, and slice-21 deliberately offers only the host
+      user's manual remedy. Specify any recovery with scenarios covering a lost retained location,
+      legacy records and no live worker.
   - id: p2-fixture-worlds-inherit-scenario-coverdir
     title: A fixture world that drops the scenario coverage destination fails in go test, not in CI
     phase: 1
