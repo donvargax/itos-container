@@ -150,7 +150,7 @@ scenario destination and removes the staging directory. Export failures fail cle
 deliberately killed controllers need not have completed counters.
 Scenario cleanup removes fixture state but leaves coverage for the collector.
 When coverage is requested, local overlap fixtures end their simulated workloads
-after the final assertion and give active controllers a shared five-second drain
+after the final assertion and give active controllers a shared 35-second drain
 bound before forced cleanup. This lets Go export their executed counters; a drain
 timeout fails cleanup. Plain runs retain direct cancellation and joining because
 their controllers have no counters to export. Native teardown is unchanged.

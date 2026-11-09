@@ -39,6 +39,9 @@ func TestOverlapCleanup(t *testing.T) {
 				runs:   []*overlapRun{{w: child, engine: engine, worker: "worker", process: process}},
 				native: mode == "native",
 			}}
+			if mode == "covered timeout" {
+				w.overlap.drainBound = 50 * time.Millisecond
+			}
 			if mode == "aggregate" {
 				t.Setenv("GOCOVERDIR", t.TempDir())
 			} else if mode != "plain" {
