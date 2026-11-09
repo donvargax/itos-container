@@ -1237,6 +1237,12 @@ items:
       the tracer, that item should consider cutting the redundant back-to-back Unchanged() walks.
       The checks are the anti-substitution guards, so any such change needs a security review by the
       person. Nothing is measured to be wrong today, so it should not be tracked separately.
+
+      That item already owns the small change to the Engine failure diagnostics step in
+      .github/workflows/ci.yml, which today shows only `tail -100` of the log. Make the same edit
+      print each `--- FAIL` block with its godog step error, beside the streamed `engine scenario
+      timing:` records, so a red run shows its failing assertion. Do not wait for the extractor fix
+      tracked upstream in itos. No separate item is needed for a second print in the same step.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
