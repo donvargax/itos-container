@@ -42,11 +42,11 @@ func (w *world) runExitSteps(sc *godog.ScenarioContext) {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		args := []string{"-test.run=^TestPublicRunExitContract$", "-test.count=1", "-test.v"}
-		if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+		if cover := w.coverageDir(); cover != "" {
 			args = append(args, "-test.gocoverdir="+cover)
 		}
 		command := exec.CommandContext(ctx, bin, args...)
-		command.Env = append(os.Environ(), "SLICE_24_SCHEDULE="+schedule)
+		command.Env = append(w.coverageEnv(os.Environ()), "SLICE_24_SCHEDULE="+schedule)
 		data, err := command.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("run-exit fixture: %w\n%s", err, data)

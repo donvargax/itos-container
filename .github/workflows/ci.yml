@@ -96,6 +96,8 @@ jobs:
           ITOS_CONTAINER_ENGINE_FIXTURE_GID: ${{ steps.fixture.outputs.gid }}
         run: |
           go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
+          ITOS_CC_TEST_COVERDIR=$(mktemp -d "$RUNNER_TEMP/T-36-engine-coverage.XXXXXX")
+          export ITOS_CC_TEST_COVERDIR
           cd features
           set +e
           # Run 42233015284 traced no product/harness process-group signals; the step died

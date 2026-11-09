@@ -72,7 +72,7 @@ func (w *world) anchorFixture() error {
 	if err := w.prepareAnchor(""); err != nil {
 		return err
 	}
-	control := &world{root: w.root, bin: w.bin, dir: filepath.Join(w.dir, "slice-17-control")}
+	control := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: filepath.Join(w.dir, "slice-17-control")}
 	w.anchor.control = control // preserve partially prepared fixture for cleanup
 	if err := os.Mkdir(control.dir, 0700); err != nil {
 		return err

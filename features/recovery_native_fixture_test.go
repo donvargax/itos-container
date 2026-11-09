@@ -78,7 +78,7 @@ func (w *world) recoveryPairFixture() error {
 	if err := w.recoveryNativeFixture("pair"); err != nil {
 		return err
 	}
-	child := &world{root: w.root, bin: w.bin, dir: filepath.Join(w.dir, "slice-11-project-b")}
+	child := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: filepath.Join(w.dir, "slice-11-project-b")}
 	w.recovery.second = child
 	if err := os.Mkdir(child.dir, 0700); err != nil {
 		return err

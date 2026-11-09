@@ -73,6 +73,26 @@ func logFeatureSignals(hostOS string) {
 	}()
 }
 
+const engineInvocation = `go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
+ITOS_CC_TEST_COVERDIR=$(mktemp -d "$RUNNER_TEMP/T-36-engine-coverage.XXXXXX")
+export ITOS_CC_TEST_COVERDIR
+cd features
+set +e
+# Run 42233015284 traced no product/harness process-group signals; the step died
+# from outside that tree. Isolate tests from CI runner/Docker session signals.
+setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
+results=("${PIPESTATUS[@]}")
+set -e
+test_status=${results[0]}
+printf 'Feature test exit status: %s\n' "$test_status"
+if (( test_status > 128 && test_status <= 192 )); then
+  signal_number=$((test_status - 128))
+  printf 'Feature test signal: %s (exit 128+%s)\n' "$(kill -l "$signal_number")" "$signal_number"
+fi
+if (( test_status != 0 )); then exit "$test_status"; fi
+exit "${results[1]}"
+`
+
 func TestEngineDiagnostics(t *testing.T) {
 	testEngineDiagnostics(t, runtime.GOOS)
 }
@@ -131,6 +151,7 @@ cp "$RUNNER_TEMP/program" "$4"
 set -euo pipefail
 [[ "$PWD" = "$RUNNER_TEMP/features" ]]
 [[ "$*" = '-test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run ^TestFeatures$' ]]
+[[ -d "$ITOS_CC_TEST_COVERDIR" && "$ITOS_CC_TEST_COVERDIR" = "$RUNNER_TEMP"/T-36-engine-coverage.* ]]
 if [[ $(ps -o sid= -p "$$") -ne $$ ]]; then
   printf 'feature test did not get its own session\n' >&2
   exit 32

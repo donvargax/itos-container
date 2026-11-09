@@ -158,6 +158,11 @@ func TestEngineWorkflow(t *testing.T) {
 		{"partial runtime selection", "complete invocation", func(w *engineWorkflow) {
 			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Run += " -scenarios=@smoke" })
 		}},
+		{"missing scenario coverage", "complete invocation", func(w *engineWorkflow) {
+			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) {
+				s.Run = strings.ReplaceAll(s.Run, "export ITOS_CC_TEST_COVERDIR\n", "")
+			})
+		}},
 		{"skipped runtime step", "complete invocation", func(w *engineWorkflow) {
 			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.If = "false" })
 		}},
@@ -211,24 +216,6 @@ func TestEngineWorkflow(t *testing.T) {
 
 const eventGuard = "${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}"
 const ciGuard = "${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}"
-const engineInvocation = `go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
-cd features
-set +e
-# Run 42233015284 traced no product/harness process-group signals; the step died
-# from outside that tree. Isolate tests from CI runner/Docker session signals.
-setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
-results=("${PIPESTATUS[@]}")
-set -e
-test_status=${results[0]}
-printf 'Feature test exit status: %s\n' "$test_status"
-if (( test_status > 128 && test_status <= 192 )); then
-  signal_number=$((test_status - 128))
-  printf 'Feature test signal: %s (exit 128+%s)\n' "$(kill -l "$signal_number")" "$signal_number"
-fi
-if (( test_status != 0 )); then exit "$test_status"; fi
-exit "${results[1]}"
-`
-
 const engineFailureDiagnostics = `set +e
 sudo dmesg | tail -50
 free -m

@@ -45,7 +45,7 @@ func (w *world) anchorsFixture(mode string) error {
 	if mode != "foreign" && mode != "pair" {
 		return nil
 	}
-	other := &world{root: w.root, bin: w.bin, dir: filepath.Join(w.dir, "slice-17-recovery-b")}
+	other := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: filepath.Join(w.dir, "slice-17-recovery-b")}
 	w.recovery.second = other
 	if err := os.Mkdir(other.dir, 0700); err != nil {
 		return err

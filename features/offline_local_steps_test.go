@@ -107,7 +107,7 @@ func (w *world) offlineLocalFixture(defect string, fault bool) error {
 		if err := os.Mkdir(dir, 0700); err != nil {
 			return err
 		}
-		control := &world{root: w.root, bin: w.bin, dir: dir}
+		control := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: dir}
 		s.offlineControl = control
 		if err := control.sessionFixture(false, "0022"); err != nil {
 			return err

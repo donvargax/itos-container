@@ -178,7 +178,7 @@ func (w *world) foregroundRecoveryRun() error {
 			return err
 		}
 		args = []string{"-test.run=^TestForegroundRecoveryCommand$", "-test.count=1"}
-		if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+		if cover := w.coverageDir(); cover != "" {
 			args = append(args, "-test.gocoverdir="+cover)
 		}
 	}

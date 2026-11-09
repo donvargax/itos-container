@@ -29,7 +29,7 @@ func (w *world) recoveryProbeStart(args ...string) (*recoveryProbe, error) {
 		return nil, err
 	}
 	arguments := []string{"-test.run=^TestPublicRecoveryCommand$", "-test.count=1"}
-	if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+	if cover := w.coverageDir(); cover != "" {
 		arguments = append(arguments, "-test.gocoverdir="+cover)
 	}
 	p.process = w.recoveryStartConfigured(120*time.Second, bin, map[string]string{"SLICE_11_REQUEST": input}, arguments...)
