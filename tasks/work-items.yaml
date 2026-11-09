@@ -455,6 +455,21 @@ items:
       only on T-38's branch and is still proposed. Without the edge, slice-26 could land with a
       dangling link, or bind text the person later overturns. It is a coordinator edit, not a new
       item.
+
+      That item's text already holds this reconciliation. It says T-39, T-40 and slice-26 to
+      slice-28 carry stale text that predates the record. T-39 still says 'library' and its
+      done_when lacks the fuzz run. Each item's own drafter rewrites its entry in its spec round,
+      and the registry edits are the coordinator's act. What this idea adds is the content of that
+      rewrite. The record (docs/decisions/0022-egress-proxy.md, on origin/T-38 and not yet on main)
+      now holds three things the entries don't mention: (1) a per-process `seq` in the refusal log,
+      with the copy checking it and reporting a gap. (2) A four-step classification of a failed
+      dial, DNS failure first and then the Control hook's flags, which the error `Dial` returns
+      cannot decide. (3) The disclosed limit that a lost log tail cannot be detected. When the
+      coordinator makes the registry edits, add these three points and tell each drafter to read the
+      record rather than the entry. T-39's check is `go test ./internal/engine/egress/...`, so the
+      dial classification belongs in its done_when. The log-store limit must be disclosed by
+      slice-26, slice-27 and slice-28 until p2-proxy-log-lost-tail-sink is answered. The coordinator
+      applies this once T-38 is merged. No new item is needed.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
