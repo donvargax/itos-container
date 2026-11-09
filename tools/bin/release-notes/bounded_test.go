@@ -365,7 +365,13 @@ func main() {
 					t.Fatal(err)
 				}
 				for _, name := range []string{"pinned", "pinned.exe"} {
-					if err := os.WriteFile(filepath.Join(repo, "tools/bin", name), helperBytes, 0o700); err != nil {
+					path := filepath.Join(repo, "tools/bin", name)
+					// Replace the file instead of rewriting it in place: the previous probe
+					// executed it, and Linux can still refuse writes to that inode (ETXTBSY).
+					if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(path, helperBytes, 0o700); err != nil {
 						t.Fatal(err)
 					}
 				}
