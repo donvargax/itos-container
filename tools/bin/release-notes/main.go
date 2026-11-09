@@ -21,14 +21,18 @@
 //     (decision 23), each module that moved, old to new, and the toolchain,
 //     named from internal/release's BinaryMoved, the one reading
 //     release-version cuts that patch on (T-16);
-//   - "What changed": every commit of the range, grouped by type, from
-//     git-cliff (tools/bin/release-notes/cliff.toml, run by tools/bin/pinned);
+//   - "What changed": commits grouped by type from git-cliff; a first
+//     release selects only features and fixes and includes known limits;
 //   - "Upgrading", last: every breaking change's BREAKING-CHANGE: footer (or
 //     its ! header), and every Upgrading: footer quoted whole, as `itos commit
 //     footers Upgrading` lists them (those saying none left out), or, for a
 //     patch cut for what moved, that there is nothing to change when no
 //     footer asks for anything; then how to check the binary and its
 //     attestation.
+//
+// T-37 bounds the complete UTF-8 document below 125000 bytes, omitting whole
+// entries only when necessary and linking the full history. Migration entries
+// take priority over change subjects and dependency details.
 //
 // What moved is read only when no commit of the range is a feat, a fix or a
 // breaking change, and only from a last release's tag: go list reads each
@@ -50,6 +54,7 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"unicode/utf8"
 
 	"github.com/donvargax/itos-container/internal/release"
 )
@@ -318,7 +323,7 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-func (n notes) render() (string, error) {
+func (n renderedNotes) document() (string, error) {
 	funcs := template.FuncMap{
 		"count":  n.count,
 		"plural": plural,
@@ -335,6 +340,7 @@ func (n notes) render() (string, error) {
 			}
 			return n.From
 		},
+		"history": n.history,
 	}
 	t, err := template.New("notes").Funcs(funcs).Parse(notesTemplate)
 	if err != nil {
@@ -344,35 +350,58 @@ func (n notes) render() (string, error) {
 	if err := t.Execute(&b, n); err != nil {
 		return "", err
 	}
-	return regexp.MustCompile(`\n{3,}`).ReplaceAllString(b.String(), "\n\n"), nil
+	text := regexp.MustCompile(`\n{3,}`).ReplaceAllString(b.String(), "\n\n")
+	if !utf8.ValidString(text) {
+		return "", fmt.Errorf("release notes contain invalid UTF-8")
+	}
+	return text, nil
 }
 
 const notesTemplate = `# itos-container {{.Version}}
 
-Cut by CI from the {{plural (len .Commits) "commit" "commits"}} since {{since}}: {{if .Moved}}no feat, no fix and no breaking change, but the binary is built from what moved beneath it, which makes a patch: {{join .Moved "; "}}.{{else}}{{plural (count "feat") "feat" "feats"}}, {{plural (count "fix") "fix" "fixes"}} and {{plural (count "breaking") "breaking change" "breaking changes"}}, {{if .From}}where a breaking change makes a major release, a feat a minor one and a fix a patch.{{else}}the initial version is 0.1.0 for any releasable history, including fixes and breaking changes.{{end}}{{end}}{{if .From}} Every change: https://github.com/{{.Repository}}/compare/{{.From}}...v{{.Version}}{{end}}
+Cut by CI from the {{plural (len .Commits) "commit" "commits"}} since {{since}}: {{if .DependencyPatch}}no feat, no fix and no breaking change, but the binary is built from what moved beneath it, which makes a patch{{if .Moved}}: {{join .Moved "; "}}{{end}}.{{else}}{{plural (count "feat") "feat" "feats"}}, {{plural (count "fix") "fix" "fixes"}} and {{plural (count "breaking") "breaking change" "breaking changes"}}, {{if .From}}where a breaking change makes a major release, a feat a minor one and a fix a patch.{{else}}the initial version is 0.1.0 for any releasable history, including fixes and breaking changes.{{end}}{{end}}{{if .From}} Every change: {{history}}{{else}} Complete history: {{history}}{{end}}
+{{if .Omitted}}
+Some entries were omitted to keep these notes below 125000 bytes. Read the complete history: {{history}}
+{{end}}
 
 ## What changed
 
 {{.Changed}}
+{{if not .From}}
+## Known limits
+
+Host sockets created or swapped into the checkout during a run remain reachable.
+Network mode ` + "`none`" + ` and a private IPC namespace do not prevent this access.
+The startup scan does not provide continuous enforcement.
+
+Approval records what was approved, not who.
+Neither route proves human presence or authenticates a separate approver.
+See https://github.com/{{.Repository}}/blob/v{{.Version}}/docs/security.md.
+{{end}}
 
 ## Upgrading
 
 1. **What the commits ask.**
-{{- if and .Moved (not .Upgrading)}} Nothing to change: no commit since {{since}} is a breaking change, and none has an ` + "`Upgrading:`" + ` footer asking for anything.
+{{- if .MigrationOmitted}} Some migration instructions were omitted; read the complete history before upgrading: {{history}}
+{{- else if and .DependencyPatch (not .Upgrading)}} Nothing to change: no commit since {{since}} is a breaking change, and none has an ` + "`Upgrading:`" + ` footer asking for anything.
 {{- else}}
 {{- if eq (count "breaking") 0}} No commit since {{since}} is a breaking change.{{end}}
-{{- range .Commits}}{{if .Breaking}}
+{{- end}}
+{{- range .Breaking}}
    - Breaking, {{short .SHA}} ` + "`{{.Header}}`" + `:
      {{quote .Breaking}}
-{{- end}}{{end}}
+{{- end}}
 {{- if .Upgrading}}
+{{- if .MigrationOmitted}}
+   Retained ` + "`Upgrading:`" + ` footers:
+{{- else}}
    Each ` + "`Upgrading:`" + ` footer since {{since}} (` + "`itos commit footers Upgrading {{.From}} v{{.Version}}`" + `):
+{{- end}}
 {{- range .Upgrading}}
    - {{short .SHA}} ` + "`{{.Subject}}`" + `:
      {{quote .Text}}
 {{- end}}
-{{- else}} Every ` + "`feat`" + ` and ` + "`fix`" + ` since {{since}} says ` + "`Upgrading: none`" + `.{{end}}
-{{- end}}
+{{- else if and (not .MigrationOmitted) (not .DependencyPatch)}} Every ` + "`feat`" + ` and ` + "`fix`" + ` since {{since}} says ` + "`Upgrading: none`" + `.{{end}}
 
 2. **Check:** ` + "`itos-container --version`" + ` prints ` + "`itos-container {{.Version}}`" + `.
 

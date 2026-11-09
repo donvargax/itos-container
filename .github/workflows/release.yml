@@ -38,8 +38,10 @@ name: Release
 #      this step would fail there;
 #   5. the notes are generated (tools/bin/release-notes: why the version is what it is, what
 #      moved beneath the binary for a patch with no feat, fix or breaking change, git-cliff over
-#      the range, every BREAKING-CHANGE and Upgrading footer quoted), from the last release's tag
-#      the version step printed;
+#      the range, BREAKING-CHANGE and Upgrading footers quoted), from the last release's tag
+#      the version step printed. First releases summarize features/fixes and known limits.
+#      Complete notes stay below 125000 bytes; oversized ranges omit whole entries with a
+#      full-history link, preserving migration instructions ahead of change subjects;
 #   6. the draft is published with those notes, which is when GitHub creates the tag, so the tag
 #      and a release holding every asset appear together. A run that fails before leaves no tag,
 #      only a draft the next run replaces; a tag is never moved.

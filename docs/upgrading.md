@@ -83,14 +83,40 @@ They reuse this project's `internal/release` under T-25's narrow q-44 architectu
 Attribution and AGPL-3.0 permission remain in force. Git-cliff stays at 2.14.2 with the template's
 four verified archive hashes; acquisition uses the existing binary asset API and checksum check.
 
-Before the first real tag, run `itos task T-25`. Its final check runs the workflow's actual
-`go run ./tools/bin/release-version` at the candidate HEAD, then builds both helpers and runs
-them in a complete local clone with no tags. It passes the calculated last/next to notes,
-verifies every commit link against the selected range, and repeats notes after creating a
-fixture tag only in that disposable clone. Notes must match before and after the fixture tag;
-neither helper may change HEAD, refs or working files, in either source or clone. No archive
-build or publication occurs. Report the candidate SHA and exact last/next/bump/range; the
-coordinator alone verifies the eventual pushed main run and released assets.
+First-release notes summarize only feature and fix subjects, grouped in that order and
+oldest first within each group, with full-SHA commit links. They retain the complete range
+counts and bootstrap explanation, link the complete history at `commits/v<version>`, and
+include the checkout-socket and approval limitations from [security.md](security.md).
+There is no comparison with a nonexistent previous release. Breaking instructions, including
+those from other commit types, and non-none `Upgrading` footers remain quoted in full while
+they fit. Ordinary commit bodies are available through the history link.
+
+T-37 bounds the complete generated document to nonempty, valid UTF-8 below 125000 bytes,
+including its final newline, links and verification instructions. Later releases retain
+their existing content unchanged while it fits. Oversized notes first omit entries that
+cannot fit individually, then remove whole change entries and dependency/toolchain details
+from the end before removing migration entries. Empty groups disappear; retained entries
+stay intact. Every size-driven omission has a notice and a complete-history or comparison
+link. Omitted migration instructions are explicitly flagged in Upgrading, directing readers
+to the history before upgrading. Mandatory framing and first-release limits remain; if that
+framing cannot fit, generation fails with exit 2 and empty stdout. Read/tool failures also
+fail without output, so zero bytes must never count as a successful size check.
+
+For a release dry run, inspect `go run ./tools/bin/release-version` at the candidate HEAD
+and run `itos task T-37`. T-37 supersedes T-25's every-commit assertion for first releases
+and its unconditional completeness assertion for oversized notes; version calculation and
+publication prerequisites remain unchanged. The task builds the current notes tool and
+tests complete real history ending at `056d0c721f462bce3bf33cdda9ec71ca038f6bef` in a
+disposable local clone without imported tags. It checks the byte cap, exact first-release
+feature/fix link sets, limits and verification sections, then repeats after adding the
+release's own fixture tag. An oversized later range must retain its comparison link and
+disclose omissions, with byte-identical output on repetition. The tool's package tests cover
+exact byte boundaries, UTF-8, complete-entry removal and empty stdout on failure.
+
+Neither helper may change HEAD, refs or working files in the source or fixture; fixture
+setup creates tags only in the disposable clone. No archive build or publication occurs.
+Report the candidate SHA and exact last/next/bump/range; the coordinator alone verifies the
+eventual pushed main run and released assets. Local notes generation is not publication proof.
 
 ## itos-cc 0.5.0 to 0.47.2
 
