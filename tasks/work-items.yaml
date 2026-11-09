@@ -455,6 +455,21 @@ items:
       only on T-38's branch and is still proposed. Without the edge, slice-26 could land with a
       dangling link, or bind text the person later overturns. It is a coordinator edit, not a new
       item.
+
+      That item's text already holds this reconciliation. It says T-39, T-40 and slice-26 to
+      slice-28 carry stale text that predates the record. T-39 still says 'library' and its
+      done_when lacks the fuzz run. Each item's own drafter rewrites its entry in its spec round,
+      and the registry edits are the coordinator's act. What this idea adds is the content of that
+      rewrite. The record (docs/decisions/0022-egress-proxy.md, on origin/T-38 and not yet on main)
+      now holds three things the entries don't mention: (1) a per-process `seq` in the refusal log,
+      with the copy checking it and reporting a gap. (2) A four-step classification of a failed
+      dial, DNS failure first and then the Control hook's flags, which the error `Dial` returns
+      cannot decide. (3) The disclosed limit that a lost log tail cannot be detected. When the
+      coordinator makes the registry edits, add these three points and tell each drafter to read the
+      record rather than the entry. T-39's check is `go test ./internal/engine/egress/...`, so the
+      dial classification belongs in its done_when. The log-store limit must be disclosed by
+      slice-26, slice-27 and slice-28 until p2-proxy-log-lost-tail-sink is answered. The coordinator
+      applies this once T-38 is merged. No new item is needed.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -1334,6 +1349,48 @@ items:
       repeat point well inside grace (the idea's 20 percent), not the 80 percent that T-42 fixes and
       two tests pin. The item is p2 and the note says to land it before charter step 4
       (p1-interactive-tty) changes Ctrl-C handling.
+
+      A recorder that journals when a held acknowledgement is cut would only sharpen the native
+      tier's inference. The defect it guards against is a grace timer started at the acknowledgement
+      or the cut instead of the first signal. That is what p2-grace-origin-fake-clock-row exists
+      for: a synthetic clock has no jitter and asserts the exact SIGKILL instant.
+      TestEngineFixtureBudgetContract's 'quiet and delayed signal' phase
+      (cmd/itos-container/engine_fixture_budget_test.go) already pins an acknowledgement delayed to
+      3/5 of grace, with the kill exactly at grace. It is not known to cover a hold the call limit
+      cuts. In the engine product copy the call limit is 1 s and the delay 0.6 s, so no cut happens
+      there. Extend the item's fake-clock row with a hold longer than what is left of the call
+      limit. It should assert the SIGKILL still falls at first signal plus grace, not at the cut
+      plus grace. That closes the gap on the native rows without touching the recorder, and a
+      CancelledAt field is then not worth a separate item. T-42's own comment on escalationWindow
+      already names this gap as known.
+
+      This is a question about ordering, not a new piece of work. p2-grace-origin-fake-clock-row
+      already holds the replacement coverage the codex thread asks for: its row sends a repeat
+      signal at about 20 percent of grace and asserts the kill still falls at first signal plus
+      grace. That is the first repeat's restart. The item says to land after T-42, and T-42's
+      escalationWindow comment points to it as the holder of this gap. The open decision is the
+      person's or the coordinator's: either accept the gap until that item lands and resolve the
+      thread, naming the item, or queue the item directly behind T-42 before the egress proof leans
+      on the lifecycle tier. The item adds nothing to charter step 1 itself, so it stays p2 in the
+      registry. If step 1 starts first, the person can move it up.
+
+      The item already carries this: a recorder that journals the cut would only sharpen the native
+      tier's inference, and the defect it guards against (a grace timer started at the
+      acknowledgement or the cut, not the first signal) is what the fake-clock row exists to catch,
+      since a synthetic clock has no jitter. The ask is to extend that row with a hold longer than
+      what is left of the call limit. It should assert SIGKILL still falls at first signal plus
+      grace, not at the cut plus grace. The engine product copy does not cut (1 s call limit, 0.6 s
+      delay), so the native rows cannot cover it. A recorded cut instant is not worth its own item,
+      and it touches the recorder outside T-42's range.
+
+      The item already holds everything this idea says. Its fake-clock row sends a repeat signal at
+      about 20 percent of grace (not the 80 percent T-42 fixes and two tests pin) and asserts the
+      kill still falls at first signal plus grace. It also says to land it before charter step 4
+      (p1-interactive-tty) changes Ctrl-C handling. The ordering is not a new piece of work. It is
+      for the person or coordinator to settle: queue the item before p1-interactive-tty (the queue
+      is T-45, T-42, p1-credentials-passed-in, p1-harness-home, p1-interactive-tty, and the item is
+      not in it), or accept the gap and say so. It stays p2 because it blocks no step on its own.
+      Move it up if step 4 starts first.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
@@ -1365,6 +1422,17 @@ items:
       choice changes the log schema (a terminal record or final count) and the proxy's hardening, so
       the person must decide it before slice-28 writes its copy check, and the drafter must stop for
       it rather than invent a protection.
+
+      That item already puts this exact question to the person. A hostile worker fills a Docker data
+      root that shares the checkout's filesystem, and the proxy's writes keep succeeding. The
+      session continues, and the teardown copy succeeds on a truncated log. Its note names the two
+      candidates: a proxy-held fsynced volume sink that fails closed mid-run but gives the proxy a
+      writable mount, or a terminal record written on clean stop that needs no new mount but cannot
+      stop a run already losing records. It also says the drafter must stop for the person rather
+      than invent a protection, and that the answer must come before slice-28's copy check. The one
+      point to add is the order of work. Until the person answers, T-40's teardown copy and
+      slice-26, slice-27 and slice-28 must carry the disclosure that an incomplete log cannot be
+      detected. Slice-28 shows a count as complete only after the decision.
   - id: T-43
     title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
     phase: 1
