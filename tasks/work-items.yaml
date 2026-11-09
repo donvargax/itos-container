@@ -408,6 +408,15 @@ items:
       Nothing has acted on it yet. Its p3 phase is now wrong, since slice-26 is the first approval
       that grants network and the item gates phase-1 work. The coordinator should raise it to p1 and
       either add the dependency from slice-26 or have the person decide before slice-26 is taken.
+
+      The edges are coordinator edits to depends_on, not a new item. p3-approval-before-egress
+      already holds the slice-26 and slice-27 edge and the person's decision, and says its p3 phase
+      is wrong now that it gates phase-1 work. p1-acceptance-static-binary already ends with
+      'slice-27 should depend on it'. Remaining edit: add T-38 to slice-26's depends_on, because
+      slice-26's drafter takes the digest binding and the network-granting profile from T-38's
+      record. Also add p1-acceptance-static-binary to slice-27's depends_on (T-39 and T-40 already
+      depend on T-38). Raise p3-approval-before-egress to p1 and give slice-26 the edge on it, or
+      ask the person to decide before slice-26 is taken.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
