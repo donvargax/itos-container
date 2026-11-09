@@ -416,8 +416,8 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, network: {mode: false}}                             | /network/mode |
       | {version: 1, manifest: a.json, network: {mode: [offline]}}                         | /network/mode |
 
-  # Slice-25 adds policy version 2, which makes this table's example 2 untrue. Its feat
-  # commit changes that example to 3 and says so; the rule checked here does not change.
+  # Slice-25 added policy version 2, which made this table's example 2 untrue. Its feat
+  # commit changed that example to 3 and said so; the rule checked here did not change.
   @slice-1 @ID-POLICY-15
   Scenario Outline: unsupported policy versions are not guessed or downgraded
     Given the policy file contains:
@@ -435,7 +435,7 @@ Feature: Strict offline sandbox policy
       | version |
       | 0       |
       | -1      |
-      | 2       |
+      | 3       |
 
   # Empty collections and false do not make unsupported permissions permissible.
   @slice-1 @ID-POLICY-16
@@ -703,7 +703,7 @@ Feature: Strict offline sandbox policy
   # today's fix, which names only version 1. This spec's red evidence used scratch steps, so
   # the first test commit adds the steps above and repeats the red run.
 
-  @wip @slice-25 @ID-POLICY-43
+  @slice-25 @ID-POLICY-43
   Scenario: an allowlist policy shows its effective host names and runs nothing
     Given the policy file contains:
       """
@@ -728,7 +728,7 @@ Feature: Strict offline sandbox policy
     And no inspection helper sentinel was executed
     And the engine recorder has no connections
 
-  @wip @slice-25 @ID-POLICY-44
+  @slice-25 @ID-POLICY-44
   Scenario: plain inspection lists each canonical host name in order
     Given the policy file contains:
       """
@@ -761,7 +761,7 @@ Feature: Strict offline sandbox policy
   # in final place, and there 0x counts only with hexadecimal digits after it, so 0x1f.example
   # and a.0xg stay names. The three longest rows sit at the DNS limits: a 63-byte label, a
   # 253-byte name, and that name with a trailing dot, which does not count towards the 253.
-  @wip @slice-25 @ID-POLICY-45
+  @slice-25 @ID-POLICY-45
   Scenario Outline: each host name is canonicalised before it is shown
     Given the policy file contains:
       """
@@ -801,7 +801,7 @@ Feature: Strict offline sandbox policy
 
   # The byte order puts a-b.example before a.example: - is 0x2d and . is 0x2e. A sort by
   # labels would differ. Numeric spellings of the version mean the same number, as at version 1.
-  @wip @slice-25 @ID-POLICY-46
+  @slice-25 @ID-POLICY-46
   Scenario Outline: reordered and respelled lists have one effective allowlist
     Given the policy file contains:
       """
@@ -824,7 +824,7 @@ Feature: Strict offline sandbox policy
       | ! {version: ! 2, manifest: ! a.json, network: ! {mode: ! allowlist, allow: ! [! a.example, ! b.example, ! a-b.example]}}                               |
       | !!map {version: !!int 2, manifest: !!str a.json, network: !!map {mode: !!str allowlist, allow: !!seq [!!str a.example, !!str b.example, !!str a-b.example]}} |
 
-  @wip @slice-25 @ID-POLICY-47
+  @slice-25 @ID-POLICY-47
   Scenario Outline: offline stays the default at version 2 and brings no list
     Given the policy file contains:
       """
@@ -847,7 +847,7 @@ Feature: Strict offline sandbox policy
       | {version: 2, manifest: a.json, network: {}}              |
       | {version: 2, manifest: a.json, network: {mode: offline}} |
 
-  @wip @slice-25 @ID-POLICY-48
+  @slice-25 @ID-POLICY-48
   Scenario: the same network request stays refused at version 1
     Given the policy file contains:
       """
@@ -873,7 +873,7 @@ Feature: Strict offline sandbox policy
   # Canonicalising comes first, so a disguised spelling is judged by what it maps to.
   # The defect column only explains each row. The longest rows are one byte past the DNS
   # limits, and the ü row is a 60-character label whose A-label takes 66 bytes.
-  @wip @slice-25 @ID-POLICY-49
+  @slice-25 @ID-POLICY-49
   Scenario Outline: only a full DNS host name enters the allowlist
     Given the policy file contains:
       """
@@ -954,7 +954,7 @@ Feature: Strict offline sandbox policy
       | 254-byte name                        | 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' |
       | A-label over 63 bytes                | 'üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü.example' |
 
-  @wip @slice-25 @ID-POLICY-50
+  @slice-25 @ID-POLICY-50
   Scenario Outline: a name repeated after canonicalisation is refused at its later entry
     Given the policy file contains:
       """
@@ -979,7 +979,7 @@ Feature: Strict offline sandbox policy
 
   # A list in offline mode is refused whatever it holds: its entries are not interpreted.
   # Null is a value here as everywhere, never omission.
-  @wip @slice-25 @ID-POLICY-51
+  @slice-25 @ID-POLICY-51
   Scenario Outline: the list and the mode must agree
     Given the policy file contains:
       """
@@ -1005,7 +1005,7 @@ Feature: Strict offline sandbox policy
   # A wrong mode reports only the mode, however good or bad the list beside it, so nothing
   # may judge the list before the mode is known. The unquoted 127.1 is a YAML number, so it
   # fails on its type before any name check.
-  @wip @slice-25 @ID-POLICY-52
+  @slice-25 @ID-POLICY-52
   Scenario Outline: version 2 network values keep their types and modes
     Given the policy file contains:
       """
@@ -1049,7 +1049,7 @@ Feature: Strict offline sandbox policy
   # The plain step guards a fix that would point at the wrong schema. Both policy.type's and
   # policy.unknown_key's fix name version 1 today, and ID-POLICY-77 and ID-POLICY-29 hold those
   # words exactly for version 1, so the text must depend on the version actually read.
-  @wip @slice-25 @ID-POLICY-53
+  @slice-25 @ID-POLICY-53
   Scenario Outline: version 2 stays closed and keeps version 1's other checks
     Given the policy file contains:
       """
@@ -1079,7 +1079,7 @@ Feature: Strict offline sandbox policy
 
   # Today's fix says use offline mode. Version 2 also accepts allowlist, and version 1 refuses
   # it, so one text for both versions misleads one of them.
-  @wip @slice-25 @ID-POLICY-75
+  @slice-25 @ID-POLICY-75
   Scenario: a wrong mode's fix names the modes its version accepts
     Given the policy file contains:
       """
@@ -1104,7 +1104,7 @@ Feature: Strict offline sandbox policy
   # The words are literal on purpose: a correct "version 1 or 2" has no separate "version 2"
   # for a looser step to find. The exact step holds version 1's policy.type words, which no
   # other scenario pins: "says" would pass a build that wrote "version 1 or 2" there as well.
-  @wip @slice-25 @ID-POLICY-77
+  @slice-25 @ID-POLICY-77
   Scenario Outline: a fix names both versions only where no supported version was read
     Given the policy file contains:
       """
@@ -1139,7 +1139,7 @@ Feature: Strict offline sandbox policy
 
   # The last entry repeats the first exactly. A refused entry has no canonical name to
   # repeat, so it is one more policy.host_name and never a policy.host_duplicate.
-  @wip @slice-25 @ID-POLICY-54
+  @slice-25 @ID-POLICY-54
   Scenario: independent version 2 problems are returned together without a partial policy
     Given the policy file contains:
       """
@@ -1174,7 +1174,7 @@ Feature: Strict offline sandbox policy
 
   # The marker is lowercase because canonicalising and the library's errors lower a name.
   # A refused name never reaches output, even when another entry repeats it exactly.
-  @wip @slice-25 @ID-POLICY-55
+  @slice-25 @ID-POLICY-55
   Scenario Outline: allowlist diagnostics locate the entry without echoing its value
     Given the policy file contains:
       """
@@ -1209,7 +1209,7 @@ Feature: Strict offline sandbox policy
   # fast would miss the wrong build. So the implementing commit also adds a domain unit test,
   # which holds that order on any machine: the names port's fake records no call for an entry
   # over the limit. ID-POLICY-57 holds the limit's exact value without any timing.
-  @wip @slice-25 @ID-POLICY-56
+  @slice-25 @ID-POLICY-56
   Scenario: a hostile host name is refused before canonicalising can amplify it
     Given the policy file allows one host name of 21600 distinct characters
     When itos-container runs with "doctor --policy-only --json" and a 2 second deadline
@@ -1223,7 +1223,7 @@ Feature: Strict offline sandbox policy
 
   # Both entries canonicalise to short names. Only the limit on the raw text tells them
   # apart, and an implementation that measures after mapping accepts both.
-  @wip @slice-25 @ID-POLICY-57
+  @slice-25 @ID-POLICY-57
   Scenario: the length limit counts what canonicalising would remove
     Given the policy file allows "ab.example" padded with soft hyphens to 1024 bytes
     When itos-container runs with "doctor --policy-only --json"
@@ -1241,7 +1241,7 @@ Feature: Strict offline sandbox policy
 
   # Eleven fixed nodes leave 2037 of the 2048 for entries: the root, three keys and values
   # at the top, and two keys and values in network. The deadline bounds duplicate detection.
-  @wip @slice-25 @ID-POLICY-58
+  @slice-25 @ID-POLICY-58
   Scenario: only the representation budget limits how many names a list holds
     Given the policy file allows 2037 generated host names
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
@@ -1257,7 +1257,7 @@ Feature: Strict offline sandbox policy
 
   # The endpoint Given is what makes the recorder step able to fail here: see the step list
   # above. The sentinel Given follows the policy file, because it snapshots the checkout.
-  @wip @slice-25 @ID-POLICY-59
+  @slice-25 @ID-POLICY-59
   Scenario: manifest inspection reads a version 2 policy and goes on to its manifest
     Given a manifest inspection checkout
     And manifest inspection is given the recording engine endpoint
@@ -1276,7 +1276,7 @@ Feature: Strict offline sandbox policy
 
   # A refused list stops manifest inspection at the policy, like any other policy problem.
   # The manifest is valid, so a build that let the list through would report it instead.
-  @wip @slice-25 @ID-POLICY-76
+  @slice-25 @ID-POLICY-76
   Scenario: manifest inspection stops at a refused version 2 list
     Given a manifest inspection checkout
     And manifest inspection is given the recording engine endpoint
@@ -1299,7 +1299,7 @@ Feature: Strict offline sandbox policy
   # rows naming an absent manifest catch a refusal between the manifest stage and the engine:
   # such a build reports that manifest instead of policy.version. Each scenario's fix step
   # reads the words a person acts on: JSON stdout for doctor and approve, stderr for run.
-  @wip @slice-25 @ID-POLICY-60 @local-engine-fixture
+  @slice-25 @ID-POLICY-60 @local-engine-fixture
   Scenario Outline: ordinary doctor refuses version 2 even beside a matching offline approval
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -1329,7 +1329,7 @@ Feature: Strict offline sandbox policy
   # In the good-manifest rows the fingerprint is the one the offline settings would have, the
   # exact approval a build that ignored the list would accept. The tree step does the looking
   # for frozen input: the record step beside it stops once the record is absent.
-  @wip @slice-25 @ID-POLICY-61 @local-engine-fixture
+  @slice-25 @ID-POLICY-61 @local-engine-fixture
   Scenario Outline: approve cannot record offline settings for a version 2 request
     Given an approval checkout and isolated host state
     And the checkout policy contains:
@@ -1353,7 +1353,7 @@ Feature: Strict offline sandbox policy
       | {version: 2, manifest: absent/devcontainer.json}                                                              |
 
   # Contract AC-02: a change to network permissions refuses startup, with no self-approval.
-  @wip @slice-25 @ID-POLICY-62 @local-engine-fixture @linux
+  @slice-25 @ID-POLICY-62 @local-engine-fixture @linux
   Scenario Outline: run refuses version 2 even beside a matching offline approval
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
@@ -1383,7 +1383,7 @@ Feature: Strict offline sandbox policy
   # build that refused every version 2 file first would report policy.version instead. Either
   # order exits 2 before the manifest, so this settles which answer a person gets, not a safety
   # property. Each row's first run fails today, when every version 2 file gets policy.version.
-  @wip @slice-25 @ID-POLICY-78 @local-engine-fixture @linux
+  @slice-25 @ID-POLICY-78 @local-engine-fixture @linux
   Scenario Outline: ordinary commands report an invalid version 2 file's own problem
     Given an approval checkout and isolated host state
     And the checkout policy contains:

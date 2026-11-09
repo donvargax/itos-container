@@ -32,3 +32,18 @@ func (s *Source) Read() (port.Value, []port.Issue) {
 	}
 	return s.Value, nil
 }
+
+// Names canonicalises spellings through a fixed table and records every call, so
+// a test can tell a spelling that was asked about from one that never was. A
+// spelling absent from the table is refused, as the adapter refuses what it cannot map.
+type Names struct {
+	Table map[string]string
+	Calls []string
+}
+
+// ASCII returns the table's answer and records the spelling it was asked about.
+func (n *Names) ASCII(name string) (string, bool) {
+	n.Calls = append(n.Calls, name)
+	ascii, ok := n.Table[name]
+	return ascii, ok
+}
