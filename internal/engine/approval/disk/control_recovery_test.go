@@ -82,6 +82,54 @@ func TestControlRetryCompletesPendingLocation(t *testing.T) {
 	tx.Close()
 }
 
+func TestControlRefusesPendingBindingWithoutAncestors(t *testing.T) {
+	for _, encoding := range []string{"null", "empty array"} {
+		for _, mode := range []string{"inspect", "publish"} {
+			t.Run(encoding+"/"+mode, func(t *testing.T) {
+				control, c, home, selected := pending(t)
+				path := filepath.Join(guardCatalog(home), locationName(selected))
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var binding locationBinding
+				if err := json.Unmarshal(data, &binding); err != nil {
+					t.Fatal(err)
+				}
+				if binding.Complete || len(binding.Ancestors) == 0 {
+					t.Fatal("fixture did not retain a pending claim with pinned ancestors")
+				}
+				// A completed binding also has its full ancestry length checked.
+				// A pending claim must reject missing pins before a retry can
+				// silently bind it to whichever ancestors now occupy the path.
+				binding.Ancestors = nil
+				if encoding == "empty array" {
+					binding.Ancestors = []locationIdentity{}
+				}
+				data, err = json.Marshal(binding)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, data, 0600); err != nil {
+					t.Fatal(err)
+				}
+				before := controlSnapshot(t, filepath.Dir(home))
+				tx, failure := control.Begin(t.Context(), c, mode == "publish")
+				if tx != nil {
+					tx.Close()
+					t.Fatal("pending claim without ancestors returned transaction authority")
+				}
+				if failure != "state.invalid" {
+					t.Fatalf("Begin = %q, want state.invalid", failure)
+				}
+				if after := controlSnapshot(t, filepath.Dir(home)); after != before {
+					t.Fatal("refusal changed the pending claim or created selected state")
+				}
+			})
+		}
+	}
+}
+
 func TestControlRetryRefusesSelectedBindingSyncFailure(t *testing.T) {
 	control, c, _, home, selected := controlFixture(t)
 	tx, failure := control.Begin(t.Context(), c, true)
