@@ -1174,5 +1174,173 @@
     "Kind": "graph",
     "Rule": "toplevel",
     "Source": "package helper\nimport _ \"$module/internal/release\"\n"
+  },
+  {
+    "Name": "egress-allow-tls-tcp",
+    "File": "internal/engine/egress/tcp/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "allow",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-allow-tls-tcp-nested",
+    "File": "internal/engine/egress/tcp/nested/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "allow",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-allow-tls-tcp-test",
+    "File": "internal/engine/egress/tcp/probe_test.go",
+    "Import": "crypto/tls",
+    "Kind": "allow",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-allow-x509-tcp-test",
+    "File": "internal/engine/egress/tcp/probe_test.go",
+    "Import": "crypto/x509",
+    "Kind": "allow",
+    "Rule": "egress-x509"
+  },
+  {
+    "Name": "egress-allow-x509-pkix-tcp-test",
+    "File": "internal/engine/egress/tcp/probe_test.go",
+    "Import": "crypto/x509/pkix",
+    "Kind": "allow",
+    "Rule": "egress-x509"
+  },
+  {
+    "Name": "egress-allow-tls-session-docker-test",
+    "File": "internal/engine/session/docker/probe_test.go",
+    "Import": "crypto/tls",
+    "Kind": "allow",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-allow-x509-session-docker-test",
+    "File": "internal/engine/session/docker/probe_test.go",
+    "Import": "crypto/x509",
+    "Kind": "allow",
+    "Rule": "egress-x509"
+  },
+  {
+    "Name": "egress-allow-domain-tcp",
+    "File": "internal/engine/egress/tcp/probe.go",
+    "Import": "$module/internal/engine/egress/domain",
+    "Kind": "allow",
+    "Rule": "egress-imports"
+  },
+  {
+    "Name": "egress-tls-domain",
+    "File": "internal/engine/egress/domain/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "lint",
+    "Rule": "domain,egress-tls"
+  },
+  {
+    "Name": "egress-tls-port",
+    "File": "internal/engine/egress/port/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "lint",
+    "Rule": "port,egress-tls"
+  },
+  {
+    "Name": "egress-tls-porttest",
+    "File": "internal/engine/egress/port/porttest/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "lint",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-tls-tcpx",
+    "File": "internal/engine/egress/tcpx/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "lint",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-tls-session-docker",
+    "File": "internal/engine/session/docker/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "lint",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-tls-slice-command",
+    "File": "internal/slices/fresh/command/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "lint",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-tls-cli",
+    "File": "internal/cli/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "lint",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-tls-cmd",
+    "File": "cmd/probe/probe.go",
+    "Import": "crypto/tls",
+    "Kind": "lint",
+    "Rule": "egress-tls"
+  },
+  {
+    "Name": "egress-x509-tcp",
+    "File": "internal/engine/egress/tcp/probe.go",
+    "Import": "crypto/x509",
+    "Kind": "lint",
+    "Rule": "egress-imports,egress-x509"
+  },
+  {
+    "Name": "egress-x509-pkix-tcp",
+    "File": "internal/engine/egress/tcp/probe.go",
+    "Import": "crypto/x509/pkix",
+    "Kind": "lint",
+    "Rule": "egress-imports,egress-x509"
+  },
+  {
+    "Name": "egress-x509-session-docker",
+    "File": "internal/engine/session/docker/probe.go",
+    "Import": "crypto/x509",
+    "Kind": "lint",
+    "Rule": "egress-x509"
+  },
+  {
+    "Name": "egress-x509-cmd",
+    "File": "cmd/probe/probe.go",
+    "Import": "crypto/x509",
+    "Kind": "lint",
+    "Rule": "egress-x509"
+  },
+  {
+    "Name": "egress-imports-net-http",
+    "File": "internal/engine/egress/tcp/probe.go",
+    "Import": "net/http",
+    "Kind": "lint",
+    "Rule": "egress-imports"
+  },
+  {
+    "Name": "egress-imports-flag",
+    "File": "internal/engine/egress/tcp/probe.go",
+    "Import": "flag",
+    "Kind": "lint",
+    "Rule": "egress-imports"
+  },
+  {
+    "Name": "egress-imports-x-term",
+    "File": "internal/engine/egress/tcp/probe.go",
+    "Import": "golang.org/x/term",
+    "Kind": "lint",
+    "Rule": "egress-imports"
+  },
+  {
+    "Name": "egress-imports-other-engine",
+    "File": "internal/engine/egress/tcp/probe.go",
+    "Import": "$module/internal/engine/policy/domain",
+    "Kind": "lint",
+    "Rule": "egress-imports"
   }
 ]
