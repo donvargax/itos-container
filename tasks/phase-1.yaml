@@ -4446,24 +4446,26 @@
     "<name>"`, which sets w.lifecycle to a copy of one built before the run; `the row passes`; and
     `the row fails`, which returns an error. No real step matches those texts. The fixture is an
     @engine feature with an @ID-LIFECYCLE-09 outline whose rows are immediate, delayed, cut after
-    the check, no signal request and never signalled, the third failing at its second step, and an
-    @ID-LIFECYCLE-08 scenario with the immediate journal. The journals are lifecycleWindowWorld's,
-    each given newLifecycleFaults("ignore", "", its delay) as fault, so that the world's
+    the check, no signal request, never signalled and no journal, the third failing at its second
+    step, and an @ID-LIFECYCLE-08 scenario with the immediate journal. The journals are
+    lifecycleWindowWorld's, each given newLifecycleFaults("ignore", "", its delay) as fault, so that the world's
     closeLifecycleNative runs: immediate is the case 'immediate at the grace' with SIGINT at 0
     percent; delayed is 'delayed slow teardown' and cut after the check is 'delayed acknowledgement
     cut a call limit after the daemon check', each with SIGTERM at 60 percent; no signal request is
-    immediate without its signal requests; never signalled holds only its fault. Decode each
-    record into the test's own type with DisallowUnknownFields, as timingRecords does, with
+    immediate without its signal requests; never signalled is immediate with only signalled
+    cleared, preserving its requests; no journal is immediate with only journalAtReturn cleared,
+    preserving its signal time. These last two independently pin both reasons to omit signals.
+    Decode each record into the test's own type with DisallowUnknownFields, as timingRecords does, with
     `signals` a json.RawMessage, which tells absent from null and [] and pins the order, and
-    compare it with the exact JSON. The run exits nonzero and its six records read, in milliseconds
+    compare it with the exact JSON. The run exits nonzero and its seven records read, in milliseconds
     after cancellation, nanoseconds in the JSON: immediate passed, SIGINT at 50, replied 50, status
     204, not cancelled, previous 50, next 1000, then SIGKILL at 1000, replied 1000, 204, not
     cancelled, previous 1000, no next; delayed passed, SIGTERM at 500, replied 1100, 204, not
     cancelled, previous 500, next 1300, then SIGKILL at 1300, replied 1300, 204, not cancelled,
     previous 1300, no next; cut after the check failed, SIGTERM at 650, no reply, 204, cancelled,
     previous 600, next 1620, then SIGKILL at 1620, replied 1620, 204, not cancelled, previous 1620,
-    no next; no signal request passed with `[]`; never signalled and the LIFECYCLE-08 row passed
-    with no `signals`.
+    no next; no signal request passed with `[]`; never signalled, no journal and the LIFECYCLE-08
+    row passed with no `signals`.
 
     Both name only what exists today, so they compile at their red commit and fail at their
     assertions. Commit TestEngineFailureTimings and the subtest alone first, red, with test --item

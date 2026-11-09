@@ -194,6 +194,7 @@ Feature: signal offsets
       | cut after the check | fails   |
       | no signal request   | passes  |
       | never signalled     | passes  |
+      | no journal          | passes  |
 
   @ID-LIFECYCLE-08
   Scenario: another row
@@ -224,8 +225,13 @@ Feature: signal offsets
 			"delayed":             built("SIGTERM", 60, "delayed slow teardown", false),
 			"cut after the check": built("SIGTERM", 60, "delayed acknowledgement cut a call limit after the daemon check", false),
 			"no signal request":   built("SIGINT", 0, "immediate at the grace", true),
-			"never signalled":     {fault: newLifecycleFaults("ignore", "", 0)},
+			"never signalled":     built("SIGINT", 0, "immediate at the grace", false),
+			"no journal":          built("SIGINT", 0, "immediate at the grace", false),
 		}
+		// Keep requests without a signal time, and a signal time without requests,
+		// so each reason to omit signals is exercised independently.
+		journals["never signalled"].signalled = time.Time{}
+		journals["no journal"].journalAtReturn = nil
 		dir, selection := timingSelection(t, fixture, true)
 		var output bytes.Buffer
 		code := runFeatureScenarios(selection, godog.Options{Paths: []string{dir}, Format: "progress", Output: &output}, func(sc *godog.ScenarioContext, _ func()) {
@@ -262,6 +268,7 @@ Feature: signal offsets
 			{"@ID-LIFECYCLE-09", "passed", ptr("[" + signal("SIGTERM", 500, replied(1100), false, 500, next(1300)) + "," + signal("SIGKILL", 1300, replied(1300), false, 1300, "") + "]")},
 			{"@ID-LIFECYCLE-09", "failed", ptr("[" + signal("SIGTERM", 650, "", true, 600, next(1620)) + "," + signal("SIGKILL", 1620, replied(1620), false, 1620, "") + "]")},
 			{"@ID-LIFECYCLE-09", "passed", ptr("[]")},
+			{"@ID-LIFECYCLE-09", "passed", nil},
 			{"@ID-LIFECYCLE-09", "passed", nil},
 			{"@ID-LIFECYCLE-08", "passed", nil},
 		}
