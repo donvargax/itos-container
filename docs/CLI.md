@@ -193,9 +193,11 @@ uncertain durable publication exits 75. Exit 75 also reports lock contention:
 `doctor`, `approve` and `run` share one private account lock, and a wait longer than
 the 10-second call budget ends as `approval.state.busy` (`run.call-timeout` for `run`)
 so the same command can be retried unchanged. Exit 3 `approval.state.unavailable` also
-means the effective user has no local `/etc/passwd` record with an absolute home, which
-the fixed account anchor requires (see [CONFIG.md](CONFIG.md)); LDAP or SSSD-only
-accounts are refused rather than guessed from HOME. Detailed rules are in
+means the effective user has no local `/etc/passwd` record with an existing absolute home,
+which the fixed account anchor requires; LDAP or SSSD-only accounts are refused rather than
+guessed from HOME. It also reports a state location the account catalog retains that is gone,
+which refuses every command on the account until the host user restores it or removes its
+record. Reapproval cannot clear either; recovery is in [CONFIG.md](CONFIG.md). Detailed rules are in
 [approval.feature](../features/approval.feature).
 
 An agent on the host can approve through `--fingerprint` or a faked terminal:

@@ -68,7 +68,8 @@ Bare terminal approve reviews settings and changes, asks y/N, and remembers appr
 until settings change. The optional `--fingerprint <value>` approves only the exact
 value printed by doctor. State uses canonical JSON SHA-256 under absolute
 `$XDG_STATE_HOME/itos-container`, falling back to `$HOME/.local/state/itos-container`
-when XDG_STATE_HOME is absent or empty. A relative nonempty XDG_STATE_HOME refuses.
+when XDG_STATE_HOME is absent or empty. A relative nonempty XDG_STATE_HOME refuses, and so
+does a selection whose path is not valid UTF-8 (`approval.state.location`, exit 2).
 Managed directories are owned mode 0700 and records mode 0600. One active generation
 supersedes the previous approval; an old historical record cannot authorize a run.
 Independently of that selection, the first approve or run also creates one fixed account
@@ -77,11 +78,30 @@ anchor, `<account home>/.local/state/itos-container`, even when XDG_STATE_HOME i
 catalog of every state location selected on the account, so commands keep one common
 exclusion across HOME and XDG_STATE_HOME choices. The account home is the home field of
 the effective UID's local `/etc/passwd` record, never HOME, USER or LOGNAME. The home must
-be owned by that user and not writable by others; it may be mode 0755 or 0750. An account
-with no local `/etc/passwd` record, such as one served only by LDAP or SSSD, cannot use
-doctor, approve or run: they refuse with `approval.state.unavailable` (exit 3, and
-`run.approval-invalid` for run). Doctor never creates the anchor; its policy-only and
-manifest-only modes never read it.
+exist, must not be `/`, must be a clean absolute path of valid UTF-8 with no symbolic link
+in it (a home reached through `/home -> /var/home` refuses as `approval.state.path`), must
+be owned by that user and must not be writable by others; it may be mode 0755 or 0750.
+XDG_STATE_HOME does not bypass any of this, because the anchor is independent of it. An
+account with no local `/etc/passwd` record, such as one served only by LDAP or SSSD, or
+whose home is missing, is `/` or is not valid UTF-8, cannot use doctor, approve or run:
+they refuse with `approval.state.unavailable` (exit 3, and `run.approval-invalid` for
+run). Doctor never creates the anchor; its policy-only and manifest-only modes never read
+it.
+
+The catalog keeps every location until the host user removes its record. Once a location
+is cataloged, losing it refuses every doctor, approve and run on the account, not only
+those that select it: a directory that is gone or unreadable is `approval.state.unavailable`
+(exit 3), and one recreated at the same path is `approval.state.path`, because the
+catalog binds the original directory's inode. For example, after
+`XDG_STATE_HOME=/tmp/x itos container approve` and a reboot that clears `/tmp`, every
+command on the account exits 3. The product never forgets, relocates or repairs a
+location, and approving again cannot help. If the directory cannot return under its
+original identity, the host user, after confirming that no worker uses that location,
+removes its record from `<account home>/.local/state/itos-container/coordination`. Each
+record is a small JSON file whose `path` field names its location; keep `control.lock`
+and `self.json`. The next approve at that path enrolls it afresh. Session records with no
+catalog beside them, such as state from v0.1.0, refuse only the selection that holds
+them; select another XDG_STATE_HOME.
 The effective UID supplies host identity, independently of HOME or user environment.
 
 
