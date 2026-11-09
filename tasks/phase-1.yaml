@@ -4328,10 +4328,194 @@
     they inform review of T-42's limits. In features/README.md, say that a goroutine blocked a
     minute or more is labelled with its minutes in a timeout dump. Keep the limit at 4 minutes and
     the engine harness's syscall tracer as it is. Leave the diagnostics step's failure-block
-    printing to p1-engine-diagnostics-failures. Both items edit the one step in ci.yml, so whichever
-    lands second rebases on the other. Broken down from p1-engine-suite-under-its-limit-again.
+    printing to p1-engine-diagnostics-failures, now T-43. Both items edit the one step in ci.yml,
+    so whichever lands second rebases on the other. Broken down from
+    p1-engine-suite-under-its-limit-again.
+
+    The coordinator decided, 2026-11-09 15:18 UTC: the promoted check, go test ./features -count=1
+    -run '^(TestEngineDiagnostics|TestEngineScenarioTiming)$', already passes on main before any
+    work, since both tests exist today, so as written the task would close with nothing done. This
+    entry replaces it with checks that fail on today's main and pass only once the work is in.
+
+    The section. Inside the step's `if [[ -f "$RUNNER_TEMP/slice-11-features.log" ]]` block and
+    before `tail -100`, print `Engine scenario timing records, slowest first: <N>`, N being the
+    number of the log's lines that begin `engine scenario timing: `, then one line for each of
+    them: its duration, as `%4d.%03d s ` prints the whole seconds and the milliseconds of the
+    line's first `"duration_ns":<digits>`, truncated, then the line's text after that prefix,
+    unchanged. Slowest first; equal durations keep their order in the log; a line with no
+    `"duration_ns":<digits>`, as a killed run can leave its last, counts as zero. All of them, not
+    the last few: a timeout's run is the rows that finished plus the one in flight, and only the
+    whole list shows which rows took the time. Read the log as text whatever it holds: a NUL byte,
+    or invalid UTF-8 under a UTF-8 locale, makes plain grep print `binary file matches` in place of
+    the lines, and quoted workload output can hold either, so use grep -a or a bash read loop. With
+    no log there is no section, as there is no tail, and the step still exits 0. Use bash, grep,
+    sort and the like, no awk or jq: the agents' host has only gawk and its own jq, and
+    ubuntu-latest's may differ, so only CI would catch a difference, the reason T-43 wrote its
+    report in bash. It is a few lines, so it stays inline in the step, and
+    engineFailureDiagnostics in features/engine_workflow_test.go, which TestEngineWorkflow and
+    TestEngineFixtureWorkflow compare with the step's text, gains the same lines.
+
+    T-43's spec, committed on its branch at 79d2974, puts `timeout 40
+    tools/bin/engine-failure-report "$RUNNER_TEMP/slice-11-features.log"` straight after `set +e`,
+    keeps the kernel messages, `free -m` and `tail -100` after it unchanged, and leaves what becomes
+    of the tail to this item. The tail stays, and stays last: T-43's tests assert that the log's
+    last non-blank line ends the step's output, which this placement keeps true whichever item
+    lands first. T-43's report already prints a timeout's `panic: test timed out` line with its
+    `running tests:` list, which names the row in flight, the one row with no record yet, so this
+    section prints records only. The second item to land rebases the step,
+    engineFailureDiagnostics and the README sentence on the first, and runs the step through the
+    first's test helper rather than adding a second one.
+
+    The offsets. The `engine scenario timing:` record of a row whose ID is @ID-LIFECYCLE-09, and of
+    no other row, gains `signals`: one object per request of the row's collected journal
+    (lifecycleNative.journalAtReturn, the journal lifecycleSignals judges) that
+    lifecycleSignalRequest selects, in journal order, holding in this order `signal`, the request's
+    `signal` query value, empty when it has none; `at_ns`, its arrival; `replied_ns`, its reply,
+    absent when Replied is zero; `status`, the journaled status; `cancelled`, the journal's
+    Cancelled; and `previous_ns` and `next_ns`, the arrival of the journal's request just before it
+    and just after it, each absent at the journal's end. Each offset is in nanoseconds after the
+    harness signalled the controller (lifecycleNative.signalled), the cancellation T-42's limits
+    count from. A reader can then set SIGKILL's at_ns against the 1 s to 3 s window, an immediate
+    row's 1.8 s and a delayed row's first at_ns plus 1.6 s; the first signal's reply, or its cut,
+    against the 600 ms hold; and that signal's call, which starts after previous_ns, the daemon
+    check in recoverySignal's order, and ends at its reply or, when cut, just before next_ns,
+    against the 1 s call budget, which is how heldAcknowledgement reads a cut. `signals` is absent
+    when the row never signalled the controller or collected no journal, as an aborted row that
+    never reached its signal, and `[]` when the journal holds no signal request, as a product that
+    sent none leaves it.
+
+    The offsets are taken whatever the row's outcome: a failing row is the one whose offsets
+    matter, and godog skips the steps after a failure. initializeScenario's After hook
+    (features/steps_test.go:72) computes them from w.lifecycle before it resets the world, and
+    hands them on through the context godog passes to the After hooks registered after it, so the
+    timing collector's hook in runScenarios (features/features_test.go:372) writes them. No other
+    field, record or tier changes: other rows' records keep their five fields, and the ordinary
+    tier writes none.
+
+    The words, in features/README.md. The failure-only step's sentence (line 280) says the step
+    prints the timing records slowest first before the last 100 lines. The records paragraph (line
+    308), which says records contain only five fields, gives LIFECYCLE-09's `signals`, its fields
+    and their origin. The sentence on TestEngineScenarioTiming (line 319) adds the subtest below
+    and TestEngineFailureTimings. And a note on reading a timeout's goroutine dump: a goroutine
+    waiting a minute or more can carry its whole minutes in its header, as in `goroutine 8 [chan
+    receive, 1 minutes]:`, Go writing `minutes` for one as well. The note says the label is
+    approximate, as a scratch test measured on go1.27.3 for this spec. The runtime stamps a waiting
+    goroutine only when a garbage collection's marking finds it, and with the time the collection
+    before began its mark termination: runtime/mgcmark.go:275 copies work.tstart, which gcMark
+    (runtime/mgc.go:1976) sets only after marking. So a 35-second wait seen by the process's second
+    collection showed `1 minutes`, and a goroutine that waited 70 s with only the first collection
+    behind it had no label at all. In a 4-minute engine run collections are frequent, so a long
+    wait is labelled, give or take the time between two of them.
+
+    What stays: the Engine scenarios step and engineInvocation, with the 4-minute test timeout and
+    the 240 s step budget, which TestEngineDiagnostics, in the first check as a guard, and
+    TestEngineSuiteBudget hold; the syscall tracer in features/recovery_trace_test.go; T-43's
+    report; and every existing assertion of TestEngineScenarioTiming.
+
+    TestEngineFailureTimings, in a new features/engine_failure_timings_test.go, takes the host OS as
+    a value and skips off Linux, as testEngineDiagnostics does. It runs the real step text read
+    from ci.yml as T-43's cases do: bash -euo pipefail -c under a 5 s context, with cmd.Dir `..`,
+    the checkout's root as in CI, RUNNER_TEMP a temporary directory holding the log, and `sudo` and
+    `free` stubs first on PATH that check their arguments and print `kernel marker` and `memory
+    marker`, so no real sudo runs. Each subtest asserts exit 0, the kernel marker before the memory
+    marker, and that what follows the memory marker is exactly the section and then the log's last
+    100 lines as tail prints them. It writes each record line with engineTiming.write, so that a
+    change to the streamed form fails here.
+
+    Its subtests. `timeout`: `=== RUN   TestFeatures`, a godog line, a line holding a NUL and a
+    0xff byte, then, between godog lines, the records of @ID-RUN-01 at 1999999999 ns,
+    @ID-OVERLAP-03 at 35.2 s, @ID-LIFECYCLE-09 at 12.3 s holding the cut row's `signals` below,
+    @ID-LIFECYCLE-13 at 128.41 s and @ID-ANCHORS-09 at 35.2 s, then `panic: test timed out after
+    4m0s`, its tab-indented `running tests:` list, a blank line and 120 goroutine headers, so that
+    the last 100 lines hold no record. Its section is the header with 5, then LIFECYCLE-13 at
+    128.410 s, OVERLAP-03 and then ANCHORS-09 at 35.200 s, LIFECYCLE-09 at 12.300 s and RUN-01 at
+    1.999 s, which pins truncation, each right-aligned as the format prints it. `record cut by a
+    kill`: the RUN-01 and OVERLAP-03 records, then a last line `engine scenario timing:
+    {"feature":"lifecycle.feature","id":"@ID-LIFE` with no newline after it. Its section is the
+    header with 3, OVERLAP-03, RUN-01 and the cut line at 0.000 s, and the output ends without a
+    newline, as the log does. `no records`: `=== RUN   TestFeatures`, `--- FAIL: TestFeatures
+    (0.00s)` and `FAIL`, giving the header with 0 and no line under it. `no log`: nothing after the
+    memory marker.
+
+    TestEngineScenarioTiming gains t.Run("LIFECYCLE-09 rows carry their signal offsets"). It clears
+    GOCOVERDIR and ITOS_CC_TEST_COVERDIR with t.Setenv, as features/cover_test.go:27 does, since the
+    real world's Before hook would otherwise make a coverage directory per ID in the proof's root.
+    It runs runFeatureScenarios at the engine tier, the selection from timingSelection(t, fixture,
+    true), with an initializer that calls the real initializeScenario(sc, t.TempDir(), "unused"),
+    none of whose steps runs here, and registers three steps of its own: `the escalation journal
+    "<name>"`, which sets w.lifecycle to a copy of one built before the run; `the row passes`; and
+    `the row fails`, which returns an error. No real step matches those texts. The fixture is an
+    @engine feature with an @ID-LIFECYCLE-09 outline whose rows are immediate, delayed, cut after
+    the check, no signal request and never signalled, the third failing at its second step, and an
+    @ID-LIFECYCLE-08 scenario with the immediate journal. The journals are lifecycleWindowWorld's,
+    each given newLifecycleFaults("ignore", "", its delay) as fault, so that the world's
+    closeLifecycleNative runs: immediate is the case 'immediate at the grace' with SIGINT at 0
+    percent; delayed is 'delayed slow teardown' and cut after the check is 'delayed acknowledgement
+    cut a call limit after the daemon check', each with SIGTERM at 60 percent; no signal request is
+    immediate without its signal requests; never signalled holds only its fault. Decode each
+    record into the test's own type with DisallowUnknownFields, as timingRecords does, with
+    `signals` a json.RawMessage, which tells absent from null and [] and pins the order, and
+    compare it with the exact JSON. The run exits nonzero and its six records read, in milliseconds
+    after cancellation, nanoseconds in the JSON: immediate passed, SIGINT at 50, replied 50, status
+    204, not cancelled, previous 50, next 1000, then SIGKILL at 1000, replied 1000, 204, not
+    cancelled, previous 1000, no next; delayed passed, SIGTERM at 500, replied 1100, 204, not
+    cancelled, previous 500, next 1300, then SIGKILL at 1300, replied 1300, 204, not cancelled,
+    previous 1300, no next; cut after the check failed, SIGTERM at 650, no reply, 204, cancelled,
+    previous 600, next 1620, then SIGKILL at 1620, replied 1620, 204, not cancelled, previous 1620,
+    no next; no signal request passed with `[]`; never signalled and the LIFECYCLE-08 row passed
+    with no `signals`.
+
+    Both name only what exists today, so they compile at their red commit and fail at their
+    assertions. Commit TestEngineFailureTimings and the subtest alone first, red, with test --item
+    T-44, and report each failing assertion. Then commit the section, engineFailureDiagnostics,
+    the offsets and features/README.md with test --task T-44. .github/workflows/ci.yml,
+    features/engine_failure_timings_test.go, features/engine_timing_regression_test.go,
+    features/engine_timing_test.go, features/features_test.go, features/steps_test.go,
+    features/engine_workflow_test.go, features/lifecycle_native_assertions_test.go for the offsets'
+    helper beside lifecycleSignalRequest, and features/README.md are the whole change: no product
+    code, scenario, engine invocation, proof setting or dependency. It touches no proof.code path,
+    so its CI judges no mutant. Before stopping, run without -race go test ./features -count=1
+    -run '^(TestEngineSuiteBudget|TestEngineRedWorkflow|TestFeatureSignalDiagnostics|TestLifecycleSignalWindow|TestEngineSchedule)',
+    which read the same workflow, file or journals, and the whole feature suite once, since every
+    scenario's After hook changes. Race detection, if wanted, names only TestEngineFailureTimings
+    and TestEngineScenarioTiming, never the whole features package.
+
+    The step runs only on a red engine job, so no green run shows the section, and these fixtures
+    cannot show the runner's own bash, grep and sort. Closure rests on the checks below and on the
+    pushed head's engine tier passing. A manual dispatch with red_scenarios set to a @wip @engine
+    scenario, which T-43 asks the coordinator for before its close, prints the section on the
+    runner too, with that row's record.
+
+    The first check captures go test's status as T-41's and T-43's do, not with set -o pipefail:
+    itos runs a check through sh -c, and ubuntu-latest's sh is dash. go test exits 0 when -run
+    matches nothing, so the check requires each subtest's PASS line. TestEngineWorkflow and
+    TestEngineFixtureWorkflow are in it because they hold the step to engineFailureDiagnostics. At
+    255bc2b both checks fail. The first: go test passes, then `TestEngineFailureTimings/timeout did
+    not pass`. Once committed red, timeout, record_cut_by_a_kill and no_records fail at the
+    assertion on what follows the memory marker, today the tail alone, while no_log passes, since
+    today's step already prints nothing there without a log: it is a guard. The subtest fails its
+    signals assertion for the immediate, delayed, cut after the check and no signal request rows,
+    which carry no `signals` today, while the never signalled and LIFECYCLE-08 rows pass. The
+    second: features/README.md has none of `minutes]:`, `slowest first`, `previous_ns` and
+    TestEngineFailureTimings.
+
+    A throwaway prototype of this rule, in a copy of the tree outside the repository and with
+    README words of its own, passed both checks, the neighbours above, golangci-lint, the whole
+    feature suite in 210.7 s, and -race on the two tests. Each of these breaks failed the first
+    check: sort without -s, which puts ANCHORS-09 before OVERLAP-03; grep without -a, which loses
+    the records after the NUL; the After hook not handing the offsets on; the LIFECYCLE-09
+    restriction dropped, which gives the LIFECYCLE-08 row `signals`; a nil list for a journal
+    without signal requests; and the step changed without engineFailureDiagnostics. dash is not
+    installed where this was written, so the checks ran under sh as bash in POSIX mode; they use
+    only POSIX constructs.
   done_when:
-    - run: go test ./features -count=1 -run '^(TestEngineDiagnostics|TestEngineScenarioTiming)$'
+    - run: |
+        out=$(go test ./features -count=1 -v -run '^(TestEngineFailureTimings|TestEngineScenarioTiming|TestEngineWorkflow|TestEngineFixtureWorkflow|TestEngineDiagnostics)$') || { printf '%s\n' "$out"; exit 1; }
+        for sub in TestEngineFailureTimings/timeout TestEngineFailureTimings/record_cut_by_a_kill TestEngineFailureTimings/no_records TestEngineFailureTimings/no_log TestEngineScenarioTiming/LIFECYCLE-09_rows_carry_their_signal_offsets; do
+          printf '%s\n' "$out" | grep "^ *--- PASS: $sub " || { echo "$sub did not pass"; exit 1; }
+        done
+    - run: |
+        grep -Fq 'minutes]:' features/README.md && grep -Fq 'slowest first' features/README.md && grep -Fq 'previous_ns' features/README.md && grep -Fq 'TestEngineFailureTimings' features/README.md
 - id: T-45
   type: test
   title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
