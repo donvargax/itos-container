@@ -450,7 +450,7 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 				if selection.timing != nil {
 					// Godog runs After hooks in registration order. This is after
 					// all fixture cleanup and receives any cleanup error as well.
-					selection.timing.complete(scenario, started, rowFailed || err != nil)
+					selection.timing.complete(scenario, started, rowFailed || err != nil, signalOffsetsOf(ctx))
 				}
 				return ctx, nil
 			})
