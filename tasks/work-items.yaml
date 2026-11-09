@@ -754,3 +754,12 @@ items:
       slice-23, which build on the shared tracking. It must land before any claim that existing
       installations are protected, and it stays inside the charter's first-milestone control-state
       work.
+
+      This is the upgrade problem for installations that already exist: v0.1.0 session records under
+      the default tree, and old roots no catalog has seen. A person with those records cannot
+      recover today, and the item's decision (documented manual cleanup or a migration step) is the
+      one the upgrade contract already has to make. Slice-21's PR still says 'select another
+      XDG_STATE_HOME' in docs/CONFIG.md and in the Fix text at
+      internal/engine/approval/port/diagnostic.go:72. That advice cannot work for this case, so
+      slice-21 should correct or remove it before merge, and the upgrade contract then supplies the
+      real recovery.
