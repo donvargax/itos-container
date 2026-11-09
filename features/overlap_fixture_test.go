@@ -26,7 +26,17 @@ type overlapFixture struct {
 	resources                      map[string]string
 	rendezvous                     *overlapRendezvous
 	gate                           chan struct{}
+	drainBound                     time.Duration // zero means overlapDrainBound
 }
+
+// How long a covered fixture waits for its controllers to drain after the
+// assertions. A healthy drain returns when its last controller joins, so this
+// only lengthens the wait on a hung one. Once waitRun returns, the product's
+// teardown takes 30 s (internal/engine/session/domain/registered_run.go), then
+// the controller exits and Go exports its counters; this adds five seconds for
+// that, which is also the 'stale controller exits' wait's 35 s. A timeout means
+// a stuck controller: diagnose it, never raise this again.
+const overlapDrainBound = 35 * time.Second
 
 type overlapRun struct {
 	w                                         *world
@@ -420,7 +430,11 @@ func (f *overlapFixture) finishLocalWorkloads() error {
 		}
 		r.engine.mu.Unlock()
 	}
-	return overlapAwait("local controllers drain after assertions", 5*time.Second, func() bool {
+	bound := f.drainBound
+	if bound == 0 {
+		bound = overlapDrainBound
+	}
+	return overlapAwait("local controllers drain after assertions", bound, func() bool {
 		for _, r := range draining {
 			if !r.ended() {
 				return false

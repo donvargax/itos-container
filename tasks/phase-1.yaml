@@ -3551,23 +3551,119 @@
   title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
   why: >
     features/overlap_fixture_test.go:419 waits a fixed 5 s for 'local controllers drain after
-    assertions'. Under the code proof's per-ID coverage measurement the drain is slower and the hook
-    times out ('bounded overlap observation timed out'), so the proof's preparation fails with no
-    mutant judged. It failed slice-21's CI twice (runs 42573174685 and 42582818914) and T-33's at
-    082884c (run 42589518540), each costing a CI cycle and a repair round on work that had nothing
-    to do with it. Fix the wait (a budget that holds under coverage, or waiting on the drain's own
-    completion signal), not the proof. Found by the coordinator, 2026-11-09. Correction: of
-    slice-21's runs, 42582818914 hit this hook; 42573174685 failed for another reason (not this
-    flake), so it counts once for slice-21, not twice. p1-overlap-drain-flake already covers the 5 s
-    drain wait in features/overlap_fixture_test.go timing out under coverage, and names 'a budget
-    that holds under coverage' as a fix. Add this to it: size the bound against the product's 30 s
-    teardown budget, since the sibling waits are 20, 35 and 40 s. A drain takes up to 1.2 s locally
-    under 4-way load, and a larger bound only lengthens the wait on a hung controller. T-36's text
-    in tasks/phase-1.yaml (around lines 3074-3096) says to keep the five-second bound, so the fix
-    has to amend that spec. This belongs inside p1-overlap-drain-flake, because raising the bound
-    there makes the TestOverlapCleanup 'covered timeout' case wait that long. The fix should make
-    the drain bound a per-fixture duration, with zero meaning the default, so that case runs in
-    milliseconds. Otherwise a bound near 35 s adds that much to every run. That case currently waits
-    the real 5.0 s.
+    assertions'. Under the code proof's per-ID coverage measurement a drain can outlast that and the
+    hook times out ('bounded overlap observation timed out'), so the proof's preparation fails with
+    no mutant judged. It failed slice-21's CI once (run 42582818914; its run 42573174685 failed for
+    another reason) and T-33's at 082884c (run 42589518540), each costing a CI cycle and a repair
+    round on work that had nothing to do with it. Found by the coordinator, 2026-11-09. Fix the
+    fixture's wait, not the proof: itos-cc.yaml, itos.yaml's proof settings and the syscall observer
+    stay unchanged.
+
+    Locally the drain is slow under contention, not stuck. With the wait temporarily lengthened so
+    no drain was cut off, ITOS_CC_TEST_COVERDIR set and -scenarios='^@ID-OVERLAP-', one run's 25
+    drains peaked at 1.66 s on 8 CPUs, 2.39 s under taskset to 2 and 4.996 s under taskset to 1,
+    every one completing; the coordinator saw up to 1.2 s under 4-way load. No CI log was read for
+    this spec and the timeout's message cannot tell slow from stuck, so that the CI runs were slow
+    is inference from this scaling.
+
+    The wait already ends on the drain's own completion signal: overlapAwait polls each run's
+    ended(), its process's done channel, so a healthy drain returns as its last controller joins and
+    a larger bound lengthens only the wait on a hung controller. Only the bound changes. Add the
+    named constant overlapDrainBound = 35 * time.Second in features/overlap_fixture_test.go. Once
+    waitRun returns, the product's teardown total is 30 s
+    (internal/engine/session/domain/registered_run.go:118), then the controller exits and Go exports
+    its counters. 35 s is that total plus the five seconds 'stale controller exits' allows
+    (features/overlap_steps_test.go:126); the sibling waits are 20 s
+    (features/overlap_fixture_test.go:268), that 35 s and 40 s (features/overlap_steps_test.go:407).
+    A controller that spends all of waitRun's 10 s stdin-closed reconciliation and all of teardown
+    can exceed it; that is stuck twice over, and failing is right. So after this a drain timeout
+    means a stuck controller: diagnose it, never raise the bound again.
+
+    The bound is per fixture. overlapFixture gains drainBound time.Duration, zero meaning
+    overlapDrainBound, which finishLocalWorkloads reads for its one shared wait. overlapSetup leaves
+    it zero, so scenarios and testRecoveryProbeCoverage's direct call use the default. Only
+    TestOverlapCleanup's 'covered timeout' case sets it, to 50 ms, so that case runs in milliseconds
+    instead of waiting the real bound on every run (5.0 s today, 35 s otherwise). It is a fixture
+    field, with no environment variable or flag.
+
+    That case then says nothing about the default, so add TestOverlapDrainBound to
+    features/overlap_cleanup_test.go, on testing/synctest's fake clock as
+    features/lifecycle_grace_test.go uses it. Each subtest calls closeOverlap on a covered in-memory
+    fixture shaped like TestOverlapCleanup's, with drainBound left zero and GOCOVERDIR and
+    ITOS_CC_TEST_COVERDIR cleared as that test clears them. 'slow drain': the controller exits 34 s
+    after its workload ends, and cleanup succeeds with at least 34 s and less than 35 s of fake time
+    passed and no cancellation before that exit. Never assert exactly 34 s: the exit and
+    overlapAwait's 5 ms tick share that fake instant, so the poll can run first and return at
+    34.005 s, as two of eight trial runs did, and that assertion would be a new flake. 'hung
+    controller': it never exits, and cleanup fails naming 'local controllers drain after assertions'
+    at exactly 35 s, after which forced cleanup cancels and joins it; nothing else runs at that
+    instant, so this one is exact. Neither subtest names the new field, so both compile against
+    today's fixture and fail at their assertions. Join the simulated controller's goroutine on every
+    path, with a defer: a bubble whose failing test leaves it asleep panics ('deadlock: main bubble
+    goroutine has exited but blocked goroutines remain'), and the panic replaces the assertion's red
+    and the sibling's result.
+
+    This amends T-36, whose entry says 'Keep the shared five-second drain bound', 'one shared
+    five-second drain bound' and 'Keep the existing five-second coverage bound'. T-41 supersedes
+    those three for the bound's value alone; T-36's entry stays as the record, as T-25's did under
+    T-37. The rest of T-36's cleanup stays: one shared wait across a fixture's controllers, a
+    timeout fails cleanup, forced cleanup joins every process, plain and native worlds keep their
+    routes, and the wait's label and every existing TestOverlapCleanup assertion are unchanged.
+    Correct the 'shared five-second drain bound' in features/README.md to say 35-second.
+
+    Commit TestOverlapDrainBound alone first, red, with test --item T-41, and report each subtest's
+    failing assertion. Then commit the fixture, the 'covered timeout' case and features/README.md
+    with test --task T-41. features/overlap_fixture_test.go, features/overlap_cleanup_test.go and
+    features/README.md are the whole change: no product code, scenario, workflow, proof setting or
+    dependency. Before stopping, run the proof's preparation once without -race,
+    ITOS_CC_TEST_COVERDIR=<a temporary directory> go test ./features -count=1, which also holds the
+    covered overlap scenarios and TestScenarioCoverageContract. Drafting stopped that run with this
+    design unfinished, at 188 listed IDs with no timeout and real drains up to 2.355 s on 4 CPUs, so
+    no whole covered run of it has completed. Race detection, if wanted, names only these two tests,
+    never the whole features package. The range touches no proof.code path, so its own CI judges no
+    mutant, and one green proof could not show an intermittent failure gone anyway. Closure rests on
+    the checks below; the next production-changing range's proof exercises the hook for real.
+
+    The checks capture go test's status rather than use set -o pipefail. itos runs a check through
+    sh -c (itos.yaml sets no shell) and these are late checks, so CI is where they are judged, and
+    ubuntu-latest's sh is dash, where versions without that option abort before running anything. At
+    bdb0e7e all three fail. The first: covered_timeout passes in 5.00 s and awk exits 1 on its 0.5 s
+    limit. The second: go test exits 0 with no tests to run and awk exits 1 finding no
+    TestOverlapDrainBound lines; once committed red, slow_drain fails with the timeout at 5 s and
+    hung_controller fails with 5 s against 35 s. The third: features/README.md has no '35-second'
+    and says 'five-second' at line 153.
+- id: T-42
+  type: test
+  title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
+  why: >
+    Run 42609794543 (T-41's range, which touches nothing LIFECYCLE-09 uses) failed the engine tier
+    at row #03 of 'Ignored and repeated cancellation escalates once after the fixed grace' (SIGTERM,
+    acknowledgement delayed 60% of grace), while T-33 to T-37 each passed it. T-33 shortened the
+    engine grace from 10 s to 1 s and kept the SIGKILL tolerance proportional: lifecycleSignals in
+    features/lifecycle_native_assertions_test.go accepts SIGKILL only from 1.0 s to 1.2 s after
+    cancellation. The 30 s teardown assertion kept an absolute 2 s tolerance. Controller wake-up and
+    request latency under -cover on a shared runner do not shrink with the grace, so 200 ms is a
+    plausible flake source. The same run's engine step took 235 s against its 240 s gate, so the
+    runner was busy. The cause is not confirmed: the failing assertion was not visible to the
+    implementer (no gh access) or to this triage. The coordinator should put the failing assertion's
+    text from the job log in the brief before the item is taken. If it is the SIGKILL window,
+    replace the 20% share with an absolute floor. A tolerance up to about 500 ms still rejects an
+    acknowledgement-relative timer, which fires at 1.6 s with a 60% delay. Keep the lower bound, the
+    native receipts and the 60% delay row. Change the T-33 wording 'escalation tolerance is 20
+    percent' and the matching lines in features/README.md with it. This keeps the engine tier from
+    failing unrelated ranges, which matters for milestone two's egress proof, which relies on it.
+    Coordinator, 2026-11-09 12:12 UTC: now red on main too (runs 42605880158 and 42605822567, row
+    #02), besides T-41's run 42609794543 and T-33's 7e30371: it fails on any range, so it goes
+    first. Widen the SIGKILL acceptance to an absolute tolerance that holds under -cover on a hosted
+    runner (as the teardown assertion's 2 s does), keeping the assertion that SIGKILL comes after
+    the grace and exactly once; don't lengthen the grace back to 10 s. This item is already first in
+    the queue, and its coordinator note of 2026-11-09 12:12 UTC says it fails on any range and goes
+    first. It already records the T-41 failures on different rows (#03, then #02) and the
+    main-branch failures on runs 42605880158 and 42605822567. It already covers the engine step
+    running near its 240 s gate (235 s) and the link to milestone two's egress proof. New evidence
+    to add as a note: run 42613812662 is a further engine-tier failure, and its failing assertion
+    text is still not visible (it depends on the upstream extractor fix). The item's own fix does
+    not wait on that text. The coordinator's instruction is to widen the SIGKILL acceptance to an
+    absolute tolerance. A new item or a promotion would add nothing.
   done_when:
-    - run: "set -o pipefail; go test ./features -run '^TestOverlapCleanup$' -count=1 -v | awk '/^    --- PASS: TestOverlapCleanup\\/covered_timeout /{gsub(/[()s]/,\"\",$4); ok=($4+0<0.5)} END{exit !ok}'"
+    - run: flock /home/yorch/src/os/github/donvargax/itos-container/.git/itos/loop/features.lock go test ./features -count=1 -run 'TestLifecycle(Grace|Signal)'
