@@ -910,8 +910,8 @@ items:
   - id: slice-25
     title: The policy file accepts an exact host-name egress allowlist and doctor validates it
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
