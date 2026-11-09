@@ -733,3 +733,24 @@ items:
       builds or fixed waits in the recovery and lifecycle fixtures. Keep every row, assertion and
       cleanup, and add no sharding or reduced selection. Phase p2: nothing blocks the current step,
       and no CI job's limit is near 300 s.
+  - id: p2-control-state-upgrade-contract
+    title: Specify the upgrade contract for existing control state, and drop the persisted device field with it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Slice-21's decision record (docs/decisions/0021-control-state-publication.md, on its branch)
+      says an upgrade contract for unseen old XDG roots and mixed old/new controllers is 'still
+      required before claiming protection for existing installations'. No registry item tracks it,
+      and v0.1.0 is already published, so installations exist. The same record keeps the persisted
+      binding device in schema 1 only as a shape-checked diagnostic: it is never compared, so it
+      misleads readers of a security record and still makes the CONTROL fixtures compute it. Specify
+      the upgrade contract with black-box scenarios, covering old roots no catalog has seen and an
+      old controller running beside a new one. Decide in the same step whether a schema bump removes
+      the device field or a stable filesystem ID replaces it; statfs IDs are not uniformly
+      populated, so any replacement needs evidence. Phase p2: it does not block slice-22 or
+      slice-23, which build on the shared tracking. It must land before any claim that existing
+      installations are protected, and it stays inside the charter's first-milestone control-state
+      work.
