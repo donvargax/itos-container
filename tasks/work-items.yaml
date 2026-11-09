@@ -1293,6 +1293,16 @@ items:
       existing ci.yml edit. The summary extractor belongs in itos and is already noted there as
       tracked. When the coordinator files upstream, it should search itos's open and closed issues
       first and comment on the existing one instead of opening a second.
+
+      This item already owns the Engine failure diagnostics step in .github/workflows/ci.yml and
+      says to print each `--- FAIL` block with its godog step error beside the streamed `engine
+      scenario timing:` records. New detail for it: job logs return 403 without a token, so an
+      implementer without gh sees only 'Process completed with exit code 1'. Also emit one `::error
+      title=<scenario>` workflow annotation per failed scenario (or go-test failure line) from that
+      same step. Annotations are public, so a red engine job becomes diagnosable without log access.
+      The coordinator can then tell an unchanged flake from a new failure when a re-run fails
+      differently, as the two attempts at 0a1d85c did. It is the same small ci.yml edit, so it needs
+      no separate item.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
