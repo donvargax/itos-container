@@ -1039,6 +1039,16 @@ items:
       scenarios; any that now fail show a real leak to fix in the product, never a reason to loosen
       the step. This is a test-support change with no new behavior and needs a ledger task and its
       checks. Phase 2: it hardens existing proof and does not block charter step 1.
+
+      The same task covers this gap: a step name promises more than its code checks, in the same
+      approval assertion files. I checked it. approvalProblem
+      (features/approval_assertions_test.go:85, registered for 'it reports prerequisite problem …
+      before requesting consent' at features/approval_steps_test.go:138) checks the exit code and
+      the rule, and never that no consent prompt appeared. The step is used at approval.feature:654
+      and hardlinks.feature:193. Add a check that no consent prompt was shown, or rename the step to
+      what it checks, to that item's test-support change. Run the same scenarios afterwards: one
+      that fails then shows a real product leak, and the step is not loosened. Slice-26 adds
+      refusals here, so the check matters more then.
   - id: p2-pin-ledger-check-shell
     title: Pin the shell itos runs ledger and CI checks with, so a check passes locally only if it passes in CI
     phase: 1
