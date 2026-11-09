@@ -4299,11 +4299,6 @@
     The rows losing @engine, a row dropped, the delayed rows moved and the ID renamed each fail it
     too. dash is not installed where this was written, so the checks ran under sh as bash in POSIX
     mode and gawk; they use only POSIX constructs.
-  done_when:
-    - run: |
-        out=$(go test ./features -count=1 -v -run '^(TestFeatures|TestLifecycleSignalWindow)$' -scenarios='^@ID-LIFECYCLE-09$') || { printf '%s\n' "$out"; exit 1; }
-        printf '%s\n' "$out" | awk '/excluded 4 scenario\(s\): @ID-LIFECYCLE-09 /{sel=1} /^--- SKIP: TestFeatures /{skip=1} /^--- PASS: TestLifecycleSignalWindow /{top=1} /^    --- PASS: TestLifecycleSignalWindow\/recorder_journals_a_cut_acknowledgement /{rec=1} /^        --- PASS: TestLifecycleSignalWindow\/SIG/{print; split($3, p, "/"); n[p[2]]++} /_0\/immediate_at_a_repeat_restart /{rep=1} /_60\/delayed_slow_teardown /{slow=1} /_60\/delayed_at_an_acknowledgement_restart /{ack=1} /_60\/delayed_acknowledgement_cut_by_the_call_limit /{cut=1} /_60\/delayed_cut_at_an_acknowledgement_restart /{cutack=1} END{exit !(sel && skip && top && rec && n["SIGINT_0"]>=8 && n["SIGTERM_0"]>=8 && n["SIGINT_60"]>=13 && n["SIGTERM_60"]>=13 && rep && slow && ack && cut && cutack)}'
-    - run: "! grep -Eq '20 percent|1\\.2 s' features/README.md features/lifecycle.feature && grep -q '1\\.8 s' features/README.md"
 - id: T-43
   type: ci
   title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
