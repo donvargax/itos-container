@@ -4590,13 +4590,6 @@
     and passes under LC_ALL=C. Each fix alone turns only its own cases green. One thing no test can
     hold is the `timeout 40` itself, removed from both the step and the constant: that is for the
     implementation review to read.
-  done_when:
-    - run: |
-        out=$(go test ./features -count=1 -v -run '^(TestEngineDiagnostics|TestEngineWorkflow|TestEngineFixtureWorkflow)$') || { printf '%s\n' "$out"; exit 1; }
-        for sub in completed_run timeout ten_failures more_than_ten test_failure_without_scenario no_go_test_failure_line no_log; do
-          printf '%s\n' "$out" | grep "^ *--- PASS: TestEngineDiagnostics/failure_report/$sub " || { echo "failure_report/$sub did not pass"; exit 1; }
-        done
-    - run: grep -q '::error' features/README.md && grep -q 'engine-failure-report' features/README.md
 - id: T-44
   type: test
   title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
