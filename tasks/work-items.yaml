@@ -1637,6 +1637,6 @@ items:
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: task
