@@ -12,6 +12,12 @@ const (
 	engineStartupBudget = 3 * time.Second
 	engineGraceBudget   = time.Second
 	engineQuietInterval = max(engineCallBudget, engineStartupBudget) + time.Second
+	// SIGKILL may leave this long after the grace expires. Absolute, as the 30 s
+	// teardown assertion's 2 s is: scheduling on a hosted runner under -cover does
+	// not shrink with the fixture's grace. It is never a license for a timer that
+	// an event restarted: lifecycleSignals refuses those from the instant they
+	// could fire.
+	engineEscalationTolerance = 2 * time.Second
 )
 
 // Only the harness builds this fixture, from a disposable copy of the product

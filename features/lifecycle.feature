@@ -213,8 +213,9 @@ Feature: Bounded offline lifecycle, cancellation and loss
   # signals, acknowledgement delays and grace checks use that same fixture.
   # Product-facing disconnects never shut down the shared daemon or independent
   # observer. Add only identity-checked kill/wait fault forwarding to the recorder.
-  # Grace timing allows 20 percent scheduling tolerance; other bounds allow 2 s,
-  # never early escalation; no resetting deadlines or widening product defaults.
+  # Grace timing allows 2 s scheduling tolerance, as other bounds do, but never
+  # early escalation or a timer an event restarted (features/README.md); no
+  # resetting deadlines or widening product defaults.
   # Fixed-seed domain contracts cover exact boundaries; CI proves real delivery.
   # Network denial after controller loss uses slice-14's SAME clients and controlled
   # IPv4/IPv6 TCP/UDP/gateway/private/synthetic-metadata and DNS/DoH endpoints.

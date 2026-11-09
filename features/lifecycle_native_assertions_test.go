@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -89,17 +90,64 @@ func (w *world) lifecycleSignals(escalate bool) error {
 		if e.At.Before(l.signalled) {
 			return errors.New("worker signal preceded controller cancellation")
 		}
-		if i == 1 && (e.At.Sub(l.signalled) < engineGraceBudget || e.At.Sub(l.signalled) > engineGraceBudget+engineGraceBudget/5) {
-			return fmt.Errorf("SIGKILL at %s, expected original %s grace (at most %s scheduling tolerance)", e.At.Sub(l.signalled), engineGraceBudget, engineGraceBudget/5)
+		if i == 1 {
+			if err := l.escalationWindow(entries[0], e); err != nil {
+				return err
+			}
 		}
 	}
 	if escalate && !l.aliveBeforeGrace {
 		return errors.New("independent native observation did not find the primary alive before grace expired")
 	}
-	if l.delay > 0 && entries[0].Replied.Sub(entries[0].At) < l.delay {
+	if l.delay > 0 && !lifecycleCutAcknowledgement(entries[0]) && entries[0].Replied.Sub(entries[0].At) < l.delay {
 		return errors.New("signal acknowledgement delay did not execute")
 	}
 	return errors.Join(w.lifecycleRevalidated(l.journalAtReturn), w.lifecycleNoHostSignals())
+}
+
+// The recorder holds an acknowledgement after the daemon's reply, so a hold
+// that outlasts what is left of the product's call limit is rightly given up
+// on: the request is cancelled with the engine's 204 journaled and no Replied.
+// The hold ran as long as the product waited. A cancellation before the engine
+// answered (a 502) is a stall, and the hold never ran.
+func lifecycleCutAcknowledgement(e offlineRequest) bool {
+	return e.Cancelled && e.Status == http.StatusNoContent && e.Replied.IsZero()
+}
+
+// escalationWindow judges the SIGKILL's arrival after cancellation. It leaves
+// from the grace through the grace plus engineEscalationTolerance, both ends
+// inclusive. That alone would accept what LIFECYCLE-09 exists to refuse, a grace
+// timer restarted by an event, so it also refuses a SIGKILL from the first
+// instant such a timer could fire. An honest SIGKILL leaves at the later of the
+// deadline and the first signal's reply, so the two limits differ by row:
+//
+//   - an immediate row: the last repeat, which goes no earlier than
+//     lifecycleLastRepeat, restarts a timer that fires no earlier than that plus
+//     the grace.
+//   - a delayed row: the hold begins when the first signal arrives (its At in the
+//     journal, since a cut hold has no Replied), and an acknowledgement-relative
+//     timer begins after it, no earlier than the delay plus the grace after that.
+//     A cut hold keeps this limit and the window, because holds are cut just
+//     when the runner is slow, where a skipped check would pass the timer.
+//
+// Neither limit can pass such a timer at any runner speed.
+func (l *lifecycleNative) escalationWindow(first, kill offlineRequest) error {
+	elapsed := kill.At.Sub(l.signalled)
+	late := engineGraceBudget + engineEscalationTolerance
+	restart, cause := lifecycleLastRepeat+engineGraceBudget, "the last repeated signal"
+	if l.delay > 0 {
+		arrival := first.At.Sub(l.signalled)
+		restart, cause = arrival+l.delay+engineGraceBudget, fmt.Sprintf("the first signal's %s acknowledgement, which arrived at %s", l.delay, arrival)
+	}
+	switch {
+	case elapsed < engineGraceBudget:
+		return fmt.Errorf("SIGKILL at %s, before the original %s grace", elapsed, engineGraceBudget)
+	case elapsed > late:
+		return fmt.Errorf("SIGKILL at %s, past the original %s grace plus its %s scheduling tolerance (%s)", elapsed, engineGraceBudget, engineEscalationTolerance, late)
+	case elapsed >= restart:
+		return fmt.Errorf("SIGKILL at %s, no earlier than %s, when a grace timer restarted by %s could fire", elapsed, restart, cause)
+	}
+	return nil
 }
 
 func (w *world) lifecycleNoHostSignals() error {
