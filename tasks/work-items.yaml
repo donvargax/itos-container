@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - p1-egress-allowlist-proxy
   - p1-credentials-passed-in
   - p1-harness-home
   - p1-interactive-tty
@@ -806,17 +805,9 @@ items:
     title: Egress through an allowlisting Go CONNECT proxy beside the worker
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Milestone two, step 1 (docs/charter.md). The worker gets no direct route out: an owned proxy
-      on an internal network allows CONNECT to listed host names on port 443 only, with no TLS
-      interception, matching the name the client gave (never a reverse-DNS lookup), and logs every
-      refusal. The allowlist is part of the approved settings. The proxy is a small, maintained Go
-      CONNECT proxy chosen in the spec, not squid (the person, 2026-11-09). Each property is proven
-      by a scenario that fails without it; harness traffic in scenarios goes to a fake endpoint the
-      proxy allows.
   - id: p1-credentials-passed-in
     title: Credentials passed in per command, never injected and never in the checkout
     phase: 1
