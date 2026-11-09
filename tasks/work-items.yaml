@@ -754,3 +754,34 @@ items:
       slice-23, which build on the shared tracking. It must land before any claim that existing
       installations are protected, and it stays inside the charter's first-milestone control-state
       work.
+
+      This is the upgrade problem for installations that already exist: v0.1.0 session records under
+      the default tree, and old roots no catalog has seen. A person with those records cannot
+      recover today, and the item's decision (documented manual cleanup or a migration step) is the
+      one the upgrade contract already has to make. Slice-21's PR still says 'select another
+      XDG_STATE_HOME' in docs/CONFIG.md and in the Fix text at
+      internal/engine/approval/port/diagnostic.go:72. That advice cannot work for this case, so
+      slice-21 should correct or remove it before merge, and the upgrade contract then supplies the
+      real recovery.
+  - id: p2-fixture-worlds-inherit-scenario-coverdir
+    title: A fixture world that drops the scenario coverage destination fails in go test, not in CI
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. T-36 made the harness route per-scenario coverage under
+      ITOS_CC_TEST_COVERDIR, but every secondary world is a hand-written &world{root, bin, coverdir:
+      w.coverdir, ...} literal in more than ten fixtures: anchors, overlap, offline anchors,
+      lifecycle and recovery. Slice-21's control-state fixture left coverdir out of its W and P
+      worlds. The product subprocesses then wrote no counters, and the failure ('listed test
+      ID-CONTROL-19 produced no per-ID coverage data') showed up only at the CI mutation proof's
+      listed-coverage step, after a full CI round and without naming the fixture. The charter keeps
+      suite and proof reliability fixes inside the first milestone, and every new slice with a
+      second world can repeat this. First add a harness regression, committed red, that fails when a
+      world a scenario builds lacks the captured coverdir, or that checks ITOS_CC_TEST_COVERDIR
+      yields counters for each live local-engine-fixture ID, naming the fixture. Then route the
+      literals through one constructor if that is the smallest repair. Keep every scenario,
+      assertion and the pinned itos-cc contract unchanged. Phase p2: nothing blocks the current
+      step, since slice-21's own fix has landed on its branch.
