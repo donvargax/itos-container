@@ -3632,3 +3632,38 @@
     TestOverlapDrainBound lines; once committed red, slow_drain fails with the timeout at 5 s and
     hung_controller fails with 5 s against 35 s. The third: features/README.md has no '35-second'
     and says 'five-second' at line 153.
+- id: T-42
+  type: test
+  title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
+  why: >
+    Run 42609794543 (T-41's range, which touches nothing LIFECYCLE-09 uses) failed the engine tier
+    at row #03 of 'Ignored and repeated cancellation escalates once after the fixed grace' (SIGTERM,
+    acknowledgement delayed 60% of grace), while T-33 to T-37 each passed it. T-33 shortened the
+    engine grace from 10 s to 1 s and kept the SIGKILL tolerance proportional: lifecycleSignals in
+    features/lifecycle_native_assertions_test.go accepts SIGKILL only from 1.0 s to 1.2 s after
+    cancellation. The 30 s teardown assertion kept an absolute 2 s tolerance. Controller wake-up and
+    request latency under -cover on a shared runner do not shrink with the grace, so 200 ms is a
+    plausible flake source. The same run's engine step took 235 s against its 240 s gate, so the
+    runner was busy. The cause is not confirmed: the failing assertion was not visible to the
+    implementer (no gh access) or to this triage. The coordinator should put the failing assertion's
+    text from the job log in the brief before the item is taken. If it is the SIGKILL window,
+    replace the 20% share with an absolute floor. A tolerance up to about 500 ms still rejects an
+    acknowledgement-relative timer, which fires at 1.6 s with a 60% delay. Keep the lower bound, the
+    native receipts and the 60% delay row. Change the T-33 wording 'escalation tolerance is 20
+    percent' and the matching lines in features/README.md with it. This keeps the engine tier from
+    failing unrelated ranges, which matters for milestone two's egress proof, which relies on it.
+    Coordinator, 2026-11-09 12:12 UTC: now red on main too (runs 42605880158 and 42605822567, row
+    #02), besides T-41's run 42609794543 and T-33's 7e30371: it fails on any range, so it goes
+    first. Widen the SIGKILL acceptance to an absolute tolerance that holds under -cover on a hosted
+    runner (as the teardown assertion's 2 s does), keeping the assertion that SIGKILL comes after
+    the grace and exactly once; don't lengthen the grace back to 10 s. This item is already first in
+    the queue, and its coordinator note of 2026-11-09 12:12 UTC says it fails on any range and goes
+    first. It already records the T-41 failures on different rows (#03, then #02) and the
+    main-branch failures on runs 42605880158 and 42605822567. It already covers the engine step
+    running near its 240 s gate (235 s) and the link to milestone two's egress proof. New evidence
+    to add as a note: run 42613812662 is a further engine-tier failure, and its failing assertion
+    text is still not visible (it depends on the upstream extractor fix). The item's own fix does
+    not wait on that text. The coordinator's instruction is to widen the SIGKILL acceptance to an
+    absolute tolerance. A new item or a promotion would add nothing.
+  done_when:
+    - run: flock /home/yorch/src/os/github/donvargax/itos-container/.git/itos/loop/features.lock go test ./features -count=1 -run 'TestLifecycle(Grace|Signal)'
