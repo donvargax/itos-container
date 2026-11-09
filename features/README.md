@@ -267,8 +267,11 @@ tier, a name that is not a basename ending in `.feature`, a name given twice, an
 no feature file with an effective `@engine` case, live or `@wip`, bears. In the engine tier it
 keeps only the named files' rows, intersected with the tier, platform, `-scenarios` and red
 selection. Red IDs and a `-scenarios` expression are still validated against the full
-inventory: an unknown one fails, and one matching only other shards' rows leaves the shard
-the explicit skip, which names those IDs as left to another engine shard. The selection and
+inventory, and an unknown one fails. A red list matching only other shards' rows leaves the
+shard the explicit red skip, which names those IDs as left to another engine shard. A
+`-scenarios` expression matching only other shards' rows leaves it the plain count-0 skip,
+`no live scenarios in selected tier and platform (count 0)`, which names no ID: those
+shards' rows appear only in the separate `excluded N scenario(s)` log line. The selection and
 its check of godog's filtered pickles read the shard's files alone, and the run and the
 nested schedule read the same files (`scenarioSelection.paths`): godog numbers pickles
 across the files of one read, so a check over other files than the selection's never
