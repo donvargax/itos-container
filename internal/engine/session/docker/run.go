@@ -15,6 +15,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
@@ -289,7 +290,7 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 	// the whole foreground workload. This is not a ten-second workload timeout.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	timer := time.AfterFunc(10*time.Second, cancel)
+	timer := time.AfterFunc(budget.CallDuration, cancel)
 	result := c.api.ContainerWait(ctx, id, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 	timer.Stop()
 	select {

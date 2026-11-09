@@ -2,8 +2,8 @@ package domain
 
 import (
 	"context"
-	"time"
 
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
@@ -13,7 +13,7 @@ func startDrain(ctx context.Context, a port.Attachment) <-chan port.Outcome {
 		done <- ""
 		return done
 	}
-	drain, cancel := context.WithTimeout(ctx, 10*time.Second)
+	drain, cancel := context.WithTimeout(ctx, budget.CallDuration)
 	go func() {
 		defer cancel()
 		var failure port.Outcome

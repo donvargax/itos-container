@@ -13,7 +13,7 @@ func TestLifecycleGraceObservationPreservesDelayedEvidence(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				start := time.Now()
 				p := &recoveryProcess{done: make(chan struct{})}
-				go func() { time.Sleep(10 * time.Second); close(p.done) }()
+				go func() { time.Sleep(engineGraceBudget); close(p.done) }()
 				var signals []string
 				var times []time.Duration
 				alive := lifecycleRepeatedSignals(p, start, func(signal string) {
@@ -22,11 +22,11 @@ func TestLifecycleGraceObservationPreservesDelayedEvidence(t *testing.T) {
 				}, func() bool {
 					// Observe the worker before its allowed escalation, but delay
 					// the reply beyond it. The observation must remain valid.
-					observed := time.Since(start) < 10*time.Second
+					observed := time.Since(start) < engineGraceBudget
 					time.Sleep(delay)
 					return observed
 				})
-				if !alive || !slices.Equal(signals, []string{"SIGINT", "SIGTERM"}) || !slices.Equal(times, []time.Duration{2 * time.Second, 8 * time.Second}) {
+				if !alive || !slices.Equal(signals, []string{"SIGINT", "SIGTERM"}) || !slices.Equal(times, []time.Duration{engineGraceBudget / 5, 4 * engineGraceBudget / 5}) {
 					t.Errorf("delayed inspect lost liveness or moved repetitions: %v %v %v", alive, signals, times)
 				}
 				<-p.done

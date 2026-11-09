@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"time"
 
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 
@@ -170,7 +169,7 @@ func detectorExited(o port.Observation) bool {
 func detectorAfterExit(ctx context.Context, r port.Record, c port.RunConnection, d port.MountDiagnostic, processExited bool) (string, port.Outcome) {
 	// Kernel process absence can precede Docker's state publication. Bound the
 	// entire reconciliation, including its fresh owned inspections, to one call.
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, budget.CallDuration)
 	defer cancel()
 	o, failure := inspectDetector(ctx, r, c)
 	if failure == "" && detectorExited(o) {
