@@ -21,6 +21,14 @@ func TestProblemsDistinguishesUnavailableStateFromUncertainPublication(t *testin
 			},
 		},
 		{
+			failure: "state.location",
+			want: port.Problem{
+				Rule: "approval.state.location", Exit: 2, Field: "approval",
+				Message: "Host state location must be absolute and valid UTF-8",
+				Fix:     "set an absolute XDG_STATE_HOME, or an absolute HOME for its fallback, whose path is valid UTF-8",
+			},
+		},
+		{
 			failure: "state.write",
 			want: port.Problem{
 				Rule: "approval.state.write", Exit: 75, Field: "approval",

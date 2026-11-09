@@ -49,8 +49,8 @@ func Problems(v View) []Problem {
 		p.Fix = "run itos container approve for a fresh review"
 	case "state.location":
 		p.Exit = 2
-		p.Message = "Host state location must be absolute"
-		p.Fix = "set an absolute XDG_STATE_HOME or an absolute HOME for its fallback"
+		p.Message = "Host state location must be absolute and valid UTF-8"
+		p.Fix = "set an absolute XDG_STATE_HOME, or an absolute HOME for its fallback, whose path is valid UTF-8"
 	case "state.exposed":
 		p.Message = "Control state is exposed to an outstanding worker checkout"
 		p.Fix = "choose a state location outside worker checkouts or finish recovery from the blocking worker’s original checkout; reapproval alone cannot fix exposure"

@@ -744,7 +744,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # before bootstrap or any binding. The first Then fails on the old success: doctor
   # reports missing approval and approve publishes one, and the final Then fails
   # because the published binding poisons the fresh selections.
-  @slice-21 @ID-CONTROL-25 @wip @local-engine-fixture
+  @slice-21 @ID-CONTROL-25 @local-engine-fixture
   Scenario Outline: A state selection that is not valid UTF-8 is refused before it can poison the catalog
     Given a control-state fixture selecting state through "<source>" with a path that is not valid UTF-8
     When P inspects that selection with "<command>" using valid approval inputs
@@ -763,7 +763,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # The same encoding applies to the fixed anchor, whose account home comes from
   # the local account record. A home that is not valid UTF-8 refuses with
   # approval.state.unavailable (exit 3) before any directory exists.
-  @slice-21 @ID-CONTROL-26 @wip @local-engine-fixture
+  @slice-21 @ID-CONTROL-26 @local-engine-fixture
   Scenario Outline: An account home that is not valid UTF-8 refuses control state before it is created
     Given a control-state fixture whose account home path is not valid UTF-8
     When P inspects that selection with "<command>" using valid approval inputs

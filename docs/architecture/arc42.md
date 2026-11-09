@@ -653,7 +653,9 @@ after preflight, preventing a later worker from exposing an earlier publication.
 same two-way comparison applies to the reserved roots of workers already active: a
 fixed or selected tree that equals, contains or lies beneath one refuses with
 approval.state.exposed, so a selection above a running worker cannot be enrolled. Catalog bindings match their locations by path and inode, never by a
-persisted device number, which a reboot can renumber. The
+persisted device number, which a reboot can renumber. The catalog stores each path as
+JSON, which rewrites an invalid UTF-8 byte, so a selected tree (state.location) or
+account home (state.unavailable) whose path is not valid UTF-8 refuses before bootstrap. The
 [control-state decision](../decisions/0021-control-state-publication.md) defines
 bootstrap/retry ordering and the legacy discovery limit. Broader mount enforcement,
 native evidence and recovery trust checks remain slices 22 and 23; unseen pre-upgrade

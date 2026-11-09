@@ -153,6 +153,49 @@ func TestControlAccountAndPrerequisites(t *testing.T) {
 		})
 	}
 }
+
+// The catalog encodes each path as JSON, which replaces an invalid UTF-8 byte
+// with U+FFFD. Such a binding would name a directory that does not exist and
+// refuse every later transaction on the account, so the path is refused first.
+func TestControlRefusesPathsThatAreNotValidUTF8(t *testing.T) {
+	for _, kind := range []string{"selection", "account home"} {
+		for _, write := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s write=%v", kind, write), func(t *testing.T) {
+				control, c, _, home, _ := controlFixture(t)
+				base := filepath.Dir(home)
+				valid := control
+				want := port.Failure("state.location")
+				switch kind {
+				case "selection":
+					control.Store.StateHome = filepath.Join(base, "selected-\xff")
+				case "account home":
+					bad := home + "-\xff"
+					if err := os.Mkdir(bad, 0700); err != nil {
+						t.Fatal(err)
+					}
+					control.Account = &porttest.Account{Home: bad}
+					want = "state.unavailable"
+				}
+				before := controlSnapshot(t, base)
+				tx, failure := control.Begin(t.Context(), c, write)
+				if tx != nil {
+					tx.Close()
+				}
+				if failure != want {
+					t.Fatalf("Begin = %q, want %q", failure, want)
+				}
+				if got := controlSnapshot(t, base); got != before {
+					t.Fatalf("refusal changed state:\n%s\nwant\n%s", got, before)
+				}
+				tx, failure = valid.Begin(t.Context(), c, true)
+				if failure != "" {
+					t.Fatalf("valid selection after refusal = %q", failure)
+				}
+				tx.Close()
+			})
+		}
+	}
+}
 func TestControlNamespaceContract(t *testing.T) {
 	for _, initialized := range []bool{false, true} {
 		t.Run(fmt.Sprint(initialized), func(t *testing.T) {

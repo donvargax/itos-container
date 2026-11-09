@@ -141,6 +141,21 @@ person-consented rebind needs a new command and consent surface that the charter
 not authorize here. CONTROL-23 specifies the renumbered rows; CONTROL-07 keeps the
 replaced-root refusal.
 
+Review PRRT_kwDOVkB0ws61J5AN makes the catalog's path encoding explicit. A binding's
+path and ancestors are stored as JSON, and encoding/json replaces each invalid UTF-8
+byte with U+FFFD, so a tree selected through a path such as `$'/tmp/bad\xff'` was
+published under a name for a directory that does not exist. The first transaction
+succeeded; the next found an enrolled location whose tree was absent and refused
+every selection on the account as state.unavailable, with nothing to repair it. That is the
+account-wide poisoning refused above for catalog and collection selections. The
+control transaction now refuses a selected tree whose path is not valid UTF-8 with
+state.location (exit 2) and an account home that is not valid UTF-8 with
+state.unavailable (exit 3), before bootstrap, binding publication or any directory is
+created, for reads as well as writes so doctor and approve agree. Valid selections
+stay usable afterwards. The alternative of encoding such bytes in the binding would change schema 1
+and every location name; refusing costs only the rare person whose home or state path is not
+text. CONTROL-25 and CONTROL-26 specify the rows.
+
 Before creating an absent selected tree, durably publish its pending claim; retain
 that protection after interruption and complete its root identity before success.
 Completed missing, replaced, malformed, unsafe or unreadable bindings refuse.

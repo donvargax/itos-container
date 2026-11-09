@@ -517,3 +517,23 @@ still classified as invalid approval.
 go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-24$'
 go test ./internal/slices/run/... -count=1
 ```
+
+## Paths that are not valid UTF-8 (review PRRT_kwDOVkB0ws61J5AN)
+
+CONTROL-25 names the selected state tree with a byte that is not UTF-8, once through
+XDG_STATE_HOME and once through the HOME fallback, for doctor and approve. CONTROL-26
+gives the account home such a byte. With only `@wip` removed and the production change
+absent, all 6 examples fail at their first Then: the four selected-state rows with
+"itos-container exited 0, not 2" and the two account-home rows with "itos-container
+exited 0, not 3", because doctor reported an approval and approve published one. Every
+Given and When step passed; there were no undefined steps or setup failures. After the
+change the six rows pass, and the selected-state rows then confirm that fresh selections
+of the default tree and another checkout stay usable.
+
+```sh
+go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-(25|26)$'
+```
+
+A disk unit test covers reads and writes for both paths, requiring that the refusal
+changes nothing and that a valid selection on the same account still enrolls; it fails
+before the change and passes after it.
