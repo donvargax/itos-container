@@ -295,7 +295,9 @@ func TestEscalationRevalidatesAfterGrace(t *testing.T) {
 			}
 		}
 		r := s.Run(ctx, d, []string{"probe"}, port.Streams{})
-		if r.Exited || r.Cleanup == port.Complete || slices.Contains(e.Events, "SIGKILL") || slices.Contains(e.Events, "remove") {
+		// The escalation that revalidation refused observed no exit, so the run
+		// reports none rather than a status of its own.
+		if r.Exited || r.Exit != 0 || r.Cleanup == port.Complete || slices.Contains(e.Events, "SIGKILL") || slices.Contains(e.Events, "remove") {
 			t.Fatal(r, e.Events)
 		}
 	})
