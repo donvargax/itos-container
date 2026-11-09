@@ -1054,6 +1054,13 @@ items:
       fields (recorded date, last-seen date, and permanent status or the exit item). Its exit is the
       upstream itos fix, so say that. The lesson is measured, not invented. It touches no proof.code
       path and is too small to be its own item.
+
+      The item already edits PLAN.md, README.md and docs/ORCHESTRATING.md to match the charter's
+      milestone two. Its text covers egress first and 'the rest when reached', but its why and title
+      name only egress. Widen it so the milestone-limits sentence 'credentials/accounts, Git over
+      the network... remain outside this milestone' is also replaced by the charter's steps 2 to 4
+      in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
+      otherwise meet two disagreeing authorities, as T-38's did.
   - id: p1-acceptance-static-binary
     title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
     phase: 1
