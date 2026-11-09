@@ -198,6 +198,7 @@ questions:
   - id: q-49
     item: "T-38"
     question: "T-38: should the egress proxy also check the TLS ClientHello (SNI must equal the CONNECT name; missing SNI, non-TLS bytes and ECH refused), still without terminating TLS?"
+    answer: "Yes (coordinator, provisional for the person's review): read the tunnel's first TLS record before forwarding anything; the SNI must equal the CONNECT name; refuse a missing SNI, non-TLS bytes and ECH, with each refusal logged. No key, CA or decryption, so the charter's 'no TLS interception' holds. Disclose HTTP Host fronting inside TLS as a remaining limit. The person's smoke check confirms Codex and Claude Code send SNI without ECH. See T-38-steer.md."
   - id: q-50
     item: "T-38"
     question: "T-38: Docker's embedded resolver can't be removed from a user-defined network; may T-38 replace the contract's 'block embedded Docker DNS' with AC-11's 'no unauthorized resolution path', proven on the real engine by slice-27?"
