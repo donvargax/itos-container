@@ -1423,3 +1423,22 @@ items:
       choice changes the log schema (a terminal record or final count) and the proxy's hardening, so
       the person must decide it before slice-28 writes its copy check, and the drafter must stop for
       it rather than invent a protection.
+  - id: p1-engine-diagnostics-failures
+    title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Job logs return 403 without a token and agents have no gh, so a red engine job shows only
+      'Process completed with exit code 1' and a goroutine dump from `tail -100`. In
+      .github/workflows/ci.yml, make the step print each `--- FAIL` block with its godog step error.
+      Also emit one `::error title=<scenario>` annotation per failed scenario or go-test failure
+      line, so the coordinator can tell an unchanged flake from a new failure on a re-run. This is
+      project-side and does not wait for the itos summary-extractor fix tracked upstream. Cover it
+      in the existing TestEngineDiagnostics, which runs the workflow shell against disposable
+      fixtures. Record in the item that anchors.feature:410 (ANCHORS-09, exit 75, cleanup 409)
+      failed on e2faafd, so the next unchanged re-run can show whether ANCHORS-09 or ANCHORS-10
+      repeat. A repeat on its own would justify a separate item for a possible real race in anchor
+      cleanup. Broken down from p1-engine-suite-under-its-limit-again.
