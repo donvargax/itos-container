@@ -1651,8 +1651,8 @@ items:
   - id: T-47
     title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: slice-29
