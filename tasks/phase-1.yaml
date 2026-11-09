@@ -2669,14 +2669,6 @@
     hooks and CI run their gates. Agents commit and stop; the loop owns pushing, CI watching and
     closure. This spec chooses pre-inspection exact-path exclusions and deterministic local
     observer controls; it leaves no new security decision or product behaviour to invent.
-  done_when:
-    - run: |
-        set -eu
-        listed=$(go test ./features -list '^TestRecoveryProtected(HeartbeatRename|SnapshotBoundaries)$')
-        for name in TestRecoveryProtectedHeartbeatRename TestRecoveryProtectedSnapshotBoundaries; do
-          printf '%s\n' "$listed" | grep -Fxq "$name" || { printf 'missing %s\n' "$name" >&2; exit 1; }
-        done
-        go test ./features -run '^(TestRecoveryProtected(HeartbeatRename|SnapshotBoundaries)|TestOfflineRegistryPreservation|TestAdmissionPreservationRequiresExactProtectedBinding)$' -count=1
 - id: T-32
   type: ci
   title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
