@@ -6,6 +6,9 @@ Acceptance did not settle every security mechanism. The decisions below distingu
 what landed, what the person and coordinator settled, and what still needs specification.
 The egress design added by T-38 is **proposed**, not accepted: the person confirms or
 overturns it, as [the egress proxy record](../decisions/0022-egress-proxy.md) says.
+The credentials design added by T-47 is also **proposed**, not accepted; the person
+confirms or overturns [the credentials record](../decisions/0025-credentials-passed-in.md).
+It defines two token kinds, no Codex delivery, and no permission to use real credentials.
 
 The [charter](../charter.md) selects the milestone from the binding
 [pilot contract](../plans/container-pilot.md); the [plan](../../PLAN.md) records that
@@ -85,6 +88,12 @@ of the worker's other limits. Only its engine package is implemented (T-39, test
 loopback listeners and bound by nothing until slice-27), and none of it is proven on the
 real engine.
 
+The second milestone's credential grants are separately **proposed** in
+[T-47](../decisions/0025-credentials-passed-in.md): per-command read-only binds of staged
+token copies, with the checkout still the only host directory. This exception does not
+change a run without grants. Codex sharing is blocked on the person's answer because
+atomic replacement invalidates the charter's single-file premise; no replacement is chosen.
+
 Work follows ports and in-memory fakes; agents have no Docker socket and real-engine
 scenarios run only in CI. Dependencies need a maintained library, a reason in the owning
 behaviour spec and a pinned version. The one deliberate exception is q-51's: the egress
@@ -137,9 +146,11 @@ flowchart LR
 ```
 
 The controller validates data crossing from the checkout; it must not execute that
-data. The worker cannot access host approval/recovery records, host credentials or
-engine control. The control arrow through the engine is trusted orchestration, not an
-API exposed to the worker. The mount is intentionally writable, so edits return to the
+data. The worker cannot access host approval/recovery records, engine control or host
+credentials beyond its explicitly approved grants in the proposed credential profile.
+Token grants expose staged copies, not the original sources. The control arrow through
+the engine is trusted orchestration, not an API exposed to the worker. The checkout
+mount is intentionally writable, so edits return to the
 checkout. No worker-to-network path exists in the offline run's required target, but the
 accepted milestone limit above permits indirect access through host listeners
 created or swapped into the checkout after inspection.
@@ -149,7 +160,9 @@ host controller. `ITOS_ROOT` does not establish safe checkout identity; `ITOS_CO
 names core configuration, not `itos-container.yaml`. Inheriting host environment at
 dispatch does not authorize forwarding it to the worker.
 
-Accounts, network Git, LAN publishing, Compose services and other platforms are
+Credentials passed in per command are **proposed** by
+[T-47](../decisions/0025-credentials-passed-in.md), for slice-29 through slice-33 and
+T-48. Account management, network Git, LAN publishing, Compose services and other platforms are
 **deferred**, as are the pilot's mitmdump guard and its HTTPS inspection and SSH tunnel
 modes. Egress through an allowlisting proxy is the charter's second-milestone step 1 and is
 **proposed**: [the egress proxy record](../decisions/0022-egress-proxy.md) fixes its design.
@@ -216,7 +229,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/slices/status` | Implemented by slice-11; native proof remains CI-only | Inspect project-owned sessions, original policy identity, controller presence and uncertainty. | Shared session contracts; read-only bounded inspection and safe schema-1 diagnostics. |
 | `internal/slices/stop` | Implemented by slice-11; native proof remains CI-only | Finish cleanup of one registered session, independently of workload success. | Shared session contracts; mutation-time identity checks, per-session locking and durable repeated removal. |
 | `internal/slices/exec` | Deferred | Additional argv only during a live owned foreground session. | Future session contract; cannot extend lifetime or alter frozen permissions. |
-| `internal/engine/policy` | Implemented by slice-1 and slice-5 | Strict offline schema/default/value validation, bounded parsing and typed failures. | Own domain/port, disk and YAML adapters; reusable policy contracts and I/O-free porttest fakes. |
+| `internal/engine/policy` | Implemented by slice-1, slice-5 and slice-25 | Closed schema/default/value validation for policy version 1 (offline) and version 2 (offline or an exact host-name allowlist), bounded parsing and typed failures. | Own domain/port, disk, YAML and IDNA adapters; reusable policy contracts and I/O-free porttest fakes. See [decision 0023](../decisions/0023-policy-version-2-allowlist.md). |
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
 | `internal/engine/readiness` | Implemented prerequisite, extended by slice-20 | Read-only checkout, regular-file inode independence, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
 | `internal/engine/approval` | Implemented through slice-21 | Effective host identity, approval/frozen input, cross-root control-state separation and durable location enrollment. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
@@ -225,6 +238,10 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/engine/egress` | Implemented by T-39, not bound by `cmd` until slice-27; its design is still proposed (see the first paragraph), with no runtime evidence; real-engine proof in slice-27/28 | Our own CONNECT proxy on Go's standard library: CONNECT head parsing, exact name and port 443 decision, address check, ClientHello peek, replay and splice, and one-line JSON refusal records. No TLS interception, library or `net/http`. | Own `domain`, `port` with its `porttest` fake and shared contract, and the adapter `internal/engine/egress/tcp`; imports no other engine. Production code may import `crypto/tls` only in the adapter, held by `egress-tls` and `TestNoInterceptionCode`. `egress-x509` bans production `crypto/x509` imports; `egress-imports` restricts egress's dependencies. `TestNoRelaxingCode` rejects build constraints, platform-specific or ignored files, external settings reads and panic recovery. Fuzz tests cover head parsing and the peek. [Record](../decisions/0022-egress-proxy.md). |
 | `internal/slices/egressproxy` | **Proposed**, slice-27; command package only | The hidden `__egress-proxy` command the proxy container runs: a thin handler over the egress engine's port, with `cmd` binding its adapter. | No domain or port directory of its own; no network I/O in the command. Not a public command. |
 | Session networks and proxy (in `internal/engine/session`) | **Proposed**, T-40 | Create, verify, own and tear down the internal network, the egress network and the proxy container beside the worker, with durable intent before each and no fallback network. | Extends the session ports, fake and Docker adapter; ownership by durable intent, random name and inspected full ID, never labels alone. |
+| Credential requests (in `internal/engine/policy`) | **Proposed**, slice-29; depends on T-47 and slice-25 | Version 3 extends slice-25's version 2 with optional closed credentials entries, exactly `kind` and literal absolute `source`; two token kinds, no Codex kind. | Versions 1/2 retain their meaning; shared pure validation, schema and file-only doctor modes. [T-47](../decisions/0025-credentials-passed-in.md). |
+| Credential source observation (in `internal/engine/readiness`) | **Proposed**, slice-29; state-side mechanism unresolved | Shared descriptor-based metadata checks for doctor, approve and run: no symlinks, trusted ancestors, private owned regular single-link files outside checkout and control state, bounded size and distinct inodes. Exclude source inodes found anywhere in either tree, including mounted descendants, as well as root aliases. | Reuse the bounded checkout metadata scan; incomplete checkout observations refuse. Do not scan the host-wide state tree: slice-29 must settle bounded state-side exclusion independent of other projects' concurrent writes and retained history before implementation or handoff to slice-30, T-48 or slice-31/33. No content read, hash or log; own port and disk adapter beside checkout inspection. Only run later reads the checked inode. |
+| Credential approval (in `internal/engine/approval`) | **Proposed**, slice-30 | Bind sorted `{kind, source, target}` grants, never contents, with `offline-credentials-v1` or `allowlist-credentials-v1`; review scope and exposure; apply q-52's terminal rule. | Reuse slice-26 canonicalization, differences and presentation. No-grant profiles keep their identity; source-content changes do not change approval. |
+| Credential staging (in `internal/engine/session`) | **Proposed**, T-48 | Intent before private `/dev/shm` staging, exact read-only file mounts, verification before start, unlink after the start attempt and owned recovery. | Session ports, I/O-free fake, disk/Docker adapters and shared contract; slice-31/33 consume it. Lost acknowledgement after mount acquisition must retain uncertainty; Codex file delivery waits on question 1. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
 or runtime permission. Doctor composes readiness and approval inspection; readiness
@@ -302,11 +319,18 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | slice-15 — active controller-loss isolation regression | slice-12 and slice-14 | LIFECYCLE-15 retains isolation until explicit stop, using slice-14's independent boundary probes. All eight steps passed at e22aa63; q-32 accepts slice-12's existing behavior as regression coverage. [Evidence and activation checks](../../features/README.md). |
 | T-38 — egress proxy record | Charter step 1 of the second milestone | [The egress proxy record](../decisions/0022-egress-proxy.md) fixes library (none: our own proxy, q-51), topology, delivery, failure closure and refusal log for T-39, T-40 and slices 26 to 28. Documentation only; no runtime evidence. |
 | slice-25 — proposed egress allowlist in policy | None | Exact host-name allowlist in `itos-container.yaml`, validated by doctor without an engine or proxy. Offline stays the default. |
-| slice-26 — proposed approval of the allowlist | slice-25 | Approval binds the allowlist and the network-granting profile; approve presents the handshake guarantee. Who may approve a sandbox that grants network stays with `p3-approval-before-egress`. |
+| slice-26 — proposed approval of the allowlist | slice-25 | Approval binds the allowlist and the network-granting profile; approve presents the handshake guarantee. q-52 requires terminal consent and refuses the fingerprint route for network grants; the older branch spec must take that answer. |
 | T-39 — implemented egress engine | T-38 | `internal/engine/egress`: domain, port, adapter and fake, its three depguard rules and fixtures, and fuzz tests, all driven over loopback listeners without Docker. Nothing binds it until slice-27, and none of it is runtime evidence. |
 | T-40 — proposed session networks and proxy | T-38 | Session ports, fake and Docker adapter gain the two networks and the proxy container, with creation order, teardown and recovery as the record fixes them. |
 | slice-27 — proposed run through the proxy | slice-26, T-39, T-40; the record also names `p1-acceptance-static-binary` | `internal/slices/egressproxy`, the hidden `__egress-proxy` command, the static harness build, and the real-engine scenarios, in CI only, that prove the topology, DNS and address rules. It edits `docs/security.md`. |
 | slice-28 — proposed refusal log, failure stop and cleanup | slice-27 | The streaming writer for `egress-refusals.jsonl`, status and cleanup of the proxy and networks, and the proxy-failure scenarios (AC-17, AC-23 and AC-36), in CI only. |
+| T-47 — proposed credentials decision | Charter step 2 of the second milestone and q-52 | [Record](../decisions/0025-credentials-passed-in.md) for sources, per-command staging, approval, uncertain starts, refusal-log conflict and six questions. Documentation only. |
+| slice-29 — proposed credential policy and inspection | T-47 and slice-25 | Version 3 extends slice-25's version 2; source metadata observation, schema and CLI/config docs. Must settle and prove state-side exclusion independent of unrelated projects' writes/history before downstream handoff; no Codex kind until question 1 is answered. |
+| slice-30 — proposed credential approval | slice-29 and slice-26 | Canonical grants, profiles, review, status and q-52's terminal rule; help and `docs/security.md`. Delivery remains gated. |
+| T-48 — proposed session credential seam | T-47 and slice-29's state-side exclusion decision | Staging and recovery port, fake, adapter and shared contract, including lost start acknowledgement after mount acquisition. Bind-mounted Codex file half waits on question 1. |
+| slice-31 — proposed Claude token delivery | slice-30 and T-48 | CI-only synthetic proof of approved read-only copies, project separation, absence checks and uncertain-start cleanup; refusal-log absence waits on question 6 and logging specs. |
+| slice-32 — blocked Codex sharing | slice-30 and T-48; T-47 question 1 | No Codex kind or delivery until the person answers the atomic-replacement incompatibility and amends the charter as needed. |
+| slice-33 — proposed GitHub token delivery | slice-31 | Reuse staging with a distinct grant; workload exports `GH_TOKEN` from its fixed file. CI-only synthetic proof includes uncertain start and, after question 6, the hostname-marker probe. |
 
 The coordinator accepted the slice-10/13/14 scenario split on 2026-11-06.
 [The offline feature](../../features/offline.feature) is the scenario ownership
@@ -357,7 +381,7 @@ settled milestone choices below replacing its open-choice and setup/state assump
 | Flow | Required success path | Refusal or partial failure; blocking decisions |
 | --- | --- | --- |
 | Doctor | File-only modes retain explicit scope. Ordinary doctor inspects the manifest, checkout, local engine, cached image and current approval. | Reject invalid requests without execution/acquisition/fallback. Missing/changed approval remains inspection-ready with explicit approve guidance. |
-| Approve | Bare approve at a terminal shows effective settings and changes since last approval, then asks y/N. Matching approved settings prompt no more until they change. | No terminal: bare approve refuses and names `--fingerprint <value>` for optional non-interactive approval of those exact settings. No consent or invalid input/readiness means no recording. Slice-4 implements this settled contract. |
+| Approve | Bare approve at a terminal shows effective settings and changes since last approval, then asks y/N. Matching approved settings prompt no more until they change. | Slice-4's fingerprint route remains for offline settings without credentials. q-52 requires terminal consent for network or credential grants: after inspection, any `--fingerprint` refuses with `approve.terminal-required`, exit 1, regardless of its value or existing approval. Bare non-terminal or JSON approval keeps `approve.confirmation-required`, naming only the terminal form for grants. No consent or invalid readiness means no recording. Grant enforcement is proposed in slice-26/27/30. |
 
 Ordinary doctor and approve execute no checkout code, install no hooks, log in
 to no account and pull/build/start no images or sessions. Approval cannot launch work.
@@ -370,8 +394,9 @@ late launch validation refuses start while cleanup retains protected ownership.
 Worker-created hard links within the sole checkout mount do not block recovery.
 Init and lifecycle hooks remain deferred. The person never types a hash in the
 terminal flow. A host agent can approve through the optional flag or a faked terminal:
-approval records **what, not who**, and neither path proves human presence. Slice-4
-must state this in help and security guidance; revisit before egress and credentials.
+approval records **what, not who**, and neither path proves human presence. q-52 has
+answered the egress/credentials revisit: those grants refuse the flag, but the faked
+terminal gap remains. Slice-30 carries the rule and disclosure into help/security wording.
 
 ### Foreground run and its failure paths
 
@@ -736,6 +761,69 @@ and measurements are in [the egress proxy record](../decisions/0022-egress-proxy
 The refusal log is described under Cross-cutting concepts. Offline recovery, status and stop
 keep the rules above; slice-28 extends them to the proxy and the networks.
 
+### Credential run
+
+**Proposed**, under [T-47](../decisions/0025-credentials-passed-in.md), not runtime
+evidence. Slice-31 owns `claude-token` and slice-33 `github-token`, using T-48's shared
+session seam. Codex has no kind or delivery pending question 1. The person's question 5
+must be answered before any real credential is used, including a smoke check.
+
+1. **Validate and freeze grants.** Slice-29 initially admits version 3 only in doctor's
+   file-only modes; ordinary doctor, approve and run refuse it with `policy.version`.
+   Slice-30 admits inspection and approval only after slice-29 specifies and proves
+   the state-side exclusion mechanism; run still refuses unavailable delivery
+   kinds and an allowlist until slice-27, before manifest, engine or host state. Once
+   admitted, reuse readiness's source observation and approval's frozen grants. Check
+   all sources without reading contents: no symlinks, trusted ancestors, outside the
+   checkout/control roots and their descendants by device/inode, private host-UID-owned
+   regular single-link files of 1–65536 bytes, distinct inodes. Compare each checked
+   source against every regular file in the bounded checkout scan, including mounted
+   descendants; an ancestor walk alone misses aliases of subdirectories. Incomplete
+   checkout scans and budget exhaustion refuse. The host-wide protected state tree
+   must not be scanned with those rules: concurrent publication/removal and accumulated
+   unrelated history would break project independence. Slice-29 must settle and prove
+   a bounded state-side exclusion preserving descendant-alias refusals before T-48
+   or delivery slices take this design. Until then only file-only policy parsing is
+   admitted. A failed check prevents staging and create.
+2. **Read and stage.** Only run reopens the checked descriptor to read the current
+   bytes once; short or changed-size reads refuse. Publish the directory name in durable
+   intent before creating `/dev/shm/itos-container-<32 random lowercase hex digits>`.
+   Require tmpfs by `statfs`, directory mode `0700`, host ownership and descriptor
+   validation; an existing name refuses. Create exclusive no-follow files of mode
+   `0400`, copying the exact untrimmed bytes. Host swap remains a limit. No bytes enter
+   records, configuration, Engine API bodies, controller Env or argv.
+3. **Create and verify.** Add only the approved staged read-only binds at
+   `/run/itos-container/credentials/claude-token` and/or
+   `/run/itos-container/credentials/github-token`. Their values are absent from
+   `docker inspect`, though paths are visible. Verify the exact sources, targets and
+   read-only flags alongside the existing checkout volume and `/tmp` tmpfs before
+   start. The worker has private IPC and its own `/dev/shm`; it never sees host staging
+   directories or original token sources. Provisioning failures before any start
+   attempt prevent launch and trigger owned cleanup as needed.
+4. **Start attempt and unlink.** After the controller's start wait and any applicable
+   mount detector return, whatever their answers, attempt to unlink every staged file
+   and remove its directory; record absence only when confirmed. An acquired mount or
+   open reference survives unlink. A lost start acknowledgement after mount acquisition
+   can therefore accompany delayed workload execution with the credential bytes.
+   Neither unlink, a timeout/start error nor restart policy `no` fences that late start
+   or proves that no workload ran. No repeated start or restart is authorized.
+5. **Reconcile and clean up.** An uncertain start retains original protected identity,
+   reconciles the owned full ID under decision 0017's existing budgets and attempts
+   owned termination/removal. An unobserved workload outcome stays unknown. Missing
+   staged paths do not establish worker absence or completed credential cleanup;
+   completion requires both confirmed worker removal and staging removal, alongside
+   all existing owned resources. Lost controller recovery removes staging by intent
+   only after owner/mode/expected-name checks. Unsafe or unavailable observations keep
+   recovery and its exact stop retry. Reboot clearing tmpfs supplies no workload result.
+
+Each later run reads fresh sources; a live worker retains its acquired copy until its
+mount is torn down. Status shows the frozen grants and present/absent/unknown staging
+state during recovery. Workload argv may export the file contents to
+`CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`; automatic harness setup is later scope. T-48's
+fake/adapter contract and slice-31/33's CI cases must cover acquired mounts, missing
+acknowledgements and delayed completion after unlink. Refusal-log absence additionally
+waits on question 6 and its adversarial hostname-marker probe below.
+
 ## Deployment view
 
 The selected slice-17 anchor uses the already trusted native dockerd to perform
@@ -752,11 +840,12 @@ settings require independent runtime probes; inspecting a flag cannot prove enfo
 | Location | Required contents and access | Status or decision boundary |
 | --- | --- | --- |
 | Trusted host | Person, core itos dispatch and extension controller; local engine control available only to trusted orchestration. | Agents receive no socket. Slice-4 specifies effective host UID identity, root refusal and effective UID/GID worker resolution; runtime enforcement remains planned. |
-| Host-owned state outside checkout | Approval records, trusted frozen configuration and recovery records under `$XDG_STATE_HOME/itos-container`, directory mode `0700`. | Worker must not access them. Slice-4 specifies canonical JSON SHA-256, `0600` active records and independent frozen input; slice-8 publishes session snapshots, with recovery in slices 9/11. Slice-21 protects publication with a persistent account-home catalog across selected roots. This state is not a persistent worker volume; mount/recovery enforcement and runtime inaccessibility still need their own proof. |
-| Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host filesystem source, mounted through the descriptor-backed owned volume. Substitution protection requires native proof. |
+| Host-owned state outside checkout | Approval records, trusted frozen configuration and recovery records under `$XDG_STATE_HOME/itos-container`, directory mode `0700`. | Worker must not access them. Slice-4 specifies canonical JSON SHA-256, `0600` active records and independent frozen input; slice-8 publishes session snapshots, with recovery in slices 9/11. Slice-21 protects publication with a persistent account-home catalog across selected roots. This state is not a persistent worker volume; inaccessibility still needs runtime proof. |
+| Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host directory, mounted through the descriptor-backed owned volume; proposed credential grants add staged single-file binds only. Substitution protection requires native proof. |
 | Local engine image store | Approved cached manifest digest, checked for architecture, compatibility and metadata. | The person pulls the manifest's digest and approval binds that content. Control commands inspect, never pull/build/substitute, keeping acquisition a deliberate host operation. Slice-3 owns checks; T-20 owns fixture preparation. |
-| Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces, engine/SSH-agent sockets or host credentials. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Slice-10 still owes runtime proof. |
-| Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its sole nonrecursive bind source. | No persistent worker volumes/caches/profiles, host `/tmp`, extra host bind mount or host-wide chown. A2 narrows broader pilot state to this milestone. |
+| Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces or engine/SSH-agent sockets. **Proposed** grants expose only approved mode-`0400` read-only token files under `/run/itos-container/credentials`, never original sources; private IPC keeps host `/dev/shm` inaccessible. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Offline proof is separate from slice-31/33's still-unproven credential boundary. |
+| Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its sole nonrecursive directory bind source. Proposed credential profiles add read-only binds of staged files, not writable credential volumes. | No persistent worker volumes/caches/profiles, host `/tmp` or host-wide chown. A2's offline limits hold; T-47 names the credential proposal's contract exceptions. |
+| Host `/dev/shm` staging (**proposed**, T-48) | One random host-UID-owned `0700` directory per run; exclusive `0400` token copies, tmpfs verified. Durable intent names it before creation; each worker gets only its own file mounts. | Rootful dockerd in the host mount namespace is assumed. Host swap can persist bytes. Unlink after the start attempt does not revoke acquired mounts; completion needs worker and staging removal, with recovery on uncertainty. |
 | Worker network boundary, offline run | `NetworkMode` `none`, inspected before start; no external network path or published port from the first instruction. | Independent network/DNS probes must prove denial through controller loss. An offline run has no proxy, guard or session network; `NetworkMode` `none` is confined to offline runs. |
 | Session networks, egress run (**proposed**, T-40) | Two owned per-session bridge networks. The internal one has Internal true, IPv6 off and `com.docker.network.bridge.gateway_mode_ipv4=isolated`, so its bridge has no address; the worker joins it alone. The egress one is a plain bridge with IPv6 off and only the proxy on it. | Docker 28.0 or newer, else an unavailable control. Docker's embedded resolver at 127.0.0.11 stays, with no route behind it; AC-11 is the result to prove (q-50, provisional). Nothing is proven until slice-27 runs on the real engine. |
 | Egress proxy container (**proposed**, T-40 and slice-27) | Runs the host's own static Linux amd64 itos-container executable as `__egress-proxy`; that read-only bind mount is its only mount. Both networks, no published port, listening on 3128, forwarding sysctl off. The root filesystem is the inert pinned busybox. Host UID/GID, read-only root, CapDrop ALL, no-new-privileges, pids limit 4096, no restart, no checkout, state volume or socket. | The person pulls the image; commands only inspect it, and approval binds its digest. Platforms other than Linux amd64 cannot run egress this way. The worker cannot reach the executable, Cmd or Env. Refusal records land in the json-file log and, at teardown, in `egress-refusals.jsonl`. |
@@ -805,8 +894,13 @@ direnv-style review-and-y/N interaction and optional exact `--fingerprint <value
 route, superseding q-1's scriptable-only choice. Protected host storage keeps the
 worker from changing approval, but an agent executing on the host can approve by flag
 or faked terminal. Approval records what, not who. Slice-4 owns canonical fields,
-matching/supersession and atomic snapshot details; it must carry this limitation into
-help/security wording and revisit it before egress and credentials.
+matching/supersession and atomic snapshot details. q-52 has revisited A1: a network or
+credential grant needs terminal review and consent, and `--fingerprint` is refused with
+`approve.terminal-required` after inspection, even for an already-approved candidate.
+Bare non-terminal/JSON approval keeps `approve.confirmation-required`, with only the
+terminal fix for grants. A faked terminal remains possible; slice-30 updates help and
+`docs/security.md`. Proposed credential approvals bind kinds, source paths and fixed
+targets, never contents, and carry forward when delivery lands without changing grants.
 [Slice-4's specification](../../features/approval.feature) now fixes the canonical
 field set, single active generation, safe host paths and atomic publication, and
 the independently owned frozen input consumed by slice-8. These are implemented;
@@ -824,6 +918,27 @@ environment, workload output and synthetic sensitive markers. Report safe typed
 problems and recovery identity. Trusted effective snapshots are distinct from recovery
 metadata; deliberate foreground streams are distinct from controller logs. There is
 no claim to redact arbitrary workload output or permission to copy it into recovery.
+
+For proposed credential delivery, the controller copies bytes only from a checked source
+descriptor into private staging. Never put them in policy, approval, snapshot, intent or
+recovery records, labels, create configuration, Engine API bodies, controller Env/argv,
+diagnostics, error text or logs, or files under the checkout/control root. Source problems
+name rule, location and path, never contents or wrapped errors. Overwriting the one
+read/write buffer is hygiene, not proof Go retained no copy. Workload output and traffic
+remain unredacted, including sends to listed hosts. The persisted-log exception below
+must not be hidden by this provisioning rule.
+
+**Credentials (proposed).** Version 3 requests `claude-token` and `github-token` by literal
+absolute host paths. The two profiles `offline-credentials-v1` and
+`allowlist-credentials-v1` bind grants sorted by kind, with fixed in-worker paths and no
+contents; profiles without grants retain their identity. Readiness observes source
+metadata without reading bytes. Only run reads from the checked inode, staging a fresh
+copy for each command; sources are never written. Codex 0.167.0 replaces `auth.json` by
+rename after commit `582a8812e023b08cbf10b4603ac41644b8d99261`, conflicting with the charter's
+single-file bind: replacement hits `EBUSY`, and a host replacement leaves the worker on
+the old inode. `auth.lock` is opened and locked without replacement. These source-based
+findings are not runtime evidence. No Codex kind/delivery is defined pending question 1
+in [T-47](../decisions/0025-credentials-passed-in.md); real use waits on question 5.
 
 **Bounded operations.** Calls have 10 s, startup 120 s and teardown 30 s. Retries and
 progress cannot reset totals, so a stalled daemon cannot hold a transition indefinitely.
@@ -867,6 +982,18 @@ in it; approve, status and `docs/security.md` say so (slice-26 and slice-27), an
 that gap is an open decision for the person. The proxy stops after 20,000 records. Retention across sessions is open
 (`p3-session-state-retention`). See [the record](../decisions/0022-egress-proxy.md).
 
+T-47 identifies a separate **unresolved persisted-log conflict** with AC-36: an unlisted
+CONNECT hostname containing credential bytes as a valid label passes the target filter
+and is logged verbatim to proxy stdout, dockerd's json-file and the protected-state copy.
+Omitting userinfo, paths, queries and headers does not close it. The required adversarial
+hostname-marker probe uses a fresh `itos-synthetic-credential-` marker plus 32 random
+lowercase hex digits as that label and searches all three destinations, including both
+persisted copies, with positive controls. It must fail absence under decision 0022 as
+written. Question 6 asks the person about representation or an explicit guarantee revision;
+T-39 and slice-28 then reconcile logging specs, and slice-31/33 prove the integrated probe.
+Do not omit it or count the expected leak as absence evidence. No credential-absence
+promise for refusal logs or AC-36 closure exists before that answer and proof.
+
 **Dependencies and platforms.** Owning behaviour specs choose maintained libraries,
 record reasons and pin versions before adapters are implemented. Policy's v4 selection
 and tooling's v3 pin are settled; manifest and Docker-client choices belong to slices
@@ -890,13 +1017,14 @@ runtime scenarios remain CI-only.
 | [T-11 lifecycle](../plans/offline-run-lifecycle.md) | Recorded interfaces and future cases, narrowed by later decisions | Preserve argv/JSON, outcome precedence and recovery obligations. No hooks or persistent worker state this milestone; settled choices replace the corresponding open questions. |
 | Policy/manifest/readiness/approval/session decomposition | Accepted current design hypothesis | Responsibility names and dependencies guide implementation; remaining exact contracts still need owning specs. |
 | [slice-1 and slice-5](../../tasks/work-items.yaml) | Implemented | Strict policy validation and parser-wide structural bounds; v4 policy parser, independent v3 tooling. |
-| A1, revised [q-2](../../tasks/asks.yaml) | Person's settled approval answer; replaces q-1's interaction choice | Bare terminal approve displays effective settings/differences then y/N; no prompt again until settings change and no hash typing. Bare non-terminal approve refuses with the optional exact-fingerprint route. Canonical JSON SHA-256, protected host state, and the host-agent caveat remain. Slice-4 builds it; revisit before egress/credentials. |
+| A1, revised [q-2 and q-52](../../tasks/asks.yaml) | Person's settled approval answers; q-52 revisits A1 for grants | Bare terminal approve displays effective settings/differences then y/N; no prompt again until settings change and no hash typing. The optional exact-fingerprint route is confined to offline settings without credentials; network or credential grants require terminal consent. Canonical JSON SHA-256, protected host state and the faked-terminal caveat remain. Grant enforcement belongs to slice-26/27/30. |
 | A2 | Person's settled milestone state choice | Checkout edits survive; ephemeral tmpfs, no persistent worker volumes/caches/profiles. Host approval/snapshot/recovery state remains separate. Init and lifecycle hooks are deferred. |
 | A3 | Person's settled controller-loss choice | Leave worker isolated until stop; status identifies lost-controller sessions as candidates. No watchdog, immediate cleanup, restart or invented child exit. |
 | A4 | Person's settled resource choice | Pids limit 4096, no memory or CPU quota claim; distinct from parser and CI budgets. |
 | Effective UID and host UID/GID | Settled loop choice; specified in slice-4, consumed by slices 8/10 | Refuse root; resolve omissions to effective host UID, override image user and require manifest equality without chown. [Allocation decision](../decisions/0003-approval-identity-and-frozen-input.md) supersedes slices 3/8 as resolver owners. |
 | Image acquisition and offline boundary | Settled loop choice; T-20 and slices 3/4/10 | Person pulls manifest digest; commands inspect cached content and approval binds it. NetworkMode none is inspected before start and must be proven by network/DNS probes from first instruction through loss, without a guard/proxy/session network in an offline run. |
-| [Egress proxy record (T-38)](../decisions/0022-egress-proxy.md) | **Proposed**; rests on q-51 (the person: our own proxy on the standard library) and q-49 (taken up by q-51 and the charter), with q-50 still provisional for the person's review. Its topology, delivery and contract readings are its own decisions, for the person to confirm or overturn | Fixes the proxy's flow, parsing and address rule, the ClientHello check, the two networks, delivery as the host's own executable through `__egress-proxy`, failure closure, teardown and the refusal log. Supersedes the contract's mitmdump, inspection-per-destination, blocking-experiment and embedded-DNS wording, which the record lists. Settles no approver for a sandbox that grants network (`p3-approval-before-egress`). |
+| [Egress proxy record (T-38)](../decisions/0022-egress-proxy.md) | **Proposed**; rests on q-51 (the person: our own proxy on the standard library) and q-49 (taken up by q-51 and the charter), with q-50 still provisional for the person's review. Its topology, delivery and contract readings are its own decisions, for the person to confirm or overturn | Fixes the proxy's flow, parsing and address rule, the ClientHello check, the two networks, delivery as the host's own executable through `__egress-proxy`, failure closure, teardown and the refusal log. Supersedes the contract's mitmdump, inspection-per-destination, blocking-experiment and embedded-DNS wording, which the record lists. q-52 subsequently settles terminal-only consent for network grants; T-47 leaves the credential-bearing hostname conflict with AC-36 open. |
+| [Credentials record (T-47)](../decisions/0025-credentials-passed-in.md) | **Proposed**, for the person to confirm or overturn; q-52's approval rule is settled | Version 3 token grants, checked sources, per-command staged read-only binds, credential profiles, redaction and honest uncertain-start recovery. No Codex kind or replacement delivery is chosen. Questions 1–6 retain charter, lifecycle, scope, real-use and logging decisions; no real credentials or runtime support claim. |
 | Durable create intent | Settled loop choice; slice-9 | fsync before unstarted create; reconcile lost response by trusted record plus random name, then record concrete identity before execution. Close the untracked window; names/labels alone confer no authority. |
 | Budgets and signal escalation | Settled loop choice; slice-12 | Calls 10 s, startup 120 s, teardown 30 s without resetting totals; forward once, 10 s grace, SIGKILL, observed exit wins. Bound controller transitions without imposing workload lifetime. |
 | Recovery placement and serialization | Settled loop choice, implemented by slice-11 | [Public session recovery](../decisions/0010-public-session-recovery.md) specifies 32-byte random IDs, strict referenced records, separate controller/operation descriptor locks, bounded observation and durable cleanup. Native support still requires CI evidence. |
@@ -927,6 +1055,8 @@ The table maps required evidence to the current gates and the work still absent.
 | Durable ownership, bounded cleanup and independent projects | T-11 write-failure, uncertain-create, cancellation, repeated/foreign stop and two-project cases; AC-06/22/23/28 offline portions. | Settled intent/recovery/budget/signal choices need slice-9/11/12 implementation and proof; remaining details stay with those specs. |
 | Safe diagnostics and honest outcomes | Synthetic marker exclusion and unknown/zero/nonzero outcome cases; AC-22/36 offline portions, with foreground streams captured separately. | No controller/recovery implementation; no credential-scan claim. |
 | Egress through the proxy (**proposed**) | AC-09 to AC-14, AC-16 to AC-18, AC-23 and AC-36, owned by slice-27 and slice-28 with the real-engine cases in CI only; T-39's loopback, contract and fuzz tests for the proxy itself. Fake endpoints and positive controls pair every denied probe. | **Unproven.** No scenario, engine run or support claim exists; AC-15, AC-19 and AC-20 (inspection and SSH tunnel) are deferred. AC-11 on the embedded resolver must pass on the real engine or the topology reopens. |
+| Approved per-command credentials (**proposed**) | AC-29 approved-material-only, source-modification probes and refusal of sources aliasing checkout or protected-state descendants through other mounts; AC-28/29 project independence with concurrent state publication/removal and more than 100,000 unrelated retained entries; AC-31's HTTPS/API half; AC-36 raw/base64 marker searches over inspect, API recorder, state, diagnostics, checkout and logs. Slice-29 owns source-observation cases; slice-31 and slice-33 own CI-only real-engine cases using synthetic sources and positive controls. | **Unproven.** State-side exclusion needs slice-29's design and evidence before grant admission or delivery handoff. AC-36's adversarial hostname-marker probe must fail with today's verbatim target log; it waits on question 6 and T-39/slice-28's logging specs before an absence claim. AC-30 and SSH remain deferred; real use waits on question 5. |
+| Credential mounts through uncertain start (**proposed**) | AC-22/23 and LIFECYCLE-03/07 extended by T-48's fake/adapter contract and slice-31/33's CI cases: acquired mount, lost start acknowledgement, delayed completion after unlink, original-ID reconciliation, no repeated start and bounded cleanup. | **Unproven.** Require observed outcome or explicit uncertainty; completion confirms worker and staging removal. Missing paths or acknowledgements cannot prove no workload ran. Failed cleanup retains recovery and exact stop retry. |
 | Package dependency boundaries | Depguard and structural `architecture-check`; compile-first [fixtures](../../tools/testdata/architecture) for enforcement-input changes. | Implemented T-14 gates, not isolation proof. Ordinary code takes the cheap structural check. |
 | Domain correctness and contract fidelity | I/O-free fakes and shared contracts against fakes/adapters; unit/property tests and [per-domain coverage](../../tools/bin/domain-coverage), 80% per domain including nested domains. | Count and policy/doctor evidence exists. Product adapters still need their own tests; porttest fakes never do I/O. |
 | Docker-client adapter mapping and failures without Docker | Slice-3's HTTP Engine API fixture, controlled responses/errors and transport failures, tested beside the real adapter; shared contracts wherever applicable. | Required test support, not a product endpoint or domain fake. Needed for engine-disabled ordinary CI coverage/mutation; not runtime enforcement proof. |
@@ -1027,15 +1157,20 @@ mechanism. Deferred categories remain outside this milestone.
 | --- | --- | --- |
 | Manifest syntax/library, exact supported fields, reserved environment and metadata treatment; separate parsing budgets | slice-2 and slice-6 | Full manifest validation and approval input. No lifecycle hooks run; hidden metadata must not add commands or permissions. Policy's parser/limits are already settled. |
 | Safe checkout/local-engine identity, symlinks and substitution details | slice-3, consumed by slice-4/8/11 | Readiness, approval binding, mount source and ownership checks. Effective UID with root refusal is settled; basenames or dispatch roots alone cannot identify a project. |
-| Approval implementation and session snapshot publication evidence | slice-4, then slice-8 | Canonical fields, matching/supersession, safe state and atomic frozen-input selection are implemented and covered by the [local scenarios](../../features/approval.feature). Slice-8 adds durable immutable publication, refusal ordering, fresh per-invocation inspection and fault/reuse contracts in [run scenarios](../../features/run.feature). Slice-10 connects the frozen handoff to owned foreground execution; runtime evidence remains CI-only. Approval cannot attest human presence; revisit before egress/credentials. |
+| Approval implementation and session snapshot publication evidence | slice-4, then slice-8 | Canonical fields, matching/supersession, safe state and atomic frozen-input selection are implemented and covered by the [local scenarios](../../features/approval.feature). Slice-8 adds durable immutable publication, refusal ordering, fresh per-invocation inspection and fault/reuse contracts in [run scenarios](../../features/run.feature). Slice-10 connects the frozen handoff to owned foreground execution; runtime evidence remains CI-only. Approval cannot attest human presence; q-52 settles terminal consent for grants while preserving the faked-terminal disclosure. |
 | Concrete fixture image digest/provenance and image compatibility/metadata checks | T-20 and slice-3, consumed by slice-4/10 | Prepared images and cached-image preflight. Person-operated digest acquisition, no pull/build/substitution by commands, and approval binding are settled. |
 | Exact temporary-location mapping and independent enforcement probes | slice-14, consuming slice-2/3/8/10 | Prove host UID/GID, checkout-only host mount, read-only root, tmpfs, pids 4096 and NetworkMode none. No persistent worker state, memory/CPU quota claim, proxy or new network topology. |
 | Intent/resource record schema and uncertain-create protocol details | slice-9 | Implement fsynced pre-create intent, unstarted create and reconciliation by trusted record plus random name. Concrete identity precedes execution; labels/names alone cannot authorize cleanup. |
 | Recovery totals, retry accounting, stream backpressure and remaining cancellation/result mappings | slice-11/12 | Bounded recovery and honest outcomes. Calls/startup/teardown 10/120/30 s and once-forwarded signal, 10 s grace, SIGKILL are settled; observed exit wins. No workload lifetime limit or new signal code selected here. |
 | Egress topology, delivery and fail-closed handling | Proposed in [the egress proxy record](../decisions/0022-egress-proxy.md); the person confirms or overturns it, and slice-27 and slice-28 prove it on the real engine | The egress profile only; not a reason to add a proxy or session network to an offline run. Unproven until those slices pass in CI. |
-| Who may approve a sandbox that grants network or credentials | `p3-approval-before-egress` | The record settles no approver. Approval still records what, not who. |
 | Passthrough handshake guarantee: the record settles the proxy's ClientHello check; whether Codex and Claude Code send SNI without ECH is not yet known | The person's smoke check; slice-26 and slice-27 disclose the limit in approve, status and `docs/security.md` | Real-harness egress. TLS interception, inspection and SSH tunnel modes stay deferred, and if interception is ever wanted the proxy first moves to a repository of its own. |
-| Minimal auth provisioning/refresh, account management, callbacks, revocation/deletion and CA/SSH-key rotation | Person through later credential lifecycle specs and explicit live-account consent — deferred | Accounts, network Git and credential-bearing work; no generic host shell/HTTP bridge. |
+| Credential source exclusion from protected-state descendants without scanning the host-wide state tree | Slice-29 must update T-47's decision and this view with a bounded mechanism, race argument and evidence preserving AC-28/29 | Credential admission in doctor/approve/run and handoff to slice-30, T-48 and slice-31/33. Concurrent writes and unrelated retained history must not cause refusal; descendant aliases must still be refused. File-only parsing can proceed. |
+| T-47 question 1: how Codex shares a login after atomic replacement of `auth.json` | Person through `itos decision`; only the person amends the charter | Slice-32, T-48's bind-mounted-file half and any Codex kind. Options remain unselected; `auth.lock` alone keeps the single-file shape. |
+| T-47 question 2: refresh and revocation ownership | Person through `itos decision` | Guarantees beyond fresh per-run token copies and provider revocation. A removed grant needs new approval for the next run; a live worker retains its copy. Neither token kind refreshes. |
+| T-47 question 3: deletion and account management | Person through `itos decision` | Source deletion/rotation and account/profile commands; no current command manages originals. Only staged copies are owned here. |
+| T-47 question 4: GitHub scope and expiry | Person through `itos decision` | Whether to require a fine-grained repository-limited token or expiry. Delivery checks no provider scope and makes no GitHub call. |
+| T-47 question 5: does the record meet the contract's prerequisites before real credentials are used? | Person through `itos decision` | Every real-credential use, including a person's smoke check; synthetic scenarios need none. CA/SSH-key lifecycle remains deferred. |
+| T-47 question 6: credential-bearing refusal hostnames | Person through `itos decision`, then T-39/slice-28 logging specs and slice-31/33 integrated proof | AC-36 hostname-marker probe and credential-bearing egress acceptance. Current verbatim targets leak markers into both persisted logs; neither sanitization nor a weaker guarantee is selected. |
 | Pinned client/tool versions, download destinations, redirect chains and TLS compatibility | Person through later worker/download specs — deferred | Online dependency/tool workflows; installer metadata cannot grant destinations. |
 | Failed Actions-log redirects: narrow destination approval or reviewed run/artifact-specific retrieval | Person through later CI-log retrieval spec — deferred | Online failed-CI inspection; generic host fetching remains excluded. |
 | Streaming/client performance budgets and measurements | Person through later compatibility/performance experiments — deferred | Online performance claims; no presumed proxy language advantage or numerical target. Offline settled budgets are distinct. |
@@ -1049,6 +1184,12 @@ loss, and confusing unavailable observations with successful work or cleanup. Th
 accepted shared ownership of contracts addresses decomposition; only settled specs,
 tests and runtime evidence can establish the required behaviour.
 
+q-52 has settled who may approve network or credential grants: the person at a terminal,
+with `--fingerprint` refused. This is not an open design choice; its implementation and
+proof remain with slice-26/27/30, and an unsandboxed host agent can still fake a terminal.
+The six credential questions above are detailed in
+[T-47](../decisions/0025-credentials-passed-in.md). None permits silent contract weakening.
+
 ## Glossary
 
 | Term | Meaning here |
@@ -1059,7 +1200,7 @@ tests and runtime evidence can establish the required behaviour.
 | Shared engine package | A reusable domain/port/adapter responsibility under `internal/engine/<name>`; policy exists, other engines remain planned. It is not a container runtime. |
 | Container engine | The selected trusted local runtime controlling actual images and resources; native Docker is the initial target. |
 | Request | Untrusted checkout policy or manifest data. Valid syntax/effective values do not constitute consent. |
-| Approval | Explicit authorization bound to reviewed effective settings and trusted identity, outside the checkout. Terminal y/N or optional exact fingerprint records what, not who; a host agent can approve too. |
+| Approval | Explicit authorization bound to reviewed effective settings and trusted identity, outside the checkout. Terminal y/N records what, not who; a host agent can fake it. Under q-52, the optional exact fingerprint is confined to offline settings without credential grants. |
 | Frozen configuration | Trusted effective settings used for one session, unaffected by later request edits or approval. Exact representation belongs to slice-4. |
 | Recovery metadata | Protected ownership, lifecycle/cleanup and uncertainty information sufficient for later inspection/removal; excludes raw argv/environment/output. Distinct from frozen configuration. |
 | Checkout identity | The safely resolved checkout and its relevant identity, not a folder basename or unchecked path. Rules remain open. |
