@@ -295,7 +295,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # PRRT_kwDOVkB0ws61IKmj: a checkout below a protected tree can expose its
   # approvals collection. Each first Then fails on the old successful inspection
   # or publication, or on worker authority granted before/after preflight.
-  @slice-21 @ID-CONTROL-19 @local-engine-fixture @wip
+  @slice-21 @ID-CONTROL-19 @local-engine-fixture
   Scenario Outline: A checkout inside protected state cannot be inspected or approved
     Given a control-state fixture with P checkout at the approvals collection of the "<location>" managed tree
     When P inspects that selection with "<command>" using valid approval inputs
@@ -311,7 +311,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | enrolled | doctor  |
       | enrolled | approve |
 
-  @slice-21 @ID-CONTROL-20 @local-engine-fixture @wip
+  @slice-21 @ID-CONTROL-20 @local-engine-fixture
   Scenario Outline: Retained control state blocks a checkout nested inside it at admission
     Given a control-state fixture with P approval "absent" and managed location "above W root" relative to W on "distinct daemons"
     When P publishes approval before W admission using the "<schedule>" schedule

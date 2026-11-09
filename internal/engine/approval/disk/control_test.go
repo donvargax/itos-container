@@ -172,6 +172,7 @@ func TestControlNamespaceContract(t *testing.T) {
 				porttest.ControlCollectionContract(t, enrolled, c, at, snapshot)
 			}
 			porttest.ControlNamespaceContract(t, fixed, c, at, snapshot)
+			porttest.ControlNestedCheckoutContract(t, []string{fixed, enrolled}, c, control, snapshot)
 		})
 	}
 }

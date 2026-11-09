@@ -409,3 +409,51 @@ checks pass, with no failing tests. Configured gates run through the final fix
 commit's hooks. T-32's settled timeout change is already an ancestor of this
 branch. No real engine, real state folder or local mutation proof is used;
 push and fresh changed-code CI proof remain with the coordinator.
+
+## Checkouts nested inside protected state (PRRT_kwDOVkB0ws61IKmj)
+
+Test commit `980eeb1e2b1a172e6434b8a98fb1661881455c47` adds pending CONTROL-19
+and CONTROL-20 with their steps. CONTROL-19 roots the checkout at the approvals
+collection of the selected, fixed and previously enrolled managed trees and
+inspects it with doctor or exact-fingerprint approve. CONTROL-20 roots the worker
+at the approvals collection of another project's selected tree, then publishes
+that project's approval before a fresh run or after run preflight. Every command
+uses disposable account and state trees and recording engine fixtures; neither
+scenario is `@engine`, so no CI red run is needed.
+
+With only `@wip` removed and the production change reverted, all eight examples
+fail at the first Then. The eight scenarios run 32 steps: 16 setup/action steps
+pass, 8 assertions fail and 8 later steps are skipped. There are no undefined
+steps or setup failures.
+
+| IDs | Examples | First assertion failure |
+| --- | ---: | --- |
+| CONTROL-19 | 6 | `itos-container exited 0, not 1`: doctor reported a missing approval and approve published a matching record for a checkout inside the protected tree. |
+| CONTROL-20 | 2 | The worker's preflight did not exit 1 (it ran until the fixture ended it with exit -1): admission was granted although the publisher's tree contains the worker, both on a fresh run and after preflight. |
+
+```sh
+go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-(19|20)$'
+```
+
+The shared disk and fake contracts also fail before implementation: nested
+candidates are accepted against retained and pending locations, and against the
+fixed and selected trees, on reads and direct writes.
+
+The common transaction and the store's location selection now refuse a checkout
+that equals, contains or lies beneath a protected tree, using one symmetric
+whole-component comparison. The fake implements the same rule. All 20 control
+scenarios pass locally, including CONTROL-19 and CONTROL-20 and the neighboring
+CONTROL-15 through CONTROL-18, and the unit contracts pass with race detection on
+the changed disk, porttest and domain packages.
+
+```sh
+go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-'
+go test -race ./internal/engine/approval/disk ./internal/engine/approval/port/porttest ./internal/engine/approval/domain -count=1
+```
+
+No real engine, real state folder or local mutation proof is used. The full
+feature suite is run without race detection; push and fresh changed-code CI proof
+remain with the coordinator.
+
+The full `go test ./features -count=1 -json` package passes in 284.165 seconds
+without race detection: 2,426 tests and subtests pass, with none failing.

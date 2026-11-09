@@ -643,9 +643,12 @@ Doctor inspects without writes, taking a shared lock when present; approve
 and validated run enrollment complete durable self-binding and selected-location
 claims before ordinary state writes. Existing reservation completion semantics are
 shared with separation checks, without operation locks or engine calls. The
-transaction also refuses a candidate checkout containing any retained managed
-location, including pending claims without a directory. Both read inspection and
-admission enforce this by whole path components; admission rechecks under exclusion
+transaction also refuses a candidate checkout that equals, contains or lies
+beneath any retained managed location or the fixed or selected tree, including
+pending claims without a directory: a checkout below a managed tree is mounted
+read/write and reaches its approvals collection exactly as one above it does. Both
+read inspection and admission enforce this by whole path components in both
+directions; admission rechecks under exclusion
 after preflight, preventing a later worker from exposing an earlier publication. The
 [control-state decision](../decisions/0021-control-state-publication.md) defines
 bootstrap/retry ordering and the legacy discovery limit. Broader mount enforcement,

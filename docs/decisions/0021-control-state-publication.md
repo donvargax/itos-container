@@ -101,6 +101,18 @@ enrollment. Preserve exact path-component boundaries: sessions-more and
 admission-more siblings remain usable. Reads and direct writes share the rule,
 leave existing records unchanged, and do not repair previously corrupted state.
 
+Review PRRT_kwDOVkB0ws61IKmj makes the candidate-checkout comparison symmetric.
+The earlier rule compared a managed location only with a checkout above it, so a
+checkout rooted at a managed tree's approvals collection was accepted and then
+mounted read/write under the host UID, exposing the records of every project on
+the account. Doctor, approve and run admission now refuse state.path when the
+checkout equals, contains or lies beneath the fixed tree, the selected tree or any
+cataloged location, including pending claims. The selected tree is refused before
+any bootstrap or claim; enrolled locations repeat the check under common exclusion
+after preflight, so a later enrollment by another project still blocks an already
+prepared nested worker. Whole-component boundaries keep textual-prefix siblings
+usable. Refusal creates no binding, tree entry, catalog change or launch authority.
+
 Before creating an absent selected tree, durably publish its pending claim; retain
 that protection after interruption and complete its root identity before success.
 Completed missing, replaced, malformed, unsafe or unreadable bindings refuse.

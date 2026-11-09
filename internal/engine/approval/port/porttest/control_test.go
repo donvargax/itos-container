@@ -67,6 +67,7 @@ func TestControlNamespaceContract(t *testing.T) {
 				ControlCollectionContract(t, control.Selected, candidate, at, state.Snapshot)
 			}
 			ControlNamespaceContract(t, control.Fixed, candidate, at, state.Snapshot)
+			ControlNestedCheckoutContract(t, []string{control.Fixed, control.Selected}, candidate, control, state.Snapshot)
 		})
 	}
 }

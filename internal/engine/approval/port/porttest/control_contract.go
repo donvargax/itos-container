@@ -135,7 +135,10 @@ func ControlCandidateContract(t Reporter, control port.Control, candidate port.C
 	}{
 		{location, "state.path"},
 		{parent, "state.path"},
+		{location + "/approvals", "state.path"}, // nested checkouts mount the records
+		{location + "/approvals/nested/checkout", "state.path"},
 		{location[:len(location)-1], ""}, // textual prefix, not a path component
+		{location + "-more/approvals", ""},
 		{parent + "-more/itos-container", ""},
 		{parent + "/other/itos-container", ""}, // same basename, disjoint tree
 	} {

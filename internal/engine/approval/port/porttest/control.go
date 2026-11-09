@@ -85,7 +85,9 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	exposed := func(location, root string) bool {
 		return location == root || strings.HasPrefix(location, strings.TrimRight(root, "/")+"/")
 	}
-	if exposed(s.Fixed, c.Root) || exposed(s.Selected, c.Root) {
+	// A checkout reaches a protected tree from above or from beneath it.
+	overlaps := func(location string) bool { return exposed(location, c.Root) || exposed(c.Root, location) }
+	if overlaps(s.Fixed) || overlaps(s.Selected) {
 		return nil, "state.path"
 	}
 	reserved := func(root string) bool {
@@ -95,7 +97,7 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 		return nil, "state.path"
 	}
 	for location := range s.State.Bound {
-		if exposed(location, c.Root) || reserved(location) {
+		if overlaps(location) || reserved(location) {
 			return nil, "state.path"
 		}
 	}

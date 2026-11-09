@@ -110,7 +110,7 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 	}
 	selected = filepath.Dir(filepath.Dir(selected))
 	fixed := filepath.Join(home, ".local", "state", "itos-container")
-	if domain.Exposed(fixed, c.Root) {
+	if domain.Overlaps(fixed, c.Root) {
 		return nil, "state.path"
 	}
 	// Metadata cannot also contain an ordinary selected state tree. Refuse before
@@ -270,7 +270,7 @@ func (t *controlTransaction) inspect(ctx context.Context, reservations port.Rese
 			continue
 		}
 		seen[path] = true
-		if domain.Exposed(path, t.candidate.Root) || inReservationCollection(t.selected, path) {
+		if domain.Overlaps(path, t.candidate.Root) || inReservationCollection(t.selected, path) {
 			return "state.path"
 		}
 		end, depth := path, 1

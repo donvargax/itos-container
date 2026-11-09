@@ -61,3 +61,40 @@ func ControlCollectionContract(t Reporter, root string, candidate port.Candidate
 		}
 	}
 }
+
+// ControlNestedCheckoutContract refuses a checkout rooted below a protected
+// tree on reads and direct writes, as it refuses one above it, without changing
+// state. Whole-component siblings stay usable for independent checkouts.
+func ControlNestedCheckoutContract(t Reporter, trees []string, candidate port.Candidate, control port.Control, snapshot func() string) {
+	t.Helper()
+	for _, tree := range trees {
+		for _, root := range []string{tree + "/approvals", tree + "/approvals/nested/checkout", tree + "/other"} {
+			for _, write := range []bool{false, true} {
+				candidate.Root = root
+				before := snapshot()
+				tx, failure := control.Begin(context.Background(), candidate, write)
+				if tx != nil {
+					tx.Close()
+				}
+				if failure != "state.path" || tx != nil {
+					t.Errorf("checkout %q write=%t: %s, want state.path", root, write, failure)
+				}
+				if before != snapshot() {
+					t.Errorf("checkout %q write=%t changed state", root, write)
+				}
+			}
+		}
+	}
+	for _, tree := range trees {
+		candidate.Root = tree + "-more/approvals"
+		for _, write := range []bool{false, true} {
+			tx, failure := control.Begin(context.Background(), candidate, write)
+			if tx != nil {
+				tx.Close()
+			}
+			if failure != "" || tx == nil {
+				t.Errorf("sibling checkout %q write=%t: %s", candidate.Root, write, failure)
+			}
+		}
+	}
+}

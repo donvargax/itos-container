@@ -107,13 +107,19 @@ func (s Store) locationAt(c port.Candidate, collection string) (string, port.Fai
 		return "", "state.location"
 	}
 	managed := filepath.Join(state, "itos-container")
-	if managed == c.Root || strings.HasPrefix(managed, strings.TrimRight(c.Root, string(filepath.Separator))+string(filepath.Separator)) {
+	if within(managed, c.Root) || within(c.Root, managed) {
 		return "", "state.path"
 	}
 	if len(c.Project) != 64 || strings.Trim(c.Project, "0123456789abcdef") != "" {
 		return "", "state.invalid"
 	}
 	return filepath.Join(managed, collection, c.Project), ""
+}
+
+// within reports whether path is root or lies below it, by whole components.
+func within(path, root string) bool {
+	separator := string(filepath.Separator)
+	return path == root || strings.HasPrefix(path, strings.TrimRight(root, separator)+separator)
 }
 
 func (s Store) pin(c port.Candidate, create bool) (*pin, port.Failure) {
