@@ -59,8 +59,9 @@ findings are inputs, not evidence.
    internal network, so the worker has no direct route out. It allows CONNECT to listed
    host names on port 443 only, with no TLS interception, matching the name the client gave
    (never a reverse-DNS lookup of an IP), and logs every refusal. The allowlist is part of
-   the approved settings. Choose the proxy in the spec (squid worked in the spike; a small
-   maintained Go CONNECT proxy is the alternative).
+   the approved settings. The proxy is a small, maintained Go CONNECT proxy, chosen in the
+   spec, not squid (the person, 2026-11-09). TLS interception may come later; if it does,
+   the proxy first moves to a repository and project of its own.
 2. **Credentials passed in, never injected, never in the checkout:** per command, so they
    never appear in the container's configuration or `docker inspect`. Claude's long-lived
    token from a host file the person keeps. Codex shares the host's own login: `auth.json`
