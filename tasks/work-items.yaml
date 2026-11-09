@@ -307,6 +307,14 @@ items:
       commit. Capture a failure first.
 
       From arc42's review: go.mod is an enforcement input, so slices 2 and 3 hit this.
+
+      That item already holds the problem that the whole fixture matrix is slow and can fail under
+      load. Add this measurement: T-39's 24 probes ran in under 10 s with a hand-built checker and
+      ARCHITECTURE_CHECKER set by hand, against 124 s for the whole matrix. A filter, or a split of
+      the matrix, is a candidate remedy once that item has captured a failure. Do not add a flag to
+      the gate tool on its own: touching tools/architecture/check is an enforcement-input change
+      that triggers the full matrix, and agents do not run the gate by hand. It is not worth a
+      separate item.
   - id: slice-5
     title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
     phase: 1
@@ -1229,6 +1237,13 @@ items:
       non-gating: it sits beside, not in, the required job. The project has so far written "no
       nightly" (the T-37 and mutation-proof items); that was about the gating mutation proof, and
       this item is the exploring tier. The person should confirm that reading when reviewing it.
+
+      Add `go test -race ./internal/engine/egress/...` to the same scheduled, non-gating job. The
+      item already covers what T-39's one-off checks leave unrepeated, and it needs a schedule
+      trigger that ci.yml lacks. The egress adapter's concurrency faces a hostile client, like the
+      parser does. ci.yml has no race run, so after T-39 closes nothing runs the race detector
+      there. Run it over the egress package only, never over ./features (the 22 GB incident of
+      2026-11-08).
   - id: p2-schema-conforms-to-parser
     title: A check ties each published policy schema to what doctor accepts and refuses
     phase: 1
