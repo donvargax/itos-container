@@ -3534,9 +3534,12 @@
     proves this three ways. A contract test has a client verify through the tunnel and see the
     upstream's own certificate. A check finds none of tls.Certificate, tls.LoadX509KeyPair,
     tls.X509KeyPair, tls.Listen, tls.NewListener, tls.Client, GetCertificate or
-    x509.CreateCertificate in the production sources under internal/engine/egress. And go list -deps
-    of those packages shows no module but this one and no net/http (measured: crypto/tls, net, io,
-    os and encoding/json do not import it). Test fakes generate their upstream's certificate in
+    x509.CreateCertificate in the production sources under cmd and internal, where no Go file
+    mentions crypto/tls or x509 today. And go list -deps of internal/engine/egress's packages shows
+    no module but this one and no net/http (measured: crypto/tls, net, io, os and encoding/json do
+    not import it). Those checks run only for T-39's own range, so T-39 also adds a depguard rule
+    with its fixture, which holds on every later push: production code may import crypto/tls only in
+    egress's adapter, and crypto/x509 nowhere. Test fakes generate their upstream's certificate in
     memory, so no key enters a file.
 
     Rejected. github.com/elazarl/goproxy v1.9.3 (BSD-3-Clause), the maintained candidate with eleven
@@ -3562,20 +3565,23 @@
     (each measured). The adapter reads the socket up to the first CRLF CRLF, at most 8 KiB, under a
     10 s read deadline from accept, and every byte after that terminator belongs to the tunnel. The
     domain parses the head as pure code, within its allowlist, so a domain test and the fuzz test
-    reach it. The request line is exactly method, space, target, space, version, CRLF, where the
-    version is HTTP/1.1 or HTTP/1.0: curl and Python 3.14 send 1.1 and openssl s_client sends 1.0
-    (measured), as Python 3.11's http.client does (read in its source). A bare LF is malformed.
-    Headers are skipped unread: never judged, logged or forwarded, Host and Proxy-Authorization
-    included.
+    reach it. The request line is exactly a non-empty method, one space, a non-empty target, one
+    space, a version and CRLF, where the version is HTTP/1.1 or HTTP/1.0: curl and Python 3.14 send
+    1.1 and openssl s_client sends 1.0 (measured), as Python 3.11's http.client does (read in its
+    source). A bare LF or CR in that line is malformed. Headers are skipped unread: never judged,
+    logged or forwarded, Host and Proxy-Authorization included.
 
     A request passes only when its method is exactly CONNECT and its target is exactly a listed name
     followed by :443. Anything else is refused with the first reason that fits, in this order:
-    malformed (no complete head, or a request line or target of any other shape), not-connect (any
-    other method, compared exactly), literal-ip (dotted IPv4 or bracketed IPv6), not-canonical (its
-    lowercase form without one trailing dot is listed), not-listed, and port (the name is listed and
-    the port is not the exact text 443, so name:0443 and name:80). These are labels for the person:
-    only the exact match admits anything. T-39's domain decides on the name first, so a refused name
-    is never resolved and refusals are no DNS channel.
+    malformed (no complete head, or a request line of any other shape); not-connect (any other
+    method, compared exactly, whatever its target); malformed (a CONNECT whose target is not a plain
+    host, a colon and a port as the log's rule below defines them); literal-ip (dotted IPv4 or
+    bracketed IPv6); not-canonical (its lowercase form without one trailing dot is listed);
+    not-listed; and port (the name is listed and the port is not the exact text 443, so name:0443
+    and name:80). So GET http://listed.example/path HTTP/1.1, what curl and urllib send for any
+    http:// URL once http_proxy is set, reads not-connect, not malformed. These are labels for the
+    person: only the exact match admits anything. T-39's domain decides on the name first, so a
+    refused name is never resolved and refusals are no DNS channel.
 
     The contract's address rule stands, since the charter does not change it (AC-12). The adapter
     dials with net.Dialer, network tcp4 and a 10 s timeout, giving the rooted name to the proxy's
@@ -3637,9 +3643,14 @@
     within 64 KiB, and that a pass has the exact ServerName and no 0xfe0d. Plain go test only
     replays seeds, which CI's go test ./cmd/... ./internal/... does on every push, and every crash a
     run finds is committed as a seed under testdata/fuzz. So T-39's done_when also runs each target
-    with -fuzz for 30 s at -parallel 2, which itos ci run runs for T-39's own range: a 20 s run of
-    each in the spike stayed under 175 MiB a process and found nothing. This repository has no
-    nightly tier for fresh runs after that, and this record adds none.
+    with -fuzz for 30 s at -parallel 2 and -fuzzminimizetime=0s, which itos ci run runs for T-39's
+    own range. Go's default spends up to 60 s minimizing an interesting input while fuzzing waits:
+    from a fresh corpus the spike's peek target did 11,141 executions in its first 3 s and none in
+    the other 27 s, against 226,151 in all with the flag, and its head target found 18 new inputs
+    against 109 (measured). A crash is still written to the corpus with the flag, just not minimized
+    (measured). Thirty seconds of each target found nothing and peaked at 120 MiB a process here and
+    159 MiB in the spec review's runs, which is no firm bound, since the cached corpus grows. This
+    repository has no nightly tier for fresh runs after that, and this record adds none.
 
     The code proof measures changed lines with the engine off (arc42's check tiers), so the proxy
     container never starts under it, and its exact Env and lack of a writable mount would stop a
@@ -3720,8 +3731,10 @@
     cannot widen them.
 
     Failure closure has no fallback network: nothing reconnects the worker, changes its network or
-    restarts the proxy. Creation order is durable intent for each resource, internal network, egress
-    network, proxy, verify, start, ready, then the worker as today. Ready is one record, event
+    restarts the proxy. Creation order is the anchor as today, internal network, egress network,
+    proxy, verify, start, ready, then the worker as today, with durable intent before each. The
+    checkout's pin, its socket scan and the anchor stay first, so a refused checkout starts no
+    proxy; the scan's known race (q-30) only grows by the proxy's start. Ready is one record, event
     ready, that the proxy prints on stdout only after validating the list and listening; the
     controller reads it with bounded log calls inside run's existing 120 s startup budget. A missing
     ready, a proxy exit or an unverifiable resource means no worker is created. Policy is compiled
@@ -3732,26 +3745,42 @@
     failure: the worker gets the existing termination (first signal, 10 s from cancellation,
     SIGKILL), an observed exit keeps its precedence and run returns nonzero. With the proxy gone the
     worker has no peer. Under A3 a lost controller leaves both running under the frozen list until
-    stop, with no watchdog and no new route. Teardown reverses creation: worker, refusal-log copy,
-    proxy, egress network, internal network, then the anchor. A failed step retains its recovery
-    record and exact retry; IDs recorded before create, not labels, authorize removal (T-40).
+    stop, with no watchdog and no new route.
+
+    Teardown reverses creation: worker, stop the proxy and confirm it has exited, refusal-log copy,
+    remove the proxy, egress network, internal network, then the anchor. The copy waits for that
+    exit because a record reaches the json-file asynchronously, through a pipe to dockerd's log
+    copier, so a log read of a running proxy could miss a workload's last refusal and removing the
+    proxy would then lose it for good. Docker waits for that path only when a container exits:
+    handleContainerExit in moby's daemon/monitor.go waits up to 2 s for the streams and up to 10 s
+    for the copier before it marks the container stopped (read at v27.5.1 and v28.5.2, not run). The
+    stop is SIGKILL, then the engine's not-running wait and a fresh inspection, as for the worker's
+    exit: each record is one write with nothing buffered in the process, so the kill loses none, and
+    a proxy that has already exited goes straight to the copy. This stop is the controller's own act
+    once the worker is gone, not the typed proxy failure, so it changes neither the run's result nor
+    its exit code. A failed step retains its recovery record and exact retry. Removal is authorized
+    as arc42's protocol has it, by durable intent with a random name before each create and then the
+    inspected full ID, recorded before any instruction, never by labels or names alone (T-40).
 
     The refusal log is one JSON object per line on the proxy's stdout, at most 2 KiB: schema 1, time
-    (RFC 3339 UTC), event refused, method, target, port, reason. Reason is one of not-listed,
-    literal-ip, port, not-canonical, not-connect, malformed, address, not-tls, tls-name,
-    tls-no-name, tls-ech. Method is written only when it is ASCII uppercase letters, at most 16.
-    Target and port are written only when the text before the request target's last colon is a plain
+    (RFC 3339 UTC) and event, which is one of ready, refused, upstream-failed or log-full. A refused
+    or upstream-failed record adds method, target, port and reason; ready and log-full add nothing.
+    A refused record's reason is one of not-listed, literal-ip, port, not-canonical, not-connect,
+    malformed, address, not-tls, tls-name, tls-no-name, tls-ech, and an upstream-failed record's is
+    dns or connect. Method is written only when it is one to 16 ASCII uppercase letters. Target and
+    port are written only when the text before the request target's last colon is a non-empty plain
     host, at most 255 bytes of ASCII letters, digits, hyphen, underscore and dot or a bracketed IPv6
-    literal, and the text after it is at most 5 digits; otherwise both are omitted. So
-    secret-token@listed.example:443, a/b?token=secret:443, listed.example:443/path?token=secret and
-    http://listed.example/path?token=secret write neither, though net.SplitHostPort accepts all four
-    (measured), and slice-28's AC-36 marker scenario uses these forms. Never written: URL path or
-    query, userinfo, headers, Proxy-Authorization, bodies, tunnel bytes, the hello's SNI, client
-    address or Go error text. Every way a head can fail leaves one malformed record, a partial head
-    and a deadline expiry included; a connection closed before its first byte asked for nothing and
-    leaves none. An allowed tunnel writes no record. Each record is one write, made before the
-    client is answered, and a failed write ends the process, because a refusal that cannot be
-    recorded must stop the session.
+    literal, and the text after it is one to 5 digits; otherwise both are omitted. A request line of
+    any other shape writes none of the three. So secret-token@listed.example:443,
+    a/b?token=secret:443, listed.example:443/path?token=secret and
+    http://listed.example/path?token=secret write neither target nor port, though net.SplitHostPort
+    accepts all four (measured), and slice-28's AC-36 marker scenario uses these forms. Never
+    written: URL path or query, userinfo, headers, Proxy-Authorization, bodies, tunnel bytes, the
+    hello's SNI, client address or Go error text. Every way a head can fail leaves one malformed
+    record, a partial head and a deadline expiry included; a connection closed before its first byte
+    asked for nothing and leaves none. An allowed tunnel writes no record. Each record is one write,
+    made before the client is answered, and a failed write ends the process, because a refusal that
+    cannot be recorded must stop the session.
 
     A refusal decided before the 200 answers HTTP/1.1 403 Forbidden, an address refusal included. A
     DNS or connect failure on a listed name is event upstream-failed, reason dns or connect,
@@ -3761,20 +3790,20 @@
     200, so they close the connection with no answer.
 
     The log lands in two places. During the run it is the proxy's json-file log (max-size 64m,
-    max-file 1), which survives controller loss. At teardown, before removing the proxy, the
-    controller copies every record but ready, fsynced and mode 0600, to
+    max-file 1), which survives controller loss. At teardown, after stopping the proxy and before
+    removing it, the controller copies every record but ready, fsynced and mode 0600, to
     sessions/<lookup>/<id>/egress-refusals.jsonl under the protected state root. Publish in
     internal/engine/approval/disk/storage.go refuses more than 1 MiB, which this log can exceed, so
     slice-28 adds a streaming writer with the same private-file, fsync, rename and parent-fsync
-    rules. A failed copy keeps the proxy and its recovery record, so stop retries and nothing is
-    lost. Cleanup never deletes that file; status names it and its count, and display escapes a
-    hostile name as approval's does (slice-28). The proxy stops after 20,000 records, writing one
-    log-full record and exiting nonzero, which the run treats as a proxy failure. Every refusal
-    stays recorded, and a hostile workload can end its own session but cannot rotate away its
-    earlier attempts, since 20,001 records of at most 2 KiB stay under the 64m cap even after
-    Docker's escaping. That bounds one session at about 40 MiB of host disk. Retention across
-    sessions stays open: completed sessions are not garbage-collected (features/recovery.feature),
-    so these files accumulate with them.
+    rules. A failed copy keeps the stopped proxy, its log and its recovery record, so stop retries
+    and nothing is lost. Cleanup never deletes that file; status names it and its count, and display
+    escapes a hostile name as approval's does (slice-28). The proxy stops after 20,000 refused or
+    upstream-failed records, writing one log-full record and exiting nonzero, which the run treats
+    as a proxy failure. Every refusal stays recorded, and a hostile workload can end its own session
+    but cannot rotate away its earlier attempts, since a session's records, each at most 2 KiB, stay
+    under the 64m cap even after Docker's escaping. That bounds one session at about 40 MiB of host
+    disk. Retention across sessions stays open (p3-session-state-retention): completed sessions are
+    not garbage-collected (features/recovery.feature), so these files accumulate with them.
 
     Handshake guarantee (q-49): the proxy reads the ClientHello without terminating TLS or holding a
     key or CA, which the charter's "no TLS interception" permits, and T-39's "opaque tunnelling"
@@ -3785,7 +3814,9 @@
     stack reads differently from crypto/tls, and it cannot stop data sent to an allowed service.
     Clients that omit SNI or send ECH, Chromium's GREASE included, and SSH over 443 are refused
     until a later mode names them. That Codex and Claude Code send SNI without ECH is not yet known:
-    the person's smoke check confirms it, since no scenario uses a real harness. This settles the
+    the person's smoke check confirms it, since no scenario uses a real harness. The disclosure has
+    owners: slice-26 puts it in approve's presentation, and slice-27 puts it in status and edits
+    docs/security.md, which p1-docs-admit-milestone-two-egress does not cover. This settles the
     contract's "Which passthrough handshake guarantees can be enforced".
 
     From the contract's "Decisions still open" this record settles the concrete guard/proxy topology
@@ -3800,11 +3831,22 @@
     (inspection per destination), which give way to the charter by the person's 2026-11-09 choice;
     its Images row, for the proxy only; its Mounts row's "do not bind-mount additional host paths"
     and the "Not included" list's "extra host-directory mounts", which must now read as the
-    worker's, since the proxy has one read-only executable mount; "The precise guard/worker network
-    topology is a blocking experiment" with Experiments item 1 (mitmdump), since this record settles
-    the topology from reading and a loopback spike and leaves its proof to slice-27; the sentence
-    "block embedded Docker DNS" (q-50); and the HTTPS inspection and SSH tunnel modes with AC-15,
-    AC-19 and AC-20, deferred.
+    worker's, since the proxy has one read-only executable mount; its Platforms row, since delivery
+    needs the host's own static Linux amd64 ELF, so the darwin, windows and arm64 builds in
+    .goreleaser.yaml cannot run egress this way, which the charter's "Not yet" allows for now, and a
+    later platform needs another delivery; "The precise guard/worker network topology is a blocking
+    experiment" with Experiments item 1 (mitmdump), since this record settles the topology from
+    reading and a loopback spike and leaves its proof to slice-27; the sentence "block embedded
+    Docker DNS" (q-50); and the HTTPS inspection and SSH tunnel modes with AC-15, AC-19 and AC-20,
+    deferred.
+
+    The record also says which of these rest on an answered question and which it decides itself.
+    The Proxy and TLS rows rest on q-51 and the DNS sentence on q-50. The Images and Mounts
+    readings, the two-network topology and the delivery have no question behind them, though the
+    charter's stop rule names contract changes and "Decisions still open". The coordinator told the
+    drafter to finish, and slice-27 must prove the topology and delivery on the real engine, so the
+    work goes on, but the record marks all of these as its own decisions for the person to confirm
+    or overturn.
 
     Scenarios need no product seam. In the engine job the harness creates its own bridge network
     with a subnet outside the refused table (for example 11.22.33.0/24) and a fake TLS endpoint on
@@ -3834,9 +3876,10 @@
     commits with Task T-38 as T-26's implementation was, and leaves the registry and sibling specs
     alone, reporting a conflict rather than resolving it. T-39's, T-40's, slice-26's, slice-27's and
     slice-28's drafters take these decisions from the record, including our own proxy and its fuzz
-    tests, the second network, the forwarding sysctl, NO_PROXY, the address check, the hello peek,
-    the egressproxy slice, the inert image, the static harness build and the streaming log writer,
-    all of which their whys predate.
+    tests, the crypto/tls depguard rule, the second network, the forwarding sysctl, NO_PROXY, the
+    address check, the hello peek, the egressproxy slice, the inert image, the static harness build,
+    the stop before the log copy, the streaming log writer and the handshake disclosure, all of
+    which their whys predate.
 
     Both checks read only those two documents, with grep, at the task tier. Their anchors are words
     the decisions above force, compared with whitespace flattened so line wrapping cannot fail them;
@@ -3855,6 +3898,8 @@
           'Decisions still open' 'net.ipv4.ip_forward=0' mitmdump 'block embedded Docker DNS' \
           'extra host-directory mounts' 'blocking experiment' 'Control hook' 'ClientHello' \
           q-49 q-50 provisional p3-approval-before-egress \
+          -fuzzminimizetime=0s not-connect upstream-failed 'confirm it has exited' Platforms \
+          depguard docs/security.md 'confirm or overturn' \
           'Building-block view' 'Runtime view' 'Deployment view'; do
           printf '%s' "$flat" | grep -qF -- "$s" || { echo "$f lacks: $s" >&2; exit 1; }
         done
