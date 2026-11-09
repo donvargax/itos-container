@@ -202,3 +202,4 @@ questions:
   - id: q-50
     item: "T-38"
     question: "T-38: Docker's embedded resolver can't be removed from a user-defined network; may T-38 replace the contract's 'block embedded Docker DNS' with AC-11's 'no unauthorized resolution path', proven on the real engine by slice-27?"
+    answer: "Yes (coordinator, provisional for the person's review): replace 'block embedded Docker DNS' with AC-11's result, no unauthorized resolution path, citing moby starting the resolver without forwarding for a sandbox with only internal endpoints; slice-27's AC-11 scenario must prove it on the real engine, and if it can't, the topology reopens."
