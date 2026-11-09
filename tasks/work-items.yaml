@@ -1103,3 +1103,22 @@ items:
       'escalation tolerance is 20 percent' and the matching lines in features/README.md with it.
       This keeps the engine tier from failing unrelated ranges, which matters for milestone two's
       egress proof, which relies on it.
+  - id: p2-scheduled-fuzz-egress-parser
+    title: A scheduled CI job fuzzes the egress proxy's CONNECT parser and ClientHello peek with fresh seeds, and each find becomes a committed seed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Charter milestone two, step 1: the owned proxy is the one process a hostile worker can talk
+      to, and it has a route out, so a parser bug in the CONNECT parse or the ClientHello peek is
+      the boundary failing. q-51 requires fuzz tests for both, but T-39's -fuzz runs happen once,
+      for T-39's own range. After that CI only replays the committed seeds, and ci.yml has no
+      schedule trigger, so nothing explores new inputs. itos guide brief puts fuzzing at the nightly
+      tier (random where it explores, nothing waits on it) and asks that every find become a fixed
+      regression at the push tier (a failing seed committed). This does not block step 1 (T-39's own
+      fuzz run meets q-51), so p2. It follows T-39, which creates the fuzz targets. The job is
+      non-gating: it sits beside, not in, the required job. The project has so far written "no
+      nightly" (the T-37 and mutation-proof items); that was about the gating mutation proof, and
+      this item is the exploring tier. The person should confirm that reading when reviewing it.
