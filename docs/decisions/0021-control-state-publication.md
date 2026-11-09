@@ -167,6 +167,18 @@ by this refusal. Run carries state.path through its shared prerequisite presente
 as approval.state.path instead of reducing it to generic invalid approval and
 suggesting reapproval. Admission keeps run.ownership-unsafe; both exit 1.
 
+Review PRRT_kwDOVkB0ws61JLZm applies that presentation to state.exposed as well, at both
+preflight stages. Run's inspection stage already carried state.path but sent known
+exposure to the generic invalid-approval refusal, so a person blocked by another worker
+was told run.approval-invalid and to review settings with itos container approve, and
+approve then refused with state.exposed. The selection stage reduced every state
+failure except busy contention to invalid approval, including state.path and
+state.exposed, which can first appear when a worker is admitted between inspection and
+selection. Both stages now present state.path and state.exposed through the shared
+prerequisite diagnostic, whose guidance says reapproval alone cannot resolve exposure.
+Unsafe, invalid, unavailable and write failures keep their existing classifications.
+CONTROL-24 covers run with P's state below, equal to and above an active worker.
+
 Known exposure reports approval.state.exposed with exit 1 and invalid approval,
 retaining the independently validated candidate. Guidance selects an unexposed
 location or recovery from the blocking worker's original checkout. Reapproval alone

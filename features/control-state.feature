@@ -722,7 +722,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # says reapproval alone cannot resolve it. P's approval matches and W is active, so
   # nothing but the exposure can refuse P. The first Then fails on the old
   # run.approval-invalid rule and its approve guidance.
-  @slice-21 @ID-CONTROL-24 @local-engine-fixture @wip
+  @slice-21 @ID-CONTROL-24 @local-engine-fixture
   Scenario Outline: Run reports state exposed to an active worker without requesting reapproval
     Given a control-state fixture with P approval "matching" and managed location "<location>" relative to W on "distinct daemons"
     When W starts and a fresh P run inspects that location

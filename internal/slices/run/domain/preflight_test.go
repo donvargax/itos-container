@@ -168,3 +168,35 @@ func TestPreflightPrivateLockContentionIsRetryable(t *testing.T) {
 		})
 	}
 }
+
+func TestPreflightPresentsStateThatApprovalCannotFixAsPrerequisite(t *testing.T) {
+	for _, stage := range []string{"inspection", "selection"} {
+		for _, failure := range []approval.Failure{"state.exposed", "state.path", "state.unsafe"} {
+			t.Run(stage+"/"+string(failure), func(t *testing.T) {
+				a := &porttest.Approval{View: approval.View{Status: "matching", Inspection: af.Ready(), Candidate: approval.Candidate{Project: "p", Fingerprint: "hash", Canonical: "selected"}, Record: approval.Record{Generation: "1"}}}
+				if stage == "inspection" {
+					a.View.Failure = failure
+				} else {
+					a.Failure = failure
+				}
+				snapshots := &af.Snapshots{}
+				value, err := Preflight(a, snapshots)
+				if value != (approval.Durable{}) || len(snapshots.Values) != 0 {
+					t.Fatal("refused state granted authority", value, snapshots)
+				}
+				var prerequisite Prerequisite
+				var refusal ApprovalRefusal
+				if failure == "state.unsafe" {
+					// Reapproval after a host user repairs unsafe state remains the guidance.
+					if !errors.As(err, &refusal) || refusal.Reason != "invalid" || errors.As(err, &prerequisite) {
+						t.Fatal("unsafe state lost its invalid-approval classification", err)
+					}
+					return
+				}
+				if !errors.As(err, &prerequisite) || prerequisite.View.Failure != failure || errors.As(err, &refusal) {
+					t.Fatal("unresolvable state was not presented through the shared diagnostic", err)
+				}
+			})
+		}
+	}
+}

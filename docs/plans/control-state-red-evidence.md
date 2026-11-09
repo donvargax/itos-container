@@ -496,3 +496,24 @@ used to pin a changed device now accepts it while a changed inode still refuses.
 ```sh
 go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-(07|23)$'
 ```
+
+## Run under exposure (review PRRT_kwDOVkB0ws61JLZm)
+
+CONTROL-24 starts worker W on a distinct daemon, then runs P with a matching approval
+whose state tree is below, equal to or above W's checkout. Run has no JSON mode, so the
+steps read its plain diagnostic. With only `@wip` removed and the production change
+absent, all 3 rows fail at the first Then, "P run reports approval.state.exposed with
+exit 1 without requesting reapproval": run printed `run.approval-invalid: run approval
+invalid; use itos container approve`. Every Given and When step passed and W stayed
+live; there were no undefined steps or setup failures.
+
+The selection stage is not reachable through a stable feature schedule, since it needs
+a worker admitted between inspection and selection. A domain unit test covers both
+stages: it fails before the change for state.exposed at inspection and for
+state.exposed and state.path at selection, and passes after it, with unsafe state
+still classified as invalid approval.
+
+```sh
+go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-24$'
+go test ./internal/slices/run/... -count=1
+```
