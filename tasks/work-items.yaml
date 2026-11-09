@@ -907,3 +907,21 @@ items:
       approvals keep their existing profile and identity. This slice covers records, presentation
       and refusal only. Nothing starts a proxy yet. It follows the policy slice, which supplies the
       validated list. Broken down from p1-egress-allowlist-proxy.
+  - id: p1-egress-connect-proxy
+    title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-egress-proxy-spec]
+    kind: idea
+    why: >
+      Charter step 1's core decision logic, built once as shared engine code under
+      internal/engine/egress with domain, port and adapter siblings. The domain is a pure decision
+      on the name the client gave in CONNECT. It allows exact canonical matches on port 443 only,
+      never reverse-DNS an IP, refuses literal IPs, alternate ports, case and trailing-dot spelling
+      variants and suffix lookalikes, and emits a refusal record with no secrets. The port has a
+      porttest fake, and the shared contract runs against the fake and the adapter. The adapter
+      wraps the library chosen in the spec, with no TLS interception, opaque tunnelling and a pinned
+      version. Unit and contract tests drive it over in-process listeners, with no Docker. It also
+      holds the small proxy entrypoint the session lifecycle will run. It adds no CLI behaviour yet,
+      so it is a task with a check, not a slice. Broken down from p1-egress-allowlist-proxy.
