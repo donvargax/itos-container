@@ -49,7 +49,7 @@ Feature: Review and record approval of exact offline settings
   # {schema:1, profile:"offline-v1", host:{uid,gid},
   #  checkout:{root,device,inode,git_device,git_inode},
   #  engine:{endpoint,id,os,architecture},
-  #  policy:{version:1,manifest,network:{mode:"offline"}},
+  #  policy:{version:1 or 2,manifest,network:{mode:"offline"}},
   #  manifest:{name,image,workspaceFolder,containerEnv,containerUser,remoteUser},
   #  image:{reference,id,os,architecture}}
   # Use slice-3's inspected checkout/engine/image facts, including canonical root
@@ -348,6 +348,13 @@ Feature: Review and record approval of exact offline settings
   # starts a proxy, and while run refuses version 2 nothing here opens a route. Every decision
   # below belongs to this spec.
   #
+  # No new slice: this adds to what exists. internal/engine/approval takes the profile, valid(),
+  # the changed-field comparison and the review and status lines. internal/engine/policy exports
+  # the host-name shape check that valid() calls, and internal/engine/readiness takes the gate's
+  # field. internal/slices/run/domain takes only ApprovalRefusal's wording, from what the view
+  # carries. The approve and doctor slices change only through cmd/itos-container's assembly, which
+  # also holds the help line.
+  #
   # Canonical settings v1 gain a second profile:
   # {schema:1, profile:"allowlist-v1", host:{uid,gid},
   #  checkout:{root,device,inode,git_device,git_inode},
@@ -396,8 +403,11 @@ Feature: Review and record approval of exact offline settings
   #   64 lower-case hexadecimal digits, and allow nonempty and strictly ascending by bytes, each
   #   name with the shape slice-25's checks end with: at least two labels of 1 to 63 lower-case
   #   letters, digits and hyphens, at most 253 bytes in all, and a final label neither all digits
-  #   nor 0x plus hexadecimal digits. This is a small lexical check in the codec, which never
-  #   calls the names port: a stored name is compared, never mapped.
+  #   nor 0x plus hexadecimal digits. This is a lexical check that never calls the names port: a
+  #   stored name is compared, never mapped. The second half of slice-25's canonicalHost is that
+  #   check, so it moves to an exported function in internal/engine/policy/domain, which both call:
+  #   a copy could drift, and a narrower one would call an approval invalid as soon as it was
+  #   written.
   # valid() and the candidate constructor above it are the two places in json.go that hardcode
   # version 1 and offline today; the constructor reads policy.Network.Mode and never infers it
   # from the list. porttest.Ready's policy has no network, so that fixture gains its offline mode.
@@ -410,8 +420,8 @@ Feature: Review and record approval of exact offline settings
   # words, as ID-POLICY-62 holds. It has no proxy to start. The branch that refuses, which slice-25
   # put in InspectBeforeEngine in internal/engine/readiness/domain/inspect.go, also stops doctor
   # and approve, which share that call. It moves behind an Inspector field whose zero value
-  # refuses. cmd sets the field in the doctor and approve assemblies and never for run, so a
-  # forgotten wiring refuses instead of opening, and
+  # refuses. cmd sets the field in the doctor and approve assemblies and in no other, never for
+  # run, so a forgotten wiring refuses instead of opening, and
   # TestValidVersion2PolicyIsRefusedBeforeAnyLaterStage keeps holding the zero value. An offline
   # approval can no longer match an allowlist request, since profile and fingerprint differ, and
   # even a mis-wired gate opens no route: session's adapters keep NetworkMode none and VerifyRun
@@ -420,15 +430,31 @@ Feature: Review and record approval of exact offline settings
   # "Run refuses with the change explained" (the registry's why, contract AC-02) meets
   # ID-POLICY-62: a version 2 file never reaches run's approval comparison, so run cannot explain
   # a changed list until slice-27 lifts that refusal. Doctor and approve explain it now, and
-  # slice-27's spec must prove run does. What run explains here is every refusal it can reach:
+  # slice-27's spec must prove run does. What run explains here is every comparison it can reach:
   # run.approval-changed names the changed canonical fields, sorted and comma separated, as "run
   # approval changed at <pointers>; use itos container approve". Pointers only, never values:
   # ApprovalRefusal carries no request contents, containerEnv can hold anything, and doctor and
   # approve already show old and new values safely. The comparison before the engine leaves out
   # /engine and /image, which it has not observed (LocalMatches), and the one after inspection
-  # includes them. The implementing commit also adds a domain test for the case the black box
-  # cannot reach yet: Preflight, given an allowlist candidate and a record with another list,
-  # reports changed at /policy/network/allow without opening the engine.
+  # includes them. Selection can also answer changed, for a record rewritten at the same generation
+  # between inspection and Select (internal/engine/approval/disk/store.go). It has no comparison at
+  # hand, so that refusal keeps today's words, "run approval changed; use itos container approve",
+  # and never reads "changed at ;".
+  #
+  # One walk finds what changed for all three commands, since arc42's Solution strategy gives
+  # matching to one shared responsibility. presentation's differences moves into
+  # internal/engine/approval/domain, over decoded values, so it needs neither encoding/json nor
+  # reflect, which a domain may not import, and presentation calls it from there. PreflightCodec
+  # gains the comparison run needs: canonical decodes both sides, blanks /engine and /image for the
+  # one before the engine, and returns that walk's paths. The view carries them to
+  # internal/slices/run/domain, which reads no JSON.
+  #
+  # The implementing commit also adds tests for the two cases the black box cannot reach, each at
+  # the tier that can see it, since a domain test may not import the codec. An allowlist candidate
+  # and a record with another list: canonical's own test gets /policy/network/allow from the local
+  # comparison, and approval's domain test, over the fake codec, has Preflight carry the codec's
+  # paths onto the view without opening the engine. A selection that answers changed: run's domain
+  # test gets today's words.
   #
   # Bare approve's review of an allowlist-v1 candidate prints these lines in this order, then the
   # unused fields, the differences and the y/N prompt as it does today:
@@ -445,11 +471,11 @@ Feature: Review and record approval of exact offline settings
   # docs/security.md. Plain approve status prints the same lines from allowlist-v1: down, after
   # the canonical settings, so the fingerprint route is told too. Slice-27's feat commit removes
   # the last line and the rows that read it. An offline-v1 candidate keeps its review and status
-  # exactly, including "Effective offline settings:" and "network none". JSON gains nothing:
-  # effective already carries the profile, the list and the proxy image, and approve's JSON stays
-  # one object with no prose. Ordinary doctor prints the same canonical settings as today.
-  # Canonical names are ASCII, and a stored one passes valid() first, so these lines need no
-  # further escaping.
+  # exactly at either version, including "Effective offline settings:" and "network none", which
+  # ID-APPROVAL-44 and ID-APPROVAL-57 hold. JSON gains nothing: effective already carries the
+  # profile, the list and the proxy image, and approve's JSON stays one object with no prose.
+  # Ordinary doctor prints the same canonical settings as today. Canonical names are ASCII, and a
+  # stored one passes valid() first, so these lines need no further escaping.
   #
   # Who may approve stays open. q-2's limitation now reaches a network grant: a host agent can
   # approve an allowlist through --fingerprint or a faked terminal, and approval still records
@@ -462,14 +488,22 @@ Feature: Review and record approval of exact offline settings
   # as only a feat or a fix may. Their behaviour moves here: a matching offline approval beside an
   # allowlist request is ID-APPROVAL-40's first row, the offline fingerprint ID-APPROVAL-47's first
   # row and the absent manifest ID-APPROVAL-55's last row. ID-POLICY-62, ID-POLICY-77 and
-  # ID-POLICY-78 stay as they are. The same commit renames this feature, whose title says offline.
+  # ID-POLICY-78 stay as they are. The same commit renames this feature, whose title says offline,
+  # and corrects the comments that still state the old rule: three in features/policy.feature
+  # ("Ordinary doctor says the same (ID-POLICY-77), though it refuses version 2 for now", the
+  # paragraph "Only doctor --policy-only and --manifest-only read version 2 for now", and "The next
+  # three scenarios" above ID-POLICY-60), and the one at the refusal in
+  # internal/engine/readiness/domain/inspect.go, which moves with the gate.
   #
   # The implementing pull request also updates docs/CLI.md and docs/CONFIG.md, which say that
   # nothing approves a list and that ordinary doctor and approve refuse version 2, and the approve
   # help line (ID-APPROVAL-56). It records a decision for the profile, the policy.version choice,
-  # the gate and run's wording, and brings arc42's internal/engine/approval row and T-38's slice-26
-  # row up to date, as the charter's "Architecture is a hypothesis" asks. docs/security.md stays
-  # with slice-27, as T-38's record says.
+  # the gate and run's wording, and brings three texts of arc42 up to date, as the charter's
+  # "Architecture is a hypothesis" asks: the internal/engine/approval row, T-38's slice-26 row, and
+  # Solution strategy's sentence that doctor, approve and run "must agree on accepted/rejected
+  # inputs and effective settings". The gate contradicts that sentence until slice-27, because
+  # doctor and approve accept a valid version 2 file that run refuses, so the decision names that
+  # section and says why. docs/security.md stays with slice-27, as T-38's record says.
   #
   # A nil names port panics on the first allowlist, in a file a hostile checkout controls. Both
   # sites are assembled in cmd/itos-container/main.go, and the gate above re-wires one of them, so
@@ -482,9 +516,11 @@ Feature: Review and record approval of exact offline settings
   #   path, mode allowlist and the names one a line, then records them for the oracle and
   #   recaptures the tree as approvalSeed does. The names are given canonical and ascending, and
   #   the step refuses others. "the checkout requests an allowlist of <count> generated host
-  #   names" does the same with n0.example, n1.example and so on, sorted by bytes for the oracle.
+  #   names" does the same with n0.example, n1.example and so on, sorted by bytes for the oracle,
+  #   and "the checkout requests an allowlist of one host name of 253 bytes" with labels of 63, 63,
+  #   63 and 61 bytes.
   # - "the checkout requests offline at policy version "<n>"" writes that version and the manifest
-  #   path, with no network key. "then" may follow "checkout" in all three: it reads better after
+  #   path, with no network key. "then" may follow "checkout" in all four: it reads better after
   #   a seed and means the same.
   # - approvalOracle takes the profile, version, network and proxy from that request, never from
   #   the product. Its digest is the features package's own busyboxFixturePin. A scenario with no
@@ -502,7 +538,8 @@ Feature: Review and record approval of exact offline settings
   # - "the transcript shows all effective settings and the worker's restrictions before exactly
   #   one y/N prompt" is approvalReview(false)'s check under a name that fits both profiles.
   # - "the review before its prompt says, in this order:" and "the review before its prompt does
-  #   not say "<text>"" read the transcript before y/N, each row after the one above it.
+  #   not say "<text>"" read the transcript before y/N, each row after the one above it. "its
+  #   standard output says, in this order:" reads standard output the same way.
   # - "its approval status is "<status>"" is approvalStatus alone.
   # These existing steps gain values. approvalEdit: "reorder the allowlist", "respell the
   # allowlist's names" (API.Example.COM. and BÜCHER.example), "write the allowlist in flow style
@@ -510,13 +547,18 @@ Feature: Review and record approval of exact offline settings
   # <name>", "remove the host name <name>", "change the host name <old> to <new>", where the
   # look-alike row's new name is the Cyrillic spelling of api.example.com, canonically
   # xn--pi-6kc.example.com, and "request ..." as the Givens above. approvalDefect: the rows of
-  # ID-APPROVAL-50, each recomputing the fingerprint so that only record validity can catch it.
-  # "approval input has prerequisite defect": "the selected manifest is absent". "run preflight
-  # has engine observation": "cached image reports another config digest".
+  # ID-APPROVAL-50, each recomputing the fingerprint so that only record validity can catch it, and
+  # each breaking one rule: the literal address is 192.0.2.1, the hexadecimal final label is
+  # host.0x7f, the empty label is a..example, and every label of the 254-byte name is within 63
+  # bytes. "approval input has prerequisite defect" gains "the selected manifest is absent" and
+  # now recaptures the tree after any defect, so that ID-APPROVAL-55's tree step reads what approve
+  # did and not what the fixture did. "run preflight has engine observation": "cached image reports
+  # another config digest".
   # Red first: today every valid version 2 file is refused as policy.version, exit 2, before
   # anything else reads it, so each scenario fails at its first Then that reads the outcome. Where
   # the first answer is that same refusal, the scenario goes on to doctor so that it can fail
-  # before the work.
+  # before the work. A version 1 file keeps its behaviour by design, so a row that reads one starts
+  # from an approval today's record check refuses.
 
   @wip @slice-26 @ID-APPROVAL-36 @local-engine-fixture
   Scenario Outline: Doctor exposes the exact allowlist candidate without granting approval
@@ -746,6 +788,7 @@ Feature: Review and record approval of exact offline settings
     Then the transcript shows all effective settings and the worker's restrictions before exactly one y/N prompt
     And the review before its prompt says, in this order:
       | text                                          |
+      | Effective settings:                           |
       | allowlist-v1:                                 |
       | no route out                                  |
       | This profile grants network                   |
@@ -767,6 +810,8 @@ Feature: Review and record approval of exact offline settings
     And the checkout is unchanged and only approval state was written
     And no engine mutation or image acquisition was attempted
 
+  # The profile words come from the request, whatever the record says: the last row widens an
+  # offline approval, the one place a build that read the record would tell a person offline.
   @wip @slice-26 @ID-APPROVAL-43 @local-engine-fixture
   Scenario Outline: Re-approval reviews the old and new network before replacing the active record
     Given an approval checkout and isolated host state
@@ -775,6 +820,11 @@ Feature: Review and record approval of exact offline settings
     And the checkout then requests <current>
     When bare approve runs at a terminal and receives " YES " after the review
     Then the transcript shows differences "<pointers>" with old and new values before exactly one y/N prompt
+    And the review before its prompt says, in this order:
+      | text                        |
+      | allowlist-v1:               |
+      | This profile grants network |
+    And the review before its prompt does not say "network none"
     And the sole active approval is the exact candidate at generation "8" in protected host state
     And it exits with code 0
 
@@ -799,8 +849,38 @@ Feature: Review and record approval of exact offline settings
       | offline-v1:                |
       | network none               |
     And the review before its prompt does not say "This profile grants network"
+    And its standard output does not say "This profile grants network"
     And it exits with code 0
     And the sole active approval is the exact candidate at generation "4" in protected host state
+
+  # The offline review and status at each version, against an approval of the other. The status
+  # follows the review on the same terminal, so the standard output step reads both. A version 1
+  # file with no record would pass today and could not fail before the work; here the first row
+  # fails at the version 2 request and the second at the version 2 record today's check refuses.
+  @wip @slice-26 @ID-APPROVAL-57 @local-engine-fixture
+  Scenario Outline: An offline request keeps the offline review and status at either policy version
+    Given an approval checkout and isolated host state
+    And the checkout requests offline at policy version "<approved>"
+    And a seeded matching approval at generation "1"
+    And the checkout then requests offline at policy version "<requested>"
+    When bare approve runs at a terminal and receives "y" after the review
+    Then the transcript shows all effective settings and the worker's restrictions before exactly one y/N prompt
+    And the transcript shows differences "/policy/version" with old and new values before exactly one y/N prompt
+    And the review before its prompt says, in this order:
+      | text                                       |
+      | Effective offline settings                 |
+      | offline-v1:                                |
+      | network none                               |
+      | /policy/version: <approved> -> <requested> |
+    And the review before its prompt does not say "This profile grants network"
+    And its standard output does not say "This profile grants network"
+    And it exits with code 0
+    And the sole active approval is the exact candidate at generation "2" in protected host state
+
+    Examples:
+      | approved | requested |
+      | 1        | 2         |
+      | 2        | 1         |
 
   @wip @slice-26 @ID-APPROVAL-45 @local-engine-fixture
   Scenario Outline: The optional exact fingerprint approves the allowlist without a terminal
@@ -817,19 +897,33 @@ Feature: Review and record approval of exact offline settings
       | plain  |
       | --json |
 
-  # The fingerprint route has no review, so its plain status has to say the same things.
+  # The fingerprint route has no review, so its plain status has to say the same things: these are
+  # ID-APPROVAL-42's rows, after the canonical settings, which the first row places.
   @wip @slice-26 @ID-APPROVAL-46 @local-engine-fixture
   Scenario: Plain approval status says what the allowlist profile grants and cannot do
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
     When approve runs without a terminal with the independently calculated exact fingerprint and "plain"
     Then it exits with code 0
-    And its standard output says "This profile grants network"
-    And its standard output says "network.allow: api.example.com"
-    And its standard output says "network.allow: registry.example.org"
-    And its standard output says "cannot stop data sent to an allowed service"
-    And its standard output says "a log that ends early reads as a complete one"
-    And its standard output says "Run cannot start this profile yet"
+    And its standard output says, in this order:
+      | text                                          |
+      | "profile":"allowlist-v1"                      |
+      | allowlist-v1:                                 |
+      | no route out                                  |
+      | This profile grants network                   |
+      | port 443                                      |
+      | network.allow: api.example.com                |
+      | network.allow: registry.example.org           |
+      | No TLS interception                           |
+      | first ClientHello's SNI                       |
+      | cannot see the HTTP Host inside TLS           |
+      | cannot stop data sent to an allowed service   |
+      | omit SNI or send ECH                          |
+      | SSH over 443                                  |
+      | a log that ends early reads as a complete one |
+      | Run cannot start this profile yet             |
+    And its standard output does not say "network none"
+    And its standard output does not say "Effective offline settings"
 
   # The offline rows are what a build that ignored the list would accept, the list rows a build
   # that left a name out of the fingerprint, and the proxy rows one that left out the digest or
@@ -867,11 +961,13 @@ Feature: Review and record approval of exact offline settings
       | remove the host name registry.example.org |
       | request offline at policy version 1       |
 
-  # 2037 is what ID-POLICY-58 lets a list hold: approval adds no limit of its own.
+  # 2037 is what ID-POLICY-58 lets a list hold, and 253 bytes with 63-byte labels is the longest
+  # name slice-25 admits: approval adds no limit of its own. The doctor half reads the record back,
+  # so a valid() narrower than the policy fails there, on an approval approve has just written.
   @wip @slice-26 @ID-APPROVAL-49 @local-engine-fixture
-  Scenario: The longest list the policy admits can be approved and still matches
+  Scenario Outline: The longest list and the longest name the policy admits can be approved and still match
     Given an approval checkout and isolated host state
-    And the checkout requests an allowlist of 2037 generated host names
+    And the checkout requests <request>
     When approve runs without a terminal with the independently calculated exact fingerprint and "--json"
     Then it reports matching approval for that fingerprint without a prompt and exits with code 0
     And the sole active approval is the exact candidate at generation "1" in protected host state
@@ -879,6 +975,11 @@ Feature: Review and record approval of exact offline settings
     Then doctor reports the independently calculated fingerprint and complete effective settings
     And its approval status is "matching"
     And it exits with code 0
+
+    Examples:
+      | request                                    |
+      | an allowlist of 2037 generated host names  |
+      | an allowlist of one host name of 253 bytes |
 
   # Protected storage, project separation and supersession.
   @slice-4 @ID-APPROVAL-16 @local-engine-fixture
@@ -949,6 +1050,10 @@ Feature: Review and record approval of exact offline settings
       | a wildcard allowlist name               |
       | a single-label allowlist name           |
       | a literal address in the allowlist      |
+      | a hexadecimal final allowlist label     |
+      | an empty allowlist label                |
+      | an allowlist label of 64 bytes          |
+      | an allowlist name of 254 bytes          |
       | no allowlist under allowlist-v1         |
       | mode offline under allowlist-v1         |
       | policy version 1 under allowlist-v1     |
@@ -957,6 +1062,7 @@ Feature: Review and record approval of exact offline settings
       | profile offline-v1 with mode allowlist  |
       | an allowlist under offline-v1           |
       | a proxy image under offline-v1          |
+      | policy version 3 under offline-v1       |
       | an unknown network profile              |
 
   @slice-4 @ID-APPROVAL-19 @local-engine-fixture
@@ -1198,7 +1304,9 @@ Feature: Review and record approval of exact offline settings
       | daemon identity changes during inspection | doctor.engine.changed      | 1    |
       | checkout root changes during inspection   | doctor.checkout.changed    | 1    |
 
-  # Lifting the version refusal must leave every later stage in place for a version 2 file.
+  # Lifting the version refusal must leave every later stage in place for a version 2 file. The
+  # tree step does the looking for frozen input, as it did in ID-POLICY-61, whose absent manifest
+  # row moves here: the record step beside it stops once the record is absent.
   @wip @slice-26 @ID-APPROVAL-55 @local-engine-fixture
   Scenario Outline: Approve applies every other prerequisite to a version 2 request
     Given an approval checkout and isolated host state
@@ -1207,6 +1315,7 @@ Feature: Review and record approval of exact offline settings
     When approve runs without a terminal with a well-formed candidate fingerprint as JSON
     Then it reports prerequisite problem "<rule>" with exit <exit> before requesting consent
     And no approval record or frozen input is produced
+    And the approval checkout and host state are unchanged
     And no engine mutation or image acquisition was attempted
 
     Examples:
@@ -1237,9 +1346,11 @@ Feature: Review and record approval of exact offline settings
     And its standard output says "doctor"
     And it exits with code 0
 
+  # Help wraps to an inherited COLUMNS, so the run names a wide one: a narrow terminal must not
+  # fail a correct build.
   @wip @slice-26 @ID-APPROVAL-56
   Scenario Outline: Approval help stops limiting approval to offline settings
-    When itos-container runs with "<arguments>"
+    When itos-container runs with "<arguments>" and the environment "COLUMNS=200"
     Then its standard output says "Review and remember exact settings"
     And its standard output does not say "exact offline settings"
     And it exits with code 0
