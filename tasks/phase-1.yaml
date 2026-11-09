@@ -3343,6 +3343,13 @@
     known limits and later omission notice. State-preservation and repeatability checks
     passed. The second check exits 1 because TestBoundedReleaseNotes is absent; the
     implementer still owes its assertion-level red and both checks passing after the repair.
+
+    CI run 42560455437 at f0b6e39 failed only this first check, with a CalledProcessError
+    from the ref snapshot in state(): git show-ref exits 1 when a repository has no refs.
+    CI's checkout is a detached merge ref with no branch heads, and the fixture clone copies
+    only heads (--no-tags), so it starts with an empty ref set; a local clone has a branch
+    and never shows this. The snapshot now uses git for-each-ref, which exits 0 on an empty
+    set and lists the same refs, so the state comparison proves what it did before.
   done_when:
     - run: |
         python3 - <<'PY'
@@ -3366,7 +3373,7 @@
 
         def state(repo):
             return tuple(run("git", *args, cwd=repo) for args in (
-                ("rev-parse", "HEAD"), ("show-ref",),
+                ("rev-parse", "HEAD"), ("for-each-ref",),
                 ("status", "--porcelain=v1", "--untracked-files=all"),
                 ("diff", "HEAD", "--"),
             ))
