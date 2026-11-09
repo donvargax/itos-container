@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cucumber/godog"
@@ -19,43 +20,11 @@ import (
 // the workflow is parsed, the real feature files are selected as data, and fixture
 // features run with memory-only steps, as the schedule regressions do.
 
-// shardWorkflow models only what the shard checks read. A negative control marshals it
-// back, so a field the checks read must be modelled here.
-type shardWorkflow struct {
-	Jobs map[string]shardJob `yaml:"jobs"`
-}
-
-type shardJob struct {
-	Name            string            `yaml:"name"`
-	If              string            `yaml:"if"`
-	Runner          string            `yaml:"runs-on"`
-	Timeout         int               `yaml:"timeout-minutes"`
-	ContinueOnError bool              `yaml:"continue-on-error"`
-	Needs           []string          `yaml:"needs"`
-	Env             map[string]string `yaml:"env"`
-	Container       any               `yaml:"container"`
-	Services        map[string]any    `yaml:"services"`
-	Strategy        struct {
-		FailFast *bool `yaml:"fail-fast"`
-		Matrix   struct {
-			Include []shardEntry `yaml:"include"`
-		} `yaml:"matrix"`
-	} `yaml:"strategy"`
-	Steps []shardStep `yaml:"steps"`
-}
-
+// shardEntry is one include of the shard job's matrix: the shard's name and its
+// whitespace-separated feature file basenames.
 type shardEntry struct {
 	Shard    string `yaml:"shard"`
 	Features string `yaml:"features"`
-}
-
-type shardStep struct {
-	Name            string            `yaml:"name"`
-	If              string            `yaml:"if"`
-	Timeout         int               `yaml:"timeout-minutes"`
-	ContinueOnError bool              `yaml:"continue-on-error"`
-	Env             map[string]string `yaml:"env"`
-	Run             string            `yaml:"run"`
 }
 
 const (
@@ -85,10 +54,13 @@ func engineFeatureFiles(dir string) ([]string, error) {
 	return slices.Sorted(maps.Keys(files)), nil
 }
 
+// realEngineFeatures is engineFeatureFiles over this folder, read once.
+var realEngineFeatures = sync.OnceValues(func() ([]string, error) { return engineFeatureFiles(".") })
+
 // engineShardIssues holds the sharded engine job and its aggregate to T-45's
 // contract, against the real feature files for the partition of the features.
 func engineShardIssues(data []byte) []string {
-	var workflow shardWorkflow
+	var workflow engineWorkflow
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
 		return []string{err.Error()}
 	}
@@ -116,7 +88,7 @@ func engineShardIssues(data []byte) []string {
 	}
 	slices.Sort(names)
 	require(slices.Equal(names, []string{"lifecycle", "offline", "other"}), "exactly three named shards: lifecycle, offline and other")
-	want, err := engineFeatureFiles(".")
+	want, err := realEngineFeatures()
 	if err != nil {
 		issues = append(issues, "feature inventory: "+err.Error())
 	}
@@ -191,13 +163,13 @@ func shardEnvironment(extra map[string]string) featureEnvironment {
 	return readFeatureEnvironment(func(name string) string { return values[name] }, "linux", "amd64")
 }
 
-func readShardWorkflow(t *testing.T) ([]byte, shardWorkflow) {
+func readShardWorkflow(t *testing.T) ([]byte, engineWorkflow) {
 	t.Helper()
 	data, err := os.ReadFile("../.github/workflows/ci.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var workflow shardWorkflow
+	var workflow engineWorkflow
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
 		t.Fatal(err)
 	}
@@ -276,6 +248,7 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 			t.Errorf("shard %s selects %d row(s) %v (skip %q); its files hold %d row(s) %v of the unsharded selection",
 				entry.Shard, selection.count, selection.ids, selection.skip, wantCount, wantIDs)
 		}
+		t.Logf("shard %s: %d row(s), %d ID(s) in %s", entry.Shard, selection.count, len(selection.ids), entry.Features)
 		total += selection.count
 		union = append(union, selection.ids...)
 		byShard[entry.Shard] = selection.ids
@@ -287,7 +260,7 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 	if !slices.Equal(union, unsharded.ids) {
 		t.Errorf("the shards' IDs %v are not the unsharded tier's %v exactly once each", union, unsharded.ids)
 	}
-	engineFiles, err := engineFeatureFiles(".")
+	engineFiles, err := realEngineFeatures()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +281,7 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 // two do not, so the baseline stays valid as feature files are added.
 func shardBaseline(t *testing.T) []byte {
 	t.Helper()
-	engine, err := engineFeatureFiles(".")
+	engine, err := realEngineFeatures()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,22 +328,22 @@ func shardBaseline(t *testing.T) []byte {
 func testBrokenShardWorkflows(t *testing.T) {
 	baseline := shardBaseline(t)
 	failFast := true
-	editShard := func(change func(*shardJob)) func(*shardWorkflow) {
-		return func(w *shardWorkflow) {
+	editShard := func(change func(*workflowJob)) func(*engineWorkflow) {
+		return func(w *engineWorkflow) {
 			job := w.Jobs[shardJobID]
 			change(&job)
 			w.Jobs[shardJobID] = job
 		}
 	}
-	editAggregate := func(change func(*shardJob)) func(*shardWorkflow) {
-		return func(w *shardWorkflow) {
+	editAggregate := func(change func(*workflowJob)) func(*engineWorkflow) {
+		return func(w *engineWorkflow) {
 			job := w.Jobs["engine"]
 			change(&job)
 			w.Jobs["engine"] = job
 		}
 	}
-	replaceFeatures := func(shard, from, to string) func(*shardWorkflow) {
-		return editShard(func(j *shardJob) {
+	replaceFeatures := func(shard, from, to string) func(*engineWorkflow) {
+		return editShard(func(j *workflowJob) {
 			for i := range j.Strategy.Matrix.Include {
 				if j.Strategy.Matrix.Include[i].Shard == shard {
 					j.Strategy.Matrix.Include[i].Features = strings.Replace(j.Strategy.Matrix.Include[i].Features, from, to, 1)
@@ -378,12 +351,12 @@ func testBrokenShardWorkflows(t *testing.T) {
 			}
 		})
 	}
-	editGate := func(change func(*shardStep)) func(*shardWorkflow) {
-		return editAggregate(func(j *shardJob) { change(&j.Steps[0]) })
+	editGate := func(change func(*workflowStep)) func(*engineWorkflow) {
+		return editAggregate(func(j *workflowJob) { change(&j.Steps[0]) })
 	}
 	for _, tc := range []struct {
 		name, issue string
-		breakIt     func(*shardWorkflow)
+		breakIt     func(*engineWorkflow)
 	}{
 		{"a feature dropped from every shard", "feature in no shard", replaceFeatures("other", "hardlinks.feature", "")},
 		{"a feature in two shards", "feature in two shards", replaceFeatures("lifecycle", "lifecycle.feature", "lifecycle.feature offline.feature")},
@@ -391,47 +364,47 @@ func testBrokenShardWorkflows(t *testing.T) {
 		{"an unknown feature", "unknown engine feature", replaceFeatures("other", "doctor.feature", "doctor.feature absent.feature")},
 		{"a path", "feature path", replaceFeatures("other", "doctor.feature", "features/doctor.feature")},
 		{"an absolute path", "feature path", replaceFeatures("other", "doctor.feature", "/doctor.feature")},
-		{"an empty shard", "empty shard", editShard(func(j *shardJob) { j.Strategy.Matrix.Include[2].Features = " " })},
-		{"a fourth shard", "exactly three named shards", editShard(func(j *shardJob) {
+		{"an empty shard", "empty shard", editShard(func(j *workflowJob) { j.Strategy.Matrix.Include[2].Features = " " })},
+		{"a fourth shard", "exactly three named shards", editShard(func(j *workflowJob) {
 			j.Strategy.Matrix.Include = append(j.Strategy.Matrix.Include, shardEntry{Shard: "extra", Features: "doctor.feature"})
 		})},
-		{"a renamed shard", "exactly three named shards", editShard(func(j *shardJob) { j.Strategy.Matrix.Include[0].Shard = "first" })},
-		{"the aggregate without always()", "aggregate guard", editAggregate(func(j *shardJob) { j.If = eventGuard })},
-		{"the aggregate without the event guard", "aggregate guard", editAggregate(func(j *shardJob) { j.If = "${{ always() }}" })},
-		{"the aggregate needing more", "aggregate needs", editAggregate(func(j *shardJob) { j.Needs = []string{shardJobID, "platform"} })},
-		{"the aggregate needing nothing", "aggregate needs", editAggregate(func(j *shardJob) { j.Needs = nil })},
-		{"the aggregate needing another job", "aggregate needs", editAggregate(func(j *shardJob) { j.Needs = []string{"platform"} })},
-		{"a gate accepting skipped", "aggregate gate", editGate(func(s *shardStep) { s.Run = `test "$SHARD_RESULT" = success || test "$SHARD_RESULT" = skipped` })},
-		{"a gate refusing only failure", "aggregate gate", editGate(func(s *shardStep) { s.Run = `test "$SHARD_RESULT" != failure` })},
-		{"a gate reading another result", "aggregate gate", editGate(func(s *shardStep) { s.Env = map[string]string{"SHARD_RESULT": "${{ needs.engine.result }}"} })},
-		{"a skipped gate", "aggregate gate", editGate(func(s *shardStep) { s.If = "false" })},
-		{"a gate that cannot fail", "aggregate gate", editGate(func(s *shardStep) { s.ContinueOnError = true })},
-		{"continue-on-error on the shard job", "shard failure propagation", editShard(func(j *shardJob) { j.ContinueOnError = true })},
-		{"continue-on-error on the aggregate", "aggregate failure propagation", editAggregate(func(j *shardJob) { j.ContinueOnError = true })},
-		{"fail-fast true", "fail-fast false", editShard(func(j *shardJob) { j.Strategy.FailFast = &failFast })},
-		{"fail-fast unset", "fail-fast false", editShard(func(j *shardJob) { j.Strategy.FailFast = nil })},
-		{"the feature input moved to job env", "step-local feature input", editShard(func(j *shardJob) {
+		{"a renamed shard", "exactly three named shards", editShard(func(j *workflowJob) { j.Strategy.Matrix.Include[0].Shard = "first" })},
+		{"the aggregate without always()", "aggregate guard", editAggregate(func(j *workflowJob) { j.If = eventGuard })},
+		{"the aggregate without the event guard", "aggregate guard", editAggregate(func(j *workflowJob) { j.If = "${{ always() }}" })},
+		{"the aggregate needing more", "aggregate needs", editAggregate(func(j *workflowJob) { j.Needs = []string{shardJobID, "platform"} })},
+		{"the aggregate needing nothing", "aggregate needs", editAggregate(func(j *workflowJob) { j.Needs = nil })},
+		{"the aggregate needing another job", "aggregate needs", editAggregate(func(j *workflowJob) { j.Needs = []string{"platform"} })},
+		{"a gate accepting skipped", "aggregate gate", editGate(func(s *workflowStep) { s.Run = `test "$SHARD_RESULT" = success || test "$SHARD_RESULT" = skipped` })},
+		{"a gate refusing only failure", "aggregate gate", editGate(func(s *workflowStep) { s.Run = `test "$SHARD_RESULT" != failure` })},
+		{"a gate reading another result", "aggregate gate", editGate(func(s *workflowStep) { s.Env = map[string]string{"SHARD_RESULT": "${{ needs.engine.result }}"} })},
+		{"a skipped gate", "aggregate gate", editGate(func(s *workflowStep) { s.If = "false" })},
+		{"a gate that cannot fail", "aggregate gate", editGate(func(s *workflowStep) { s.ContinueOnError = true })},
+		{"continue-on-error on the shard job", "shard failure propagation", editShard(func(j *workflowJob) { j.ContinueOnError = true })},
+		{"continue-on-error on the aggregate", "aggregate failure propagation", editAggregate(func(j *workflowJob) { j.ContinueOnError = true })},
+		{"fail-fast true", "fail-fast false", editShard(func(j *workflowJob) { j.Strategy.FailFast = &failFast })},
+		{"fail-fast unset", "fail-fast false", editShard(func(j *workflowJob) { j.Strategy.FailFast = nil })},
+		{"the feature input moved to job env", "step-local feature input", editShard(func(j *workflowJob) {
 			j.Env = map[string]string{shardFeaturesVariable: "${{ matrix.features }}"}
 			delete(j.Steps[0].Env, shardFeaturesVariable)
 		})},
-		{"the feature input missing", "step-local feature input", editShard(func(j *shardJob) { delete(j.Steps[0].Env, shardFeaturesVariable) })},
-		{"the feature input from another matrix key", "step-local feature input", editShard(func(j *shardJob) { j.Steps[0].Env[shardFeaturesVariable] = "${{ matrix.shard }}" })},
-		{"the feature input also on the aggregate", "step-local feature input", editAggregate(func(j *shardJob) {
+		{"the feature input missing", "step-local feature input", editShard(func(j *workflowJob) { delete(j.Steps[0].Env, shardFeaturesVariable) })},
+		{"the feature input from another matrix key", "step-local feature input", editShard(func(j *workflowJob) { j.Steps[0].Env[shardFeaturesVariable] = "${{ matrix.shard }}" })},
+		{"the feature input also on the aggregate", "step-local feature input", editAggregate(func(j *workflowJob) {
 			j.Steps[0].Env[shardFeaturesVariable] = "${{ matrix.features }}"
 		})},
-		{"a second engine switch", "engine switch", editAggregate(func(j *shardJob) { j.Steps[0].Env["ITOS_CONTAINER_ENGINE_TESTS"] = "1" })},
-		{"the engine switch in job env", "engine switch", editShard(func(j *shardJob) { j.Env = map[string]string{"ITOS_CONTAINER_ENGINE_TESTS": "1"} })},
-		{"the 240-second budget", "180-second step budget", editShard(func(j *shardJob) {
+		{"a second engine switch", "engine switch", editAggregate(func(j *workflowJob) { j.Steps[0].Env["ITOS_CONTAINER_ENGINE_TESTS"] = "1" })},
+		{"the engine switch in job env", "engine switch", editShard(func(j *workflowJob) { j.Env = map[string]string{"ITOS_CONTAINER_ENGINE_TESTS": "1"} })},
+		{"the 240-second budget", "180-second step budget", editShard(func(j *workflowJob) {
 			j.Steps[0].Run = strings.ReplaceAll(j.Steps[0].Run, "180000", "240000")
 		})},
-		{"no budget", "180-second step budget", editShard(func(j *shardJob) { j.Steps[0].Run = "true" })},
-		{"a shard guard lost", "shard event guard", editShard(func(j *shardJob) { j.If = "" })},
-		{"a shard that needs another job", "shard failure propagation and independence", editShard(func(j *shardJob) { j.Needs = []string{"ci"} })},
-		{"a shard on another runner", "shard native runner", editShard(func(j *shardJob) { j.Runner = "windows-latest" })},
-		{"a longer shard job", "shard job budget", editShard(func(j *shardJob) { j.Timeout = 20 })},
+		{"no budget", "180-second step budget", editShard(func(j *workflowJob) { j.Steps[0].Run = "true" })},
+		{"a shard guard lost", "shard event guard", editShard(func(j *workflowJob) { j.If = "" })},
+		{"a shard that needs another job", "shard failure propagation and independence", editShard(func(j *workflowJob) { j.Needs = []string{"ci"} })},
+		{"a shard on another runner", "shard native runner", editShard(func(j *workflowJob) { j.Runner = "windows-latest" })},
+		{"a longer shard job", "shard job budget", editShard(func(j *workflowJob) { j.Timeout = 20 })},
 	} {
 		t.Run("reject "+tc.name, func(t *testing.T) {
-			var broken shardWorkflow
+			var broken engineWorkflow
 			if err := yaml.Unmarshal(baseline, &broken); err != nil {
 				t.Fatal(err)
 			}

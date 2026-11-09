@@ -126,7 +126,7 @@ func testShardSelector(t *testing.T) {
 			{"parent path", "../alpha.feature", "1", "../alpha.feature"},
 			{"dot path", "./alpha.feature", "1", "./alpha.feature"},
 			{"absolute path", "/tmp/alpha.feature", "1", "/tmp/alpha.feature"},
-			{"backslash path", `sub\alpha.feature`, "1", `sub\alpha.feature`},
+			{"backslash path", `sub\alpha.feature`, "1", `"sub\\alpha.feature"`}, // quoted, as errors name it
 			{"line suffix", "alpha.feature:2", "1", "alpha.feature:2"},
 			{"no extension", "alpha", "1", "alpha"},
 			{"wrong extension", "alpha.txt", "1", "alpha.txt"},

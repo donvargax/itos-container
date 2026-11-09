@@ -26,7 +26,7 @@ func TestEngineSuiteBudget(t *testing.T) {
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
 		t.Fatal(err)
 	}
-	engine := workflow.Jobs["engine"]
+	engine := workflow.Jobs["engine-shard"]
 	var step workflowStep
 	for _, candidate := range engine.Steps {
 		if candidate.Name == "Engine scenarios" {

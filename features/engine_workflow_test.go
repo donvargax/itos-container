@@ -25,8 +25,10 @@ type workflowJob struct {
 	Services        map[string]any    `yaml:"services"`
 	ContinueOnError bool              `yaml:"continue-on-error"`
 	Strategy        struct {
-		Matrix struct {
-			OS []string `yaml:"os"`
+		FailFast *bool `yaml:"fail-fast"`
+		Matrix   struct {
+			OS      []string     `yaml:"os"`
+			Include []shardEntry `yaml:"include"`
 		} `yaml:"matrix"`
 	} `yaml:"strategy"`
 	Name    string         `yaml:"name"`
@@ -61,12 +63,15 @@ func TestEngineWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("required engine job", func(t *testing.T) {
-		engine, ok := workflow.Jobs["engine"]
+		shard, ok := workflow.Jobs["engine-shard"]
 		if !ok {
-			t.Fatal("missing engine job")
+			t.Fatal("missing engine shard job")
 		}
-		if engine.Name != "Engine scenarios (Linux amd64)" || engine.Runner != "ubuntu-latest" {
-			t.Errorf("wrong engine check/runner: %+v", engine)
+		if shard.Name != "Engine shard (${{ matrix.shard }})" || shard.Runner != "ubuntu-latest" {
+			t.Errorf("wrong engine shard name/runner: %+v", shard)
+		}
+		if aggregate := workflow.Jobs["engine"]; aggregate.Name != "Engine scenarios (Linux amd64)" || !slices.Equal(aggregate.Needs, []string{"engine-shard"}) {
+			t.Errorf("wrong engine check name or need: %+v", aggregate)
 		}
 	})
 	t.Run("required ci dependency", func(t *testing.T) {
@@ -84,7 +89,7 @@ func TestEngineWorkflow(t *testing.T) {
 		breakWorkflow func(*engineWorkflow)
 	}{
 		{"missing ordinary job", "four ordinary jobs", func(w *engineWorkflow) { delete(w.Jobs, "platform-macos") }},
-		{"extra engine job", "four ordinary jobs", func(w *engineWorkflow) { w.Jobs["extra-engine"] = w.Jobs["engine"] }},
+		{"extra engine job", "four ordinary jobs", func(w *engineWorkflow) { w.Jobs["extra-engine"] = w.Jobs["engine-shard"] }},
 		{"renamed release job", "four ordinary jobs", func(w *engineWorkflow) {
 			w.Jobs["publish"] = w.Jobs["release"]
 			delete(w.Jobs, "release")
@@ -128,18 +133,18 @@ func TestEngineWorkflow(t *testing.T) {
 		}},
 		{"lost dependency", "ci dependency", func(w *engineWorkflow) { j := w.Jobs["ci"]; j.Needs = nil; w.Jobs["ci"] = j }},
 		{"ignored preflight failure", "preflight", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Docker server preflight", func(s *workflowStep) { s.ContinueOnError = true })
+			changeStep(w, "engine-shard", "Docker server preflight", func(s *workflowStep) { s.ContinueOnError = true })
 		}},
 		{"preflight success fallback", "preflight", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Docker server preflight", func(s *workflowStep) { s.Run += "true\n" })
+			changeStep(w, "engine-shard", "Docker server preflight", func(s *workflowStep) { s.Run += "true\n" })
 		}},
 		{"preflight remote endpoint", "preflight", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Docker server preflight", func(s *workflowStep) {
+			changeStep(w, "engine-shard", "Docker server preflight", func(s *workflowStep) {
 				s.Run = strings.ReplaceAll(s.Run, "unix:///var/run/docker.sock", "tcp://remote:2375")
 			})
 		}},
 		{"unbounded preflight", "preflight", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Docker server preflight", func(s *workflowStep) { s.Run = strings.ReplaceAll(s.Run, "29s", "60s") })
+			changeStep(w, "engine-shard", "Docker server preflight", func(s *workflowStep) { s.Run = strings.ReplaceAll(s.Run, "29s", "60s") })
 		}},
 		{"leaked switch", "switch", func(w *engineWorkflow) { w.Env["ITOS_CONTAINER_ENGINE_TESTS"] = "1" }},
 		{"leaked switch in proof command", "switch", func(w *engineWorkflow) {
@@ -154,45 +159,57 @@ func TestEngineWorkflow(t *testing.T) {
 		{"skipped result guard", "result propagation", func(w *engineWorkflow) {
 			changeStep(w, "ci", "Require engine success", func(s *workflowStep) { s.If = "false" })
 		}},
-		{"wrong engine head", "checkout head", func(w *engineWorkflow) { j := w.Jobs["engine"]; j.Steps[0].With["ref"] = "main"; w.Jobs["engine"] = j }},
+		{"wrong engine head", "checkout head", func(w *engineWorkflow) {
+			j := w.Jobs["engine-shard"]
+			j.Steps[0].With["ref"] = "main"
+			w.Jobs["engine-shard"] = j
+		}},
 		{"partial runtime selection", "complete invocation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Run += " -scenarios=@smoke" })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { s.Run += " -scenarios=@smoke" })
 		}},
 		{"missing scenario coverage", "complete invocation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) {
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) {
 				s.Run = strings.ReplaceAll(s.Run, "export ITOS_CC_TEST_COVERDIR\n", "")
 			})
 		}},
 		{"skipped runtime step", "complete invocation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.If = "false" })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { s.If = "false" })
 		}},
-		{"wrong platform", "native runner", func(w *engineWorkflow) { j := w.Jobs["engine"]; j.Runner = "windows-latest"; w.Jobs["engine"] = j }},
-		{"job container", "native runner", func(w *engineWorkflow) { j := w.Jobs["engine"]; j.Container = "image"; w.Jobs["engine"] = j }},
+		{"wrong platform", "native runner", func(w *engineWorkflow) {
+			j := w.Jobs["engine-shard"]
+			j.Runner = "windows-latest"
+			w.Jobs["engine-shard"] = j
+		}},
+		{"job container", "native runner", func(w *engineWorkflow) {
+			j := w.Jobs["engine-shard"]
+			j.Container = "image"
+			w.Jobs["engine-shard"] = j
+		}},
 		{"missing runtime budget", "complete invocation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Timeout = 0 })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { s.Timeout = 0 })
 		}},
 		{"ignored binary failure", "complete invocation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) {
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) {
 				s.Run = strings.ReplaceAll(s.Run, `exit "$test_status"`, "exit 0")
 			})
 		}},
 		{"missing kernel evidence", "failure diagnostics", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine failure diagnostics", func(s *workflowStep) {
+			changeStep(w, "engine-shard", "Engine failure diagnostics", func(s *workflowStep) {
 				s.Run = strings.ReplaceAll(s.Run, "sudo dmesg | tail -50", "true")
 			})
 		}},
 		{"missing independent session", "complete invocation", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) {
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) {
 				s.Run = strings.ReplaceAll(s.Run, "setsid --wait ", "")
 			})
 		}},
 		{"missing retained test output", "failure diagnostics", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine failure diagnostics", func(s *workflowStep) {
+			changeStep(w, "engine-shard", "Engine failure diagnostics", func(s *workflowStep) {
 				s.Run = strings.ReplaceAll(s.Run, "$RUNNER_TEMP/slice-11-features.log", "$RUNNER_TEMP/missing.log")
 			})
 		}},
 		{"skipped failure diagnostics", "failure diagnostics", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine failure diagnostics", func(s *workflowStep) { s.If = "success()" })
+			changeStep(w, "engine-shard", "Engine failure diagnostics", func(s *workflowStep) { s.If = "success()" })
 		}},
 	} {
 		t.Run("reject "+tc.name, func(t *testing.T) {
@@ -246,8 +263,8 @@ func engineWorkflowIssues(data []byte) []string {
 		}
 	}
 	require(slices.Equal(slices.Sorted(maps.Keys(workflow.Jobs)), []string{
-		"ci", "engine", "platform", "platform-macos", "platform-windows", "release",
-	}), "preserve four ordinary jobs, exactly one engine job and the named release job")
+		"ci", "engine", "engine-shard", "platform", "platform-macos", "platform-windows", "release",
+	}), "preserve four ordinary jobs, exactly one engine shard job with its aggregate and the named release job")
 	release := workflow.Jobs["release"]
 	needs := slices.Clone(release.Needs)
 	slices.Sort(needs)
@@ -275,7 +292,7 @@ func engineWorkflowIssues(data []byte) []string {
 	require(prNode.Decode(&pr) == nil && slices.Equal(pr.Types, []string{"opened", "synchronize", "reopened", "ready_for_review"}), "PR events")
 	require(len(workflow.Permissions) == 2 && workflow.Permissions["contents"] == "read" && workflow.Permissions["actions"] == "read", "preserve read permissions")
 	require(workflow.Env["TO"] == "${{ github.event.pull_request.head.sha || github.sha }}", "tested head")
-	ci, engine := workflow.Jobs["ci"], workflow.Jobs["engine"]
+	ci, engine := workflow.Jobs["ci"], workflow.Jobs["engine-shard"]
 	require(slices.Contains(ci.Needs, "engine"), "ci dependency")
 	require(ci.If == ciGuard, "ci guard must run after failed or skipped dependencies")
 	require(!ci.ContinueOnError, "ci result propagation")
@@ -297,7 +314,7 @@ func engineWorkflowIssues(data []byte) []string {
 		}
 	}
 	require(hasRange, "preserve range command")
-	require(engine.Name == "Engine scenarios (Linux amd64)", "stable engine check name")
+	require(engine.Name == "Engine shard (${{ matrix.shard }})" && workflow.Jobs["engine"].Name == "Engine scenarios (Linux amd64)", "stable engine check name")
 	require(engine.If == eventGuard, "engine event/draft guard")
 	require(engine.Runner == "ubuntu-latest" && engine.Container == nil && len(engine.Services) == 0 && len(engine.Strategy.Matrix.OS) == 0, "native runner")
 	require(engine.Timeout == 10 && !engine.ContinueOnError && len(engine.Needs) == 0, "engine job budget and independence")
@@ -313,7 +330,7 @@ func engineWorkflowIssues(data []byte) []string {
 	for i, run := range engine.Steps {
 		if run.Name == "Engine scenarios" {
 			require(run.Run == engineInvocation && run.Shell == "bash" && run.Timeout == 5 && run.If == "" && !run.ContinueOnError && validFixtureEnvironment(run.Env), "complete invocation, fixture outputs and step budget")
-			enabledPath = "jobs.engine.steps." + strconv.Itoa(i) + ".env.ITOS_CONTAINER_ENGINE_TESTS"
+			enabledPath = "jobs.engine-shard.steps." + strconv.Itoa(i) + ".env.ITOS_CONTAINER_ENGINE_TESTS"
 		}
 	}
 	require(enabledPath != "", "complete invocation missing")
@@ -425,7 +442,7 @@ func TestEngineRedWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	setRedDispatch(t, &ready, redDispatchSchema)
-	for job, step := range map[string]string{"engine": "Engine scenarios", "platform-macos": "Tests", "platform-windows": "Tests"} {
+	for job, step := range map[string]string{"engine-shard": "Engine scenarios", "platform-macos": "Tests", "platform-windows": "Tests"} {
 		changeStep(&ready, job, step, func(s *workflowStep) { s.Env[redVariable] = redDispatchExpression })
 	}
 	baseline, err := yaml.Marshal(ready)
@@ -457,7 +474,7 @@ func TestEngineRedWorkflow(t *testing.T) {
 		}},
 		{"extra input", "dispatch inputs", func(w *engineWorkflow) { setRedDispatch(t, w, redDispatchSchema+"  other: {type: string}\n") }},
 		{"missing engine wiring", "step-local red selection", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { delete(s.Env, redVariable) })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { delete(s.Env, redVariable) })
 		}},
 		{"missing macOS wiring", "step-local red selection", func(w *engineWorkflow) {
 			changeStep(w, "platform-macos", "Tests", func(s *workflowStep) { delete(s.Env, redVariable) })
@@ -469,16 +486,16 @@ func TestEngineRedWorkflow(t *testing.T) {
 			changeStep(w, "platform-macos", "Tests", func(s *workflowStep) { s.Run += " ${{ inputs.red_scenarios }}" })
 		}},
 		{"shell evaluation", "leaked red selection", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Run += "\neval \"$ITOS_CONTAINER_RED_SCENARIOS\"" })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { s.Run += "\neval \"$ITOS_CONTAINER_RED_SCENARIOS\"" })
 		}},
 		{"unguarded expression", "step-local red selection", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Env[redVariable] = "${{ inputs.red_scenarios }}" })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { s.Env[redVariable] = "${{ inputs.red_scenarios }}" })
 		}},
 		{"global leakage", "leaked red selection", func(w *engineWorkflow) { w.Env[redVariable] = redDispatchExpression }},
 		{"job leakage", "leaked red selection", func(w *engineWorkflow) {
-			j := w.Jobs["engine"]
+			j := w.Jobs["engine-shard"]
 			j.Env = map[string]string{redVariable: redDispatchExpression}
-			w.Jobs["engine"] = j
+			w.Jobs["engine-shard"] = j
 		}},
 		{"proof leakage", "leaked red selection", func(w *engineWorkflow) {
 			j := w.Jobs["ci"]
@@ -489,13 +506,13 @@ func TestEngineRedWorkflow(t *testing.T) {
 			changeStep(w, "platform", "Tests", func(s *workflowStep) { s.Env[redVariable] = redDispatchExpression })
 		}},
 		{"preflight leakage", "leaked red selection", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Docker server preflight", func(s *workflowStep) { s.Env = map[string]string{redVariable: redDispatchExpression} })
+			changeStep(w, "engine-shard", "Docker server preflight", func(s *workflowStep) { s.Env = map[string]string{redVariable: redDispatchExpression} })
 		}},
 		{"fixture leakage", "leaked red selection", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Prepare engine fixture registry", func(s *workflowStep) { s.Env = map[string]string{redVariable: redDispatchExpression} })
+			changeStep(w, "engine-shard", "Prepare engine fixture registry", func(s *workflowStep) { s.Env = map[string]string{redVariable: redDispatchExpression} })
 		}},
 		{"GITHUB_ENV leakage", "leaked red selection", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Run += "\necho ITOS_CONTAINER_RED_SCENARIOS=x >> $GITHUB_ENV" })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { s.Run += "\necho ITOS_CONTAINER_RED_SCENARIOS=x >> $GITHUB_ENV" })
 		}},
 		{"ignored step failure", "failure propagation", func(w *engineWorkflow) {
 			changeStep(w, "platform-windows", "Tests", func(s *workflowStep) { s.ContinueOnError = true })
@@ -509,7 +526,7 @@ func TestEngineRedWorkflow(t *testing.T) {
 			changeStep(w, "platform-macos", "Tests", func(s *workflowStep) { s.Run += " || true" })
 		}},
 		{"forced red failure", "unchanged test command", func(w *engineWorkflow) {
-			changeStep(w, "engine", "Engine scenarios", func(s *workflowStep) { s.Run += "; exit 1" })
+			changeStep(w, "engine-shard", "Engine scenarios", func(s *workflowStep) { s.Run += "; exit 1" })
 		}},
 		{"conditional test step", "failure propagation", func(w *engineWorkflow) {
 			changeStep(w, "platform-windows", "Tests", func(s *workflowStep) { s.If = "false" })
@@ -566,7 +583,7 @@ func engineRedWorkflowIssues(data []byte) []string {
 	}
 	require(validRedDispatch(w.On["workflow_dispatch"]), "exact optional red dispatch inputs")
 	allowed := map[string]bool{}
-	for job, name := range map[string]string{"engine": "Engine scenarios", "platform-macos": "Tests", "platform-windows": "Tests"} {
+	for job, name := range map[string]string{"engine-shard": "Engine scenarios", "platform-macos": "Tests", "platform-windows": "Tests"} {
 		j := w.Jobs[job]
 		require(!j.ContinueOnError, "job failure propagation for "+job)
 		found := 0
@@ -578,7 +595,7 @@ func engineRedWorkflowIssues(data []byte) []string {
 			allowed["jobs."+job+".steps."+strconv.Itoa(i)+".env."+redVariable] = true
 			require(step.Env[redVariable] == redDispatchExpression, "step-local red selection for "+job)
 			run := "go test ./... -count=1"
-			if job == "engine" {
+			if job == "engine-shard" {
 				run = engineInvocation
 			}
 			require(step.Run == run, "unchanged test command for "+job)
