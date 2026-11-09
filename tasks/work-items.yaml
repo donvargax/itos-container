@@ -1334,6 +1334,20 @@ items:
       repeat point well inside grace (the idea's 20 percent), not the 80 percent that T-42 fixes and
       two tests pin. The item is p2 and the note says to land it before charter step 4
       (p1-interactive-tty) changes Ctrl-C handling.
+
+      A recorder that journals when a held acknowledgement is cut would only sharpen the native
+      tier's inference. The defect it guards against is a grace timer started at the acknowledgement
+      or the cut instead of the first signal. That is what p2-grace-origin-fake-clock-row exists
+      for: a synthetic clock has no jitter and asserts the exact SIGKILL instant.
+      TestEngineFixtureBudgetContract's 'quiet and delayed signal' phase
+      (cmd/itos-container/engine_fixture_budget_test.go) already pins an acknowledgement delayed to
+      3/5 of grace, with the kill exactly at grace. It is not known to cover a hold the call limit
+      cuts. In the engine product copy the call limit is 1 s and the delay 0.6 s, so no cut happens
+      there. Extend the item's fake-clock row with a hold longer than what is left of the call
+      limit. It should assert the SIGKILL still falls at first signal plus grace, not at the cut
+      plus grace. That closes the gap on the native rows without touching the recorder, and a
+      CancelledAt field is then not worth a separate item. T-42's own comment on escalationWindow
+      already names this gap as known.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
