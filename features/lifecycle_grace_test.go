@@ -217,6 +217,7 @@ func lifecycleDelayedWindowCases(delay time.Duration) []lifecycleWindowCase {
 	const tolerance = 2 * time.Second // absolute, as the teardown assertion's
 	grace := engineGraceBudget
 	ms := time.Millisecond
+	call := engineCallBudget
 	// An acknowledgement-relative timer begins after the hold, which begins after
 	// the first signal's arrival.
 	restart := func(arrival time.Duration) time.Duration { return arrival + delay + grace }
@@ -229,6 +230,14 @@ func lifecycleDelayedWindowCases(delay time.Duration) []lifecycleWindowCase {
 		{name: "delayed at an acknowledgement restart", first: 300 * ms, kills: []time.Duration{restart(300 * ms)}, refuses: "SIGKILL at"},
 		{name: "delayed as an acknowledgement timer on a hosted runner", first: 500 * ms, kills: []time.Duration{restart(500*ms) + 100*ms}, refuses: "SIGKILL at"},
 		{name: "delayed past the absolute tolerance", first: 1500 * ms, kills: []time.Duration{grace + tolerance + ms}, refuses: "SIGKILL at"},
+		// A late first signal leaves the product's call limit running from the
+		// request before the signal, not from cancellation. The cut is journaled
+		// nowhere, so the next request decides: at the call limit after that
+		// request it is accepted, any sooner it is the product giving up.
+		{name: "delayed acknowledgement cut by the call limit after a late first signal", first: 600 * ms,
+			kills: []time.Duration{600*ms + call + 50*ms}, ack: ackCut},
+		{name: "delayed hold cut at the call limit after a late first signal", first: 600 * ms, waits: []time.Duration{600*ms + call},
+			kills: []time.Duration{600*ms + call + 100*ms}, ack: ackCut},
 		{name: "delayed cut at an acknowledgement restart", first: first, kills: []time.Duration{restart(first)}, ack: ackCut, refuses: "SIGKILL at"},
 		{name: "delayed cut before the grace", first: first, kills: []time.Duration{grace - ms}, ack: ackCut, refuses: "SIGKILL at"},
 		// The cut is not journaled, but the product's next request follows it, so
@@ -238,6 +247,18 @@ func lifecycleDelayedWindowCases(delay time.Duration) []lifecycleWindowCase {
 			kills: []time.Duration{grace}, ack: ackCut, refuses: "delay did not execute"},
 		{name: "delayed hold abandoned, then a timer from the abandonment", first: first, waits: []time.Duration{first + 100*ms},
 			kills: []time.Duration{first + 100*ms + grace}, ack: ackCut, refuses: "delay did not execute"},
+		// The same abandonment after a first signal that arrived late. Measured
+		// from cancellation the product's next request is a call limit on, so the
+		// hold looks as if it ran; measured from the request before the signal it
+		// is not.
+		{name: "delayed hold abandoned after a late first signal", first: 1200 * ms, waits: []time.Duration{1250 * ms},
+			kills: []time.Duration{1300 * ms}, ack: ackCut, refuses: "delay did not execute"},
+		{name: "delayed hold abandoned after a late first signal, then a timer from the abandonment", first: 1200 * ms,
+			waits: []time.Duration{1250 * ms}, kills: []time.Duration{2250 * ms}, ack: ackCut, refuses: "delay did not execute"},
+		{name: "delayed hold abandoned within the call limit of a first signal at 600 ms", first: 600 * ms,
+			waits: []time.Duration{1100 * ms}, kills: []time.Duration{1200 * ms}, ack: ackCut, refuses: "delay did not execute"},
+		{name: "delayed hold abandoned just before the call limit", first: 600 * ms, waits: []time.Duration{600*ms + call - ms},
+			kills: []time.Duration{600*ms + call + 100*ms}, ack: ackCut, refuses: "delay did not execute"},
 		{name: "acknowledgement replied early", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackEarly, refuses: "delay did not execute"},
 		{name: "cancelled before the engine accepted", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackStalled, refuses: "delay did not execute"},
 		{name: "no reply and not cancelled", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackNone, refuses: "delay did not execute"},
@@ -268,9 +289,11 @@ func lifecycleWindowWorld(t *testing.T, signal string, delay time.Duration, c li
 	var journal []offlineRequest
 	send := func(signal string, after time.Duration) int {
 		at := cancelled.Add(after)
+		// In the product's order: recoverySignal inspects, then checks the daemon,
+		// and only then signals.
 		journal = append(journal,
-			offlineRequest{Method: "GET", Path: "/info", Status: 200, Observation: map[string]any{"ID": "engine"}, At: at},
 			offlineRequest{Method: "GET", Path: "/containers/" + worker + "/json", Status: 200, Observation: observed, At: at},
+			offlineRequest{Method: "GET", Path: "/info", Status: 200, Observation: map[string]any{"ID": "engine"}, At: at},
 			offlineRequest{Method: "POST", Path: "/containers/" + worker + "/kill", Query: "signal=" + signal, Status: 204,
 				Observation: observed, Record: record, At: at, Replied: at})
 		return len(journal) - 1
