@@ -1437,28 +1437,10 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-engine-suite-cut-t41-wait
+  - id: T-45
     title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
     phase: 1
     owner: null
     status: todo
     depends_on: [T-44]
-    kind: idea
-    why: >
-      Measured on 2026-11-09: 2 min 49 s before T-41, 3 min 44 s on T-41's own green run, and 4 min
-      5 s on main after it merged. TestFeatures ran 239.55 s against -test.timeout=4m, so any slow
-      runner fails the engine tier as a timeout, whatever the range changes. The cause is
-      unconfirmed. Candidates are T-41's 35 s overlapDrainBound, now waiting for each covered
-      controller's real drain, and the product's 30 s teardown that drain follows. The 30 s teardown
-      cannot be shortened in product code. T-33 already shortened the engine grace from 10 s to 1 s
-      through the harness-only budget seam in features/engine_budgets_test.go, and this item should
-      use that seam, not raise the limit or change product code. After the two diagnostics items
-      land, read the slowest-examples output from a CI run on the item's head and shorten whichever
-      step it shows, keeping every scenario row, assertion and cleanup. The overlap drain bound
-      stays a stuck-controller bound, per T-41. A lead, if the suite stays near 4 minutes: the
-      control transaction re-validates every pinned path chain about 11 times per Begin, about 2,800
-      syscalls and 41 fsyncs, five Begins per run, under the syscall tracer against the 1 s call
-      budget. Cutting the redundant back-to-back Unchanged() walks would loosen the
-      anti-substitution guards, so it needs the person's security review and is not part of this
-      item unless the timings show it. Nothing is measured to be wrong there today. Broken down from
-      p1-engine-suite-under-its-limit-again.
+    kind: task
