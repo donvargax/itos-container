@@ -141,7 +141,8 @@ func (p *pin) durableSnapshot(name string, expected []byte) port.Failure {
 	if err != nil {
 		return "state.write"
 	}
-	if failure := recordSafety(info, p.uid); failure != "" {
+	links := p.recordLinks(info)
+	if failure := linkedRecordSafety(info, p.uid, links); failure != "" {
 		return failure
 	}
 	data, err := p.ops.readAll(io.LimitReader(file, 1024*1024+1))
@@ -171,7 +172,7 @@ func (p *pin) durableSnapshot(name string, expected []byte) port.Failure {
 		}
 	}
 	actual, err := p.ops.lstat(p.root(), name)
-	if err != nil || !os.SameFile(info, actual) || recordSafety(actual, p.uid) != "" || !p.unchanged() {
+	if err != nil || !os.SameFile(info, actual) || linkedRecordSafety(actual, p.uid, links) != "" || !p.unchanged() {
 		return "state.path"
 	}
 	return ""

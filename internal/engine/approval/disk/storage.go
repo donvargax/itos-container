@@ -121,7 +121,8 @@ func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 	if err != nil {
 		return nil, "state.unavailable"
 	}
-	if failure := recordSafety(info, p.uid); failure != "" {
+	links := p.recordLinks(info)
+	if failure := linkedRecordSafety(info, p.uid, links); failure != "" {
 		return nil, failure
 	}
 	file, err := p.ops.openRecord(p.root(), name, os.O_RDONLY|noFollow, 0)
@@ -133,7 +134,7 @@ func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 	if err != nil {
 		return nil, "state.path"
 	}
-	if failure := recordSafety(actual, p.uid); failure != "" {
+	if failure := linkedRecordSafety(actual, p.uid, links); failure != "" {
 		return nil, failure
 	}
 	if !os.SameFile(info, actual) {
@@ -147,7 +148,7 @@ func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 		return nil, "state.invalid"
 	}
 	latest, err := p.ops.lstat(p.root(), name)
-	if err != nil || !os.SameFile(actual, latest) || recordSafety(latest, p.uid) != "" || !d.Unchanged() {
+	if err != nil || !os.SameFile(actual, latest) || linkedRecordSafety(latest, p.uid, links) != "" || !d.Unchanged() {
 		return nil, "state.path"
 	}
 	return data, ""

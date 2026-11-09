@@ -514,8 +514,51 @@ func (s Store) selectRecord(c port.Candidate, generation string) (port.Frozen, p
 }
 
 func recordSafety(info os.FileInfo, expected uint64) port.Failure {
-	uid, links, ok := ownership(info)
-	if !ok || !info.Mode().IsRegular() || uid != expected || links != 1 || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 {
+	return linkedRecordSafety(info, expected, 1)
+}
+
+// recordLinks is the number of links a record in this directory may have. Publish
+// links a new record to its final name and then removes the temporary, so a
+// publisher killed between the two leaves the record with a second link: the
+// temporary it named .intent-<nonce>.tmp, beside the record in this pinned
+// private directory. The record's bytes were synced before the link, and no name
+// outside the directory reaches the inode, so such a record is read as it would
+// be after the removal that did not run. Names has always skipped the temporary.
+// Any other second link, and any further one, leaves the record unsafe.
+func (p *pin) recordLinks(info os.FileInfo) uint64 {
+	if _, links, ok := ownership(info); !ok || links != 2 {
+		return 1
+	}
+	dir, err := p.ops.openDir(p.root(), ".")
+	if err != nil {
+		return 1
+	}
+	// Entries read before an error still name only files that are checked below.
+	entries, _ := dir.ReadDir(-1)
+	_ = dir.Close()
+	for _, entry := range entries {
+		if !intentTemporary(entry.Name()) {
+			continue
+		}
+		twin, err := p.ops.lstat(p.root(), entry.Name())
+		if err == nil && os.SameFile(info, twin) {
+			return 2
+		}
+	}
+	return 1
+}
+
+// intentTemporary reports a name that Publish makes: ".intent-", a 128-bit hex
+// nonce and ".tmp".
+func intentTemporary(name string) bool {
+	return len(name) == 44 && strings.HasPrefix(name, ".intent-") && strings.HasSuffix(name, ".tmp") && strings.Trim(name[8:40], "0123456789abcdef") == ""
+}
+
+// linkedRecordSafety is recordSafety for a record that is expected to have the
+// given number of links.
+func linkedRecordSafety(info os.FileInfo, expected, links uint64) port.Failure {
+	uid, actual, ok := ownership(info)
+	if !ok || !info.Mode().IsRegular() || uid != expected || actual != links || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 {
 		return "state.unsafe"
 	}
 	return ""
