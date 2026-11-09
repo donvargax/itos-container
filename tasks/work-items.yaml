@@ -1010,3 +1010,42 @@ items:
       egress work is mixed in. Set CGO_ENABLED=0 for the build, including the -cover variant used by
       the code proof. Add a check that the built binary is static or matches the release setting.
       The existing scenarios must still pass, with no gate weakened. slice-27 should depend on it.
+  - id: p2-approval-no-record-step-checks-frozen-input
+    title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      approvalNoRecord (features/approval_assertions_test.go:331, registered at
+      features/approval_steps_test.go:156) returns success as soon as the approval record path is
+      absent. It never looks for frozen input, so a build that left a frozen file behind would still
+      pass. Seven live scenarios use this text at the approval boundary: six in approval.feature
+      (lines 303, 419, 449, 468, 514, 655) and one in hardlinks.feature (line 215). It is also
+      reused as the 'replacement target is unchanged' fallback. The step name promises a check the
+      code does not make, and slice-26 will add refusal scenarios in the same area. Make the step
+      assert both that the record is absent and that no frozen input was published, for example by
+      comparing the whole state tree as ID-POLICY-61's tree check does. Then run all seven
+      scenarios; any that now fail show a real leak to fix in the product, never a reason to loosen
+      the step. This is a test-support change with no new behavior and needs a ledger task and its
+      checks. Phase 2: it hardens existing proof and does not block charter step 1.
+  - id: p2-pin-ledger-check-shell
+    title: Pin the shell itos runs ledger and CI checks with, so a check passes locally only if it passes in CI
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      itos runs each check through the `shell` key, which defaults to `sh -c` (`itos config get
+      shell`), and itos.yaml sets none. `sh` is bash on the person's host and dash on ubuntu-latest.
+      A bash-only check such as `set -o pipefail` can pass `itos task` locally and first fail in a
+      CI cycle. Late checks, T-41's among them, run automatically only in CI, and T-41 exists to
+      stop that cost. Pin `shell` in itos.yaml, for example to bash, which both environments have.
+      Before pinning, confirm whether the CI image's dash refuses `set -o pipefail`; the idea left
+      that unconfirmed. This is a foundation, CI-polish change with a ledger task and its checks.
+      itos.yaml is an enforcement input, so it also runs the architecture fixtures (see
+      p2-architecture-fixtures-load). It is p2: it blocks no step of charter milestone two. The
+      itos-side warning, from `itos config check` or `itos work promote --check`, is a gap in itos
+      itself; the coordinator files it after searching existing issues.
