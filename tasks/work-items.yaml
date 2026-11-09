@@ -925,3 +925,21 @@ items:
       version. Unit and contract tests drive it over in-process listeners, with no Docker. It also
       holds the small proxy entrypoint the session lifecycle will run. It adds no CLI behaviour yet,
       so it is a task with a check, not a slice. Broken down from p1-egress-allowlist-proxy.
+  - id: p1-egress-network-lifecycle
+    title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-egress-proxy-spec]
+    kind: idea
+    why: >
+      Charter step 1: an owned proxy on an internal network, so the worker has no direct route out.
+      This is the lifecycle plumbing in engine/session, defined as the spec fixes it. The port and
+      its stateful fake gain an internal (non-routable) network and a proxy container. The worker
+      attaches only to the internal network. Creation order is network, proxy, ready, worker.
+      Teardown runs in reverse. Ownership labels and recovery records cover the new resources, so
+      stop and interrupted-controller recovery never touch foreign networks or containers. If the
+      proxy fails to start or exits, the worker is stopped or never started, with no unrestricted
+      fallback. The Docker adapter implements it with unit coverage against its fake transport.
+      Real-engine proof belongs to the run slices, in CI only. It is session engine work with no new
+      command behaviour, so it is a task with a check. Broken down from p1-egress-allowlist-proxy.
