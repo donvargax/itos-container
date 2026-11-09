@@ -459,7 +459,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # the worker checkout passed. Enrolling it then writes every project's approvals
   # into that read/write workspace. Each first Then fails on the old successful
   # inspection or publication; W is active and P's selection is above W's root.
-  @slice-21 @ID-CONTROL-21 @local-engine-fixture @wip
+  @slice-21 @ID-CONTROL-21 @local-engine-fixture
   Scenario Outline: Doctor refuses state above an active worker checkout
     Given a control-state fixture with P approval "<approval>" and managed location "above W root" relative to W on "<engines>"
     When W starts and a fresh P doctor inspects that location in "<format>"
@@ -475,7 +475,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | absent   | distinct daemons | JSON   |
       | matching | shared daemon    | JSON   |
 
-  @slice-21 @ID-CONTROL-22 @local-engine-fixture @wip
+  @slice-21 @ID-CONTROL-22 @local-engine-fixture
   Scenario Outline: Consent cannot publish into state above an active worker checkout
     Given a control-state fixture with P approval "<approval>" and managed location "above W root" relative to W on "<engines>"
     When W starts and P approve receives its independently calculated exact fingerprint in "<format>"

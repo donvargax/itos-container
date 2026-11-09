@@ -313,8 +313,10 @@ func (t *controlTransaction) inspect(ctx context.Context, reservations port.Rese
 		if t.data[t.fixed] == nil && roots != nil {
 			return "state.unavailable"
 		}
+		// A worker checkout inside a protected tree mounts that tree's records
+		// as surely as one above it, so the comparison runs both ways.
 		for _, root := range roots {
-			if domain.Exposed(t.fixed, root) || domain.Exposed(t.selected, root) {
+			if domain.Overlaps(t.fixed, root) || domain.Overlaps(t.selected, root) {
 				return "state.exposed"
 			}
 		}

@@ -14,19 +14,22 @@ func TestControlContract(t *testing.T) {
 		first := Control{State: state, Account: &Account{Home: "/account"}, Reservations: reservations, Fixed: "/account/.local/state/itos-container", Selected: "/selected/itos-container"}
 		second := first
 		second.Selected = "/other/itos-container"
-		return ControlFixture{First: first, Second: second, Candidate: port.Candidate{Root: "/checkout"}, Location: first.Selected,
-			Expose: func(on bool) {
+		reserve := func(root string) func(bool) {
+			return func(on bool) {
 				if on {
 					tx, f := second.Begin(context.Background(), port.Candidate{Root: "/checkout"}, true)
 					if f != "" {
 						t.Fatal(f)
 					}
 					tx.Close()
-					reservations.RootsByLocation["/worker-state"] = []string{"/selected"}
+					reservations.RootsByLocation["/worker-state"] = []string{root}
 				} else {
 					delete(reservations.RootsByLocation, "/worker-state")
 				}
-			},
+			}
+		}
+		return ControlFixture{First: first, Second: second, Candidate: port.Candidate{Root: "/checkout"}, Location: first.Selected,
+			Expose: reserve("/selected"), Inside: reserve(first.Selected + "/approvals"),
 			WriteFault: func(on bool) { state.WriteFault = on }, Snapshot: state.Snapshot, Durable: func() bool { return state.Bound[first.Selected] }, Replace: func() { state.Replaced = true },
 		}
 	})

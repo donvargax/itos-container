@@ -457,3 +457,27 @@ remain with the coordinator.
 
 The full `go test ./features -count=1 -json` package passes in 284.165 seconds
 without race detection: 2,426 tests and subtests pass, with none failing.
+
+## Selection above an active worker (review PRRT_kwDOVkB0ws61Iu4r)
+
+CONTROL-21 (doctor) and CONTROL-22 (approve) start worker W, then select a state tree
+whose approvals collection is W's checkout. They add no step definitions: the existing
+CONTROL-01 and CONTROL-02 steps run against the `above W root` fixture. With only
+`@wip` removed and the production change absent, all 7 examples (3 doctor, 4 approve)
+fail at the first Then, `itos-container exited 0, not 1`: doctor reported a missing or
+matching approval and approve published a record into W's workspace. Every setup and
+action step passed; there were no undefined steps or setup failures.
+
+```sh
+go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-(21|22)$'
+```
+
+The shared memory and disk control contract also fails before the change (an exposed
+location was accepted on reads and writes, and the refusal wrote state) and passes
+after it. All 22 control scenarios and the OVERLAP scenarios pass locally; the unit
+packages pass with race detection on the changed packages only:
+
+```sh
+go test ./features -count=1 -run '^TestFeatures$' -scenarios '^@ID-CONTROL-'
+go test -race ./internal/engine/approval/disk ./internal/engine/approval/port/porttest ./internal/engine/approval/domain -count=1
+```

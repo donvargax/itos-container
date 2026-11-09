@@ -14,11 +14,13 @@ type ControlFixture struct {
 	First, Second port.Control
 	Candidate     port.Candidate
 	Location      string
-	Expose        func(bool)
-	WriteFault    func(bool)
-	Snapshot      func() string
-	Durable       func() bool
-	Replace       func()
+	// Expose reserves a worker checkout above the selected location; Inside
+	// reserves one rooted within it, which mounts the same records.
+	Expose, Inside func(bool)
+	WriteFault     func(bool)
+	Snapshot       func() string
+	Durable        func() bool
+	Replace        func()
 }
 
 func ControlContract(t Reporter, open func() ControlFixture) {
@@ -35,21 +37,23 @@ func ControlContract(t Reporter, open func() ControlFixture) {
 	if f.Snapshot() != before {
 		t.Errorf("inspection created control state")
 	}
-	f.Expose(true)
-	before = f.Snapshot()
-	for _, write := range []bool{false, true} {
-		tx, failure := f.First.Begin(ctx, f.Candidate, write)
-		if tx != nil {
-			tx.Close()
+	for _, expose := range []func(bool){f.Expose, f.Inside} {
+		expose(true)
+		before = f.Snapshot()
+		for _, write := range []bool{false, true} {
+			tx, failure := f.First.Begin(ctx, f.Candidate, write)
+			if tx != nil {
+				tx.Close()
+			}
+			if failure != "state.exposed" || tx != nil {
+				t.Errorf("exposed location accepted: %s", failure)
+			}
 		}
-		if failure != "state.exposed" || tx != nil {
-			t.Errorf("exposed location accepted: %s", failure)
+		if f.Snapshot() != before {
+			t.Errorf("exposure refusal wrote state")
 		}
+		expose(false)
 	}
-	if f.Snapshot() != before {
-		t.Errorf("exposure refusal wrote state")
-	}
-	f.Expose(false)
 	f.WriteFault(true)
 	tx, failure := f.First.Begin(ctx, f.Candidate, true)
 	if tx != nil {

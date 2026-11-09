@@ -113,6 +113,16 @@ after preflight, so a later enrollment by another project still blocks an alread
 prepared nested worker. Whole-component boundaries keep textual-prefix siblings
 usable. Refusal creates no binding, tree entry, catalog change or launch authority.
 
+Review PRRT_kwDOVkB0ws61Iu4r applies the same symmetry to the reservations of
+workers that are already active. The separation check compared each reserved worker
+root with the fixed and selected trees one way, so a selection above a worker, whose
+checkout is that tree's approvals collection, passed doctor and approve. Enrolling it
+then wrote every project's approvals into the worker's read/write workspace. Both
+trees are now compared with every reserved root in both directions and refuse
+approval.state.exposed (exit 1) before any binding, tree entry or approval record.
+Completed and pending-without-record reservations keep their existing semantics, and
+whole-component boundaries keep textual-prefix siblings usable.
+
 Before creating an absent selected tree, durably publish its pending claim; retain
 that protection after interruption and complete its root identity before success.
 Completed missing, replaced, malformed, unsafe or unreadable bindings refuse.

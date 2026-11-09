@@ -69,19 +69,22 @@ func TestProtectedControlContract(t *testing.T) {
 			return write(file, data)
 		}
 		first.Store.ops = &ops
-		return porttest.ControlFixture{First: first, Second: second, Candidate: c, Location: selected,
-			Expose: func(on bool) {
+		reserve := func(root string) func(bool) {
+			return func(on bool) {
 				if on {
 					tx, f := second.Begin(t.Context(), c, true)
 					if f != "" {
 						t.Fatal(f)
 					}
 					tx.Close()
-					r.RootsByLocation[other] = []string{filepath.Dir(selected)}
+					r.RootsByLocation[other] = []string{root}
 				} else {
 					delete(r.RootsByLocation, other)
 				}
-			},
+			}
+		}
+		return porttest.ControlFixture{First: first, Second: second, Candidate: c, Location: selected,
+			Expose: reserve(filepath.Dir(selected)), Inside: reserve(filepath.Join(selected, "approvals")),
 			WriteFault: func(on bool) { fault = on }, Snapshot: func() string { return controlSnapshot(t, filepath.Dir(home)) },
 			Durable: func() bool {
 				data, err := os.ReadFile(filepath.Join(home, ".local/state/itos-container/coordination", locationName(selected)))
