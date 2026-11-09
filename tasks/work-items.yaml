@@ -1184,3 +1184,19 @@ items:
       p2-control-state-upgrade-contract, which covers a location that was once approved and then
       lost; this is a first run under a root that does not exist yet. Phase p2: no current step
       depends on it.
+  - id: p1-engine-suite-under-its-limit-again
+    title: The engine suite fits its 4-minute test timeout again after T-41
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Measured by the coordinator, 2026-11-09: the Engine scenarios step took 2 min 49 s on main at
+      966e456 (run 42615366138, before T-41), 3 min 44 s on T-41's own green run (42617313777), and
+      4 min 5 s on main after T-41 merged (42618748581), where TestFeatures ran 239.55 s against
+      -test.timeout=4m. T-41's drain wait added about a minute, so every pull request's engine tier
+      now runs at the limit and fails as a timeout on any slow runner, whatever it changes. Find
+      what T-41 lengthened (its overlap drain wait or the cleanup it added) and bring the suite back
+      near 3 minutes through the harness-only budget seam; don't raise the limit. Milestone two's
+      egress step needs a green engine tier.
