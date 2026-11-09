@@ -61,12 +61,12 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
 	args := []string{"-test.run=^TestSessionContractProbe$", "-test.count=1"}
-	if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+	if cover := w.coverageDir(); cover != "" {
 		args = append(args, "-test.gocoverdir="+cover)
 	}
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = w.doctor.checkout
-	cmd.Env = sessionChildEnvironment(os.Environ())
+	cmd.Env = w.coverageEnv(sessionChildEnvironment(os.Environ()))
 	for key, value := range w.doctor.env {
 		cmd.Env = setEnv(cmd.Env, key, value)
 	}
@@ -182,7 +182,7 @@ func (w *world) sessionProbeBinary() (string, error) {
 	if filepath.IsAbs(w.bin) {
 		path = w.bin + "-session-probe"
 	}
-	covered := os.Getenv("GOCOVERDIR") != ""
+	covered := productCoverageRequested() || w.coverdir != ""
 	if covered {
 		path += "-cover"
 	}

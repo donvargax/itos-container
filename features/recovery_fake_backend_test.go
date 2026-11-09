@@ -39,10 +39,11 @@ func (w *world) recoveryFakeBackendSteps(sc *godog.ScenarioContext) {
 		run, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
 		args := []string{"-test.run=^TestPublicRecoveryFakeBackend$", "-test.count=1", "-test.v"}
-		if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+		if cover := w.coverageDir(); cover != "" {
 			args = append(args, "-test.gocoverdir="+cover)
 		}
 		command := exec.CommandContext(run, bin, args...)
+		command.Env = w.coverageEnv(os.Environ())
 		data, err := command.CombinedOutput()
 		r := doctorResult{stdout: string(data)}
 		if err != nil {

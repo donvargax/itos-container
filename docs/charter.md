@@ -44,13 +44,53 @@ why, and update that section. A spec reviewer refuses a change that departs from
 without one. Triage files a drift it sees elsewhere as its own idea, titled "Architecture
 drift: …".
 
+## The second milestone: a coding agent inside the sandbox
+
+Current once `v0.1.0` is published. Milestone-one isolation items still open then (control
+state, the flaky-test and suite-speed fixes) keep their place ahead of it.
+
+Done when a coding agent's harness runs inside an approved container for one checkout and
+reaches only the hosts it needs: Codex CLI headless (`codex exec`) first, then Claude Code
+headless (`claude -p`) and interactive. Each property is proven by a scenario that fails
+without it. The container spike (outside this repository) tried every piece by hand; its
+findings are inputs, not evidence.
+
+1. **Egress through an allowlisting proxy:** an owned proxy beside the worker, on an
+   internal network, so the worker has no direct route out. It allows CONNECT to listed
+   host names on port 443 only, with no TLS interception, matching the name the client gave
+   (never a reverse-DNS lookup of an IP), and logs every refusal. The allowlist is part of
+   the approved settings. Choose the proxy in the spec (squid worked in the spike; a small
+   maintained Go CONNECT proxy is the alternative).
+2. **Credentials passed in, never injected, never in the checkout:** per command, so they
+   never appear in the container's configuration or `docker inspect`. Claude's long-lived
+   token from a host file the person keeps. Codex shares the host's own login: `auth.json`
+   bind-mounted read-write as a single file (Codex rewrites it in place), plus its lock file
+   when the host has one. A GitHub token for `gh` and pushes, passed the same way.
+3. **A home for the harness:** a writable volume or tmpfs, never the host home; harness
+   state seeded where its first run would otherwise stop or call home (Claude's onboarding
+   flags; Codex with update checks, analytics and plugins off, and its own sandbox off because
+   the container is the sandbox). Executable `/tmp`.
+4. **Interactive use:** `run` and `exec` with a TTY (raw mode, resizes, Ctrl-C as input),
+   built on slice-12's cancellation rules; a disconnected client never leaves the harness
+   running inside.
+5. **Late host sockets unreachable:** Landlock (ABI 9 or later) by default, applied by a
+   small read-only init binary itos-container mounts as the worker's entrypoint before it
+   runs the literal argv; gVisor (`runsc`) as the fallback; with neither, `run` only with an
+   approval that records "late host sockets reachable", shown at approval and in `status`.
+   Doctor names the backend a run will use, and the approval binds it. Prove the Landlock
+   path on the person's machine until a CI runner with a new enough kernel exists (a
+   weakened gate, recorded), and the gVisor path in hosted CI. Registry:
+   `p1-checkout-socket-kernel-enforcement`.
+
+No scenario uses a real model, account or credential: harness traffic goes to a fake
+endpoint the proxy allows in tests. A real harness run is the person's smoke check.
+
 ## Not yet
 
-Egress through a proxy, credentials and accounts, Git over the network from inside the
-container, LAN ingress, Compose services, platforms other than Linux amd64 with native
-Docker, and any support claim beyond what a scenario proves. The runtime directions in
-`PLAN.md` (isolates, WASM, a restricted shell, a capability broker) are research: record
-findings as ideas, build none of them in this milestone.
+LAN ingress, Compose services, platforms other than Linux amd64 with native Docker, giving
+any worker the Docker socket, and any support claim beyond what a scenario proves. The
+runtime directions in `PLAN.md` (isolates, WASM, a restricted shell, a capability broker)
+are research: record findings as ideas, build none of them yet.
 
 ## How the work is done here
 
@@ -68,7 +108,7 @@ findings as ideas, build none of them in this milestone.
 
 ## Bounds for the loop
 
-- Work only on items this milestone needs. When nothing is ready, specify the next idea
+- Work only on items the current milestone needs. When nothing is ready, specify the next idea
   the milestone needs, in the order above.
 - Agents commit; only the loop pushes, marks a pull request ready, and closes an item.
 - Stop and ask the person on: an open question (`itos decision`), a change to this charter

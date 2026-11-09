@@ -687,3 +687,10 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: T-36
+    title: The feature harness writes per-scenario coverage when itos-cc asks, so the code proof's coverage pass takes minutes
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task

@@ -27,9 +27,10 @@ import (
 
 // One scenario's state.
 type world struct {
-	root string // the itos-container checkout: where go.mod is
-	bin  string // the itos-container binary under test
-	dir  string // the scratch folder
+	root     string // the itos-container checkout: where go.mod is
+	bin      string // the itos-container binary under test
+	dir      string // the scratch folder
+	coverdir string // product coverage, outside the scenario's disposable state
 
 	exit           int
 	stdout, stderr string
@@ -60,7 +61,10 @@ type world struct {
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w := &world{root: root, bin: bin}
-	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
+	sc.Before(func(ctx context.Context, scenario *godog.Scenario) (context.Context, error) {
+		if err := w.initializeCoverage(scenario); err != nil {
+			return ctx, err
+		}
 		return ctx, w.setUp()
 	})
 	sc.StepContext().After(w.reportMountDiagnosticFailure)
@@ -238,7 +242,7 @@ func (w *world) env() []string {
 		"GIT_COMMITTER_EMAIL=features@localhost",
 		"PATH="+callerPath(),
 	)
-	return w.doctorEnv(w.manifestEnv(w.policyEnv(env)))
+	return w.coverageEnv(w.doctorEnv(w.manifestEnv(w.policyEnv(env))))
 }
 
 // withEnv is the scenarios' environment with each NAME=value of vars, a

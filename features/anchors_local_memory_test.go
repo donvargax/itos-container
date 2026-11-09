@@ -3,7 +3,6 @@ package features
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -19,7 +18,7 @@ func (w *world) anchorRecoveryMemory() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	args := []string{"-test.run=^TestAnchorRecoveryMemory$", "-test.count=1", "-test.v"}
-	if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+	if cover := w.coverageDir(); cover != "" {
 		args = append(args, "-test.gocoverdir="+cover)
 	}
 	c := exec.CommandContext(ctx, bin, args...)

@@ -179,3 +179,11 @@ questions:
     item: "T-25"
     question: "T-25: the release helpers need internal/release but the architecture gate forbids tools importing internal; may the gate change?"
     answer: "Yes, one narrow named exception: the release helper packages may import internal/release (their tests internal/release/releasetest) and nothing else under internal, with fixtures proving that edge allowed and every other tools-to-internal edge still refused. Amend the spec's no-gate-edits rule to name it, land it in a ci commit before the helpers, and apply the stashed test files. See T-25-steer.md."
+  - id: q-45
+    item: "T-36"
+    question: "T-36: the spec's count-reach check fails for ID-CLI-01, which runs count's Help() during Kong setup; correct the spec?"
+    answer: "Yes: judge counting by internal/slices/count/domain/ only, in the spec and the task check together, then apply the stashed harness repair (git stash list in .wt/w1), finish docs and checks, and push. See T-36-steer.md."
+  - id: q-46
+    item: "T-31"
+    question: "T-31: its task check needs the engine fixtures, which only the Engine job has; how is it proven?"
+    answer: "Change done_when to the engine-free regression for the heartbeat rename race; RECOVERY-23's native proof is the Engine job, which runs every live engine scenario on each pull request. Keep the workflow guards. See T-31-steer.md."

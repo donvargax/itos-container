@@ -242,7 +242,7 @@ func (w *world) recoveryRaceSteps(sc *godog.ScenarioContext) {
 		if err := w.recoveryAdditional("c"); err != nil {
 			return err
 		}
-		child := &world{root: w.root, bin: w.bin, dir: filepath.Join(w.dir, "project-b")}
+		child := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: filepath.Join(w.dir, "project-b")}
 		if err := os.Mkdir(child.dir, 0700); err != nil {
 			return err
 		}

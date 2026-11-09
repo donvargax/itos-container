@@ -10,6 +10,7 @@
 //	GOCOVERDIR=<dir> go test ./features -count=1       either, itos-container
 //	                                                   built with -cover, what
 //	                                                   the scenarios ran in <dir>
+//	ITOS_CC_TEST_COVERDIR=<root> go test ./features    coverage in <root>/<ID>
 //
 // godog's own tag filter takes exact tags joined by commas; itos's run
 // templates join the IDs they select with |, as a regular expression
@@ -18,21 +19,14 @@
 // Ordinary runs exclude @wip. Manual CI can select exact IDs for red evidence;
 // @engine is still CI-only and @linux requires a Linux test process (see README.md).
 //
-// The scenarios run itos-container as another process, where Go records
-// coverage only for a binary built with -cover and run with GOCOVERDIR naming
-// an existing folder (go.dev/doc/build-cover); go test's own -cover sees none
-// of it. So with GOCOVERDIR set, the binary is built with -cover
-// -covermode=atomic -coverpkg=./..., every package of the module counted, and
-// what the scenarios run lands in that folder, where itos-cc merges it with go
-// test's. The build keys on GOCOVERDIR alone: a -cover binary run without it
-// writes "warning: GOCOVERDIR not set, no coverage data emitted" to its
-// stderr, which breaks every scenario that reads stderr, and only
-// GOCOVERDIR's being set guarantees every command a scenario starts has it.
-// w.env() passes it on unchanged, every environment a step runs a command in
-// is w.env() changed elsewhere (noGit, knowingNoOne, withGitConfig). Never
-// ITOS_CC_TEST_COVERDIR, which itos-cc sets alone for a listed test's first
-// coverage run and w.env() drops with every ITOS_ variable. With GOCOVERDIR
-// unset the build is the plain one.
+// Product subprocesses need -cover -covermode=atomic -coverpkg=./... and an
+// existing GOCOVERDIR. Either GOCOVERDIR or ITOS_CC_TEST_COVERDIR requests
+// covered CLI and test-assembly builds. The latter routes each scenario to its
+// absolute <root>/<ID> directory and takes precedence over aggregate coverage.
+// Destinations belong to worlds (including their secondary fixture worlds), not
+// process-global Before-hook mutations. Outline rows accumulate under one ID;
+// cleanup releases fixture state but preserves counters for the external reader.
+// With neither input, selected and whole runs retain plain builds and output.
 package features
 
 import (
@@ -102,6 +96,11 @@ func TestFeatures(t *testing.T) {
 		w.duringQuiet = duringQuiet
 	}) != 0 {
 		t.Fatal("a scenario failed")
+	}
+	if dir := os.Getenv("ITOS_CC_TEST_COVERDIR"); selection.engine && dir != "" {
+		// The CI engine invocation keeps its behavior assertions and also proves
+		// that every selected ID exported readable, executed product counters.
+		readScenarioCoverage(t, dir, selection.ids)
 	}
 }
 
@@ -368,7 +367,7 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 // stamped with stampedVersion and stampedCommit, once for every scenario of
 // the run: itos-container, or itos-container.exe on windows, where a
 // program is found by its extension. No VCS stamping, so the build runs no
-// git of the caller's. With GOCOVERDIR set it is a -cover build (see the
+// git of the caller's. Either coverage input requests a -cover build (see the
 // package's comment).
 func build(root, dir string) (string, error) {
 	name := "itos-container"
@@ -378,7 +377,7 @@ func build(root, dir string) (string, error) {
 	bin := filepath.Join(dir, name)
 	args := []string{"build", "-trimpath", "-buildvcs=false",
 		"-ldflags", "-X " + versionSymbol + "=" + stampedVersion + " -X " + commitSymbol + "=" + stampedCommit}
-	if os.Getenv("GOCOVERDIR") != "" {
+	if productCoverageRequested() {
 		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	}
 	cmd := exec.Command("go", append(args, "-o", bin, "./cmd/itos-container")...)

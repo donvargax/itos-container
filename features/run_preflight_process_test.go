@@ -271,7 +271,7 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 		return nil, err
 	}
 	p := &runProcess{approval: approvalBefore, cancel: cancel, done: make(chan struct{}), start: time.Now(), count: w.doctor.engine.listener.connections.Load()}
-	if cover := os.Getenv("GOCOVERDIR"); cover != "" && r.mask != "" {
+	if cover := w.coverageDir(); cover != "" && r.mask != "" {
 		dir, err := os.MkdirTemp(cover, "slice-8-mask-")
 		if err != nil {
 			cancel()
@@ -331,7 +331,7 @@ func (w *world) finishRun(p *runProcess) (runObservation, error) {
 	}
 	if p.coverage != "" {
 		defer func() { _ = os.RemoveAll(p.coverage) }()
-		if err := exportApprovalKernelCoverage(p.coverage, os.Getenv("GOCOVERDIR")); err != nil {
+		if err := exportApprovalKernelCoverage(p.coverage, w.coverageDir()); err != nil {
 			return r, err
 		}
 	}

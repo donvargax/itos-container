@@ -80,7 +80,7 @@ func (w *world) anchorRecoveryControlSeed() error {
 	if err != nil {
 		return err
 	}
-	c := &world{root: w.root, bin: w.bin, dir: dir}
+	c := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: dir}
 	w.anchorLocalRecovery.control = c
 	w.doctor.cleanup = append(w.doctor.cleanup, func() { _ = c.closeRecoveryNative(); _ = c.closeSession(); c.closeDoctor(); _ = os.RemoveAll(dir) })
 	if err := c.anchorRecoverySeed("failed", "created", "present", "pending", "7"); err != nil {

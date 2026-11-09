@@ -19,6 +19,7 @@ func TestSessionContractCoverage(t *testing.T) {
 	if filteredFeatureRun(*scenarios, env) || env.os != "linux" || env.engine == "1" {
 		t.Skip("whole-suite Linux fixture regression; preserve filtered and engine selections")
 	}
+	isolateProductCoverage(t)
 	root, err := moduleRoot()
 	if err != nil {
 		t.Fatal(err)

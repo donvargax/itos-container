@@ -36,8 +36,9 @@ remain serial. No scenario deadline or assertion is shortened or omitted.
 
 Commands run in a clean environment: no `GIT_*`, `ITOS_*`, `ITOS_CONTAINER_*`, `GITHUB_*`,
 `GH_*` or `CI` variable of the caller's, no global or system git config, a fixed author, and none
-of the caller's claude, itos or its extensions on the PATH. A `GOCOVERDIR` that exists builds the
-binary with `-cover` and collects what each run did, for itos-cc to merge with `go test`'s.
+of the caller's claude, itos or its extensions on the PATH. Either `GOCOVERDIR` or
+`ITOS_CC_TEST_COVERDIR` requests a covered product build. The harness reads the latter before
+filtering `ITOS_` variables and gives each scenario its own `GOCOVERDIR` for collection.
 
 Slice-2 also specifies a shared metadata-validator contract. Its four metadata
 scenario IDs use a test-only `cmd/itos-container` assembly, built as a Go test binary,
@@ -45,7 +46,7 @@ with in-memory file data and the real parser, reference adapter, domain and doct
 presenter. The runner sends raw input and asserts actual output; it imports no
 production packages and supplies no engine fake or product injection flag. File
 scenarios still run the product binary. Slice-3 owns binary-to-engine evidence.
-When `GOCOVERDIR` is set, the test assembly also builds with atomic coverage across
+When either coverage variable is set, the test assembly also builds with atomic coverage across
 the module. Go's exit hooks export counters for both success and refusal exits.
 `TestManifestContractCoverage` checks each metadata ID's exported product coverage
 in a separate directory. It runs in the unfiltered suite; `-scenarios` and active manual red
@@ -57,16 +58,16 @@ Slice-4's identity, publication and frozen-input contract IDs use a test-only
 contracts share its compiled executable, while each invocation keeps separate
 inputs, processes and results. A covered executable is cached separately from
 the plain one; it enables atomic coverage across the module and passes the
-caller's measurement directory explicitly through `-test.gocoverdir`.
+scenario's effective measurement directory explicitly through `-test.gocoverdir`.
 `TestApprovalContractCoverage` requires executed approval-domain counters for each
 of the five IDs in separate directories. Like the manifest regression, it skips
 filtered and active manual red selections so they execute only the requested IDs.
 
 The older-kernel approval fixture runs the product with umask `0777` as well as
 `0022`. Go applies that umask to its coverage files too. Each child therefore
-writes coverage to a private temporary subdirectory of the caller's `GOCOVERDIR`.
+writes coverage to a private temporary subdirectory of the scenario's effective `GOCOVERDIR`.
 After it exits, the harness gives only those metadata/counter files owner access
-and moves them unchanged into the caller's collection directory. The product's
+and moves them unchanged into that scenario's collection directory. The product's
 umask and approval-state permissions remain as tested. Missing metadata or counters
 fails collection. `TestApprovalKernelCoverage` runs both examples and requires
 successful conversion with executed private-directory initialization coverage.
@@ -78,6 +79,7 @@ It preserves the same filtered, platform and engine selection boundaries.
 go test ./features -count=1                         # live non-engine scenarios and harness tests
 go test ./features -count=1 -scenarios='^@ID-CLI-'  # matching live non-engine scenarios
 GOCOVERDIR=$d go test ./features -count=1           # non-engine coverage in existing directory $d
+ITOS_CC_TEST_COVERDIR=$d go test ./features -count=1 # non-engine coverage in $d/<ID>
 itos tests smoke run scenario                      # eligible smoke IDs; engine IDs explicitly skip
 ```
 
@@ -119,6 +121,57 @@ to the child, so observers never depend on an unprotected shared environment.
 Use `-v` to see successful-run logs and Go's skip report. Selection precedes the binary build,
 scenario initialization, Background steps and any engine access. Each eligible scenario is a
 subtest of `TestFeatures`, named after the scenario.
+
+### Product coverage
+
+Both the CLI and the shared command test assembly use
+`-cover -covermode=atomic -coverpkg=./...` when coverage is requested. Plain and
+covered assemblies have separate cache paths; neither input means plain builds,
+including selected runs, without missing-coverage warnings or changed output.
+
+| Harness inputs | Product coverage destination |
+| --- | --- |
+| Neither variable | No product coverage |
+| `GOCOVERDIR` only | Aggregate counters in that directory |
+| `ITOS_CC_TEST_COVERDIR` only | `<root>/<ID>` for each selected scenario |
+| Both variables | `<ITOS_CC_TEST_COVERDIR>/<ID>`; the per-ID root wins |
+
+The harness resolves relative roots against its working directory (`features/`)
+and creates an absolute destination before fixture setup starts product code.
+For per-ID collection, each scenario must have exactly one complete
+`@ID-AREA-number` tag; missing, ambiguous or malformed IDs and unusable directories
+fail the run. Outline rows
+accumulate under their shared ID. The destination stays on the scenario world
+and its secondary fixture worlds, so concurrent IDs and nested native scenarios
+keep independent counters without changing the process environment.
+
+CLI launches, contract probes and recovery controllers use the same destination.
+The approval older-kernel and run umask helpers stage their counters there before
+exporting them after child exit, preserving the child's umask and state permissions.
+Returning recovery probes also stage each invocation's `GOCOVERDIR` and matching
+`-test.gocoverdir` in a private subdirectory. Go's test runner rereads that directory
+to report coverage after printing `PASS`; under the syscall observer, rereading
+sibling counters can exceed the drain bound even after product cleanup completes.
+After joining each probe, cleanup moves its generated files into the captured
+scenario destination and removes the staging directory. Export failures fail cleanup;
+deliberately killed controllers need not have completed counters.
+Scenario cleanup removes fixture state but leaves coverage for the collector.
+When coverage is requested, local overlap fixtures end their simulated workloads
+after the final assertion and give active controllers a shared five-second drain
+bound before forced cleanup. This lets Go export their executed counters; a drain
+timeout fails cleanup. Plain runs retain direct cancellation and joining because
+their controllers have no counters to export. Native teardown is unchanged.
+Independent harness regressions use private temporary coverage roots and restore
+the caller's inputs, keeping their reruns outside the listed-ID inventory.
+
+`TestScenarioCoverageContract` checks this routing through real hooks and binaries,
+including secondary worlds, concurrent IDs, outline rows, restrictive umasks,
+retained counters, invalid destinations and plain/covered cache transitions. It
+requires readable atomic metadata and counters with executed product blocks.
+COUNT-01 alone must reach `internal/slices/count/domain/`; CLI-01 legitimately
+reaches count's command help during Kong initialization. The T-36 ledger also
+checks the unchanged full non-engine inventory once, without `-race`, within
+600 seconds. Native coverage and fresh pinned-itos-cc proof remain CI evidence.
 
 ### Scenario memory
 
@@ -206,14 +259,22 @@ wrong server platform or timeout fails the job. It records only server version, 
 OS, architecture and the tested commit. Its 29-second deadline plus a 1-second kill grace
 bounds it to 30 seconds. The preflight attempts no install/start, image pull/build, container
 creation or fallback. A separate preparation step supplies the cached fixture described below.
-The Engine scenarios step first compiles the test binary, then alone enables the switch
-for this **CI-only** invocation (the workflow also supplies the fixture environment):
+The Engine scenarios step first compiles the test binary, creates a fresh coverage
+root beneath `RUNNER_TEMP`, then alone enables the switch for this **CI-only**
+invocation (the workflow also supplies the fixture environment):
 
 ```sh
 go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
+ITOS_CC_TEST_COVERDIR=$(mktemp -d "$RUNNER_TEMP/T-36-engine-coverage.XXXXXX")
+export ITOS_CC_TEST_COVERDIR
 cd features
 ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=7m -test.paniconexit0 -test.run '^TestFeatures$'
 ```
+
+After the selected scenarios succeed, the same `TestFeatures` invocation checks
+that the root contains exactly their IDs and converts each ID's data with
+`go tool covdata`, requiring atomic coverage and executed product blocks. This
+also follows manual red selection; it does not start a second engine run.
 
 The engine tests run in their own session. Coordinator-reviewed run 42233015284
 at `9af619c` traced the entire test process tree and found no product or harness
