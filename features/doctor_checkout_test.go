@@ -285,10 +285,23 @@ func (w *world) doctorEnv(env []string) []string {
 // Include every entry created during invocation, modes and link targets. Never
 // follow a symlink or open a socket, FIFO or deliberately unreadable directory.
 func doctorTree(root string) (map[string]string, error) {
+	return doctorTreeWithWalk(root, nil, filepath.WalkDir)
+}
+
+// A per-call walker lets observer controls deliver entries across a rename.
+// Native observations always use filepath.WalkDir.
+type doctorTreeWalk func(string, fs.WalkDirFunc) error
+
+func doctorTreeWithWalk(root string, excluded map[string]bool, walk doctorTreeWalk) (map[string]string, error) {
 	files := map[string]string{}
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	err := walk(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if excluded[path] {
+			// Omit only this entry before inspecting it. A directory's children
+			// remain audited, so this must not return SkipDir or SkipAll.
+			return nil
 		}
 		info, err := entry.Info()
 		if err != nil {

@@ -2485,13 +2485,198 @@
   type: test
   title: Native stop confined to one of two equal-basename projects passes reliably
   why: >
-    main's engine job went red at 8164782 (run 42389951333), a registry-only push, on 'Native stop
-    is confined to one of two equal-basename projects': lstat
-    …/slice-11-project-b/checkout/slice-11-heartbeat.next: no such file or directory, while the run
-    before (db63a37) passed. A flaky engine scenario turns main red at random. Find the race (the
-    heartbeat file's rename, likely) and fix it, never by retrying or widening a timeout.
+    The coordinator reported main's engine job red at 8164782 (run 42389951333), a registry-only
+    push, on 'Native stop is confined to one of two equal-basename projects': lstat
+    …/slice-11-project-b/checkout/slice-11-heartbeat.next: no such file or directory. The preceding
+    run at db63a37 passed. Repair the test observer's race, never by retrying or widening a
+    timeout. This is harness maintenance for the charter's existing offline owned-run contract,
+    not new product behaviour or a runtime support claim. Keep RECOVERY-23 live and unchanged;
+    add no scenarios or IDs. The drafter edits only this entry; implementation is a test commit
+    with --task T-31.
+
+    Read features/recovery.feature's RECOVERY-21/22/23, recovery_native_steps_test.go,
+    recovery_native_fixture_test.go and recovery_native_assertions_test.go in full. Follow
+    offline_runtime_fixture_test.go's offlineProtected, doctor_checkout_test.go's doctorTree,
+    run_preflight_process_test.go's runTree and admission_records_test.go's protected-state
+    validation. Read features_test.go and doctor_runtime_test.go for selection and native guards,
+    and .github/workflows/ci.yml for the engine tier. These are test helpers, not new slices or
+    engine packages. Preserve docs/architecture.md's boundaries and the public recovery contract.
+
+    The failing preservation step calls recoveryPreserved, then recoveryProtected, offlineProtected
+    and doctorTree. doctorTree's filepath.WalkDir callback calls entry.Info and os.ReadFile before
+    recoveryProtected deletes either heartbeat path from the completed map. Project B is still
+    running: recoveryWorkerSource writes slice-11-heartbeat.next and atomically renames it over
+    slice-11-heartbeat every 50 ms. The staging name can disappear after directory enumeration
+    but before Info (lstat), or before the subsequent read. Filtering the completed map cannot
+    prevent that error. It is the observer reading a deliberately excluded file, not evidence
+    that stop removed B's data. The separate runTree scan covers protected host state, not the
+    checkout; do not relax that scan to address this race.
+
+    Apply recovery's existing heartbeat exclusions before the tree collector obtains metadata,
+    reads contents or resolves a link target for those entries. Match only the full paths
+    filepath.Join(w.doctor.checkout, "slice-11-heartbeat") and the corresponding
+    "slice-11-heartbeat.next". Pass the exclusions explicitly from recovery through the offline
+    collector to the tree walker; the ordinary doctorTree and offlineProtected calls retain
+    their strict default behaviour. Do not omit a checkout, directory subtree, basename match,
+    prefix, glob or arbitrary .next file. Do not swallow missing-file or other I/O errors for
+    non-excluded entries, even if they also disappear after enumeration. All other existing
+    filtering and the protected-state/admission validation stay intact. A small per-call walk
+    seam in test support may supply deterministic observations; use no mutable package-global
+    hook and no production API change. Existing standard-library filepath, io/fs, os and testing
+    facilities suffice; no new dependency or service is needed.
+
+    Keep the probe's atomic write/rename and monotonic heartbeat, the current readiness and
+    later-heartbeat bounds, and the independent native running observation. B and its controller
+    must remain running through the preservation assertion; pausing or stopping B, moving the
+    assertion after harness cleanup, changing the heartbeat cadence or replacing its output
+    with expected fixture data would change the proof. Retain the removal barrier overlapping
+    A's two independent stops, both successful results, A's full-ID absence and durable completion,
+    B's new heartbeat, per-project status/fingerprint/nullable-exit checks, exact retained worker
+    edit and original snapshot checks, unrelated resource comparison and single-launch/removal
+    totals. Harness cleanup never supplies product-success evidence.
+
+    Implementation may change features/doctor_checkout_test.go, offline_runtime_fixture_test.go
+    and recovery_native_fixture_test.go to carry the narrow exclusions, and add
+    features/recovery_preservation_test.go for their regressions. Keep recovery_native_steps_test.go,
+    recovery_native_assertions_test.go and all feature text unchanged. Do not change cmd/internal,
+    production locking or stop behaviour, workflow limits, test selection, hooks or proof settings.
+    T-32's temporary limit allowance and T-33's engine-duration work stay separate. If inspection
+    exposes a product defect, return it for a behaviour spec instead of fixing it inside this task.
+
+    Add TestRecoveryProtectedHeartbeatRename using disposable files and the real recovery
+    preservation collector, without constructing a native fixture, starting a product command
+    or connecting to an engine. Include an unchanged control and controlled rename_after_listing
+    and rename_with_cached_info cases. In each rename case, have the walker enumerate the real
+    staging entry, rename it over the published heartbeat exactly once, then deliver that entry
+    to the collector. The first case delivers the original DirEntry, so its Info lookup sees
+    the missing path. For the second, obtain the real entry's FileInfo before renaming and
+    deliver a DirEntry wrapper whose Info returns that saved metadata; the old collector then
+    reaches ReadFile on the missing path. This models disappearance between metadata lookup
+    and reading without adding another scheduling hook. Metadata obtained by the test to
+    arrange this schedule is distinct from calls made by the collector under test.
+
+    Assert the rename was reached and performed exactly once, the heartbeat advanced, the
+    protected snapshot is unchanged and the capture succeeds. Exercise recovery's actual
+    exclusion wiring, not just an isolated skip predicate. Before repair, both rename cases
+    must fail at the capture assertion, respectively on metadata lookup and file reading;
+    after repair the collector must not call Info or read either excluded entry. Use controlled
+    callbacks or handshakes, never sleeps, scheduling hints, retries, stress loops or an
+    increased count to seek a passing schedule. Any seam must leave the ordinary native path
+    using WalkDir.
+
+    Include an excluded_info_calls control in TestRecoveryProtectedHeartbeatRename with both
+    exact heartbeat files present. A per-call wrapper delegates to WalkDir, delivers both real
+    entries to the collector and counts their Info calls while returning the real metadata.
+    Preserve each entry's Name, Type and IsDir; the wrapper must not filter entries itself.
+    Require each entry to be delivered exactly once and each collector Info count to be zero,
+    alongside successful capture and the known retained checkout/host sentinels. Count calls
+    even if the collector discards their results or errors. This fails under the current late
+    deletion and rejects inspecting an excluded entry before dropping it from the map; capture
+    success alone cannot establish that inspection was avoided. Keep fixture metadata reads
+    used to arrange the cached-info rename separate from these collector-call counts.
+
+    Add TestRecoveryProtectedSnapshotBoundaries with a healthy control and fault controls that
+    retain the audit. Deleting a non-excluded entry after enumeration must still return its
+    filesystem error, both with the original DirEntry and with pre-deletion cached metadata.
+    Check the missing-file cause and the offending path, not just an arbitrary non-nil error,
+    so a different setup failure cannot satisfy these controls. Cover an unrelated .next file,
+    the same heartbeat basename under a nested checkout directory and under the host root,
+    and checkout siblings named slice-11-heartbeat.keep and slice-11-heartbeat.next.keep.
+    In separate disposable fixtures, make each exact excluded heartbeat path a directory with
+    a retained child. The existing late deletion omits only that directory's own map entry;
+    its descendants remain audited. The early exclusion must preserve that traversal, never
+    return SkipDir or SkipAll to omit the subtree or the rest of the walk. Require the child
+    and prefix-neighbour entries in the baseline with their known contents and modes, then
+    change each independently and assert the affected entry as well as snapshot inequality.
+    Comparing two empty or identically over-filtered maps is not a preservation control.
+
+    Exercise the strict defaults by calling doctorTree(root) and w.offlineProtected() directly,
+    not only an internal helper with an empty exclusion set. With both heartbeat files present,
+    each default collector must include their exact keys and known contents and detect a change
+    to either. These boundary/default controls preserve behaviour that already works before
+    the repair; the two forced-rename capture failures supply the observer's red evidence.
+    Unrelated checkout/host additions, removals, content changes and mode changes must still
+    change the captured snapshot; include an approval-file sentinel. Preserve link handling
+    without following targets. Keep the existing TestOfflineRegistryPreservation and
+    TestAdmissionPreservationRequiresExactProtectedBinding controls, including their negative
+    cases. New controls must reject an overly broad exclusion or generic ErrNotExist suppression,
+    not accept an empty capture, normalize away changes or compute expected state from the final
+    observation. The existing separate worker-edit, snapshot and native-resource assertions remain
+    authoritative for the data the collector already exempts.
+
+    Make the link preservation control explicit in TestRecoveryProtectedSnapshotBoundaries.
+    A retained, non-excluded checkout symlink points to a disposable directory outside both
+    walked roots. Require its baseline entry to contain the known link mode, owner and literal
+    target, with no captured descendants below the link or target. Changing only an outside
+    target's child must leave the snapshot unchanged; retargeting the link must change its
+    exact entry and the snapshot. Also delete that link after enumeration, delivering its
+    cached symlink FileInfo to the collector: require ErrNotExist with the link's exact path
+    from Readlink. This uses the same per-call walk seam and retains the existing link audit
+    and error propagation; it neither follows targets nor adds an I/O hook or product rule.
+
+    At f0122e818db7bf9120dabdef4e9d995d93a632ee, a single local execution of a temporary
+    observation-only Go overlay reproduced both capture failures. It passed a per-call walker
+    through recoveryProtected, offlineProtected and doctorTree while retaining the existing late
+    deletion and every collector assertion. Disposable offlineRegistryFixture files supplied
+    checkout/host sentinels and protected registration/admission records without a native fixture,
+    product command or approval. The unchanged control passed. rename_after_listing failed at
+    the capture assertion with lstat on slice-11-heartbeat.next; rename_with_cached_info failed
+    there with open on that same path. Each case performed exactly one successful rename and
+    advanced the heartbeat from 1 to 2 before the capture assertion. excluded_info_calls failed
+    with one collector Info call on each exact heartbeat path, despite a successful unchanged
+    snapshot. No implementation or temporary probe is committed by this spec. Reproduce these
+    red assertions before repair and retain the schedules as permanent regressions; missing
+    tests alone are not race evidence.
+
+    In that execution, known-content controls for unrelated .next files, nested heartbeat
+    basenames, both prefix neighbours and children beneath both exact heartbeat directories
+    passed. Both non-excluded disappearance controls preserved ErrNotExist with the exact path
+    and the expected lstat/open operation. Direct doctorTree and offlineProtected controls
+    included both heartbeat keys and detected changes to each. The link controls were checked
+    at 29ab6a2, including the forced Readlink error on the removed link; this refresh did not
+    rerun those controls. These are preservation results, not evidence the observer is repaired
+    or the full permanent regression suite exists. Keep every boundary and link requirement
+    above when implementing it.
+
+    The task check below discovers both named regressions before running them, preserves go
+    test's exit status and refuses an empty selection. At f0122e8 it failed with missing
+    TestRecoveryProtectedHeartbeatRename; both new tests were absent then. The separate focused
+    run of TestOfflineRegistryPreservation and TestAdmissionPreservationRequiresExactProtectedBinding
+    passed, including their negative cases. Keep the new tests in the existing ordinary Linux
+    go test ./... tier; the focused task check needs no engine and no new gate. Commands use
+    plain Go and existing runner shell tools, with no RTK requirement in CI.
+
+    Commit 1f8471a adds the permanent regressions and the pre-inspection exclusions. Its
+    pre-repair controls failed at the capture assertion with lstat and open on the renamed
+    staging path, and at one Info call per excluded heartbeat. The focused check passes after
+    the repair, including the snapshot boundary and existing registry/admission controls.
+
+    The coordinator's q-46 decision (2026-11-09) assigns only the engine-free regression to
+    done_when. Task checks run through itos ci run in the ci job; cached-image fixture inputs
+    exist only in the Engine job. Running RECOVERY-23 as a task check therefore fails with
+    absent or malformed CI cached-image fixture inputs. Leave the workflow and native guards
+    unchanged. ID-RECOVERY-23 needs no task check because the Engine job runs every live engine
+    scenario on each non-draft pull request and on main. Its actual green RECOVERY-23 execution
+    at the pushed branch head is the native evidence the coordinator accepts, not a skip or
+    zero selected scenarios. That suite also covers RECOVERY-21/22 and lifecycle consumers;
+    preserve its selection and budgets without adding repeated native runs. The coordinator's
+    reported lstat failure remains the native pre-work evidence; a flaky scenario need not fail
+    on every run. Never spoof the engine context or run the native scenario on the agent host.
+
+    Report the deterministic failing assertion, passing controlled regression and audit controls,
+    and the coordinator's native CI result when available. No local mutation run, generated
+    coverage/mutation evidence, real state approval or engine access is authorized. Let configured
+    hooks and CI run their gates. Agents commit and stop; the loop owns pushing, CI watching and
+    closure. This spec chooses pre-inspection exact-path exclusions and deterministic local
+    observer controls; it leaves no new security decision or product behaviour to invent.
   done_when:
-    - run: ITOS_CONTAINER_ENGINE_TESTS=1 go test ./features -count=1 -scenarios='^@ID-RECOVERY-23$'
+    - run: |
+        set -eu
+        listed=$(go test ./features -list '^TestRecoveryProtected(HeartbeatRename|SnapshotBoundaries)$')
+        for name in TestRecoveryProtectedHeartbeatRename TestRecoveryProtectedSnapshotBoundaries; do
+          printf '%s\n' "$listed" | grep -Fxq "$name" || { printf 'missing %s\n' "$name" >&2; exit 1; }
+        done
+        go test ./features -run '^(TestRecoveryProtected(HeartbeatRename|SnapshotBoundaries)|TestOfflineRegistryPreservation|TestAdmissionPreservationRequiresExactProtectedBinding)$' -count=1
 - id: T-32
   type: ci
   title: The Engine scenarios step gets an 8-minute limit while the suite is sped up

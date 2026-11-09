@@ -94,7 +94,17 @@ func (w *world) recoveryPairFixture() error {
 }
 
 func (w *world) recoveryProtected() (map[string]string, error) {
-	all, err := w.offlineProtected()
+	return w.recoveryProtectedWithWalk(filepath.WalkDir)
+}
+
+func (w *world) recoveryProtectedWithWalk(walk doctorTreeWalk) (map[string]string, error) {
+	// The live worker atomically replaces these entries. Exclude their exact
+	// checkout paths before inspection; filtering the completed map races rename.
+	excluded := map[string]bool{
+		filepath.Join(w.doctor.checkout, "slice-11-heartbeat"):      true,
+		filepath.Join(w.doctor.checkout, "slice-11-heartbeat.next"): true,
+	}
+	all, err := w.offlineProtectedWithWalk(excluded, walk)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +123,6 @@ func (w *world) recoveryProtected() (map[string]string, error) {
 	for path := range all {
 		if path == sessions || path == filepath.Join(sessions, w.recoveryIndexKey()) ||
 			strings.HasPrefix(path, filepath.Join(sessions, w.recoveryIndexKey())+string(os.PathSeparator)) ||
-			path == filepath.Join(w.doctor.checkout, "slice-11-heartbeat") || path == filepath.Join(w.doctor.checkout, "slice-11-heartbeat.next") ||
 			path == filepath.Join(w.doctor.checkout, "slice-11-worker-edit") {
 			delete(all, path)
 		}
