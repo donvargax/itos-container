@@ -69,16 +69,21 @@ var lifecycleWindowRows = []struct {
 // One journal of a row, built by hand: the first signal at first after
 // cancellation, the product's own waits at waits (it makes one the moment its
 // signal call returns), then each of kills, SIGKILL unless repeat names the first
-// signal. refuses is empty where the journal is accepted, else the text the error
-// names.
+// signal. Each signal's inspection, daemon check and kill reach the recorder at
+// one instant, except that the first signal's daemon check is checkLead before the
+// kill and its inspection inspectLead before the daemon check, as they are when
+// the kill arrives after the call has started. refuses is empty where the journal
+// is accepted, else the text the error names.
 type lifecycleWindowCase struct {
-	name    string
-	first   time.Duration
-	waits   []time.Duration
-	kills   []time.Duration
-	repeat  bool
-	ack     lifecycleWindowAck
-	refuses string
+	name        string
+	first       time.Duration
+	checkLead   time.Duration
+	inspectLead time.Duration
+	waits       []time.Duration
+	kills       []time.Duration
+	repeat      bool
+	ack         lifecycleWindowAck
+	refuses     string
 }
 
 type lifecycleWindowAck int
@@ -259,6 +264,24 @@ func lifecycleDelayedWindowCases(delay time.Duration) []lifecycleWindowCase {
 			waits: []time.Duration{1100 * ms}, kills: []time.Duration{1200 * ms}, ack: ackCut, refuses: "delay did not execute"},
 		{name: "delayed hold abandoned just before the call limit", first: 600 * ms, waits: []time.Duration{600*ms + call - ms},
 			kills: []time.Duration{600*ms + call + 100*ms}, ack: ackCut, refuses: "delay did not execute"},
+		// The call limit runs from the signal call's start, which the recorder
+		// cannot see: the kill reaches it some time later, and the daemon check
+		// before the call is the last request that precedes the start. So the bound
+		// runs from the daemon check, not from the kill's arrival. Here the check
+		// is at 600 ms and the kill at 650 ms. A next request at 1.62 s comes 1.02 s
+		// after the check but 970 ms after the kill, and an honest cut leaves just
+		// that: the product's next request follows the cut at once, while the
+		// kill's arrival lags the start of the call.
+		{name: "delayed acknowledgement cut a call limit after the daemon check", first: 650 * ms, checkLead: 50 * ms,
+			kills: []time.Duration{1620 * ms}, ack: ackCut},
+		{name: "delayed hold cut a call limit after the daemon check", first: 650 * ms, checkLead: 50 * ms,
+			waits: []time.Duration{1620 * ms}, kills: []time.Duration{1700 * ms}, ack: ackCut},
+		// And not from the inspection before the daemon check: the call starts after
+		// the check, so a next request a call limit after the inspection but short
+		// of one after the check is the product giving up early.
+		{name: "delayed hold abandoned within a call limit of the daemon check", first: 650 * ms, checkLead: 50 * ms,
+			inspectLead: 40 * ms, waits: []time.Duration{1590 * ms}, kills: []time.Duration{1700 * ms}, ack: ackCut,
+			refuses: "delay did not execute"},
 		{name: "acknowledgement replied early", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackEarly, refuses: "delay did not execute"},
 		{name: "cancelled before the engine accepted", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackStalled, refuses: "delay did not execute"},
 		{name: "no reply and not cancelled", first: first, kills: []time.Duration{grace + 100*ms}, ack: ackNone, refuses: "delay did not execute"},
@@ -287,18 +310,19 @@ func lifecycleWindowWorld(t *testing.T, signal string, delay time.Duration, c li
 		"Config": map[string]any{"Labels": w.sessionLabels()}}
 	record := sessionRecord{Bytes: fmt.Sprintf(`{"container_id":%q,"project":"project"}`, worker), Mode: 0600}
 	var journal []offlineRequest
-	send := func(signal string, after time.Duration) int {
+	send := func(signal string, after, checkLead, inspectLead time.Duration) int {
 		at := cancelled.Add(after)
 		// In the product's order: recoverySignal inspects, then checks the daemon,
 		// and only then signals.
+		checked := at.Add(-checkLead)
 		journal = append(journal,
-			offlineRequest{Method: "GET", Path: "/containers/" + worker + "/json", Status: 200, Observation: observed, At: at},
-			offlineRequest{Method: "GET", Path: "/info", Status: 200, Observation: map[string]any{"ID": "engine"}, At: at},
+			offlineRequest{Method: "GET", Path: "/containers/" + worker + "/json", Status: 200, Observation: observed, At: checked.Add(-inspectLead)},
+			offlineRequest{Method: "GET", Path: "/info", Status: 200, Observation: map[string]any{"ID": "engine"}, At: checked},
 			offlineRequest{Method: "POST", Path: "/containers/" + worker + "/kill", Query: "signal=" + signal, Status: 204,
 				Observation: observed, Record: record, At: at, Replied: at})
 		return len(journal) - 1
 	}
-	first := &journal[send(signal, c.first)]
+	first := &journal[send(signal, c.first, c.checkLead, c.inspectLead)]
 	switch c.ack {
 	case ackHeld:
 		first.Replied = first.At.Add(delay)
@@ -320,7 +344,7 @@ func lifecycleWindowWorld(t *testing.T, signal string, delay time.Duration, c li
 		if !c.repeat {
 			next = "SIGKILL"
 		}
-		send(next, after)
+		send(next, after, 0, 0)
 	}
 	w.lifecycle = &lifecycleNative{first: signal, signalled: cancelled, delay: delay, aliveBeforeGrace: true,
 		journalAtReturn: journal, signalTrace: trace}

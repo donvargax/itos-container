@@ -124,7 +124,9 @@ func (w *world) lifecycleSignals(escalate bool) error {
 // the cut comes no earlier than engineCallBudget after the later of the two. Not
 // from cancellation alone: a first signal that arrives late leaves most of that
 // bound spent before the hold begins, and a product that gave up after 50 ms
-// would pass. The product's next request follows the cut: its own wait, made the
+// would pass. Nor from the kill's own arrival, which follows the start of the
+// call: an honest cut can leave a next request less than a call limit after it. The
+// product's next request follows the cut: its own wait, made the
 // moment the signal call returns. The teardown is sequential, so no other request
 // of the product lands between them, and the independent observer reads the
 // daemon without the recorder. A next request before that time means the product
