@@ -5,15 +5,15 @@ Feature: Named credential requests and read-only source inspection
   executing checkout code, contacting an engine or recording approval.
 
   # Authorities: docs/charter.md, docs/architecture.md (Slices), CONFIG.md,
-  # CLI.md and T-47's docs/decisions/0025-credentials-passed-in.md on its branch.
-  # Draft against main 168eb7c9ba9800919a1d2a9c1d8affe0eadc2416,
-  # slice-25 12ea980afcb5474e08da96699b68c19b103b63c3 and
-  # T-47 389f5585b64557f545ce05c88a914c9461c3f88f (record 01cfa825).
-  # This spec waits for those policy/decision changes; it does not copy their code.
+  # CLI.md and T-47's docs/decisions/0025-credentials-passed-in.md, now landed.
+  # Revised after the review of f2b0e58. Slice-25's version 2 and helpers remain
+  # prerequisites; this spec does not copy their code.
   # Both T-47 and slice-25 are prerequisites. The coordinator must retain T-47
   # and add slice-25 to the registry dependency list before implementation.
   # docs/decisions/0026-credential-source-inspection.md amends T-47's source
-  # location rule and increment table now, with the corresponding arc42 changes.
+  # location rule and increment table, with the corresponding arc42 changes.
+  # This revision withdraws the shared-state traversal and supplies its bounded
+  # mount-projection replacement and race argument in BOTH decisions and arc42.
   #
   # T-47 supplies version 3: version 2 plus optional credentials, a nonempty list
   # of closed objects containing exactly kind and source. Kinds are case-sensitive
@@ -67,8 +67,8 @@ Feature: Named credential requests and read-only source inspection
   # 2. Every ancestor is root- or host-owned, with no group/other write bits unless
   #    root-owned and sticky, matching approval/disk.directory's ancestor rule.
   # 3. Compare the source and every source ancestor's device/inode with BOTH
-  #    protected roots AND every entry beneath them. A match is location refusal.
-  #    Enumerate the pinned checkout and existing protected state tree completely,
+  #    protected roots AND every entry in the CHECKOUT. A match is location refusal.
+  #    Enumerate the pinned checkout completely,
   #    including .git, hidden, ignored and untracked entries. Cross directory mount
   #    points and inspect mounted file identities; neither device changes nor
   #    repeated directory identities permit skipping entries. Do not follow
@@ -77,33 +77,62 @@ Feature: Named credential requests and read-only source inspection
   #    with unavailable, never a safe result from the partial inventory. A known
   #    identity match still reports location even if another subtree is unavailable.
   #    Reuse readiness's bounded traversal primitives: batches of at most 128,
-  #    100000 entries total across both trees, directory depth 64 from each root
-  #    (depth 0), and one 10-second monotonic deadline across the scan. Count/depth
+  #    100000 checkout entries, directory depth 64 from its root
+  #    (depth 0), and one 10-second monotonic deadline across ALL source observation. Count/depth
   #    limits are inclusive; exceeding them or reaching the deadline refuses.
   #    Time checks between synchronous calls do not preempt blocked kernel calls.
-  #    No background scan
-  #    continues after refusal, and no earlier invocation's inventory is reused.
+  #    No background scan continues after refusal, and no earlier inventory is reused.
   #    This detects bind aliases of protected descendants and individual files
   #    even when source ancestry contains neither root and link count is one.
-  #    It also detects an outside source bound INTO either protected tree. It does
+  #    It also detects an outside source bound INTO the checkout. It does
   #    not reject an unrelated inode just for sharing a pathname prefix or device.
+  #    For STATE, never enumerate or stat unrelated records. Decision 0026's
+  #    mount projections reserve the state root's filesystem-coordinate subtree
+  #    and the roots of all mounts at/below its path, including file mounts,
+  #    different devices and covered backing subtrees. A descriptor's coordinate
+  #    uses its mount ID, that row's decoded root and its relative pathname.
+  #    Device plus component ancestry determines membership, not path-prefix or
+  #    device alone. This catches state descendants bound outside and outside
+  #    sources bound into state, even with one link and neither root in ancestry.
+  #    Rewalk descriptor paths with no-follow and compare device/inode/mount ID.
+  #    Take complete mount tables before and after, recheck pins and mappings,
+  #    and refuse unavailable/changed relevant evidence, never retry to obtain
+  #    a pass. Unrelated mounts/record writes do not invalidate the observation.
+  #    Defer any initial table error to the location check, preserving earlier
+  #    source symlink/ancestor refusal precedence.
+  #    Either complete observation's source match is location; otherwise require
+  #    two complete exclusions and unchanged source/boundary mappings/identities.
+  #    Each table is at most 8 MiB, 16384 rows, 65535 bytes per line excluding LF;
+  #    EOF and the final LF are required. Paths are at most 4096 bytes, joined
+  #    coordinates 8192, fdinfo 64 KiB with EOF. Bounds are inclusive, shared by
+  #    both grants, and overflow/malformed/missing evidence is unavailable.
+  #    These are topology limits; state history never consumes the checkout cap.
+  #    An absent root reserves its projected coordinate under a pinned safe
+  #    ancestor. Safe first creation is accepted after final validation at that
+  #    same coordinate. A replaced existing root retains shared boundary refusal.
   #    The checkout remains the only authorized worker host directory mount.
   # 4. Require a regular host-UID-owned file, no group/other permission bit,
   #    one link, and size 1..65536 inclusive, in that order. Owner read permission
   #    is not required for this metadata-only mode; delivery checks are later work.
+  #    Recheck held source metadata before success. An extra link in state or
+  #    outside both trees is credential.links without any state enumeration.
   # 5. A source device/inode already used by another valid grant is refused.
   # An absent protected state root is not created. An inaccessible existing
-  # boundary or descendant refuses, rather than being omitted from the inventory.
+  # boundary refuses; an unreadable unrelated STATE descendant is immaterial.
   # Existing state-location/identity failures retain their shared rules and exits.
   # The mode does not establish approval readiness or inspect another project's
-  # admission history or record contents; the state walk observes metadata only.
+  # admission history or record contents. Normal publication/removal does not
+  # change the reserved subtrees or an independent source's metadata; no record
+  # disappearance can invalidate an inventory because none is made for state.
   # Slice-21's controls still govern later approval and run. With no grants there
   # is no source/exposure scan. Later consumers re-observe before use: this is an
-  # observation of the pinned trees, not continuous protection against host changes.
+  # observation, not an atomic snapshot or continuous protection against trusted
+  # host mount/rename/link changes between or after the checks. Later delivery
+  # reads the retained checked descriptor, never a fresh source pathname.
   #
   # Source rules are located at /credentials/<written-index>/source in the policy.
   # credential.missing (3): a source or ordinary ancestor is absent.
-  # credential.unavailable (3): unavailable metadata/identity or incomplete protected scan.
+  # credential.unavailable (3): unavailable metadata, checkout scan or state projection.
   # credential.symlink (1): a symbolic link at any component, even dangling.
   # credential.ancestor (1): unsafe ancestor ownership or write permissions.
   # credential.location (1): an identity exposed in checkout or protected state.
@@ -132,7 +161,10 @@ Feature: Named credential requests and read-only source inspection
   # internal/engine/readiness's domain/port/disk for shared source observation.
   # Doctor stays internal/slices/doctor/{command,domain,port,inspection}; only cmd
   # binds adapters. Use the already pinned YAML v4 and x/sys/unix, plus Go's
-  # standard library; no new dependency or handwritten YAML/filesystem library.
+  # standard library. Select github.com/moby/sys/mountinfo v0.7.2 for its bounded-
+  # reader-compatible kernel-format parser; preserve its Apache-2.0 notices.
+  # Pin it during implementation, not this spec; no new service or custom parser.
+  # Validate its numeric/identity output and supply no early-stopping filter.
   # I/O-free port/porttest fakes and a shared contract must cover foreign source
   # and ancestor owners, root-owned sticky ancestors, inaccessible components,
   # unavailable stat data, and stable checked descriptor identity during path
@@ -145,10 +177,16 @@ Feature: Named credential requests and read-only source inspection
   # aliases have outside source ancestry with neither protected root identity;
   # root-directory aliases exercise the inherited root check as well.
   # Also include a distinct-inode same-device control, unreadable/disappearing
-  # descendants, metadata failure,
-  # directory substitution, and entry/depth/time limits at and beyond the bounds.
-  # Alias results must be location; incomplete scans must be unavailable, with a
-  # known match taking precedence. Do not precompute those decisions in fixtures.
+  # CHECKOUT descendants, metadata failure, directory substitution and checkout
+  # entry/depth/time limits at and beyond the bounds. State contracts instead
+  # cover mount projection, complete topology bounds, concurrent publication and
+  # removal, unreadable unrelated records and >100000 retained entries. All
+  # exact topology bounds must succeed before their one-over-limit refusals.
+  # Include escaped mount paths, nested mounts, covered backing subtrees, absent
+  # state safely created during inspection, unrelated mount changes and a final
+  # source stat observing a newly added state hard link (credential.links).
+  # Alias results must be location; incomplete required observations unavailable,
+  # with a known match taking precedence. Do not precompute decisions in fixtures.
   # Test directory and file mount crossings, including a device change below a
   # protected root; a scan stopping at a mount point must fail the contract.
   # The simulated alias cases prove the shared observation contract, not native
@@ -733,6 +771,10 @@ Feature: Named credential requests and read-only source inspection
   # Root binds alias the selected root outside; descendant binds alias its private
   # subdirectory outside; file binds alias its private/token outside. The inverse
   # layouts mount an outside directory/file below that root's hidden descendant.
+  # State topology supplies actual mountinfo text, descriptor paths/mount IDs,
+  # per-component metadata and before/after observations, never a computed set
+  # of protected coordinates. The production adapter parser and projection code
+  # must participate. A root's device can differ from a mounted descendant's.
   # New When extends the existing test-only cmd/itos-container assembly pattern:
   # real policy parser, readiness source validator, doctor handler and presenter,
   # with an I/O-free metadata/topology fake beneath validation. The runner sends
@@ -748,7 +790,7 @@ Feature: Named credential requests and read-only source inspection
     When the credential observation contract runs in JSON mode
     Then it exits with code 0
     And its credential JSON reports exactly these grants and no problems:
-      | kind         | source | target                                     |
+      | kind         | source | target                                       |
       | claude-token | token  | /run/itos-container/credentials/claude-token |
     Given a credential observation fixture for "<boundary>" with "<layout>"
     When the credential observation contract runs in JSON mode
@@ -759,31 +801,34 @@ Feature: Named credential requests and read-only source inspection
     And the engine recorder has no connections
 
     Examples:
-      | boundary        | layout                                    |
-      | checkout        | root directory bound outside              |
-      | checkout        | descendant directory bound outside        |
-      | checkout        | single descendant file bound outside      |
-      | checkout        | outside directory bound into a descendant |
-      | checkout        | outside file bound into a descendant      |
-      | protected state | root directory bound outside              |
-      | protected state | descendant directory bound outside        |
-      | protected state | single descendant file bound outside      |
-      | protected state | outside directory bound into a descendant |
-      | protected state | outside file bound into a descendant      |
+      | boundary        | layout                                            |
+      | checkout        | root directory bound outside                      |
+      | checkout        | descendant directory bound outside                |
+      | checkout        | single descendant file bound outside              |
+      | checkout        | outside directory bound into a descendant         |
+      | checkout        | outside file bound into a descendant              |
+      | protected state | root directory bound outside                      |
+      | protected state | descendant directory bound outside                |
+      | protected state | single descendant file bound outside              |
+      | protected state | outside directory bound into a descendant         |
+      | protected state | outside file bound into a descendant              |
+      | protected state | descendant on another device bound outside        |
+      | protected state | descendant with escaped mount paths bound outside |
+      | protected state | covered state backing directory bound outside     |
 
   # New Given makes one empty private descendant, then removes all its permission
   # bits. The native non-root fixture retains its setup inventory; snapshots treat
   # that directory as metadata-only and cleanup restores access after assertions.
-  # No source ancestry intersects either tree: only a complete exposure scan can
-  # establish safety. Skipping the unreadable directory must not produce success.
+  # Only checkout enumeration is required. State's old row mandated the withdrawn
+  # traversal; 35 below replaces it with the correct independent-source success.
   @wip @slice-29 @ID-CREDENTIALS-30 @linux
-  Scenario Outline: an incomplete protected-tree scan cannot declare a source outside it
+  Scenario: an incomplete checkout scan cannot declare a source outside it
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
     And the credential fixture requests these sources:
       | kind         | source |
       | claude-token | token  |
-    And the credential fixture "<boundary>" has an unreadable descendant
+    And the credential fixture "checkout" has an unreadable descendant
     And credential inspection effects are snapshotted
     When itos-container runs with "doctor --credentials-only --json"
     Then its credential JSON reports exactly these source problems and retains the requested grants:
@@ -793,10 +838,141 @@ Feature: Named credential requests and read-only source inspection
     And credential inspection has no side effects or helper execution
     And the engine recorder has no connections
 
+  @wip @slice-29 @ID-CREDENTIALS-35 @linux
+  Scenario: unreadable unrelated state records cannot block a distinct private source
+    Given a private credential inspection fixture
+    And credential source "token" has layout "private regular file"
+    And the credential fixture requests these sources:
+      | kind         | source |
+      | claude-token | token  |
+    And the credential fixture "protected state" has an unreadable descendant
+    And credential inspection effects are snapshotted
+    When itos-container runs with "doctor --credentials-only --json"
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                     |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+    And credential inspection has no side effects or helper execution
+    And the engine recorder has no connections
+
+  # New activity Given schedules another project's raw state operations after
+  # acquiring the first mount table but before returning that observation to the
+  # validator. Publication writes a temp
+  # file then renames it over an approval, intent or snapshot; cleanup unlinks a
+  # session record. A barrier holds that first observation until the writes finish,
+  # so the writer runs inside inspection even if a known alias refuses early.
+  # The combined activity also removes a temp file before a hypothetical stat.
+  # The Then checks the operation log and that the barrier was reached inside the
+  # command, not before it. No Given invokes a command or asserts its result.
+  # Repeat each activity with a state alias so ignoring state cannot pass.
+  # The fake schedules raw metadata changes; the shared disk contract performs
+  # these same writes in isolated temporary state through adapter-local barriers.
+  # Do not require unchanged unrelated records or modify the production binary.
+  @wip @slice-29 @ID-CREDENTIALS-32
+  Scenario Outline: another project's state publications and cleanup do not block inspection or hide aliases
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And credential observation schedules unrelated state activity "<activity>"
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                       |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+    And the credential observation completed the scheduled state activity during inspection
+    And the credential observation recorded no state record enumeration or metadata visits
+    Given a credential observation fixture for "protected state" with "<alias>"
+    And credential observation schedules unrelated state activity "<activity>"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                | path                  | exit |
+      | credential.location | /credentials/0/source | 1    |
+    And it exits with code 1
+    And the credential observation completed the scheduled state activity during inspection
+    And the credential observation recorded no state record enumeration or metadata visits
+    And the engine recorder has no connections
+
     Examples:
-      | boundary        |
-      | checkout        |
-      | protected state |
+      | activity                                  | alias                                     |
+      | approval publication                      | descendant directory bound outside        |
+      | intent publication                        | single descendant file bound outside      |
+      | snapshot publication                      | outside directory bound into a descendant |
+      | session record cleanup                    | outside file bound into a descendant      |
+      | publication and disappearing temp entries | descendant directory bound outside        |
+
+  # New retained-history Given supplies 100001 ordinary unrelated records under
+  # other projects, without changing the mount table. Enumerations are available
+  # as lazy batches, not a precomputed count returned to the validator; a caller
+  # doing the withdrawn scan would visit them and exceed its budget. The Then
+  # verifies the setup count and zero product visits. Run against fake and disk
+  # observation seams; do not allocate a 100001-entry object graph or capture its
+  # contents for each row. This is observation-contract, not native mount proof.
+  @wip @slice-29 @ID-CREDENTIALS-33
+  Scenario Outline: retained unrelated state history does not consume inspection budgets or hide aliases
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And the credential observation state retains 100001 unrelated entries
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                       |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+    And the credential observation left all 100001 unrelated entries unvisited
+    Given a credential observation fixture for "protected state" with "<alias>"
+    And the credential observation state retains 100001 unrelated entries
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                | path                  | exit |
+      | credential.location | /credentials/0/source | 1    |
+    And it exits with code 1
+    And the credential observation left all 100001 unrelated entries unvisited
+    And the engine recorder has no connections
+
+    Examples:
+      | alias                                     |
+      | descendant directory bound outside        |
+      | single descendant file bound outside      |
+      | outside directory bound into a descendant |
+      | outside file bound into a descendant      |
+
+  # Raw evidence faults are inputs, not canned validator results. Table limits
+  # use generated mount rows/bytes; the final-table fault is injected only on
+  # the second read. Descriptor/path changes keep a safe file at the old path
+  # so identity revalidation, not a missing-file diagnostic, must catch them.
+  # "source mount mapping changed" changes its root without making a known
+  # location match. Complete-data controls include exactly every topology bound,
+  # safe first state creation and unrelated mount churn in the shared contract.
+  @wip @slice-29 @ID-CREDENTIALS-34
+  Scenario Outline: incomplete or inconsistent namespace evidence cannot establish state exclusion
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                       |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And credential observation has namespace evidence fault "<fault>"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                   | path                  | exit |
+      | credential.unavailable | /credentials/0/source | 3    |
+    And it exits with code 3
+    And the credential observation recorded no state record enumeration or metadata visits
+    And the engine recorder has no connections
+
+    Examples:
+      | fault                                   |
+      | mount table unreadable                  |
+      | final mount table unreadable            |
+      | truncated final mount row               |
+      | malformed mount row                     |
+      | duplicate mount ID                      |
+      | descriptor mount row missing            |
+      | descriptor device disagrees             |
+      | source pathname now names another inode |
+      | source mount mapping changed            |
+      | 16385 mount rows                        |
+      | mount table exceeds 8 MiB               |
+      | mount row exceeds 65535 bytes           |
+      | fdinfo mount ID unavailable             |
+      | observation deadline reached            |
 
   # The root-owned sticky /tmp ancestor of every private fixture is a positive
   # control for the inherited directory rule. User-owned sticky is no exception.
@@ -859,11 +1035,12 @@ Feature: Named credential requests and read-only source inspection
     And the engine recorder has no connections
 
     Examples:
-      | layout                                          | rule                |
-      | private source with a hard link in checkout      | credential.location |
-      | private source with a hard link outside checkout | credential.links    |
-      | private regular file of zero bytes               | credential.size     |
-      | private regular file of 65537 bytes              | credential.size     |
+      | layout                                             | rule                |
+      | private source with a hard link in checkout        | credential.location |
+      | private source with a hard link in protected state | credential.links    |
+      | private source with a hard link outside checkout   | credential.links    |
+      | private regular file of zero bytes                 | credential.size     |
+      | private regular file of 65537 bytes                | credential.size     |
 
   @wip @slice-29 @ID-CREDENTIALS-24 @linux
   Scenario: source failures are collected without hiding grants or disclosing contents
@@ -963,47 +1140,46 @@ Feature: Named credential requests and read-only source inspection
       | 2       |
       | 3       |
 
-  # Extend 29's raw observation fixture with an "unreadable descendant" layout:
-  # the source is a distinct outside private file, both protected roots can be
-  # pinned, and the selected tree has an empty mode-000 descendant whose entry
-  # enumeration returns a permission failure. The other tree remains readable.
-  # Supply metadata and that per-directory failure, never a credential decision.
+  # Extend 29's raw observation fixture: checkout's "unreadable descendant"
+  # supplies an entry-read error; state's "unavailable mount table" supplies a
+  # procfs read error, never an unrelated record failure. Roots remain pinnable.
+  # Supply raw observations/errors, never a credential decision.
   # The new policy-version Given changes only the version and removes credentials;
-  # it preserves all topology, including the source file and unreadable descendant.
+  # it preserves topology, source file and the selected observation failure.
   # The same real command assembly runs both invocations. Its test-only observer
-  # records raw source-metadata and protected-tree traversal calls below validation,
-  # including failed calls, from command entry through return. Record each tree
-  # separately and reset the call log before each invocation, not in a Then step.
-  # The positive control must record traversal of the selected tree; with no grants,
-  # require zero source observations and zero traversal calls across BOTH trees.
-  # Root identity pinning is allowed; directory-entry reads and descendant walk
-  # calls are not. Export observations through test-only output separate from the
+  # records source metadata, checkout traversal and state mount-table calls below
+  # validation, including failed calls, from command entry through return. Record
+  # each operation separately and reset logs before each invocation, not in Then.
+  # The positive control must record the selected operation; with no grants,
+  # require zero calls in all three categories. Root identity pinning is allowed;
+  # directory-entry reads, descendant walks and mount-table reads are not.
+  # Export observations through test-only output separate from the
   # product JSON, and run the same cases against the fake/disk observation contract.
   @wip @slice-29 @ID-CREDENTIALS-31
-  Scenario Outline: no-grant inspection makes no source or protected-tree traversal calls
-    Given a credential observation fixture for "<boundary>" with "unreadable descendant"
+  Scenario Outline: no-grant inspection makes no source checkout scan or state projection calls
+    Given a credential observation fixture for "<boundary>" with "<layout>"
     When the credential observation contract runs in JSON mode
     Then its credential JSON reports exactly these source problems and retains the requested grants:
       | rule                   | path                  | exit |
       | credential.unavailable | /credentials/0/source | 3    |
     And it exits with code 3
-    And the credential observation recorded traversal calls for "<boundary>"
+    And the credential observation recorded "<operation>" calls
     Given the credential observation policy version is <version> with no credentials section
     When the credential observation contract runs in JSON mode
     Then it exits with code 0
     And its credential JSON reports exactly these grants and no problems:
       | kind | source | target |
-    And the credential observation recorded no source metadata or protected-tree traversal calls
+    And the credential observation recorded no source metadata checkout traversal or state mount-table calls
     And the engine recorder has no connections
 
     Examples:
-      | boundary        | version |
-      | checkout        | 1       |
-      | checkout        | 2       |
-      | checkout        | 3       |
-      | protected state | 1       |
-      | protected state | 2       |
-      | protected state | 3       |
+      | boundary        | layout                  | operation          | version |
+      | checkout        | unreadable descendant   | checkout traversal | 1       |
+      | checkout        | unreadable descendant   | checkout traversal | 2       |
+      | checkout        | unreadable descendant   | checkout traversal | 3       |
+      | protected state | unavailable mount table | state mount-table  | 1       |
+      | protected state | unavailable mount table | state mount-table  | 2       |
+      | protected state | unavailable mount table | state mount-table  | 3       |
 
   # A string-prefix check would reject these safe siblings. The sibling sources
   # are distinct private directories/inodes, never symlinks or mount aliases.

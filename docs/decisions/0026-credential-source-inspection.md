@@ -3,18 +3,22 @@
 Recorded on 2026-11-09 with the revised
 [credential scenarios](../../features/credentials-policy.feature). This is a drafter's
 design amendment under the charter's architecture hypothesis, not implemented behavior,
-runtime evidence or permission to use real credentials. Slice-29 still waits for T-47
-and slice-25. The coordinator must retain T-47 and add slice-25 to the registry's
+runtime evidence or permission to use real credentials. T-47 has landed; slice-29
+still waits for slice-25. The coordinator must retain T-47 and add slice-25 to the registry's
 `depends_on` before scheduling implementation; this spec does not change that registry.
 
 ## The sections this decision overrides
 
-T-47's draft is `docs/decisions/0025-credentials-passed-in.md` at
-`389f5585b64557f545ce05c88a914c9461c3f88f` (the record was introduced by `01cfa825`).
-That prerequisite is still on its own branch. This amendment supersedes:
+T-47's record is [decision 0025](0025-credentials-passed-in.md). The first version
+of this amendment used its draft at `389f5585b64557f545ce05c88a914c9461c3f88f`.
+The spec review correctly rejected this amendment's recursive shared-state scan:
+unrelated record publication and cleanup could refuse a good source, and retained
+history could exhaust its budget forever. This revision withdraws that scan and
+settles T-47's state-exclusion specification prerequisite below. It supersedes:
 
-- **Policy version 3 and read-only source observation**, step 3: comparing source
-  ancestors only with the protected root identities does not detect all aliases.
+- **Policy version 3 and read-only source observation**, step 3 and its unresolved
+  state-side mechanism: use checkout enumeration and state mount projections, with
+  the link-count check closing hard-link aliases. Root-only ancestry is insufficient.
 - **Gates between the increments**, slice-29's newly permitted column: policy and
   manifest parsing alone cannot provide slice-29's promised source inspection.
 - **Authority, sibling handoff and architecture changes**, slice-29's handoff:
@@ -24,9 +28,9 @@ In the same spec commit, [arc42](../architecture/arc42.md) changes **Constraints
 **Building-block view** (doctor, policy, readiness and the increment table),
 **Runtime view** (doctor scopes and version gates), **Cross-cutting concepts**
 (source-location checks), **Decisions** and **Quality requirements**. These sections
-previously described only file-only and full-readiness inspection. They now identify
-the proposed third scope and its unproven source contract. Preserve these amendments
-when integrating T-47's overlapping arc42 edits; do not postpone them to implementation.
+now identify the third scope, the bounded state mechanism and its unproven source
+contract. Decision 0025 is reconciled in this same commit; no conflicting scan
+instruction is left for the implementer to choose between.
 
 The rest of T-47's proposal remains with that item, including its six questions for
 the person. This decision selects no Codex kind, delivery mechanism, approval grant,
@@ -57,7 +61,7 @@ Silently dropping credentials to obtain an offline approval is forbidden. Versio
 allowlist semantics and any sibling gate remain intact. The new mode resolves an
 increment-scope omission; it does not bring slice-30's approval work forward.
 
-## Compare all exposed identities, not just roots
+## Checkout enumeration and state mount projections
 
 If `/checkout/private` is bound at `/outside`, `/outside/token` need not have the
 checkout root in its walked ancestry. A bind of `/checkout/private/token` as one file
@@ -66,70 +70,166 @@ comparisons, lexical prefixes and a link-count check cannot establish non-exposu
 The inverse also matters: a source under `/vault` can be bound into the checkout or
 protected state while its original pathname and ancestors remain outside both.
 
-After the existing no-symlink source walk and safe-ancestor checks, compare the pinned
-source and each source ancestor's `(device, inode)` with the identities of both protected
-roots and **every entry below them**. Any match is `credential.location` (exit 1),
-located at that grant's written `/credentials/<index>/source`. The protected roots are
-the selected checkout and the managed `itos-container` state tree. An absent state
-root stays absent; an inaccessible existing tree is not an absent one.
+After the no-symlink source walk and safe-ancestor checks, compare the source and
+each source ancestor's `(device, inode)` with both protected roots and every entry
+in the **checkout only**. A match is `credential.location` (exit 1), located at that
+grant's written `/credentials/<index>/source`. Traverse pinned checkout directories,
+including Git, hidden, ignored and untracked entries, crossing directory/file mounts
+and device changes. Follow no symlinks, read no file data and do not prune repeated
+directory identities. Compare each child pin to its preceding metadata observation.
+Unavailable metadata, disappearance, substitution or incomplete enumeration refuses
+with `credential.unavailable` (exit 3); a known match retains location precedence.
 
-The disk observation enumerates pinned directories without reading file contents or
-following symlinks. Include Git, hidden, ignored and untracked entries. Traverse every
-directory mount point and observe mounted file identities, even across device changes;
-do not prune repeated directory identities. Pin each opened child and compare its
-identity with the entry just observed, as readiness's existing traversal does. No
-privileged mount operation, mount discovery helper or engine connection is involved.
+The checkout alone keeps readiness's batches of 128, 100,000 total entries and depth
+64 (root depth zero), inclusive. All credential metadata work shares one 10-second
+monotonic deadline. Reaching it refuses; synchronous kernel calls are not preempted.
+No background scanner survives refusal and no inventory is cached between commands.
+These limits never count state records. This mode does not impose unrelated checkout
+link-count or readiness checks.
 
-A source with no known identity match requires a **complete** inventory. Failed reads
-of directory entries, unavailable metadata, disappearing entries, observed substitution
-or budget exhaustion produce `credential.unavailable` (exit 3), never success from the
-part visited. A known match retains `credential.location` if a different subtree cannot
-be enumerated. Shared state-location/identity failures keep their existing diagnostics.
-The inventory may serve the grants in one invocation but is never cached across commands.
+### State exclusion without enumerating records
 
-Reuse readiness's bounded directory traversal primitives: batches of at most 128 entries,
-a total of 100,000 entries across both trees, directory depth at most 64 from each root
-at depth zero, and one 10-second monotonic scan deadline. Exactly 100,000 entries and
-depth 64 are admissible if enumeration completes before the deadline; needing another
-entry, deeper directory or reaching the deadline refuses. Time checks between synchronous
-filesystem calls cannot preempt a blocked kernel call. No abandoned background scanner
-continues after refusal. A cyclic mount eventually exhausts these bounds and refuses.
+The managed `itos-container` state root reserves filesystem subtrees. Observe their
+mount mappings, not their contents. The following is an algorithm to implement and
+prove, not a claim of an atomic kernel snapshot:
 
-Only after location is established do the existing regular-file, owner, permissions,
-link-count, size and duplicate-source checks apply. Thus a source hard-linked into the
-checkout reports location before links; an unrelated outside hard link still reports
-`credential.links`. This intentionally corrects that row in ID-CREDENTIALS-23. Distinct
-inodes sharing a device or a protected pathname prefix remain admissible.
+1. Acquire the first bounded mount table, retaining any error until the location
+   check so source symlink/ancestor refusals keep their precedence. Pin the source,
+   checkout and existing state root using the existing no-follow component walks.
+   Read each relevant descriptor's device/inode and mount ID
+   (`/proc/self/fdinfo/<fd>`), and its current absolute pathname from
+   `/proc/self/fd/<fd>`. Rewalk that pathname without following symlinks and require
+   the same device, inode and mount ID. Do not strip a ` (deleted)` suffix and use
+   what remains: an unlinked, unreachable or ambiguous descriptor path refuses.
+   Retain the source descriptor through observation and any later delivery read.
+2. The table is a complete `/proc/self/mountinfo` in a bounded buffer. For a descriptor
+   with pathname `p`, select its row by **mount ID**, not longest pathname prefix.
+   Require its device to match the row and `p` to be the row's mountpoint or a
+   component-descendant. Its filesystem coordinate is the row's decoded `root`
+   followed by the relative components from `mountpoint` to `p`, keyed by device.
+   A bind alias has the same coordinate even though its visible path differs.
+   Apply this to source ancestors too. Mount sources such as `/dev/sda1`, filesystem
+   type names alone and equal device numbers alone are not location evidence.
+3. The state exclusion set contains the state root's coordinate subtree, plus the
+   coordinate subtree rooted at **every mountpoint at or below the pinned state's
+   visible path**, using each such row's device and root. A file mount contributes
+   its exact coordinate (treating it as a subtree is conservative: no real path can
+   descend through a file). Include nested mounts, other devices and repeated bind
+   roots; compare components, never string prefixes. Keep covered backing subtrees
+   reserved too: an overmount does not make the underlying state a credential store.
+   Thus outward state-descendant/file binds match the base subtree; an outside
+   directory/file bound into state matches an added subtree. Nothing enumerates,
+   stats or reads ordinary state descendants. An unreadable unrelated record
+   directory has no bearing on this calculation.
+4. Take the second mount table after the checkout scan. Recheck source and boundary
+   pins, pathname walks and mount
+   IDs at the end. Build the coordinates/exclusion set independently from each
+   table. Either observation locating a source/ancestor in a reserved subtree is
+   a location refusal. Success requires both complete observations to exclude it
+   and unchanged source/boundary mappings and identities. A changed relevant
+   mapping, unavailable evidence or inconsistency is unavailable, with no retry
+   loop or cached-safe fallback. Do not compare the whole tables byte for byte:
+   unrelated mounts whose changes affect neither the source/boundary mappings nor
+   either exclusion result do not refuse an otherwise valid source.
+5. The observer never creates an initially absent managed root. Pin the
+   nearest existing safe ancestor, reserve the missing path's projected subtree,
+   and check the missing suffix again at the end. If another controller creates
+   it, pin and validate it and compute its exclusion set in the final observation;
+   accept only the same reserved coordinate, with no new source match. This normal
+   first publication is not itself a failure. An existing root disappearing or
+   changing identity, an unsafe newly created root or an unprojectable path refuses
+   under the shared boundary diagnostics. No lock or state writer/index is added.
 
-This is a metadata observation, not an atomic filesystem snapshot or continuous defense
-against trusted host changes. Later approve/run consumers reuse and refresh the same
-check at their specified validation points, retaining T-47's checked-descriptor rule.
-The protected-state walk observes no record contents or other project's admission
-history. Unrelated checkout link-count/readiness checks are not added to this mode.
+Read each mount table at most once per observation: at most 8 MiB, 16,384 rows and
+65,535 bytes per line excluding the newline. Require EOF and a final complete line;
+probe beyond inclusive bounds to distinguish a complete input from truncation.
+Each decoded root/mountpoint and descriptor pathname is at most 4096 bytes; a joined
+coordinate is at most 8192. Cap each fdinfo at 64 KiB with EOF and require one valid
+mount ID. Reject malformed rows, duplicate mount IDs, invalid/non-absolute components,
+missing descriptor rows, device mismatches and missing observations. Oversize or
+unavailable evidence yields `credential.unavailable`, never a shortened table.
+Unknown optional mount fields remain allowed. The limits are on topology, paths
+and elapsed time, independent of the number of retained state entries. Work is
+bounded by those limits and at most two grants, not another project's history.
+
+The ordinary regular-file, owner, permissions, exactly-one-link, size and
+duplicate-source checks still follow location. State aliases through a second hard
+link need no namespace scan: the source's link count is not one, so they refuse as
+`credential.links`. Recheck this metadata on the held descriptor before success.
+A hard link found in the checkout scan keeps `credential.location` precedence;
+state-only or outside-only additional links use `credential.links`. An alias that
+passes all these checks has one filesystem name; bind mounts change its visible
+route, not that name. Distinct sibling paths sharing a device remain admissible.
+
+### Race argument and limits
+
+Normal controllers publish new files by rename inside the reserved state subtrees
+and remove old records. They do not change the state root, move an unrelated source
+into state or mount a new filesystem over its ancestors. Such writes change neither
+the subtree exclusion nor the outside source's identity/path/link count. No record
+is enumerated, so a temporary entry disappearing cannot cause a false unavailable
+result, and 100,001 or more retained entries cannot exhaust admission. Even a source
+alias to a state file being renamed stays within the reserved subtree; if unlinked,
+it fails the path/link checks. Bind exposure into a state descendant is in the
+mount table even with one link and no shared root in the source's visible ancestry.
+Cross-directory hard links fail the independent link-count check.
+
+The two observations detect observed changes to the objects or mappings on which
+success depends. They do **not** prove absence of a trusted host's transient
+mount/rename/link operation between observations, or prevent changes after return.
+The existing host-user/admin trust assumption remains; no global lock, privileged
+namespace operation, mount helper, engine connection or continuous enforcement is
+introduced. The controller uses its host mount namespace, as later native Docker
+delivery requires. An inaccessible or incomplete view refuses, never falls back to
+root-only comparison. Approve/run must repeat this entire check at their specified
+validation points and run must read the retained checked descriptor. Ordinary
+credential admission and delivery remain gated until their own evidence exists.
+
+### Kernel interface basis and library choice
+
+The kernel documents mount IDs, filesystem roots and mountpoints in
+[/proc mountinfo and fdinfo](https://www.kernel.org/doc/html/latest/filesystems/proc.html).
+The coordinate and concurrency argument above is our design inferred from those
+interfaces; those documents do not promise an atomic snapshot.
+
+Select `github.com/moby/sys/mountinfo` **v0.7.2** for the implementing commit. Its
+[reader API and escape handling](https://github.com/moby/sys/blob/mountinfo/v0.7.2/mountinfo/mountinfo_linux.go)
+already parse the kernel format, avoiding a new mount-table parser. Pass the bounded
+buffer to `GetMountsFromReader` without a filter that stops early, then validate
+the required numeric/identity fields (the parser ignores some numeric errors).
+Retain its [Apache-2.0 license](https://github.com/moby/sys/blob/mountinfo/v0.7.2/LICENSE)
+and notices. This adds no service; the spec does not
+edit go.mod. Use the existing pinned x/sys/unix and Go primitives for descriptors.
+Linux-only calls live in call-only shims; OS remains a value in the decision logic.
 
 ## Shared implementation and evidence
 
 The owning packages remain `internal/slices/doctor/{command,domain,port,inspection}`,
 `internal/engine/policy` and `internal/engine/readiness`, with only `cmd` assembling
 adapters. Policy validates the pure version-3 shape. Readiness owns source metadata,
-complete protected-tree observations and the shared validation contract; doctor renders
-its results. Domain decisions receive metadata through ports. Reuse Go's filesystem
-primitives and the already pinned `golang.org/x/sys/unix`, plus the existing YAML v4
-parser. No new library, custom filesystem library or service is selected.
+checkout inventory, state projections and the shared validation contract; doctor renders
+its results. Domain decisions receive raw metadata through ports. The disk adapter
+owns procfs and filesystem I/O; no domain or port imports the mountinfo library.
+Policy parsing continues to use the pinned YAML v4 parser.
 
 The source-observation contract runs unchanged against its I/O-free fake and disk
-adapter. It must cover each of these for **both** protected trees:
+adapter. Alias rows apply to **both** protected trees; other rows name their scope:
 
 | Observation fixture | Required result |
 | --- | --- |
 | Protected root bound outside | Location refusal by shared root identity. |
 | Protected descendant directory bound outside | Location refusal although source ancestry contains neither protected root. |
 | Single protected file bound outside | Location refusal with one link and no matching protected root ancestor. |
-| Outside directory or individual file bound into a protected descendant | Location refusal from the protected-tree scan. |
+| Outside directory or individual file bound into a protected descendant | Location refusal from checkout inventory or the state mount projection. |
 | Distinct inode, same device and shared pathname prefix | Accepted when all other source checks succeed. |
-| Unreadable/disappearing entry, unavailable identity or directory substitution | Unavailable refusal; never an incomplete-safe result. |
-| Exact entry/depth limits completed before deadline; limits exceeded or deadline reached | Accepted at the count/depth boundaries; unavailable on exhaustion. |
-| Known alias plus another unavailable subtree | Location refusal for the known alias; unavailable for an otherwise unmatched source. |
+| Unreadable/disappearing checkout entry, unavailable identity or directory substitution | Unavailable refusal; never an incomplete-safe result. |
+| Exact checkout entry/depth and state topology limits; limits exceeded or deadline reached | Accepted at inclusive limits when complete; unavailable on exhaustion. |
+| Known alias plus unavailable checkout metadata | Location refusal for the alias; unavailable for an otherwise unmatched source. |
+| Concurrent approval/intent/snapshot publication and session cleanup in another project | Distinct source accepted; state-descendant alias still refused; no state enumeration. |
+| 100,001 retained state entries, including an unreadable unrelated directory | Distinct source accepted with zero state record visits; state-descendant alias still refused. |
+| State-only hard link, including one created before the final source stat | Links refusal without scanning state. |
+| Missing/malformed/truncated mount data, changed source mapping or boundary identity | Unavailable or existing boundary refusal; never root-only fallback. |
+| Unrelated mount changes; absent state root created safely at its reserved coordinate | Accepted if both complete observations exclude the unchanged source. |
 
 Alias fixtures have safe owners/permissions, one-link nonempty regular files and no
 symlink, so an unrelated refusal cannot satisfy them. Include file and directory mount
@@ -140,10 +240,15 @@ override. These are observation-contract tests, not native bind-mount evidence.
 ID-CREDENTIALS-29 exercises the real validator and doctor presentation through a
 test-only command assembly with raw in-memory topology, as the manifest contract
 scenarios do. Its positive control accepts distinct identities before its alias refusal.
-The fixtures cannot supply a precomputed credential decision. ID-CREDENTIALS-30 uses the
-product CLI and an unreadable descendant in a temporary protected tree to require
-refusal of incomplete native enumeration. The existing data-access observer and
-synthetic-marker cases still require inspection to read no source contents.
+The fixtures cannot supply a precomputed credential decision. ID-CREDENTIALS-30 keeps
+the product CLI's unreadable-checkout refusal; 35 accepts unreadable unrelated state.
+31 observes source, checkout and mount-table calls separately, requiring none with no
+grants. New 32/33 pair concurrent writes and retained history with state-alias refusals;
+34 exercises complete topology and race evidence. Their fixture schedules and lazy
+history live in the feature comments and shared fake/disk observation contract. No
+test needs a host mount or engine. The data-access observer and synthetic-marker
+cases still require inspection to read no source contents. Privileged native mount
+evidence remains CI-only downstream work, not a claim of these simulated contracts.
 
 All credential scenarios remain `@wip`. Their implementing agent supplies missing step
 definitions in a red-first test commit, then obtains assertion-failing and passing

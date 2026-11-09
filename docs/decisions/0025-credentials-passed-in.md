@@ -108,8 +108,9 @@ checkout scan. It reads metadata, never contents. For each grant, in this order:
    of `<checkout>/sub`, `/mnt/sub/token` never traverses the checkout root, but is the
    same file the worker can reach at `/workspace/sub/token`. A separately mounted
    subvolume or a single-file bind can expose the same alias. Apply the same exclusion
-   to descendants of the protected state root; the state-side mechanism is an
-   explicit slice-29 specification prerequisite below, not the checkout traversal.
+   to descendants of the protected state root; the state-side mechanism is the
+   slice-29 mount-projection design below, not the checkout traversal. A second
+   hard link in state is refused by check 4 without enumerating state records.
 4. Require a regular file owned by the host UID, no group or other permission bits,
    exactly one link and a size from 1 through 65536 bytes. A second name could expose
    or replace the source, including from the checkout.
@@ -125,8 +126,9 @@ checkout scan does today. Missing metadata, an incomplete scan or budget exhaust
 refuses. Repeat these comparisons on each source observation and revalidation, never
 trusting a set cached at approval. No file contents are needed for the scan.
 
-**State-side exclusion remains for slice-29 to specify before implementation or
-handoff to slice-30, T-48, slice-31 or slice-33.** Do not apply this recursive scan to
+**Slice-29 specifies the state-side replacement in
+[decision 0026](0026-credential-source-inspection.md); its evidence remains required
+before handoff to slice-30, T-48, slice-31 or slice-33.** Do not apply this recursive scan to
 `$XDG_STATE_HOME/itos-container`. That root is shared by every project of the host
 user. Approval, intent and snapshot publication rename temporary files, and cleanup
 removes records. Their disappearance after enumeration is normal concurrent work,
@@ -135,16 +137,40 @@ session records and refusal logs also make a host-wide 100,000-entry budget an
 eventual permanent refusal. Requiring that tree to remain quiet violates AC-28's
 project independence.
 
-Slice-29 must record a bounded, concurrency-safe state-side exclusion mechanism and
-its race argument in this decision and arc42 before the downstream slices take it.
-It must retain the check-3 invariant, including aliases of state descendants through
-other mounts, without work or admission limits proportional to unrelated projects'
-retained history. Checking only the current project's records or dropping descendant
-aliases does not satisfy it. Treating vanished entries as absent alone also leaves
-the host-wide budget problem unsolved. Until that design and its evidence are in
-place, ordinary doctor, approve and run must not admit credential grants; file-only
-policy parsing remains possible. This is a specification dependency, not permission
-to implement the withdrawn scan, skip state exclusion or invent a fallback in T-48.
+The replacement reserves the state's filesystem-coordinate subtree and every mount
+root at or below its path, including file mounts, other devices and covered backing
+subtrees. Coordinates combine a pinned descriptor's mount ID, that mount's filesystem
+root and the descriptor's relative path. Device plus component ancestry detects
+outward descendant/file binds and outside sources bound into state. Equal devices
+or textual prefixes alone do not imply exposure. Descriptor paths are rewalked
+without symlinks and compared to their pins. There is no state directory enumeration,
+record read, persistent index or cross-project lock.
+
+Two complete bounded mount-table observations bracket inspection; source and boundary
+identities/mappings and final source link metadata are rechecked. Each table has
+inclusive limits of 8 MiB, 16,384 rows and 65,535 bytes per line excluding its newline;
+all source metadata shares the 10-second deadline. Required evidence unavailable or
+inconsistent means refusal, not root-only fallback. Unrelated mount-table changes do
+not refuse an unchanged, excluded source. An absent root reserves its coordinate
+under a pinned safe ancestor; safe creation there by another controller is accepted
+after final validation. Decision 0026 specifies path/fdinfo bounds and the exact
+protocol and selects mountinfo v0.7.2 for parsing at implementation time.
+
+The race argument is that normal approval/intent/snapshot publication and session
+cleanup operate within already excluded subtrees: they change neither those subtree
+boundaries nor a distinct outside source. No enumerated record can disappear between
+listing and stat because state is never listed. Retained history consumes no budget.
+Bind aliases have matching coordinates even with one link; extra hard links fail
+check 4. The observations detect observed relevant changes, not a trusted host's
+transient mount/rename/link changes between observations or after return. Later
+approve/run repeat the check, and run reads the retained checked descriptor. This
+is metadata observation under the existing host trust boundary, not an atomic
+snapshot or a new continuous isolation promise.
+
+This resolves the specification conflict; it supplies no implemented or executed
+evidence. Ordinary doctor, approve and run still gate credential grants until their
+increments prove them. Slice-29's separate `doctor --credentials-only` scope can
+inspect metadata without admitting a grant. T-48 cannot invent a weaker fallback.
 
 A missing source or failed check is a located problem. Doctor still shows effective
 grants; approve records nothing; run refuses before staging or creating anything.
@@ -289,8 +315,8 @@ revisit the limitation. T-47 edits neither that document nor slice-26's older sp
 
 | Increment | Newly permitted | Still refused |
 | --- | --- | --- |
-| slice-29 | `doctor --policy-only` and `--manifest-only` parse valid version 3 | Ordinary doctor, approve and run refuse with `policy.version`. No Codex kind. |
-| slice-30 | Ordinary doctor and approve inspect version 3 and its grants after slice-29 settles and proves state-side exclusion | Run refuses any kind whose delivery is absent and any allowlist until slice-27, before the manifest, engine and host state. |
+| slice-29 | `doctor --policy-only` and `--manifest-only` parse valid version 3; `--credentials-only` uses the shared metadata observation without manifest/engine/approval checks | Ordinary doctor, approve and run refuse with `policy.version`. No Codex kind. [Decision 0026](0026-credential-source-inspection.md) fixes the scope and state projections. |
+| slice-30 | Ordinary doctor and approve inspect version 3 and its grants after slice-29 proves the specified state-side exclusion | Run refuses any kind whose delivery is absent and any allowlist until slice-27, before the manifest, engine and host state. |
 | T-48 and slice-31 | Shared staging seam, then `claude-token` delivery with synthetic proof | `github-token` until slice-33; Codex pending question 1; real credentials pending question 5. |
 | slice-33 | `github-token` through the same staging seam | No SSH identity, live-account trial or unproven credential-absence claim. |
 
@@ -331,8 +357,9 @@ exhausted checkout-scan budgets. The state-side mechanism must also pass with a
 distinct valid source while another project publishes approvals, intents and
 snapshots and removes session records, including disappearance between enumeration
 and metadata access if it enumerates. More than 100,000 unrelated retained state
-entries must not consume its admission budget or cause a refusal. Pair these positive
-controls with the state-descendant-alias refusal; tolerating concurrent state writes
+entries must not consume its admission budget or cause a refusal. Decision 0026
+selects no enumeration at all and requires an observation of zero state-record visits.
+Pair these positive controls with the state-descendant-alias refusal; tolerating concurrent state writes
 must not admit an alias. Cases requiring real mounts run only in CI. Slice-31 and
 slice-33 carry the descendant-alias refusals into AC-29 before staging or create,
 alongside their source-modification probes. A distinct private source outside both
@@ -438,9 +465,9 @@ specs, not proof, charter amendments or authorization to use real credentials.
 
 | Owner | Handoff |
 | --- | --- |
-| slice-29 | Wait for both T-47 and slice-25's version 2; take the closed version 3 shape and refusal gates. Settle and prove bounded state-side descendant exclusion with concurrent writers and accumulated unrelated history before downstream handoff; the host-wide scan is withdrawn. Omit the Codex kind its older why named. |
-| slice-30 | Wait for slice-29's source-exclusion design and evidence before admitting grants. Take canonical grants, profiles, review and q-52; update help and `docs/security.md`. |
-| T-48 | Wait for slice-29's state-side exclusion decision before taking the delivery design. Stage and recover through session ports, fake and adapter; the file half also waits for question 1. Its older "failed delivery stops the workload before it starts" applies only before a start attempt. Add acquired-mount/lost-acknowledgement coverage. |
+| slice-29 | Wait for both T-47 and slice-25's version 2; take the closed version 3 shape, metadata scope and refusal gates. Implement and prove decision 0026's bounded state mount projections with concurrent writers and accumulated unrelated history before downstream handoff; the host-wide scan is withdrawn. Omit the Codex kind its older why named. |
+| slice-30 | Wait for slice-29's source-exclusion evidence before admitting grants. Take canonical grants, profiles, review and q-52; update help and `docs/security.md`. |
+| T-48 | Take slice-29's state-side exclusion specification in decision 0026, retaining its shared validation and proof dependency. Stage and recover through session ports, fake and adapter; the file half also waits for question 1. Its older "failed delivery stops the workload before it starts" applies only before a start attempt. Add acquired-mount/lost-acknowledgement coverage. |
 | slice-31 and slice-33 | Wait for slice-29's source-exclusion design and evidence, then prove token delivery, isolation and uncertain-start cleanup in CI. For slice-33, "where gh expects it" means `GH_TOKEN` exported by workload argv from its file. Neither can claim refusal-log absence before question 6 and its proof. |
 | slice-32 | Wait for question 1; the old in-place-write premise is invalid. |
 | slice-26 and slice-27 | Apply q-52 wherever the first network-granting approval lands; slice-26's branch spec still calls the approver open. |
