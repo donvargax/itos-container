@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,12 +23,21 @@ import (
 // ended context. This runs the assembly that main builds: the session engine's
 // scan over the approval engine's protected locations, with no fake in between.
 // The context is ended before the call, so the outcome does not depend on timing.
+// The protected-state adapter targets Linux, so other hosts skip it like its own
+// package tests do, and the account is built under the resolved temporary folder:
+// the adapter refuses a symlinked ancestor, which the test must not depend on.
 func TestEndedCallBudgetOverTheRealScanIsBusy(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux protected-state target")
+	}
 	for _, bootstrapped := range []bool{false, true} {
 		for _, write := range []bool{false, true} {
 			name := map[bool]string{false: "fresh account", true: "enrolled account"}[bootstrapped] + map[bool]string{false: ", reader", true: ", writer"}[write]
 			t.Run(name, func(t *testing.T) {
-				base := t.TempDir()
+				base, err := filepath.EvalSymlinks(t.TempDir())
+				if err != nil {
+					t.Fatal(err)
+				}
 				home := filepath.Join(base, "account")
 				if err := os.Mkdir(home, 0700); err != nil {
 					t.Fatal(err)
