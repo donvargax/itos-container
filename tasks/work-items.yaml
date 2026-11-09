@@ -1391,6 +1391,14 @@ items:
       is T-45, T-42, p1-credentials-passed-in, p1-harness-home, p1-interactive-tty, and the item is
       not in it), or accept the gap and say so. It stays p2 because it blocks no step on its own.
       Move it up if step 4 starts first.
+
+      The item already carries this, in its note that a recorder journalling the cut would only
+      sharpen the native tier's inference. It also says a recorded cut instant is not worth its own
+      item and touches the recorder outside T-42's range. The gap is covered by extending the item's
+      fake-clock row with a hold longer than what is left of the call limit. The row asserts that
+      SIGKILL still falls at first signal plus grace, not at the cut plus grace. A synthetic clock
+      has no jitter, so no recorded instant is needed. T-42's escalationWindow comment already names
+      this gap as known.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
