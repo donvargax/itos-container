@@ -1318,6 +1318,14 @@ items:
       re-run. Only a repeat on its own justifies a separate item, and then it should be treated as a
       possible real race in anchor cleanup, not a timing flake. One unexplained failure in a run
       that was already failing for load is too thin to track separately.
+
+      That item already owns the Engine failure diagnostics step in .github/workflows/ci.yml. Its
+      notes say to print each `--- FAIL` block with its godog step error beside the streamed `engine
+      scenario timing:` records, to emit one `::error title=<scenario>` annotation per failed
+      scenario because job logs return 403 without a token and agents have no gh, and not to wait
+      for the itos extractor fix tracked upstream. This idea is the same ci.yml edit. T-42's 'nobody
+      read the failing assertion' complaint is the gap that note describes, so no second item is
+      needed.
   - id: p2-admission-nested-checkouts-across-state-roots
     title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
     phase: 1
