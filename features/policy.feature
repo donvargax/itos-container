@@ -416,6 +416,8 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, network: {mode: false}}                             | /network/mode |
       | {version: 1, manifest: a.json, network: {mode: [offline]}}                         | /network/mode |
 
+  # Slice-25 adds policy version 2, which makes this table's example 2 untrue. Its feat
+  # commit changes that example to 3 and says so; the rule checked here does not change.
   @slice-1 @ID-POLICY-15
   Scenario Outline: unsupported policy versions are not guessed or downgraded
     Given the policy file contains:
@@ -566,6 +568,657 @@ Feature: Strict offline sandbox policy
       | none    |
       | Offline |
       |         |
+
+  # Slice-25: an exact host-name egress allowlist (charter, second milestone, step 1). A
+  # policy only requests it: nothing here approves it, starts a proxy or opens a route.
+  # Slice-26 binds it in approval, T-39 and T-40 build the proxy and its network, and
+  # slice-27 runs through them. Every decision below belongs to this spec.
+  #
+  # A new key needs a new policy version (docs/CONFIG.md rule 7 and the decisions at the
+  # top of this file), so the allowlist is version 2. Version 1 keeps its written meaning
+  # in every command: ID-POLICY-16 and ID-POLICY-21 stay as they are, and offline approvals
+  # keep their identity. Version 2 is version 1's closed object with a wider network:
+  # - mode: optional string, offline (still the default) or allowlist, never case folded.
+  # - allow: list of strings, required and nonempty in allowlist mode. In offline mode it
+  #   is refused even when empty, so a forgotten mode cannot look like a granted list, and
+  #   its entries are not interpreted. Strings rather than objects: per-destination
+  #   settings such as TLS modes would need a new version anyway.
+  # The effective network is {mode: offline} or {mode: allowlist, allow: [names]}. allow is
+  # absent when offline, so the offline object is the same in both versions. Names appear
+  # once each, in ascending byte order of their canonical spelling: reordering changes
+  # nothing, and slice-26 can bind them as a set. Plain output gives one network.allow line
+  # per name in that order. Canonical names are ASCII and need no terminal escaping.
+  #
+  # Each entry is checked in this order. The check is lexical: no DNS lookup, public-suffix
+  # list or list of special names. What a listed name may resolve to belongs to the proxy
+  # (contract AC-12), so a name such as host.internal is not refused here.
+  # 1. At most 1024 bytes of decoded UTF-8, before IDNA, because punycode encoding is
+  #    quadratic: a 64 KiB name of distinct characters took x/net/idna four to six seconds
+  #    on 2026-11-09. A character mapping to one ASCII character takes at most 4 bytes, so
+  #    any 253-byte name can be spelled in 1012; only ignored code points can reach the limit.
+  # 2. idna.Lookup.ToASCII: lower case, UTS 46 non-transitional mapping (full-width forms,
+  #    ideographic dots, ignored code points), STD3 host-name characters, hyphen and Bidi
+  #    rules and valid A-labels. An error refuses the entry. Never show the error's text:
+  #    it quotes the label.
+  # 3. Remove one trailing dot, after mapping, so an ideographic final dot counts as well.
+  # 4. At least two labels, each of 1 to 63 bytes, at most 253 bytes in all. Lookup checks
+  #    none of this: it accepts .example.com, example.com.. and a 64-byte label, and it
+  #    turns xn--.example into .example.
+  # 5. The final label is not all digits, nor 0x followed only by hexadecimal digits.
+  #    Address parsers read those as IPv4 (127.1, 0x7f.0.0.1, 1.2.3.0X4) and Lookup passes
+  #    them. IPv6 already fails step 2 on its colons.
+  # A look-alike keeps its own A-label, so it stays visibly different from what it imitates.
+  # Nothing is trimmed: surrounding space is refused like any other character outside a name.
+  #
+  # New stable rules, all exit 2. Entry rules sit at /network/allow/<index>, the others at
+  # /network/allow:
+  # policy.host_name       entry is not a full DNS host name
+  # policy.host_duplicate  entry's canonical name repeats an earlier entry's
+  # policy.allow_empty     empty list in allowlist mode
+  # policy.allow_offline   list present in offline mode
+  # An absent list in allowlist mode is policy.required and a wrong type is policy.type. A
+  # wrong mode reports only the mode: allow means nothing without one. Independent problems
+  # are collected as in ID-POLICY-24, and diagnostics never echo a rejected value. The
+  # existing depth, node and path budgets bound the list; it has no limit of its own.
+  #
+  # Only doctor --policy-only and --manifest-only read version 2 for now. Ordinary doctor,
+  # approve and run refuse it with the existing policy.version at /version, exit 2, whatever
+  # its mode, before the manifest, the engine or host state. Canonical settings v1
+  # (features/approval.feature) hardcode profile offline-v1 and network offline, so without
+  # this refusal approve would record offline settings for a request that asks for network,
+  # and an offline approval would appear to match it. The refusal's fix names
+  # doctor --policy-only, so a person can still see what the file asks for. Slice-26 lifts
+  # the refusal for doctor and approve once approval can bind version 2, and must keep run
+  # from starting a version 2 policy until slice-27 can.
+  #
+  # Library decision, checked 2026-11-09: golang.org/x/net/idna, pinned at golang.org/x/net
+  # v0.59.0, BSD-3-Clause, maintained by the Go team; net/http uses the same Lookup profile
+  # for host names. golang.org/x/tools v0.50.0 already puts v0.59.0 in the module graph, so
+  # no other pin moves. Its idna package is byte-identical to the newest release, v0.62.0,
+  # which would raise x/sys and x/term. Add x/net's and x/text's notices to
+  # THIRD_PARTY_NOTICES.md. The library is outside the domain allowlist, so canonicalising
+  # sits behind a policy port with a named adapter sibling, an I/O-free porttest fake and
+  # the shared contract against both; cmd assembles it. Steps 1 and 3 to 5, duplicates and
+  # sorting are pure domain code. port.Value must start retaining list items, which it
+  # drops today.
+  #
+  # The implementing pull request also updates docs/CONFIG.md and docs/CLI.md, publishes
+  # docs/schemas/itos-container-v2.schema.json beside the unchanged v1 schema, and records a
+  # decision naming the arc42 text this overrides (internal/engine/policy's strict offline
+  # schema, proxy egress deferred), as the charter's "Architecture is a hypothesis" asks.
+  #
+  # Scenarios below reuse existing steps except these, which only write fixtures or read
+  # output. Each of the first three writes version 2, manifest a.json and mode allowlist:
+  # - "the policy file allows one host name of <count> distinct characters": one entry, that
+  #   many consecutive code points from U+4E00 upward followed by .example.
+  # - "the policy file allows "<name>" padded with soft hyphens to <size> bytes": one
+  #   double-quoted entry, the name then raw U+00AD until its text is exactly that size.
+  # - "the policy file allows <count> generated host names": entries n0.example,
+  #   n1.example and so on, one a line.
+  # - "the manifest inspection policy contains:" and "the checkout policy contains:" write
+  #   the DocString over itos-container.yaml in the manifest or approval checkout.
+  # - "its JSON output reports exactly these policy problems:" is ID-POLICY-27's assertion
+  #   under a name that also fits approve.
+  # Red first: today every version 2 policy is refused as policy.version at /version, exit
+  # 2, so each scenario fails at its first Then that reads the outcome; deadline and output
+  # size steps pass. Where the final answer is that same refusal, the scenario runs
+  # --policy-only first so that it can fail before the work.
+
+  @wip @slice-25 @ID-POLICY-43
+  Scenario: an allowlist policy shows its effective host names and runs nothing
+    Given the policy file contains:
+      """
+      version: 2
+      manifest: .devcontainer/devcontainer.json
+      network:
+        mode: allowlist
+        allow:
+          - registry.example.org
+          - API.Example.COM.
+          - bücher.example
+      """
+    And inspection helper sentinels are installed
+    And the policy inspection files are snapshotted
+    When itos-container runs with "doctor --policy-only --json"
+    Then it exits with code 0
+    And its policy JSON contains this effective policy:
+      """
+      {"version":2,"manifest":".devcontainer/devcontainer.json","network":{"mode":"allowlist","allow":["api.example.com","registry.example.org","xn--bcher-kva.example"]}}
+      """
+    And the policy inspection files are unchanged
+    And no inspection helper sentinel was executed
+    And the engine recorder has no connections
+
+  @wip @slice-25 @ID-POLICY-44
+  Scenario: plain inspection lists each canonical host name in order
+    Given the policy file contains:
+      """
+      version: 2
+      manifest: .devcontainer/devcontainer.json
+      network:
+        mode: allowlist
+        allow:
+          - registry.example.org
+          - API.Example.COM.
+          - bücher.example
+      """
+    When itos-container runs with "doctor --policy-only"
+    Then its standard output is exactly:
+      """
+      Policy only
+      version: 2
+      manifest: .devcontainer/devcontainer.json
+      network.mode: allowlist
+      network.allow: api.example.com
+      network.allow: registry.example.org
+      network.allow: xn--bcher-kva.example
+      Host readiness and approval were not checked
+      """
+    And it exits with code 0
+
+  # The \u0430 row starts with a Cyrillic letter: a look-alike never merges with the Latin
+  # name. faß pins non-transitional mapping, which keeps ß instead of turning it into ss.
+  # The soft hyphen is an ignored code point. A numeric label is refused only in final place.
+  # The two longest rows sit at the DNS limits: a 63-byte label and a 253-byte name.
+  @wip @slice-25 @ID-POLICY-45
+  Scenario Outline: each host name is canonicalised before it is shown
+    Given the policy file contains:
+      """
+      version: 2
+      manifest: a.json
+      network: {mode: allowlist, allow: [<spelling>]}
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then it exits with code 0
+    And its policy JSON contains this effective policy:
+      """
+      {"version":2,"manifest":"a.json","network":{"mode":"allowlist","allow":["<canonical>"]}}
+      """
+
+    Examples:
+      | spelling              | canonical             |
+      | api.example.com       | api.example.com       |
+      | API.Example.COM       | api.example.com       |
+      | api.example.com.      | api.example.com       |
+      | bücher.example        | xn--bcher-kva.example |
+      | BÜCHER.Example.       | xn--bcher-kva.example |
+      | XN--BCHER-KVA.example | xn--bcher-kva.example |
+      | 日本。example。           | xn--wgv71a.example    |
+      | faß.example           | xn--fa-hia.example    |
+      | "\u0430pple.example" | xn--pple-43d.example  |
+      | example。com           | example.com           |
+      | ＡＰＩ.example.com       | api.example.com       |
+      | "exa\u00ADmple.com"  | example.com           |
+      | 123.example           | 123.example           |
+      | a-b.example           | a-b.example           |
+      | a.b                   | a.b                   |
+      | aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example | aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example |
+      | aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd | aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd |
+
+  # The byte order puts a-b.example before a.example: - is 0x2d and . is 0x2e. A sort by
+  # labels would differ. Numeric spellings of the version mean the same number, as at version 1.
+  @wip @slice-25 @ID-POLICY-46
+  Scenario Outline: reordered and respelled lists have one effective allowlist
+    Given the policy file contains:
+      """
+      <document>
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then it exits with code 0
+    And its policy JSON contains this effective policy:
+      """
+      {"version":2,"manifest":"a.json","network":{"mode":"allowlist","allow":["a-b.example","a.example","b.example"]}}
+      """
+
+    Examples:
+      | document                                                                                                                                           |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [a-b.example, a.example, b.example]}}                                                |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [b.example, a.example, a-b.example]}}                                                |
+      | {manifest: a.json, network: {allow: [B.EXAMPLE., 'a.example', "A-B.example"], mode: allowlist}, version: 2} # order grants nothing                    |
+      | {version: 2.0, manifest: a.json, network: {mode: allowlist, allow: [a.example, b.example, a-b.example]}}                                              |
+      | {version: 20e-1, manifest: a.json, network: {mode: allowlist, allow: [a.example, b.example, a-b.example]}}                                            |
+      | ! {version: ! 2, manifest: ! a.json, network: ! {mode: ! allowlist, allow: ! [! a.example, ! b.example, ! a-b.example]}}                               |
+      | !!map {version: !!int 2, manifest: !!str a.json, network: !!map {mode: !!str allowlist, allow: !!seq [!!str a.example, !!str b.example, !!str a-b.example]}} |
+
+  @wip @slice-25 @ID-POLICY-47
+  Scenario Outline: offline stays the default at version 2 and brings no list
+    Given the policy file contains:
+      """
+      <document>
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then it exits with code 0
+    And its policy JSON contains this effective policy:
+      """
+      {"version":2,"manifest":"a.json","network":{"mode":"offline"}}
+      """
+    When itos-container runs with "doctor --policy-only"
+    Then it exits with code 0
+    And its standard output says "network.mode: offline"
+    And its standard output does not say "network.allow"
+
+    Examples:
+      | document                                                 |
+      | {version: 2, manifest: a.json}                           |
+      | {version: 2, manifest: a.json, network: {}}              |
+      | {version: 2, manifest: a.json, network: {mode: offline}} |
+
+  @wip @slice-25 @ID-POLICY-48
+  Scenario: the same network request stays refused at version 1
+    Given the policy file contains:
+      """
+      version: 2
+      manifest: a.json
+      network: {mode: allowlist, allow: [api.example.com]}
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then it exits with code 0
+    Given the policy file contains:
+      """
+      version: 1
+      manifest: a.json
+      network: {mode: allowlist, allow: [api.example.com]}
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule                | path           | exit |
+      | policy.network_mode | /network/mode  | 2    |
+      | policy.unknown_key  | /network/allow | 2    |
+    And it exits with code 2
+
+  # Canonicalising comes first, so a disguised spelling is judged by what it maps to.
+  # The defect column only explains each row. The longest rows are one byte past the DNS
+  # limits, and the ü row is a 60-character label whose A-label takes 66 bytes.
+  @wip @slice-25 @ID-POLICY-49
+  Scenario Outline: only a full DNS host name enters the allowlist
+    Given the policy file contains:
+      """
+      version: 2
+      manifest: a.json
+      network: {mode: allowlist, allow: [<value>]}
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule             | path             | exit |
+      | policy.host_name | /network/allow/0 | 2    |
+    And it exits with code 2
+
+    Examples:
+      | defect                               | value                     |
+      | literal IPv4                         | '127.0.0.1'               |
+      | IPv4 with a trailing dot             | '127.0.0.1.'              |
+      | short IPv4                           | '127.1'                   |
+      | hexadecimal IPv4                     | '0x7f.0.0.1'              |
+      | capital hexadecimal final label      | '1.2.3.0X4'               |
+      | IPv4 as one number                   | '2130706433'              |
+      | IPv4 in full-width digits            | '１２７.０.０.１'           |
+      | IPv4 with ideographic dots           | '1。2。3。4'               |
+      | numeric final label                  | 'example.123'             |
+      | hexadecimal final label              | 'example.0x1f'            |
+      | bare hexadecimal prefix              | 'example.0x'              |
+      | IPv6 loopback                        | '::1'                     |
+      | bracketed IPv6                       | '[::1]'                   |
+      | IPv6                                 | '2001:db8::1'             |
+      | wildcard alone                       | '*'                       |
+      | leading wildcard                     | '*.example.com'           |
+      | trailing wildcard                    | 'example.*'               |
+      | inner wildcard                       | 'ex*mple.com'             |
+      | full-width wildcard                  | '＊.example.com'           |
+      | question mark                        | '?.example.com'           |
+      | suffix shortcut                      | '.example.com'            |
+      | suffix shortcut with two dots        | '..example.com'           |
+      | two trailing dots                    | 'example.com..'           |
+      | empty inner label                    | 'api..example.com'        |
+      | empty A-label                        | 'xn--.example'            |
+      | single label                         | example                   |
+      | top-level domain alone               | com                       |
+      | localhost                            | localhost                 |
+      | localhost with a trailing dot        | 'localhost.'              |
+      | single label with an ideographic dot | 'example。'                |
+      | port                                 | 'example.com:443'         |
+      | another port                         | 'example.com:8443'        |
+      | full-width colon and port            | 'example.com：443'         |
+      | bracketed IPv6 and port              | '[::1]:443'               |
+      | URL                                  | 'https://example.com'     |
+      | URL with a path                      | 'https://example.com/'    |
+      | path                                 | 'example.com/path'        |
+      | scheme-relative URL                  | '//example.com'           |
+      | user information                     | 'user@example.com'        |
+      | query                                | 'example.com?x=1'         |
+      | fragment                             | 'example.com#f'           |
+      | percent encoding                     | '%65xample.com'           |
+      | empty                                | ''                        |
+      | one space                            | ' '                       |
+      | one dot                              | '.'                       |
+      | leading space                        | ' example.com'            |
+      | trailing space                       | 'example.com '            |
+      | inner space                          | 'exa mple.com'            |
+      | two names in one entry               | 'a.example,b.example'     |
+      | newline                              | "example.com\\n"          |
+      | tab                                  | "exa\\tmple.com"          |
+      | NUL                                  | "exa\u0000mple.com"       |
+      | zero-width joiner                    | "exa\u200Dmple.com"       |
+      | underscore                           | '_dmarc.example.com'      |
+      | leading hyphen                       | '-example.com'            |
+      | trailing hyphen                      | 'example-.com'            |
+      | hyphens in places three and four     | 'ab--cd.example'          |
+      | malformed A-label                    | 'xn--a.example'           |
+      | A-label of a refused name            | 'xn--a-.example'          |
+      | A-label prefix on Unicode            | 'xn--bücher.example'      |
+      | mixed right-to-left label            | "\u05D0a.example"         |
+      | 64-byte label                        | 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example' |
+      | 254-byte name                        | 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' |
+      | A-label over 63 bytes                | 'üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü.example' |
+
+  @wip @slice-25 @ID-POLICY-50
+  Scenario Outline: a name repeated after canonicalisation is refused at its later entry
+    Given the policy file contains:
+      """
+      version: 2
+      manifest: a.json
+      network: {mode: allowlist, allow: [<names>]}
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule                  | path   | exit |
+      | policy.host_duplicate | <path> | 2    |
+    And it exits with code 2
+
+    Examples:
+      | names                                 | path             |
+      | api.example.com, api.example.com      | /network/allow/1 |
+      | api.example.com, API.EXAMPLE.COM.     | /network/allow/1 |
+      | bücher.example, xn--bcher-kva.example | /network/allow/1 |
+      | example.com, example。com              | /network/allow/1 |
+      | example.com, "exa\u00ADmple.com"     | /network/allow/1 |
+      | a.example, b.example, a.example       | /network/allow/2 |
+
+  # A list in offline mode is refused whatever it holds: its entries are not interpreted.
+  # Null is a value here as everywhere, never omission.
+  @wip @slice-25 @ID-POLICY-51
+  Scenario Outline: the list and the mode must agree
+    Given the policy file contains:
+      """
+      <document>
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule   | path           | exit |
+      | <rule> | /network/allow | 2    |
+    And it exits with code 2
+
+    Examples:
+      | document                                                                 | rule                 |
+      | {version: 2, manifest: a.json, network: {mode: allowlist}}                | policy.required      |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: []}}     | policy.allow_empty   |
+      | {version: 2, manifest: a.json, network: {allow: [a.example]}}             | policy.allow_offline |
+      | {version: 2, manifest: a.json, network: {allow: []}}                      | policy.allow_offline |
+      | {version: 2, manifest: a.json, network: {mode: offline, allow: [a.example]}} | policy.allow_offline |
+      | {version: 2, manifest: a.json, network: {mode: offline, allow: []}}       | policy.allow_offline |
+      | {version: 2, manifest: a.json, network: {mode: offline, allow: ['*']}}    | policy.allow_offline |
+      | {version: 2, manifest: a.json, network: {mode: offline, allow: null}}     | policy.allow_offline |
+
+  # A wrong mode reports only the mode, however good the list beside it. The unquoted
+  # 127.1 is a YAML number, so it fails on its type before any name check.
+  @wip @slice-25 @ID-POLICY-52
+  Scenario Outline: version 2 network values keep their types and modes
+    Given the policy file contains:
+      """
+      <document>
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule   | path   | exit |
+      | <rule> | <path> | 2    |
+    And it exits with code 2
+
+    Examples:
+      | document                                                                       | rule                | path             |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: null}}          | policy.type         | /network/allow   |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: a.example}}     | policy.type         | /network/allow   |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: {a.example: true}}} | policy.type     | /network/allow   |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [null]}}        | policy.type         | /network/allow/0 |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [443]}}         | policy.type         | /network/allow/0 |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [127.1]}}       | policy.type         | /network/allow/0 |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [true]}}        | policy.type         | /network/allow/0 |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [[a.example]]}} | policy.type         | /network/allow/0 |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [{name: a.example}]}} | policy.type   | /network/allow/0 |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [a.example, 7]}} | policy.type        | /network/allow/1 |
+      | {version: 2, manifest: a.json, network: null}                                    | policy.type         | /network         |
+      | {version: 2, manifest: a.json, network: allowlist}                               | policy.type         | /network         |
+      | {version: 2, manifest: a.json, network: [a.example]}                             | policy.type         | /network         |
+      | {version: 2, manifest: a.json, network: {mode: null, allow: [a.example]}}        | policy.type         | /network/mode    |
+      | {version: 2, manifest: a.json, network: {mode: [allowlist], allow: [a.example]}} | policy.type         | /network/mode    |
+      | {version: 2, manifest: a.json, network: {mode: bridge, allow: [a.example]}}      | policy.network_mode | /network/mode    |
+      | {version: 2, manifest: a.json, network: {mode: proxy, allow: [a.example]}}       | policy.network_mode | /network/mode    |
+      | {version: 2, manifest: a.json, network: {mode: Allowlist, allow: [a.example]}}   | policy.network_mode | /network/mode    |
+      | {version: 2, manifest: a.json, network: {mode: '', allow: [a.example]}}          | policy.network_mode | /network/mode    |
+      | {version: 2, manifest: a.json, network: {mode: Offline}}                         | policy.network_mode | /network/mode    |
+
+  # The plain step guards a fix that would point at the wrong schema: ID-POLICY-29 holds
+  # version 1's words exactly, so the text must depend on the version actually read.
+  @wip @slice-25 @ID-POLICY-53
+  Scenario Outline: version 2 stays closed and keeps version 1's other checks
+    Given the policy file contains:
+      """
+      <document>
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule   | path   | exit |
+      | <rule> | <path> | 2    |
+    And it exits with code 2
+    When itos-container runs with "doctor --policy-only"
+    Then it exits with code 2
+    And its error output does not say "version 1 schema"
+
+    Examples:
+      | document                                                                         | rule               | path            |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [a.example], egress: []}} | policy.unknown_key | /network/egress |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [a.example], hosts: []}}  | policy.unknown_key | /network/hosts  |
+      | {version: 2, manifest: a.json, allow: [a.example]}                                 | policy.unknown_key | /allow          |
+      | {version: 2, manifest: a.json, proxy: {}}                                          | policy.unknown_key | /proxy          |
+      | {version: 2, manifest: a.json, accounts: []}                                       | policy.unknown_key | /accounts       |
+      | {version: 2, manifest: a.json, x-note: ignored}                                    | policy.unknown_key | /x-note         |
+      | {version: 2}                                                                       | policy.required    | /manifest       |
+      | {version: 2, manifest: null}                                                       | policy.type        | /manifest       |
+      | {version: 2, manifest: '../a.json'}                                                | policy.path        | /manifest       |
+
+  @wip @slice-25 @ID-POLICY-54
+  Scenario: independent version 2 problems are returned together without a partial policy
+    Given the policy file contains:
+      """
+      version: 2
+      manifest: null
+      network:
+        mode: allowlist
+        allow:
+          - '*.example.com'
+          - a.example
+          - A.EXAMPLE.
+          - a.example.
+          - 'a.example:443'
+          - 7
+        egress: []
+      accounts: []
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule                  | path             | exit |
+      | policy.type           | /manifest        | 2    |
+      | policy.host_name      | /network/allow/0 | 2    |
+      | policy.host_duplicate | /network/allow/2 | 2    |
+      | policy.host_duplicate | /network/allow/3 | 2    |
+      | policy.host_name      | /network/allow/4 | 2    |
+      | policy.type           | /network/allow/5 | 2    |
+      | policy.unknown_key    | /network/egress  | 2    |
+      | policy.unknown_key    | /accounts        | 2    |
+    And it exits with code 2
+
+  # The marker is lowercase because canonicalising and the library's errors lower a name.
+  # A refused name never reaches output, even when another entry repeats it exactly.
+  @wip @slice-25 @ID-POLICY-55
+  Scenario Outline: allowlist diagnostics locate the entry without echoing its value
+    Given the policy file contains:
+      """
+      <document>
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule   | path   | exit |
+      | <rule> | <path> | 2    |
+    And it exits with code 2
+    And its standard output does not say "synthetic-policy-marker"
+    And its error output does not say "synthetic-policy-marker"
+    When itos-container runs with "doctor --policy-only"
+    Then it exits with code 2
+    And its error output says "itos-container: itos-container.yaml<path>:"
+    And its error output does not say "synthetic-policy-marker"
+    And its standard output does not say "synthetic-policy-marker"
+
+    Examples:
+      | document                                                                                                          | rule                  | path             |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: ['https://synthetic-policy-marker.example/']}}     | policy.host_name      | /network/allow/0 |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: ['-synthetic-policy-marker.example']}}             | policy.host_name      | /network/allow/0 |
+      | {version: 2, manifest: a.json, network: {mode: allowlist, allow: [synthetic-policy-marker.example, synthetic-policy-marker.example]}} | policy.host_duplicate | /network/allow/1 |
+      | {version: 2, manifest: a.json, network: {mode: synthetic-policy-marker, allow: [a.example]}}                        | policy.network_mode   | /network/mode    |
+      | {version: 2, manifest: a.json, network: {mode: offline, allow: [synthetic-policy-marker.example]}}                  | policy.allow_offline  | /network/allow   |
+
+  # 21600 distinct characters of 3 bytes each are the longest such name the 64 KiB file
+  # limit admits. Encoding it takes the library four to six seconds and refusing it first
+  # takes milliseconds, so the 2 second deadline tells a limit checked before IDNA from one
+  # checked after it. ID-POLICY-57 holds the limit's exact value without any timing.
+  @wip @slice-25 @ID-POLICY-56
+  Scenario: a hostile host name is refused before canonicalising can amplify it
+    Given the policy file allows one host name of 21600 distinct characters
+    When itos-container runs with "doctor --policy-only --json" and a 2 second deadline
+    Then it finishes before the deadline
+    And its combined policy output is at most 4096 bytes
+    And its policy JSON reports exactly these problems:
+      | rule             | path             | exit |
+      | policy.host_name | /network/allow/0 | 2    |
+    And it exits with code 2
+    And the engine recorder has no connections
+
+  # Both entries canonicalise to short names. Only the limit on the raw text tells them
+  # apart, and an implementation that measures after mapping accepts both.
+  @wip @slice-25 @ID-POLICY-57
+  Scenario: the length limit counts what canonicalising would remove
+    Given the policy file allows "ab.example" padded with soft hyphens to 1024 bytes
+    When itos-container runs with "doctor --policy-only --json"
+    Then it exits with code 0
+    And its policy JSON contains this effective policy:
+      """
+      {"version":2,"manifest":"a.json","network":{"mode":"allowlist","allow":["ab.example"]}}
+      """
+    Given the policy file allows "abc.example" padded with soft hyphens to 1025 bytes
+    When itos-container runs with "doctor --policy-only --json"
+    Then its policy JSON reports exactly these problems:
+      | rule             | path             | exit |
+      | policy.host_name | /network/allow/0 | 2    |
+    And it exits with code 2
+
+  # Eleven fixed nodes leave 2037 of the 2048 for entries: the root, three keys and values
+  # at the top, and two keys and values in network. The deadline bounds duplicate detection.
+  @wip @slice-25 @ID-POLICY-58
+  Scenario: only the representation budget limits how many names a list holds
+    Given the policy file allows 2037 generated host names
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And it exits with code 0
+    Given the policy file allows 2038 generated host names
+    When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
+    Then it finishes before the deadline
+    And its policy JSON reports exactly these problems:
+      | rule              | path | exit |
+      | policy.complexity |      | 2    |
+    And it exits with code 2
+
+  @wip @slice-25 @ID-POLICY-59
+  Scenario: manifest inspection reads a version 2 policy and goes on to its manifest
+    Given a manifest inspection checkout
+    And the manifest inspection policy contains:
+      """
+      version: 2
+      manifest: .devcontainer/devcontainer.json
+      network: {mode: allowlist, allow: [api.example.com]}
+      """
+    When itos-container runs with "doctor --manifest-only --json"
+    Then its JSON output reports a valid manifest at ".devcontainer/devcontainer.json"
+    And it exits with code 0
+    And the engine recorder has no connections
+
+  # The last three scenarios keep a version 2 request away from canonical settings v1. Each
+  # file edit is the only difference from an approved or approvable offline checkout, so
+  # refusing later than the policy stage would reach the engine or the approval record.
+  @wip @slice-25 @ID-POLICY-60 @local-engine-fixture
+  Scenario Outline: ordinary doctor refuses version 2 even beside a matching offline approval
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "1"
+    And the checkout policy contains:
+      """
+      <policy>
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then it exits with code 0
+    When itos-container runs with "doctor --json"
+    Then its JSON output reports exactly these policy problems:
+      | rule           | path     | exit |
+      | policy.version | /version | 2    |
+    And it exits with code 2
+    And the Engine API journal is empty
+    And the active approval bytes and generation are unchanged
+
+    Examples:
+      | policy                                                                                                        |
+      | {version: 2, manifest: .devcontainer/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}} |
+      | {version: 2, manifest: .devcontainer/devcontainer.json}                                                       |
+
+  # The fingerprint is the one the offline settings would have, the exact approval a build
+  # that ignored the list would accept.
+  @wip @slice-25 @ID-POLICY-61 @local-engine-fixture
+  Scenario Outline: approve cannot record offline settings for a version 2 request
+    Given an approval checkout and isolated host state
+    And the checkout policy contains:
+      """
+      <policy>
+      """
+    When itos-container runs with "doctor --policy-only --json"
+    Then it exits with code 0
+    When approve runs without a terminal with a well-formed candidate fingerprint as JSON
+    Then it reports prerequisite problem "policy.version" with exit 2 before requesting consent
+    And no approval record or frozen input is produced
+    And the Engine API journal is empty
+
+    Examples:
+      | policy                                                                                                        |
+      | {version: 2, manifest: .devcontainer/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}} |
+      | {version: 2, manifest: .devcontainer/devcontainer.json}                                                       |
+
+  # Contract AC-02: a change to network permissions refuses startup, with no self-approval.
+  @wip @slice-25 @ID-POLICY-62 @local-engine-fixture @linux
+  Scenario Outline: run refuses version 2 even beside a matching offline approval
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "1"
+    And the checkout policy contains:
+      """
+      <policy>
+      """
+    And the run preflight files are snapshotted
+    When itos-container runs with "doctor --policy-only --json"
+    Then it exits with code 0
+    When itos-container runs with "run -- fixture-workload"
+    Then run reports preflight problem "policy.version" with exit 2 and subject "/version"
+    And its error output says "doctor --policy-only"
+    And the Engine API journal is empty
+    And no endpoint connection was attempted
+    And the active approval bytes and generation are unchanged
+    And run preflight has changed no checkout or host state
+
+    Examples:
+      | policy                                                                                                        |
+      | {version: 2, manifest: .devcontainer/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}} |
+      | {version: 2, manifest: .devcontainer/devcontainer.json}                                                       |
 
   # A date or yes/on without quotes remains a string under the core scalar rules.
   # These filenames request no host expansion; policy-only does not open them.
