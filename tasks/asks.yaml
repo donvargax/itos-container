@@ -187,3 +187,7 @@ questions:
     item: "T-31"
     question: "T-31: its task check needs the engine fixtures, which only the Engine job has; how is it proven?"
     answer: "Change done_when to the engine-free regression for the heartbeat rename race; RECOVERY-23's native proof is the Engine job, which runs every live engine scenario on each pull request. Keep the workflow guards. See T-31-steer.md."
+  - id: q-47
+    item: "T-37"
+    question: "T-37: its check's git show-ref fails on CI's ref-less fixture clone; use for-each-ref?"
+    answer: "Yes: git for-each-ref, which succeeds on an empty ref set, keeping the same state comparison; change the check and push."
