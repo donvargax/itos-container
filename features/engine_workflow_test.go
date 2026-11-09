@@ -233,29 +233,6 @@ func TestEngineWorkflow(t *testing.T) {
 
 const eventGuard = "${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}"
 const ciGuard = "${{ always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}"
-const engineFailureDiagnostics = `set +e
-sudo dmesg | tail -50
-free -m
-if [[ -f "$RUNNER_TEMP/slice-11-features.log" ]]; then
-  # Every timing record, slowest first, so a timeout's rows show where the time went.
-  # grep -a reads a NUL or invalid UTF-8 in the log as text; the sequence number keeps
-  # equal durations in log order; a record with no duration counts as zero.
-  printf 'Engine scenario timing records, slowest first: %s\n' "$(grep -ac '^engine scenario timing: ' "$RUNNER_TEMP/slice-11-features.log")"
-  n=0
-  grep -a '^engine scenario timing: ' "$RUNNER_TEMP/slice-11-features.log" | while IFS= read -r record; do
-    record=${record#engine scenario timing: }
-    ns=0
-    if [[ $record =~ \"duration_ns\":([0-9]+) ]]; then ns=${BASH_REMATCH[1]}; fi
-    ns=${ns#"${ns%%[!0]*}"}
-    ns=${ns:-0}
-    padded=000000000$ns
-    whole=${padded:0:${#padded}-9}
-    whole=${whole#"${whole%%[!0]*}"}
-    printf '%s\t%s\t%4s.%s s %s\n' "$ns" "$((++n))" "${whole:-0}" "${padded:${#padded}-9:3}" "$record"
-  done | LC_ALL=C sort -t $'\t' -k1,1nr -k2,2n | cut -f3-
-  tail -100 "$RUNNER_TEMP/slice-11-features.log"
-fi
-`
 
 func changeStep(w *engineWorkflow, job, name string, change func(*workflowStep)) {
 	j := w.Jobs[job]
