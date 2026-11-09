@@ -1663,3 +1663,21 @@ items:
       credentials are used) and asks through itos decision rather than inventing protections. It
       updates the arc42 sections it overrides under the charter's drift rule. Later items take their
       design from it. Broken down from p1-credentials-passed-in.
+  - id: p1-credentials-policy-sources
+    title: The policy file accepts named credential sources and doctor validates them without reading their contents
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-credentials-decision-record]
+    kind: idea
+    why: >
+      Charter step 2: the credential grants are part of the approved settings, so they start in
+      itos-container.yaml, as the egress allowlist did in slice-25. Scenarios first: a closed
+      credentials section naming each source by kind (Claude token file, Codex auth file, GitHub
+      token file) with an absolute host path. Unknown kinds, duplicates, relative or empty paths,
+      and paths inside the checkout or any mount are refused with a located diagnostic. Doctor
+      reports a missing, non-regular, group- or world-accessible, or foreign-owned source, and shows
+      the effective grants. It never prints, hashes or logs contents. It does not execute checkout
+      code and starts no engine. Offline policies without the section are unchanged. docs/CONFIG.md
+      and docs/CLI.md are updated, and the published policy schema moves with it. It takes the keys
+      and checks from the decision record. Broken down from p1-credentials-passed-in.
