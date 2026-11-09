@@ -102,7 +102,7 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 		return nil, "state.unavailable"
 	}
 	home, failure := s.Account.AccountHome()
-	if failure != "" || !filepath.IsAbs(home) || filepath.Clean(home) != home || home == "/" || !utf8.ValidString(home) {
+	if failure != "" || !filepath.IsAbs(home) || home == "/" || !utf8.ValidString(home) {
 		return nil, "state.unavailable"
 	}
 	selected, failure := s.Store.locationAt(c, "approvals")
@@ -216,7 +216,7 @@ func (s Store) prospective(c port.Candidate, path string, depth int) (*pin, port
 			return p, f
 		}
 		parent := filepath.Dir(path)
-		if parent == path || parent == "/" {
+		if parent == "/" {
 			return nil, "state.unavailable"
 		}
 		path, depth = parent, depth-1
