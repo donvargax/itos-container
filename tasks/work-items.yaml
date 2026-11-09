@@ -1373,6 +1373,24 @@ items:
       thread, naming the item, or queue the item directly behind T-42 before the egress proof leans
       on the lifecycle tier. The item adds nothing to charter step 1 itself, so it stays p2 in the
       registry. If step 1 starts first, the person can move it up.
+
+      The item already carries this: a recorder that journals the cut would only sharpen the native
+      tier's inference, and the defect it guards against (a grace timer started at the
+      acknowledgement or the cut, not the first signal) is what the fake-clock row exists to catch,
+      since a synthetic clock has no jitter. The ask is to extend that row with a hold longer than
+      what is left of the call limit. It should assert SIGKILL still falls at first signal plus
+      grace, not at the cut plus grace. The engine product copy does not cut (1 s call limit, 0.6 s
+      delay), so the native rows cannot cover it. A recorded cut instant is not worth its own item,
+      and it touches the recorder outside T-42's range.
+
+      The item already holds everything this idea says. Its fake-clock row sends a repeat signal at
+      about 20 percent of grace (not the 80 percent T-42 fixes and two tests pin) and asserts the
+      kill still falls at first signal plus grace. It also says to land it before charter step 4
+      (p1-interactive-tty) changes Ctrl-C handling. The ordering is not a new piece of work. It is
+      for the person or coordinator to settle: queue the item before p1-interactive-tty (the queue
+      is T-45, T-42, p1-credentials-passed-in, p1-harness-home, p1-interactive-tty, and the item is
+      not in it), or accept the gap and say so. It stays p2 because it blocks no step on its own.
+      Move it up if step 4 starts first.
   - id: p2-proxy-log-lost-tail-sink
     title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
     phase: 1
