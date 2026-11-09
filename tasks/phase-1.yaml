@@ -2763,7 +2763,13 @@
     row took 128 s, its other rows 22 s and 12 s, and LIFECYCLE-09's four rows took 11-14 s
     each. Shorten these real waits through the harness's own build fixture: centralize the
     unchanged production call/startup/grace constants (10/120/10 s) in the existing budget
-    engine and let a Go build overlay substitute 1/3/1 s only in the engine tier's binary.
+    engine and have the harness build the engine tier's binary from a disposable copy of
+    cmd, internal, go.mod and go.sum outside every checkout, in which only the limits file
+    holds 1/3/1 s. A Go build overlay does not work and must not be used: the engine step
+    always sets -cover, and then cmd/go hands the cover tool each package file's path on
+    disk and ignores the overlay, so the product kept 10/120/10 s (run 42566251698 spent its
+    four minutes in the unshortened waits), and the build cache stored that production build
+    under the overlaid text's key. The copy's limits file carries a header no overlay had.
     No environment variable, flag or configuration accepted by a product binary may select
     test budgets. Ordinary tests and release builds retain the production constants.
     Keep the 30-second teardown budget and process guards. Native assertions and actions use
