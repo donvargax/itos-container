@@ -49,6 +49,7 @@ func TestRefusedHeads(t *testing.T) {
 		{"bare LF", "CONNECT listed.example:443 HTTP/1.1\n\n", true, port.Malformed, [3]string{}},
 		{"bare LF in the request line", "CONNECT listed.example:443 HTTP/1.1\nHost: x\r\n\r\n", false, port.Malformed, [3]string{}},
 		{"partial head then close", "CONNECT listed.ex", true, port.Malformed, [3]string{}},
+		{"one byte then close", "C", true, port.Malformed, [3]string{}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -62,7 +63,7 @@ func TestRefusedHeads(t *testing.T) {
 			}
 			answer, _ := readUntilClosed(t, conn)
 			if string(answer) != want403 {
-				t.Errorf("answer = %q; want exactly the 403", answer)
+				t.Fatalf("answer = %q; want exactly the 403", answer)
 			}
 			records := h.records(2)
 			h.quiet(2)

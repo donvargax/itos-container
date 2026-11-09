@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
+	"io"
 	"net"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 
@@ -162,7 +165,7 @@ func TestSplice(t *testing.T) {
 		conn, server := established(t, upstream, h)
 		_ = server.CloseWrite()
 		_ = conn.SetReadDeadline(time.Now().Add(testWait))
-		if n, err := conn.Read(make([]byte, 1)); n != 0 || err == nil {
+		if n, err := conn.Read(make([]byte, 1)); n != 0 || !errors.Is(err, io.EOF) {
 			t.Errorf("client read %d bytes, %v; want EOF", n, err)
 		}
 		_, _ = conn.Write([]byte("after"))
@@ -194,8 +197,8 @@ func TestSplice(t *testing.T) {
 		_ = server.SetLinger(0)
 		_ = server.Close()
 		_ = conn.SetReadDeadline(time.Now().Add(testWait))
-		if n, err := conn.Read(make([]byte, 1)); n != 0 || err == nil {
-			t.Errorf("client read %d bytes, %v; want the tunnel closed", n, err)
+		if n, err := conn.Read(make([]byte, 1)); n != 0 || (!errors.Is(err, io.EOF) && !errors.Is(err, syscall.ECONNRESET)) {
+			t.Errorf("client read %d bytes, %v; want EOF or a connection reset", n, err)
 		}
 	})
 }

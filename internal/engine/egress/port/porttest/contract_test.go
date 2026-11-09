@@ -156,7 +156,7 @@ func TestProxyContractCatchesFaults(t *testing.T) {
 		t.Run(fault, func(t *testing.T) {
 			t.Parallel()
 			reporter := &recordingReporter{}
-			proxyContract(reporter, 250*time.Millisecond, 60*time.Millisecond, func(f ProxyFixture) port.Proxy {
+			ProxyContractWithWaits(reporter, 250*time.Millisecond, 60*time.Millisecond, func(f ProxyFixture) port.Proxy {
 				return &faulty{fixture: f, fault: fault}
 			})
 			if !strings.Contains(strings.Join(reporter.errors, "\n"), want) {
@@ -166,7 +166,7 @@ func TestProxyContractCatchesFaults(t *testing.T) {
 	}
 	t.Run("a sound proxy reports nothing", func(t *testing.T) {
 		reporter := &recordingReporter{}
-		proxyContract(reporter, 250*time.Millisecond, 60*time.Millisecond, func(f ProxyFixture) port.Proxy { return &faulty{fixture: f} })
+		ProxyContractWithWaits(reporter, 250*time.Millisecond, 60*time.Millisecond, func(f ProxyFixture) port.Proxy { return &faulty{fixture: f} })
 		if len(reporter.errors) != 0 {
 			t.Errorf("contract failed a sound proxy: %q", reporter.errors)
 		}

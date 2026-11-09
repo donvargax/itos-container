@@ -24,12 +24,14 @@ type Reporter interface {
 // record, and a failing log returns LogFailed.
 func ProxyContract(t Reporter, open func(ProxyFixture) port.Proxy) {
 	t.Helper()
-	proxyContract(t, 30*time.Second, 100*time.Millisecond, open)
+	ProxyContractWithWaits(t, 30*time.Second, 100*time.Millisecond, open)
 }
 
-// proxyContract waits up to wait for anything it expects to happen, and settle
-// for anything it expects not to.
-func proxyContract(t Reporter, wait, settle time.Duration, open func(ProxyFixture) port.Proxy) {
+// ProxyContractWithWaits runs ProxyContract's assertions with caller-supplied
+// waits, so tests of faulty proxies need not wait for the default deadlines.
+// It waits up to wait for anything it expects to happen, and settle for anything
+// it expects not to.
+func ProxyContractWithWaits(t Reporter, wait, settle time.Duration, open func(ProxyFixture) port.Proxy) {
 	t.Helper()
 	valid := []string{"listed.example"}
 	serveValid(t, wait, settle, open, valid)
