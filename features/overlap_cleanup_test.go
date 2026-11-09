@@ -9,8 +9,11 @@ import (
 // Plain controllers have no counters to export. A controller which cannot
 // drain must still be cancelled and joined by ordinary fixture cleanup.
 func TestOverlapCleanup(t *testing.T) {
-	for _, mode := range []string{"plain", "covered", "covered timeout", "native"} {
+	t.Setenv("GOCOVERDIR", "")
+	t.Setenv("ITOS_CC_TEST_COVERDIR", "")
+	for _, mode := range []string{"plain", "aggregate", "covered", "covered timeout", "native"} {
 		t.Run(mode, func(t *testing.T) {
+			normalExit := mode == "covered" || mode == "aggregate"
 			worker := &overlapWorker{
 				value:  map[string]any{"State": map[string]any{"Running": true}},
 				exited: make(chan struct{}),
@@ -34,10 +37,12 @@ func TestOverlapCleanup(t *testing.T) {
 				runs:   []*overlapRun{{w: child, engine: engine, worker: "worker", process: process}},
 				native: mode == "native",
 			}}
-			if mode != "plain" {
+			if mode == "aggregate" {
+				t.Setenv("GOCOVERDIR", t.TempDir())
+			} else if mode != "plain" {
 				w.coverdir = t.TempDir()
 			}
-			if mode == "covered" {
+			if normalExit {
 				go func() {
 					<-worker.exited
 					finish()
@@ -56,7 +61,7 @@ func TestOverlapCleanup(t *testing.T) {
 			default:
 				t.Fatal("cleanup left its controller unjoined")
 			}
-			if cancelledBeforeExit != (mode != "covered") {
+			if cancelledBeforeExit == normalExit {
 				t.Fatalf("%s cancelled before normal exit: %t", mode, cancelledBeforeExit)
 			}
 			select {
@@ -65,7 +70,7 @@ func TestOverlapCleanup(t *testing.T) {
 					t.Fatal("cleanup requested an unnecessary coverage drain")
 				}
 			default:
-				if strings.HasPrefix(mode, "covered") {
+				if mode != "plain" && mode != "native" {
 					t.Fatal("coverage cleanup did not complete its simulated workload")
 				}
 			}

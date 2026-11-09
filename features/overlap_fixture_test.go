@@ -380,7 +380,7 @@ func (w *world) closeOverlap() error {
 		}
 	}
 	var err error
-	if !f.native {
+	if !f.native && w.coverageDir() != "" {
 		err = f.finishLocalWorkloads()
 	}
 	for _, p := range f.worlds {
@@ -397,9 +397,11 @@ func (w *world) closeOverlap() error {
 	return err
 }
 
-// Called only after the scenario's assertions. Complete the existing simulated
-// workloads so their controllers can export measured counters on normal exit;
-// the forced cleanup still joins every process if the bounded drain fails.
+// Called only after a covered scenario's assertions. Complete the existing
+// simulated workloads so their controllers can export measured counters on
+// normal exit. Plain worlds retain cancellation and joining without waiting for
+// product teardown that has no counters to export. Forced cleanup
+// still joins every process if the bounded coverage drain fails.
 func (f *overlapFixture) finishLocalWorkloads() error {
 	var draining []*overlapRun
 	for _, r := range f.runs {

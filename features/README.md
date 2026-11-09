@@ -142,10 +142,11 @@ CLI launches, contract probes and recovery controllers use the same destination.
 The approval older-kernel and run umask helpers stage their counters there before
 exporting them after child exit, preserving the child's umask and state permissions.
 Scenario cleanup removes fixture state but leaves coverage for the collector.
-Local overlap fixtures end their simulated workloads after the final assertion
-and give active controllers a shared five-second drain bound before forced
-cleanup. This lets Go export their executed counters; a drain timeout fails
-cleanup. Native teardown is unchanged.
+When coverage is requested, local overlap fixtures end their simulated workloads
+after the final assertion and give active controllers a shared five-second drain
+bound before forced cleanup. This lets Go export their executed counters; a drain
+timeout fails cleanup. Plain runs retain direct cancellation and joining because
+their controllers have no counters to export. Native teardown is unchanged.
 Independent harness regressions use private temporary coverage roots and restore
 the caller's inputs, keeping their reruns outside the listed-ID inventory.
 
