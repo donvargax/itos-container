@@ -1039,6 +1039,16 @@ items:
       scenarios; any that now fail show a real leak to fix in the product, never a reason to loosen
       the step. This is a test-support change with no new behavior and needs a ledger task and its
       checks. Phase 2: it hardens existing proof and does not block charter step 1.
+
+      The same task covers this gap: a step name promises more than its code checks, in the same
+      approval assertion files. I checked it. approvalProblem
+      (features/approval_assertions_test.go:85, registered for 'it reports prerequisite problem …
+      before requesting consent' at features/approval_steps_test.go:138) checks the exit code and
+      the rule, and never that no consent prompt appeared. The step is used at approval.feature:654
+      and hardlinks.feature:193. Add a check that no consent prompt was shown, or rename the step to
+      what it checks, to that item's test-support change. Run the same scenarios afterwards: one
+      that fails then shows a real product leak, and the step is not loosened. Slice-26 adds
+      refusals here, so the check matters more then.
   - id: p2-pin-ledger-check-shell
     title: Pin the shell itos runs ledger and CI checks with, so a check passes locally only if it passes in CI
     phase: 1
@@ -1078,3 +1088,65 @@ items:
       explicit act by the person, never silent automatic pruning. It also has to keep the
       exact-ownership guarantee: it may touch only this project's own session state, never foreign
       resources. Decide the rule, then specify it by scenarios.
+  - id: p2-lifecycle-09-escalation-window-jitter
+    title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Run 42609794543 (T-41's range, which touches nothing LIFECYCLE-09 uses) failed the engine tier
+      at row #03 of 'Ignored and repeated cancellation escalates once after the fixed grace'
+      (SIGTERM, acknowledgement delayed 60% of grace), while T-33 to T-37 each passed it. T-33
+      shortened the engine grace from 10 s to 1 s and kept the SIGKILL tolerance proportional:
+      lifecycleSignals in features/lifecycle_native_assertions_test.go accepts SIGKILL only from 1.0
+      s to 1.2 s after cancellation. The 30 s teardown assertion kept an absolute 2 s tolerance.
+      Controller wake-up and request latency under -cover on a shared runner do not shrink with the
+      grace, so 200 ms is a plausible flake source. The same run's engine step took 235 s against
+      its 240 s gate, so the runner was busy. The cause is not confirmed: the failing assertion was
+      not visible to the implementer (no gh access) or to this triage. The coordinator should put
+      the failing assertion's text from the job log in the brief before the item is taken. If it is
+      the SIGKILL window, replace the 20% share with an absolute floor. A tolerance up to about 500
+      ms still rejects an acknowledgement-relative timer, which fires at 1.6 s with a 60% delay.
+      Keep the lower bound, the native receipts and the 60% delay row. Change the T-33 wording
+      'escalation tolerance is 20 percent' and the matching lines in features/README.md with it.
+      This keeps the engine tier from failing unrelated ranges, which matters for milestone two's
+      egress proof, which relies on it.
+  - id: p2-scheduled-fuzz-egress-parser
+    title: A scheduled CI job fuzzes the egress proxy's CONNECT parser and ClientHello peek with fresh seeds, and each find becomes a committed seed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Charter milestone two, step 1: the owned proxy is the one process a hostile worker can talk
+      to, and it has a route out, so a parser bug in the CONNECT parse or the ClientHello peek is
+      the boundary failing. q-51 requires fuzz tests for both, but T-39's -fuzz runs happen once,
+      for T-39's own range. After that CI only replays the committed seeds, and ci.yml has no
+      schedule trigger, so nothing explores new inputs. itos guide brief puts fuzzing at the nightly
+      tier (random where it explores, nothing waits on it) and asks that every find become a fixed
+      regression at the push tier (a failing seed committed). This does not block step 1 (T-39's own
+      fuzz run meets q-51), so p2. It follows T-39, which creates the fuzz targets. The job is
+      non-gating: it sits beside, not in, the required job. The project has so far written "no
+      nightly" (the T-37 and mutation-proof items); that was about the gating mutation proof, and
+      this item is the exploring tier. The person should confirm that reading when reviewing it.
+  - id: p2-schema-conforms-to-parser
+    title: A check ties each published policy schema to what doctor accepts and refuses
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      docs/schemas/itos-container-v1.schema.json is a published data contract. docs/CONFIG.md links
+      it for editors and producers, and slice-25 adds a version 2 schema beside it. Nothing reads
+      either file in a test or gate, so a schema can drift from what the strict parser enforces and
+      every check stays green. That has a real cost: an editor accepts a file doctor refuses, or the
+      reverse. Version 3 and later slices will extend the contract again. Specify a check that runs
+      a maintained JSON Schema validator, chosen and pinned in the spec, over the policy examples
+      that doctor accepts and refuses, and fails when the two disagree for any published version.
+      The YAML syntax limits stay outside the schema, as the policy spec says. It does not block
+      milestone two step 1 and should follow slice-25, which publishes the version 2 schema, so p2.
+      Slice-25 stays unchanged.
