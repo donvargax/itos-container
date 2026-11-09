@@ -1463,8 +1463,8 @@ items:
   - id: T-45
     title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-harness-env-clears-columns
