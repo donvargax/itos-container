@@ -15,6 +15,9 @@ import (
 )
 
 func TestEngineSuiteBudget(t *testing.T) {
+	t.Run("compiled fixture budgets", testEngineBudgetFixture)
+	t.Run("quiet observation", TestEngineFixtureQuietBudget)
+	t.Run("grace repetitions", TestEngineFixtureGraceBudget)
 	data, err := os.ReadFile("../.github/workflows/ci.yml")
 	if err != nil {
 		t.Fatal(err)

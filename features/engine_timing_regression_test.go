@@ -118,7 +118,7 @@ Feature: timing
 						}
 					}
 					total += want
-					if record.Feature != filepath.Join(dir, "memory.feature") || record.ID != "@ID-MEMORY-01" || record.Line != int64(8+i) || record.DurationNS != int64(want) || record.Outcome != outcome {
+					if filepath.Clean(record.Feature) != filepath.Join(dir, "memory.feature") || record.ID != "@ID-MEMORY-01" || record.Line != int64(8+i) || record.DurationNS != int64(want) || record.Outcome != outcome {
 						t.Errorf("row %d lost identity, setup/cleanup time or outcome: %+v", i, record)
 					}
 				}

@@ -28,7 +28,7 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	if s.Registry != nil {
 		return s.registeredRun(ctx, frozen, argv, streams)
 	}
-	startup, cancel := context.WithTimeout(ctx, 120*time.Second)
+	startup, cancel := context.WithTimeout(ctx, budget.StartupDuration)
 	result, connection, attachment := s.launch(startup, frozen, argv, streams)
 	cancel()
 	if connection != nil {
@@ -57,7 +57,7 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 			// Exit can precede the last output, including an interrupted worker's
 			// diagnostics. Keep draining independent of the host signal, but inside
 			// the shared teardown budget and before cleanup closes the connection.
-			drain, stop := context.WithTimeout(teardown, 10*time.Second)
+			drain, stop := context.WithTimeout(teardown, budget.CallDuration)
 			if failure := attachment.Drain(drain); failure != "" {
 				result.Outcome = failure
 			}
@@ -90,7 +90,7 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	// A worker may close stdin on exit while input forwarding is still pending.
 	// Confirm that the exact worker exited before reacquiring its wait response;
 	// a running or unverifiable worker still requires failure and owned cleanup.
-	probe, end := context.WithTimeout(ctx, 10*time.Second)
+	probe, end := context.WithTimeout(ctx, budget.CallDuration)
 	defer end()
 	// The launch connection retains the startup deadline. Reopen protected
 	// authority and the original daemon within this one reconciliation budget,
@@ -173,7 +173,7 @@ func (s Runner) interrupt(ctx context.Context, reference, signal string) (int, b
 	if signalOwned(ctx, intent, c, signal) != "" {
 		return 0, false
 	}
-	grace, end := context.WithTimeout(ctx, 10*time.Second)
+	grace, end := context.WithTimeout(ctx, budget.GraceDuration)
 	exit, outcome := c.Wait(grace, record.ContainerID)
 	end()
 	if outcome == "" {

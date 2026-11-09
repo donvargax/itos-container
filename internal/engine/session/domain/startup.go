@@ -26,7 +26,7 @@ func startupOperation(ctx context.Context, name string, fn func(context.Context)
 	if budget.Cause(ctx) != nil {
 		return startupFailure(ctx)
 	}
-	call, end := context.WithTimeout(ctx, 10*time.Second)
+	call, end := context.WithTimeout(ctx, budget.CallDuration)
 	defer end()
 	failure := fn(call)
 	if budget.Cause(call) != nil && failure != port.Refused && failure != port.IsolationUnverified {

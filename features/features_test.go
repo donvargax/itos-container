@@ -88,7 +88,7 @@ func TestFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bin, err := build(root, t.TempDir())
+	bin, err := buildProduct(root, t.TempDir(), selection.engine)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,6 +175,9 @@ func (env featureEnvironment) engineEnabled() (bool, error) {
 // The repository's macOS/Windows jobs are manual; Linux proof never runs them.
 func (env featureEnvironment) excludedPlatforms() []string {
 	var tags []string
+	if env.os != "linux" && env.os != "darwin" {
+		tags = append(tags, "@unix")
+	}
 	if env.os != "linux" || env.arch != "amd64" {
 		tags = append(tags, "@local-engine-fixture")
 	}
@@ -382,6 +385,10 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 // git of the caller's. With GOCOVERDIR set it is a -cover build (see the
 // package's comment).
 func build(root, dir string) (string, error) {
+	return buildProduct(root, dir, false)
+}
+
+func buildProduct(root, dir string, engine bool) (string, error) {
 	name := "itos-container"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
@@ -389,6 +396,13 @@ func build(root, dir string) (string, error) {
 	bin := filepath.Join(dir, name)
 	args := []string{"build", "-trimpath", "-buildvcs=false",
 		"-ldflags", "-X " + versionSymbol + "=" + stampedVersion + " -X " + commitSymbol + "=" + stampedCommit}
+	if engine {
+		overlay, err := engineBudgetOverlay(root, dir)
+		if err != nil {
+			return "", err
+		}
+		args = append(args, "-overlay", overlay)
+	}
 	if os.Getenv("GOCOVERDIR") != "" {
 		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	}

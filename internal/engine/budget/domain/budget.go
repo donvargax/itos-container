@@ -52,7 +52,7 @@ func Startup(ctx context.Context) (context.Context, context.CancelFunc) {
 	if startup, ok := ctx.Value(startupKey{}).(context.Context); ok {
 		return startup, func() {}
 	}
-	return Start(ctx, 120*time.Second, "startup")
+	return Start(ctx, StartupDuration, "startup")
 }
 
 type pair[A, B any] struct {
@@ -75,7 +75,7 @@ func Acquire[T any](ctx context.Context, operation string, fn func(context.Conte
 	if cause := Cause(ctx); cause != nil {
 		return zero, cause
 	}
-	call, end := context.WithTimeout(ctx, 10*time.Second)
+	call, end := context.WithTimeout(ctx, CallDuration)
 	defer end()
 	call = port.WithLifetime(call, ctx)
 	done := make(chan T)

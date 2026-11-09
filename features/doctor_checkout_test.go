@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,11 +15,20 @@ import (
 )
 
 func (w *world) doctorCheckout() error {
+	return w.doctorCheckoutForHost(runtime.GOOS, os.Geteuid())
+}
+
+func (w *world) doctorCheckoutForHost(hostOS string, uid int) error {
+	if hostOS == "windows" {
+		// The fixture must pass manifest validation before the real product can
+		// diagnose an unsupported host. Windows' -1 is not a container UID.
+		uid = 1000
+	}
 	d := &doctorWorld{checkout: filepath.Join(w.dir, "checkout"), host: filepath.Join(w.dir, "host"), recorder: filepath.Join(w.dir, "recorder"),
 		image: doctorImage, imageID: doctorImageID, engineID: "engine-A", api: "1.56", env: map[string]string{}}
 	w.doctor = d
 	d.cwd = d.checkout
-	d.manifest = map[string]any{"image": d.image, "containerUser": strconv.Itoa(os.Geteuid()), "remoteUser": strconv.Itoa(os.Geteuid())}
+	d.manifest = map[string]any{"image": d.image, "containerUser": strconv.Itoa(uid), "remoteUser": strconv.Itoa(uid)}
 	for key, name := range map[string]string{"HOME": "home", "USERPROFILE": "home", "XDG_CONFIG_HOME": "config", "XDG_STATE_HOME": "state", "XDG_CACHE_HOME": "cache", "XDG_DATA_HOME": "data", "DOCKER_CONFIG": "docker", "PATH": "bin"} {
 		dir := filepath.Join(d.host, name)
 		if err := os.MkdirAll(dir, 0700); err != nil {

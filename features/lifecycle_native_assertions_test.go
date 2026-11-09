@@ -89,8 +89,8 @@ func (w *world) lifecycleSignals(escalate bool) error {
 		if e.At.Before(l.signalled) {
 			return errors.New("worker signal preceded controller cancellation")
 		}
-		if i == 1 && (e.At.Sub(l.signalled) < 10*time.Second || e.At.Sub(l.signalled) > 12*time.Second) {
-			return fmt.Errorf("SIGKILL at %s, expected original 10 s grace (at most 2 s scheduling tolerance)", e.At.Sub(l.signalled))
+		if i == 1 && (e.At.Sub(l.signalled) < engineGraceBudget || e.At.Sub(l.signalled) > engineGraceBudget+engineGraceBudget/5) {
+			return fmt.Errorf("SIGKILL at %s, expected original %s grace (at most %s scheduling tolerance)", e.At.Sub(l.signalled), engineGraceBudget, engineGraceBudget/5)
 		}
 	}
 	if escalate && !l.aliveBeforeGrace {

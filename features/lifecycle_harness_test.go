@@ -145,8 +145,7 @@ func TestLifecycleRecorderRelaysWaitAfterOwnedRemoval(t *testing.T) {
 func TestLifecycleRecorderDelaysOnlySignalAcknowledgement(t *testing.T) {
 	w, mutations := recoveryRecorderWorld(t)
 	a := w.offline.api
-	// Fixture delay alone is shortened for this harness test. Product budgets
-	// and the native scenario's zero/six-second examples are never overridden.
+	// This memory-only recorder check needs no native product or grace wait.
 	a.recovery, a.lifecycle = true, newLifecycleFaults("ignore", "", 50*time.Millisecond)
 	done := make(chan struct{})
 	response := httptest.NewRecorder()

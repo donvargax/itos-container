@@ -38,7 +38,7 @@ func (e Engine) Open(ctx context.Context, b port.Binding) (port.Connection, port
 // The foreground capability distinguishes missing local environment while the
 // separate unstarted-only capability retains its existing failure contract.
 func (e Engine) open(ctx context.Context, b port.Binding, unavailable port.Outcome) (port.Connection, port.Outcome) {
-	call, cancel := context.WithTimeout(ctx, 10*time.Second)
+	call, cancel := context.WithTimeout(ctx, budget.CallDuration)
 	defer cancel()
 	if call.Err() != nil {
 		return nil, port.Incomplete
@@ -96,10 +96,10 @@ func (c *connection) call(ctx context.Context) (context.Context, context.CancelF
 	if deadline, ok := c.ctx.Deadline(); ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, deadline)
-		call, end := context.WithTimeout(ctx, 10*time.Second)
+		call, end := context.WithTimeout(ctx, budget.CallDuration)
 		return call, func() { end(); cancel() }
 	}
-	return context.WithTimeout(ctx, 10*time.Second)
+	return context.WithTimeout(ctx, budget.CallDuration)
 }
 func (c *connection) Check(ctx context.Context) port.Outcome {
 	if !c.pin.Unchanged() {
