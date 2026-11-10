@@ -131,8 +131,8 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 		cases = append(cases, testCase{activity, "", func(f *CredentialFiles) { f.Activity = activity }})
 	}
 	for _, boundary := range []string{"/checkout", "/state"} {
-		for _, layout := range []string{"root", "descendant", "file", "inverse directory", "inverse file", "different device", "covered"} {
-			if boundary == "/checkout" && layout == "covered" {
+		for _, layout := range []string{"root", "descendant", "file", "inverse directory", "inverse file", "different device", "covered", "covered root"} {
+			if boundary == "/checkout" && (layout == "covered" || layout == "covered root") {
 				continue
 			}
 			cases = append(cases, testCase{boundary + " " + layout, "credential.location", func(f *CredentialFiles) { credentialAlias(f, boundary, layout) }})
@@ -183,7 +183,7 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 			t.Errorf("4096-byte descriptor and 8192-byte coordinate: %#v", got)
 		}
 		if over && !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}) {
-			t.Errorf("descriptor/coordinate overflow: %#v", got)
+			t.Errorf("descriptor overflow: %#v", got)
 		}
 	}
 }
@@ -227,6 +227,9 @@ func credentialAlias(f *CredentialFiles, root, layout string) {
 				f.Nodes[path] = n
 			}
 		}
+	case "covered root":
+		base = root
+		fallthrough
 	case "covered":
 		f.MountsText[0] += "3 1 0:2 / " + base + " rw - tmpfs tmpfs rw\n"
 		for path, n := range f.Nodes {
@@ -260,7 +263,7 @@ func credentialTopologyContract(t Reporter, observe func(*CredentialFiles, []pol
 			case "table":
 				count, length = 128, 65535
 			}
-			if over && limit == "rows" {
+			if over && (limit == "rows" || limit == "table") {
 				count++
 			}
 			if over && limit == "line" {
@@ -277,9 +280,6 @@ func credentialTopologyContract(t Reporter, observe func(*CredentialFiles, []pol
 					line += "x:" + strings.Repeat("a", length-len(line)-len(end)-3) + " "
 				}
 				b.WriteString(line + end + "\n")
-			}
-			if over && limit == "table" {
-				b.WriteByte('\n')
 			}
 			f.MountsText = []string{b.String(), b.String()}
 			got := observe(f, grants, input)

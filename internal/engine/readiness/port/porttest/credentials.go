@@ -23,8 +23,9 @@ type CredentialBatch struct {
 	Done, OK bool
 }
 type CredentialStat struct {
-	Node port.CredentialNode
-	OK   bool
+	Node    port.CredentialNode
+	OK      bool
+	Elapsed time.Duration
 }
 
 // CredentialFiles is an I/O-free filesystem/topology fake, not a validator.
@@ -147,6 +148,7 @@ func (f *CredentialFiles) Stat(h port.CredentialHandle) (port.CredentialNode, bo
 		}
 		i := min(f.statReads[n.Path], len(sequence)-1)
 		f.statReads[n.Path]++
+		f.Elapsed = sequence[i].Elapsed
 		return sequence[i].Node, ok && sequence[i].OK
 	}
 	if f.StatErrors[n.Path] {

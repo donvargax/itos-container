@@ -28,7 +28,7 @@ func TestCredentialContractProcess(t *testing.T) {
 		t.Skip("used only by the credential observation scenarios")
 	}
 	var request struct {
-		Policy, Manifest, Argv string
+		Policy, Manifest, Argv, Root string
 		readinessfake.CredentialFiles
 	}
 	if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
@@ -36,7 +36,7 @@ func TestCredentialContractProcess(t *testing.T) {
 	}
 	request.Parser = readinessdisk.ParseCredentialMounts
 	request.Calls = map[string]int{}
-	code := credentialContractCommand(request.Policy, request.Manifest, request.Argv, &request.CredentialFiles)
+	code := credentialContractCommand(request.Policy, request.Manifest, request.Argv, request.Root, &request.CredentialFiles)
 	log, err := json.Marshal(struct {
 		Calls     map[string]int
 		Completed string
@@ -50,7 +50,7 @@ func TestCredentialContractProcess(t *testing.T) {
 	os.Exit(code)
 }
 
-func credentialContractCommand(policy, manifest, argv string, files *readinessfake.CredentialFiles) int {
+func credentialContractCommand(policy, manifest, argv, root string, files *readinessfake.CredentialFiles) int {
 	ui := &cli.UI{Stdout: os.Stdout, Stderr: os.Stderr}
 	var c commandLine
 	parser, err := kong.New(&c, append(cli.Flags(), kong.Writers(os.Stdout, os.Stderr))...)
@@ -65,6 +65,9 @@ func credentialContractCommand(policy, manifest, argv string, files *readinessfa
 		Files:  &manifestfake.Files{Data: map[string][]byte{".devcontainer/devcontainer.json": []byte(manifest)}},
 		Parser: jsonc.Parser{}, References: reference.References{},
 	}
-	c.Doctor.Credentials = readiness.Credentials{FS: files, Input: readinessport.CredentialInput{Root: "/checkout", State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}}
+	if root == "" {
+		root = "/checkout"
+	}
+	c.Doctor.Credentials = readiness.Credentials{FS: files, Input: readinessport.CredentialInput{Root: root, State: "/state", AccountState: "/account/.local/state/itos-container", OS: "linux", Architecture: "amd64", UID: 1000}}
 	return c.Doctor.Run(ui)
 }

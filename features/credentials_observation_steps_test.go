@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -15,18 +16,23 @@ import (
 // kernel text, never an expected credential verdict. The product command must
 // choose the inspection scope and the production observer must judge the data.
 type credentialObservation struct {
-	Nodes                  map[string]credentialNode
-	Mounts                 []string
-	ReadErrors             map[string]bool
-	MountErrors            map[int]bool
-	DescriptorErrors       map[string]bool
-	FinalNodes             map[string]credentialNode
-	Activity               string
-	Retained               int
-	Deadline               bool
-	Policy, Manifest, Argv string
-	Calls                  map[string]int
-	Completed              string
+	Nodes                        map[string]credentialNode
+	Mounts                       []string
+	ReadErrors                   map[string]bool
+	MountErrors                  map[int]bool
+	DescriptorErrors             map[string]bool
+	FinalNodes                   map[string]credentialNode
+	Activity                     string
+	Retained                     int
+	Deadline                     bool
+	Policy, Manifest, Argv, Root string
+	StatSequence                 map[string][]struct {
+		Node    credentialNode
+		OK      bool
+		Elapsed time.Duration
+	}
+	Calls     map[string]int
+	Completed string
 }
 
 type credentialNode struct {
@@ -39,6 +45,31 @@ type credentialNode struct {
 
 func (w *world) credentialObservationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^a credential observation fixture for "([^"]*)" with "([^"]*)"$`, w.credentialObservationFixture)
+	sc.Step(`^the credential checkout parent is "([^"]*)"$`, w.credentialCheckoutParent)
+	sc.Step(`^the final credential stat completes at (\d+) nanoseconds$`, func(elapsed int) {
+		o := w.credentials.observation
+		n := o.Nodes[w.credentials.paths["token"]]
+		o.StatSequence = map[string][]struct {
+			Node    credentialNode
+			OK      bool
+			Elapsed time.Duration
+		}{n.Path: {{Node: n, OK: true}, {Node: n, OK: true}, {Node: n, OK: true, Elapsed: time.Duration(elapsed)}}}
+	})
+	sc.Step(`^the credential boundary problem is "([^"]*)" at "([^"]*)"$`, func(rule, path string) error {
+		obj, err := w.json()
+		if err != nil {
+			return err
+		}
+		problems, _ := obj["problems"].([]any)
+		if len(problems) != 1 {
+			return fmt.Errorf("expected one boundary problem: %s", w.stdout)
+		}
+		p := object(problems[0])
+		if p["rule"] != rule || p["path"] != path {
+			return fmt.Errorf("wrong boundary problem: %s", w.stdout)
+		}
+		return nil
+	})
 	sc.Step(`^credential observation includes a valid selected manifest$`, func() error {
 		w.credentials.observation.Manifest = manifestBytes
 		return nil
@@ -130,6 +161,26 @@ func (w *world) credentialObservationFixture(boundary, layout string) error {
 	table := "1 0 0:1 / / rw - tmpfs tmpfs rw\n"
 	switch layout {
 	case "distinct outside file":
+	case "fixed account state file":
+		for _, path := range []string{"/account", "/account/.local", "/account/.local/state", "/account/.local/state/itos-container", "/account/.local/state/itos-container/coordination"} {
+			dir(path)
+		}
+		n := o.Nodes[source]
+		delete(o.Nodes, source)
+		source = "/account/.local/state/itos-container/coordination/catalog"
+		n.Path = source
+		o.Nodes[source] = n
+	case "covered state root backing directory bound outside":
+		table += "2 1 0:1 /state/private /checkout-sources rw - tmpfs tmpfs rw\n3 1 0:2 / /state rw - tmpfs tmpfs rw\n"
+		for path, node := range o.Nodes {
+			if path == "/checkout-sources" || path == source {
+				node.MountID = 2
+			}
+			if path == "/state" || strings.HasPrefix(path, "/state/") {
+				node.MountID, node.Device, node.Inode = 3, 2, node.Inode+100
+			}
+			o.Nodes[path] = node
+		}
 	case "unreadable descendant":
 		dir("/checkout/unreadable")
 		o.ReadErrors["/checkout/unreadable"] = true
@@ -253,7 +304,17 @@ func (w *world) credentialNamespaceFault(fault string) error {
 		}
 		o.Mounts[0] = table.String()
 	case "mount table exceeds 8 MiB":
-		o.Mounts[0] += strings.Repeat("2 1 0:1 / /elsewhere rw - tmpfs tmpfs rw\n", 230000)
+		var table strings.Builder
+		for i := 1; i <= 129; i++ {
+			point := "/"
+			if i > 1 {
+				point = fmt.Sprintf("/unrelated/%d", i)
+			}
+			line := fmt.Sprintf("%d 0 0:1 / %s rw x:", i, point)
+			end := " - tmpfs tmpfs rw"
+			table.WriteString(line + strings.Repeat("a", 65535-len(line)-len(end)) + end + "\n")
+		}
+		o.Mounts[0] = table.String()
 	case "mount row exceeds 65535 bytes":
 		o.Mounts[0] = "1 0 0:1 / / rw " + strings.Repeat("x", 65536) + " - tmpfs tmpfs rw\n"
 	case "fdinfo mount ID unavailable":
@@ -322,5 +383,31 @@ func (w *world) credentialObservationScope(scope string) error {
 	if !reflect.DeepEqual(object["manifest"], want) {
 		return fmt.Errorf("unexpected effective manifest: %s", w.stdout)
 	}
+	return nil
+}
+
+func (w *world) credentialCheckoutParent(layout string) error {
+	o := w.credentials.observation
+	n := o.Nodes["/checkout"]
+	delete(o.Nodes, "/checkout")
+	n.Path = "/projects/checkout"
+	o.Nodes[n.Path] = n
+	parent := n
+	parent.Path, parent.Inode, parent.Mode = "/projects", 900, 0040755
+	switch layout {
+	case "group writable":
+		parent.Mode = 0040775
+	case "foreign owned":
+		parent.UID = 2000
+	case "symlink":
+		parent.Mode = 0120777
+	case "missing":
+	default:
+		return fmt.Errorf("unknown checkout layout %q", layout)
+	}
+	if layout != "missing" {
+		o.Nodes[parent.Path] = parent
+	}
+	o.Root = n.Path
 	return nil
 }

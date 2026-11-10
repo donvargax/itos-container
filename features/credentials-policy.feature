@@ -1249,3 +1249,73 @@ Feature: Named credential requests and read-only source inspection
       | layout                                                   |
       | private source in checkout-name-suffix sibling directory |
       | private source in state-name-suffix sibling directory    |
+
+  # Review regressions use only raw topology and metadata. The covered root is
+  # a different filesystem; the alias still reaches its hidden backing tree.
+  @slice-29 @ID-CREDENTIALS-37 @linux @wip
+  Scenario: an overmounted state root still reserves its backing subtree
+    Given a credential observation fixture for "protected state" with "covered state root backing directory bound outside"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                | path                  | exit |
+      | credential.location | /credentials/0/source | 1    |
+    And it exits with code 1
+
+  @slice-29 @ID-CREDENTIALS-38 @linux @wip
+  Scenario Outline: the final source stat must complete before the observation deadline
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And the final credential stat completes at <elapsed> nanoseconds
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                   | path                  | exit |
+      | credential.unavailable | /credentials/0/source | 3    |
+    And it exits with code 3
+
+    Examples:
+      | elapsed     |
+      | 10000000000 |
+      | 10000000001 |
+
+  @slice-29 @ID-CREDENTIALS-39 @linux @wip
+  Scenario Outline: credential inspection uses checkout ancestor permissions from the shared checkout pin
+    Given a credential observation fixture for "checkout" with "distinct outside file"
+    And the credential checkout parent is "<layout>"
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                     |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+
+    Examples:
+      | layout         |
+      | group writable |
+      | foreign owned  |
+
+  @slice-29 @ID-CREDENTIALS-40 @linux @wip
+  Scenario Outline: credential checkout boundary refusals keep their shared diagnostic and subject
+    Given a credential observation fixture for "checkout" with "distinct outside file"
+    And the credential checkout parent is "<layout>"
+    When the credential observation contract runs in JSON mode
+    Then the credential boundary problem is "<rule>" at "/projects/checkout"
+    And it exits with code <exit>
+
+    Examples:
+      | layout  | rule                 | exit |
+      | symlink | checkout.path        | 1    |
+      | missing | checkout.unavailable | 3    |
+
+  @slice-29 @ID-CREDENTIALS-41 @linux @wip
+  Scenario: a separately selected state location cannot expose the fixed account control state
+    Given a credential observation fixture for "protected state" with "fixed account state file"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                | path                  | exit |
+      | credential.location | /credentials/0/source | 1    |
+    And it exits with code 1
+
+  @slice-29 @ID-CREDENTIALS-42 @wip
+  Scenario: doctor help names the credential source refusal exit codes
+    When itos-container runs with "doctor --help"
+    Then it exits with code 0
+    And its standard output says "unsafe credential source metadata or location"
+    And its standard output says "missing credential source or unavailable credential evidence"

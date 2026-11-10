@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -209,6 +210,49 @@ func TestCredentialMetadataRequiresUnixIdentity(t *testing.T) {
 		}
 		if _, ok := credentialMetadata(info); ok {
 			t.Fatalf("accepted incomplete identity %#v", raw)
+		}
+	}
+}
+
+// The byte bound is independent of row count, row length and ID uniqueness.
+// Exercise both the parser and the production bounded reader used by Mounts.
+func TestCredentialMountTableByteBound(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("native mount observations require Linux")
+	}
+	var table strings.Builder
+	for i := 1; i <= 129; i++ {
+		point := "/"
+		if i > 1 {
+			point = fmt.Sprintf("/unrelated/%d", i)
+		}
+		line := fmt.Sprintf("%d 0 0:1 / %s rw x:", i, point)
+		end := " - tmpfs tmpfs rw"
+		table.WriteString(line + strings.Repeat("a", 65535-len(line)-len(end)) + end + "\n")
+		if i < 128 {
+			continue
+		}
+		data := []byte(table.String())
+		want := i == 128
+		if rows, ok := ParseCredentialMounts(data); ok != want || ok && len(rows) != i {
+			t.Fatalf("parser rows=%d: complete=%v count=%d", i, ok, len(rows))
+		}
+		path := t.TempDir() + "/mountinfo"
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		files := &CredentialFiles{}
+		ops := files.operations()
+		ops.read = func(_ string, limit int64) ([]byte, bool) {
+			read, complete := credentialReadBounded(path, limit)
+			if complete != want || len(read) != min(len(data), 8*1024*1024+1) {
+				t.Fatalf("reader rows=%d: complete=%v bytes=%d", i, complete, len(read))
+			}
+			return read, complete
+		}
+		files.ops = &ops
+		if _, ok := files.Mounts(); ok != want {
+			t.Fatalf("Mounts rows=%d: complete=%v", i, ok)
 		}
 	}
 }

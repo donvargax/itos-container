@@ -58,8 +58,8 @@ type CredentialFS interface {
 }
 
 type CredentialInput struct {
-	Root, State, OS, Architecture string
-	UID                           int64
+	Root, State, AccountState, OS, Architecture string
+	UID                                         int64
 }
 
 // CredentialIssue locates one first failure at the request's written index.
