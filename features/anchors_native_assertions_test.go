@@ -26,7 +26,7 @@ func (w *world) anchorsEntry(p *recoveryProcess, code int) (anchorRecoveryEntry,
 		return entry, p.err
 	}
 	if p.exit != code {
-		return entry, fmt.Errorf("anchor recovery exit %d, expected %d", p.exit, code)
+		return entry, fmt.Errorf("anchor recovery exit %d, expected %d\n%s", p.exit, code, w.anchorRecoveryDiagnostics())
 	}
 	var report struct {
 		Schema   int

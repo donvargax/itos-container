@@ -32,6 +32,12 @@ func Problems(v View) []Problem {
 	case "approve.confirmation-required":
 		p.Message = "Approval requires terminal review"
 		p.Fix = "use itos container doctor, then optionally --fingerprint <value> to approve exactly those settings"
+		if v.RequiresTerminal() {
+			p.Fix = "run itos container approve at a terminal with plain output to review and consent"
+		}
+	case "approve.terminal-required":
+		p.Message = "Network grants require the person at a terminal"
+		p.Fix = "run itos container approve at a terminal with plain output to review and consent"
 	case "approve.declined":
 		p.Message = "Approval declined"
 		p.Fix = "run itos container approve when ready to review and consent"

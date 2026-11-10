@@ -67,7 +67,7 @@ func TestLocalRunCommand(t *testing.T) {
 	if err != nil {
 		os.Exit(ui.Usage(commandName(args), err, wantsJSON(args)))
 	}
-	service, _ := approvalServices(os.Stdin, os.Stdout, os.Stderr)
+	service, _ := approvalServices("run", os.Stdin, os.Stdout, os.Stderr)
 	runner, _ := sessionServices(service)
 	runner.Workspace = &sessiondisk.Workspace{ProcessOpen: localProcessOpen, MountStat: localMountStat(os.Getenv("SLICE_17_LOCAL_MOUNT_ROOT"))}
 	ctx, release := signals.Capture(context.Background())

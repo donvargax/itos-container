@@ -3,6 +3,7 @@ package canonical
 import (
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -120,5 +121,35 @@ func TestFrozenRecordRejectsSettingsAtEnvelopeLimit(t *testing.T) {
 	frozen := port.Frozen{Project: c.Project, Generation: "1", Fingerprint: c.Fingerprint, Settings: c.Canonical}
 	if record, failure := codec.FrozenRecord(frozen); record != (port.Record{}) || failure != "state.invalid" {
 		t.Fatalf("settings at the envelope limit were accepted: failure = %q", failure)
+	}
+}
+
+func TestAllowlistComparisonReportsOnlyObservedPaths(t *testing.T) {
+	codec := JSON{}
+	r := porttest.Ready()
+	r.Policy.Policy.Version = 2
+	r.Policy.Policy.Network.Mode = "allowlist"
+	r.Policy.Policy.Network.Allow = []string{"a.example", "b.example"}
+	record := port.Record{Candidate: codec.Candidate(r, "1000", "2000"), Generation: "1"}
+	r.Policy.Policy.Network.Allow = []string{"a.example", "c.example"}
+	r.Engine.ID = "engine-B"
+	r.Image.ID = "sha256:" + strings.Repeat("c", 64)
+	local := codec.LocalCandidate(r, "1000", "2000")
+	if codec.LocalMatches(local, record) {
+		t.Fatal("different allowlist matched")
+	}
+	if got := codec.ChangedPaths(local, record, true); !reflect.DeepEqual(got, []string{"/policy/network/allow"}) {
+		t.Fatal(got)
+	}
+	full := codec.Candidate(r, "1000", "2000")
+	if got := codec.ChangedPaths(full, record, false); !reflect.DeepEqual(got, []string{"/engine/id", "/image/id", "/policy/network/allow"}) {
+		t.Fatal(got)
+	}
+	if got := codec.ChangedPaths(record.Candidate, record, false); len(got) != 0 {
+		t.Fatal(got)
+	}
+	broken := port.Candidate{Canonical: "{"}
+	if codec.ChangedPaths(broken, record, true) != nil || codec.ChangedPaths(full, port.Record{Candidate: broken}, false) != nil {
+		t.Fatal("invalid comparison returned paths")
 	}
 }
