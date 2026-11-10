@@ -6,7 +6,6 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	"slices"
 	"sync"
-	"sync/atomic"
 )
 
 type RefusalLog struct {
@@ -36,7 +35,7 @@ func (l *RefusalLog) Begin(ctx context.Context, id string) (port.RefusalCopy, po
 
 type refusalCopy struct {
 	mu        sync.Mutex
-	ended     atomic.Bool
+	ended     bool
 	log       *RefusalLog
 	id, fault string
 	data      []byte
@@ -47,7 +46,7 @@ type refusalCopy struct {
 func (c *refusalCopy) Write(data []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.ended.Load() {
+	if c.ended {
 		return 0, errors.New("refusal copy closed")
 	}
 	if c.fault == "write" {
@@ -58,11 +57,14 @@ func (c *refusalCopy) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 func (c *refusalCopy) Commit() (port.RefusalReport, port.Outcome) {
-	if c.ended.Swap(true) {
-		return port.RefusalReport{}, port.Incomplete
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.ended {
+		return port.RefusalReport{}, port.Incomplete
+	}
+	// Claim the copy and publish its bytes under the same lock as Close, so a
+	// successful commit cannot publish data discarded by a concurrent close.
+	c.ended = true
 	if c.failed || c.fault == "commit" {
 		return port.RefusalReport{}, port.Incomplete
 	}
@@ -76,4 +78,9 @@ func (c *refusalCopy) Commit() (port.RefusalReport, port.Outcome) {
 	report.Gaps = slices.Clone(report.Gaps)
 	return report, ""
 }
-func (c *refusalCopy) Close() { c.ended.Store(true); c.mu.Lock(); defer c.mu.Unlock(); c.data = nil }
+func (c *refusalCopy) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ended = true
+	c.data = nil
+}
