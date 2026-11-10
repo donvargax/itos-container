@@ -30,10 +30,12 @@ type credentialWorld struct {
 	cleanup        []func()
 	markers        []string
 	watch          *credentialWatch
+	observation    *credentialObservation
 }
 
 func (w *world) credentialSteps(sc *godog.ScenarioContext) {
 	w.credentialObserverSteps(sc)
+	w.credentialObservationSteps(sc)
 	sc.Step(`^a private credential inspection fixture$`, w.credentialFixture)
 	sc.Step(`^credential source "([^"]*)" has layout "([^"]*)"$`, w.credentialLayout)
 	sc.Step(`^credential source "([^"]*)" is a regular file of (\d+) bytes with mode "([^"]*)"$`, w.credentialFile)
