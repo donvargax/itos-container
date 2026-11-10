@@ -1462,7 +1462,7 @@ Feature: Named credential requests and read-only source inspection
 
   # Raw stacking observations reproduce the leak without mounting anything:
   # the lower source and merged view share an inode but have different devices.
-  @slice-29 @ID-CREDENTIALS-51 @linux @wip
+  @slice-29 @ID-CREDENTIALS-51 @linux
   Scenario Outline: credential inspection refuses unprojectable stacking filesystems
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And credential observation exposes the source through "<filesystem>" at "<point>"

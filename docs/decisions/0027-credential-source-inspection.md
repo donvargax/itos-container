@@ -373,3 +373,12 @@ ancestors under a 1,024-handle limit and an unrelated mount with an empty source
 The shared fake/disk contract additionally accepts two deep sources under 128
 handles, verifies handle release after success and refusal, and retains malformed
 field refusals. These observations need no privileged mount or real engine.
+
+The stacking-filesystem regression was committed pending in `0ad35d5`. With
+`@wip` removed before the fix, all 12 ID-CREDENTIALS-51 examples failed at the
+source-problem assertion: inspection returned `ok: true`, no problems and exit 0.
+After the fix, all 12 pass with `credential.filesystem` and exit 3. The shared
+fake/disk contract also passes its covering/descendant, first/final observation,
+absent-state, source-ancestor and unrelated-mount controls. The q-57 subvolume and
+changed-mount-ID regressions remain required. No native stacking mount or engine
+was run locally; changed-code proof and native scenarios remain CI-owned.

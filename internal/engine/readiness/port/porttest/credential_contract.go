@@ -251,6 +251,7 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 	credentialAccountStateContract(t, observe, grants, input)
 	credentialTopologyContract(t, observe, grants, input)
 	credentialHandleContract(t, observe, input)
+	credentialStackingContract(t, observe, grants, input)
 	for _, over := range []bool{false, true} {
 		f := CredentialFixture()
 		n := f.Nodes["/vault/token"]

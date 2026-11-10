@@ -129,6 +129,8 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 				rule = "credential.location"
 			case first.failure == "credential.mount_id" || last.failure == "credential.mount_id":
 				rule = "credential.mount_id"
+			case first.failure == "credential.filesystem" || last.failure == "credential.filesystem":
+				rule = "credential.filesystem"
 			case !scanOK || !first.ok || !last.ok || !sameProjection(first, last) || s.expired():
 				rule = "credential.unavailable"
 			default:

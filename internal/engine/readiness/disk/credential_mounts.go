@@ -64,7 +64,7 @@ func ParseCredentialMounts(data []byte) ([]port.CredentialMount, bool) {
 		major, _ := strconv.ParseUint(deviceText[0], 10, 32)
 		minor, _ := strconv.ParseUint(deviceText[1], 10, 32)
 		device := (minor & 0xff) | (major&0xfff)<<8 | (minor&^uint64(0xff))<<12 | (major&^uint64(0xfff))<<32
-		result = append(result, port.CredentialMount{ID: row.ID, Device: device, Root: row.Root, Point: row.Mountpoint, Unprojectable: !credentialMountPath(row.Root)})
+		result = append(result, port.CredentialMount{ID: row.ID, Device: device, Root: row.Root, Point: row.Mountpoint, Filesystem: row.FSType, Unprojectable: !credentialMountPath(row.Root)})
 	}
 	return result, true
 }

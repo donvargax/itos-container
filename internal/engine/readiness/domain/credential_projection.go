@@ -35,8 +35,19 @@ func (s *credentialScan) project(source, checkout credentialWalk, states []crede
 		return p
 	}
 	rows := make(map[int]port.CredentialMount, len(mounts))
+	protected := append([]string{checkout.pins[len(checkout.pins)-1].descriptor.Path}, statePaths...)
 	for _, m := range mounts {
 		rows[m.ID] = m
+		if credentialStackingFilesystem(m) {
+			for _, path := range protected {
+				// Include hidden covering rows and descendant file mounts. Their
+				// backing aliases need not share the visible inode's device.
+				if credentialDescendant(path, m.Point) || credentialDescendant(m.Point, path) {
+					p.failure = "credential.filesystem"
+					return p
+				}
+			}
+		}
 	}
 	var reserved []credentialCoordinate
 	for i, state := range states {
@@ -105,6 +116,9 @@ func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.Credential
 	if !exists || row.Unprojectable || !credentialDescendant(d.Path, row.Point) {
 		return m, "credential.unavailable"
 	}
+	if credentialStackingFilesystem(row) {
+		return m, "credential.filesystem"
+	}
 	// A descriptor's path is evidence only after a fresh no-follow rewalk binds
 	// that spelling to the held identity and the same mount, including file binds.
 	// Only the rewalk owns these temporary pins. Release them on every return,
@@ -124,6 +138,10 @@ func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.Credential
 		return m, "credential.unavailable"
 	}
 	return credentialMapping{credentialCoordinate{row.Device, credentialMountCoordinate(row, d.Path)}, d.Path, d.MountID}, ""
+}
+
+func credentialStackingFilesystem(row port.CredentialMount) bool {
+	return row.Filesystem == "overlay" || strings.HasPrefix(row.Filesystem, "fuse.")
 }
 
 // Validated root and visible paths are each at most 4096 bytes. The relative

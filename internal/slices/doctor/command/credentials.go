@@ -69,6 +69,8 @@ func credentialProblem(issue readiness.CredentialIssue) readiness.Problem {
 		p.Message, p.Fix, p.Exit = "Credential metadata or exclusion evidence is unavailable", "provide complete stable source, checkout and mount metadata", 3
 	case "credential.mount_id":
 		p.Message, p.Fix, p.Exit = "Credential mount identity STATX_MNT_ID is unavailable", "use a host kernel that exposes STATX_MNT_ID for every source and protected boundary", 3
+	case "credential.filesystem":
+		p.Message, p.Fix, p.Exit = "Overlay or FUSE backing paths cannot be excluded from credential exposure", "use source, checkout and state paths on filesystems with projectable backing paths", 3
 	case "credential.symlink":
 		p.Message, p.Fix = "Credential path contains a symbolic link", "use a source with no symbolic link in any path component"
 	case "credential.ancestor":

@@ -43,6 +43,9 @@ type CredentialMount struct {
 	ID          int
 	Device      uint64
 	Root, Point string
+	// Filesystem is mountinfo's type, needed to refuse stacking/pass-through
+	// views whose backing paths cannot be derived from Root and Point.
+	Filesystem string
 	// Unprojectable retains a valid mount row whose root is not a filesystem
 	// path (for example nsfs or a deleted bind). It supplies no coordinate.
 	Unprojectable bool

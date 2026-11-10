@@ -103,7 +103,7 @@ func TestCredentialEmptyMountSource(t *testing.T) {
 					}
 					return
 				}
-				want := port.CredentialMount{ID: 473, Device: 59, Root: "/", Point: "/scratch"}
+				want := port.CredentialMount{ID: 473, Device: 59, Root: "/", Point: "/scratch", Filesystem: "tmpfs"}
 				if !ok || len(rows) != 1 || rows[0] != want {
 					t.Fatalf("empty source lost mount coordinates: %#v %v", rows, ok)
 				}

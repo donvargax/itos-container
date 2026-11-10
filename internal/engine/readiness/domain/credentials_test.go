@@ -230,6 +230,46 @@ func TestCredentialUnprojectableMountRelevance(t *testing.T) {
 	}
 }
 
+func TestCredentialStackingMountRelevance(t *testing.T) {
+	for _, tc := range []struct {
+		point, filesystem string
+		refused           bool
+	}{
+		{"/", "overlay", true},
+		{"/checkout", "overlay", true},
+		{"/checkout/child", "fuse.bindfs", true},
+		{"/state/child", "overlay", true},
+		{"/fixed/child", "fuse.sshfs", true},
+		{"/vault/token", "overlay", true},
+		{"/vault", "fuse.bindfs", true},
+		{"/checkout-sibling", "overlay", false},
+		{"/unrelated", "fuse.bindfs", false},
+		{"/checkout", "ext4", false},
+	} {
+		t.Run(tc.filesystem+tc.point, func(t *testing.T) {
+			f, c, grants := credentialDomainFixture()
+			c.Input.AccountState = "/fixed"
+			f.Parser = func([]byte) ([]port.CredentialMount, bool) {
+				return []port.CredentialMount{
+					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "tmpfs"},
+					{ID: 2, Device: 64, Root: "/", Point: tc.point, Filesystem: tc.filesystem},
+				}, true
+			}
+			if n, exists := f.Nodes[tc.point]; exists {
+				n.MountID, n.Device = 2, 64
+				f.Nodes[tc.point] = n
+			}
+			var want []port.CredentialIssue
+			if tc.refused {
+				want = []port.CredentialIssue{{Rule: "credential.filesystem", Index: 0}}
+			}
+			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+				t.Fatalf("issues %#v, want %#v", got.Issues, want)
+			}
+		})
+	}
+}
+
 func TestCredentialIncompleteEvidence(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

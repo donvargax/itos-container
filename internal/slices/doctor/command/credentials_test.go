@@ -12,10 +12,10 @@ import (
 )
 
 func TestCredentialDiagnosticEnvelope(t *testing.T) {
-	for _, rule := range []string{"missing", "unavailable", "mount_id", "symlink", "ancestor", "location", "regular", "owner", "permissions", "links", "size", "duplicate"} {
+	for _, rule := range []string{"missing", "unavailable", "mount_id", "filesystem", "symlink", "ancestor", "location", "regular", "owner", "permissions", "links", "size", "duplicate"} {
 		p := credentialProblem(readiness.CredentialIssue{Rule: "credential." + rule, Index: 1})
 		want := 1
-		if rule == "missing" || rule == "unavailable" || rule == "mount_id" {
+		if rule == "missing" || rule == "unavailable" || rule == "mount_id" || rule == "filesystem" {
 			want = 3
 		}
 		if p.Rule != "credential."+rule || p.Exit != want || p.File != "itos-container.yaml" || p.Path == nil || *p.Path != "/credentials/1/source" || p.Message == "" || p.Fix == "" {
