@@ -1061,6 +1061,10 @@ items:
       egress work is mixed in. Set CGO_ENABLED=0 for the build, including the -cover variant used by
       the code proof. Add a check that the built binary is static or matches the release setting.
       The existing scenarios must still pass, with no gate weakened. slice-27 should depend on it.
+
+      The existing item already requires CGO_ENABLED=0 for normal and coverage builds before
+      slice-27. Schedule it first and make slice-27 depend on it; that dependency is not yet
+      recorded.
   - id: p2-approval-no-record-step-checks-frozen-input
     title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
     phase: 1
