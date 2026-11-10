@@ -27,7 +27,7 @@ func AdmissionStorageContract(t Reporter, open func() (port.RegistryStorage, por
 	other := c
 	other.Project = strings.Repeat("b", 64)
 	deadline, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
-	if contender, failure := s.Admission(deadline, other); failure != "state.unavailable" || contender != nil {
+	if contender, failure := s.Admission(deadline, other); failure != "state.busy" || contender != nil {
 		t.Errorf("other project bypassed held admission lock: %s", failure)
 	}
 	cancel()

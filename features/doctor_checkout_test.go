@@ -27,9 +27,19 @@ func (w *world) doctorCheckoutForHost(hostOS string, uid int) error {
 	d := &doctorWorld{checkout: filepath.Join(w.dir, "checkout"), host: filepath.Join(w.dir, "host"), recorder: filepath.Join(w.dir, "recorder"),
 		image: doctorImage, imageID: doctorImageID, engineID: "engine-A", api: "1.56", env: map[string]string{}}
 	w.doctor = d
+	// The real product reads the account home from /etc/passwd. The probe
+	// assembly honors the isolated one the fixture names, so every scenario that
+	// builds a checkout runs it instead, compiled once for the suite.
+	if !isProbeBinary(w.bin) {
+		binary, err := w.productProbeBinary()
+		if err != nil {
+			return err
+		}
+		w.bin = binary
+	}
 	d.cwd = d.checkout
 	d.manifest = map[string]any{"image": d.image, "containerUser": strconv.Itoa(uid), "remoteUser": strconv.Itoa(uid)}
-	for key, name := range map[string]string{"HOME": "home", "USERPROFILE": "home", "XDG_CONFIG_HOME": "config", "XDG_STATE_HOME": "state", "XDG_CACHE_HOME": "cache", "XDG_DATA_HOME": "data", "DOCKER_CONFIG": "docker", "PATH": "bin"} {
+	for key, name := range map[string]string{"HOME": "home", "USERPROFILE": "home", "XDG_CONFIG_HOME": "config", "XDG_STATE_HOME": "state", "XDG_CACHE_HOME": "cache", "XDG_DATA_HOME": "data", "DOCKER_CONFIG": "docker", "PATH": "bin", "SLICE_21_ACCOUNT_HOME": "account-home"} {
 		dir := filepath.Join(d.host, name)
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return err
@@ -259,9 +269,36 @@ func (w *world) doctorCredentialSentinels() error {
 	return nil
 }
 
+// Doctor must leave host control state alone. Unrelated synthetic files outside
+// every managed tree prove it ignores them; the records it can read or change
+// are valid ones in the selected tree: this checkout's approval, the account
+// catalog that binds the fixed and selected trees, and a public session with
+// its intent. Without the catalog, session evidence refuses inspection.
 func (w *world) doctorHostState() error {
-	for _, name := range []string{"home/.local/state/itos-container/approvals/existing.json", "state/itos-container/sessions/existing.json", "config/itos-container/approvals.json"} {
+	for _, name := range []string{"home/.local/state/itos-container/approvals/existing.json", "state/unrelated-sessions/existing.json", "config/itos-container/approvals.json"} {
 		if err := writeManifestFixture(filepath.Join(w.doctor.host, name), []byte(`{"synthetic":"preserve"}`), 0600); err != nil {
+			return err
+		}
+	}
+	w.approval = &approvalWorld{uid: strconv.Itoa(os.Geteuid()), gid: strconv.Itoa(os.Getegid())}
+	if err := w.approvalSeed("1", false); err != nil {
+		return err
+	}
+	token, id, worker := strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64)
+	w.session = &sessionWorld{token: token, reference: "intents/" + w.approval.project + "/" + token + ".json"}
+	if err := w.sessionSeedSnapshot(); err != nil {
+		return err
+	}
+	if err := writeManifestFixture(w.sessionRecordPath(), approvalJSON(w.sessionExpectedRecord("owned", worker)), 0600); err != nil {
+		return err
+	}
+	record := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.recoveryIndexKey(), id)
+	public := map[string]any{"schema": 1, "id": id, "project": w.approval.project, "intent": w.session.reference, "state": "running", "workload_exit": nil, "last_problem": nil}
+	if err := writeManifestFixture(filepath.Join(record, "record.json"), approvalJSON(public), 0600); err != nil {
+		return err
+	}
+	for _, name := range []string{"controller.lock", "operation.lock"} {
+		if err := os.WriteFile(filepath.Join(record, name), nil, 0600); err != nil {
 			return err
 		}
 	}

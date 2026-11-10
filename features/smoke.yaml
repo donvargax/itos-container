@@ -84,6 +84,10 @@
   scenarios:
     - id: "@ID-HARDLINK-03"
       why: shared Git storage refuses inspection and an independent copy restores readiness with the original approval
+- file: control-state.feature
+  scenarios:
+    - id: "@ID-CONTROL-10"
+      why: first approval durably bootstraps the default control tree under account-home exclusion and fresh inspection and reuse preserve its bindings
 - file: run_exit.feature
   scenarios:
     - id: "@ID-RUNEXIT-02"

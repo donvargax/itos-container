@@ -27,6 +27,13 @@ release's. Each scenario gets a scratch folder in a temporary directory, runs th
 and reads its exit code, its output and the files it leaves. A step judges the program by its
 command line alone: it never reads its source or calls its code to decide a result.
 
+The ordinary non-engine suite runs four independent scenarios concurrently so real
+filesystem I/O and deadline observations fit the existing ten-minute package budget.
+Each keeps its own processes, state, recording engine and assertions. Compiled test
+helpers are shared only after a serialized build and atomic publication outside the
+scenario checkouts. Engine runs, red-evidence selections and focused harness controls
+remain serial. No scenario deadline or assertion is shortened or omitted.
+
 Commands run in a clean environment: no `GIT_*`, `ITOS_*`, `ITOS_CONTAINER_*`, `GITHUB_*`,
 `GH_*` or `CI` variable of the caller's, no global or system git config, a fixed author, and none
 of the caller's claude, itos or its extensions on the PATH. Either `GOCOVERDIR` or
@@ -456,16 +463,31 @@ can enable the fixture. The copy and binary live outside the writable scenario
 checkouts, and their preparation and compilation remain inside the measured step.
 The 30-second teardown budget and independent process guards are unchanged.
 
-The fixture reaches only the disposable product, the `w.bin` that `buildProduct`
-returns. The session contract test assembly does not use it: `sessionProbeBinary`
+The fixture reaches the disposable product, the `w.bin` that `buildProduct`
+returns, and the assembly that replaces it in a scenario world. The real product
+reads the account home from `/etc/passwd`, so the fixture that builds a checkout
+(`doctorCheckout`) swaps `w.bin` for a test assembly that honors the world's isolated
+account home. In the engine tier `productProbeBinary` compiles that assembly from the
+copy, beside the product, so the native rows keep 1/3/1 seconds. Compiled from the
+checkout it ran every native wait at 10/120/10 seconds: run 42600688807 spent its
+four-minute test timeout there and printed no scenario result. The session contract
+test assembly does not use the copy: `sessionProbeBinary`
 runs `go test -c ./cmd/itos-container` in the checkout, so that assembly compiles
 the checkout's `limits.go` and keeps 10/120/10 seconds even in the engine tier. The
 engine rows `ID-SESSION-11` and `ID-SESSION-12` run it through `sessionRun`, so a
 wait in those rows follows the production limits, not 1/3/1 seconds.
-The contract compilation `TestEngineSuiteBudget` checks is the copy's, not this
-checkout assembly. Those rows were not among the slow rows measured above, and
-building the assembly from the copy would change what they exercise, so it stays
-on the production limits.
+Those rows were not among the slow rows measured above, and building the assembly
+from the copy would change what they exercise, so it stays on the production limits.
+`TestEngineSuiteBudget` runs the budget contract in both assemblies: the world's
+product assembly must report 1/3/1 seconds and the session assembly 10/120/10. The
+contract compilation it checks first is the copy's.
+
+Both assemblies are compiled with `-trimpath`, as the product is, so the product build
+and the two assemblies share one build cache. Without the flag each covered assembly
+recompiled the whole module: with the product built first and an empty cache, a
+covered assembly took about 20 s to the product's 15 s on a fast machine, and 5 s with
+the flag. The engine tier builds two assemblies inside its measured step;
+`TestProbeAssemblySharesTheProductBuildCache` pins the flag.
 
 The first version used `go build -overlay` instead of a copy and never took effect in
 CI: with `-cover`, which the engine step always sets, `cmd/go` passes the cover tool

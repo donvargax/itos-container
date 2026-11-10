@@ -87,6 +87,15 @@ mutation:
       replacement: <=
       reason: Changing colon < 0 to colon <= 0 differs only when strings.LastIndexByte returns 0. Then target[:colon] is the empty host. The original returns the same empty host, empty port and false either from the port validation or from the following host == empty check; the mutant returns that triple earlier. All other colon indices take identical branches. splitTarget is pure, so neither the Judge verdict nor its logged fields can change. TestJudge already covers CONNECT :443 as malformed with no target or port.
       line_text: if colon < 0 {
+    - file: internal/engine/approval/disk/store.go
+      function: github.com/donvargax/itos-container/internal/engine/approval/disk.pin#recordLinks
+      hash: 718f75da08c678fe
+      line_in_function: 7
+      column: 10
+      original: "1"
+      replacement: "0"
+      reason: This return is reached only after ownership(info) succeeded with exactly two links and opening the directory failed. Both callers, directoryStore.Read and pin.durableSnapshot, immediately pass the same FileInfo snapshot and the returned link count to linkedRecordSafety. Its actual != links check therefore refuses with state.unsafe for either expected count 1 or 0, before any further read, sync or publication. The failed open and all observable results are identical; testing the private helper return alone would distinguish an implementation detail, not behavior.
+      line_text: return 1
     - file: internal/engine/readiness/domain/inspect.go
       function: github.com/donvargax/itos-container/internal/engine/readiness/domain.Inspector#InspectBeforeEngine
       hash: 7716a814eaca5296

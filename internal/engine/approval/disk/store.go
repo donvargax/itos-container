@@ -2,6 +2,7 @@
 package disk
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 )
 
 // Store receives path selection and canonical encoding from cmd assembly.
@@ -20,7 +22,9 @@ import (
 type Store struct {
 	StateHome, Home string
 	Records         port.Records
+	Control         port.Control
 	ops             *operations
+	ctx             context.Context
 }
 type operations struct {
 	// Keep filesystem failures injectable while retaining real pinned handles.
@@ -52,7 +56,13 @@ func (s Store) operations() operations {
 	ops := operations{
 		openRoot: os.OpenRoot, lstat: (*os.Root).Lstat, mkdir: (*os.Root).Mkdir,
 		openDir: (*os.Root).Open, openChild: (*os.Root).OpenRoot, statRoot: (*os.Root).Stat,
-		syncDir: (*os.File).Sync, lock: lock, openPrivate: openPrivate, chmodPrivate: chmodPrivate,
+		syncDir: (*os.File).Sync, lock: func(f *os.File, exclusive bool) error {
+			ctx := s.ctx
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			return sessionLock(ctx, f, !exclusive)
+		}, openPrivate: openPrivate, chmodPrivate: chmodPrivate,
 		openRecord: (*os.Root).OpenFile, statFile: (*os.File).Stat, readAll: io.ReadAll,
 		nonce: rand.Read, chmod: (*os.File).Chmod, closeFile: (*os.File).Close,
 		create: func(r *os.Root, n string) (*os.File, error) {
@@ -97,13 +107,19 @@ func (s Store) locationAt(c port.Candidate, collection string) (string, port.Fai
 		return "", "state.location"
 	}
 	managed := filepath.Join(state, "itos-container")
-	if managed == c.Root || strings.HasPrefix(managed, strings.TrimRight(c.Root, string(filepath.Separator))+string(filepath.Separator)) {
+	if within(managed, c.Root) || within(c.Root, managed) {
 		return "", "state.path"
 	}
 	if len(c.Project) != 64 || strings.Trim(c.Project, "0123456789abcdef") != "" {
 		return "", "state.invalid"
 	}
 	return filepath.Join(managed, collection, c.Project), ""
+}
+
+// within reports whether path is root or lies below it, by whole components.
+func within(path, root string) bool {
+	separator := string(filepath.Separator)
+	return path == root || strings.HasPrefix(path, strings.TrimRight(root, separator)+separator)
 }
 
 func (s Store) pin(c port.Candidate, create bool) (*pin, port.Failure) {
@@ -154,6 +170,13 @@ func (s Store) pinPath(c port.Candidate, create bool, path string, managedDepth 
 				return nil, "state.write"
 			}
 			info, err = ops.lstat(current, name)
+			if errors.Is(err, os.ErrNotExist) {
+				// Made here, or by a peer, and removed again before this lookup. A
+				// creating pin never reports an absent directory: its callers
+				// dereference what it returns when no failure comes with it.
+				p.close()
+				return nil, "state.path"
+			}
 		}
 		if errors.Is(err, os.ErrNotExist) {
 			p.close()
@@ -219,7 +242,7 @@ func (s Store) pinPath(c port.Candidate, create bool, path string, managedDepth 
 	}
 	if err = ops.lock(p.dir, create); err != nil {
 		p.close()
-		return nil, "state.unavailable"
+		return nil, lockFailure(err)
 	}
 	if !p.unchanged() {
 		p.close()
@@ -334,19 +357,39 @@ func (p *pin) readNamed(c port.Candidate, records port.Records, name string) (po
 	return records.Decode(c, data)
 }
 
-// Read never creates a directory, lock or record. Directory locks serialize all
-// readers with publication without needing a writable lock file for inspection.
+// Read never creates a directory, lock or record. Existing private coordination
+// and selected-directory locks serialize readers with publication.
 func (s Store) Read(c port.Candidate) (port.Record, port.Failure) {
+	ctx, cancel := context.WithTimeout(context.Background(), budget.CallDuration)
+	defer cancel()
+	s.ctx = ctx
+	transaction, failure := s.control(ctx, c, false)
+	if failure != "" {
+		return port.Record{}, failure
+	}
+	defer transaction.Close()
 	p, failure := s.pin(c, false)
 	if failure != "" || p == nil {
 		return port.Record{}, failure
 	}
 	defer p.close()
-	return p.read(c, s.Records)
+	record, failure := p.read(c, s.Records)
+	if failure == "" && !transaction.Unchanged() {
+		return port.Record{}, "state.path"
+	}
+	return record, failure
 }
 
 // Commit compares generation and publishes only a complete durable record.
 func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Failure) {
+	ctx, cancel := context.WithTimeout(context.Background(), budget.CallDuration)
+	defer cancel()
+	s.ctx = ctx
+	transaction, failure := s.control(ctx, c, true)
+	if failure != "" {
+		return port.Record{}, failure
+	}
+	defer transaction.Close()
 	p, failure := s.pin(c, true)
 	if failure != "" {
 		return port.Record{}, failure
@@ -360,6 +403,9 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 		return port.Record{}, "approve.conflict"
 	}
 	if generation != "" && old.Canonical == c.Canonical {
+		if !transaction.Unchanged() {
+			return port.Record{}, "state.path"
+		}
 		return old, ""
 	}
 	n := uint64(0)
@@ -379,7 +425,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 	if ops.beforePublish != nil {
 		ops.beforePublish()
 	}
-	if !p.unchanged() {
+	if !p.unchanged() || !transaction.Unchanged() {
 		return port.Record{}, "state.path"
 	}
 	var nonce [16]byte
@@ -405,7 +451,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 	if ops.closeFile(file) != nil {
 		return port.Record{}, "state.write"
 	}
-	if !p.unchanged() {
+	if !p.unchanged() || !transaction.Unchanged() {
 		return port.Record{}, "state.path"
 	}
 	if ops.rename(p.root(), name, "current.json") != nil {
@@ -414,7 +460,7 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 	if ops.syncParent(p.dir) != nil {
 		return port.Record{}, "state.write"
 	}
-	if !p.unchanged() {
+	if !p.unchanged() || !transaction.Unchanged() {
 		return port.Record{}, "state.path"
 	}
 	return record, ""
@@ -423,6 +469,26 @@ func (s Store) Commit(c port.Candidate, generation string) (port.Record, port.Fa
 // Select atomically verifies the active generation, exact bytes and fingerprint.
 // Its returned string owns the bytes; it never consults checkout request files.
 func (s Store) Select(c port.Candidate, generation string) (port.Frozen, port.Failure) {
+	ctx, cancel := context.WithTimeout(context.Background(), budget.CallDuration)
+	defer cancel()
+	s.ctx = ctx
+	// Establish existing approval before any enrollment, then recheck it while
+	// holding common exclusion in the required coordination-before-selected lock order.
+	if _, failure := s.selectRecord(c, generation); failure != "" {
+		return port.Frozen{}, failure
+	}
+	transaction, failure := s.control(ctx, c, true)
+	if failure != "" {
+		return port.Frozen{}, failure
+	}
+	defer transaction.Close()
+	frozen, failure := s.selectRecord(c, generation)
+	if failure == "" && !transaction.Unchanged() {
+		return port.Frozen{}, "state.path"
+	}
+	return frozen, failure
+}
+func (s Store) selectRecord(c port.Candidate, generation string) (port.Frozen, port.Failure) {
 	p, failure := s.pin(c, false)
 	if failure != "" {
 		return port.Frozen{}, failure
@@ -448,8 +514,51 @@ func (s Store) Select(c port.Candidate, generation string) (port.Frozen, port.Fa
 }
 
 func recordSafety(info os.FileInfo, expected uint64) port.Failure {
-	uid, links, ok := ownership(info)
-	if !ok || !info.Mode().IsRegular() || uid != expected || links != 1 || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 {
+	return linkedRecordSafety(info, expected, 1)
+}
+
+// recordLinks is the number of links a record in this directory may have. Publish
+// links a new record to its final name and then removes the temporary, so a
+// publisher killed between the two leaves the record with a second link: the
+// temporary it named .intent-<nonce>.tmp, beside the record in this pinned
+// private directory. The record's bytes were synced before the link, and no name
+// outside the directory reaches the inode, so such a record is read as it would
+// be after the removal that did not run. Names has always skipped the temporary.
+// Any other second link, and any further one, leaves the record unsafe.
+func (p *pin) recordLinks(info os.FileInfo) uint64 {
+	if _, links, ok := ownership(info); !ok || links != 2 {
+		return 1
+	}
+	dir, err := p.ops.openDir(p.root(), ".")
+	if err != nil {
+		return 1
+	}
+	// Entries read before an error still name only files that are checked below.
+	entries, _ := dir.ReadDir(-1)
+	_ = dir.Close()
+	for _, entry := range entries {
+		if !intentTemporary(entry.Name()) {
+			continue
+		}
+		twin, err := p.ops.lstat(p.root(), entry.Name())
+		if err == nil && os.SameFile(info, twin) {
+			return 2
+		}
+	}
+	return 1
+}
+
+// intentTemporary reports a name that Publish makes: ".intent-", a 128-bit hex
+// nonce and ".tmp".
+func intentTemporary(name string) bool {
+	return len(name) == 44 && strings.HasPrefix(name, ".intent-") && strings.HasSuffix(name, ".tmp") && strings.Trim(name[8:40], "0123456789abcdef") == ""
+}
+
+// linkedRecordSafety is recordSafety for a record that is expected to have the
+// given number of links.
+func linkedRecordSafety(info os.FileInfo, expected, links uint64) port.Failure {
+	uid, actual, ok := ownership(info)
+	if !ok || !info.Mode().IsRegular() || uid != expected || actual != links || info.Mode().Perm() != 0600 || info.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 {
 		return "state.unsafe"
 	}
 	return ""
@@ -485,4 +594,17 @@ func (ops operations) privateDirectory(parent *os.Root, name string, expected os
 		return nil, "state.path"
 	}
 	return latest, ""
+}
+
+// Uncoordinated stores are primitives used beneath the common transaction and
+// by isolated storage contracts. Production assembly always supplies Control.
+type localTransaction struct{}
+
+func (localTransaction) Close()          {}
+func (localTransaction) Unchanged() bool { return true }
+func (s Store) control(ctx context.Context, c port.Candidate, write bool) (port.ControlTransaction, port.Failure) {
+	if s.Control == nil {
+		return localTransaction{}, ""
+	}
+	return s.Control.Begin(ctx, c, write)
 }
