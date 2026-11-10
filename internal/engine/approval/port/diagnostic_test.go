@@ -17,7 +17,25 @@ func TestProblemsDistinguishesUnavailableStateFromUncertainPublication(t *testin
 			want: port.Problem{
 				Rule: "approval.state.unavailable", Exit: 3, Field: "approval",
 				Message: "Approval state is unavailable",
-				Fix:     "inspect with itos container doctor and run itos container approve after resolving the problem",
+				Fix: "resolve the cause and inspect again with itos container doctor; approve cannot clear it. The effective user needs a local /etc/passwd entry with an existing absolute home directory, so LDAP or SSSD-only accounts are refused. " +
+					"A state location the catalog retains may be missing or unreadable, which refuses every selection on the account until the host user restores the original directory or removes its record under the account home's .local/state/itos-container/coordination after confirming no worker uses it. " +
+					"Admission, session or intent records with no catalog beside them refuse the selection that holds them, and every selection when they are in the account home's .local/state/itos-container, so choosing another XDG_STATE_HOME does not help there; the host user moves those directories out of the tree after confirming no worker uses them",
+			},
+		},
+		{
+			failure: "state.path",
+			want: port.Problem{
+				Rule: "approval.state.path", Exit: 1, Field: "approval",
+				Message: "Approval state path is unsafe or was substituted",
+				Fix:     "use a stable state tree outside the checkout without symbolic links; the account home's own path must have none either, and XDG_STATE_HOME cannot move that anchor",
+			},
+		},
+		{
+			failure: "state.location",
+			want: port.Problem{
+				Rule: "approval.state.location", Exit: 2, Field: "approval",
+				Message: "Host state location must be absolute and valid UTF-8",
+				Fix:     "set an absolute XDG_STATE_HOME, or an absolute HOME for its fallback, whose path is valid UTF-8",
 			},
 		},
 		{

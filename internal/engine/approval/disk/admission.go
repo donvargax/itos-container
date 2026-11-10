@@ -10,6 +10,16 @@ import (
 )
 
 func (s Registry) Admission(ctx context.Context, c port.Candidate) (port.AdmissionDirectory, port.Failure) {
+	transaction, failure := s.Store.control(ctx, c, true)
+	if failure != "" {
+		return nil, failure
+	}
+	success := false
+	defer func() {
+		if !success {
+			transaction.Close()
+		}
+	}()
 	store := s.store(ctx)
 	location, failure := store.locationAt(c, "sessions")
 	if failure != "" {
@@ -20,8 +30,9 @@ func (s Registry) Admission(ctx context.Context, c port.Candidate) (port.Admissi
 	if failure != "" {
 		return nil, failure
 	}
+	success = true
 	return &admissionDirectory{
-		directoryStore: directoryStore{pin: p, ctx: ctx, exclusive: (*os.Root).Link},
+		directoryStore: directoryStore{pin: p, ctx: ctx, exclusive: (*os.Root).Link, control: transaction},
 		store:          store, candidate: c, sessions: filepath.Join(base, "sessions"),
 	}, ""
 }
@@ -34,6 +45,9 @@ type admissionDirectory struct {
 }
 
 func (d *admissionDirectory) Names() ([]string, port.Failure) {
+	if d.pin == nil {
+		return nil, ""
+	}
 	names, failure := pinnedNames(d.pin)
 	if failure != "" {
 		return nil, failure
@@ -159,4 +173,13 @@ func (d *admissionDirectory) sessionRecord(store Store, path string) ([]byte, po
 		failure = readFailure
 	}
 	return nil, failure
+}
+
+func (d *admissionDirectory) Close() {
+	if d.pin != nil {
+		d.directoryStore.Close()
+	}
+}
+func (d *admissionDirectory) Unchanged() bool {
+	return d.ctx.Err() == nil && (d.pin == nil || d.directoryStore.Unchanged())
 }

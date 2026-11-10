@@ -88,6 +88,9 @@ func (w *world) approvalProblem(rule string, code int, field string) error {
 	}
 	if !strings.HasPrefix(strings.TrimSpace(w.stdout), "{") {
 		for _, line := range strings.Split(w.stderr, "\n") {
+			// Doctor renders through the shared CLI; approve uses its own view.
+			// Both must retain the exact rule, nonempty message and fix.
+			line = strings.TrimPrefix(line, "itos-container: ")
 			if strings.HasPrefix(line, rule+": ") {
 				message, fix, ok := strings.Cut(strings.TrimPrefix(line, rule+": "), "; ")
 				if ok && message != "" && fix != "" {
@@ -341,6 +344,14 @@ func (w *world) approvalNoRecord() error {
 }
 
 func (w *world) approvalOnlyState() error {
+	control := map[string]bool{}
+	if w.exit == 0 {
+		var err error
+		control, err = w.approvalControlPaths()
+		if err != nil {
+			return err
+		}
+	}
 	actual, err := doctorTree(w.dir)
 	if err != nil {
 		return err
@@ -354,7 +365,7 @@ func (w *world) approvalOnlyState() error {
 		allowed = filepath.Join(w.doctor.env["HOME"], ".local")
 	}
 	for path, value := range actual {
-		if path == allowed || strings.HasPrefix(path, allowed+string(os.PathSeparator)) {
+		if control[path] || path == allowed || strings.HasPrefix(path, allowed+string(os.PathSeparator)) {
 			continue
 		}
 		if before[path] != value {

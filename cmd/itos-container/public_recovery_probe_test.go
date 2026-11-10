@@ -58,6 +58,11 @@ func TestPublicRecoveryCommand(t *testing.T) {
 	}
 	out, errout := open(request.Stdout), open(request.Stderr)
 	service, _ := approvalServices(nil, out, errout)
+	if home := os.Getenv("SLICE_21_ACCOUNT_HOME"); home != "" {
+		host := controlAccountHost{Host: service.Host, home: home}
+		service.Host = host
+		service = coordinatedApproval(service, host)
+	}
 	runner, recovery := sessionServices(service)
 	if request.LocalMount != "" {
 		runner.Workspace = &sessiondisk.Workspace{ProcessOpen: localProcessOpen, MountStat: localMountStat(request.LocalMount)}
@@ -65,6 +70,7 @@ func TestPublicRecoveryCommand(t *testing.T) {
 	registry := runner.Registry.(sessiondisk.Registry)
 	publicStorage := registry.Storage.(approvaldisk.Registry)
 	store := runner.Store.(sessiondisk.Store)
+	store.Host = service.Host
 	intentStorage := store.Storage.(approvaldisk.Storage)
 	ioFault := publicProbeIO(request.Fault)
 	publicStorage.IO, intentStorage.IO = ioFault, ioFault

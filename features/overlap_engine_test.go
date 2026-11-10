@@ -73,7 +73,10 @@ func newOverlapEngine(w *world, id string) (*overlapEngine, error) {
 		return nil, err
 	}
 	w.doctor.cleanup = append(w.doctor.cleanup, func() { _ = os.RemoveAll(dir) })
-	path := filepath.Join(dir, "engine.sock")
+	return newOverlapEngineAt(w, id, filepath.Join(dir, "engine.sock"))
+}
+
+func newOverlapEngineAt(w *world, id, path string) (*overlapEngine, error) {
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		return nil, err

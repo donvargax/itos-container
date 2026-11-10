@@ -157,6 +157,43 @@ func TestStoreLocationsAndOverflow(t *testing.T) {
 	}
 }
 
+func TestApprovalRecordSizeBoundary(t *testing.T) {
+	for _, size := range []int{1024*1024 - 1, 1024 * 1024, 1024*1024 + 1} {
+		t.Run(strconv.Itoa(size), func(t *testing.T) {
+			store, old, next := diskFixture(t)
+			if _, failure := store.Commit(old, ""); failure != "" {
+				t.Fatal(failure)
+			}
+			next.Canonical = ""
+			envelope := (records{}).Encode(port.Record{Candidate: next, Generation: "2"})
+			next.Canonical = strings.Repeat("x", size-len(envelope))
+			if got := len((records{}).Encode(port.Record{Candidate: next, Generation: "2"})); got != size {
+				t.Fatalf("fixture size = %d, want %d", got, size)
+			}
+			want := port.Record{Candidate: next, Generation: "2"}
+			wantFailure := port.Failure("")
+			if size > 1024*1024 {
+				want = port.Record{Candidate: old, Generation: "1"}
+				wantFailure = "state.invalid"
+			}
+			published, failure := store.Commit(next, "1")
+			if failure != wantFailure {
+				t.Fatalf("publish %d bytes: %s, want %s", size, failure, wantFailure)
+			}
+			if wantFailure == "" && published != want {
+				t.Fatal("successful publication returned a different record")
+			}
+			if wantFailure != "" && published != (port.Record{}) {
+				t.Fatal("oversized publication returned an approval")
+			}
+			stored, failure := store.Read(old)
+			if failure != "" || stored != want {
+				t.Fatalf("read after %d-byte publication lost the complete record: %s", size, failure)
+			}
+		})
+	}
+}
+
 type ownedInfo struct {
 	os.FileInfo
 	system any

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
+	af "github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
@@ -356,5 +357,65 @@ func TestAdmissionRepeatedCompletionPreservesCertificateAndSyncFailure(t *testin
 	s.registry.Storage = admissionFaultStorage{RegistryStorage: m.files, fault: "sync"}
 	if f := s.Sync(); f != sp.IntentWrite {
 		t.Fatal("retry lost admission durability failure", f)
+	}
+}
+
+// A legacy registration is read back through its original intent. Whatever
+// that read reports is classified by the control-state vocabulary, never
+// dropped and never turned into a silent success.
+func TestReservationRootsClassifyLegacyIntentReadFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		failure ap.Failure
+		want    ap.Failure
+	}{
+		{"unsafe", "state.unsafe", "state.unsafe"},
+		{"unreadable", "state.unavailable", "state.unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newRegistryFixture(t)
+			m.seed()
+			m.storage.Directories["intents/"+m.binding.Frozen.Project].ReadFailure = tc.failure
+			c := ap.Candidate{UID: m.binding.UID, GID: m.binding.GID, Root: m.binding.Checkout.Root + "/child", Project: m.binding.Frozen.Project}
+			d, failure := m.files.Admission(t.Context(), c)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer d.Close()
+			if roots, got := m.registry.reservationRoots(t.Context(), c, d); got != tc.want || roots != nil {
+				t.Fatalf("reservationRoots = %v, %q, want %q", roots, got, tc.want)
+			}
+		})
+	}
+}
+
+// locationsFake serves the shared protected location port from the in-memory
+// registry files; it does no I/O.
+type locationsFake struct {
+	files   *af.Registry
+	storage ap.Storage
+	failure ap.Failure
+}
+
+func (l locationsFake) At(string) ap.Storage { return l.storage }
+func (l locationsFake) Inspect(ctx context.Context, c ap.Candidate, _ string) (ap.AdmissionDirectory, ap.Failure) {
+	if l.failure != "" {
+		return nil, l.failure
+	}
+	return l.files.Admission(ctx, c)
+}
+
+func TestReservationsRootsReportsTheProtectedLocationRefusalAndLegacyRoots(t *testing.T) {
+	m := newRegistryFixture(t)
+	m.seed()
+	c := ap.Candidate{UID: m.binding.UID, GID: m.binding.GID, Root: m.binding.Checkout.Root + "/child", Project: m.binding.Frozen.Project}
+	reservations := Reservations{Locations: locationsFake{files: m.files, storage: m.storage, failure: "state.path"}, Store: m.registry.Store, Codec: m.codec}
+	if roots, failure := reservations.Roots(t.Context(), c, "/state/itos-container"); roots != nil || failure != "state.path" {
+		t.Fatalf("refused location produced %v, %q", roots, failure)
+	}
+	reservations.Locations = locationsFake{files: m.files, storage: m.storage}
+	roots, failure := reservations.Roots(t.Context(), c, "/state/itos-container")
+	if failure != "" || len(roots) != 1 || roots[0] != m.binding.Checkout.Root {
+		t.Fatalf("legacy registration roots = %v, %q", roots, failure)
 	}
 }
