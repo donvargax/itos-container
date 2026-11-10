@@ -15,17 +15,7 @@ import (
 )
 
 func (w *world) lifecycleResult(code int) error {
-	l := w.lifecycle
-	if l != nil && l.err != nil {
-		return l.err
-	}
-	if l == nil || l.run == nil {
-		return errors.New("no lifecycle invocation was observed")
-	}
-	if l.run.exit != code {
-		return fmt.Errorf("lifecycle run returned %d, expected %d; stderr %q", l.run.exit, code, l.run.errout.bytes())
-	}
-	return nil
+	return w.lifecycleResultEvidence(code)
 }
 
 func (w *world) lifecycleReceipts(signal string, child int) error {
