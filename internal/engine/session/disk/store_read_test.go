@@ -110,3 +110,84 @@ func TestIntentReadFailurePreservesCauseEvidenceAndRetry(t *testing.T) {
 		}
 	}
 }
+
+// lockProbe reports whether the intent collection is held while a checkout scan
+// runs: the real storage holds its account-wide control lock from the creating
+// open until publication.
+type lockProbe struct {
+	*rf.Checkout
+	held   func() bool
+	scans  int
+	locked int
+}
+
+func (p *lockProbe) observe() {
+	p.scans++
+	if p.held() {
+		p.locked++
+	}
+}
+func (p *lockProbe) Inspect() (rp.CheckoutIdentity, rp.Failure) {
+	p.observe()
+	return p.Checkout.Inspect()
+}
+func (p *lockProbe) Unchanged() bool {
+	p.observe()
+	return p.Checkout.Unchanged()
+}
+
+func TestNewIntentScansCheckoutBeforeTakingTheControlLock(t *testing.T) {
+	for _, operation := range []string{"intent", "reserved"} {
+		t.Run(operation, func(t *testing.T) {
+			store, b, storage, checkout := intentReadFixture(t)
+			directory := storage.Directories["intents/"+b.Frozen.Project]
+			probe := &lockProbe{Checkout: checkout, held: func() bool { return directory.Locked }}
+			store.Checkout = probe
+			create := store.New
+			if operation == "reserved" {
+				create = store.Prepare
+			}
+			entry, failure := create(t.Context(), ap.Durable{Frozen: b.Frozen}, strings.Repeat("1", 64))
+			if failure != "" || entry == nil {
+				t.Fatal("valid creation refused", failure)
+			}
+			defer entry.Close()
+			if probe.scans != 2 {
+				t.Fatalf("creation ran %d checkout scans, want inspection and revalidation", probe.scans)
+			}
+			if probe.locked != 0 {
+				t.Fatalf("%d checkout scans ran while the control lock was held", probe.locked)
+			}
+			if !directory.Locked || directory.Files[strings.Repeat("1", 64)+".json"] == nil {
+				t.Fatal("creation did not publish its intent under the lock")
+			}
+		})
+	}
+}
+
+func TestRefusedCheckoutScanNeverOpensStorageForCreation(t *testing.T) {
+	for _, fault := range []string{"identity differs", "changed during scan", "inspection failure"} {
+		t.Run(fault, func(t *testing.T) {
+			store, b, storage, checkout := intentReadFixture(t)
+			delete(storage.Directories, "intents/"+b.Frozen.Project)
+			switch fault {
+			case "identity differs":
+				checkout.Identity.Inode = "replaced"
+			case "changed during scan":
+				checkout.Changed = true
+			case "inspection failure":
+				checkout.InspectFailure = rp.CheckoutUnavailable
+			}
+			entry, failure := store.New(t.Context(), ap.Durable{Frozen: b.Frozen}, strings.Repeat("1", 64))
+			if entry != nil {
+				entry.Close()
+			}
+			if entry != nil || failure != sp.Refused {
+				t.Fatal("refused checkout was accepted", entry, failure)
+			}
+			if _, created := storage.Directories["intents/"+b.Frozen.Project]; created || checkout.Opened {
+				t.Fatal("refused checkout created intent storage or kept its pin")
+			}
+		})
+	}
+}

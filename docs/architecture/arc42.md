@@ -234,7 +234,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/engine/policy` | Implemented by slice-1, slice-5 and slice-25 | Closed schema/default/value validation for policy version 1 (offline) and version 2 (offline or an exact host-name allowlist), bounded parsing and typed failures. | Own domain/port, disk, YAML and IDNA adapters; reusable policy contracts and I/O-free porttest fakes. See [decision 0023](../decisions/0023-policy-version-2-allowlist.md). |
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
 | `internal/engine/readiness` | Implemented prerequisite, extended by slice-20 | Read-only checkout, regular-file inode independence, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
-| `internal/engine/approval` | Implemented through slice-26 | Host identity, canonical offline/allowlist profiles, shared sorted differences, q-52 terminal consent for network grants, protected recording and frozen input. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
+| `internal/engine/approval` | Implemented through slice-26 | Effective host identity, canonical offline/allowlist profiles, shared sorted differences, q-52 terminal consent for network grants, protected recording and frozen input, cross-root control-state separation and durable location enrollment. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
 | `internal/engine/budget` | Implemented by slice-12 | Shared phase and finite-operation deadlines, late-result handling and retained handle lifetimes. | Context/time only; typed values in ports, policy in domain. |
 | `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, cross-project checkout admission, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
 | `internal/engine/egress` | Implemented by T-39, not bound by `cmd` until slice-27; its design is still proposed (see the first paragraph), with no runtime evidence; real-engine proof in slice-27/28 | Our own CONNECT proxy on Go's standard library: CONNECT head parsing, exact name and port 443 decision, address check, ClientHello peek, replay and splice, and one-line JSON refusal records. No TLS interception, library or `net/http`. | Own `domain`, `port` with its `porttest` fake and shared contract, and the adapter `internal/engine/egress/tcp`; imports no other engine. Production code may import `crypto/tls` only in the adapter, held by `egress-tls` and `TestNoInterceptionCode`. `egress-x509` bans production `crypto/x509` imports; `egress-imports` restricts egress's dependencies. `TestNoRelaxingCode` rejects build constraints, platform-specific or ignored files, external settings reads and panic recovery. Fuzz tests cover head parsing and the peek. [Record](../decisions/0022-egress-proxy.md). |
@@ -441,12 +441,14 @@ terminal gap remains. Slice-30 carries the rule and disclosure into help/securit
    standard-library traversal; scan failures release the pin and prevent create.
    Q-34 accepted all 12 ID-SOCKETS-01 red rows; runtime green remains required.
    Slice-16 atomically reserves the validated
-   canonical checkout under one protected control-root lock before registration or
+   canonical checkout under private coordination exclusion shared with approval
+   publication before registration or
    create. Strict ancestor/descendant roots conflict across projects and daemons;
    equal roots and disjoint roots retain concurrency. Legacy registrations without
    admission metadata remain authority. The lock spans short storage transactions,
    never engine calls or session operation locks. See
-   [the admission decision](../decisions/0014-checkout-admission.md).
+   [the admission decision](../decisions/0014-checkout-admission.md) and
+   [control-state publication](../decisions/0021-control-state-publication.md).
    New foreground runs publish a reserved intent before public registration, then
    clear the pending reservation marker durably before receiving launch authority.
    Advance the intent with `fsync` under the operation lock before create,
@@ -678,6 +680,43 @@ There is no detached lifetime or unattended restart. Preserve the future exec in
 primary exit refuses new exec and tears down active exec commands without extending
 lifetime. Exec implementation remains deferred.
 
+Slice-21 retains a location catalog under the effective account home's fixed
+`.local/state/itos-container/coordination` anchor. The Linux host adapter requires
+the effective UID's local `/etc/passwd` record; it refuses missing or unreadable
+account evidence, including NSS-only accounts in the CGO-disabled release.
+HOME, USER and LOGNAME cannot supply a fallback account home. After validated mkdir
+bootstrap, its private 0600 control.lock inode supplies bounded exclusion for catalog access
+and selected-root publication across HOME/XDG selections; the home is never locked.
+The coordination directory is reserved for metadata: selected managed roots equal
+to or below it refuse with state.path before bootstrap or enrollment, preventing
+ordinary state entries from invalidating the shared catalog. This whole-component
+rule still permits the default tree and similarly named sibling directories.
+Session and admission collection namespaces are likewise reserved in the fixed
+tree and every enrolled location, including pending claims. Selections inside
+these collections refuse before any binding or selected-tree creation; discovery
+rechecks them under the common lock so subsequent reservation scans remain usable.
+Doctor inspects without writes, taking a shared lock when present; approve
+and validated run enrollment complete durable self-binding and selected-location
+claims before ordinary state writes. Existing reservation completion semantics are
+shared with separation checks, without operation locks or engine calls. The
+transaction also refuses a candidate checkout that equals, contains or lies
+beneath any retained managed location or the fixed or selected tree, including
+pending claims without a directory: a checkout below a managed tree is mounted
+read/write and reaches its approvals collection exactly as one above it does. Both
+read inspection and admission enforce this by whole path components in both
+directions; admission rechecks under exclusion
+after preflight, preventing a later worker from exposing an earlier publication. The
+same two-way comparison applies to the reserved roots of workers already active: a
+fixed or selected tree that equals, contains or lies beneath one refuses with
+approval.state.exposed, so a selection above a running worker cannot be enrolled. Catalog bindings match their locations by path and inode, never by a
+persisted device number, which a reboot can renumber. The catalog stores each path as
+JSON, which rewrites an invalid UTF-8 byte, so a selected tree (state.location) or
+account home (state.unavailable) whose path is not valid UTF-8 refuses before bootstrap. The
+[control-state decision](../decisions/0021-control-state-publication.md) defines
+bootstrap/retry ordering and the legacy discovery limit. Broader mount enforcement,
+native evidence and recovery trust checks remain slices 22 and 23; unseen pre-upgrade
+roots and mixed controller versions require a separate upgrade contract.
+
 ### Egress run
 
 **Proposed**, for a run whose approved policy lists host names. The run itself is unbuilt;
@@ -803,7 +842,7 @@ settings require independent runtime probes; inspecting a flag cannot prove enfo
 | Location | Required contents and access | Status or decision boundary |
 | --- | --- | --- |
 | Trusted host | Person, core itos dispatch and extension controller; local engine control available only to trusted orchestration. | Agents receive no socket. Slice-4 specifies effective host UID identity, root refusal and effective UID/GID worker resolution; runtime enforcement remains planned. |
-| Host-owned state outside checkout | Approval records, trusted frozen configuration and recovery records under `$XDG_STATE_HOME/itos-container`, directory mode `0700`. | Worker must not access them. Slice-4 specifies canonical JSON SHA-256, `0600` active records and independent frozen input; slice-8 publishes session snapshots, with recovery in slices 9/11. This state is not a persistent worker volume; inaccessibility still needs runtime proof. |
+| Host-owned state outside checkout | Approval records, trusted frozen configuration and recovery records under `$XDG_STATE_HOME/itos-container`, directory mode `0700`. | Worker must not access them. Slice-4 specifies canonical JSON SHA-256, `0600` active records and independent frozen input; slice-8 publishes session snapshots, with recovery in slices 9/11. Slice-21 protects publication with a persistent account-home catalog across selected roots. This state is not a persistent worker volume; inaccessibility still needs runtime proof. |
 | Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host directory, mounted through the descriptor-backed owned volume; proposed credential grants add staged single-file binds only. Substitution protection requires native proof. |
 | Local engine image store | Approved cached manifest digest, checked for architecture, compatibility and metadata. | The person pulls the manifest's digest and approval binds that content. Control commands inspect, never pull/build/substitute, keeping acquisition a deliberate host operation. Slice-3 owns checks; T-20 owns fixture preparation. |
 | Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces or engine/SSH-agent sockets. **Proposed** grants expose only approved mode-`0400` read-only token files under `/run/itos-container/credentials`, never original sources; private IPC keeps host `/dev/shm` inaccessible. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Offline proof is separate from slice-31/33's still-unproven credential boundary. |

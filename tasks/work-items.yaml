@@ -604,22 +604,14 @@ items:
     title: Doctor and approve reject state exposed to another worker
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-16]
     kind: slice
-    why: >
-      Was p1-protect-control-state-publication.
-      Extend slice-16's shared admission mechanism with protected control-state location tracking
-      across XDG_STATE_HOME values. Approve must atomically establish separation before publishing
-      records; doctor must inspect without writes. Specify concurrent publication versus worker
-      admission, unsafe-location refusals and safe independent projects. Keep shared contracts,
-      fakes and disk adapters in engine packages. Broken down from
-      p2-control-state-outside-every-mount.
   - id: slice-22
     title: Run refuses checkouts exposing any project's control state
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-21]
     kind: slice
     why: >

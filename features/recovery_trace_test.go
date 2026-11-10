@@ -25,22 +25,25 @@ type recoverySync struct {
 }
 
 func recoveryBuildHelper(root, output, source string) error {
-	path := output + ".go"
-	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", output, path)
-	cmd.Dir, cmd.Env = root, sessionChildEnvironment(os.Environ())
-	for key, value := range map[string]string{"CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "amd64", "GOFLAGS": "", "GOWORK": "off"} {
-		cmd.Env = setEnv(cmd.Env, key, value)
-	}
-	data, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("build recovery observer: %w\n%s", err, data)
-	}
-	return nil
+	_, err := featureBinary(output, func(output string) error {
+		path := output + ".go"
+		if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+			return err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", output, path)
+		cmd.Dir, cmd.Env = root, sessionChildEnvironment(os.Environ())
+		for key, value := range map[string]string{"CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "amd64", "GOFLAGS": "", "GOWORK": "off"} {
+			cmd.Env = setEnv(cmd.Env, key, value)
+		}
+		data, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("build recovery observer: %w\n%s", err, data)
+		}
+		return nil
+	})
+	return err
 }
 
 func (w *world) recoveryTraceBinary() (string, error) {

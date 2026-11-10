@@ -31,7 +31,7 @@ func Approve(service port.Service, ui engine.Reviewer, fingerprint *string, json
 		return view
 	}
 	if view.Status == "matching" {
-		return view
+		return service.Approve(view)
 	}
 	if fingerprint == nil && !ui.Review(view) {
 		view.Failure = "approve.declined"

@@ -29,6 +29,9 @@ func TestStoreAcquisitionRefusesUnusableEvidence(t *testing.T) {
 		{"new", "checkout identity differs", sp.Refused},
 		{"new", "snapshot locked", sp.Incomplete},
 		{"new", "snapshot directory missing", sp.Invalid},
+		{"new", "intents locked", sp.IntentWrite},
+		{"new", "record exists", sp.Refused},
+		{"new", "publish failure", sp.IntentWrite},
 		{"open", "valid", ""},
 		{"open", "invalid reference", sp.Invalid},
 		{"open", "unsupported host", sp.Refused},
@@ -37,6 +40,7 @@ func TestStoreAcquisitionRefusesUnusableEvidence(t *testing.T) {
 		{"open", "record missing", sp.Refused},
 		{"open", "snapshot locked", sp.Incomplete},
 		{"open", "snapshot directory missing", sp.Invalid},
+		{"open", "intents locked", sp.Incomplete},
 	} {
 		t.Run(tc.operation+"/"+tc.fault, func(t *testing.T) {
 			b, _, _ := sf.Fixture()
@@ -80,6 +84,12 @@ func TestStoreAcquisitionRefusesUnusableEvidence(t *testing.T) {
 				snapshots.Locked = true
 			case "snapshot directory missing":
 				delete(storage.Directories, "snapshots/"+b.Frozen.Project)
+			case "intents locked":
+				directory.Locked = true
+			case "record exists":
+				directory.Files[token+".json"] = []byte("existing ownership")
+			case "publish failure":
+				directory.WriteFailure = "state.write"
 			case "record missing":
 				delete(directory.Files, token+".json")
 			case "invalid reference":
@@ -114,7 +124,7 @@ func TestStoreAcquisitionRefusesUnusableEvidence(t *testing.T) {
 				if tc.operation == "new" {
 					expected[token+".json"] = codec.Encode(record)
 				}
-			} else if directory.Locked || checkout.Opened {
+			} else if directory.Locked != (tc.fault == "intents locked") || checkout.Opened {
 				t.Fatal("refused acquisition retained its storage lock or checkout pin")
 			}
 			if !reflect.DeepEqual(directory.Files, expected) {

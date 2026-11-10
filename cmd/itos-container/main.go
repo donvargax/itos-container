@@ -185,7 +185,7 @@ func sessionServices(service approvaldomain.Service) (sessiondomain.Runner, sess
 	source := service.Readiness.(inspection.Readiness)
 	codec := sessioncodec.JSON{Approval: approvalcanonical.JSON{}, Parser: jsonc.Parser{}}
 	protected := service.Store.(approvaldisk.Store)
-	store := sessiondisk.Store{Storage: approvaldisk.Storage{Store: protected}, Codec: codec, Host: approvalhost.Process{}, Checkout: &readinessdisk.Checkout{}, Input: source.Input}
+	store := sessiondisk.Store{Storage: approvaldisk.Storage{Store: protected}, Codec: codec, Host: service.Host, Checkout: &readinessdisk.Checkout{}, Input: source.Input}
 	registry := sessiondisk.Registry{Store: store, Storage: approvaldisk.Registry{Store: protected}, Codec: codec, Identity: approvalcanonical.JSON{}}
 	engine := sessiondocker.Engine{Readiness: docker.Engine{}, Selection: source.Input.Host}
 	return sessiondomain.Runner{Store: store, Registry: registry, Engine: engine, Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{}}, sessiondomain.Recovery{Registry: registry, Engine: engine}
@@ -284,9 +284,29 @@ func approvalServices(command string, in io.Reader, out, errout io.Writer) (appr
 	}}
 	codec := approvalcanonical.JSON{}
 	service := approvaldomain.Service{Readiness: source, Host: approvalhost.Process{}, Codec: codec, Store: approvaldisk.Store{StateHome: os.Getenv("XDG_STATE_HOME"), Home: os.Getenv("HOME"), Records: codec}}
+	service = coordinatedApproval(service, accountLookup)
 	return service, approvalpresentation.UI{In: in, Out: out, Err: errout}
 }
 
 func doctorPolicies() inspection.Policies {
 	return inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}, Names: policyidna.Names{}}
 }
+
+// Only cmd binds the session ownership validator to the approval engine's
+// account-wide protected storage. Neither engine imports the other's adapter.
+func coordinatedApproval(service approvaldomain.Service, account approvalport.Account) approvaldomain.Service {
+	protected := service.Store.(approvaldisk.Store)
+	protected.Control = nil
+	source := service.Readiness.(inspection.Readiness)
+	codec := sessioncodec.JSON{Approval: approvalcanonical.JSON{}, Parser: jsonc.Parser{}}
+	evidence := sessiondisk.Reservations{
+		Locations: approvaldisk.Locations{Store: protected},
+		Store:     sessiondisk.Store{Codec: codec, Host: service.Host, Input: source.Input},
+		Codec:     codec,
+	}
+	protected.Control = approvaldisk.Control{Account: account, Store: protected, Reservations: evidence}
+	service.Store = protected
+	return service
+}
+
+var accountLookup approvalport.Account = approvalhost.Process{}

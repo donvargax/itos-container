@@ -36,7 +36,7 @@ func TestConsentAndPrecedence(t *testing.T) {
 				reviews, publications = 0, 0
 			case "matching":
 				service.View.Status = "matching"
-				reviews, publications = 0, 0
+				reviews, publications = 0, 1
 			case "fingerprint":
 				fingerprint = &good
 				ui.IsTerminal = false
@@ -87,7 +87,8 @@ func TestAllowlistConsentRequiresTerminalAndPreservesPrecedence(t *testing.T) {
 				publications = 0
 			case "matching":
 				service.View.Status = "matching"
-				reviews, publications = 0, 0
+				// Revalidate control state without asking for consent again.
+				reviews, publications = 0, 1
 			case "matching redirected", "redirected", "json":
 				if kind == "matching redirected" {
 					service.View.Status = "matching"

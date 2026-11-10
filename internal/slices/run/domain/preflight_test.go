@@ -63,6 +63,19 @@ func TestPreflightReturnsSelectedValueAndDurableReference(t *testing.T) {
 	}
 }
 
+func TestPreflightPreservesControlPathRefusal(t *testing.T) {
+	a := &porttest.Approval{View: approval.View{Status: "invalid", Inspection: af.Ready(), Failure: "state.path"}}
+	snapshots := &af.Snapshots{}
+	durable, err := Preflight(a, snapshots)
+	var prerequisite Prerequisite
+	if !errors.As(err, &prerequisite) || prerequisite.View.Failure != "state.path" {
+		t.Fatalf("control-state path refusal lost its shared diagnostic: %v", err)
+	}
+	if durable != (approval.Durable{}) || a.Selections != 0 || len(snapshots.Values) != 0 || len(snapshots.Events) != 0 {
+		t.Fatal("unsafe checkout obtained approval selection or snapshot authority")
+	}
+}
+
 type stalledSelectionApproval struct {
 	*porttest.Approval
 	release <-chan struct{}
@@ -155,5 +168,37 @@ func TestChangedInspectionCarriesOnlyPointerDiagnostics(t *testing.T) {
 	}
 	if got := (ApprovalRefusal{Reason: "missing", Paths: []string{"/ignored"}}).Error(); got != "run approval missing; use itos container approve" {
 		t.Fatal(got)
+	}
+}
+
+func TestPreflightPresentsStateThatApprovalCannotFixAsPrerequisite(t *testing.T) {
+	for _, stage := range []string{"inspection", "selection"} {
+		for _, failure := range []approval.Failure{"state.exposed", "state.path", "state.unsafe"} {
+			t.Run(stage+"/"+string(failure), func(t *testing.T) {
+				a := &porttest.Approval{View: approval.View{Status: "matching", Inspection: af.Ready(), Candidate: approval.Candidate{Project: "p", Fingerprint: "hash", Canonical: "selected"}, Record: approval.Record{Generation: "1"}}}
+				if stage == "inspection" {
+					a.View.Failure = failure
+				} else {
+					a.Failure = failure
+				}
+				snapshots := &af.Snapshots{}
+				value, err := Preflight(a, snapshots)
+				if value != (approval.Durable{}) || len(snapshots.Values) != 0 {
+					t.Fatal("refused state granted authority", value, snapshots)
+				}
+				var prerequisite Prerequisite
+				var refusal ApprovalRefusal
+				if failure == "state.unsafe" {
+					// Reapproval after a host user repairs unsafe state remains the guidance.
+					if !errors.As(err, &refusal) || refusal.Reason != "invalid" || errors.As(err, &prerequisite) {
+						t.Fatal("unsafe state lost its invalid-approval classification", err)
+					}
+					return
+				}
+				if !errors.As(err, &prerequisite) || prerequisite.View.Failure != failure || errors.As(err, &refusal) {
+					t.Fatal("unresolvable state was not presented through the shared diagnostic", err)
+				}
+			})
+		}
 	}
 }
