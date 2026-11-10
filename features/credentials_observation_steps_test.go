@@ -26,6 +26,7 @@ type credentialObservation struct {
 	FinalNodes                   map[string]credentialNode
 	Activity                     string
 	Retained                     int
+	HandleLimit                  int
 	Deadline                     bool
 	Policy, Manifest, Argv, Root string
 	StatSequence                 map[string][]struct {

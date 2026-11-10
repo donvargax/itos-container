@@ -8,6 +8,33 @@ import (
 )
 
 func (w *world) credentialReviewSteps(sc *godog.ScenarioContext) {
+	sc.Step(`^the credential source has (\d+) additional ancestor directories$`, func(depth int) error {
+		o := w.credentials.observation
+		source := w.credentials.paths["token"]
+		n := o.Nodes[source]
+		delete(o.Nodes, source)
+		parent, _, _ := strings.Cut(source, "/token")
+		for i := 0; i < depth; i++ {
+			parent += "/d"
+			dir := n
+			dir.Path, dir.Inode, dir.Mode = parent, uint64(1000+i), 0040700
+			o.Nodes[parent] = dir
+		}
+		n.Path = parent + "/token"
+		o.Nodes[n.Path] = n
+		w.credentials.paths["token"] = n.Path
+		w.credentials.grants[0].Source = n.Path
+		return w.credentialObservationPolicy(3)
+	})
+	sc.Step(`^the credential filesystem permits at most (\d+) open handles$`, func(limit int) {
+		w.credentials.observation.HandleLimit = limit
+	})
+	sc.Step(`^credential mount tables include an unrelated mount with an empty source$`, func() {
+		o := w.credentials.observation
+		for i := range o.Mounts {
+			o.Mounts[i] += "473 1 0:59 / /scratch rw,relatime - tmpfs  rw,uid=1000\n"
+		}
+	})
 	sc.Step(`^credential mount tables include root "([^"]*)" at "([^"]*)"$`, func(root, point string) {
 		o := w.credentials.observation
 		for i := range o.Mounts {

@@ -42,6 +42,7 @@ type CredentialFiles struct {
 	DescriptorMountIDs             map[string][]int
 	Activity                       string
 	Retained                       int
+	HandleLimit                    int
 	Deadline                       bool
 	Calls                          map[string]int
 	Completed                      string
@@ -92,6 +93,9 @@ func (f *CredentialFiles) Now() time.Time {
 }
 
 func (f *CredentialFiles) Open(parent port.CredentialHandle, name string) (port.CredentialHandle, port.CredentialNode, port.CredentialRead) {
+	if f.HandleLimit > 0 && len(f.handles) >= f.HandleLimit {
+		return 0, port.CredentialNode{}, port.CredentialReadUnavailable
+	}
 	path := name
 	if parent != 0 {
 		p, ok := f.handles[parent]
