@@ -15,14 +15,16 @@ import (
 // Inspector's file readers must use the checkout pin established by Pin.
 // Assembly binds that capability; file-only inspection does not depend on it.
 type Inspector struct {
-	Checkout   port.Checkout
-	Policy     policyport.Source
-	Names      policyport.Names
-	Files      manifestport.Files
-	Parser     manifestport.Parser
-	References manifestport.References
-	Digests    port.Digests
-	Engine     port.Engine
+	// AllowVersion2 permits inspection/approval only; the zero value keeps run gated.
+	AllowVersion2 bool
+	Checkout      port.Checkout
+	Policy        policyport.Source
+	Names         policyport.Names
+	Files         manifestport.Files
+	Parser        manifestport.Parser
+	References    manifestport.References
+	Digests       port.Digests
+	Engine        port.Engine
 }
 
 // Inspect stops at unsafe prerequisites and retains only facts actually read.
@@ -38,10 +40,9 @@ func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result)
 	}
 	defer i.Checkout.Close()
 	p := policy.Inspect(i.Policy, i.Names)
-	if p.Policy != nil && p.Policy.Version != 1 {
-		// Canonical settings v1 hardcode an offline profile: recording them for a
-		// request that asks for network would approve what was never reviewed.
-		// Only doctor --policy-only reads such a file until approval can bind it.
+	if p.Policy != nil && p.Policy.Version != 1 && !i.AllowVersion2 {
+		// Run cannot honour version 2 until its proxy topology is implemented.
+		// Inspection and approval opt in explicitly; an omitted binding refuses.
 		p = policyport.Result{Issues: []policyport.Issue{{Kind: policyport.Version, Path: []string{"version"}, Version: p.Policy.Version}}}
 	}
 	result.Policy = &p

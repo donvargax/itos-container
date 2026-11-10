@@ -105,7 +105,11 @@ func (w *world) approvalUnicodeReview(kind, source string) error {
 	if !strings.Contains(before, escaped) {
 		return fmt.Errorf("review lacks visible Unicode escapes before consent")
 	}
-	_, settings, found := strings.Cut(before, "Effective offline settings: ")
+	prefix := "Effective offline settings: "
+	if w.approval.settings["profile"] == "allowlist-v1" {
+		prefix = "Effective settings: "
+	}
+	_, settings, found := strings.Cut(before, prefix)
 	if !found {
 		return fmt.Errorf("missing effective settings before consent")
 	}

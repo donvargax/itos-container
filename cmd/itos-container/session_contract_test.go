@@ -133,7 +133,7 @@ func TestSessionContractProbe(t *testing.T) {
 	case "run", "run-cleanup":
 		result = offlineContract(t, request, controllerFor, ops)
 	case "create":
-		service, _ := approvalServices(os.Stdin, io.Discard, io.Discard)
+		service, _ := approvalServices("run", os.Stdin, io.Discard, io.Discard)
 		preflight := &sessionContractPreflight{Preflight: approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}}}
 		snapshots := disk.Snapshots{Store: service.Store.(disk.Store), Records: canonical.JSON{}}
 		handoff, preflightErr := rundomain.Preflight(preflight, snapshots)
