@@ -104,6 +104,14 @@ Feature: Named credential requests and read-only source inspection
   #    Refuse unavailable when a held source/boundary descriptor uses one or
   #    its mountpoint is at, below or covering protected state; ignore unrelated
   #    unprojectable rows when judging an independent source.
+  #    The coordinator's 2026-11-10 04:42 UTC decision also refuses overlay
+  #    and every fuse.* filesystem: mountinfo does not map their backing paths.
+  #    A source/ancestor descriptor using one, or a row at, below or covering
+  #    checkout or either state root, refuses with credential.filesystem (3).
+  #    Check both observations, including covered rows and absent state roots.
+  #    Ignore unrelated stacking rows; do not parse lowerdir/upperdir options.
+  #    Known identity/location matches keep precedence. q-57 still governs
+  #    descriptor mount identity; no st_dev equality requirement is restored.
   #    Defer any initial table error to the location check, preserving earlier
   #    source symlink/ancestor refusal precedence.
   #    Either complete observation's source match is location; otherwise require
@@ -143,6 +151,7 @@ Feature: Named credential requests and read-only source inspection
   # credential.missing (3): a source or ordinary ancestor is absent.
   # credential.unavailable (3): unavailable metadata, checkout scan or state projection.
   # credential.mount_id (3): unavailable STATX_MNT_ID; name it and require kernel support.
+  # credential.filesystem (3): overlay/FUSE backing aliases cannot be excluded.
   # credential.symlink (1): a symbolic link at any component, even dangling.
   # credential.ancestor (1): unsafe ancestor ownership or write permissions.
   # credential.location (1): an identity exposed in checkout or protected state.
@@ -1450,3 +1459,32 @@ Feature: Named credential requests and read-only source inspection
       | kind         | source | target                                     |
       | claude-token | token  | /run/itos-container/credentials/claude-token |
     And the credential observation recorded no state record enumeration or metadata visits
+
+  # Raw stacking observations reproduce the leak without mounting anything:
+  # the lower source and merged view share an inode but have different devices.
+  @slice-29 @ID-CREDENTIALS-51 @linux @wip
+  Scenario Outline: credential inspection refuses unprojectable stacking filesystems
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And credential observation exposes the source through "<filesystem>" at "<point>"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                  | path                  | exit |
+      | credential.filesystem | /credentials/0/source | 3    |
+    And it exits with code 3
+    And its standard output says "Overlay or FUSE backing paths cannot be excluded from credential exposure"
+    And the credential observation recorded no state record enumeration or metadata visits
+
+    Examples:
+      | filesystem  | point                                      |
+      | overlay     | /checkout                                  |
+      | fuse.bindfs | /checkout                                  |
+      | overlay     | /state                                     |
+      | fuse.bindfs | /state                                     |
+      | overlay     | /account/.local/state/itos-container        |
+      | fuse.bindfs | /account/.local/state/itos-container        |
+      | overlay     | /checkout-sources                          |
+      | fuse.bindfs | /checkout-sources                          |
+      | overlay     | /checkout/private                          |
+      | fuse.bindfs | /checkout/private                          |
+      | overlay     | /state/private                             |
+      | fuse.bindfs | /state/private                             |

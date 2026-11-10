@@ -22,6 +22,14 @@ This record was numbered 0026 when q-57 and q-58 were answered. Merging main
 renumbered it to 0027 because main already used 0026 for egress approval; those
 answers continue to refer to this credential-inspection decision.
 
+Amended by the coordinator's **2026-11-10 04:42 UTC** decision: fail closed on
+overlay and every `fuse.*` filesystem whose backing paths mountinfo cannot map.
+Different device numbers can hide a lower-layer credential in a merged checkout
+or protected state. Refuse these observations with `credential.filesystem` (exit 3)
+and the message "Overlay or FUSE backing paths cannot be excluded from credential
+exposure". Advise using source, checkout and state paths on filesystems with
+projectable backing paths. This preserves q-57 and q-58.
+
 ## The sections this decision overrides
 
 T-47's record is [decision 0025](0025-credentials-passed-in.md). The first version
@@ -151,6 +159,16 @@ prove, not a claim of an atomic kernel snapshot:
    a held source/ancestor or boundary mapped to it refuses as unavailable. A row
    at, below or covering either protected state path also refuses, including
    hidden covering mounts. Never discard the row or invent a coordinate for it.
+   Retain each row's filesystem type. A source or source-ancestor descriptor on
+   `overlay` or any `fuse.*` type refuses with `credential.filesystem`. So does
+   any such row at, below or covering the checkout or either state root, including
+   hidden covering mounts and initially absent state roots. Apply this to both
+   complete observations; either refusal prevents success. Unrelated rows are
+   harmless. Do not interpret mount options as backing-path evidence: neither
+   overlay's lowerdir/upperdir strings nor a FUSE source supplies this contract's
+   pinned coordinate proof. Known identity/location matches retain precedence.
+   This extends checkout exclusion beyond identity comparisons without adding
+   state enumeration or restoring descriptor/mount-row device equality.
 3. The state exclusion set contains the state root's coordinate subtree, plus the
    coordinate subtree rooted at **every mountpoint at or below the pinned state's
    visible path**, using each such row's device and root. A file mount contributes
@@ -290,6 +308,8 @@ adapter. Alias rows apply to **both** protected trees; other rows name their sco
 | Unrelated mount changes; absent state root created safely at its reserved coordinate | Accepted if both complete observations exclude the unchanged source. |
 | Unrelated nsfs or deleted bind roots | Accepted; the rows remain unprojectable. |
 | Unprojectable source/boundary row or row overlapping protected state | Unavailable; no coordinate is inferred. |
+| Overlay/FUSE source or ancestor; row at, below or covering checkout or either state root | Dedicated filesystem refusal, even when the backing file and merged view have different device identities. |
+| Unrelated overlay/FUSE row | Accepted when the source is otherwise independent. |
 
 Alias fixtures have safe owners/permissions, one-link nonempty regular files and no
 symlink, so an unrelated refusal cannot satisfy them. Include file and directory mount
@@ -309,6 +329,13 @@ history live in the feature comments and shared fake/disk observation contract. 
 test needs a host mount or engine. The data-access observer and synthetic-marker
 cases still require inspection to read no source contents. Privileged native mount
 evidence remains CI-only downstream work, not a claim of these simulated contracts.
+
+ID-CREDENTIALS-51 supplies synthetic checkout, selected-state, fixed-account-state,
+source and descendant overlay/FUSE rows through the command boundary. Its backing
+file and merged view share an inode but have different devices. The shared fake/disk
+contract also covers hidden covering rows, either observation alone, source ancestors,
+absent state, unrelated siblings and known-match precedence. No local native mount
+or engine is used. Credential admission stays gated until its required evidence passes.
 
 The credential scenarios are implemented with synthetic fake/disk and CLI evidence.
 The initial specification supplied no executed-red result; implementation and review

@@ -146,6 +146,16 @@ or textual prefixes alone do not imply exposure. Descriptor paths are rewalked
 without symlinks and compared to their pins. There is no state directory enumeration,
 record read, persistent index or cross-project lock.
 
+The coordinator's 2026-11-10 04:42 UTC amendment in decision 0027 also refuses
+`overlay` and every `fuse.*` filesystem when a source/ancestor uses it or its row
+is at, below or covering checkout or either protected state root. Mountinfo cannot
+prove their backing aliases excluded; different device identities can hide exposure.
+Use the dedicated `credential.filesystem` diagnostic (exit 3), including covered
+rows and absent state roots, in either observation. Unrelated stacking mounts remain
+harmless. Preserve q-57's statx mount-ID mapping and revalidation without requiring
+st_dev equality. Synthetic checkout/state regression evidence is required before
+credential admission; real-mount evidence belongs only in CI.
+
 Two complete bounded mount-table observations bracket inspection; source and boundary
 identities/mappings and final source link metadata are rechecked. Each table has
 inclusive limits of 8 MiB, 16,384 rows and 65,535 bytes per line excluding its newline;

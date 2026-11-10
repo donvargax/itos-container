@@ -522,6 +522,14 @@ Namespace handles and deleted bind roots remain unprojectable mount rows. They d
 not block independent sources unless a required descriptor uses the row or its
 mountpoint is at, below or covering protected state.
 
+Overlay and all `fuse.*` filesystem types cannot establish backing-path exclusion.
+Inspection reports `credential.filesystem`, exit 3, when a source or its ancestor
+uses one, or such a mount is at, below or covering checkout or either protected
+state root. Covered mounts and absent state roots are included. Use source,
+checkout and state paths on filesystems with projectable backing paths. Unrelated
+overlay/FUSE mounts do not block an otherwise independent source. Mount options
+are not treated as backing-path proof; the mount-ID checks above still apply.
+
 Source problems are located at `/credentials/<written-index>/source`. Missing or
 unavailable metadata uses exit 3; symlink, ancestor, location, regular, owner, permissions,
 links, size and duplicate refusals use exit 1, under the `credential.` prefix. Only the

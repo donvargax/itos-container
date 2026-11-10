@@ -942,6 +942,17 @@ Non-path mount roots (namespace handles and deleted bind sources) remain in the
 table as unprojectable. Unrelated rows are harmless; a source/boundary descriptor
 using one, or one at, below or covering protected state, makes exclusion unavailable.
 
+The coordinator's 2026-11-10 04:42 UTC amendment refuses `overlay` and all `fuse.*`
+types with `credential.filesystem` (exit 3). Their backing files can appear in a
+merged checkout/state view under different device identities, and mountinfo does
+not map those aliases. Refuse source/ancestor descriptors on these types and rows
+at, below or covering checkout or either state root, including hidden covering rows
+and absent state. Check both observations; unrelated rows do not refuse an independent
+source. Do not infer backing coordinates from mount options. The statx mount-ID
+rule remains unchanged, and known location matches keep precedence. Synthetic
+checkout/state and shared fake/disk fixtures prove the refusal before downstream
+credential admission; native mounts remain CI-only evidence.
+
 Two complete mount-table observations bracket inspection; descriptor pathname walks,
 pins, mappings and final source metadata are rechecked. Each table is bounded to
 8 MiB, 16,384 rows and 65,535 bytes per line excluding LF, with EOF required. All
