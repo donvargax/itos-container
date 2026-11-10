@@ -47,6 +47,7 @@ type credentialNode struct {
 }
 
 func (w *world) credentialObservationSteps(sc *godog.ScenarioContext) {
+	w.credentialCoveredCheckoutSteps(sc)
 	sc.Step(`^a credential observation fixture for "([^"]*)" with "([^"]*)"$`, w.credentialObservationFixture)
 	sc.Step(`^credential descriptors report subvolume devices distinct from mountinfo$`, func() {
 		for path, node := range w.credentials.observation.Nodes {

@@ -1568,3 +1568,36 @@ Feature: Named credential requests and read-only source inspection
       | missing mount ID                | fuse.portal | credential.mount_id    |
       | unavailable checkout descriptor | overlay     | credential.unavailable |
       | unavailable checkout descriptor | fuse.portal | credential.unavailable |
+
+  # A non-recursive checkout bind exposes backing entries hidden from the host
+  # inventory by submounts. The outside alias has one link and no shared root
+  # ancestor. Only filesystem coordinates reveal its checkout membership.
+  # First/final rows move the alias mapping outside the checkout in the other
+  # observation; either complete observation's match must keep location precedence.
+  @wip @slice-29 @ID-CREDENTIALS-55 @linux
+  Scenario Outline: covered checkout entries remain excluded from credential sources
+    Given a credential observation fixture for "checkout" with "distinct outside file"
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                     |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+    Given a credential observation fixture for "checkout" with "distinct outside file"
+    And the credential source aliases a covered checkout "<kind>" in the "<observation>" observation
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                | path                  | exit |
+      | credential.location | /credentials/0/source | 1    |
+    And it exits with code 1
+    And the credential observation recorded "checkout traversal" calls
+    And the credential observation recorded no state record enumeration or metadata visits
+    And the engine recorder has no connections
+
+    Examples:
+      | kind      | observation |
+      | directory | both        |
+      | file      | both        |
+      | directory | first       |
+      | file      | first       |
+      | directory | final       |
+      | file      | final       |
