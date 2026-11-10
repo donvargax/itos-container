@@ -4,6 +4,7 @@ phases:
 queue:
   - p1-lifecycle-shard-flakes-on-main
   - p1-anchor-recovery-flake
+  - p1-session-contract-coverage-flake
   - p1-harness-home
   - p1-interactive-tty
 items:
@@ -1823,3 +1824,34 @@ items:
       and 409 as a container or volume still in use at cleanup. A red shard blocks each pull request
       it lands on and sends its implementer after code it never changed. Find which wait the hosted
       runner outruns and bound it through the harness budget seam, as T-42 did.
+  - id: p1-platform-log-redaction
+    title: The controller scrubs the credentials it staged from every log it persists
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      q-55, the person 2026-11-10: log redaction belongs to the platform, not to each program. The
+      controller stages each credential itself, so it knows the exact bytes; scrub them and their
+      common encodings (base64, URL, hex) from everything it persists: the egress refusal log copy,
+      proxy and worker output it keeps, status and diagnostics. dockerd's own json-file log of the
+      proxy is outside the controller's writes, so either route the proxy's output through the
+      controller (a log driver of none and the controller capturing stdout) or scrub that file at
+      teardown. AC-36's hostname-marker probe moves here. Until this lands the leak is disclosed.
+  - id: p1-session-contract-coverage-flake
+    title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      slice-26, run 42738076694 (2026-11-10): the code proof failed before judging any mutant
+      (count.preparation-failed at listed-coverage: the listed test all command exited 1) because
+      Frozen image inspection must exclude implicit volumes before create (session.feature:722) row
+      #01 failed: disk: session contract subprocess failed: exit status 2, after 0.57 s. The same
+      scenario passed in that run's Tests (ubuntu-latest) job. Like T-41's overlap hook, a bound or
+      a subprocess the instrumented, slower coverage run outruns; find it and give it room through
+      the harness budget seam. A red code proof sends the item's implementer after code it never
+      changed.
