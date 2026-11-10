@@ -194,7 +194,7 @@ func (f *CredentialFiles) Descriptor(h port.CredentialHandle) (port.CredentialDe
 		n.MountID = id
 		ok = ok && valid
 	}
-	return port.CredentialDescriptor{Path: n.Path, MountID: n.MountID}, ok && !f.DescriptorErrors[n.Path]
+	return port.CredentialDescriptor{Path: n.Path, MountID: n.MountID}, ok
 }
 
 func (f *CredentialFiles) Entries(h port.CredentialHandle) ([]string, bool, bool) {

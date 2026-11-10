@@ -18,6 +18,8 @@ type credentialMapping struct {
 }
 type credentialProjection struct {
 	ok, match  bool
+	overlap    bool
+	reserved   []credentialCoordinate
 	failure    string
 	source     []credentialMapping
 	checkout   credentialMapping
@@ -29,27 +31,22 @@ func sameProjection(a, b credentialProjection) bool {
 	return slices.Equal(a.source, b.source) && a.checkout == b.checkout && slices.Equal(a.state, b.state) && slices.Equal(a.stateMount, b.stateMount)
 }
 
-func (s *credentialScan) project(source, checkout credentialWalk, states []credentialWalk, statePaths []string, mounts []port.CredentialMount, complete bool) credentialProjection {
+// Project boundaries independently of sources, before checkout inventory. A
+// checkout bind must not turn protected state into an enumerated directory.
+func (s *credentialScan) projectBoundaries(checkout credentialWalk, states []credentialWalk, statePaths []string, mounts []port.CredentialMount, complete bool) credentialProjection {
 	p := credentialProjection{}
+	if credentialBoundaryIdentityOverlap(checkout, states) {
+		p.overlap = true
+		return p
+	}
 	if !complete || s.expired() {
 		return p
 	}
-	rows := make(map[int]port.CredentialMount, len(mounts))
-	protected := append([]string{checkout.pins[len(checkout.pins)-1].descriptor.Path}, statePaths...)
-	for _, m := range mounts {
-		rows[m.ID] = m
-		if credentialStackingFilesystem(m) {
-			for _, path := range protected {
-				// Include hidden covering rows and descendant file mounts. Their
-				// backing aliases need not share the visible inode's device.
-				if credentialDescendant(path, m.Point) || credentialDescendant(m.Point, path) {
-					p.failure = "credential.filesystem"
-					return p
-				}
-			}
-		}
+	rows := credentialMountRows(mounts)
+	p.checkout, p.failure = s.mapping(checkout.pins[len(checkout.pins)-1], rows, credentialCheckout)
+	if p.failure != "" {
+		return p
 	}
-	var reserved []credentialCoordinate
 	for i, state := range states {
 		stateMap, failure := s.mapping(state.pins[len(state.pins)-1], rows, credentialSource)
 		if failure != "" {
@@ -62,7 +59,7 @@ func (s *credentialScan) project(source, checkout credentialWalk, states []crede
 		}
 		p.state = append(p.state, coordinate)
 		p.stateMount = append(p.stateMount, stateMap.mount)
-		reserved = append(reserved, coordinate)
+		p.reserved = append(p.reserved, coordinate)
 		for _, m := range mounts {
 			if m.Unprojectable && (credentialDescendant(statePaths[i], m.Point) || credentialDescendant(m.Point, statePaths[i])) {
 				p.failure = "credential.unavailable"
@@ -70,26 +67,94 @@ func (s *credentialScan) project(source, checkout credentialWalk, states []crede
 			}
 			switch {
 			case credentialDescendant(statePaths[i], m.Point):
-				// Every covering row reserves its backing coordinate, including hidden
-				// parents of an overmounted root or ancestor. An overmount cannot free it.
-				reserved = append(reserved, credentialCoordinate{m.Device, credentialMountCoordinate(m, statePaths[i])})
+				// Hidden backing subtrees remain reserved after an overmount.
+				p.reserved = append(p.reserved, credentialCoordinate{m.Device, credentialMountCoordinate(m, statePaths[i])})
 			case credentialDescendant(m.Point, statePaths[i]):
-				reserved = append(reserved, credentialCoordinate{m.Device, m.Root})
+				p.reserved = append(p.reserved, credentialCoordinate{m.Device, m.Root})
 			}
 		}
 	}
-	p.checkout, p.failure = s.mapping(checkout.pins[len(checkout.pins)-1], rows, credentialCheckout)
-	if p.failure != "" {
+	checkoutTrees := []credentialCoordinate{p.checkout.coordinate}
+	for _, m := range mounts {
+		if !m.Unprojectable && credentialDescendant(m.Point, p.checkout.visible) {
+			checkoutTrees = append(checkoutTrees, credentialCoordinate{m.Device, m.Root})
+		}
+	}
+	for _, tree := range checkoutTrees {
+		if s.expired() {
+			return p
+		}
+		for _, state := range p.reserved {
+			if tree.device == state.device && (credentialDescendant(tree.path, state.path) || credentialDescendant(state.path, tree.path)) {
+				p.overlap = true
+				return p
+			}
+		}
+	}
+	p.ok = !s.expired()
+	return p
+}
+
+func credentialBoundaryIdentityOverlap(checkout credentialWalk, states []credentialWalk) bool {
+	root := checkout.pins[len(checkout.pins)-1]
+	for _, state := range states {
+		for _, pin := range state.pins {
+			if sameCredentialPin(root, pin) {
+				return true
+			}
+		}
+		if state.missing == "" {
+			stateRoot := state.pins[len(state.pins)-1]
+			for _, pin := range checkout.pins {
+				if sameCredentialPin(stateRoot, pin) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func credentialMountRows(mounts []port.CredentialMount) map[int]port.CredentialMount {
+	rows := make(map[int]port.CredentialMount, len(mounts))
+	for _, m := range mounts {
+		rows[m.ID] = m
+	}
+	return rows
+}
+
+func (s *credentialScan) project(source credentialWalk, boundary credentialProjection, statePaths []string, mounts []port.CredentialMount) credentialProjection {
+	p := boundary
+	if !p.ok {
 		return p
 	}
+	p.ok = false
+	// Only validated descriptor paths participate in mountpoint comparisons.
+	// An empty failed descriptor must not make every absolute mount relevant.
+	protected := append([]string{p.checkout.visible}, statePaths...)
+	for _, m := range mounts {
+		if credentialStackingFilesystem(m) {
+			for _, path := range protected {
+				if credentialDescendant(path, m.Point) || credentialDescendant(m.Point, path) {
+					p.failure = "credential.filesystem"
+					return p
+				}
+			}
+		}
+	}
+	rows := credentialMountRows(mounts)
 	for _, pin := range source.pins {
 		m, failure := s.mapping(pin, rows, credentialSource)
 		if failure != "" {
 			p.failure = failure
 			return p
 		}
+		if credentialStackingFilesystem(rows[m.mount]) {
+			p.failure = "credential.filesystem"
+			return p
+		}
 		p.source = append(p.source, m)
-		for _, tree := range reserved {
+		for _, tree := range p.reserved {
 			if tree.device == m.coordinate.device && credentialDescendant(m.coordinate.path, tree.path) {
 				p.match = true
 			}
@@ -116,9 +181,6 @@ func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.Credential
 	if !exists || row.Unprojectable || !credentialDescendant(d.Path, row.Point) {
 		return m, "credential.unavailable"
 	}
-	if credentialStackingFilesystem(row) {
-		return m, "credential.filesystem"
-	}
 	// A descriptor's path is evidence only after a fresh no-follow rewalk binds
 	// that spelling to the held identity and the same mount, including file binds.
 	// Only the rewalk owns these temporary pins. Release them on every return,
@@ -141,7 +203,8 @@ func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.Credential
 }
 
 func credentialStackingFilesystem(row port.CredentialMount) bool {
-	return row.Filesystem == "overlay" || strings.HasPrefix(row.Filesystem, "fuse.")
+	return row.Filesystem == "overlay" || row.Filesystem == "fuse" || row.Filesystem == "fuseblk" ||
+		strings.HasPrefix(row.Filesystem, "fuse.") || strings.HasPrefix(row.Filesystem, "fuseblk.")
 }
 
 // Validated root and visible paths are each at most 4096 bytes. The relative

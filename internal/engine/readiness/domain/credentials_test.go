@@ -202,6 +202,75 @@ func TestCredentialMountIDMissingDuringRewalk(t *testing.T) {
 	}
 }
 
+func TestCredentialBoundaryEvidenceBeforeInventory(t *testing.T) {
+	for _, fault := range []string{"checkout descriptor", "state descriptor", "table"} {
+		t.Run(fault, func(t *testing.T) {
+			f, c, grants := credentialDomainFixture()
+			switch fault {
+			case "checkout descriptor":
+				f.DescriptorErrors["/checkout"] = true
+			case "state descriptor":
+				f.DescriptorErrors["/state"] = true
+			case "table":
+				f.MountErrors[0] = true
+			}
+			want := []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}
+			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+				t.Fatalf("issues %#v, want %#v", got.Issues, want)
+			}
+			if f.Calls["checkout traversal"] != 0 {
+				t.Fatal("inventoried checkout without complete boundary evidence")
+			}
+		})
+	}
+}
+
+func TestCredentialBoundaryAncestorIdentities(t *testing.T) {
+	for _, ancestor := range []string{"checkout", "state"} {
+		t.Run(ancestor, func(t *testing.T) {
+			f, c, grants := credentialDomainFixture()
+			root, other := "/checkout", "/state"
+			if ancestor == "state" {
+				root, other = other, root
+			}
+			n := f.Nodes[other]
+			n.Path = root
+			f.Nodes[root] = n
+			n.Path, n.Inode = root+"/nested", 90
+			f.Nodes[n.Path] = n
+			if ancestor == "checkout" {
+				c.Input.Root = n.Path
+			} else {
+				c.Input.State, c.Input.AccountState = n.Path, n.Path
+			}
+			want := []port.CredentialIssue{{Rule: "state.path", Index: -1}}
+			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+				t.Fatalf("issues %#v, want %#v", got.Issues, want)
+			}
+			if f.Calls["checkout traversal"] != 0 || f.Calls["state enumeration"] != 0 {
+				t.Fatal("enumerated an aliased boundary")
+			}
+		})
+	}
+}
+
+func TestCredentialBoundaryOverlapInFinalTable(t *testing.T) {
+	f, c, grants := credentialDomainFixture()
+	reads := 0
+	f.Parser = func([]byte) ([]port.CredentialMount, bool) {
+		reads++
+		rows := []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/"}}
+		if reads == 2 {
+			rows = append(rows, port.CredentialMount{ID: 2, Device: 1, Root: "/state/private", Point: "/checkout/records"})
+		}
+		return rows, true
+	}
+	want := []port.CredentialIssue{{Rule: "state.path", Index: -1}}
+	if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+		t.Fatalf("issues %#v, want %#v", got.Issues, want)
+	}
+}
+
 func TestCredentialUnprojectableMountRelevance(t *testing.T) {
 	for _, point := range []string{"/unrelated", "/state-sibling", "/state/child", "/state", "/", "/checkout", "/vault/token"} {
 		t.Run(point, func(t *testing.T) {

@@ -926,8 +926,10 @@ deferred; successful validation neither grants approval nor starts a worker.
 
 **Credential source location — implemented by slice-29.** Root-only ancestry comparison
 misses descendant and single-file bind aliases. Absolute checkout inputs are cleaned
-like the shared checkout pin. Checkout/state overlap in either direction refuses
-before enumeration. Readiness compares source/ancestor
+like the shared checkout pin. Checkout/state overlap in either direction, including
+pinned identity and filesystem-coordinate aliases, refuses before enumeration.
+Compare checkout and descendant-mount subtrees with the reserved state subtrees;
+unavailable boundary evidence prevents traversal. Readiness compares source/ancestor
 identities with protected roots and every checkout entry, crossing mounts without
 symlink or file-data reads. Checkout limits remain batches of 128, 100,000 entries
 and depth 64. It never enumerates shared state. Instead, a descriptor's statx mount ID
@@ -942,9 +944,9 @@ Non-path mount roots (namespace handles and deleted bind sources) remain in the
 table as unprojectable. Unrelated rows are harmless; a source/boundary descriptor
 using one, or one at, below or covering protected state, makes exclusion unavailable.
 
-The coordinator's 2026-11-10 04:42 UTC amendment refuses `overlay` and all FUSE types (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`)
-types with `credential.filesystem` (exit 3). Their backing files can appear in a
-merged checkout/state view under different device identities, and mountinfo does
+The coordinator's 2026-11-10 04:42 UTC amendment refuses `overlay` and all FUSE
+types (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) with `credential.filesystem` (exit 3).
+Their backing files can appear in a merged checkout/state view under different device identities, and mountinfo does
 not map those aliases. Refuse source/ancestor descriptors on these types and rows
 at, below or covering checkout or either state root, including hidden covering rows
 and absent state. Check both observations; unrelated rows do not refuse an independent

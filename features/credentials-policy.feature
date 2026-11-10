@@ -1493,7 +1493,7 @@ Feature: Named credential requests and read-only source inspection
       | overlay     | /state/private                             |
       | fuse.bindfs | /state/private                             |
 
-  @wip @slice-29 @ID-CREDENTIALS-54 @linux
+  @slice-29 @ID-CREDENTIALS-54 @linux
   Scenario Outline: credential inspection refuses FUSE types with and without subtypes
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And credential observation exposes the source through "<filesystem>" at "<point>"
@@ -1528,7 +1528,7 @@ Feature: Named credential requests and read-only source inspection
 
   # Bind coordinates and pinned identities must establish the boundary before
   # inventory. The checkout spelling must never enumerate protected records.
-  @wip @slice-29 @ID-CREDENTIALS-52 @linux
+  @slice-29 @ID-CREDENTIALS-52 @linux
   Scenario Outline: aliased checkout and state overlap is refused before inventory
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the credential checkout aliases "<boundary>" state through "<layout>"
@@ -1551,7 +1551,7 @@ Feature: Named credential requests and read-only source inspection
       | account  | descendant mount |
       | account  | inverse bind     |
 
-  @wip @slice-29 @ID-CREDENTIALS-53 @linux
+  @slice-29 @ID-CREDENTIALS-53 @linux
   Scenario Outline: unrelated stacking mounts do not hide missing descriptor evidence
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And credential descriptors have "<fault>" beside an unrelated "<filesystem>" mount

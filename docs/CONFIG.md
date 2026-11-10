@@ -522,7 +522,8 @@ Namespace handles and deleted bind roots remain unprojectable mount rows. They d
 not block independent sources unless a required descriptor uses the row or its
 mountpoint is at, below or covering protected state.
 
-Overlay and all FUSE types (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) cannot establish backing-path exclusion.
+Overlay and all FUSE types (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) cannot establish
+backing-path exclusion.
 Inspection reports `credential.filesystem`, exit 3, when a source or its ancestor
 uses one, or such a mount is at, below or covering checkout or either protected
 state root. Covered mounts and absent state roots are included. Use source,
@@ -539,7 +540,10 @@ ancestors have no credential-source owner or permission requirement, symlinks re
 `doctor.checkout.path`, and checkout problems retain the requested root as their path.
 Absolute checkout inputs are cleaned before walking, as in the shared checkout pin;
 credential source paths remain literal. Checkout/state overlap in either direction
-reports `approval.state.path` before any inventory of state records.
+reports `approval.state.path` before inventory, including aliases established by
+pinned identities and mount coordinates. Unavailable boundary evidence prevents
+inventory. An unrelated stacking mount cannot override a missing mount ID or an
+unavailable checkout descriptor diagnostic.
 
 These observations neither grant access nor establish continuous protection from trusted
 host changes. [Decision 0027](decisions/0027-credential-source-inspection.md) defines the

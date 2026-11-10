@@ -23,7 +23,8 @@ renumbered it to 0027 because main already used 0026 for egress approval; those
 answers continue to refer to this credential-inspection decision.
 
 Amended by the coordinator's **2026-11-10 04:42 UTC** decision: fail closed on
-overlay and every FUSE filesystem (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) whose backing paths mountinfo cannot map.
+overlay and every FUSE filesystem (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) whose
+backing paths mountinfo cannot map.
 Different device numbers can hide a lower-layer credential in a merged checkout
 or protected state. Refuse these observations with `credential.filesystem` (exit 3)
 and the message "Overlay or FUSE backing paths cannot be excluded from credential
@@ -189,7 +190,14 @@ prove, not a claim of an atomic kernel snapshot:
    Thus outward state-descendant/file binds match the base subtree; an outside
    directory/file bound into state matches an added subtree. Nothing enumerates,
    stats or reads ordinary state descendants. An unreadable unrelated record
-   directory has no bearing on this calculation.
+   directory has no bearing on this calculation. Before inventory, intersect this
+   reservation with the validated checkout coordinate and every projectable mount
+   subtree at or below checkout. Compare devices and component ancestry in both
+   directions. A match, or a pinned root/ancestor identity match between the two
+   boundaries, is `approval.state.path`; no checkout entries are visited. If the
+   boundary evidence is incomplete, skip inventory and refuse the source under
+   the existing diagnostic precedence. Check the shared deadline between subtree
+   comparisons, and repeat the overlap check with the final table.
 4. Take the second mount table after the checkout scan. Recheck source and boundary
    pins, pathname walks and mount
    IDs at the end. Build the coordinates/exclusion set independently from each
@@ -389,3 +397,16 @@ fake/disk contract also passes its covering/descendant, first/final observation,
 absent-state, source-ancestor and unrelated-mount controls. The q-57 subvolume and
 changed-mount-ID regressions remain required. No native stacking mount or engine
 was run locally; changed-code proof and native scenarios remain CI-owned.
+
+The boundary/FUSE review regressions were committed pending in `e2c5a98`. With
+`@wip` removed, all 32 examples failed at behavior assertions: ID-CREDENTIALS-52's
+10 alias layouts returned a source error after inventory instead of
+`approval.state.path`; 53's four missing-evidence layouts returned
+`credential.filesystem`; and 54's 18 bare/subtyped FUSE layouts succeeded instead
+of refusing. All 32 now pass, together with the full 225-example credential
+selection. ID-CREDENTIALS-51 retains its original overlay/fuse.* coverage; 54
+extends that same contract to `fuse`, `fuseblk` and `fuseblk.ntfs`.
+The shared fake/disk contract also covers absent and covered state, independent
+sibling/device controls, and no traversal on boundary refusal. The fake now returns
+empty failed descriptors like the disk adapter. These runs used synthetic
+observations, no privileged mounts or native engine. Fresh code proof remains CI-owned.

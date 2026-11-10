@@ -91,14 +91,18 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 	// Each walk has captured its descriptors' mount IDs before mountinfo.
 	// Projection re-reads those held descriptors after the table, without retry.
 	tables[0], complete[0] = s.fs.Mounts()
+	firstBoundary := s.projectBoundaries(checkout, states, statePaths, tables[0], complete[0])
+	if firstBoundary.overlap {
+		return boundary("state.path")
+	}
 	observations := make([][2]credentialProjection, len(grants))
 	for i, source := range sources {
 		if source.rule == "" {
-			observations[i][0] = s.project(source, checkout, states, statePaths, tables[0], complete[0])
+			observations[i][0] = s.project(source, firstBoundary, statePaths, tables[0])
 		}
 	}
 	identities := map[[2]uint64]bool{}
-	scanOK := s.inventory(checkout.pins[len(checkout.pins)-1], 0, identities)
+	scanOK := firstBoundary.ok && s.inventory(checkout.pins[len(checkout.pins)-1], 0, identities)
 	tables[1], complete[1] = s.fs.Mounts()
 	finalStates := make([]credentialWalk, len(states))
 	for i, state := range states {
@@ -118,11 +122,15 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 			finalStates[i] = state
 		}
 	}
+	lastBoundary := s.projectBoundaries(checkout, finalStates, statePaths, tables[1], complete[1])
+	if lastBoundary.overlap {
+		return boundary("state.path")
+	}
 	seen := map[[2]uint64]bool{}
 	for i, source := range sources {
 		rule := source.rule
 		if rule == "" {
-			observations[i][1] = s.project(source, checkout, finalStates, statePaths, tables[1], complete[1])
+			observations[i][1] = s.project(source, lastBoundary, statePaths, tables[1])
 			first, last := observations[i][0], observations[i][1]
 			switch {
 			case sourceMatches(source, checkout, states, identities) || first.ok && first.match || last.ok && last.match:
