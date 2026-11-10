@@ -4,9 +4,59 @@ import (
 	"context"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestEgressStopRetainsProxyThatRunsAgain(t *testing.T) {
+	for _, boundary := range []string{"after wait", "after copy"} {
+		t.Run(boundary, func(t *testing.T) {
+			runner, registry, engine, id, r := seedEgressSession(t, 9)
+			restart := func() {
+				o := engine.Resources[r.Egress.Proxy.ID]
+				o.Running, o.Status, o.PID = true, "running", 124
+				engine.Resources[o.ID] = o
+			}
+			if boundary == "after wait" {
+				engine.AfterProxyWait = restart
+			} else {
+				engine.After = func(event string) {
+					if event == "proxy copy" {
+						restart()
+					}
+				}
+			}
+			recovery := Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}
+			result := recovery.Stop(t.Context(), id)
+			saved, failure := registry.Store.Codec.Decode(registry.Store.Records[registry.Records[id].Intent])
+			if failure != "" || len(result.Failures) != 1 || result.Failures[0].Outcome != port.Incomplete || len(result.Entries) != 1 || len(result.Entries[0].Retry) == 0 || saved.Completed() || saved.Egress != r.Egress || !engine.Resources[r.Egress.Proxy.ID].Running || len(engine.Networks) != 2 || len(engine.Anchors) != 1 || slices.Contains(engine.Events, "proxy remove") {
+				t.Errorf("running proxy released at %s: %#v; %v", boundary, result, engine.Events)
+			}
+			if copied := slices.Contains(engine.Events, "proxy copy"); copied != (boundary == "after copy") {
+				t.Errorf("copy at %s = %v", boundary, copied)
+			}
+			engine.After, engine.AfterProxyWait = nil, nil
+			if retry := recovery.Stop(t.Context(), id); len(retry.Failures) != 0 || retry.Entries[0].Cleanup != "complete" {
+				t.Errorf("retry failed: %#v", retry)
+			}
+		})
+	}
+}
+
+func TestEgressStatusBeforeResourceCreate(t *testing.T) {
+	runner, registry, engine, _, r := seedEgressSession(t, 1)
+	before := registry.Writes
+	result := (Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}).Status(t.Context())
+	if len(result.Failures) != 1 || result.Failures[0].Outcome != port.Incomplete || len(result.Entries) != 1 || result.Entries[0].Cleanup != "unknown" || registry.Writes != before {
+		t.Errorf("uncertain internal network lost: %#v", result)
+	}
+	for _, event := range engine.Engine.Events {
+		if event.Method == "INSPECT" && (event.Target == r.Egress.Proxy.Name || event.Target == r.Egress.Network.Name || event.Target == "") {
+			t.Errorf("unrequested resource inspected: %#v", event)
+		}
+	}
+}
 
 func TestEgressStopRevalidatesEachDestructiveBoundary(t *testing.T) {
 	for _, tc := range []struct {

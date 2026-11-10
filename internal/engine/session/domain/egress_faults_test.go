@@ -14,8 +14,8 @@ func TestEgressStartupKeepsDurableFailures(t *testing.T) {
 	}{
 		{"internal-network short ID", port.Uncertain}, {"egress-network short ID", port.Uncertain}, {"proxy short ID", port.Uncertain},
 		{"network unavailable", port.IsolationInspection}, {"network changed", port.Refused}, {"network foreign", port.Refused},
-		{"proxy inspection unavailable", port.IsolationInspection}, {"proxy inspection foreign", port.Refused},
-		{"intent write", port.IntentWrite}, {"internal ownership write", port.OwnershipWrite}, {"proxy ownership write", port.OwnershipWrite},
+		{"proxy inspection unavailable", port.IsolationInspection}, {"proxy inspection foreign", port.Refused}, {"proxy inspection changed", port.Refused},
+		{"intent write", port.IntentWrite}, {"proxy intent write", port.IntentWrite}, {"internal ownership write", port.OwnershipWrite}, {"proxy ownership write", port.OwnershipWrite},
 		{"network daemon changed", port.Refused}, {"proxy daemon changed", port.Refused},
 	} {
 		t.Run(tc.fault, func(t *testing.T) {
@@ -24,6 +24,8 @@ func TestEgressStartupKeepsDurableFailures(t *testing.T) {
 			engine.EgressFault = tc.fault
 			engine.After = func(event string) {
 				switch {
+				case event == "proxy create" && tc.fault == "proxy inspection changed":
+					engine.BeforeInspect = func() { engine.Replaced = true }
 				case event == "proxy create" && tc.fault == "proxy inspection unavailable":
 					engine.Inspection = "unavailable"
 				case event == "proxy create" && tc.fault == "proxy inspection foreign":
@@ -38,6 +40,9 @@ func TestEgressStartupKeepsDurableFailures(t *testing.T) {
 					if tc.fault == "intent write" && r.Schema == 2 && r.Anchor.Stage == "owned" {
 						store.Fault = "reserved-record write"
 					}
+					if tc.fault == "proxy intent write" && r.Egress.Network.Stage == "owned" {
+						store.Fault = "reserved-record write"
+					}
 					if tc.fault == "network daemon changed" && r.Schema == 3 && r.Egress.Internal.Stage == "intent" {
 						engine.DaemonID = "foreign"
 					}
@@ -48,6 +53,14 @@ func TestEgressStartupKeepsDurableFailures(t *testing.T) {
 			}
 			if failure := launchEgress(t, runner, id); failure != tc.want || slices.Contains(engine.Events, "start") {
 				t.Errorf("startup %s = %s, want %s; %v", tc.fault, failure, tc.want, engine.Events)
+			}
+			if tc.fault == "proxy intent write" && slices.Contains(engine.Events, "proxy create") {
+				t.Error("proxy created without durable intent")
+			}
+			if tc.fault == "proxy inspection changed" && !slices.ContainsFunc(engine.Engine.Events, func(event f.EngineEvent) bool {
+				return event.Method == "INSPECT" && event.Target == engine.ProxyID && event.Status == port.Changed
+			}) {
+				t.Error("socket replacement never reached proxy inspection")
 			}
 		})
 	}

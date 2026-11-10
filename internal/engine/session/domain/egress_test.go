@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
@@ -90,16 +91,69 @@ func TestEgressLaunchOrder(t *testing.T) {
 	}
 }
 func TestEgressLaunchFailuresStartNoWorker(t *testing.T) {
-	for _, fault := range []string{"internal-network create", "egress-network create", "internal-network exact", "proxy create", "proxy verify", "proxy start", "proxy ready", "proxy stopped", "foreign endpoint"} {
-		t.Run(fault, func(t *testing.T) {
-			runner, _, engine, id := egressSessionFixture(t)
-			engine.EgressFault = fault
-			failure := launchEgress(t, runner, id)
-			if failure == "" || slices.Contains(engine.Events, "start") {
-				t.Error("egress fault started worker", failure, engine.Events)
+	for _, tc := range []struct {
+		fault, operation string
+		outcome          port.Outcome
+		removals         []string
+		intent           int
+	}{
+		{"internal-network create", "network creation", port.Uncertain, nil, 0},
+		{"egress-network create", "network creation", port.Uncertain, nil, 1},
+		{"internal-network exact", "network inspection", port.IsolationUnverified, []string{"internal-network remove", "anchor remove"}, -1},
+		{"proxy create", "proxy creation", port.Uncertain, nil, 2},
+		{"proxy verify", "proxy verification", port.IsolationUnverified, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
+		{"proxy start", "proxy start", port.ExecutionFailed, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
+		{"proxy ready", "proxy readiness", port.ProxyFailed, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
+		{"proxy stopped", "proxy inspection", port.ProxyFailed, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
+		{"foreign endpoint", "network inspection", port.IsolationUnverified, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
+	} {
+		t.Run(tc.fault, func(t *testing.T) {
+			runner, registry, engine, id := egressSessionFixture(t)
+			engine.EgressFault = tc.fault
+			state := &startupState{}
+			ctx := context.WithValue(t.Context(), startupKey{}, state)
+			c, a, _, failure := runner.registeredLaunch(ctx, id, []string{"probe"}, port.Streams{})
+			if c != nil {
+				c.Close()
 			}
-			if !slices.ContainsFunc(engine.Events, func(s string) bool { return strings.Contains(s, "network") }) {
-				t.Error("failure never reached egress lifecycle", failure, engine.Events)
+			if a != nil {
+				a.Close()
+			}
+			if failure != tc.outcome || state.operation != tc.operation || slices.Contains(engine.Events, "start") {
+				t.Errorf("launch = %s at %q, want %s at %q, no worker start; %v", failure, state.operation, tc.outcome, tc.operation, engine.Events)
+			}
+			before, decode := registry.Store.Codec.Decode(registry.Store.Records[registry.Records[id].Intent])
+			if decode != "" {
+				t.Fatal(decode)
+			}
+			workerPresentAtRemoval := false
+			engine.After = func(event string) {
+				if strings.HasSuffix(event, " remove") {
+					if _, present := engine.Resources[before.ContainerID]; present {
+						workerPresentAtRemoval = true
+					}
+				}
+			}
+			result := (Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}).Stop(t.Context(), id)
+			saved, decode := registry.Store.Codec.Decode(registry.Store.Records[registry.Records[id].Intent])
+			if decode != "" || len(result.Entries) != 1 {
+				t.Fatalf("teardown lost record: %s, %#v", decode, result)
+			}
+			var removals []string
+			for _, event := range engine.Events {
+				if event == "remove" || strings.HasSuffix(event, " remove") {
+					removals = append(removals, event)
+				}
+			}
+			if !slices.Equal(removals, tc.removals) || workerPresentAtRemoval {
+				t.Errorf("removals = %v, want %v after worker absence; worker present = %v", removals, tc.removals, workerPresentAtRemoval)
+			}
+			if tc.intent >= 0 {
+				if len(result.Failures) != 1 || result.Failures[0].Outcome != port.Incomplete || result.Entries[0].Cleanup == "complete" || len(result.Entries[0].Retry) == 0 || saved.Completed() || saved.Egress != before.Egress || saved.Anchor != before.Anchor || egressResource(&saved, tc.intent).Stage != "intent" {
+					t.Errorf("lost reply discarded intent or earlier ownership: %#v, %#v", result, saved)
+				}
+			} else if len(result.Failures) != 0 || result.Entries[0].Cleanup != "complete" || !saved.Completed() || len(engine.Resources) != 0 || len(engine.Networks) != 0 || len(engine.Anchors) != 0 {
+				t.Errorf("launch failure left resources: %#v, %#v; %v", result, saved, engine.Events)
 			}
 		})
 	}

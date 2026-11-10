@@ -85,6 +85,11 @@ func TestEgressTransitions(t *testing.T) {
 	b, _, _ := f.Fixture()
 	b = f.EgressBinding(b)
 	rs := f.EgressRecords(b)
+	invalid := rs[1]
+	invalid.Egress.Internal.Name = "foreign"
+	if invalid.ValidTransition(rs[2]) {
+		t.Error("malformed prior egress record acquired ownership")
+	}
 	for n, r := range rs {
 		if n > 0 && !rs[n-1].ValidTransition(r) {
 			t.Errorf("transition %d refused", n)
