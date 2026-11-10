@@ -849,6 +849,50 @@ tolerance, and os/exec capture waits are bounded after process death. Harness ab
 remain failures, never successful product cancellation or cleanup. One observed
 budget-relative quiet control may be shared within the stream outline, as q-40 permits.
 
+T-49 treats native readiness as one observation with a 35-second allowance
+(`engineReadinessAllowance`) from the recorded controller start. The ready file,
+an independent running/full-identity inspection and the complete `slice-12:ready`
+newline frame must all arrive before that deadline. File publication alone does
+not establish receipt by asynchronous stdout capture. Split frames and later
+progress never restart the allowance. Already complete evidence returns promptly;
+controller exit or an observation error ends the wait as failure. Independent
+inspection inherits the remaining allowance and controller-exit cancellation;
+recorder-lock contention is polled within the same deadline.
+
+Signal actions and transport loss share that readiness gate, including the
+independent healthy control. The unread-stdout case collects only its exact
+pre-release readiness prelude from the pipe, preserving it for later assertions;
+it does not wait on the unused capture writer. The unread-stderr case still uses
+captured stdout readiness and preserves its diagnostic prelude before releasing
+the workload writer. Neither readiness path drains the deliberately blocked
+workload output. Full-pipe measurements, quiet lifetime, signal origins and native
+receipt, inventory and durable-state assertions remain required.
+
+A failed readiness observation names the missing evidence, mode, condition,
+elapsed time and configured allowance. The first failing Then retains the actual
+collected exit, process/guard error, bounded quoted stderr and request progress,
+even when a barrier or the healthy control has already failed. Early exit and
+harness cancellation after expiry remain distinct failures. Process result fields
+are read only after completion; unstarted/uncollected processes, empty journals,
+missing replies and unavailable recorders are explicit observations.
+Journal summaries are taken under the recorder lock and contain at most twelve
+requests in original order, preserving the first and latest failed/cancelled
+request, the first request and recent progress. They state total and omitted
+counts, method, API path, status, cancellation and arrival/reply offsets from
+controller start, plus bounded engine diagnostic and scalar state-error fields.
+Text is quoted and truncation is explicit. Bodies, raw queries, headers,
+environment, argv, protected records and full inspection maps are excluded.
+
+`TestLifecycleReadinessBarrier` and `TestLifecycleBarrierDiagnostics` exercise the
+same helpers with controlled time, in-memory HTTP observations and disposable
+pipes. Their delayed-frame, missing/late-evidence, action-ordering and diagnostic
+controls need no engine. The fixture's 1/3/1-second call/startup/grace limits,
+production's 10/120/10-second limits, 75/190-second process guards, 40-second startup
+collection guard and 30-second teardown plus two-second observation tolerance are
+unchanged. The old generic barrier errors do not establish a product timeout or
+explain a resource-inventory failure. Fresh full-shard native evidence and any
+remaining failure diagnosis belong to the coordinating loop in CI.
+
 Local `TestLifecycle*` checks verify step registration, probe compilation, recorder
 forwarding/faults and rejection of incorrect observations. They do not execute the probe
 or provide native red/green evidence. Run `42297748701` supplied accepted assertion

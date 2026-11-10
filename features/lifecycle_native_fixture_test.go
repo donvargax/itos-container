@@ -33,6 +33,7 @@ type lifecycleNative struct {
 	journalAtReturn                 []offlineRequest
 	control                         *world
 	quiet                           *lifecycleQuietEvidence
+	harnessCancellation             string
 	err                             error
 }
 
@@ -153,7 +154,7 @@ func lifecycleStartProcess(ctx context.Context, p *recoveryProcess) {
 			}
 		}
 		if ctx.Err() != nil {
-			p.err = fmt.Errorf("lifecycle controller interrupted by harness guard after %s", p.finished.Sub(p.started))
+			p.err = errors.Join(p.err, fmt.Errorf("lifecycle controller interrupted by harness guard after %s", p.finished.Sub(p.started)))
 		}
 	}()
 }
@@ -178,6 +179,7 @@ func (l *lifecycleNative) wait() {
 		return
 	case <-timer.C:
 		l.err = errors.Join(l.err, fmt.Errorf("lifecycle controller exceeded collection guard after %s", time.Since(origin)))
+		l.harnessCancellation = "after collection expiry"
 		l.run.cancel()
 		l.run.wait()
 	}
@@ -187,35 +189,28 @@ func (l *lifecycleNative) wait() {
 // Given or a substitute cancellation/cleanup success supplied by the harness.
 func (w *world) lifecycleAwait(timeout time.Duration, condition func() bool) bool {
 	p := w.lifecycle.run
+	origin := time.Now()
+	fail := func(cause string) bool {
+		l := w.lifecycle
+		l.err = errors.Join(l.err, fmt.Errorf("lifecycle barrier missing condition; %s; mode=%q condition=%q elapsed=%s limit=%s",
+			cause, l.mode, l.condition, time.Since(origin), timeout))
+		return false
+	}
 	timer, tick := time.NewTimer(timeout), time.NewTicker(10*time.Millisecond)
 	defer timer.Stop()
 	defer tick.Stop()
 	for {
 		select {
 		case <-p.done:
-			return false
+			return fail("controller exited")
 		case <-timer.C:
-			return false
+			return fail("deadline expired with live controller")
 		case <-tick.C:
 			if condition() {
 				return true
 			}
 		}
 	}
-}
-
-func (w *world) lifecycleReady() bool {
-	l := w.lifecycle
-	if !w.lifecycleAwait(35*time.Second, func() bool {
-		data, err := os.ReadFile(filepath.Join(w.doctor.checkout, "slice-12-ready"))
-		return err == nil && string(data) == "ready" && w.offline.api.running()
-	}) {
-		return false
-	}
-	w.recoveryDiscover()
-	l.ready = time.Now()
-	l.initialBoundary, l.err = w.offline.api.inspect(w.recovery.worker)
-	return l.err == nil
 }
 
 func (w *world) lifecycleSignal(signal string) {
@@ -343,8 +338,16 @@ func (w *world) lifecycleFreshRecovery(stop bool) {
 func (w *world) lifecycleAbortEarly() {
 	l := w.lifecycle
 	l.err = errors.Join(l.err, fmt.Errorf("product did not reach the %s lifecycle barrier", l.mode))
-	if l.run.cancel != nil {
-		l.run.cancel()
+	select {
+	case <-l.run.done:
+	default:
+		l.harnessCancellation = "before readiness expiry"
+		if !time.Now().Before(l.run.started.Add(engineReadinessAllowance)) {
+			l.harnessCancellation = "after readiness expiry"
+		}
+		if l.run.cancel != nil {
+			l.run.cancel()
+		}
 	}
 	w.lifecycleCollect()
 }
