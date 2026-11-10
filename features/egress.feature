@@ -49,9 +49,15 @@ Feature: Run through the approved egress proxy
   # - Remove "Run cannot start this profile yet: it refuses every version 2
   #   policy for now." from presentation and its scenario rows, including
   #   ID-APPROVAL-42, 43 and 46. Retain every grant/handshake/log disclosure.
-  # - Extend run.feature's inspection-only journal to the exact pinned proxy
-  #   image for allowlist mode only. Preserve empty-journal approval refusals,
-  #   all offline journals, argv/JSON precedence and existing identity safeguards.
+  # - Extend run.feature's inspection-only journal and the shared
+  #   doctorAllowedJournal/doctorAllowedRequest assertion behind "no engine
+  #   mutation or image acquisition was attempted". Allowlist fixtures may also
+  #   permit GET /images/<pinned proxy reference>/json without a query, only when
+  #   image inspection is permitted. Other image paths, queries, mutations and
+  #   acquisition stay forbidden; allowImage=false still permits neither image.
+  #   Preserve empty-journal approval refusals, offline worker-image-only journals,
+  #   argv/JSON precedence and existing identity safeguards. This shared assertion
+  #   is reused in EGRESS-04/05/06/08/20, not just run.feature.
   # Update CLI/CONFIG/run help for approved offline or allowlist runs; keep the
   # hidden proxy command out of help/completion. In the same implementation PR,
   # record the gate removal and runtime observation handoff in docs/decisions,
@@ -180,6 +186,12 @@ Feature: Run through the approved egress proxy
   # request/edit/oracle and review-list steps. Every phrase specific to "egress"
   # below is NEW unless it is one of those generic assertions. Add definitions
   # in a red test commit, never implement production behaviour in that commit.
+  # EGRESS-11 also needs the NEW step "the active approval record is snapshotted".
+  # After the generation-1 assertion and before the second invocation, refresh
+  # recordBefore and recordInfo from that stored record, as approvalCapture does:
+  # bytes (including generation), inode and mtime. Never seed or rewrite approval
+  # here, recapture during the second approvalTerminal, or relax any of
+  # approvalRecordUnchanged's byte, os.SameFile or mtime comparisons.
   # The local egress fixture extends the recorded HTTP Engine API fixture with
   # T-40's networks, proxy stdout-ready/exit and two independent image responses.
   # Its default daemon is 28.0/API 1.48; the worker's image and the proxy's image
@@ -464,6 +476,7 @@ Feature: Run through the approved egress proxy
     Then the terminal review describes allowlist-v1 without a temporary run refusal before exactly one y/N prompt
     And the review before its prompt lists exactly the requested host names
     And the sole active approval is the exact candidate at generation "1" in protected host state
+    Given the active approval record is snapshotted
     When bare approve runs at a terminal with no answer available
     Then it reports matching approval without prompting and exits with code 0
     And its standard output does not say "Run cannot start this profile yet"
