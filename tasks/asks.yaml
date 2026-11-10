@@ -211,3 +211,6 @@ questions:
     item: "slice-27"
     question: "Who may approve a sandbox that grants network or credentials (q-2's revisit, p3-approval-before-egress)?"
     answer: "The person, 2026-11-09: keep it simple, no keys. Approval is asked again only when the settings fingerprint changes, as today. A grant that includes network or credentials needs the person at a real terminal: approve shows what is granted and asks for yes; --fingerprint (no terminal) is accepted only for offline grants and is refused, with a fix naming the interactive form, for any grant with an egress allowlist or credentials. So no non-interactive network grant can exist to be honoured later. Disclosed gap: an agent running unsandboxed on the host could fake a terminal; the answer is running agents inside the container, which milestone two provides."
+  - id: q-53
+    item: "slice-22"
+    question: "slice-22: its implementer stopped because docs/charter.md defers it until milestone two steps 1 and 2 have landed, which they have not (slice-26, slice-27, slice-28, slice-29 and T-48 are open). Go on with it now, or wait?"
