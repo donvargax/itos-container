@@ -48,6 +48,9 @@ func (w *world) lifecycleNativeSteps(sc lifecycleStepRegistrar) {
 		w.lifecycleSignalAction(signal, true)
 	})
 	sc.Step(`^the worker records only the first "([^"]*)" and native observations show it alive before the configured grace expires$`, func(signal string) error {
+		if err := w.lifecycleResult(137); err != nil {
+			return err
+		}
 		if !w.lifecycle.aliveBeforeGrace {
 			return errors.New("native primary was not observed alive before the original grace deadline")
 		}

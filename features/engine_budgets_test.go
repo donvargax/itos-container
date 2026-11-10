@@ -13,6 +13,8 @@ const (
 	engineStartupBudget = 3 * time.Second
 	engineGraceBudget   = time.Second
 	engineQuietInterval = max(engineCallBudget, engineStartupBudget) + time.Second
+	// One observation allowance from controller start, including stream propagation.
+	engineReadinessAllowance = 35 * time.Second
 	// SIGKILL may leave this long after the grace expires. Absolute, as the 30 s
 	// teardown assertion's 2 s is: scheduling on a hosted runner under -cover does
 	// not shrink with the fixture's grace. It is no license for a timer that the
