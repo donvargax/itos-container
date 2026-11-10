@@ -44,6 +44,11 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 	}
 	cases := []testCase{
 		{"independent", "", func(*CredentialFiles) {}},
+		{"unrelated empty mount source", "", func(f *CredentialFiles) {
+			for i := range f.MountsText {
+				f.MountsText[i] += "473 1 0:59 / /scratch rw,relatime - tmpfs  rw,uid=1000\n"
+			}
+		}},
 		{"subvolume devices", "", func(f *CredentialFiles) {
 			for path, n := range f.Nodes {
 				n.Device += 100
@@ -230,6 +235,9 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 		if f.Activity != "" && f.Completed != f.Activity {
 			t.Errorf("%s did not execute scheduled activity", tc.name)
 		}
+		if len(f.handles) != 0 {
+			t.Errorf("%s retained %d handles after inspection", tc.name, len(f.handles))
+		}
 	}
 	f := CredentialFixture()
 	got := observe(f, append(grants, policy.Credential{Kind: "github-token", Source: "/vault/token"}), input)
@@ -242,6 +250,7 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 	}
 	credentialAccountStateContract(t, observe, grants, input)
 	credentialTopologyContract(t, observe, grants, input)
+	credentialHandleContract(t, observe, input)
 	for _, over := range []bool{false, true} {
 		f := CredentialFixture()
 		n := f.Nodes["/vault/token"]

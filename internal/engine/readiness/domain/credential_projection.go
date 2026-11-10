@@ -107,7 +107,12 @@ func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.Credential
 	}
 	// A descriptor's path is evidence only after a fresh no-follow rewalk binds
 	// that spelling to the held identity and the same mount, including file binds.
-	w := s.walk(d.Path, kind)
+	// Only the rewalk owns these temporary pins. Release them on every return,
+	// retaining the original source and boundary pins across both observations.
+	rewalk := *s
+	rewalk.opened = nil
+	defer rewalk.close()
+	w := rewalk.walk(d.Path, kind)
 	if w.rule != "" {
 		return m, "credential.unavailable"
 	}

@@ -85,6 +85,33 @@ func TestCredentialMountEvidenceValidation(t *testing.T) {
 	}
 }
 
+func TestCredentialEmptyMountSource(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("kernel-format parser is Linux-specific")
+	}
+	for _, optional := range []string{"", "shared:7 master:1 "} {
+		valid := "473 411 0:59 / /scratch rw,relatime " + optional + "- tmpfs tmpfs rw,uid=1000"
+		fields := strings.Split(valid, " ")
+		for i := range fields {
+			t.Run(fmt.Sprintf("optional=%q/empty=%d", optional, i), func(t *testing.T) {
+				row := append([]string(nil), fields...)
+				row[i] = ""
+				rows, ok := ParseCredentialMounts([]byte(strings.Join(row, " ") + "\n"))
+				if i != len(fields)-2 {
+					if ok || rows != nil {
+						t.Fatalf("accepted empty non-source field %d: %#v", i, rows)
+					}
+					return
+				}
+				want := port.CredentialMount{ID: 473, Device: 59, Root: "/", Point: "/scratch"}
+				if !ok || len(rows) != 1 || rows[0] != want {
+					t.Fatalf("empty source lost mount coordinates: %#v %v", rows, ok)
+				}
+			})
+		}
+	}
+}
+
 func TestCredentialFDInfoBounds(t *testing.T) {
 	for _, data := range []string{"", "mnt_id: 0\n", "mnt_id: -1\n", "mnt_id: +1\n", "mnt_id: nope\n", "mnt_id: 99999999999999999999999\n", "mnt_id: 1\nmnt_id: 2\n"} {
 		if _, ok := ParseCredentialMountID([]byte(data)); ok {

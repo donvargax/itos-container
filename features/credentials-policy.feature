@@ -1426,7 +1426,7 @@ Feature: Named credential requests and read-only source inspection
 
   # Rewalks only revalidate a mapping; their temporary handles must not pile
   # up across source ancestors or observations. Original pins remain held.
-  @wip @slice-29 @ID-CREDENTIALS-49 @linux
+  @slice-29 @ID-CREDENTIALS-49 @linux
   Scenario: a deeply nested credential source fits the host descriptor limit
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the credential source has 30 additional ancestor directories
@@ -1440,7 +1440,7 @@ Feature: Named credential requests and read-only source inspection
 
   # Linux permits an empty mount source: exactly that field, following the
   # separator and filesystem type, can be empty. Other empty fields still fail.
-  @wip @slice-29 @ID-CREDENTIALS-50 @linux
+  @slice-29 @ID-CREDENTIALS-50 @linux
   Scenario: an unrelated mount with an empty source does not block credential inspection
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And credential mount tables include an unrelated mount with an empty source

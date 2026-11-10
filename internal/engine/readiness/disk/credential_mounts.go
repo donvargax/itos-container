@@ -27,8 +27,10 @@ func ParseCredentialMounts(data []byte) ([]port.CredentialMount, bool) {
 		if len(fields) < 10 {
 			return nil, false
 		}
-		for _, field := range fields {
-			if field == "" {
+		for i, field := range fields {
+			// The kernel permits an empty source after the separator and fstype.
+			// All other fields, including the separator itself, remain required.
+			if field == "" && (i != len(fields)-2 || fields[len(fields)-4] != "-") {
 				return nil, false
 			}
 		}

@@ -123,6 +123,9 @@ prove, not a claim of an atomic kernel snapshot:
    `/proc/self/fd/<fd>`. The mapping below rewalks that pathname without following
    symlinks and requires the same device, inode and mount ID. Do not strip a ` (deleted)` suffix and use
    what remains: an unlinked, unreachable or ambiguous descriptor path refuses.
+   Close each temporary pathname rewalk's handles as soon as its mapping is
+   validated or refused; retain the original source and boundary pins. Live
+   rewalk handles grow with pathname depth, not the sum of all ancestor rewalks.
    Retain the source descriptor through observation and any later delivery read.
    Then acquire the first bounded mount table, retaining any error until the
    location check so source symlink/ancestor refusals keep their precedence.
@@ -194,7 +197,9 @@ statx mask, unavailable statx call or unusable mount ID produces
 `credential.mount_id` (exit 3), naming `STATX_MNT_ID` and advising a host kernel
 that exposes it. Other inconsistent mapping evidence remains `credential.unavailable`. Oversize or
 unavailable evidence yields `credential.unavailable`, never a shortened table.
-Unknown optional mount fields remain allowed. The limits are on topology, paths
+Unknown optional mount fields and an empty mount-source field remain allowed.
+Only the source field, after the separator and filesystem type, may be empty;
+other empty fields and missing separators remain malformed. The limits are on topology, paths
 and elapsed time, independent of the number of retained state entries. Work is
 bounded by those limits and at most two grants, not another project's history.
 
@@ -329,3 +334,11 @@ checkout spellings as non-absolute. All nine now pass. The shared fake/disk cont
 also refuses unprojectable source/ancestor/checkout/state mappings and mountpoints
 at, below or covering state, while accepting unrelated sibling mountpoints. No
 native mount or engine is needed for these topology observations.
+
+The final-round resource/parser regressions were committed pending in `2185886`.
+With `@wip` removed, ID-CREDENTIALS-49 and 50 both failed at their exit-0 assertion
+with `credential.unavailable` and exit 3. The fixes accept a source with 30 extra
+ancestors under a 1,024-handle limit and an unrelated mount with an empty source.
+The shared fake/disk contract additionally accepts two deep sources under 128
+handles, verifies handle release after success and refusal, and retains malformed
+field refusals. These observations need no privileged mount or real engine.

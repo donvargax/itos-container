@@ -39,7 +39,7 @@ func TestCredentialObservationContract(t *testing.T) {
 // Only raw OS observations are substituted. The disk adapter still acquires
 // native O_PATH handles, compares pre-open identities, parses kernel text and
 // performs its descriptor/readdir mapping. No mount or privileged chown occurs.
-func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) *CredentialFiles {
+func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) port.CredentialFS {
 	t.Helper()
 	root := t.TempDir()
 	byFD := map[int]port.CredentialHandle{}
@@ -198,7 +198,26 @@ func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) *Crede
 		return entries, nil
 	}
 	files.ops = &ops
-	return files
+	return credentialContractFiles{CredentialFS: files, closeRaw: func(h port.CredentialHandle) {
+		if p := files.handles[h]; p != nil {
+			fd := int(p.file.Fd())
+			raw.Close(byFD[fd])
+			delete(byFD, fd)
+			delete(descriptors, fd)
+		}
+	}}
+}
+
+// Keep the raw observation handles' lifetimes aligned with the native handles
+// they describe, including early closes during pathname revalidation.
+type credentialContractFiles struct {
+	port.CredentialFS
+	closeRaw func(port.CredentialHandle)
+}
+
+func (f credentialContractFiles) Close(h port.CredentialHandle) {
+	f.closeRaw(h)
+	f.CredentialFS.Close(h)
 }
 
 type credentialEntryName string
