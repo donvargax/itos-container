@@ -3,6 +3,7 @@ phases:
   1: null
 queue:
   - p1-lifecycle-shard-flakes-on-main
+  - p1-anchor-recovery-flake
   - p1-harness-home
   - p1-interactive-tty
 items:
