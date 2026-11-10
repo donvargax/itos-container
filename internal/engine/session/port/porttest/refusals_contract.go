@@ -90,12 +90,25 @@ func RefusalLogContract(t Reporter, fixture RefusalLogFixture, input, stored, re
 		t.Errorf("concurrent begin: %s", f)
 		return
 	}
+	// The committed result must describe the bytes staged before Commit starts,
+	// even when Close races it after a caller's timeout. Keep the competing Write
+	// empty so both publication outcomes have an exact, adapter-independent value.
+	if n, err := copy.Write(input); n != len(input) || err != nil {
+		t.Errorf("concurrent prewrite: %d %v", n, err)
+	}
 	var wg sync.WaitGroup
-	for _, fn := range []func(){func() { _, _ = copy.Write(input) }, func() { _, _ = copy.Commit() }, copy.Close} {
+	for _, fn := range []func(){func() { _, _ = copy.Write(nil) }, func() { got, f = copy.Commit() }, copy.Close} {
 		wg.Go(fn)
 	}
 	wg.Wait()
 	copy.Close()
+	if f == "" {
+		if !reflect.DeepEqual(got, report) || string(fixture.Read(session)) != string(stored) {
+			t.Errorf("successful concurrent commit lost report or staged bytes: %#v %q", got, fixture.Read(session))
+		}
+	} else if !reflect.DeepEqual(got, port.RefusalReport{}) || string(fixture.Read(session)) != string(replacementStored) {
+		t.Errorf("failed concurrent commit published a report or changed earlier bytes: %#v %s %q", got, f, fixture.Read(session))
+	}
 	if _, e := copy.Write(input); e == nil {
 		t.Errorf("closed concurrent copy writable")
 	}
