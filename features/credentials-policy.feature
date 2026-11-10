@@ -1355,3 +1355,63 @@ Feature: Named credential requests and read-only source inspection
       | credential.mount_id | /credentials/0/source | 3    |
     And it exits with code 3
     And its error output says "STATX_MNT_ID"
+
+  @slice-29 @ID-CREDENTIALS-46 @linux @wip
+  Scenario Outline: unrelated namespace and deleted mounts do not invalidate credential inspection
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And credential mount tables include root "<root>" at "/run/namespaces/unrelated"
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                     |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+    And the credential observation recorded no state record enumeration or metadata visits
+    Given credential mount tables include root "<root>" at "/state/private/namespace"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                   | path                  | exit |
+      | credential.unavailable | /credentials/0/source | 3    |
+    And it exits with code 3
+
+    Examples:
+      | root               |
+      | net:[4026537384]   |
+      | mnt:[4026537385]   |
+      | /replaced//deleted |
+
+  @slice-29 @ID-CREDENTIALS-47 @linux @wip
+  Scenario Outline: checkout inside either state boundary is refused before inventory
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And the credential checkout is inside "<boundary>" state
+    When the credential observation contract runs in JSON mode
+    Then its JSON output names the problem "approval.state.path"
+    And it exits with code 1
+    And the credential observation recorded no source metadata checkout traversal or state mount-table calls
+    And the credential observation recorded no state record enumeration or metadata visits
+
+    Examples:
+      | boundary |
+      | selected |
+      | account  |
+
+  @slice-29 @ID-CREDENTIALS-48 @linux @wip
+  Scenario Outline: credential inspection cleans absolute checkout paths like the shared checkout pin
+    Given a private credential inspection fixture
+    And credential source "token" has layout "private regular file"
+    And the credential fixture requests these sources:
+      | kind         | source |
+      | claude-token | token  |
+    And the credential checkout environment uses "<spelling>" spelling
+    When itos-container runs with "doctor --credentials-only --json"
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                     |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+    And the engine recorder has no connections
+
+    Examples:
+      | spelling         |
+      | trailing slash   |
+      | repeated slash   |
+      | dot component    |
+      | parent component |
