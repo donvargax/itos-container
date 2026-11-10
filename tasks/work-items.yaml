@@ -1648,8 +1648,8 @@ items:
   - id: slice-29
     title: The policy file accepts named credential sources and doctor validates them without reading their contents
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-47]
     kind: slice
     why: >
