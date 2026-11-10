@@ -610,8 +610,8 @@ items:
   - id: slice-22
     title: Run refuses checkouts exposing any project's control state
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-21]
     kind: slice
     why: >
