@@ -5,6 +5,7 @@ import (
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
+	"slices"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -18,6 +19,53 @@ func TestEgressSilentReadinessIsBounded(t *testing.T) {
 		result := runner.Run(t.Context(), d, []string{"probe"}, port.Streams{})
 		if result.Outcome != port.CallTimeout || result.Operation != "proxy readiness" || result.Started || time.Since(before) != budget.CallDuration || result.Cleanup != port.Complete {
 			t.Errorf("silent proxy exceeded call or started worker: %#v duration %s", result, time.Since(before))
+		}
+	})
+}
+
+func TestEgressProxyStopWaitIsBounded(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		runner, registry, engine, id, r := seedEgressSession(t, 9)
+		engine.EgressFault = "proxy ignores kill"
+		start := time.Now()
+		result := (Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}).Stop(t.Context(), id)
+		synctest.Wait()
+		if time.Since(start) != budget.CallDuration || len(result.Failures) != 1 || result.Failures[0].Outcome != port.Incomplete || !engine.Resources[r.Egress.Proxy.ID].Running || slices.Contains(engine.Events, "proxy copy") || slices.Contains(engine.Events, "proxy remove") {
+			t.Fatalf("unconfirmed proxy exit = %#v after %s; %v", result, time.Since(start), engine.Events)
+		}
+		engine.EgressFault = ""
+		if retry := (Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}).Stop(t.Context(), id); len(retry.Failures) != 0 || len(engine.Resources) != 0 || len(engine.Networks) != 0 || len(engine.Anchors) != 0 {
+			t.Fatal("confirmed stop did not release retained resources", retry)
+		}
+	})
+}
+
+func TestEgressCleanupSharesThirtySecondDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		runner, store, engine, ref, before := cleanupFixture(t, 3, "reserved")
+		engine.After = func(event string) {
+			switch event {
+			case "open", "proxy SIGKILL", "proxy copy", "egress-network remove":
+				time.Sleep(9 * time.Second)
+			}
+		}
+		start := time.Now()
+		result := runner.Cleanup(t.Context(), ref)
+		elapsed := time.Since(start)
+		// Finish the timed-out remove before inspecting the shared fake state.
+		time.Sleep(10 * time.Second)
+		synctest.Wait()
+		if result.Outcome != port.Incomplete || elapsed != 30*time.Second || store.Locked {
+			t.Fatalf("cleanup = %#v after %s, want incomplete at 30s with released lock", result, elapsed)
+		}
+		saved, failure := store.Codec.Decode(store.Records[ref])
+		before.Egress.Proxy.Stage = "absent"
+		if failure != "" || saved != before || len(engine.Resources) != 0 || len(engine.Networks) != 2 || len(engine.Anchors) != 1 {
+			t.Fatal("expired cleanup released recovery authority", saved, engine.Events)
+		}
+		engine.After = nil
+		if retry := runner.Cleanup(t.Context(), ref); retry.Outcome != port.Complete {
+			t.Fatal("fresh cleanup did not finish retained resources", retry)
 		}
 	})
 }

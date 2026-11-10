@@ -15,7 +15,7 @@ func TestEgressStartupKeepsDurableFailures(t *testing.T) {
 		{"internal-network short ID", port.Uncertain}, {"egress-network short ID", port.Uncertain}, {"proxy short ID", port.Uncertain},
 		{"network unavailable", port.IsolationInspection}, {"network changed", port.Refused}, {"network foreign", port.Refused},
 		{"proxy inspection unavailable", port.IsolationInspection}, {"proxy inspection foreign", port.Refused}, {"proxy inspection changed", port.Refused},
-		{"intent write", port.IntentWrite}, {"proxy intent write", port.IntentWrite}, {"internal ownership write", port.OwnershipWrite}, {"proxy ownership write", port.OwnershipWrite},
+		{"intent write", port.IntentWrite}, {"egress intent write", port.IntentWrite}, {"proxy intent write", port.IntentWrite}, {"internal ownership write", port.OwnershipWrite}, {"egress ownership write", port.OwnershipWrite}, {"proxy ownership write", port.OwnershipWrite},
 		{"network daemon changed", port.Refused}, {"proxy daemon changed", port.Refused},
 	} {
 		t.Run(tc.fault, func(t *testing.T) {
@@ -30,7 +30,7 @@ func TestEgressStartupKeepsDurableFailures(t *testing.T) {
 					engine.Inspection = "unavailable"
 				case event == "proxy create" && tc.fault == "proxy inspection foreign":
 					engine.Inspection = "different name"
-				case event == "internal-network create" && tc.fault == "internal ownership write", event == "proxy create" && tc.fault == "proxy ownership write":
+				case event == "internal-network create" && tc.fault == "internal ownership write", event == "egress-network create" && tc.fault == "egress ownership write", event == "proxy create" && tc.fault == "proxy ownership write":
 					store.Fault = "reserved-record write"
 				}
 			}
@@ -41,6 +41,9 @@ func TestEgressStartupKeepsDurableFailures(t *testing.T) {
 						store.Fault = "reserved-record write"
 					}
 					if tc.fault == "proxy intent write" && r.Egress.Network.Stage == "owned" {
+						store.Fault = "reserved-record write"
+					}
+					if tc.fault == "egress intent write" && r.Egress.Internal.Stage == "owned" {
 						store.Fault = "reserved-record write"
 					}
 					if tc.fault == "network daemon changed" && r.Schema == 3 && r.Egress.Internal.Stage == "intent" {
@@ -56,6 +59,9 @@ func TestEgressStartupKeepsDurableFailures(t *testing.T) {
 			}
 			if tc.fault == "proxy intent write" && slices.Contains(engine.Events, "proxy create") {
 				t.Error("proxy created without durable intent")
+			}
+			if tc.fault == "egress intent write" && slices.Contains(engine.Events, "egress-network create") {
+				t.Error("egress network created without durable intent")
 			}
 			if tc.fault == "proxy inspection changed" && !slices.ContainsFunc(engine.Engine.Events, func(event f.EngineEvent) bool {
 				return event.Method == "INSPECT" && event.Target == engine.ProxyID && event.Status == port.Changed

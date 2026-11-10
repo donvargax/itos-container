@@ -45,8 +45,12 @@ func TestCreateNetworkRequest(t *testing.T) {
 		if len(labels) != 5 || labels["io.itos-container.kind"] != string(kind) || labels["io.itos-container.intent"] != r.NameToken() || labels["io.itos-container.session"] != r.Anchor.Session || labels["io.itos-container.project"] != r.Project || labels["io.itos-container.fingerprint"] != r.Fingerprint {
 			t.Error("labels differ", labels)
 		}
-		if n == 0 && body["Options"].(map[string]any)["com.docker.network.bridge.gateway_mode_ipv4"] != "isolated" {
-			t.Error("missing isolated mode")
+		var wantOptions any
+		if n == 0 {
+			wantOptions = map[string]any{"com.docker.network.bridge.gateway_mode_ipv4": "isolated"}
+		}
+		if !reflect.DeepEqual(body["Options"], wantOptions) {
+			t.Errorf("%s options = %#v, want %#v", kind, body["Options"], wantOptions)
 		}
 	}
 	for _, r := range []sp.Record{rs[0], rs[2], rs[5]} {
