@@ -1678,8 +1678,8 @@ items:
   - id: T-48
     title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-47]
     kind: task
   - id: slice-31
