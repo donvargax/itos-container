@@ -933,21 +933,9 @@ items:
     title: Approval binds the egress allowlist, and any change to it needs a new approval
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-25]
     kind: slice
-    why: >
-      Was p1-egress-allowlist-approval.
-      Charter step 1: the allowlist is part of the approved settings, and the contract's AC-02
-      requires a change to network permissions to refuse startup with no self-approval. The
-      canonical approved-settings record (engine/approval/canonical, profile offline-v1) and the
-      approve presentation extend to the allowlist. Scenarios first: approve shows the exact host
-      names the worker will be able to reach and the profile that grants network. Adding, removing
-      or changing a name invalidates an existing approval, and run refuses with the change
-      explained. Reordering the same names does not, since the canonical form is a set. Offline
-      approvals keep their existing profile and identity. This slice covers records, presentation
-      and refusal only. Nothing starts a proxy yet. It follows the policy slice, which supplies the
-      validated list. Broken down from p1-egress-allowlist-proxy.
   - id: T-39
     title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
     phase: 1
