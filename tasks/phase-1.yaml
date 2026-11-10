@@ -5832,6 +5832,16 @@
     proof; it adds no product behaviour, Gherkin scenario or ID. The drafter changes only this
     ledger entry. The four LIFECYCLE-08 examples, not just the reported failing two, remain required.
 
+    The coordinator's 2026-11-10 03:10 UTC decision takes precedence over the timing hypothesis
+    below. Both this flake and T-50 end with after scenario hook failed: native anchor harness
+    cleanup HTTP 409; T-40 run 42746685311 failed both in one run. Before changing either
+    scenario's bound, investigate whether cleanup attempts to remove an anchor volume while a
+    container still uses it and whether that is their shared cause. Follow the shared anchor
+    cleanup and worker-removal ordering, distinguishing the first failure from its cleanup
+    aftermath. If a shared harness defect causes both, repair it once and record that result in
+    T-50. The readiness and diagnostic regressions below do not by themselves establish the
+    cause of the hosted flakes. Keep existing bounds until this investigation is resolved.
+
     Read features/lifecycle_native_fixture_test.go, lifecycle_native_actions_test.go,
     lifecycle_native_assertions_test.go, lifecycle_native_steps_test.go, lifecycle_probe_test.go,
     lifecycle_guard_test.go, lifecycle_harness_test.go and lifecycle_grace_test.go in full. Follow
@@ -5986,3 +5996,22 @@
             if (!diagnostic) print "TestLifecycleBarrierDiagnostics did not pass"
             exit !(ready && diagnostic)
           }'
+- id: T-50
+  type: test
+  title: "Fresh recovery after controller loss and path replacement flakes: anchor recovery exits 75 and cleanup gets HTTP 409"
+  why: >
+    2026-11-09/10, Engine shard (other): Fresh recovery preserves the anchored checkout after
+    controller loss and path replacement failed on three branches whose changes do not touch it
+    (T-47 run 42708074071, T-40 run 42731353707, slice-26 run 42731520745): step error anchor
+    recovery exit 75, expected 0; then the after-scenario hook failed with native anchor harness
+    cleanup HTTP 409. Exit 75 reads as a transient (the engine still busy with the replaced path),
+    and 409 as a container or volume still in use at cleanup. A red shard blocks each pull request
+    it lands on and sends its implementer after code it never changed. The coordinator's
+    2026-11-10 03:10 UTC decision supersedes the initial timing hypothesis: T-40 run 42746685311
+    failed this and T-49 together, both ending in the same cleanup HTTP 409. T-49 first checks
+    whether shared anchor cleanup removes a volume while a container still uses it, before
+    either task tunes a scenario bound. Distinguish the initiating failure from cleanup
+    aftermath. If shared cleanup is the cause, fix it once under T-49 and record the result
+    here; investigate a separate bound only after that shared-cause check.
+  done_when:
+    - run: go test ./features -count=1 -run '^(TestAnchorRecovery|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)'
