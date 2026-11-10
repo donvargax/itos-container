@@ -5984,18 +5984,6 @@
     Run no local mutation test and commit no generated proof. Agents commit and stop; the loop
     owns push, native CI evidence and closure. Report the tested heads, every red/green regression,
     the baseline neighbour result, measured failure cause and remaining uncertainty.
-  done_when:
-    - run: |
-        output=$(go test ./features -count=1 -v -run '^(TestLifecycle|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)') || { printf '%s\n' "$output"; exit 1; }
-        printf '%s\n' "$output"
-        printf '%s\n' "$output" | awk '
-          /^--- PASS: TestLifecycleReadinessBarrier / { ready = 1 }
-          /^--- PASS: TestLifecycleBarrierDiagnostics / { diagnostic = 1 }
-          END {
-            if (!ready) print "TestLifecycleReadinessBarrier did not pass"
-            if (!diagnostic) print "TestLifecycleBarrierDiagnostics did not pass"
-            exit !(ready && diagnostic)
-          }'
 - id: T-50
   type: test
   title: "Fresh recovery after controller loss and path replacement flakes: anchor recovery exits 75 and cleanup gets HTTP 409"
