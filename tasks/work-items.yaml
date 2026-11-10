@@ -1838,3 +1838,19 @@ items:
       proxy is outside the controller's writes, so either route the proxy's output through the
       controller (a log driver of none and the controller capturing stdout) or scrub that file at
       teardown. AC-36's hostname-marker probe moves here. Until this lands the leak is disclosed.
+  - id: p1-session-contract-coverage-flake
+    title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      slice-26, run 42738076694 (2026-11-10): the code proof failed before judging any mutant
+      (count.preparation-failed at listed-coverage: the listed test all command exited 1) because
+      Frozen image inspection must exclude implicit volumes before create (session.feature:722) row
+      #01 failed: disk: session contract subprocess failed: exit status 2, after 0.57 s. The same
+      scenario passed in that run's Tests (ubuntu-latest) job. Like T-41's overlap hook, a bound or
+      a subprocess the instrumented, slower coverage run outruns; find it and give it room through
+      the harness budget seam. A red code proof sends the item's implementer after code it never
+      changed.
