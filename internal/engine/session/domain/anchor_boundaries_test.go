@@ -141,12 +141,12 @@ func TestVerifyAnchorRequiresOwnedRecordAndFreshObservation(t *testing.T) {
 }
 
 func TestReleaseAnchorRetainsEvidenceWhenAuthorityChanges(t *testing.T) {
-	for _, name := range []string{"healthy", "worker not absent", "intent adoption unsafe", "vanished before removal", "unsafe before removal", "unsafe after removal"} {
+	for _, name := range []string{"healthy", "worker not absent", "intent adoption healthy", "intent adoption unsafe", "intent adoption write failure", "vanished before removal", "unsafe before removal", "unsafe after removal"} {
 		t.Run(name, func(t *testing.T) {
 			a := newAnchorFixture(t)
 			a.prepare(t)
 			r := a.intent.Record()
-			if name == "intent adoption unsafe" {
+			if strings.HasPrefix(name, "intent adoption ") {
 				// Independently seed recovery at the lost-allocation-reply boundary.
 				r.Anchor.Stage, r.Anchor.Created = "intent", ""
 				a.intent.Close()
@@ -159,6 +159,9 @@ func TestReleaseAnchorRetainsEvidenceWhenAuthorityChanges(t *testing.T) {
 				}
 				t.Cleanup(a.intent.Close)
 			}
+			if name == "intent adoption write failure" {
+				a.store.Fault = "reserved-record file fsync"
+			}
 			if name == "worker not absent" {
 				r.Stage = "intent"
 				if failure := a.intent.Save(r); failure != "" {
@@ -168,6 +171,12 @@ func TestReleaseAnchorRetainsEvidenceWhenAuthorityChanges(t *testing.T) {
 			before := a.intent.Record()
 			inspections := 0
 			a.engine.After = func(event string) {
+				if event == "anchor remove" && name == "intent adoption healthy" {
+					adopted := a.intent.Record().Anchor
+					if adopted.Stage != "owned" || adopted.Created != a.engine.Anchors[r.Anchor.Name].Created || a.intent.Validate() != "" {
+						t.Error("anchor removed without publishing its observed ownership", adopted)
+					}
+				}
 				if event != "anchor inspect" {
 					return
 				}
@@ -181,8 +190,10 @@ func TestReleaseAnchorRetainsEvidenceWhenAuthorityChanges(t *testing.T) {
 			}
 			want := port.Unsafe
 			switch name {
-			case "healthy":
+			case "healthy", "intent adoption healthy":
 				want = ""
+			case "intent adoption write failure":
+				want = port.OwnershipWrite
 			case "worker not absent":
 				want = port.Refused
 			case "vanished before removal":
@@ -195,10 +206,10 @@ func TestReleaseAnchorRetainsEvidenceWhenAuthorityChanges(t *testing.T) {
 				t.Fatal("failed release changed original evidence", a.intent.Record())
 			}
 			removed := slices.Contains(a.engine.Events, "anchor remove")
-			if removed != (name == "healthy" || name == "unsafe after removal") {
+			if removed != (want == "" || name == "unsafe after removal") {
 				t.Fatal("removal crossed an authority failure", a.engine.Events)
 			}
-			if name == "healthy" && (len(a.engine.Anchors) != 0 || a.intent.Record().Anchor.Stage != "absent") {
+			if want == "" && (len(a.engine.Anchors) != 0 || a.intent.Record().Anchor.Stage != "absent") {
 				t.Fatal("successful release lacks independent absence", a.intent.Record())
 			}
 		})

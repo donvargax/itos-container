@@ -3,6 +3,7 @@ package domain_test
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -78,7 +79,7 @@ func TestAnchoredStatusKeepsNoCreateProofAndInspectsAnchor(t *testing.T) {
 				if e.Resource != wantResource || e.Anchor != wantAnchor || e.Cleanup != wantCleanup || e.WorkloadExit != nil {
 					t.Fatal("worker proof and anchor observation were conflated", result)
 				}
-				if wantFailure == "" && len(result.Failures) != 0 || wantFailure != "" && !slices.Equal(result.Failures, []port.RecoveryFailure{{Session: id, Outcome: wantFailure}}) {
+				if wantFailure == "" && len(result.Failures) != 0 || wantFailure != "" && !reflect.DeepEqual(result.Failures, []port.RecoveryFailure{{Session: id, Outcome: wantFailure}}) {
 					t.Fatal("lost independent failure", result)
 				}
 				if (e.Retry == nil) != (wantCleanup == "complete") || e.StopCandidate != (wantCleanup != "complete") {

@@ -67,7 +67,7 @@ func (r Record) ValidAnchor(b Binding) bool {
 		return r.Anchor == (Anchor{})
 	}
 	a := r.Anchor
-	return r.Schema == 2 && HexID(a.Session) && a.Name == "itos-container-anchor-"+r.NameToken() &&
+	return (r.Schema == 2 || r.Schema == 3) && HexID(a.Session) && a.Name == "itos-container-anchor-"+r.NameToken() &&
 		DescriptorPath(a.Source) && a.Device == b.Checkout.Device && a.Inode == b.Checkout.Inode &&
 		a.Device != "" && a.Inode != "" && ((a.Stage == "intent" && a.Created == "") ||
 		((a.Stage == "owned" || a.Stage == "absent") && a.Created != ""))
@@ -88,7 +88,7 @@ func (r Record) anchorTransition(next Record) bool {
 				next.Stage == r.Stage && next.ContainerID == "" && next.Anchor.Stage == "intent" && next.Anchor.Created == "" &&
 				HexID(next.Anchor.Session) && next.Anchor.Name == "itos-container-anchor-"+r.NameToken() && DescriptorPath(next.Anchor.Source)
 	}
-	if next.Schema != 2 {
+	if next.Schema != r.Schema && (r.Schema != 2 || next.Schema != 3) {
 		return false
 	}
 	a, n := r.Anchor, next.Anchor
@@ -106,5 +106,5 @@ func (r Record) anchorTransition(next Record) bool {
 	if a.Stage == "intent" {
 		return n.Stage == "owned" && n.Created != "" && next.Stage == r.Stage
 	}
-	return a.Stage == "owned" && n.Stage == "absent" && (next.Stage == "absent" || next.Stage == "reserved" || next.Stage == "cancelled")
+	return next.EgressGone() && a.Stage == "owned" && n.Stage == "absent" && (next.Stage == "absent" || next.Stage == "reserved" || next.Stage == "cancelled")
 }
