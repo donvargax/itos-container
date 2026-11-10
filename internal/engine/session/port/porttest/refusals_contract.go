@@ -16,8 +16,12 @@ type RefusalLogFixture struct {
 	Report func(port.RefusalReport)
 }
 
-func RefusalLogContract(t Reporter, fixture RefusalLogFixture, input, stored []byte, report port.RefusalReport) {
+func RefusalLogContract(t Reporter, fixture RefusalLogFixture, input, stored, replacementInput, replacementStored []byte, report port.RefusalReport) {
 	t.Helper()
+	if string(input) == string(replacementInput) || string(stored) == string(replacementStored) {
+		t.Errorf("refusal log fixture needs distinguishable input and stored copies")
+		return
+	}
 	ctx := context.Background()
 	const session = "session"
 	fixture.Report(report)
@@ -57,7 +61,7 @@ func RefusalLogContract(t Reporter, fixture RefusalLogFixture, input, stored []b
 			t.Errorf("begin with %s fault: %s", fault, f)
 			return
 		}
-		_, err := copy.Write(input)
+		_, err := copy.Write(replacementInput)
 		got, f = copy.Commit()
 		copy.Close()
 		if fault == "write" && err == nil {
@@ -73,10 +77,12 @@ func RefusalLogContract(t Reporter, fixture RefusalLogFixture, input, stored []b
 		t.Errorf("replacement begin: %s", f)
 		return
 	}
-	_, _ = copy.Write(input)
-	_, f = copy.Commit()
+	if n, err := copy.Write(replacementInput); n != len(replacementInput) || err != nil {
+		t.Errorf("replacement write: %d %v", n, err)
+	}
+	got, f = copy.Commit()
 	copy.Close()
-	if f != "" || string(fixture.Read(session)) != string(stored) {
+	if f != "" || !reflect.DeepEqual(got, report) || string(fixture.Read(session)) != string(replacementStored) {
 		t.Errorf("replacement lost bytes: %s", f)
 	}
 	copy, f = fixture.Log.Begin(ctx, session)

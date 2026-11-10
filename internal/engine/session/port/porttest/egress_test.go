@@ -1,6 +1,7 @@
 package porttest
 
 import (
+	"bytes"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	"testing"
 )
@@ -20,6 +21,7 @@ func TestRefusalLogContract(t *testing.T) {
 			input = []byte("{\"schema\":1,\"seq\":1,\"time\":\"2026-11-09T12:00:00Z\",\"event\":\"ready\"}\n{\"schema\":1,\"seq\":3,\"time\":\"2026-11-09T12:00:01Z\",\"event\":\"refused\",\"reason\":\"not-listed\"}\n")
 			report = port.RefusalReport{Outcome: port.RefusalLogGap, Gaps: []port.RefusalGap{{First: 2, Last: 2}}}
 		}
-		RefusalLogContract(t, RefusalLogFixture{Log: log, Read: func(id string) []byte { return log.Copies[id] }, Fault: func(f string) { log.Fault = f }, Report: func(r port.RefusalReport) { log.Report = r }}, input, input, report)
+		replacement := bytes.ReplaceAll(input, []byte("not-listed"), []byte("port"))
+		RefusalLogContract(t, RefusalLogFixture{Log: log, Read: func(id string) []byte { return log.Copies[id] }, Fault: func(f string) { log.Fault = f }, Report: func(r port.RefusalReport) { log.Report = r }}, input, input, replacement, replacement, report)
 	}
 }
