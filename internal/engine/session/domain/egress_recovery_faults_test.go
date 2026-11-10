@@ -171,8 +171,8 @@ func TestEgressWatchRequiresConnectionAndSupportsOfflineCaller(t *testing.T) {
 	}
 	defer a.Close()
 	engine.OpenNil = true
-	if _, _, failure := runner.waitEgress(t.Context(), c, a, b, r); failure != port.Internal {
-		t.Error("nil watch connection accepted", failure)
+	if exit, exited, failure := runner.waitEgress(t.Context(), c, a, b, r); failure != port.Internal || exited || exit != 0 {
+		t.Error("nil watch connection invented a worker exit or lost its failure", exit, exited, failure)
 	}
 	engine.OpenNil = false
 	b.Egress = port.EgressGrant{}

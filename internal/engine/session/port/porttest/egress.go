@@ -23,6 +23,9 @@ func (c *runConnection) CreateNetwork(ctx context.Context, r port.Record, k port
 	if c.run.EgressFault == "internal-network exact" && k == port.InternalNetwork {
 		o.Gateway = true
 	}
+	if c.run.EgressFault == string(k)+" occupied at create" {
+		o.Endpoints, o.ContainerID = 1, strings.Repeat("f", 64)
+	}
 	c.engine.resourcesMu.Lock()
 	if c.run.Networks == nil {
 		c.run.Networks = map[string]port.NetworkObservation{}
@@ -62,6 +65,9 @@ func (c *runConnection) InspectNetwork(ctx context.Context, target string) (port
 			if c.run.EgressFault == "foreign endpoint" && o.Endpoints > 0 {
 				o.Endpoints = 2
 				o.ContainerID = ""
+			}
+			if c.run.EgressFault == o.Kind+" foreign single endpoint" && o.Endpoints > 0 {
+				o.Endpoints, o.ContainerID = 1, strings.Repeat("f", 64)
 			}
 			return o, port.Observed
 		}

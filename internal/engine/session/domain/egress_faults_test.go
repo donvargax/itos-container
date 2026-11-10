@@ -71,6 +71,7 @@ func TestEgressRechecksNetworkAndProxyAfterWorkerCreate(t *testing.T) {
 		want  port.Outcome
 	}{
 		{"network unavailable", port.IsolationInspection}, {"network changed", port.Refused}, {"network foreign", port.Refused}, {"gateway", port.IsolationUnverified}, {"foreign endpoint", port.IsolationUnverified}, {"proxy stopped", port.ProxyFailed},
+		{"internal-network foreign single endpoint", port.IsolationUnverified}, {"egress-network foreign single endpoint", port.IsolationUnverified},
 	} {
 		t.Run(tc.fault, func(t *testing.T) {
 			runner, _, engine, id := egressSessionFixture(t)

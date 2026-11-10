@@ -100,12 +100,16 @@ func TestEgressLaunchFailuresStartNoWorker(t *testing.T) {
 		{"internal-network create", "network creation", port.Uncertain, nil, 0},
 		{"egress-network create", "network creation", port.Uncertain, nil, 1},
 		{"internal-network exact", "network inspection", port.IsolationUnverified, []string{"internal-network remove", "anchor remove"}, -1},
+		{"internal-network occupied at create", "network inspection", port.IsolationUnverified, []string{"internal-network remove", "anchor remove"}, -1},
+		{"egress-network occupied at create", "network inspection", port.IsolationUnverified, []string{"egress-network remove", "internal-network remove", "anchor remove"}, -1},
 		{"proxy create", "proxy creation", port.Uncertain, nil, 2},
 		{"proxy verify", "proxy verification", port.IsolationUnverified, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
 		{"proxy start", "proxy start", port.ExecutionFailed, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
 		{"proxy ready", "proxy readiness", port.ProxyFailed, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
 		{"proxy stopped", "proxy inspection", port.ProxyFailed, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
 		{"foreign endpoint", "network inspection", port.IsolationUnverified, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
+		{"internal-network foreign single endpoint", "network inspection", port.IsolationUnverified, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
+		{"egress-network foreign single endpoint", "network inspection", port.IsolationUnverified, []string{"proxy remove", "egress-network remove", "internal-network remove", "anchor remove"}, -1},
 	} {
 		t.Run(tc.fault, func(t *testing.T) {
 			runner, registry, engine, id := egressSessionFixture(t)
@@ -125,6 +129,17 @@ func TestEgressLaunchFailuresStartNoWorker(t *testing.T) {
 			before, decode := registry.Store.Codec.Decode(registry.Store.Records[registry.Records[id].Intent])
 			if decode != "" {
 				t.Fatal(decode)
+			}
+			if strings.HasSuffix(tc.fault, " occupied at create") {
+				if slices.Contains(engine.Events, "proxy create") || slices.Contains(engine.Events, "create") {
+					t.Error("occupied new network permitted later resource creation", engine.Events)
+				}
+				// The foreign endpoint leaves before recovery. Its presence must
+				// still have stopped launch after recording the owned network ID.
+				for key, o := range engine.Networks {
+					o.Endpoints, o.ContainerID = 0, ""
+					engine.Networks[key] = o
+				}
 			}
 			workerPresentAtRemoval := false
 			engine.After = func(event string) {
