@@ -45,12 +45,14 @@ func inspectEgressResource(ctx context.Context, i port.Intent, c port.RunConnect
 	}
 	var status port.Inspection
 	var owned bool
+	knownState := true
 	if index == 2 {
 		o, s := c.Inspect(ctx, target)
 		status = s
 		id = o.ID
 		running = o.Running
-		owned = r.OwnsProxy(o, i.Binding()) && o.StatePresent && ((o.Status == "running" && o.Running) || (o.Status == "created" && !o.Running && !o.Started && o.PID == 0) || (o.Status == "exited" && !o.Running && o.PID == 0))
+		owned = r.OwnsProxy(o, i.Binding())
+		knownState = o.StatePresent && ((o.Status == "running" && o.Running) || (o.Status == "created" && !o.Running && !o.Started && o.PID == 0) || (o.Status == "exited" && !o.Running && o.PID == 0))
 	} else {
 		o, s := c.InspectNetwork(ctx, target)
 		status = s
@@ -72,6 +74,11 @@ func inspectEgressResource(ctx context.Context, i port.Intent, c port.RunConnect
 	}
 	if v.Stage == "absent" || !owned {
 		return "", false, false, port.Refused
+	}
+	// The daemon can still be removing our proxy after a bounded remove call.
+	// An unexpected state retains ownership and a retryable cleanup failure.
+	if !knownState {
+		return id, true, running, port.Incomplete
 	}
 	return id, true, running, ""
 }
