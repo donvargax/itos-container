@@ -33,7 +33,7 @@ func CredentialFixture() *CredentialFiles {
 // below it and has no I/O or dependency on a production domain or adapter.
 func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Credential, port.CredentialInput) port.CredentialResult) {
 	t.Helper()
-	input := port.CredentialInput{Root: "/checkout", State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}
+	input := port.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000}
 	grants := []policy.Credential{{Kind: "claude-token", Source: "/vault/token"}}
 	type testCase struct {
 		name, rule string
@@ -127,6 +127,16 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 		{"changed mapping", "credential.unavailable", func(f *CredentialFiles) { f.MountsText[1] = "1 0 0:1 /changed / rw - tmpfs tmpfs rw\n" }},
 		{"unrelated mount churn", "", func(f *CredentialFiles) { f.MountsText[1] += "2 1 0:2 / /unrelated rw - tmpfs tmpfs rw\n" }},
 	}
+	for _, elapsed := range []time.Duration{10*time.Second - time.Nanosecond, 10 * time.Second, 10*time.Second + time.Nanosecond} {
+		rule := ""
+		if elapsed >= 10*time.Second {
+			rule = "credential.unavailable"
+		}
+		cases = append(cases, testCase{fmt.Sprintf("final source stat at %s", elapsed), rule, func(f *CredentialFiles) {
+			n := f.Nodes["/vault/token"].CredentialNode
+			f.StatSequence = map[string][]CredentialStat{"/vault/token": {{Node: n, OK: true}, {Node: n, OK: true}, {Node: n, OK: true, Elapsed: elapsed}}}
+		}})
+	}
 	for _, activity := range []string{"approval publication", "intent publication", "snapshot publication", "session record cleanup", "publication and disappearing temp entries"} {
 		cases = append(cases, testCase{activity, "", func(f *CredentialFiles) { f.Activity = activity }})
 	}
@@ -165,6 +175,7 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 	if got := observe(f, nil, input); len(got.Issues) != 0 || len(f.Calls) != 0 {
 		t.Errorf("no grants observed sources: %#v %v", got, f.Calls)
 	}
+	credentialAccountStateContract(t, observe, grants, input)
 	credentialTopologyContract(t, observe, grants, input)
 	for _, over := range []bool{false, true} {
 		f := CredentialFixture()
@@ -289,6 +300,61 @@ func credentialTopologyContract(t Reporter, observe func(*CredentialFiles, []pol
 			if over && !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}) {
 				t.Errorf("%s overflow: %#v", limit, got)
 			}
+		}
+	}
+}
+
+func credentialAccountStateContract(t Reporter, observe func(*CredentialFiles, []policy.Credential, port.CredentialInput) port.CredentialResult, grants []policy.Credential, input port.CredentialInput) {
+	input.AccountState = "/fixed"
+	for _, layout := range []string{"absent", "created", "unsafe", "replaced", "direct", "alias", "inverse", "covered"} {
+		f := CredentialFixture()
+		requested := grants
+		fixed := f.Nodes["/state"]
+		fixed.Path, fixed.Inode = "/fixed", 90
+		if layout != "absent" {
+			f.Nodes[fixed.Path] = fixed
+		}
+		rule := ""
+		switch layout {
+		case "created":
+			f.FinalNodes[fixed.Path] = fixed
+			delete(f.Nodes, fixed.Path)
+		case "unsafe":
+			fixed.Mode = 0040777
+			f.Nodes[fixed.Path] = fixed
+			rule = "state.unsafe"
+		case "replaced":
+			fixed.Inode++
+			f.FinalNodes[fixed.Path] = fixed
+			rule = "state.path"
+		case "direct":
+			n := f.Nodes["/vault/token"]
+			n.Path = "/fixed/token"
+			f.Nodes[n.Path] = n
+			requested = []policy.Credential{{Kind: "claude-token", Source: n.Path}}
+			rule = "credential.location"
+		case "alias", "inverse", "covered":
+			layoutName := "descendant"
+			if layout == "inverse" {
+				layoutName = "inverse file"
+			}
+			if layout == "covered" {
+				layoutName = "covered root"
+			}
+			credentialAlias(f, "/fixed", layoutName)
+			rule = "credential.location"
+		}
+		got := observe(f, requested, input)
+		var want []port.CredentialIssue
+		if rule != "" {
+			index := 0
+			if strings.HasPrefix(rule, "state.") {
+				index = -1
+			}
+			want = []port.CredentialIssue{{Rule: rule, Index: index}}
+		}
+		if !reflect.DeepEqual(got.Issues, want) {
+			t.Errorf("fixed account state %s: %#v want %#v", layout, got.Issues, want)
 		}
 	}
 }

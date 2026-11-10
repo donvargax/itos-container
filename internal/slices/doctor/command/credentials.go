@@ -88,9 +88,11 @@ func credentialProblem(issue readiness.CredentialIssue) readiness.Problem {
 	case "state.location", "state.path", "state.unsafe", "state.unavailable":
 		return approval.Problems(approval.View{Inspection: readiness.Result{Ready: true}, Failure: approval.Failure(issue.Rule)})[0]
 	case "checkout.unavailable":
-		return readiness.Diagnostic(readiness.Issue{Kind: readiness.CheckoutUnavailable})
+		return readiness.Diagnostic(readiness.Issue{Kind: readiness.CheckoutUnavailable, Subject: issue.Subject})
+	case "checkout.path":
+		return readiness.Diagnostic(readiness.Issue{Kind: readiness.CheckoutPath, Subject: issue.Subject})
 	case "checkout.root":
-		return readiness.Diagnostic(readiness.Issue{Kind: readiness.CheckoutRoot})
+		return readiness.Diagnostic(readiness.Issue{Kind: readiness.CheckoutRoot, Subject: issue.Subject})
 	case "host.unsupported":
 		return readiness.Diagnostic(readiness.Issue{Kind: readiness.HostUnsupported})
 	default:

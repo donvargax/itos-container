@@ -154,9 +154,10 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		} else {
 			state = ""
 		}
-		c.Doctor.Credentials = readiness.Credentials{FS: &readinessdisk.CredentialFiles{}, Input: readinessport.CredentialInput{
+
+		c.Doctor.Credentials = inspection.Credentials{FS: &readinessdisk.CredentialFiles{}, Input: readinessport.CredentialInput{
 			Root: root, State: state, OS: runtime.GOOS, Architecture: runtime.GOARCH, UID: int64(os.Geteuid()),
-		}}
+		}, Account: &approvalhost.Process{}}
 		return c.Doctor.Run(ui)
 	case "approve":
 		service, presentation := approvalServices(in, stdout, stderr)

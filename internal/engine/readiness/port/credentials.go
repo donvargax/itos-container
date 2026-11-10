@@ -57,6 +57,8 @@ type CredentialFS interface {
 	Close(CredentialHandle)
 }
 
+// AccountState is the fixed account-home control tree, independent of State.
+// Both boundaries are required whenever grants are inspected.
 type CredentialInput struct {
 	Root, State, AccountState, OS, Architecture string
 	UID                                         int64
@@ -65,8 +67,9 @@ type CredentialInput struct {
 // CredentialIssue locates one first failure at the request's written index.
 // Negative indices identify a shared boundary refusal rather than a source.
 type CredentialIssue struct {
-	Rule  string
-	Index int
+	Rule    string
+	Index   int
+	Subject string
 }
 
 type CredentialResult struct{ Issues []CredentialIssue }

@@ -493,15 +493,19 @@ root- or host-owned ancestors, no symlink, a host-owned regular file with no gro
 permission bits, exactly one link, and 1..65536 bytes. Owner read permission is not
 required. Two grants cannot name one inode. Sources and their ancestors must be outside
 checkout and protected state by identity and filesystem coordinates, not pathname prefix.
+Protected roots include both the selected state location and the fixed
+`<account home>/.local/state/itos-container` control tree. Account home comes from the
+effective UID's local account record; `HOME` and `XDG_STATE_HOME` cannot move that anchor.
 The mode never reads, hashes or logs contents and creates no state or approval.
 
 The shared readiness observer inventories checkout metadata, including hidden, Git,
 ignored and mounted entries, in batches of 128, at most 100000 entries and directory
 depth 64. It never enumerates unrelated state records. Instead, two complete mount tables
-reserve the state root's filesystem subtree and every mount rooted below it, including
+reserve each protected root's filesystem subtree and every mount rooted below it, including
 covered backing trees. Each table is bounded to 8 MiB, 16384 rows and 65535 bytes per line;
 descriptor paths to 4096 bytes, coordinates to 8192, and fdinfo to 64 KiB. All observations
 share a ten-second monotonic deadline, which cannot preempt a blocked kernel call.
+A final source stat returning at or after that deadline is refused.
 Incomplete or changed required evidence refuses. An absent state root is not created;
 safe concurrent creation at its reserved coordinate is accepted after revalidation.
 
@@ -509,7 +513,9 @@ Source problems are located at `/credentials/<written-index>/source`. Missing or
 unavailable metadata uses exit 3; symlink, ancestor, location, regular, owner, permissions,
 links, size and duplicate refusals use exit 1, under the `credential.` prefix. Only the
 first failure per source is reported, in that order; the highest exit wins. Requested
-grants remain visible. Existing boundary refusals retain their shared rules.
+grants remain visible. Existing boundary refusals retain their shared rules: checkout
+ancestors have no credential-source owner or permission requirement, symlinks report
+`doctor.checkout.path`, and checkout problems retain the requested root as their path.
 
 These observations neither grant access nor establish continuous protection from trusted
 host changes. [Decision 0026](decisions/0026-credential-source-inspection.md) defines the

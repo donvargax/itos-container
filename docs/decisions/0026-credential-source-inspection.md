@@ -89,7 +89,12 @@ link-count or readiness checks.
 
 ### State exclusion without enumerating records
 
-The managed `itos-container` state root reserves filesystem subtrees. Observe their
+The selected `itos-container` state root and the fixed
+`<account home>/.local/state/itos-container` control-state root both reserve filesystem
+subtrees. The latter uses the effective UID's account record, as the approval engine
+does; neither `HOME` nor `XDG_STATE_HOME` moves it. Apply the following observation to
+both roots with one checkout inventory and one shared deadline. This does not read
+the coordination catalog or enumerate other enrolled locations. Observe their
 mount mappings, not their contents. The following is an algorithm to implement and
 prove, not a claim of an atomic kernel snapshot:
 
@@ -117,6 +122,9 @@ prove, not a claim of an atomic kernel snapshot:
    descend through a file). Include nested mounts, other devices and repeated bind
    roots; compare components, never string prefixes. Keep covered backing subtrees
    reserved too: an overmount does not make the underlying state a credential store.
+   Project the state path through every covering mount row as well, including the
+   parent of a mount covering the state root itself or an ancestor. This reserves
+   hidden backing coordinates even when the held state descriptor sees another device.
    Thus outward state-descendant/file binds match the base subtree; an outside
    directory/file bound into state matches an added subtree. Nothing enumerates,
    stats or reads ordinary state descendants. An unreadable unrelated record
@@ -144,8 +152,11 @@ Read each mount table at most once per observation: at most 8 MiB, 16,384 rows a
 65,535 bytes per line excluding the newline. Require EOF and a final complete line;
 probe beyond inclusive bounds to distinguish a complete input from truncation.
 Each decoded root/mountpoint and descriptor pathname is at most 4096 bytes; a joined
-coordinate is at most 8192. Cap each fdinfo at 64 KiB with EOF and require one valid
-mount ID. Reject malformed rows, duplicate mount IDs, invalid/non-absolute components,
+coordinate is at most 8192 by construction: the decoded root is at most 4096,
+its separator is one byte, and the relative visible suffix is at most 4095. The same
+bound holds for an absent root's suffix, whose complete visible path is bounded to
+4096. There is no independent coordinate-overflow input after those path checks.
+Cap each fdinfo at 64 KiB with EOF and require one valid mount ID. Reject malformed rows, duplicate mount IDs, invalid/non-absolute components,
 missing descriptor rows, device mismatches and missing observations. Oversize or
 unavailable evidence yields `credential.unavailable`, never a shortened table.
 Unknown optional mount fields remain allowed. The limits are on topology, paths
@@ -250,8 +261,9 @@ test needs a host mount or engine. The data-access observer and synthetic-marker
 cases still require inspection to read no source contents. Privileged native mount
 evidence remains CI-only downstream work, not a claim of these simulated contracts.
 
-All credential scenarios remain `@wip`. Their implementing agent supplies missing step
-definitions in a red-first test commit, then obtains assertion-failing and passing
-evidence. This spec amendment supplies no executed-red result. The neighboring policy,
+The credential scenarios are implemented with synthetic fake/disk and CLI evidence.
+The initial specification supplied no executed-red result; implementation and review
+regressions supply assertion-failing then passing runs. Native bind-mount proof remains
+downstream CI work. The neighboring policy,
 parsing, manifest, doctor, approval, run and control-state scenarios remain relevant;
 slice-25 supplies version 2 and the manifest-policy/recorder steps this spec consumes.

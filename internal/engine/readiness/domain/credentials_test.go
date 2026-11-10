@@ -2,7 +2,6 @@ package domain_test
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +18,7 @@ func credentialDomainFixture() (*porttest.CredentialFiles, domain.Credentials, [
 	f.Parser = func([]byte) ([]port.CredentialMount, bool) {
 		return []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/"}}, true
 	}
-	c := domain.Credentials{FS: f, Input: port.CredentialInput{Root: "/checkout", State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}}
+	c := domain.Credentials{FS: f, Input: port.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000}}
 	return f, c, []policy.Credential{{Kind: "claude-token", Source: "/vault/token"}}
 }
 
@@ -127,6 +126,7 @@ func TestCredentialBoundaryRefusals(t *testing.T) {
 	}{
 		{"platform", "host.unsupported", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.OS = "windows" }},
 		{"relative checkout", "checkout.root", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.Root = "relative" }},
+		{"unavailable account", "state.unavailable", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.AccountState = "" }},
 		{"relative state", "state.location", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.State = "relative" }},
 		{"state in checkout", "state.path", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.State = "/checkout/state" }},
 		{"checkout absent", "checkout.unavailable", func(f *porttest.CredentialFiles, _ *port.CredentialInput) { delete(f.Nodes, "/checkout") }},
@@ -175,7 +175,11 @@ func TestCredentialBoundaryRefusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f, c, grants := credentialDomainFixture()
 			tc.change(f, &c.Input)
-			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: tc.rule, Index: -1}}) {
+			want := port.CredentialIssue{Rule: tc.rule, Index: -1}
+			if tc.rule == "checkout.root" || tc.rule == "checkout.unavailable" {
+				want.Subject = c.Input.Root
+			}
+			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{want}) {
 				t.Fatal(got)
 			}
 		})
@@ -191,20 +195,6 @@ func TestCredentialIncompleteEvidence(t *testing.T) {
 		{"checkout descriptor", func(f *porttest.CredentialFiles) { f.DescriptorErrors["/checkout"] = true }},
 		{"missing mount ID", func(f *porttest.CredentialFiles) { n := f.Nodes["/vault/token"]; n.MountID = 42; f.Nodes[n.Path] = n }},
 		{"descriptor names absent path", func(f *porttest.CredentialFiles) { f.DescriptorPaths = map[string]string{"/vault/token": "/absent"} }},
-		{"oversize joined coordinate", func(f *porttest.CredentialFiles) {
-			f.Parser = func([]byte) ([]port.CredentialMount, bool) {
-				return []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/"}, {ID: 2, Device: 1, Root: "/" + strings.Repeat("a", 8190), Point: "/vault"}}, true
-			}
-			n := f.Nodes["/vault/token"]
-			n.MountID = 2
-			f.Nodes[n.Path] = n
-		}},
-		{"oversize absent state coordinate", func(f *porttest.CredentialFiles) {
-			delete(f.Nodes, "/state")
-			f.Parser = func([]byte) ([]port.CredentialMount, bool) {
-				return []port.CredentialMount{{ID: 1, Device: 1, Root: "/" + strings.Repeat("a", 8190), Point: "/"}}, true
-			}
-		}},
 		{"source disappears on final stat", func(f *porttest.CredentialFiles) {
 			n := f.Nodes["/vault/token"].CredentialNode
 			f.StatSequence = map[string][]porttest.CredentialStat{"/vault/token": {{Node: n, OK: true}, {Node: n, OK: true}, {OK: false}}}

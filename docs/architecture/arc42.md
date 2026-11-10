@@ -276,8 +276,10 @@ extends admission and revalidation without adding link counts to the fingerprint
 
 Slice-29 reuses pinned traversal for the checkout only, without imposing unrelated
 checkout readiness checks on credentials-only mode. State exclusion instead maps
-descriptor paths through mount IDs and filesystem roots, reserving the state root
-and every descendant mount's backing subtree. No state record is enumerated or read.
+descriptor paths through mount IDs and filesystem roots, reserving both the selected
+state root and the fixed account-home control-state root, plus every descendant
+mount's backing subtree and covered backing coordinates. No state record is enumerated
+or read.
 Two complete bounded mount observations and pin/mapping rechecks detect observed
 relevant changes; unrelated record writes do not affect the exclusion. Extra hard
 links fail source metadata checks. The I/O-free fake and disk adapter share the
@@ -926,8 +928,8 @@ identities with protected roots and every checkout entry, crossing mounts withou
 symlink or file-data reads. Checkout limits remain batches of 128, 100,000 entries
 and depth 64. It never enumerates shared state. Instead, a descriptor's mount ID
 selects the kernel mount row; its decoded filesystem root plus relative descriptor
-path gives a coordinate keyed by device. The state root's coordinate subtree and
-all mount roots at/below its visible path are reserved, including other devices,
+path gives a coordinate keyed by device. Each protected state root's coordinate
+subtree and all mount roots at/below its visible path are reserved, including other devices,
 file mounts and covered backing subtrees. Component comparisons detect outward and
 inward aliases without rejecting distinct siblings just for sharing a device.
 
@@ -1115,7 +1117,7 @@ The table maps required evidence to the current gates and the work still absent.
 | Strict policy and restricted manifest | Live slice-1/5 [policy](../../features/policy.feature) and [parsing](../../features/parsing.feature) cases and shared contracts; live slice-2 manifest cases and separate slice-6 manifest/metadata bounds evidence; AC-01, AC-39/40/41 offline scope. | Policy validation and bounds implemented; manifest validation implemented. AC-39's later guard/proxy wording adds none here. |
 | Explicit matching approval and frozen settings | Slice-4 cases and shared contracts; T-11 missing/mismatched/superseded and frozen-settings cases; AC-02/03/41. | Implemented with local temporary-state scenarios and shared store contracts. Durable session publication and worker isolation remain later proof. |
 | Inspection executes no checkout code | Policy sentinel/snapshot/connection-recorder cases are live; broader doctor/approve need synthetic markers and positive controls; AC-04 and T-11 strict-input cases. | Doctor/approve marker and API-journal scenarios exercise inspection without checkout execution or image acquisition. Init and lifecycle hooks remain deferred. |
-| Credential metadata and protected-tree separation | Slice-29's [credential scenarios](../../features/credentials-policy.feature): test-only alias assembly (ID-CREDENTIALS-29), native incomplete-checkout refusal (30), no-grant observation control (31), concurrent writes (32), 100,001 retained entries (33), namespace evidence refusals (34), unreadable unrelated state accepted (35), data-access and marker controls; shared fake/disk contract. | **Specified, all `@wip`.** Root, descendant and single-file bind aliases in both directions must refuse alongside independent-source positive controls. Simulated topology is not native bind-mount or engine evidence. No source contents, approval or delivery are supplied by this increment. |
+| Credential metadata and protected-tree separation | Slice-29's [credential scenarios](../../features/credentials-policy.feature): test-only alias assembly (ID-CREDENTIALS-29), native incomplete-checkout refusal (30), no-grant observation control (31), concurrent writes (32), 100,001 retained entries (33), namespace evidence refusals (34), unreadable unrelated state accepted (35), data-access and marker controls; shared fake/disk contract. | **Implemented with synthetic fake/disk and CLI evidence.** Root, descendant and single-file bind aliases in both directions refuse alongside independent-source positive controls. Simulated topology is not native bind-mount or engine evidence. No source contents, approval or delivery are supplied by this increment. |
 | Safe checkout, local engine and approved cached image | Slice-3 contracts and CI observations; AC-05/38; T-11 identity, cached-image and hidden-metadata cases. | Readiness is implemented; absent images refuse without acquisition. Synthetic Engine API evidence does not establish runtime isolation. |
 | Host isolation, mount and non-root writable boundary | Independent CI probes for allowed writes and denied host/root/privilege access; AC-07/08/25 and T-11 non-root case. | No runtime proof. Protected online guard material from AC-08 remains deferred. |
 | Offline isolation from first instruction and through loss | Trusted controls plus worker IPv4/IPv6, gateway/private-route and DNS denial; AC-10/11/37 offline portions and T-11 loss cases. | NetworkMode none and T-16's tier are settled; slice-14/12 runtime proof remains absent. Flags and broken controls cannot pass it. |

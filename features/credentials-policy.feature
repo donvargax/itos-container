@@ -546,7 +546,7 @@ Feature: Named credential requests and read-only source inspection
   # discarding observation errors in a file-only mode cannot pass the zero counts.
   # Today each row fails at the first exit-0 assertion: version 3 is unsupported.
   # The implementer adds these steps in the red-first test commit, not this spec.
-  @slice-29 @ID-CREDENTIALS-36
+  @slice-29 @ID-CREDENTIALS-36 @linux
   Scenario Outline: file-only scopes never observe requested credential sources or exposure
     Given a credential observation fixture for "<boundary>" with "<layout>"
     And credential observation includes a valid selected manifest
@@ -832,7 +832,7 @@ Feature: Named credential requests and read-only source inspection
   # Reuse the compiled contract binary and its per-scenario coverage handling.
   # The first invocation proves that the new mode accepts distinct identities;
   # the second must reject the alias with the exact located diagnostic.
-  @slice-29 @ID-CREDENTIALS-29
+  @slice-29 @ID-CREDENTIALS-29 @linux
   Scenario Outline: metadata inspection refuses bind aliases of protected descendants and files
     Given a credential observation fixture for "<boundary>" with "distinct outside file"
     When the credential observation contract runs in JSON mode
@@ -916,7 +916,7 @@ Feature: Named credential requests and read-only source inspection
   # The fake schedules raw metadata changes; the shared disk contract performs
   # these same writes in isolated temporary state through adapter-local barriers.
   # Do not require unchanged unrelated records or modify the production binary.
-  @slice-29 @ID-CREDENTIALS-32
+  @slice-29 @ID-CREDENTIALS-32 @linux
   Scenario Outline: another project's state publications and cleanup do not block inspection or hide aliases
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And credential observation schedules unrelated state activity "<activity>"
@@ -953,7 +953,7 @@ Feature: Named credential requests and read-only source inspection
   # verifies the setup count and zero product visits. Run against fake and disk
   # observation seams; do not allocate a 100001-entry object graph or capture its
   # contents for each row. This is observation-contract, not native mount proof.
-  @slice-29 @ID-CREDENTIALS-33
+  @slice-29 @ID-CREDENTIALS-33 @linux
   Scenario Outline: retained unrelated state history does not consume inspection budgets or hide aliases
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the credential observation state retains 100001 unrelated entries
@@ -987,7 +987,7 @@ Feature: Named credential requests and read-only source inspection
   # "source mount mapping changed" changes its root without making a known
   # location match. Complete-data controls include exactly every topology bound,
   # safe first state creation and unrelated mount churn in the shared contract.
-  @slice-29 @ID-CREDENTIALS-34
+  @slice-29 @ID-CREDENTIALS-34 @linux
   Scenario Outline: incomplete or inconsistent namespace evidence cannot establish state exclusion
     Given a credential observation fixture for "protected state" with "distinct outside file"
     When the credential observation contract runs in JSON mode
@@ -1203,7 +1203,7 @@ Feature: Named credential requests and read-only source inspection
   # directory-entry reads, descendant walks and mount-table reads are not.
   # Export observations through test-only output separate from the
   # product JSON, and run the same cases against the fake/disk observation contract.
-  @slice-29 @ID-CREDENTIALS-31
+  @slice-29 @ID-CREDENTIALS-31 @linux
   Scenario Outline: no-grant inspection makes no source checkout scan or state projection calls
     Given a credential observation fixture for "<boundary>" with "<layout>"
     When the credential observation contract runs in JSON mode
@@ -1252,7 +1252,7 @@ Feature: Named credential requests and read-only source inspection
 
   # Review regressions use only raw topology and metadata. The covered root is
   # a different filesystem; the alias still reaches its hidden backing tree.
-  @slice-29 @ID-CREDENTIALS-37 @linux @wip
+  @slice-29 @ID-CREDENTIALS-37 @linux
   Scenario: an overmounted state root still reserves its backing subtree
     Given a credential observation fixture for "protected state" with "covered state root backing directory bound outside"
     When the credential observation contract runs in JSON mode
@@ -1261,7 +1261,7 @@ Feature: Named credential requests and read-only source inspection
       | credential.location | /credentials/0/source | 1    |
     And it exits with code 1
 
-  @slice-29 @ID-CREDENTIALS-38 @linux @wip
+  @slice-29 @ID-CREDENTIALS-38 @linux
   Scenario Outline: the final source stat must complete before the observation deadline
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the final credential stat completes at <elapsed> nanoseconds
@@ -1276,7 +1276,7 @@ Feature: Named credential requests and read-only source inspection
       | 10000000000 |
       | 10000000001 |
 
-  @slice-29 @ID-CREDENTIALS-39 @linux @wip
+  @slice-29 @ID-CREDENTIALS-39 @linux
   Scenario Outline: credential inspection uses checkout ancestor permissions from the shared checkout pin
     Given a credential observation fixture for "checkout" with "distinct outside file"
     And the credential checkout parent is "<layout>"
@@ -1291,7 +1291,7 @@ Feature: Named credential requests and read-only source inspection
       | group writable |
       | foreign owned  |
 
-  @slice-29 @ID-CREDENTIALS-40 @linux @wip
+  @slice-29 @ID-CREDENTIALS-40 @linux
   Scenario Outline: credential checkout boundary refusals keep their shared diagnostic and subject
     Given a credential observation fixture for "checkout" with "distinct outside file"
     And the credential checkout parent is "<layout>"
@@ -1300,11 +1300,11 @@ Feature: Named credential requests and read-only source inspection
     And it exits with code <exit>
 
     Examples:
-      | layout  | rule                 | exit |
-      | symlink | checkout.path        | 1    |
-      | missing | checkout.unavailable | 3    |
+      | layout  | rule                        | exit |
+      | symlink | doctor.checkout.path        | 1    |
+      | missing | doctor.checkout.unavailable | 3    |
 
-  @slice-29 @ID-CREDENTIALS-41 @linux @wip
+  @slice-29 @ID-CREDENTIALS-41 @linux
   Scenario: a separately selected state location cannot expose the fixed account control state
     Given a credential observation fixture for "protected state" with "fixed account state file"
     When the credential observation contract runs in JSON mode
@@ -1313,7 +1313,7 @@ Feature: Named credential requests and read-only source inspection
       | credential.location | /credentials/0/source | 1    |
     And it exits with code 1
 
-  @slice-29 @ID-CREDENTIALS-42 @wip
+  @slice-29 @ID-CREDENTIALS-42
   Scenario: doctor help names the credential source refusal exit codes
     When itos-container runs with "doctor --help"
     Then it exits with code 0

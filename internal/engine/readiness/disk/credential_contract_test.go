@@ -43,6 +43,9 @@ func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) *Crede
 	t.Helper()
 	root := t.TempDir()
 	byFD := map[int]port.CredentialHandle{}
+	// Open supplies the initial metadata; only subsequent Stat calls advance
+	// the shared final-stat schedule, just as they do for the in-memory fake.
+	opening := map[int]port.CredentialNode{}
 	backing := func(n port.CredentialNode) string {
 		key := n.Inode
 		if key >= 10000 {
@@ -107,10 +110,18 @@ func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) *Crede
 		fd, err := credentialOpen(-100, backing(n))
 		if err == nil {
 			byFD[fd] = h
+			opening[fd] = n
 		}
 		return fd, err
 	}
-	ops.metadata = func(file *os.File, _ os.FileInfo) (port.CredentialNode, bool) { return raw.Stat(byFD[int(file.Fd())]) }
+	ops.metadata = func(file *os.File, _ os.FileInfo) (port.CredentialNode, bool) {
+		fd := int(file.Fd())
+		if n, ok := opening[fd]; ok {
+			delete(opening, fd)
+			return n, true
+		}
+		return raw.Stat(byFD[fd])
+	}
 	ops.readlink = func(path string, buf []byte) (int, error) {
 		d, ok := raw.Descriptor(byFD[fdFrom(path, "/proc/self/fd/")])
 		if !ok {

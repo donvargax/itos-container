@@ -22,7 +22,7 @@ func TestCredentialDiagnosticEnvelope(t *testing.T) {
 			t.Fatal(p)
 		}
 	}
-	for rule, exit := range map[string]int{"state.location": 2, "state.path": 1, "state.unsafe": 1, "state.unavailable": 3, "checkout.unavailable": 3, "checkout.root": 2, "host.unsupported": 1, "unknown": 70} {
+	for rule, exit := range map[string]int{"state.location": 2, "state.path": 1, "state.unsafe": 1, "state.unavailable": 3, "checkout.unavailable": 3, "checkout.root": 2, "checkout.path": 1, "host.unsupported": 1, "unknown": 70} {
 		p := credentialProblem(readiness.CredentialIssue{Rule: rule, Index: -1})
 		want := rule
 		if strings.HasPrefix(rule, "state.") {
@@ -60,5 +60,20 @@ func TestCredentialPresentationRetainsSortedRequestsOnFailure(t *testing.T) {
 	errout.Reset()
 	if code := presentCredentials(ui, requests, result, false); code != 3 || !strings.Contains(out.String(), `/a\u0080`) || !strings.Contains(out.String(), "Credential contents, manifest, engine and approval were not checked") {
 		t.Fatalf("%d %s", code, out.String())
+	}
+}
+
+func TestCredentialCheckoutDiagnosticRetainsSubject(t *testing.T) {
+	for _, rule := range []string{"checkout.path", "checkout.root", "checkout.unavailable"} {
+		var out, errout bytes.Buffer
+		result := readiness.CredentialResult{Issues: []readiness.CredentialIssue{{Rule: rule, Index: -1, Subject: "/projects/checkout"}}}
+		p := credentialProblem(result.Issues[0])
+		if p.Path == nil || *p.Path != "/projects/checkout" {
+			t.Fatal(p)
+		}
+		presentCredentials(&cli.UI{Stdout: &out, Stderr: &errout}, nil, result, false)
+		if !strings.Contains(errout.String(), "itos-container: /projects/checkout: ") {
+			t.Fatal(errout.String())
+		}
 	}
 }

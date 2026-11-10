@@ -8,6 +8,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/donvargax/itos-container/internal/cli"
+	approvalfake "github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
 	"github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
 	manifestfake "github.com/donvargax/itos-container/internal/engine/manifest/port/porttest"
 	"github.com/donvargax/itos-container/internal/engine/manifest/reference"
@@ -15,7 +16,6 @@ import (
 	policyfake "github.com/donvargax/itos-container/internal/engine/policy/port/porttest"
 	policyyaml "github.com/donvargax/itos-container/internal/engine/policy/yaml"
 	readinessdisk "github.com/donvargax/itos-container/internal/engine/readiness/disk"
-	readiness "github.com/donvargax/itos-container/internal/engine/readiness/domain"
 	readinessport "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	readinessfake "github.com/donvargax/itos-container/internal/engine/readiness/port/porttest"
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
@@ -68,6 +68,6 @@ func credentialContractCommand(policy, manifest, argv, root string, files *readi
 	if root == "" {
 		root = "/checkout"
 	}
-	c.Doctor.Credentials = readiness.Credentials{FS: files, Input: readinessport.CredentialInput{Root: root, State: "/state", AccountState: "/account/.local/state/itos-container", OS: "linux", Architecture: "amd64", UID: 1000}}
+	c.Doctor.Credentials = inspection.Credentials{FS: files, Input: readinessport.CredentialInput{Root: root, State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}, Account: &approvalfake.Account{Home: "/account"}}
 	return c.Doctor.Run(ui)
 }

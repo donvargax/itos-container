@@ -40,7 +40,11 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 		return result
 	}
 	boundary := func(rule string) port.CredentialResult {
-		return port.CredentialResult{Issues: []port.CredentialIssue{{Rule: rule, Index: -1}}}
+		issue := port.CredentialIssue{Rule: rule, Index: -1}
+		if strings.HasPrefix(rule, "checkout.") {
+			issue.Subject = c.Input.Root
+		}
+		return port.CredentialResult{Issues: []port.CredentialIssue{issue}}
 	}
 	if c.Input.OS != "linux" || c.Input.Architecture != "amd64" {
 		return boundary("host.unsupported")
@@ -51,8 +55,17 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 	if !absoluteCredentialPath(c.Input.State) {
 		return boundary("state.location")
 	}
-	if credentialDescendant(c.Input.State, c.Input.Root) {
-		return boundary("state.path")
+	if !absoluteCredentialPath(c.Input.AccountState) {
+		return boundary("state.unavailable")
+	}
+	statePaths := []string{c.Input.State}
+	if c.Input.AccountState != c.Input.State {
+		statePaths = append(statePaths, c.Input.AccountState)
+	}
+	for _, path := range statePaths {
+		if credentialDescendant(path, c.Input.Root) {
+			return boundary("state.path")
+		}
 	}
 	s := &credentialScan{fs: c.FS, uid: c.Input.UID, deadline: c.FS.Now().Add(port.MetadataBudget), remaining: port.MetadataEntryLimit}
 	defer s.close()
@@ -65,45 +78,51 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 		}
 		return result
 	}
-	checkout := s.walk(c.Input.Root, false, false)
-	if checkout.rule != "" || checkout.pins[len(checkout.pins)-1].node.Mode&0170000 != 0040000 {
-		return boundary("checkout.unavailable")
+	checkout := s.walk(c.Input.Root, credentialCheckout)
+	if checkout.rule != "" {
+		return boundary(checkout.rule)
 	}
-	state := s.walk(c.Input.State, true, true)
-	if state.rule != "" {
-		return boundary(state.rule)
+	states := make([]credentialWalk, len(statePaths))
+	for i, path := range statePaths {
+		states[i] = s.walk(path, credentialState)
+		if states[i].rule != "" {
+			return boundary(states[i].rule)
+		}
 	}
 	sources := make([]credentialWalk, len(grants))
 	for i, grant := range grants {
-		sources[i] = s.walk(grant.Source, false, false)
+		sources[i] = s.walk(grant.Source, credentialSource)
 	}
 	observations := make([][2]credentialProjection, len(grants))
 	for i, source := range sources {
 		if source.rule == "" {
-			observations[i][0] = s.project(source, checkout, state, c.Input.State, tables[0], complete[0])
+			observations[i][0] = s.project(source, checkout, states, statePaths, tables[0], complete[0])
 		}
 	}
 	identities := map[[2]uint64]bool{}
 	scanOK := s.inventory(checkout.pins[len(checkout.pins)-1], 0, identities)
 	tables[1], complete[1] = s.fs.Mounts()
-	finalState := state
-	if !s.expired() {
-		finalState = s.walk(c.Input.State, true, true)
-	}
-	if finalState.rule != "" {
-		return boundary(finalState.rule)
-	}
-	if state.missing == "" && !sameCredentialPin(state.pins[len(state.pins)-1], finalState.pins[len(finalState.pins)-1]) {
-		return boundary("state.path")
+	finalStates := make([]credentialWalk, len(states))
+	for i, state := range states {
+		finalStates[i] = state
+		if !s.expired() {
+			finalStates[i] = s.walk(statePaths[i], credentialState)
+		}
+		if finalStates[i].rule != "" {
+			return boundary(finalStates[i].rule)
+		}
+		if state.missing == "" && !sameCredentialPin(state.pins[len(state.pins)-1], finalStates[i].pins[len(finalStates[i].pins)-1]) {
+			return boundary("state.path")
+		}
 	}
 	seen := map[[2]uint64]bool{}
 	for i, source := range sources {
 		rule := source.rule
 		if rule == "" {
-			observations[i][1] = s.project(source, checkout, finalState, c.Input.State, tables[1], complete[1])
+			observations[i][1] = s.project(source, checkout, finalStates, statePaths, tables[1], complete[1])
 			first, last := observations[i][0], observations[i][1]
 			switch {
-			case sourceMatches(source, checkout, state, identities) || first.ok && first.match || last.ok && last.match:
+			case sourceMatches(source, checkout, states, identities) || first.ok && first.match || last.ok && last.match:
 				rule = "credential.location"
 			case !scanOK || !first.ok || !last.ok || !sameProjection(first, last) || s.expired():
 				rule = "credential.unavailable"
@@ -113,7 +132,7 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 					break
 				}
 				final, ok := s.fs.Stat(pin.handle)
-				if !ok || final.Device != pin.node.Device || final.Inode != pin.node.Inode {
+				if !ok || final.Device != pin.node.Device || final.Inode != pin.node.Inode || s.expired() {
 					rule = "credential.unavailable"
 				} else {
 					rule = credentialFile(final, s.uid)
@@ -153,9 +172,18 @@ func (s *credentialScan) close() {
 	}
 }
 
+type credentialWalkKind uint8
+
+const (
+	credentialSource credentialWalkKind = iota
+	credentialState
+	credentialCheckout
+)
+
 // Missing state is reserved under its nearest pinned safe ancestor. Neither
 // walking it nor revalidating its suffix creates a directory or reads a record.
-func (s *credentialScan) walk(path string, absent, state bool) credentialWalk {
+func (s *credentialScan) walk(path string, kind credentialWalkKind) credentialWalk {
+	state := kind == credentialState
 	w := credentialWalk{}
 	parts := append([]string{"/"}, strings.Split(strings.TrimPrefix(path, "/"), "/")...)
 	if path == "/" {
@@ -165,7 +193,7 @@ func (s *credentialScan) walk(path string, absent, state bool) credentialWalk {
 	for i, name := range parts {
 		pin, status := s.open(parent, name)
 		if status != port.CredentialReadOK {
-			if status == port.CredentialReadMissing && absent && i > 0 {
+			if status == port.CredentialReadMissing && state && i > 0 {
 				w.missing = strings.Join(parts[i:], "/")
 				break
 			}
@@ -180,7 +208,7 @@ func (s *credentialScan) walk(path string, absent, state bool) credentialWalk {
 			w.rule = "credential.symlink"
 			break
 		}
-		if i < len(parts)-1 || state {
+		if i < len(parts)-1 || kind != credentialSource {
 			if pin.node.Mode&0170000 != 0040000 {
 				w.rule = "credential.unavailable"
 				if state {
@@ -195,7 +223,7 @@ func (s *credentialScan) walk(path string, absent, state bool) credentialWalk {
 		}
 		parent = pin.handle
 	}
-	if w.rule == "" {
+	if w.rule == "" && kind != credentialCheckout {
 		ancestors := w.pins[:len(w.pins)-1]
 		if state {
 			ancestors = w.pins
@@ -215,6 +243,13 @@ func (s *credentialScan) walk(path string, absent, state bool) credentialWalk {
 			w.rule = "state.unsafe"
 		default:
 			w.rule = "state.unavailable"
+		}
+	}
+	if kind == credentialCheckout && w.rule != "" {
+		if w.rule == "credential.symlink" {
+			w.rule = "checkout.path"
+		} else {
+			w.rule = "checkout.unavailable"
 		}
 	}
 	return w
@@ -264,14 +299,16 @@ func sameCredentialPin(a, b credentialPin) bool {
 	return a.node.Device == b.node.Device && a.node.Inode == b.node.Inode
 }
 
-func sourceMatches(source, checkout, state credentialWalk, inventory map[[2]uint64]bool) bool {
+func sourceMatches(source, checkout credentialWalk, states []credentialWalk, inventory map[[2]uint64]bool) bool {
 	root := checkout.pins[len(checkout.pins)-1]
 	for _, pin := range source.pins {
 		if sameCredentialPin(pin, root) || inventory[[2]uint64{pin.node.Device, pin.node.Inode}] {
 			return true
 		}
-		if state.missing == "" && sameCredentialPin(pin, state.pins[len(state.pins)-1]) {
-			return true
+		for _, state := range states {
+			if state.missing == "" && sameCredentialPin(pin, state.pins[len(state.pins)-1]) {
+				return true
+			}
 		}
 	}
 	return false

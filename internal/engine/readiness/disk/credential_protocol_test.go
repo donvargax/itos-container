@@ -47,6 +47,9 @@ func TestCredentialFDInfoBounds(t *testing.T) {
 		if ok != (size == 65536) || ok && id != 42 {
 			t.Fatalf("fdinfo size %d: %d %v", size, id, ok)
 		}
+		if runtime.GOOS != "linux" {
+			continue
+		} // Native /proc paths are Linux-only; parser cases above remain portable.
 		path := t.TempDir() + "/synthetic-fdinfo"
 		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 			t.Fatal(err)

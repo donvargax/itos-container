@@ -37,11 +37,12 @@ func (CLI) Help() string {
 		"    Exit codes:\n" +
 		"      0  policy validation succeeded; other requested inspections also succeeded\n" +
 		"      1  unsupported or changed checkout, host, engine or image, or control state that is\n" +
-		"         unsafe, invalid or exposed to a worker checkout\n" +
+		"         unsafe, invalid or exposed to a worker checkout; unsafe credential source metadata or location\n" +
 		"      2  invalid policy or command line, or invalid selected manifest, or a state location that\n" +
 		"         is relative or not valid UTF-8 (approval.state.location)\n" +
 		"      3  policy cannot be read, or another required local resource is unavailable,\n" +
-		"         including the account home or retained control state\n" +
+		"         including the account home or retained control state;\n" +
+		"         missing credential source or unavailable credential evidence\n" +
 		"      75 engine inspection failed or exceeded five seconds, or the control-state lock\n" +
 		"         was still held after ten seconds (approval.state.busy; retry the same command)\n"
 }
