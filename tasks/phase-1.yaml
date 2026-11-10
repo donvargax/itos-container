@@ -5835,3 +5835,17 @@
     those step errors in CI annotations.
   done_when:
     - run: go test ./features -count=1 -run '^(TestLifecycle|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)'
+- id: T-50
+  type: test
+  title: "Fresh recovery after controller loss and path replacement flakes: anchor recovery exits 75 and cleanup gets HTTP 409"
+  why: >
+    2026-11-09/10, Engine shard (other): Fresh recovery preserves the anchored checkout after
+    controller loss and path replacement failed on three branches whose changes do not touch it
+    (T-47 run 42708074071, T-40 run 42731353707, slice-26 run 42731520745): step error anchor
+    recovery exit 75, expected 0; then the after-scenario hook failed with native anchor harness
+    cleanup HTTP 409. Exit 75 reads as a transient (the engine still busy with the replaced path),
+    and 409 as a container or volume still in use at cleanup. A red shard blocks each pull request
+    it lands on and sends its implementer after code it never changed. Find which wait the hosted
+    runner outruns and bound it through the harness budget seam, as T-42 did.
+  done_when:
+    - run: go test ./features -count=1 -run '^(TestAnchorRecovery|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)'
