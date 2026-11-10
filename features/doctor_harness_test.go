@@ -82,7 +82,11 @@ func TestDoctorFixtureJournal(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Unix fixture is selected only on Linux")
 	}
-	w := &world{dir: t.TempDir()}
+	root, err := moduleRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &world{root: root, dir: t.TempDir()}
 	if err := w.doctorCheckout(); err != nil {
 		t.Fatal(err)
 	}
@@ -121,12 +125,15 @@ func TestDoctorFixtureJournal(t *testing.T) {
 }
 
 func TestDoctorTreeDetectsChanges(t *testing.T) {
-	w := &world{dir: t.TempDir()}
+	root, err := moduleRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &world{root: root, dir: t.TempDir()}
 	if err := w.doctorCheckout(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(w.closeDoctor)
-	var err error
 	w.doctor.snapshot, err = doctorTree(w.dir)
 	if err != nil {
 		t.Fatal(err)

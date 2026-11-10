@@ -18,7 +18,7 @@ func (s *Registry) Admission(ctx context.Context, _ port.Candidate) (port.Admiss
 	select {
 	case gate <- struct{}{}:
 	case <-ctx.Done():
-		return nil, "state.unavailable"
+		return nil, "state.busy"
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

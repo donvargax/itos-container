@@ -201,7 +201,19 @@ JSON approval emits one schema-1 object with `ok`, complete `problems` and `appr
 An exact `--fingerprint` works without a terminal; malformed values exit 2 and stale
 values exit 1. Changes during review and concurrent replacement refuse a fresh
 publication. Identity/state refusals exit 1, unavailable observations exit 3, and
-uncertain durable publication exits 75. Detailed rules are in
+uncertain durable publication exits 75. Exit 75 also reports lock contention:
+`doctor`, `approve` and `run` share one private account lock, and a wait longer than
+the 10-second call budget ends as `approval.state.busy` (`run.call-timeout` for `run`)
+so the same command can be retried unchanged. The budget also covers the discovery scan
+that follows the lock: a scan it interrupts is reported the same way, not as a refusal. Exit 3 `approval.state.unavailable` also
+means the effective user has no local `/etc/passwd` record with an existing absolute home,
+which the fixed account anchor requires; LDAP or SSSD-only accounts are refused rather than
+guessed from HOME. It also reports a state location the account catalog retains that is gone,
+and session, admission or intent records with no catalog beside them. A lost location refuses
+doctor and approve on the account, whatever state location they select, until the host user
+restores it or removes its record. `run` shows these as exit 1 `run.approval-invalid`,
+`status` keeps working and `stop` exits 75. Reapproval cannot clear any of them;
+[CONFIG.md](CONFIG.md) states each outcome and the recovery. Detailed rules are in
 [approval.feature](../features/approval.feature).
 
 An agent on the host can approve through `--fingerprint` or a faked terminal:

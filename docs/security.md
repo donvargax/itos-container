@@ -72,6 +72,33 @@ records of mode `0600`. A hash detects inconsistent data; it does not prevent a
 trusted host user from forging or restoring a record. Run refuses unapproved
 settings and name `itos container approve`; it never obtains consent itself.
 
+A second, fixed location exists whatever XDG_STATE_HOME selects: the first approve or
+run creates `<account home>/.local/state/itos-container/coordination`, a mode `0700`
+directory with the private `control.lock` (mode `0600`) and a catalog of every state
+location the account has selected. It is protected control state like the records
+themselves, and it lets approve, run and worker admission refuse a state tree that a
+worker's checkout contains, equals or lies inside. The account home is read from the
+effective UID's local `/etc/passwd` record, never from HOME, USER or LOGNAME, which a
+checkout or caller could set. An account with no such record (LDAP or SSSD only) is
+refused as `approval.state.unavailable` by doctor and approve (run reports `run.approval-invalid`), as is
+a home that is missing, relative, `/` or not valid UTF-8, and a home reached through a
+symbolic link refuses as `approval.state.path`; see [CONFIG.md](CONFIG.md). The home directory itself is never locked, because another
+user can lock a readable home and stall every command. A person who changes XDG_STATE_HOME
+keeps every earlier location in the catalog; a state tree another worker's checkout could
+reach refuses with `approval.state.exposed`, which reapproval alone cannot resolve.
+
+The catalog trusts what it recorded, so losing a recorded location locks out the whole
+account: a retained directory that is gone refuses every doctor and approve with
+`approval.state.unavailable` (run refuses it as `run.approval-invalid`), and one recreated
+at the same path refuses with `approval.state.path`, because the binding names the original
+inode. The product never forgets or repairs a location, since doing so would let a worker checkout reach a tree
+that other projects' records may still live in. Recovery is the host user's own act,
+described in [CONFIG.md](CONFIG.md): restore the original directory, or remove that
+location's record after confirming that no worker uses it. A command that does this with
+consent is a decision for the person, not part of this release. The catalog stores each
+path as JSON, so a state tree or account home that is not valid UTF-8 refuses before
+anything is created.
+
 The shared approval contract supplies an independent frozen input for later
 session startup. Subsequent checkout edits or approval cannot change that value.
 Protected placement and the checkout-only mount contract are requirements, not
@@ -86,7 +113,13 @@ Read-only inspection creates no state. Publication rechecks settings after conse
 locks the pinned project directory, compares the reviewed generation, fsyncs a
 private temporary file, renames it and fsyncs the parent. A failure after rename is
 reported as uncertain durability; the next inspection reads the actual record.
-Directory locking requires no lock file or writable operation from doctor or run.
+Doctor creates no lock file and writes nothing: it takes a shared lock on the account's
+`control.lock` only when that file already exists. Approve and run take the exclusive
+lock for publication and admission, never across consent or engine calls. Every wait
+ends within the 10-second call budget as the retryable `approval.state.busy` (exit 75;
+`run.call-timeout` for run). The budget also covers the discovery scan that follows the
+lock, so a scan the budget interrupts ends the same way, never as a path or state
+refusal.
 Symlinks, hard-linked records, foreign ownership and unsafe permissions are refused,
 not repaired. State ancestors must be trusted; root-owned sticky `/tmp` above a
 private fixture parent is allowed.

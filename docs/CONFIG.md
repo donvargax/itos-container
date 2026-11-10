@@ -73,9 +73,61 @@ Bare terminal approve reviews settings and changes, asks y/N, and remembers appr
 until settings change. The optional `--fingerprint <value>` approves only the exact
 value printed by doctor. State uses canonical JSON SHA-256 under absolute
 `$XDG_STATE_HOME/itos-container`, falling back to `$HOME/.local/state/itos-container`
-when XDG_STATE_HOME is absent or empty. A relative nonempty XDG_STATE_HOME refuses.
-Managed directories are owned mode 0700 and records mode 0600. One active generation
+when XDG_STATE_HOME is absent or empty. A relative nonempty XDG_STATE_HOME refuses, and so
+does a relative HOME when XDG_STATE_HOME is absent or empty, and a selection whose path is
+not valid UTF-8. Doctor and approve report `approval.state.location` (exit 2); run refuses
+as `run.approval-invalid` (exit 1) before starting resources.
+Managed directories are owned mode 0700 and records mode 0600. A record with a second
+link is `approval.state.unsafe`, except when the other link is the `.intent-<hex>.tmp`
+file that a controller killed while publishing the record left beside it: that record is
+read as usual and the leftover is ignored. One active generation
 supersedes the previous approval; an old historical record cannot authorize a run.
+Independently of that selection, the first approve or run also creates one fixed account
+anchor, `<account home>/.local/state/itos-container`, even when XDG_STATE_HOME is set. Its
+`coordination` directory (mode 0700) holds the private `control.lock` (mode 0600) and a
+catalog of every state location selected on the account, so commands keep one common
+exclusion across HOME and XDG_STATE_HOME choices. The account home is the home field of
+the effective UID's local `/etc/passwd` record, never HOME, USER or LOGNAME. The field is
+normalized by path cleaning (`/account/./home/` reads as `/account/home`). The home must
+exist, must not be `/`, must be an absolute path of valid UTF-8 with no symbolic link in it
+(a home reached through `/home -> /var/home` refuses as `approval.state.path`), must be
+owned by that user and must not be writable by group or others (`approval.state.unsafe`
+otherwise); it may be mode 0755 or 0750. XDG_STATE_HOME does not bypass any of this,
+because the anchor is independent of it. An account with no local `/etc/passwd` record,
+such as one served only by LDAP or SSSD, or whose home is missing, relative, `/` or not
+valid UTF-8, cannot use doctor, approve or run. Doctor and approve refuse with
+`approval.state.unavailable` (exit 3); run refuses as `run.approval-invalid` (exit 1),
+whose advice to approve cannot help. Doctor never creates the anchor; its policy-only and
+manifest-only modes never read it.
+
+The catalog keeps every location until the host user removes its record. Once a location
+is cataloged, losing it affects the whole account, not only commands that select it. A
+directory that is gone or unreadable is `approval.state.unavailable`, and one recreated at
+the same path is `approval.state.path` (exit 1), because the catalog binds the original
+directory's inode. Doctor and approve report those rules, exit 3 and exit 1. Run reports a
+recreated directory as `approval.state.path` and a missing one as `run.approval-invalid`
+(both exit 1; the second one's advice to approve cannot help). `status` takes no control
+lock and keeps working. `stop` still removes the worker of a session in a surviving
+location, then cannot record its completion and exits 75 (`recovery.temporary`). For
+example, after `XDG_STATE_HOME=/tmp/x itos container approve` and a reboot that clears
+`/tmp`, doctor and approve exit 3 and run exits 1, whatever state location they select.
+The product never forgets, relocates or repairs a
+location, and approving again cannot help. If the directory cannot return under its
+original identity, the host user, after confirming that no worker uses that location,
+removes its record from `<account home>/.local/state/itos-container/coordination`. Each
+record is a small JSON file whose `path` field names its location; keep `control.lock`
+and `self.json`. The next approve at that path enrolls it afresh.
+
+Records with no catalog beside them, such as state from v0.1.0, refuse with
+`approval.state.unavailable` (exit 3): an `admission`, `sessions` or `intents` directory
+with entries in a tree while `self.json` is absent. The check covers two trees, the
+selected one and the fixed account tree. Entries in the selected tree refuse that
+selection only, so another XDG_STATE_HOME works. Entries in the fixed tree, which is also
+the default selection when HOME is the account home, refuse every selection, so choosing
+another XDG_STATE_HOME does not help. The product never adopts or repairs them. The host
+user, after confirming that no worker uses them, moves those directories out of the
+tree; the next approve then creates the catalog.
+
 The effective UID supplies host identity, independently of HOME or user environment.
 
 

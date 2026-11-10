@@ -40,7 +40,7 @@ func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.S
 	if ctx.Err() != nil {
 		return approval.Durable{}, context.Cause(ctx)
 	}
-	if strings.HasPrefix(string(view.Failure), "identity.") || hasIssues(view) {
+	if strings.HasPrefix(string(view.Failure), "identity.") || unresolvedByApproval(view.Failure) || hasIssues(view) {
 		return approval.Durable{}, Prerequisite{view}
 	}
 	if view.Failure != "" {
@@ -66,6 +66,10 @@ func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.S
 	if ctx.Err() != nil {
 		return approval.Durable{}, context.Cause(ctx)
 	}
+	if unresolvedByApproval(failure) {
+		view.Failure = failure
+		return approval.Durable{}, Prerequisite{view}
+	}
 	if failure != "" {
 		reason := string(failure)
 		if strings.HasPrefix(reason, "state.") {
@@ -82,6 +86,11 @@ func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.S
 	}
 	return durable, nil
 }
+
+// unresolvedByApproval names the state refusals that fresh consent cannot fix: the
+// person must choose another location or finish recovery. Run presents the shared
+// diagnostic for them instead of the generic invalid-approval request to approve.
+func unresolvedByApproval(f approval.Failure) bool { return f == "state.path" || f == "state.exposed" }
 
 func hasIssues(v approval.View) bool {
 	r := v.Inspection

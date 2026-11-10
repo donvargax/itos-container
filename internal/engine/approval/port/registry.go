@@ -23,7 +23,8 @@ type SessionDirectory interface {
 	Controller() (string, Failure)
 }
 
-// AdmissionDirectory holds the common control-root lock. Sessions reads protected
+// AdmissionDirectory holds common account exclusion and the selected admission
+// directory lock. Sessions reads protected
 // public records without taking operation locks; no engine call may span this
 // transaction. Its own files are durable reservation/completion certificates.
 type AdmissionDirectory interface {

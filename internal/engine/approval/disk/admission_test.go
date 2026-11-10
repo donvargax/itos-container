@@ -21,7 +21,11 @@ func TestAdmissionPublicationExcludesOtherProjectsUntilDurable(t *testing.T) {
 		t.Fatal(f)
 	}
 	done := make(chan port.Failure, 1)
-	go func() { done <- d.Publish(strings.Repeat("a", 64)+".json", nil, []byte("reservation")); d.Close() }()
+	go func() {
+		failure := d.Publish(strings.Repeat("a", 64)+".json", nil, []byte("reservation"))
+		d.Close()
+		done <- failure
+	}()
 	<-entered
 	other := c
 	other.Project = strings.Repeat("b", 64)
@@ -35,7 +39,7 @@ func TestAdmissionPublicationExcludesOtherProjectsUntilDurable(t *testing.T) {
 	if failure := <-done; failure != "" {
 		t.Fatal(failure)
 	}
-	if f != "state.unavailable" || contender != nil {
+	if f != "state.busy" || contender != nil {
 		t.Fatal("publication barrier did not exclude another project", f)
 	}
 	d, f = (Registry{Store: s}).Admission(t.Context(), other)
