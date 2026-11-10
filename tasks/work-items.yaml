@@ -1768,6 +1768,10 @@ items:
       The existing item already identifies the dependency cycle and moves the writer ahead of
       slice-27. Schedule T-40 → writer → slice-27 → slice-28, record those dependencies, and update
       the decision record and architecture ownership as specified.
+
+      Already covers the dependency cycle and architecture ownership. Schedule T-40 → writer →
+      slice-27 → slice-28, record those dependencies, and update ADR 0022 and arc42 to move writer
+      ownership ahead of slice-27.
   - id: p1-offline-11-ipv6-route-flake
     title: "ID-OFFLINE-11 flakes: a positive IPv6 route control times out on the CI runner"
     phase: 1
