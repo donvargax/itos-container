@@ -1390,7 +1390,7 @@ Feature: Review and record approval of exact settings
     And its standard output says "doctor"
     And it exits with code 0
 
-  @wip @slice-26 @ID-APPROVAL-60
+  @slice-26 @ID-APPROVAL-60
   Scenario: Approval help names both host-agent self-approval routes
     When itos-container runs with "approve --help" and the environment "COLUMNS=200"
     Then its standard output says "an agent on the host can approve offline settings through --fingerprint"
