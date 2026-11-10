@@ -11,6 +11,17 @@ import (
 // Inspect validates policy without inspecting its requested manifest.
 func Inspect(policies port.Policies) policy.Result { return policies.Inspect() }
 
+// InspectCredentials never observes sources after a policy refusal. File-only
+// scopes do not call this operation at all.
+func InspectCredentials(policies port.Policies, sources port.Credentials) (policy.Result, *readiness.CredentialResult) {
+	p := Inspect(policies)
+	if p.Policy == nil || len(p.Issues) != 0 {
+		return p, nil
+	}
+	r := sources.Inspect(p.Policy.Credentials)
+	return p, &r
+}
+
 // InspectReadiness requests read-only observations, never approval.
 func InspectReadiness(inspector port.Readiness) readiness.Result { return inspector.Inspect() }
 

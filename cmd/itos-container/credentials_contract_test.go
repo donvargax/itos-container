@@ -14,6 +14,10 @@ import (
 	policyidna "github.com/donvargax/itos-container/internal/engine/policy/idna"
 	policyfake "github.com/donvargax/itos-container/internal/engine/policy/port/porttest"
 	policyyaml "github.com/donvargax/itos-container/internal/engine/policy/yaml"
+	readinessdisk "github.com/donvargax/itos-container/internal/engine/readiness/disk"
+	readiness "github.com/donvargax/itos-container/internal/engine/readiness/domain"
+	readinessport "github.com/donvargax/itos-container/internal/engine/readiness/port"
+	readinessfake "github.com/donvargax/itos-container/internal/engine/readiness/port/porttest"
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
 )
 
@@ -25,18 +29,28 @@ func TestCredentialContractProcess(t *testing.T) {
 	}
 	var request struct {
 		Policy, Manifest, Argv string
+		readinessfake.CredentialFiles
 	}
 	if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
 		t.Fatal(err)
 	}
-	code := credentialContractCommand(request.Policy, request.Manifest, request.Argv)
-	if err := os.WriteFile(os.Getenv("SLICE_29_OBSERVATIONS"), []byte(`{"Calls":{},"Completed":""}`), 0o600); err != nil {
+	request.Parser = readinessdisk.ParseCredentialMounts
+	request.Calls = map[string]int{}
+	code := credentialContractCommand(request.Policy, request.Manifest, request.Argv, &request.CredentialFiles)
+	log, err := json.Marshal(struct {
+		Calls     map[string]int
+		Completed string
+	}{request.Calls, request.Completed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(os.Getenv("SLICE_29_OBSERVATIONS"), log, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	os.Exit(code)
 }
 
-func credentialContractCommand(policy, manifest, argv string) int {
+func credentialContractCommand(policy, manifest, argv string, files *readinessfake.CredentialFiles) int {
 	ui := &cli.UI{Stdout: os.Stdout, Stderr: os.Stderr}
 	var c commandLine
 	parser, err := kong.New(&c, append(cli.Flags(), kong.Writers(os.Stdout, os.Stderr))...)
@@ -51,5 +65,6 @@ func credentialContractCommand(policy, manifest, argv string) int {
 		Files:  &manifestfake.Files{Data: map[string][]byte{".devcontainer/devcontainer.json": []byte(manifest)}},
 		Parser: jsonc.Parser{}, References: reference.References{},
 	}
+	c.Doctor.Credentials = readiness.Credentials{FS: files, Input: readinessport.CredentialInput{Root: "/checkout", State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}}
 	return c.Doctor.Run(ui)
 }

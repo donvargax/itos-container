@@ -126,6 +126,7 @@ func (w *world) credentialObservationFixture(boundary, layout string) error {
 	o.Nodes["/"] = n
 	source := "/checkout-sources/token"
 	o.Nodes[source] = credentialNode{Device: 1, Inode: next, Links: 1, UID: 1000, Mode: 0100600, Size: 32, MountID: 1, Path: source}
+	next++
 	table := "1 0 0:1 / / rw - tmpfs tmpfs rw\n"
 	switch layout {
 	case "distinct outside file":

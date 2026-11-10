@@ -14,9 +14,10 @@ the checkout as its only host mount, a non-root identity and owned cleanup. Linu
 with native Docker is a target requiring passing runtime evidence, not a supported-host
 claim. A policy may request network egress to an allowlist of host names, but no
 approval binds that request, no proxy enforces it and no run starts with it: ordinary
-doctor, approve and run refuse a valid version 2 file for now. Credentials/accounts,
-network Git, LAN ingress, Compose and other platforms remain deferred. Describing the
-wider pilot does not authorize its later slices or settle an open security decision.
+doctor, approve and run refuse a valid version 2 file for now. Version 3 adds named
+credential requests and metadata-only inspection, without approval or delivery.
+Credential delivery/accounts, network Git, LAN ingress, Compose and other platforms
+remain deferred. Describing the wider pilot does not authorize its later slices or settle an open security decision.
 Real-engine scenarios run only in CI.
 
 Files owned by other tools retain their formats: `itos.yaml` configures core itos's
@@ -251,12 +252,13 @@ A fix names the schema the file was read against. For a version 2 file read by
 offline or allowlist mode. The one exception is the refusal below, which ordinary doctor,
 approve and run give a valid version 2 file: its fix says `use policy version 1, or read
 what a version 2 file requests with doctor --policy-only`. Where no supported version was
-read, the fix names both: `use policy version 1 or 2` for an unsupported number, and
-`use the field type defined by policy version 1 or 2` for a wrongly typed version or a
+read, the fix names all supported versions: `use policy version 1, 2 or 3` for an
+unsupported number, and
+`use the field type defined by policy version 1, 2 or 3` for a wrongly typed version or a
 root that is not an object.
 
-Only `doctor --policy-only` and `doctor --manifest-only` read a valid version 2 file for
-now. Ordinary doctor, approve and run refuse it with `policy.version` at `/version`, exit
+`doctor --policy-only`, `doctor --manifest-only` and `doctor --credentials-only` read
+a valid version 2 file for now. Ordinary doctor, approve and run refuse it with `policy.version` at `/version`, exit
 2, whatever its mode, before the manifest, the engine or host state, and the fix names
 `doctor --policy-only` so the request can still be read. Approval's canonical settings
 describe an offline profile only, so without this refusal approve would record offline
@@ -402,6 +404,69 @@ do not establish sandbox argv or credential rules.
     order, one key per line, using only the permitted JSON-compatible data. Preserve
     meaning on read-back and avoid unrelated diff churn. `init` must not overwrite
     existing files; its non-runnable examples and paths still need specifications.
+
+## Policy version 3: credential requests
+
+[Version 3's schema](schemas/itos-container-v3.schema.json) extends version 2 with
+optional `credentials`. Omission means no grants. A present list is nonempty and each
+entry has exactly `kind` and `source`. The case-sensitive kinds are `claude-token` and
+`github-token`, each at most once. There is no Codex kind, inline value, target override,
+command or environment key. Versions 1 and 2 continue to reject `credentials`.
+
+```yaml
+version: 3
+manifest: .devcontainer/devcontainer.json
+credentials:
+  - kind: claude-token
+    source: /private-host-sources/claude-token
+```
+
+Sources are literal absolute slash-separated paths of at most 4096 UTF-8 bytes, with
+at least one component after `/`. Empty, dot and dot-dot components, trailing slash,
+backslash and ASCII controls are refused. Nothing is trimmed, expanded or executed;
+`~` and `$` inside an absolute path are ordinary filename characters. JSON Schema's
+character limit cannot express the UTF-8 byte limit. Network defaults and allowlist
+validation retain version 2's meaning. Effective output sorts requests by kind while
+problem indices retain their written order. Parsing never stats or opens sources.
+
+New exit-2 policy rules are `policy.credentials_empty` at `/credentials`,
+`policy.credential_kind` and `policy.credential_duplicate` at the entry's `/kind`, and
+`policy.credential_source` at its `/source`. Missing fields, wrong types and extra keys
+use the existing required/type/unknown-key rules. Independent problems are collected
+without partial effective data or rejected values in diagnostics. Fixes name the declared
+schema; unsupported-version fixes name versions 1, 2 and 3.
+
+`doctor --credentials-only` observes metadata on Linux amd64. Each source needs safe
+root- or host-owned ancestors, no symlink, a host-owned regular file with no group/other
+permission bits, exactly one link, and 1..65536 bytes. Owner read permission is not
+required. Two grants cannot name one inode. Sources and their ancestors must be outside
+checkout and protected state by identity and filesystem coordinates, not pathname prefix.
+The mode never reads, hashes or logs contents and creates no state or approval.
+
+The shared readiness observer inventories checkout metadata, including hidden, Git,
+ignored and mounted entries, in batches of 128, at most 100000 entries and directory
+depth 64. It never enumerates unrelated state records. Instead, two complete mount tables
+reserve the state root's filesystem subtree and every mount rooted below it, including
+covered backing trees. Each table is bounded to 8 MiB, 16384 rows and 65535 bytes per line;
+descriptor paths to 4096 bytes, coordinates to 8192, and fdinfo to 64 KiB. All observations
+share a ten-second monotonic deadline, which cannot preempt a blocked kernel call.
+Incomplete or changed required evidence refuses. An absent state root is not created;
+safe concurrent creation at its reserved coordinate is accepted after revalidation.
+
+Source problems are located at `/credentials/<written-index>/source`. Missing or
+unavailable metadata uses exit 3; symlink, ancestor, location, regular, owner, permissions,
+links, size and duplicate refusals use exit 1, under the `credential.` prefix. Only the
+first failure per source is reported, in that order; the highest exit wins. Requested
+grants remain visible. Existing boundary refusals retain their shared rules.
+
+These observations neither grant access nor establish continuous protection from trusted
+host changes. [Decision 0026](decisions/0026-credential-source-inspection.md) defines the
+race argument and limits. The disk adapter uses `github.com/moby/sys/mountinfo` v0.7.2
+under Apache-2.0, with its upstream license retained in the module distribution.
+Ordinary doctor, approve and run still refuse valid version 3 with `policy.version`,
+exit 2, before manifest/source/engine inspection or state publication. Their fix points
+to policy-only and credentials-only inspection. Slice-30 owns approval integration;
+this mode grants no delivery and settles none of T-47's live-account questions.
 
 ## Remaining specification work
 

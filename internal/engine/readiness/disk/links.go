@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	checkoutBatchSize = 128
-	checkoutEntries   = 100000
-	checkoutDepth     = 64
-	checkoutScanTime  = 10 * time.Second
+	checkoutBatchSize = port.MetadataBatchSize
+	checkoutEntries   = port.MetadataEntryLimit
+	checkoutDepth     = port.MetadataDepthLimit
+	checkoutScanTime  = port.MetadataBudget
 )
 
 // One budget spans the entire traversal, never one allowance per directory.

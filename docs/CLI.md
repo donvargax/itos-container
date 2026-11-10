@@ -11,9 +11,10 @@ The first milestone is an offline owned run: explicit argv in an approved, harde
 container with no network, the checkout as its only host mount, a non-root identity
 and owned resources cleaned up on exit. Linux amd64 with native Docker is the target,
 requiring passing runtime evidence before any support claim. A policy can request an
-exact host-name egress allowlist, which only `doctor --policy-only` and
-`doctor --manifest-only` read: nothing approves, enforces or runs it yet, and the other
-commands refuse it. Credentials/accounts, network Git, LAN ingress, Compose and other
+exact host-name egress allowlist, which the explicit policy-only, manifest-only and
+credentials-only doctor scopes read: nothing approves, enforces or runs it yet, and the
+other commands refuse it. Named credential requests and metadata inspection are implemented;
+credential delivery/accounts, network Git, LAN ingress, Compose and other
 platforms are deferred. Describing later pilot commands here does not authorize their
 implementation or settle an open security decision. Real-engine scenarios run only in CI;
 agents never receive the Docker socket.
@@ -211,7 +212,7 @@ approval records what was approved, not who. See [security.md](security.md).
 `doctor --manifest-only` validates policy, the selected manifest and its requested
 workspace directory. Ordinary doctor currently performs these same file checks.
 Both refuse missing manifests rather than searching conventional locations or
-choosing a worker. `--policy-only` and `--manifest-only` cannot be combined.
+choosing a worker. `--policy-only`, `--manifest-only` and `--credentials-only` are mutually exclusive.
 
 JSON success has `schema: 1`, `scope: "manifest"`, `ok: true`, `problems: []` and
 `manifest` containing `valid`, `path`, all six `effective` fields, sorted `unused`
@@ -227,6 +228,29 @@ there is no CLI or environment channel for injecting it. Label problems identify
 Accepted editor settings and metadata are unused, never executed or merged. See
 [manifest.feature](../features/manifest.feature) for the complete profile and rules.
 Configuration validity supplies neither host readiness nor approval.
+
+### Credential metadata inspection
+
+`doctor --credentials-only` parses policy and observes requested host source metadata
+without reading credential contents, requiring a manifest, executing helpers, contacting
+an engine or recording approval. It accepts policy versions 1, 2 and 3; no credentials
+means an empty result with no source, checkout-inventory or mount-table calls. The
+three explicit inspection scopes cannot be combined. JSON selection follows `ITOS_JSON`
+and explicit `--no-json`, as with the other doctor modes.
+
+Successful policy projection produces one `schema:1` JSON object with `scope:"credentials"`,
+`ok`, `problems` and `credentials` (always an array). Each sorted grant has exactly `kind`,
+its literal `source`, and the fixed target `/run/itos-container/credentials/<kind>`.
+Source failures retain this list and located diagnostics; policy failures use the existing
+policy envelope without partial data. There is no approval fingerprint or readiness claim.
+Plain output names “Credentials only”, the same grants, and “Credential contents, manifest,
+engine and approval were not checked”. Paths use the existing terminal escaping.
+
+The [configuration contract](CONFIG.md#policy-version-3-credential-requests) defines the
+metadata rules, bounds and refusal precedence. Ordinary doctor, approve and run remain
+gated on version 3, including a version-3 policy with no credentials. File-only scopes
+accept its requests without inspecting the named host files. No token is delivered and
+no real credential use is authorized by these observations.
 
 ## Names, help and arguments
 

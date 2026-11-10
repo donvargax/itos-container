@@ -27,8 +27,8 @@ func TestFixNamesTheVersionRead(t *testing.T) {
 	}{
 		{port.Issue{Kind: port.Type, Version: 1}, "policy.type", "use the field type defined by policy version 1"},
 		{port.Issue{Kind: port.Type, Version: 2}, "policy.type", "use the field type defined by policy version 2"},
-		{port.Issue{Kind: port.Type}, "policy.type", "use the field type defined by policy version 1 or 2"},
-		{port.Issue{Kind: port.Version}, "policy.version", "use policy version 1 or 2"},
+		{port.Issue{Kind: port.Type}, "policy.type", "use the field type defined by policy version 1, 2 or 3"},
+		{port.Issue{Kind: port.Version}, "policy.version", "use policy version 1, 2 or 3"},
 		{port.Issue{Kind: port.Version, Version: 2}, "policy.version", "use policy version 1, or read what a version 2 file requests with doctor --policy-only"},
 		{port.Issue{Kind: port.UnknownKey, Version: 1}, "policy.unknown_key", "remove fields absent from the version 1 schema"},
 		{port.Issue{Kind: port.UnknownKey, Version: 2}, "policy.unknown_key", "remove fields absent from the version 2 schema"},

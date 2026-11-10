@@ -213,7 +213,7 @@ Feature: Named credential requests and read-only source inspection
     Given policy inspection has isolated host state and a recording engine endpoint
 
   # Policy shape and presentation. No path below names a real credential.
-  @wip @slice-29 @ID-CREDENTIALS-01
+  @slice-29 @ID-CREDENTIALS-01
   Scenario: version 3 displays both named requests as a set without executing helpers
     Given the policy file contains:
       """
@@ -237,7 +237,7 @@ Feature: Named credential requests and read-only source inspection
     And the engine recorder has no connections
 
   # A version-3 positive control makes the legacy-compatibility rows red today.
-  @wip @slice-29 @ID-CREDENTIALS-02
+  @slice-29 @ID-CREDENTIALS-02
   Scenario Outline: omitting credentials keeps the offline defaults and creates no grant
     Given the policy file contains:
       """
@@ -266,7 +266,7 @@ Feature: Named credential requests and read-only source inspection
       | 1       |
       | 2       |
 
-  @wip @slice-29 @ID-CREDENTIALS-03
+  @slice-29 @ID-CREDENTIALS-03
   Scenario: plain policy inspection shows literal sources without expanding or granting them
     Given the policy file contains:
       """
@@ -290,7 +290,7 @@ Feature: Named credential requests and read-only source inspection
     And it exits with code 0
     And the engine recorder has no connections
 
-  @wip @slice-29 @ID-CREDENTIALS-04
+  @slice-29 @ID-CREDENTIALS-04
   Scenario Outline: credential entries are typed closed objects with both fields required
     Given the policy file contains:
       """
@@ -324,7 +324,7 @@ Feature: Named credential requests and read-only source inspection
       | [{kind: claude-token, source: /synthetic-sources/a, target: /a}] | policy.unknown_key       | /credentials/0/target |
       | [{kind: claude-token, source: /synthetic-sources/a, name: work}] | policy.unknown_key       | /credentials/0/name   |
 
-  @wip @slice-29 @ID-CREDENTIALS-05
+  @slice-29 @ID-CREDENTIALS-05
   Scenario Outline: only the two decided token kinds are accepted
     Given the policy file contains:
       """
@@ -346,7 +346,7 @@ Feature: Named credential requests and read-only source inspection
       | github          |
       |                 |
 
-  @wip @slice-29 @ID-CREDENTIALS-06
+  @slice-29 @ID-CREDENTIALS-06
   Scenario Outline: repeated kinds are located at the later written entry
     Given the policy file contains:
       """
@@ -367,7 +367,7 @@ Feature: Named credential requests and read-only source inspection
       | claude-token |
       | github-token |
 
-  @wip @slice-29 @ID-CREDENTIALS-07
+  @slice-29 @ID-CREDENTIALS-07
   Scenario Outline: a source must be an unambiguous literal absolute path
     Given the policy file contains:
       """
@@ -408,7 +408,7 @@ Feature: Named credential requests and read-only source inspection
   # / followed by repeated UTF-8 text and ASCII padding to exactly the given
   # decoded byte length, with no other slash. It creates no source on disk.
   # New Then compares the complete effective policy to that generated literal.
-  @wip @slice-29 @ID-CREDENTIALS-08
+  @slice-29 @ID-CREDENTIALS-08
   Scenario Outline: source length counts UTF-8 bytes and accepts the exact limit
     Given a credential policy source repeats "<text>" to exactly 4096 bytes
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
@@ -429,7 +429,7 @@ Feature: Named credential requests and read-only source inspection
       | a    |
       | ñ    |
 
-  @wip @slice-29 @ID-CREDENTIALS-09
+  @slice-29 @ID-CREDENTIALS-09
   Scenario: independent credential problems retain written locations and reveal no rejected values
     Given the policy file contains:
       """
@@ -456,7 +456,7 @@ Feature: Named credential requests and read-only source inspection
 
   # Structural errors already fail before version dispatch. Start with a valid
   # v3 control so this scenario cannot be green on a binary that rejects all v3.
-  @wip @slice-29 @ID-CREDENTIALS-10
+  @slice-29 @ID-CREDENTIALS-10
   Scenario: credential entries do not bypass YAML duplicate-key checks
     Given the policy file contains:
       """
@@ -479,7 +479,7 @@ Feature: Named credential requests and read-only source inspection
       | policy.duplicate_key | /credentials/0/source | 2    |
     And it exits with code 2
 
-  @wip @slice-29 @ID-CREDENTIALS-11
+  @slice-29 @ID-CREDENTIALS-11
   Scenario Outline: older policy versions cannot acquire credential semantics
     Given the policy file contains:
       """
@@ -505,7 +505,7 @@ Feature: Named credential requests and read-only source inspection
 
   # These three fixture/endpoint steps already exist on slice-25. The manifest
   # fixture leaves a private checkout and valid pinned-image JSON, no real engine.
-  @wip @slice-29 @ID-CREDENTIALS-12
+  @slice-29 @ID-CREDENTIALS-12
   Scenario: manifest-only validation accepts version 3 without checking a source
     Given a manifest inspection checkout
     And the manifest inspection policy contains:
@@ -546,7 +546,7 @@ Feature: Named credential requests and read-only source inspection
   # discarding observation errors in a file-only mode cannot pass the zero counts.
   # Today each row fails at the first exit-0 assertion: version 3 is unsupported.
   # The implementer adds these steps in the red-first test commit, not this spec.
-  @wip @slice-29 @ID-CREDENTIALS-36
+  @slice-29 @ID-CREDENTIALS-36
   Scenario Outline: file-only scopes never observe requested credential sources or exposure
     Given a credential observation fixture for "<boundary>" with "<layout>"
     And credential observation includes a valid selected manifest
@@ -608,7 +608,7 @@ Feature: Named credential requests and read-only source inspection
   # chown, host mount, real source or production test switch is needed for setup.
   # Pin the native fixtures below /tmp for the root-owned sticky ancestor control.
 
-  @wip @slice-29 @ID-CREDENTIALS-13 @linux
+  @slice-29 @ID-CREDENTIALS-13 @linux
   Scenario Outline: valid version 3 remains gated from ordinary doctor approval and run
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
@@ -636,7 +636,7 @@ Feature: Named credential requests and read-only source inspection
       | requested | run -- credential-fixture-never-executed                                                      |
       | none      | run -- credential-fixture-never-executed                                                      |
 
-  @wip @slice-29 @ID-CREDENTIALS-14
+  @slice-29 @ID-CREDENTIALS-14
   Scenario Outline: invalid version 3 reports its policy problem before any later inspection
     Given the policy file contains:
       """
@@ -656,7 +656,7 @@ Feature: Named credential requests and read-only source inspection
       | doctor --credentials-only --json |
       | doctor --json                    |
 
-  @wip @slice-29 @ID-CREDENTIALS-15
+  @slice-29 @ID-CREDENTIALS-15
   Scenario: doctor help distinguishes credential metadata from file-only and approval scopes
     When itos-container runs with "doctor --help"
     Then its standard output says "--credentials-only"
@@ -670,7 +670,7 @@ Feature: Named credential requests and read-only source inspection
   # before either CLI invocation; its positive control is outside product trees.
   # The selected manifest is absent: successful source inspection must not
   # depend on manifest validation, even when both grants are requested.
-  @wip @slice-29 @ID-CREDENTIALS-16 @linux
+  @slice-29 @ID-CREDENTIALS-16 @linux
   Scenario: metadata inspection shows both grants without reading or retaining either token
     Given a private credential inspection fixture
     And credential source "github" has layout "private regular file"
@@ -698,7 +698,7 @@ Feature: Named credential requests and read-only source inspection
   # New size/mode Given writes synthetic bytes of exactly this length, then
   # chmods only this fixture leaf. A one-byte boundary file cannot contain the
   # full marker; the marker absence probe belongs to 16, which uses full markers.
-  @wip @slice-29 @ID-CREDENTIALS-17 @linux
+  @slice-29 @ID-CREDENTIALS-17 @linux
   Scenario Outline: private regular sources need metadata but not content readability
     Given a private credential inspection fixture
     And credential source "token" is a regular file of <bytes> bytes with mode "<mode>"
@@ -723,7 +723,7 @@ Feature: Named credential requests and read-only source inspection
 
   # These failures must not open a special file or wait for a FIFO writer.
   # Source layouts remain lexically valid: --policy-only accepts all of them.
-  @wip @slice-29 @ID-CREDENTIALS-18 @linux
+  @slice-29 @ID-CREDENTIALS-18 @linux
   Scenario Outline: unavailable linked and non-regular sources fail without reading them
     Given a private credential inspection fixture
     And credential source "token" has layout "<layout>"
@@ -756,7 +756,7 @@ Feature: Named credential requests and read-only source inspection
       | regular file used as a parent       | credential.unavailable | 3    |
 
   # Each bit stands alone so a check for only readability cannot pass.
-  @wip @slice-29 @ID-CREDENTIALS-19 @linux
+  @slice-29 @ID-CREDENTIALS-19 @linux
   Scenario Outline: any group or other source permission is refused
     Given a private credential inspection fixture
     And credential source "token" is a regular file of 64 bytes with mode "<mode>"
@@ -784,7 +784,7 @@ Feature: Named credential requests and read-only source inspection
   # Layouts place sources in the selected checkout or managed itos-container
   # state tree, including .git and hidden descendants. Roots themselves are
   # included to pin location-before-regular-file precedence. No state is approved.
-  @wip @slice-29 @ID-CREDENTIALS-20 @linux
+  @slice-29 @ID-CREDENTIALS-20 @linux
   Scenario Outline: a credential source cannot reside in checkout or protected state
     Given a private credential inspection fixture
     And credential source "token" has layout "<layout>"
@@ -832,7 +832,7 @@ Feature: Named credential requests and read-only source inspection
   # Reuse the compiled contract binary and its per-scenario coverage handling.
   # The first invocation proves that the new mode accepts distinct identities;
   # the second must reject the alias with the exact located diagnostic.
-  @wip @slice-29 @ID-CREDENTIALS-29
+  @slice-29 @ID-CREDENTIALS-29
   Scenario Outline: metadata inspection refuses bind aliases of protected descendants and files
     Given a credential observation fixture for "<boundary>" with "distinct outside file"
     When the credential observation contract runs in JSON mode
@@ -869,7 +869,7 @@ Feature: Named credential requests and read-only source inspection
   # that directory as metadata-only and cleanup restores access after assertions.
   # Only checkout enumeration is required. State's old row mandated the withdrawn
   # traversal; 35 below replaces it with the correct independent-source success.
-  @wip @slice-29 @ID-CREDENTIALS-30 @linux
+  @slice-29 @ID-CREDENTIALS-30 @linux
   Scenario: an incomplete checkout scan cannot declare a source outside it
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
@@ -886,7 +886,7 @@ Feature: Named credential requests and read-only source inspection
     And credential inspection has no side effects or helper execution
     And the engine recorder has no connections
 
-  @wip @slice-29 @ID-CREDENTIALS-35 @linux
+  @slice-29 @ID-CREDENTIALS-35 @linux
   Scenario: unreadable unrelated state records cannot block a distinct private source
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
@@ -916,7 +916,7 @@ Feature: Named credential requests and read-only source inspection
   # The fake schedules raw metadata changes; the shared disk contract performs
   # these same writes in isolated temporary state through adapter-local barriers.
   # Do not require unchanged unrelated records or modify the production binary.
-  @wip @slice-29 @ID-CREDENTIALS-32
+  @slice-29 @ID-CREDENTIALS-32
   Scenario Outline: another project's state publications and cleanup do not block inspection or hide aliases
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And credential observation schedules unrelated state activity "<activity>"
@@ -953,7 +953,7 @@ Feature: Named credential requests and read-only source inspection
   # verifies the setup count and zero product visits. Run against fake and disk
   # observation seams; do not allocate a 100001-entry object graph or capture its
   # contents for each row. This is observation-contract, not native mount proof.
-  @wip @slice-29 @ID-CREDENTIALS-33
+  @slice-29 @ID-CREDENTIALS-33
   Scenario Outline: retained unrelated state history does not consume inspection budgets or hide aliases
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the credential observation state retains 100001 unrelated entries
@@ -987,7 +987,7 @@ Feature: Named credential requests and read-only source inspection
   # "source mount mapping changed" changes its root without making a known
   # location match. Complete-data controls include exactly every topology bound,
   # safe first state creation and unrelated mount churn in the shared contract.
-  @wip @slice-29 @ID-CREDENTIALS-34
+  @slice-29 @ID-CREDENTIALS-34
   Scenario Outline: incomplete or inconsistent namespace evidence cannot establish state exclusion
     Given a credential observation fixture for "protected state" with "distinct outside file"
     When the credential observation contract runs in JSON mode
@@ -1025,7 +1025,7 @@ Feature: Named credential requests and read-only source inspection
   # The root-owned sticky /tmp ancestor of every private fixture is a positive
   # control for the inherited directory rule. User-owned sticky is no exception.
   # Parent modes are 0720, 0702 and 01777 respectively; only fixture paths change.
-  @wip @slice-29 @ID-CREDENTIALS-21 @linux
+  @slice-29 @ID-CREDENTIALS-21 @linux
   Scenario Outline: a private source also needs safe ancestors
     Given a private credential inspection fixture
     And credential source "token" has layout "<layout>"
@@ -1049,7 +1049,7 @@ Feature: Named credential requests and read-only source inspection
 
   # Same path means the same inode with one link: this reaches the cross-grant
   # check rather than the independent multiple-hard-link refusal in 23.
-  @wip @slice-29 @ID-CREDENTIALS-22 @linux
+  @slice-29 @ID-CREDENTIALS-22 @linux
   Scenario: different kinds cannot share one source inode
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
@@ -1066,7 +1066,7 @@ Feature: Named credential requests and read-only source inspection
 
   # Exposure through a checkout hard link is location refusal before link count;
   # an outside-only second link still reaches the independent links rule.
-  @wip @slice-29 @ID-CREDENTIALS-23 @linux
+  @slice-29 @ID-CREDENTIALS-23 @linux
   Scenario Outline: source exposure, link count and size bound metadata acceptance
     Given a private credential inspection fixture
     And credential source "token" has layout "<layout>"
@@ -1090,7 +1090,7 @@ Feature: Named credential requests and read-only source inspection
       | private regular file of zero bytes                 | credential.size     |
       | private regular file of 65537 bytes                | credential.size     |
 
-  @wip @slice-29 @ID-CREDENTIALS-24 @linux
+  @slice-29 @ID-CREDENTIALS-24 @linux
   Scenario: source failures are collected without hiding grants or disclosing contents
     Given a private credential inspection fixture
     And credential source "missing" has layout "absent leaf"
@@ -1115,7 +1115,7 @@ Feature: Named credential requests and read-only source inspection
   # The first successful invocation prevents a preexisting unknown-flag usage
   # refusal from satisfying the combination assertion. The second command must
   # identify a scope conflict, not reject credentials-only as an unknown option.
-  @wip @slice-29 @ID-CREDENTIALS-25 @linux
+  @slice-29 @ID-CREDENTIALS-25 @linux
   Scenario Outline: explicit inspection scopes cannot be combined
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
@@ -1143,7 +1143,7 @@ Feature: Named credential requests and read-only source inspection
 
   # New plain assertion resolves fixture source paths, requires exactly one line
   # per kind in sorted order, and applies the same escaping as policy inspection.
-  @wip @slice-29 @ID-CREDENTIALS-26 @linux
+  @slice-29 @ID-CREDENTIALS-26 @linux
   Scenario: credential metadata honors JSON selection and explains the plain inspection scope
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
@@ -1168,7 +1168,7 @@ Feature: Named credential requests and read-only source inspection
   # Reuse 30's unreadable descendant and metadata-only snapshot setup. With no
   # grants, that unrelated checkout directory must not prevent success. The
   # observation contract in 31 also rejects a scan whose errors are discarded.
-  @wip @slice-29 @ID-CREDENTIALS-27 @linux
+  @slice-29 @ID-CREDENTIALS-27 @linux
   Scenario Outline: metadata mode with no grants creates no state and inspects no sources
     Given a private credential inspection fixture
     And the credential fixture policy version is <version> with no credentials section
@@ -1203,7 +1203,7 @@ Feature: Named credential requests and read-only source inspection
   # directory-entry reads, descendant walks and mount-table reads are not.
   # Export observations through test-only output separate from the
   # product JSON, and run the same cases against the fake/disk observation contract.
-  @wip @slice-29 @ID-CREDENTIALS-31
+  @slice-29 @ID-CREDENTIALS-31
   Scenario Outline: no-grant inspection makes no source checkout scan or state projection calls
     Given a credential observation fixture for "<boundary>" with "<layout>"
     When the credential observation contract runs in JSON mode
@@ -1231,7 +1231,7 @@ Feature: Named credential requests and read-only source inspection
 
   # A string-prefix check would reject these safe siblings. The sibling sources
   # are distinct private directories/inodes, never symlinks or mount aliases.
-  @wip @slice-29 @ID-CREDENTIALS-28 @linux
+  @slice-29 @ID-CREDENTIALS-28 @linux
   Scenario Outline: a sibling path sharing a protected name prefix is not inside that tree
     Given a private credential inspection fixture
     And credential source "token" has layout "<layout>"

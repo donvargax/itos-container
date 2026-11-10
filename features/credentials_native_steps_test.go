@@ -112,6 +112,16 @@ func (w *world) credentialSteps(sc *godog.ScenarioContext) {
 		if err := w.exitsWith(code); err != nil {
 			return err
 		}
+		if strings.TrimSpace(w.stdout) == "" {
+			line := strings.TrimSuffix(w.stderr, "\n")
+			prefix := "itos-container: " + rule + " " + strconv.Quote("itos-container.yaml"+path) + ": "
+			message, ok := strings.CutPrefix(line, prefix)
+			text, fix, separated := strings.Cut(message, "; ")
+			if !ok || !separated || text == "" || fix == "" || strings.Contains(line, "\n") {
+				return fmt.Errorf("incorrect plain credential gate diagnostic\n%s", w.report())
+			}
+			return nil
+		}
 		var table godog.Table
 		data := fmt.Sprintf(`{"rows":[{}, {"cells":[{"value":%q},{"value":%q},{"value":%q}]}]}`, rule, path, strconv.Itoa(code))
 		if err := json.Unmarshal([]byte(data), &table); err != nil {

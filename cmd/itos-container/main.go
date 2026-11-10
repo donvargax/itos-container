@@ -20,6 +20,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -140,6 +141,22 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		c.Doctor.Readiness = service.Readiness
 		c.Doctor.Approval = service
 		c.Doctor.Presentation = presentation
+		root := os.Getenv("ITOS_ROOT")
+		if root == "" {
+			root, _ = os.Getwd()
+		}
+		state := os.Getenv("XDG_STATE_HOME")
+		if state == "" && filepath.IsAbs(os.Getenv("HOME")) {
+			state = filepath.Join(os.Getenv("HOME"), ".local", "state")
+		}
+		if filepath.IsAbs(state) {
+			state = filepath.Join(state, "itos-container")
+		} else {
+			state = ""
+		}
+		c.Doctor.Credentials = readiness.Credentials{FS: &readinessdisk.CredentialFiles{}, Input: readinessport.CredentialInput{
+			Root: root, State: state, OS: runtime.GOOS, Architecture: runtime.GOARCH, UID: int64(os.Geteuid()),
+		}}
 		return c.Doctor.Run(ui)
 	case "approve":
 		service, presentation := approvalServices(in, stdout, stderr)
