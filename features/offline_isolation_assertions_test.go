@@ -206,16 +206,19 @@ func (s *isolationWorld) mountBoundary(run *isolationRun) error {
 		if h["ReadonlyRootfs"] != true {
 			return errors.New("native root is not read-only")
 		}
-		binds, temps := 0, 0
+		if err := s.mountAnchor(run, r); err != nil {
+			return err
+		}
+		anchors, temps := 0, 0
 		mounts, _ := c["Mounts"].([]any)
 		for _, raw := range mounts {
 			m := object(raw)
 			switch m["Type"] {
-			case "bind":
-				if m["Source"] != s.w.doctor.checkout || m["Destination"] != "/workspace" || m["RW"] != true {
+			case "volume":
+				if m["Name"] != r.Anchor["Name"] || m["Driver"] != "local" || m["Source"] != r.Anchor["Mountpoint"] || m["Destination"] != "/workspace" || m["RW"] != true {
 					return errors.New("native worker has an unapproved host mount")
 				}
-				binds++
+				anchors++
 			case "tmpfs":
 				if m["Destination"] != "/tmp" {
 					return errors.New("unexpected requested temporary mount")
@@ -227,15 +230,69 @@ func (s *isolationWorld) mountBoundary(run *isolationRun) error {
 		}
 		// Docker reports HostConfig.Tmpfs separately on API versions that omit
 		// those entries from Mounts; it is still independently inspected here.
-		if temps == 0 && object(h["Tmpfs"])["/tmp"] != nil {
+		tmpfs := object(h["Tmpfs"])
+		if len(tmpfs) > 1 || (len(tmpfs) == 1 && tmpfs["/tmp"] == nil) {
+			return errors.New("unexpected requested temporary mount")
+		}
+		if temps == 0 && tmpfs["/tmp"] != nil {
 			temps = 1
 		}
-		if binds != 1 || temps != 1 {
+		if anchors != 1 || temps != 1 {
 			return errors.New("native mount inventory is incomplete")
 		}
 	}
 	if !found {
 		return errors.New("no independently inspected native mount boundary before start")
+	}
+	return nil
+}
+
+func (s *isolationWorld) mountAnchor(run *isolationRun, r offlineRequest) error {
+	a := s.w.approval
+	record := lossRecord(r.Record)
+	anchor := object(record["anchor"])
+	labels := object(object(r.Observation["Config"])["Labels"])
+	token, _ := labels["io.itos-container.intent"].(string)
+	session, _ := anchor["session"].(string)
+	checkout := object(a.settings["checkout"])
+	if !offlineHex(token) || !offlineHex(session) || session != run.sessionID || r.Record.Mode != 0600 || r.Record.UID != a.uid || r.Record.Inode == "" ||
+		record["schema"] != float64(2) || record["stage"] != "owned" || record["container_id"] != run.id || r.Observation["Id"] != run.id ||
+		record["name"] != "itos-container-"+token || record["project"] != a.project || record["fingerprint"] != a.fingerprint ||
+		labels["io.itos-container.project"] != a.project || labels["io.itos-container.fingerprint"] != a.fingerprint ||
+		anchor["name"] != "itos-container-anchor-"+token || anchor["stage"] != "owned" || anchor["device"] != checkout["device"] || anchor["inode"] != checkout["inode"] {
+		return errors.New("native mount lacks exact protected anchor ownership")
+	}
+	source, _ := anchor["source"].(string)
+	parts := strings.Split(source, "/")
+	if len(parts) != 5 || parts[0] != "" || parts[1] != "proc" || parts[3] != "fd" {
+		return errors.New("native anchor source is not a controller descriptor")
+	}
+	pid, pidErr := strconv.Atoi(parts[2])
+	fd, fdErr := strconv.Atoi(parts[4])
+	if pidErr != nil || fdErr != nil || pid <= 0 || fd < 0 || strconv.Itoa(pid) != parts[2] || strconv.Itoa(fd) != parts[4] {
+		return errors.New("native anchor descriptor is invalid")
+	}
+	wantLabels := map[string]any{
+		"io.itos-container.intent": token, "io.itos-container.project": a.project, "io.itos-container.fingerprint": a.fingerprint,
+		"io.itos-container.session": session, "io.itos-container.kind": "checkout-anchor", "io.itos-container.device": checkout["device"], "io.itos-container.inode": checkout["inode"],
+	}
+	v := r.Anchor
+	created, _ := anchor["created"].(string)
+	mountpoint, _ := v["Mountpoint"].(string)
+	if v["Name"] != anchor["name"] || v["Driver"] != "local" || v["Scope"] != "local" || created == "" || v["CreatedAt"] != created || mountpoint == "" ||
+		!reflect.DeepEqual(v["Labels"], wantLabels) || !reflect.DeepEqual(v["Options"], map[string]any{"type": "none", "o": "bind", "device": source}) {
+		return errors.New("native volume differs from the original owned anchor")
+	}
+	h := object(r.Observation["HostConfig"])
+	mounts, _ := h["Mounts"].([]any)
+	if len(mounts) != 1 || !offlineEmpty(h["Binds"]) || !offlineEmpty(h["VolumesFrom"]) {
+		return errors.New("native worker requests additional mount sources")
+	}
+	m := object(mounts[0])
+	options := object(m["VolumeOptions"])
+	if m["Type"] != "volume" || m["Source"] != anchor["name"] || m["Target"] != "/workspace" || m["ReadOnly"] == true ||
+		options["NoCopy"] != true || (options["Subpath"] != nil && options["Subpath"] != "") || !offlineEmpty(options["DriverConfig"]) {
+		return errors.New("native worker does not request exactly its owned checkout anchor")
 	}
 	return nil
 }

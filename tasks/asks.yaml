@@ -119,3 +119,95 @@ questions:
     item: "slice-19"
     question: "slice-19: CI red evidence for ID-SOCKETS-02 at 69b02a8?"
     answer: "Yes. Run 42323471709: the worker reached host sockets created after launch, with the positive controls passing. With 01 and 03, every slice-19 scenario has red evidence: implement the denial."
+  - id: q-30
+    item: "slice-19"
+    question: "slice-19: which enforcement denies host Unix sockets in the checkout: Landlock with a product init, the gVisor runtime, or defer?"
+    answer: "Defer (the person, 2026-11-07). For this milestone: refuse at startup a checkout that holds any Unix socket, with no worker created; document plainly that sockets created or swapped in during a run stay reachable; move ID-SOCKETS-02 and 03 out of slice-19 to p1-checkout-socket-kernel-enforcement, keeping the Landlock and gVisor research for milestone 2. See slice-19-steer.md."
+  - id: q-31
+    item: "slice-21"
+    question: "slice-21: is the local red evidence at 4d64985 enough to implement?"
+    answer: "Yes. All 45 examples fail at their behaviour assertions against recording fake engines (docs/plans/control-state-red-evidence.md); none is an engine scenario, so no CI red run is needed. Implement."
+  - id: q-32
+    item: "slice-15"
+    question: "slice-15: native evidence for ID-LIFECYCLE-15 at e22aa63?"
+    answer: "Run 42390615242: it already passes (8 of 8 steps), covered by slice-12's work. Accepted as regression coverage under the standing rule: activate it."
+  - id: q-33
+    item: "slice-17"
+    question: "slice-17: CI red evidence for ID-OFFLINE-30 at 3aae532?"
+    answer: "Yes. Run 42390617135: both rows fail at their Then (missing original owned volume and protected recovery evidence after controller exit). Implement."
+  - id: q-34
+    item: "slice-19"
+    question: "slice-19: CI red evidence for the reworded ID-SOCKETS-01 (12 rows) at f33853b?"
+    answer: "Yes. Run 42391893492: all 12 rows fail at their Then (the socket checkout reached worker creation, one create request). Implement the startup refusal and the run-help disclosure."
+  - id: q-35
+    item: "slice-21"
+    question: "slice-21: lock a private inode instead of the account home (Codex P3), and how to bootstrap it?"
+    answer: "Stop locking the home. mkdir the coordination directory 0700 (EEXIST is fine), open it O_DIRECTORY|O_NOFOLLOW and validate by descriptor (this UID, 0700, no symlink), then flock a private lock file inside it, validated the same way. Bound every lock wait by the 10 s call budget with a typed retryable refusal. Revise CONTROL-10 and control-state.feature:43-54 to match and add a case where another UID locking the home cannot delay doctor, approve or run. No 0700-home requirement. See slice-21-steer.md."
+  - id: q-36
+    item: "slice-17"
+    question: "slice-17: its scenarios can't activate without slice-18's recovery, which is specified to follow it; how to break the cycle?"
+    answer: "Merge slice-18 into slice-17: bring slice-18's accepted spec (origin/slice-18, features/anchors.feature) onto slice-17's branch and implement and land both in slice-17's pull request; slice-18 is dropped as merged. Each scenario keeps its red-first evidence; slice-18's engine cases need their CI red run before implementation. See slice-17-steer.md."
+  - id: q-37
+    item: "slice-17"
+    question: "slice-17: CI red evidence for ID-ANCHORS-09 to 13?"
+    answer: "Yes. Run 42400524477: all seven rows fail at their Then steps (recovery neither accounts for nor releases the original anchor). Finish ANCHORS-01 to 08's local red, then implement."
+  - id: q-38
+    item: "slice-17"
+    question: "slice-17: ADR 0019 says fresh-process anchor recovery belongs to slice-18; is that conflict still open?"
+    answer: "No. q-36 merged slice-18 into slice-17, so fresh-process recovery is this slice's scope and 60b81ed implements it. Update ADR 0019 to match, read CI run 42410829045 at 60b81ed, and treat a job dying near 600 s as go test's default timeout to fix by speeding the slow package, never by raising it. See slice-17-steer.md."
+  - id: q-39
+    item: "slice-17"
+    question: "slice-17: a workload that exits before the post-start stat can't be verified; refuse it (q-27) or keep its result?"
+    answer: "Keep its result. The detector checks the anchor, it is not the protection. While the worker runs: pidfd for State.Pid, a fresh inspect confirming the same PID, then stat /proc/<pid>/root/workspace; mismatch means teardown and refusal. If the worker already exited (before or between inspect and stat): return its real exit status, record the detector as not observed, tear down normally, claim no verification. Another stat failure while running stays a refusal. Regressions for exit 0 and nonzero in both windows and the PID-reuse guard; update ADR 0019. See slice-17-steer.md."
+  - id: q-40
+    item: "T-33"
+    question: "T-33: which native engine scenarios make the suite slow, and how to fix it?"
+    answer: "Run 42457394504: LIFECYCLE-13 row 1 takes 128 s (it waits out the real 120 s startup budget) and LIFECYCLE-09's four rows about 12 s each (the real 10 s grace); everything else is under 6 s. Shorten the product's call, startup and grace budgets for the harness through a test-only seam (a build tag or fixture config, never a user-settable variable), keep assertions relative to the budget used, then restore the 5-minute limits. See T-33-steer.md."
+  - id: q-41
+    item: "slice-17"
+    question: "slice-17: what failed natively in run 42459248613?"
+    answer: "The full log is at .git/itos/loop/slice-17-run-42459248613-engine.log. Even fault-free native controls fail, and the product reports only run.mount-refused, so on Docker 28 the anchor or the post-start detector refuses ordinary runs. Make run.mount-refused carry its reason (the check, expected and observed device:inode, or the stat or pidfd errno), show it in the harness output, and return blocked for a native run; if Moby resolves the path by name or refuses it, stop with the evidence (q-19)."
+  - id: q-42
+    item: "slice-17"
+    question: "slice-17: the post-start stat finds no /workspace in a live worker's root (it changed root or namespaces); refuse or record?"
+    answer: "Record, as q-39 reasons: the anchor is the protection. On ENOENT, ESRCH or EACCES from the stat, poll the pidfd: exited means q-39's exited path; alive means record the detector as not observed (worker root changed) and continue. Refuse only on a device:inode mismatch, or when a live worker's root still shows /workspace but it can't be read. Add a regression for a live worker that chroots or unshares before the stat."
+  - id: q-43
+    item: "T-34"
+    question: "T-34: what does the CI runner's fixture manifest look like now?"
+    answer: "Run 42497992377: the built image ID equals the manifest digest (sha256:af908c… for both), so the runner's Docker uses the containerd image store, where image IDs are manifest digests. Accept either store and log which: graph driver (built ID equals .config.digest) or containerd (built ID equals the manifest digest, with .config.digest checked against the daemon's config). Keep the bytes, single-manifest and cold-reference checks. See T-34-steer.md."
+  - id: q-44
+    item: "T-25"
+    question: "T-25: the release helpers need internal/release but the architecture gate forbids tools importing internal; may the gate change?"
+    answer: "Yes, one narrow named exception: the release helper packages may import internal/release (their tests internal/release/releasetest) and nothing else under internal, with fixtures proving that edge allowed and every other tools-to-internal edge still refused. Amend the spec's no-gate-edits rule to name it, land it in a ci commit before the helpers, and apply the stashed test files. See T-25-steer.md."
+  - id: q-45
+    item: "T-36"
+    question: "T-36: the spec's count-reach check fails for ID-CLI-01, which runs count's Help() during Kong setup; correct the spec?"
+    answer: "Yes: judge counting by internal/slices/count/domain/ only, in the spec and the task check together, then apply the stashed harness repair (git stash list in .wt/w1), finish docs and checks, and push. See T-36-steer.md."
+  - id: q-46
+    item: "T-31"
+    question: "T-31: its task check needs the engine fixtures, which only the Engine job has; how is it proven?"
+    answer: "Change done_when to the engine-free regression for the heartbeat rename race; RECOVERY-23's native proof is the Engine job, which runs every live engine scenario on each pull request. Keep the workflow guards. See T-31-steer.md."
+  - id: q-47
+    item: "T-37"
+    question: "T-37: its check's git show-ref fails on CI's ref-less fixture clone; use for-each-ref?"
+    answer: "Yes: git for-each-ref, which succeeds on an empty ref set, keeping the same state comparison; change the check and push."
+  - id: q-48
+    item: "T-33"
+    question: "T-33: may its live-scenario timing changes go in a fix commit, as the gate requires, though the task is a test task?"
+    answer: "Yes: a fix commit with Task: T-33 and the scenario footers itos asks for; pop the stashed implementation and push. See T-33-steer.md."
+  - id: q-49
+    item: "T-38"
+    question: "T-38: should the egress proxy also check the TLS ClientHello (SNI must equal the CONNECT name; missing SNI, non-TLS bytes and ECH refused), still without terminating TLS?"
+    answer: "Yes (coordinator, provisional for the person's review): read the tunnel's first TLS record before forwarding anything; the SNI must equal the CONNECT name; refuse a missing SNI, non-TLS bytes and ECH, with each refusal logged. No key, CA or decryption, so the charter's 'no TLS interception' holds. Disclose HTTP Host fronting inside TLS as a remaining limit. The person's smoke check confirms Codex and Claude Code send SNI without ECH. See T-38-steer.md."
+  - id: q-50
+    item: "T-38"
+    question: "T-38: Docker's embedded resolver can't be removed from a user-defined network; may T-38 replace the contract's 'block embedded Docker DNS' with AC-11's 'no unauthorized resolution path', proven on the real engine by slice-27?"
+    answer: "Yes (coordinator, provisional for the person's review): replace 'block embedded Docker DNS' with AC-11's result, no unauthorized resolution path, citing moby starting the resolver without forwarding for a sandbox with only internal endpoints; slice-27's AC-11 scenario must prove it on the real engine, and if it can't, the topology reopens."
+  - id: q-51
+    item: "T-38"
+    question: "T-38: which proxy implementation: goproxy, smarty/cproxy, or our own on Go's standard library?"
+    answer: "The person, 2026-11-09: our own, on Go's standard library, no dependencies (about 300 lines): parse CONNECT, check the name against the allowlist and the port against 443, dial, peek the TLS ClientHello with crypto/tls (SNI equal to the CONNECT name; missing SNI, non-TLS bytes and ECH refused, per q-49), replay the peeked bytes untouched, splice both ways, and log each refusal as a JSON line. No interception code exists in the tree. A deliberate exception to the charter's prefer-a-library rule: it is security-critical and small, the libraries either carry MITM machinery (goproxy) or are unmaintained (cproxy), and q-49 needs custom code anyway. The spec requires fuzz tests for CONNECT parsing and the ClientHello peek, beside slice-27's real-engine scenarios. If TLS interception is ever wanted, this code seeds the proxy's own repository."
+  - id: q-52
+    item: "slice-27"
+    question: "Who may approve a sandbox that grants network or credentials (q-2's revisit, p3-approval-before-egress)?"
+    answer: "The person, 2026-11-09: keep it simple, no keys. Approval is asked again only when the settings fingerprint changes, as today. A grant that includes network or credentials needs the person at a real terminal: approve shows what is granted and asks for yes; --fingerprint (no terminal) is accepted only for offline grants and is refused, with a fix naming the interactive form, for any grant with an egress allowlist or credentials. So no non-interactive network grant can exist to be honoured later. Disclosed gap: an agent running unsandboxed on the host could fake a terminal; the answer is running agents inside the container, which milestone two provides."

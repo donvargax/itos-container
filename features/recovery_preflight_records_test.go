@@ -3,6 +3,7 @@ package features
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 )
@@ -41,7 +42,7 @@ func (w *world) localRegistryPaths(tree map[string]runEntry) (map[string]bool, e
 		count++
 		recordPath := filepath.Join(path, "record.json")
 		var r map[string]any
-		if json.Unmarshal([]byte(tree[recordPath].Data), &r) != nil || len(r) != 7 || r["schema"] != float64(1) || r["id"] != id || r["project"] != w.approval.project || r["state"] != "stopped" || r["workload_exit"] != float64(0) || r["last_problem"] != nil {
+		if json.Unmarshal([]byte(tree[recordPath].Data), &r) != nil || !publicRecordShape(r) || r["schema"] != float64(1) || r["id"] != id || r["project"] != w.approval.project || r["state"] != "stopped" || r["workload_exit"] != float64(0) || r["last_problem"] != nil {
 			return nil, fmt.Errorf("public registration lost exact completed facts")
 		}
 		intent, ok := r["intent"].(string)
@@ -50,6 +51,12 @@ func (w *world) localRegistryPaths(tree map[string]runEntry) (map[string]bool, e
 			return nil, fmt.Errorf("public registration did not uniquely bind an owned intent")
 		}
 		intents[intent] = true
+		complete := true
+		admission, err := w.admissionPaths(tree, id, intent, &complete)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(allowed, admission)
 		for _, p := range []string{path, recordPath, filepath.Join(path, "controller.lock"), filepath.Join(path, "operation.lock")} {
 			allowed[p] = true
 		}
@@ -62,7 +69,7 @@ func (w *world) localRegistryPaths(tree map[string]runEntry) (map[string]bool, e
 		if !ok {
 			return nil, fmt.Errorf("missing public registry object")
 		}
-		directory := path == root || path == project || filepath.Dir(path) == project
+		directory := path == root || path == project || filepath.Dir(path) == project || path == filepath.Dir(w.admissionPath(""))
 		if fmt.Sprint(entry.Owner) != w.approval.uid {
 			return nil, fmt.Errorf("public registry owner changed")
 		}

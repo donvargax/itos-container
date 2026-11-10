@@ -29,6 +29,7 @@ type foregroundRecovery struct {
 	exitCode      int
 	started, exit chan struct{}
 	finish        sync.Once
+	began         sync.Once
 	signals       []string
 	elapsed       time.Duration
 	startup       chan time.Time
@@ -68,10 +69,7 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the foreground recovery command preserves both trailing streams and the interrupted exit$`, func() error {
 		f := w.doctor.engine.offline.recovery
 		want := f.exitCode
-		if want == 0 {
-			want = 75
-		}
-		if w.exit != want || w.stdout != recoveryTailOut || !strings.HasPrefix(w.stderr, recoveryTailErr) {
+		if w.exit != want || !strings.Contains(w.stderr, "run.cancelled") || w.stdout != recoveryTailOut || !strings.HasPrefix(w.stderr, recoveryTailErr) {
 			return fmt.Errorf("interrupted exit lost trailing stdout/stderr or worker status: %s", w.report())
 		}
 		return nil
@@ -118,7 +116,7 @@ func (w *world) foregroundRecoverySteps(sc *godog.ScenarioContext) {
 			valid = valid && f.elapsed >= 100*time.Millisecond && f.graceBudget > 9*time.Second && f.graceBudget <= 10*time.Second
 		}
 		a.mu.Unlock()
-		if !valid || w.exit != 75 {
+		if !valid || w.exit != 0 || !strings.Contains(w.stderr, "run.cancelled") || !strings.Contains(w.stderr, signal) {
 			return fmt.Errorf("interrupt did not forward/escalate and return failure: signals=%v elapsed=%v %s", f.signals, f.elapsed, w.report())
 		}
 		return w.localOfflineOwned()
@@ -165,10 +163,6 @@ func (a *localOfflineAPI) recoveryStart(out http.ResponseWriter, resource map[st
 		}
 		_ = conn.Close()
 	}
-	if !f.block && !f.lateStdin {
-		resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
-	}
-	close(f.started)
 	out.WriteHeader(204)
 }
 
@@ -184,14 +178,22 @@ func (w *world) foregroundRecoveryRun() error {
 			return err
 		}
 		args = []string{"-test.run=^TestForegroundRecoveryCommand$", "-test.count=1"}
-		if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+		if cover := w.coverageDir(); cover != "" {
 			args = append(args, "-test.gocoverdir="+cover)
 		}
+	}
+	if !assembly {
+		var err error
+		bin, err = w.sessionProbeBinary()
+		if err != nil {
+			return err
+		}
+		args = append([]string{"-test.run=^TestLocalRunCommand$", "-test.count=1", "--"}, args...)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Dir, cmd.Env = w.doctor.cwd, w.env()
+	cmd.Dir, cmd.Env = w.doctor.cwd, append(w.env(), "SLICE_17_LOCAL_RUN=1", "SLICE_17_LOCAL_MOUNT_ROOT="+w.doctor.checkout)
 	result := filepath.Join(w.dir, "slice-10-recovery-result.json")
 	stdout, stderr := filepath.Join(w.dir, "slice-10-recovery.out"), filepath.Join(w.dir, "slice-10-recovery.err")
 	if f.fault == "stdout" {

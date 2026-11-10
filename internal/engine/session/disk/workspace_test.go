@@ -8,7 +8,32 @@ import (
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	"github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
+
+func TestWorkspaceContracts(t *testing.T) {
+	t.Run("memory", func(t *testing.T) {
+		w := &porttest.Workspace{}
+		porttest.WorkspaceContract(t, w, port.Binding{}, func() { w.Changed = true })
+	})
+	t.Run("disk", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.Mkdir(filepath.Join(root, "sub"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		b := port.Binding{Workspace: "/workspace/sub"}
+		b.Checkout.Root = root
+		w := &Workspace{}
+		porttest.WorkspaceContract(t, w, b, func() {
+			if err := w.roots[0].Rename("sub", "original"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(filepath.Join(root, "sub"), 0700); err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
+}
 
 func TestWorkspacePinsAndRejectsSubstitution(t *testing.T) {
 	root := t.TempDir()
@@ -19,16 +44,16 @@ func TestWorkspacePinsAndRejectsSubstitution(t *testing.T) {
 	b.Checkout.Root = root
 	w := &Workspace{}
 	t.Cleanup(w.Close)
-	if f := w.Pin(b); f != "" || !w.Unchanged() {
+	if f := w.Pin(b); f != "" || w.Validate() != "" {
 		t.Fatal(f)
 	}
 	// Windows refuses renaming an ancestor with an open descendant, even with
 	// delete sharing. Release only the leaf handle; both parents used to check
-	// identity stay pinned. Prove this does not itself invalidate Unchanged.
+	// identity stay pinned. Prove this does not itself invalidate validation.
 	if err := w.roots[len(w.roots)-1].Close(); err != nil {
 		t.Fatal(err)
 	}
-	if !w.Unchanged() {
+	if w.Validate() != "" {
 		t.Fatal("closing the leaf invalidated parent identity before substitution")
 	}
 	// The handle-relative rename permits the target directory itself to stay
@@ -39,15 +64,15 @@ func TestWorkspacePinsAndRejectsSubstitution(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "sub", "child"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if w.Unchanged() {
+	if w.Validate() == "" {
 		t.Fatal("replacement accepted")
 	}
 	w.Close()
-	if w.Unchanged() {
+	if w.Validate() == "" {
 		t.Fatal("closed pin accepted")
 	}
 	b.Workspace = "/workspace"
-	if f := w.Pin(b); f != "" || !w.Unchanged() {
+	if f := w.Pin(b); f != "" || w.Validate() != "" {
 		t.Fatal(f)
 	}
 	w.Close()
@@ -67,7 +92,7 @@ func TestWorkspaceRefusesMissingAndAliasedPaths(t *testing.T) {
 		if f := w.Pin(b); f != port.Refused {
 			t.Fatalf("%s: %s", path, f)
 		}
-		if w.Unchanged() {
+		if w.Validate() == "" {
 			t.Fatal("failure retained pin")
 		}
 	}
@@ -120,7 +145,7 @@ func TestWorkspacePinClosesHandlesOnChildFailure(t *testing.T) {
 			if got := w.Pin(b); got != port.Refused {
 				t.Fatalf("%s during pin = %s, want refusal", fault, got)
 			}
-			if w.Unchanged() || len(w.roots) != 0 || len(w.names) != 0 || len(w.infos) != 0 {
+			if w.Validate() == "" || len(w.roots) != 0 || len(w.names) != 0 || len(w.infos) != 0 {
 				t.Fatal("failed pin retained workspace authority")
 			}
 			if len(handles) < 3 {
@@ -132,9 +157,40 @@ func TestWorkspacePinClosesHandlesOnChildFailure(t *testing.T) {
 				}
 			}
 			w.ops = nil
-			if got := w.Pin(b); got != "" || !w.Unchanged() {
+			if got := w.Pin(b); got != "" || w.Validate() != "" {
 				t.Fatalf("fresh pin after failure = %s", got)
 			}
 		})
+	}
+}
+
+func TestWorkspacePinClosesHandleOnRootStatFailure(t *testing.T) {
+	b := port.Binding{Workspace: "/workspace"}
+	b.Checkout.Root = t.TempDir()
+	var opened *os.Root
+	w := &Workspace{ops: &workspaceOperations{openRoot: func(path string) (*os.Root, error) {
+		if path != b.Checkout.Root {
+			t.Fatalf("opened different checkout: %s", path)
+		}
+		root, err := os.OpenRoot(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		opened = root
+		// Fail the stat on the real descriptor after the root open succeeds.
+		if err := root.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return root, nil
+	}}}
+	t.Cleanup(w.Close)
+	if failure := w.Pin(b); failure != port.Refused {
+		t.Fatal("unreadable root acquired authority", failure)
+	}
+	if opened == nil || len(w.roots) != 0 || w.Validate() != port.Refused {
+		t.Fatal("failed root stat retained workspace authority")
+	}
+	if source, failure := w.Source(); failure != port.MountRefused || source != (port.MountSource{}) {
+		t.Fatal("failed root stat supplied a mount source", source, failure)
 	}
 }

@@ -137,8 +137,24 @@ func (w *world) sessionDurability(events []sessionEvent, stage, id string) error
 			continue
 		}
 		record, err := sessionDecodeRecord(event.Bytes)
-		if err != nil || !reflect.DeepEqual(record, w.sessionExpectedRecord(stage, id)) {
+		want := w.sessionExpectedRecord(stage, id)
+		if stage == "absent" && object(record["anchor"])["stage"] == "owned" && want["schema"] == float64(2) {
+			// Worker absence is durable before anchor release. This intermediate
+			// record must retain the exact owned tuple, but is not completion.
+			object(want["anchor"])["stage"] = "owned"
+			if err != nil || !reflect.DeepEqual(record, want) {
+				return fmt.Errorf("worker absence lost anchor authority")
+			}
+			continue
+		}
+		if err != nil || !reflect.DeepEqual(record, want) {
 			return fmt.Errorf("%s durability event contains different bindings", stage)
+		}
+		if event.Operation == "write" {
+			positions = map[string]int{}
+		}
+		if event.Operation == "file fsync" && positions["atomic publication"] != 0 {
+			continue
 		}
 		positions[event.Operation] = i + 1
 	}

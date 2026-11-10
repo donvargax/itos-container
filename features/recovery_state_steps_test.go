@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -258,6 +259,18 @@ func (w *world) recoverySeed(phase, resource, exit string) error {
 			return err
 		}
 	}
+	if phase == "stopped" {
+		// A current completed session includes its admission completion proof.
+		// Explicit pre-upgrade ownership stays in OVERLAP-08's legacy fixture.
+		path := w.admissionPath(l.id)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			return err
+		}
+		claim := map[string]any{"schema": 1, "root": w.doctor.checkout, "id": l.id, "intent": w.session.reference, "complete": true}
+		if err := os.WriteFile(path, approvalJSON(claim), 0600); err != nil {
+			return err
+		}
+	}
 	w.sessionReplacement()
 	return w.recoveryCapture()
 }
@@ -277,7 +290,18 @@ func (w *world) recoveryCapture() error {
 	}
 	w.recoveryLocal.before = all
 	w.recoveryLocal.immutable = map[string]string{}
+	tree, err := runTree(w.doctor.host)
+	if err != nil {
+		return err
+	}
+	admission, err := w.currentAdmissionPaths(tree)
+	if err != nil {
+		return err
+	}
 	for path, value := range all {
+		if admission[path] {
+			continue
+		}
 		if w.recoveryLocal.runFixture && strings.HasPrefix(path, filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")) {
 			rel, _ := filepath.Rel(filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container"), path)
 			if rel == "sessions" || strings.HasPrefix(rel, "sessions/") || rel == "intents" || strings.HasPrefix(rel, "intents/") || rel == "snapshots" {
@@ -310,7 +334,9 @@ func (w *world) sessionRequests() []sessionRequest {
 	if w.session == nil {
 		return nil
 	}
-	return w.session.api.requests
+	w.session.api.mu.Lock()
+	defer w.session.api.mu.Unlock()
+	return slices.Clone(w.session.api.requests)
 }
 func (w *world) recoveryImmutable() error {
 	before := w.recoveryLocal.immutable
@@ -321,7 +347,9 @@ func (w *world) recoveryImmutable() error {
 		return fmt.Errorf("recovery changed unrelated state")
 	}
 	for _, q := range w.session.api.requests {
-		if (!w.recoveryLocal.runFixture && (q.Path == "/containers/create" || strings.HasSuffix(q.Path, "/start"))) || (q.Method == "DELETE" && q.Path != "/containers/"+w.session.seedID) {
+		launch := q.Path == "/containers/create" || strings.HasSuffix(q.Path, "/start")
+		ownedRemoval := q.Path == "/containers/"+w.session.seedID || (w.recoveryLocal.runFixture && q.Path == "/volumes/itos-container-anchor-"+w.session.token && (q.Query == "" || q.Query == "force=false"))
+		if !w.recoveryLocal.runFixture && launch || q.Method == "DELETE" && !ownedRemoval {
 			return fmt.Errorf("recovery launched or removed another resource")
 		}
 	}
@@ -392,12 +420,16 @@ func (w *world) recoveryLocalDurable() error {
 		exit, _ = strconv.Atoi(w.recoveryLocal.exit)
 	}
 	want := map[string]any{"schema": 1, "id": w.recoveryLocal.id, "project": w.approval.project, "intent": w.session.reference, "state": "stopped", "workload_exit": exit, "last_problem": nil}
+	if w.recoveryLocal.runFixture && exit != nil {
+		// This HTTP worker remains live until Wait, after the guarded detector.
+		want["mount_detector"] = "verified"
+	}
 	return recoveryDurableFile(w.recoveryRecordPath(), want, w.recoveryLocal.processes)
 }
 func (w *world) recoveryLocalSignals() error {
 	term, kill, remove := 0, 0, 0
 	for _, q := range w.session.api.requests {
-		if q.Method == "DELETE" {
+		if q.Method == "DELETE" && strings.HasPrefix(q.Path, "/containers/") {
 			remove++
 		}
 		if strings.HasSuffix(q.Path, "/kill") {

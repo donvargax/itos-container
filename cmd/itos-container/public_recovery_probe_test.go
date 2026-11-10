@@ -31,6 +31,7 @@ import (
 // adapter boundaries, never command results, ownership decisions or engine data.
 type publicProbeRequest struct {
 	Args                                                        []string
+	LocalMount                                                  string
 	Fault, Boundary, ID, Ready, Release, Output, Stdout, Stderr string
 }
 
@@ -57,10 +58,19 @@ func TestPublicRecoveryCommand(t *testing.T) {
 	}
 	out, errout := open(request.Stdout), open(request.Stderr)
 	service, _ := approvalServices(nil, out, errout)
+	if home := os.Getenv("SLICE_21_ACCOUNT_HOME"); home != "" {
+		host := controlAccountHost{Host: service.Host, home: home}
+		service.Host = host
+		service = coordinatedApproval(service, host)
+	}
 	runner, recovery := sessionServices(service)
+	if request.LocalMount != "" {
+		runner.Workspace = &sessiondisk.Workspace{ProcessOpen: localProcessOpen, MountStat: localMountStat(request.LocalMount)}
+	}
 	registry := runner.Registry.(sessiondisk.Registry)
 	publicStorage := registry.Storage.(approvaldisk.Registry)
 	store := runner.Store.(sessiondisk.Store)
+	store.Host = service.Host
 	intentStorage := store.Storage.(approvaldisk.Storage)
 	ioFault := publicProbeIO(request.Fault)
 	publicStorage.IO, intentStorage.IO = ioFault, ioFault
@@ -80,8 +90,14 @@ func TestPublicRecoveryCommand(t *testing.T) {
 			return sessionOwnerInfo{FileInfo: info, metadata: metadata.Interface()}, nil
 		}
 	}
+	if request.Fault == "public progress replacement" {
+		publicStorage.Stat = publicProgressReplacement(t, publicStorage, request)
+	}
 	store.Storage = intentStorage
 	registry.Store, registry.Storage = store, publicStorage
+	if request.Boundary == "reservation before registration" {
+		registry.Storage = reservationBarrierStorage{RegistryStorage: publicStorage, barrier: &publicBarrier{request: request}}
+	}
 	runner.Store, runner.Registry = store, registry
 	recovery.Registry = registry
 	if request.Fault == "entropy unavailable" {
@@ -115,12 +131,30 @@ func TestPublicRecoveryCommand(t *testing.T) {
 
 type publicUnknownEngine struct{}
 
+type reservationBarrierStorage struct {
+	ap.RegistryStorage
+	barrier *publicBarrier
+}
+
+func (s reservationBarrierStorage) Register(ctx context.Context, c ap.Candidate, id string, data []byte) (ap.ControllerLease, ap.Failure) {
+	s.barrier.wait(ctx, "reservation before registration")
+	return s.RegistryStorage.Register(ctx, c, id, data)
+}
+
 func (publicUnknownEngine) OpenRun(context.Context, sp.Binding) (sp.RunConnection, sp.Outcome) {
 	return nil, "unclassified fixture failure"
 }
 
 func publicProbeIO(fault string) approvaldisk.SnapshotIO {
 	bad := errors.New("synthetic persistence failure")
+	anchorAbsent := func(data []byte) bool {
+		var r struct{ Anchor struct{ Stage string } }
+		return json.Unmarshal(data, &r) == nil && r.Anchor.Stage == "absent"
+	}
+	anchorFile := func(file *os.File) bool {
+		data, err := os.ReadFile(file.Name())
+		return err == nil && anchorAbsent(data)
+	}
 	state := func(file *os.File) string {
 		path := file.Name()
 		info, err := file.Stat()
@@ -143,12 +177,18 @@ func publicProbeIO(fault string) approvaldisk.SnapshotIO {
 	}
 	return approvaldisk.SnapshotIO{
 		Write: func(file *os.File, data []byte) (int, error) {
+			if fault == "anchor absence short write" && anchorAbsent(data) {
+				return 0, io.ErrShortWrite
+			}
 			if fault == "short record write" && strings.Contains(file.Name(), "/sessions/") {
 				return 0, io.ErrShortWrite
 			}
 			return file.Write(data)
 		},
 		FileSync: func(file *os.File) error {
+			if fault == "anchor absence file fsync" && anchorFile(file) {
+				return bad
+			}
 			public := strings.Contains(file.Name(), "/sessions/")
 			if (fault == "record file fsync" && public && state(file) == "preparing") || (fault == "lock object durability" && public && strings.HasSuffix(file.Name(), ".lock")) || (fault == "session completion file fsync" && public && state(file) == "stopped") || (fault == "intent absent publication fsync" && state(file) == "absent") {
 				return bad
@@ -162,6 +202,15 @@ func publicProbeIO(fault string) approvaldisk.SnapshotIO {
 			return root.Rename(from, to)
 		},
 		ParentSync: func(file *os.File) error {
+			if fault == "anchor absence parent fsync" {
+				entries, _ := os.ReadDir(file.Name())
+				for _, entry := range entries {
+					data, err := os.ReadFile(filepath.Join(file.Name(), entry.Name()))
+					if err == nil && anchorAbsent(data) {
+						return bad
+					}
+				}
+			}
 			if strings.Contains(file.Name(), "/sessions/") && ((fault == "session directory fsync" && state(file) == "preparing") || (fault == "session completion parent fsync" && state(file) == "stopped")) {
 				return bad
 			}

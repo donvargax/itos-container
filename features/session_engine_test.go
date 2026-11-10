@@ -38,6 +38,7 @@ type sessionAPI struct {
 	absent   map[string]bool
 	problem  error
 	attached net.Conn
+	volumes  map[string]map[string]any
 }
 
 func (w *world) startSessionAPI() error {
@@ -91,6 +92,19 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 	// Every request, even a refused start/acquisition, is recorded before dispatch.
 	a.requests = append(a.requests, entry)
 	index := len(a.requests) - 1
+	if s := a.w.anchorLocalRecovery; s != nil && s.mode == "budget" && s.fault == "status anchor inspect" && !s.priorDelay && entry.Path == "/info" {
+		s.priorDelay = true
+		a.mu.Unlock()
+		select {
+		case <-time.After(8 * time.Second):
+		case <-request.Context().Done():
+		}
+		a.mu.Lock()
+	}
+	if (a.w.session.offline || a.w.anchorLocalRecovery != nil || a.w.recoveryLocal != nil && a.w.recoveryLocal.runFixture) && strings.HasPrefix(entry.Path, "/volumes") {
+		a.serveAnchorVolume(out, request, entry, index)
+		return
+	}
 	if a.w.recoveryLocal != nil && strings.HasPrefix(entry.Path, "/containers/") {
 		a.serveRecovery(out, request, entry, index)
 		return

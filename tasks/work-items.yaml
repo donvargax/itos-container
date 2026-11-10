@@ -1,7 +1,10 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue: []
+queue:
+  - p1-lifecycle-shard-flakes-on-main
+  - p1-harness-home
+  - p1-interactive-tty
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -168,6 +171,10 @@ items:
       unrestricted-push and automatic three-platform claims with the implemented CI policy. T-9's
       completed refresh predates this change. Defer unless it blocks the charter's configuration,
       doctor and approval step.
+
+      Already covers hook registration and verification instructions. Include the reported unset
+      core.hooksPath and missing pre-commit/commit-msg hooks in that verification, confirming how
+      subsequent commits enforce configured gates.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -275,6 +282,24 @@ items:
       blocks. One check closes most: tools/bin/architecture-check reads each role's stdlib imports
       from go list, with an allowlist per role, including IgnoredGoFiles. Details at the
       coordinator.
+
+      This belongs inside p2-architecture-stdlib-on-go-list. That item already plans a go list based
+      change to tools/architecture and already names build-tagged files as an evasion ('a
+      build-tagged handler file with os/exec passes'). Closing this gap is the same
+      enforcement-input edit: it triggers the full fixture matrix, so it should be one change, not
+      two. One correction to the idea's example. I checked with go list on this Linux host: a lone
+      x_darwin.go is already reported in IgnoredGoFiles, so the current check
+      (tools/architecture/graph.go) does refuse it. The real gap is a file that matches the host.
+      x_linux.go, x_amd64.go and //go:build linux all pass on Linux CI, yet the file is dropped on
+      the other release targets (.goreleaser.yaml builds linux, darwin and windows). So the domain
+      or port behaves differently per OS without any ignored file showing up. The idea's measured
+      remedy still applies: run go/build MatchFile over the goreleaser targets, plus a refusal of
+      any //go:build line in domains and ports, because //go:build !relaxed matches on all five
+      targets. The charter's supported host is Linux amd64, so this is p2 at most and blocks
+      nothing. Backport candidate for the coordinator to file on go-template-itos after searching
+      its issues: tools/architecture has been reworked in this project, and the template renders the
+      same checker (.itos-template.yaml names go-template-itos). This project's copy was changed
+      after rendering.
   - id: T-17
     title: Bugbot is not requested for the rest of 2026-11-04
     phase: 1
@@ -297,6 +322,14 @@ items:
       commit. Capture a failure first.
 
       From arc42's review: go.mod is an enforcement input, so slices 2 and 3 hit this.
+
+      That item already holds the problem that the whole fixture matrix is slow and can fail under
+      load. Add this measurement: T-39's 24 probes ran in under 10 s with a hand-built checker and
+      ARCHITECTURE_CHECKER set by hand, against 124 s for the whole matrix. A filter, or a split of
+      the matrix, is a candidate remedy once that item has captured a failure. Do not add a flag to
+      the gate tool on its own: touching tools/architecture/check is an enforcement-input change
+      that triggers the full matrix, and agents do not run the gate by hand. It is not worth a
+      separate item.
   - id: slice-5
     title: Bound what doctor can spend parsing hostile config, as a whole rather than by each amplification
     phase: 1
@@ -371,25 +404,16 @@ items:
     title: Budgets, cancellation and loss
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-11]
     kind: slice
-    why: >
-      T-11's stall, signal, engine-loss and controller-kill cases. Waits: 10 s call, 120 s startup,
-      30 s teardown. Signals: forward once, 10 s grace, then SIGKILL; observed exit wins. Controller
-      loss leaves the worker isolated until stop.
   - id: p3-approval-before-egress
     title: Revisit who may approve a sandbox before it can grant network or credentials
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The person's q-2, 2026-11-04: an agent on the host can approve its own sandbox through
-      --fingerprint or a faked terminal. Offline-only permissions make that cheap for now. Before
-      the egress and credentials stages, when an approval grants something worth taking, weigh a
-      host-side confirmation an agent cannot drive, per the stage.
   - id: T-21
     title: CI's manual trigger runs named @wip scenarios, for their red evidence
     phase: 1
@@ -428,9 +452,9 @@ items:
   - id: T-25
     title: Release a version on each feat or fix once run works
     phase: 1
-    owner: null
-    status: todo
-    depends_on: [slice-14, slice-15]
+    owner: donvargax
+    status: done
+    depends_on: [slice-14, slice-15, slice-17, slice-19]
     kind: task
   - id: slice-13
     title: Launch and cleanup contract
@@ -466,15 +490,10 @@ items:
   - id: slice-15
     title: Isolation retained through controller loss
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: [slice-12, slice-14]
     kind: slice
-    why: >
-      Split from slice-12, 2026-11-06, to break a dependency cycle its spec review found:
-      ID-LIFECYCLE-15 proves network denial still holds after the controller is lost, using
-      slice-14's boundary probes and slice-11's recovery. Its scenario is specified on slice-12's
-      branch and moves here, still @wip.
   - id: p1-mount-bound-to-validated-inode
     title: The checkout mount is bound to the inode that passed validation
     phase: 1
@@ -495,18 +514,9 @@ items:
     title: Host Unix sockets under the checkout are not reachable from the worker
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-host-sockets-in-checkout.
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. The whole checkout is
-      bind-mounted (docker/run.go:64) and network none does not isolate filesystem Unix sockets, so
-      a tmux server, SSH control socket or other host service with its socket under the checkout is
-      reachable from /workspace as the host UID: host command execution or network access without
-      another mount. A startup scan is not enough, as host processes can create sockets later; deny
-      connecting to host sockets, or expose a materialised checkout with no host IPC objects.
   - id: slice-20
     title: Hard links to files outside the checkout are refused
     phase: 1
@@ -521,22 +531,13 @@ items:
     status: dropped
     depends_on: []
     kind: idea
-  - id: p2-unknown-workload-exit-nonzero
+  - id: slice-24
     title: run never returns 0 when the workload's exit is unknown
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      Correctness, this milestone. A read-only security audit of main at 7236d68 (Codex,
-      2026-11-06), static, no Docker run; confirm with a scenario before building. stoppedRun
-      returns (0, false, "") when cleanup completed but WorkloadExit is unknown
-      (internal/engine/session/domain/run.go:141; internal/slices/run/command/command.go:67), so a
-      concurrent stop that removes an exited worker first makes run report success though the
-      command may have failed; cmd/itos-container/public_recovery_review_test.go:183 expects 0. Keep
-      cleanup completion and workload success apart: unknown exit is nonzero, WorkloadExit stays
-      null.
+    kind: slice
   - id: p3-registration-before-intent
     title: A crash between registration and intent publication leaves no stuck session
     phase: 1
@@ -558,70 +559,59 @@ items:
       discoverable session. Include a black-box scenario and safe retirement based on durable
       evidence that creation was never issued, preserving active reservations; a name-only 404 must
       not establish absence.
+
+      This is crash debris with no supported way to clear it, which is what
+      p3-registration-before-intent is about. Add this to that item's safe-retirement part. A
+      publisher killed anywhere in Publish (before the write, during it, or after the link) leaves a
+      .intent-<nonce>.tmp, either alone or as the second link of its record. The next control-lock
+      holder can retire it on durable evidence: the name Publish makes, in the pinned private
+      directory, and either an orphan or the same inode as its record. Keep to the item's rule that
+      a name alone is not proof. It is not needed for correctness, because Names skips the temporary
+      and bd383fd reads the record around it. The item's scenario should check that a retired
+      temporary leaves the record intact and that a live publisher's temporary is never removed.
+
+      This is the same family: a session that status and stop can never finish, because an uncertain
+      create keeps its intent and a name-only miss is not proof of absence. That item already covers
+      the crash gaps around registration and intent. Add the case where the daemon answered a create
+      with an error (an exhausted address pool, say) as another way to reach it. Whether an error
+      reply proves no create was made is a security decision, so it is for the person or coordinator
+      to settle, and a drafter must not invent that rule. T-40's spec says the uncertain-create rule
+      is the worker's and the anchor's today and is not T-40's to change. But T-40 adds two network
+      creates per egress run, so slice-27 makes the stuck session reachable and nested checkouts
+      then stay blocked. The item is p3; its phase is worth revisiting once slice-27 is queued.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-refuse-overlapping-worker-checkouts.
-      Prevent one worker from replacing another checkout's parent path. Atomically refuse
-      ancestor/descendant overlaps in either launch order, including concurrent launches, while
-      allowing disjoint projects. Keep admission and ownership rules in shared engine packages.
-      Specify black-box scenarios first, with native-engine evidence only in CI. Broken down from
-      null.
   - id: slice-17
     title: Run binds its mount to the validated checkout inode
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-launch-with-inode-bound-checkout.
-      Close the gap between final validation and Docker resolving the mount pathname. Provide a
-      protected inode-bound source through engine ports and adapters, record its ownership before
-      use, and cover normal teardown and failure retention. Preserve checkout edits and the
-      sole-host-mount contract. Require CI red/green scenarios for substitution after the final
-      identity check; update affected architecture sections and record the decision. Broken down
-      from null.
   - id: slice-18
     title: Status and stop recover owned checkout mount anchors
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: [slice-17]
     kind: slice
-    why: >
-      Was p1-recover-owned-checkout-mounts.
-      Extend existing recovery to the mount ownership introduced by the launch slice. After
-      controller loss or uncertain startup, retain isolation and release only proven-owned anchors
-      after worker removal is confirmed. Cover repeated stop, foreign-resource refusal and
-      independent sessions with black-box scenarios, using CI for native-engine evidence. Share
-      recovery logic through engine packages without imports between command slices. Broken down
-      from null.
   - id: slice-21
     title: Doctor and approve reject state exposed to another worker
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: [slice-16]
     kind: slice
-    why: >
-      Was p1-protect-control-state-publication.
-      Extend slice-16's shared admission mechanism with protected control-state location tracking
-      across XDG_STATE_HOME values. Approve must atomically establish separation before publishing
-      records; doctor must inspect without writes. Specify concurrent publication versus worker
-      admission, unsafe-location refusals and safe independent projects. Keep shared contracts,
-      fakes and disk adapters in engine packages. Broken down from
-      p2-control-state-outside-every-mount.
   - id: slice-22
     title: Run refuses checkouts exposing any project's control state
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-21]
     kind: slice
     why: >
@@ -646,21 +636,13 @@ items:
       without authorizing removal from exposed records. Preserve read-only status, ownership-checked
       stop and persistent state protection. Keep each command in its own slice and reusable recovery
       logic in engine packages. Broken down from p2-control-state-outside-every-mount.
-  - id: p1-flaky-recovery-budget-changed-record
+  - id: T-30
     title: TestPublicRecoveryBudgetRegressions/changed_record passes reliably on Linux CI
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      main's CI went red at 78f26bb (run 42313659921, Tests on ubuntu-latest) on a docs-only push:
-      cmd/itos-container/public_recovery_budget_test.go:195 'run repeated cleanup or failed to drain
-      the remaining output' in the changed_record case, while the run before (3931b4c) passed;
-      slice-12's attempt 5 also saw it fail in CI and could not reproduce it locally. A unit test
-      that flakes turns main red at random, and with it the release T-25 needs. Find the race
-      (likely drain versus cleanup ordering under load) and fix it, never by retrying the test or
-      widening its timeout.
+    kind: task
   - id: T-27
     title: Stop requesting Bugbot reviews
     phase: 1
@@ -675,3 +657,1140 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: p1-checkout-socket-kernel-enforcement
+    title: Host Unix sockets created during a run are unreachable from the worker
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Deferred from slice-19 by the person (q-30, 2026-11-07): CI showed the worker connects to host
+      Unix sockets in the bind-mounted checkout (runs 42312676619, 42323471709), and the milestone
+      only refuses sockets present at startup. Closing it needs kernel enforcement: Landlock's
+      pathname-socket rule (ABI 9+) through a product init, which needs a new kernel on every host
+      and a CI runner that has it, or the gVisor runtime, which hosted runners can prove but which
+      adds a runtime. Research in docs/plans/checkout-socket-enforcement.md; scenarios ID-SOCKETS-02
+      and 03 wait for it. A milestone-2 choice.
+
+      Already tracks continuous enforcement against host sockets created or replaced after startup,
+      retaining Landlock/gVisor research and runtime scenarios ID-SOCKETS-02/03. Preserve the
+      person's q-30 deferral to milestone 2.
+
+      The person's design, 2026-11-07, for milestone 2: Landlock by default (ABI 9+,
+      LANDLOCK_ACCESS_FS_RESOLVE_UNIX), applied by a small read-only init binary itos-container
+      mounts and runs as the worker's entrypoint before exec'ing the literal argv, as Docker has no
+      Landlock option and the controller cannot restrict a worker the daemon spawns; gVisor (runsc)
+      as the fallback when the kernel lacks ABI 9; on a host with neither, run is allowed only with
+      an explicit approval that records 'late host sockets reachable', shown at approve time and in
+      status. Doctor reports which backend a run would use, and the approval binds it. Proof: the
+      Landlock path is proven locally on the person's machine (Landlock ABI 10 on Linux 7.2) for
+      now, with hosted CI proving the gVisor path; a weakened gate until a new-kernel CI runner
+      exists (record it in weakened-gates.md when built). Amends the spec's no-helper and
+      no-extra-mount rules for the init binary.
+  - id: T-31
+    title: Native stop confined to one of two equal-basename projects passes reliably
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-33
+    title: main's engine scenarios finish well inside the job's 5-minute limit
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-32
+    title: The Engine scenarios step gets an 8-minute limit while the suite is sped up
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-35
+    title: The feature suite stays within a few GB, with or without the race detector
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-34
+    title: Engine fixture preparation passes again on today's CI runners
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-36
+    title: The feature harness writes per-scenario coverage when itos-cc asks, so the code proof's coverage pass takes minutes
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-37
+    title: Release notes stay within GitHub's body limit, the first release included
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p3-release-notes-skip-merges
+    title: Release notes leave out merges of main into an item branch
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      v0.1.0's generated notes (2026-11-09) list 'Merge main into slice-13', 'slice-14' and
+      'slice-11' under Features: release-notes counts a merge commit whose subject carries a feat
+      type, or classifies merges by their first parent's type. A merge of main into an item branch
+      changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
+      own subject names the item).
+  - id: p2-profile-non-engine-feature-suite
+    title: Profile the non-engine feature suite and cut its roughly 300 s wall time
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. T-35 recorded 303 s for the uncached `go test ./features -count=1` (1,274
+      scenario rows plus the harness regressions), and the current work step saw 298 s on Linux.
+      T-33 shortens only the engine tier, and T-36 only the coverage pass. Every slice adds rows,
+      and the same suite runs on the Linux, macOS and Windows platform jobs, so each pull request
+      pays it three times, and the loop pays it whenever there is no green base to select from. The
+      charter keeps suite-speed fixes in the first milestone, ahead of milestone 2. First measure
+      per-scenario and per-harness-test durations in the non-engine tier, reusing T-33's
+      timing-record approach. Then cut only demonstrated harness overhead, such as redundant fixture
+      builds or fixed waits in the recovery and lifecycle fixtures. Keep every row, assertion and
+      cleanup, and add no sharding or reduced selection. Phase p2: nothing blocks the current step,
+      and no CI job's limit is near 300 s.
+  - id: p2-control-state-upgrade-contract
+    title: Specify the upgrade contract for existing control state, and drop the persisted device field with it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Slice-21's decision record (docs/decisions/0021-control-state-publication.md, on its branch)
+      says an upgrade contract for unseen old XDG roots and mixed old/new controllers is 'still
+      required before claiming protection for existing installations'. No registry item tracks it,
+      and v0.1.0 is already published, so installations exist. The same record keeps the persisted
+      binding device in schema 1 only as a shape-checked diagnostic: it is never compared, so it
+      misleads readers of a security record and still makes the CONTROL fixtures compute it. Specify
+      the upgrade contract with black-box scenarios, covering old roots no catalog has seen and an
+      old controller running beside a new one. Decide in the same step whether a schema bump removes
+      the device field or a stable filesystem ID replaces it; statfs IDs are not uniformly
+      populated, so any replacement needs evidence. Phase p2: it does not block slice-22 or
+      slice-23, which build on the shared tracking. It must land before any claim that existing
+      installations are protected, and it stays inside the charter's first-milestone control-state
+      work.
+
+      This is the upgrade problem for installations that already exist: v0.1.0 session records under
+      the default tree, and old roots no catalog has seen. A person with those records cannot
+      recover today, and the item's decision (documented manual cleanup or a migration step) is the
+      one the upgrade contract already has to make. Slice-21's PR still says 'select another
+      XDG_STATE_HOME' in docs/CONFIG.md and in the Fix text at
+      internal/engine/approval/port/diagnostic.go:72. That advice cannot work for this case, so
+      slice-21 should correct or remove it before merge, and the upgrade contract then supplies the
+      real recovery.
+
+      This is the recovery decision that item already has to make, which it frames as 'documented
+      manual cleanup or a migration step'. Legacy v0.1.0 records with no catalog are its subject.
+      The lost-location lockout is the same decision: after `XDG_STATE_HOME=/tmp/x approve` and a
+      reboot that clears /tmp, doctor, approve and run all fail on state.unavailable, and stop exits
+      75 with no retry that can succeed. Any recovery needs the same consent surface, so the upgrade
+      contract should cover both cases. One correction to the idea: v0.1.0 is already published, so
+      'before v0.1.0 ships' is stale. The item must land before any claim that existing
+      installations are protected. A supported recovery command is a new command and consent surface
+      the charter does not yet authorize, so the person decides it (`itos decision`). The agent
+      working that item should not invent a repair, and slice-21 deliberately offers only the host
+      user's manual remedy. Specify any recovery with scenarios covering a lost retained location,
+      legacy records and no live worker.
+
+      Records with no catalog are that item's subject, and its recovery decision is the person's
+      (itos decision): documented manual cleanup or a migration step. The 'never adopts' wording in
+      CONFIG.md and the code at internal/engine/approval/disk/control.go:303, where the evidence
+      check runs only when t.data[t.fixed] is nil, are a guarantee and a recovery procedure at once.
+      Whether the refusal lasts only until a catalog exists, or the code must enforce 'never
+      adopted', cannot be settled by a doc edit. Add to that item: a later approve under another
+      selection enrolls the original tree with its records in place, validated by the reservation
+      scan. The reviewer found no exposure bypass. Until the person decides, slice-21 should word
+      CONFIG.md to say only what the code does now.
+
+      Same decision that item already holds: how a retained control-state location can be recovered,
+      because the product never forgets one and a supported repair needs a consent surface the
+      charter does not yet authorize, so it is the person's call (itos decision). That item already
+      says the lost-location lockout (state.unavailable after /tmp is cleared) is the same decision
+      and that its contract should cover both cases. This is a third lockout cause with the same
+      mechanism. enroll publishes an incomplete binding, then pinPath(create=true) hits a
+      foreign-owned directory (another UID won the mkdir race under a shared-writable
+      XDG_STATE_HOME). Every later inspect re-pins every enrolled path, gets state.unsafe, and
+      refuses doctor, approve and run for every selection until the binding is removed by hand. Add
+      to the item: the claim-retention rule is open (skip an incomplete claim whose unbound tail is
+      foreign-owned, since no state tree of ours exists there, or secure a UID-private ancestor
+      before persisting the claim). A test needs a seam between the prospective pin and
+      pinPath(create) to simulate the race. It is availability only, on a multi-UID host with a
+      shared-writable state home, and slice-21 deliberately did not repair it.
+
+      This is the same recovery decision that item already has to make, in the other direction.
+      v0.1.0 is published, so older binaries exist. Once slice-26 writes an allowlist-v1 record, an
+      older binary reads an active one as approval.state.invalid, and approve stops on that failure.
+      The person then cannot re-approve with that binary until they remove the record by hand. It
+      fails closed, but it is a lockout. The item's upgrade contract should also decide downgrade:
+      documented manual removal, or a version marker an older binary can recognise. Its scenarios
+      should cover an older controller running beside a record it cannot read.
+  - id: p2-fixture-worlds-inherit-scenario-coverdir
+    title: A fixture world that drops the scenario coverage destination fails in go test, not in CI
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. T-36 made the harness route per-scenario coverage under
+      ITOS_CC_TEST_COVERDIR, but every secondary world is a hand-written &world{root, bin, coverdir:
+      w.coverdir, ...} literal in more than ten fixtures: anchors, overlap, offline anchors,
+      lifecycle and recovery. Slice-21's control-state fixture left coverdir out of its W and P
+      worlds. The product subprocesses then wrote no counters, and the failure ('listed test
+      ID-CONTROL-19 produced no per-ID coverage data') showed up only at the CI mutation proof's
+      listed-coverage step, after a full CI round and without naming the fixture. The charter keeps
+      suite and proof reliability fixes inside the first milestone, and every new slice with a
+      second world can repeat this. First add a harness regression, committed red, that fails when a
+      world a scenario builds lacks the captured coverdir, or that checks ITOS_CC_TEST_COVERDIR
+      yields counters for each live local-engine-fixture ID, naming the fixture. Then route the
+      literals through one constructor if that is the smallest repair. Keep every scenario,
+      assertion and the pinned itos-cc contract unchanged. Phase p2: nothing blocks the current
+      step, since slice-21's own fix has landed on its branch.
+
+      This is the same defect class that item already names: every secondary fixture builds its
+      world as a hand-written &world{root, bin, coverdir, ...} literal, so a fixture can drop or
+      swap what the harness set up (here w.bin, which hid the slice-21 10/120/10 s regression until
+      a 4-minute CI timeout). That item already plans a harness regression that names the offending
+      fixture, and then one constructor for the world literals. Put this guard in that constructor
+      or regression: before the first engine-tier scenario, assert that w.bin lies beside the T-33
+      budget fixture tree and carries the engine suffix, so a fixture that swaps w.bin or calls
+      sessionProbeBinary for a native row fails in seconds. TestEngineSuiteBudget only pins the
+      doctorCheckout path.
+  - id: p1-egress-allowlist-proxy
+    title: Egress through an allowlisting Go CONNECT proxy beside the worker
+    phase: 1
+    owner: null
+    status: dropped
+    depends_on: []
+    kind: idea
+  - id: p1-credentials-passed-in
+    title: Credentials passed in per command, never injected and never in the checkout
+    phase: 1
+    owner: null
+    status: dropped
+    depends_on: []
+    kind: idea
+  - id: p1-harness-home
+    title: A home of the harness's own inside the container, seeded so a first run neither stops nor calls home
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, step 3 (docs/charter.md). A writable volume or tmpfs, never the host home and
+      never the checkout; Claude's onboarding flags and Codex's update checks, analytics and plugins
+      off (its own sandbox off, the container being the sandbox); executable /tmp. Open for the
+      spec: a named volume per checkout (keeps sessions, so resume works across runs) or a tmpfs
+      (keeps nothing); the coordinator recommends the volume.
+  - id: p1-interactive-tty
+    title: "run and exec with a TTY: raw mode, resizes, Ctrl-C as input, no harness left running after a disconnect"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, step 4 (docs/charter.md), built on slice-12's cancellation rules. A terminal or
+      multiplexer outside the sandbox is the window onto an agent inside it.
+  - id: T-38
+    title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: slice-25
+    title: The policy file accepts an exact host-name egress allowlist and doctor validates it
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: slice
+  - id: slice-26
+    title: Approval binds the egress allowlist, and any change to it needs a new approval
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: [slice-25]
+    kind: slice
+    why: >
+      Was p1-egress-allowlist-approval.
+      Charter step 1: the allowlist is part of the approved settings, and the contract's AC-02
+      requires a change to network permissions to refuse startup with no self-approval. The
+      canonical approved-settings record (engine/approval/canonical, profile offline-v1) and the
+      approve presentation extend to the allowlist. Scenarios first: approve shows the exact host
+      names the worker will be able to reach and the profile that grants network. Adding, removing
+      or changing a name invalidates an existing approval, and run refuses with the change
+      explained. Reordering the same names does not, since the canonical form is a set. Offline
+      approvals keep their existing profile and identity. This slice covers records, presentation
+      and refusal only. Nothing starts a proxy yet. It follows the policy slice, which supplies the
+      validated list. Broken down from p1-egress-allowlist-proxy.
+  - id: T-39
+    title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [T-38]
+    kind: task
+  - id: T-40
+    title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: [T-38]
+    kind: task
+  - id: slice-27
+    title: run reaches only the approved names through the proxy; every other route out is closed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-26, T-39, T-40]
+    kind: slice
+    why: >
+      Was p1-egress-run-through-proxy.
+      The first user-visible egress behaviour, charter step 1 (contract AC-09, AC-10, AC-13).
+      Scenarios first, with the real-engine ones in CI only, run against a fake endpoint the proxy
+      allows and never a real model or credential. With an approved allowlist, itos container run
+      reaches an allowed host name over CONNECT on 443. A direct route out (ignoring proxy
+      variables, a literal IP, the default gateway, UDP, another port) fails independent of client
+      cooperation. A name outside the list, or a spelling variant, is refused. Offline runs are
+      unchanged. It wires the approved allowlist from the approval slice, the proxy package and the
+      lifecycle port into the run slice, and doctor says what a run will use. Each property is
+      proven by a scenario that fails without it. Broken down from p1-egress-allowlist-proxy.
+  - id: slice-28
+    title: Refusals are logged, a proxy failure stops the run, and cleanup removes the proxy and network
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-27]
+    kind: slice
+    why: >
+      Was p1-egress-refusals-and-failure.
+      Charter step 1's remaining properties (contract AC-17 and the cleanup rule). Scenarios first,
+      the real-engine ones in CI. Every refused CONNECT leaves a log record, containing the name and
+      port the client gave and no payload or secret, that the person can read after the run. If the
+      proxy crashes, never becomes ready or exits mid-run, the workload stops or never starts, with
+      no unrestricted network and a clear diagnostic that separates policy refusal from DNS failure.
+      Normal exit, failure and interruption remove the worker, proxy and network. A cleanup failure
+      leaves a recovery record with the exact retry command, and stop recovers it without touching
+      foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
+      from p1-egress-allowlist-proxy.
+  - id: T-41
+    title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p1-docs-admit-milestone-two-egress
+    title: PLAN.md, README and the orchestration docs stop saying proxy egress is outside the scope
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy). The charter
+      (ef653e7, 2026-11-09) says to specify and start it, but PLAN.md's milestone limits ("Proxy
+      egress, credentials/accounts, Git over the network... remain outside this milestone"),
+      README.md:38 and docs/ORCHESTRATING.md:12 still say it is deferred or unauthorized. AGENTS.md
+      sends every agent to the charter and then PLAN.md, so each drafter and reviewer of T-38 and
+      slice-25 to slice-28 meets two authorities that disagree, and may stop or refuse. Update
+      PLAN.md (current state, order of work, milestone limits), README and ORCHESTRATING to match
+      the charter: milestone two's steps in the charter's order, egress first and the rest when
+      reached, while LAN ingress, Compose, other platforms and the Docker socket stay out. Do not
+      touch the charter. Leave the 'deferred' headers in docs/CONFIG.md and docs/CLI.md to slice-25,
+      which edits those files for the allowlist field. Leave arc42's deferral text to T-38's
+      decision record, per the charter's architecture rule. AGENTS.md's opening paragraph is also
+      stale ("container commands and isolation are not implemented yet", v0.1.0 is published), but
+      whether to edit AGENTS.md is the person's. Documentation only: it touches no proof.code path.
+
+      This item is already a documentation-only edit of docs/ORCHESTRATING.md, whose empty 'Lessons'
+      section is the repository's place for this. Add one lesson there: a docs task whose checks
+      read documents declares `prose: true` on each such check, because on a prose-only range CI
+      leaves out any other late check and `itos work done` never runs one. Evidence: the T-38 spec
+      review's P1 (itos 8.46.4); T-26 and T-6 had the same gap. Give it the section's required
+      fields (recorded date, last-seen date, and permanent status or the exit item). Its exit is the
+      upstream itos fix, so say that. The lesson is measured, not invented. It touches no proof.code
+      path and is too small to be its own item.
+
+      The item already edits PLAN.md, README.md and docs/ORCHESTRATING.md to match the charter's
+      milestone two. Its text covers egress first and 'the rest when reached', but its why and title
+      name only egress. Widen it so the milestone-limits sentence 'credentials/accounts, Git over
+      the network... remain outside this milestone' is also replaced by the charter's steps 2 to 4
+      in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
+      otherwise meet two disagreeing authorities, as T-38's did.
+  - id: p1-acceptance-static-binary
+    title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy), through
+      slice-27. features/features_test.go buildProduct runs go build with no CGO_ENABLED setting,
+      and the binary it builds measured dynamically linked here. .goreleaser.yaml ships
+      CGO_ENABLED=0. Scenarios therefore exercise cgo paths for DNS and user lookup that no released
+      binary uses, so a pass does not prove the shipped binary, which matters beyond egress.
+      slice-27 needs a static binary for the proxy container and its real-engine scenarios. Landing
+      the fix first lets the existing suite show any static-versus-dynamic difference before the
+      egress work is mixed in. Set CGO_ENABLED=0 for the build, including the -cover variant used by
+      the code proof. Add a check that the built binary is static or matches the release setting.
+      The existing scenarios must still pass, with no gate weakened. slice-27 should depend on it.
+  - id: p2-approval-no-record-step-checks-frozen-input
+    title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      approvalNoRecord (features/approval_assertions_test.go:331, registered at
+      features/approval_steps_test.go:156) returns success as soon as the approval record path is
+      absent. It never looks for frozen input, so a build that left a frozen file behind would still
+      pass. Seven live scenarios use this text at the approval boundary: six in approval.feature
+      (lines 303, 419, 449, 468, 514, 655) and one in hardlinks.feature (line 215). It is also
+      reused as the 'replacement target is unchanged' fallback. The step name promises a check the
+      code does not make, and slice-26 will add refusal scenarios in the same area. Make the step
+      assert both that the record is absent and that no frozen input was published, for example by
+      comparing the whole state tree as ID-POLICY-61's tree check does. Then run all seven
+      scenarios; any that now fail show a real leak to fix in the product, never a reason to loosen
+      the step. This is a test-support change with no new behavior and needs a ledger task and its
+      checks. Phase 2: it hardens existing proof and does not block charter step 1.
+
+      The same task covers this gap: a step name promises more than its code checks, in the same
+      approval assertion files. I checked it. approvalProblem
+      (features/approval_assertions_test.go:85, registered for 'it reports prerequisite problem …
+      before requesting consent' at features/approval_steps_test.go:138) checks the exit code and
+      the rule, and never that no consent prompt appeared. The step is used at approval.feature:654
+      and hardlinks.feature:193. Add a check that no consent prompt was shown, or rename the step to
+      what it checks, to that item's test-support change. Run the same scenarios afterwards: one
+      that fails then shows a real product leak, and the step is not loosened. Slice-26 adds
+      refusals here, so the check matters more then.
+  - id: p2-pin-ledger-check-shell
+    title: Pin the shell itos runs ledger and CI checks with, so a check passes locally only if it passes in CI
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      itos runs each check through the `shell` key, which defaults to `sh -c` (`itos config get
+      shell`), and itos.yaml sets none. `sh` is bash on the person's host and dash on ubuntu-latest.
+      A bash-only check such as `set -o pipefail` can pass `itos task` locally and first fail in a
+      CI cycle. Late checks, T-41's among them, run automatically only in CI, and T-41 exists to
+      stop that cost. Pin `shell` in itos.yaml, for example to bash, which both environments have.
+      Before pinning, confirm whether the CI image's dash refuses `set -o pipefail`; the idea left
+      that unconfirmed. This is a foundation, CI-polish change with a ledger task and its checks.
+      itos.yaml is an enforcement input, so it also runs the architecture fixtures (see
+      p2-architecture-fixtures-load). It is p2: it blocks no step of charter milestone two. The
+      itos-side warning, from `itos config check` or `itos work promote --check`, is a gap in itos
+      itself; the coordinator files it after searching existing issues.
+  - id: p3-session-state-retention
+    title: Decide how long completed sessions' host state is kept, egress-refusals.jsonl included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Outside charter milestone two step 1, so p3: nothing in step 1 needs it, and it is recorded
+      rather than specified now. T-38's record bounds one session's egress-refusals.jsonl at about
+      40 MiB of host disk. Cleanup never deletes it, and completed sessions stay listed and are
+      never garbage-collected: features/recovery.feature says 'no retention/GC policy is added
+      here', and features/session.feature says 'Later retention/GC belongs to a separate
+      specification'. No registry item holds that specification, and slice-28 covers writing the
+      log, not how long it lives. The charter's purpose is an agent loop running unattended, which
+      accumulates session state and these logs on the host without bound. The rule must keep a
+      hostile run's refusal evidence until the person has read it, so any deletion has to be an
+      explicit act by the person, never silent automatic pruning. It also has to keep the
+      exact-ownership guarantee: it may touch only this project's own session state, never foreign
+      resources. Decide the rule, then specify it by scenarios.
+  - id: T-42
+    title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p2-scheduled-fuzz-egress-parser
+    title: A scheduled CI job fuzzes the egress proxy's CONNECT parser and ClientHello peek with fresh seeds, and each find becomes a committed seed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Charter milestone two, step 1: the owned proxy is the one process a hostile worker can talk
+      to, and it has a route out, so a parser bug in the CONNECT parse or the ClientHello peek is
+      the boundary failing. q-51 requires fuzz tests for both, but T-39's -fuzz runs happen once,
+      for T-39's own range. After that CI only replays the committed seeds, and ci.yml has no
+      schedule trigger, so nothing explores new inputs. itos guide brief puts fuzzing at the nightly
+      tier (random where it explores, nothing waits on it) and asks that every find become a fixed
+      regression at the push tier (a failing seed committed). This does not block step 1 (T-39's own
+      fuzz run meets q-51), so p2. It follows T-39, which creates the fuzz targets. The job is
+      non-gating: it sits beside, not in, the required job. The project has so far written "no
+      nightly" (the T-37 and mutation-proof items); that was about the gating mutation proof, and
+      this item is the exploring tier. The person should confirm that reading when reviewing it.
+
+      Add `go test -race ./internal/engine/egress/...` to the same scheduled, non-gating job. The
+      item already covers what T-39's one-off checks leave unrepeated, and it needs a schedule
+      trigger that ci.yml lacks. The egress adapter's concurrency faces a hostile client, like the
+      parser does. ci.yml has no race run, so after T-39 closes nothing runs the race detector
+      there. Run it over the egress package only, never over ./features (the 22 GB incident of
+      2026-11-08).
+  - id: p2-schema-conforms-to-parser
+    title: A check ties each published policy schema to what doctor accepts and refuses
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      docs/schemas/itos-container-v1.schema.json is a published data contract. docs/CONFIG.md links
+      it for editors and producers, and slice-25 adds a version 2 schema beside it. Nothing reads
+      either file in a test or gate, so a schema can drift from what the strict parser enforces and
+      every check stays green. That has a real cost: an editor accepts a file doctor refuses, or the
+      reverse. Version 3 and later slices will extend the contract again. Specify a check that runs
+      a maintained JSON Schema validator, chosen and pinned in the spec, over the policy examples
+      that doctor accepts and refuses, and fails when the two disagree for any published version.
+      The YAML syntax limits stay outside the schema, as the policy spec says. It does not block
+      milestone two step 1 and should follow slice-25, which publishes the version 2 schema, so p2.
+      Slice-25 stays unchanged.
+
+      This item already asks for a check that runs a maintained, pinned JSON Schema validator over
+      the policy examples doctor accepts and refuses, for every published version including
+      slice-25's version 2 schema. Its why already says the YAML syntax limits stay outside the
+      schema. It also leaves the validator choice and pin to the spec, which is where the
+      new-dependency question belongs. One note to add: the version 2 schema cannot express the
+      1024-byte limit or the host-name canonicalisation rules. The check should therefore compare
+      accept and refuse outcomes only where the schema can speak, and the dependency choice is the
+      person's to review.
+  - id: p2-doctor-absent-state-root-is-missing
+    title: Doctor reports a missing approval, not state.unavailable, when XDG_STATE_HOME sits under an absent top-level directory
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Follow-up to slice-21, which is still in doing, so it must land after slice-21 and does not
+      block slice-22 or slice-23. On slice-21's branch Store.prospective in
+      internal/engine/approval/disk/control.go returns state.unavailable when its parent walk
+      reaches "/" with no existing ancestor. So `XDG_STATE_HOME=/data/state` with /data not yet
+      mounted makes doctor exit 3, where main reported `missing` with exit 0.
+      TestControlProspectiveRequiresAnExistingNonRootAncestor pins the refusal. This is a behaviour
+      change to a first-milestone control-state command that slice-21 deferred from review thread
+      PRRT_kwDOVkB0ws61O3O1. Specify it first as a scenario row, committed red. Then let a read-only
+      Begin treat an absent selection with no existing ancestor as absent (no pins, no binding), and
+      change the unit test. Keep refusing for a writer before anything is published: a binding with
+      empty Ancestors would make every later inspect return state.invalid. It stays apart from
+      p2-control-state-upgrade-contract, which covers a location that was once approved and then
+      lost; this is a first run under a root that does not exist yet. Phase p2: no current step
+      depends on it.
+
+      Doctor refuses an absent selection under a missing top-level directory. This is that item's
+      own finding: Store.prospective in internal/engine/approval/disk/control.go returns
+      state.unavailable at "/" when no ancestor exists, so `XDG_STATE_HOME=/data/state` with /data
+      absent makes doctor exit 3 where main reported `missing`. The item already has the decision: a
+      read-only Begin treats the absent selection as absent, a writer still refuses, and the red
+      scenario row comes first. Note for it: the person sees an unexplained refusal today, and no
+      CONTROL scenario covers the case.
+  - id: p1-engine-suite-under-its-limit-again
+    title: The engine suite fits its 4-minute test timeout again after T-41
+    phase: 1
+    owner: null
+    status: dropped
+    depends_on: []
+    kind: idea
+  - id: p2-admission-nested-checkouts-across-state-roots
+    title: Run refuses a checkout that nests with another worker's checkout even when the two use different state roots
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Isolation, first milestone. It does not block milestone two step 1 (the egress proxy), so p2.
+      Found in slice-21's PR review. checkAdmission in internal/engine/session/disk/admission.go
+      compares a candidate checkout with other workers' checkouts only through the admission records
+      and public registrations of the selected XDG_STATE_HOME tree. Two workers whose checkouts
+      nest, started under different XDG_STATE_HOME values, are therefore both admitted. Slice-16
+      (done) made nested checkouts a refusal, but only inside one state tree. A nested checkout
+      exposes the other worker's checkout and lets the outer worker modify what the inner worker
+      runs, which is the exposure slice-16 closed. Slice-21 now records every control-state location
+      in a catalog that is discoverable under the common control lock. Slice-22 consumes that
+      tracking at run admission for control state, and does not cover worker checkouts, so this
+      stays apart from it. Specify first: black-box scenarios, committed red, for nested checkouts
+      under different state roots in both start orders and with concurrent launches. Then decide,
+      with the person (itos decision), whether admission compares against every enrolled location's
+      admission and registry records, and what it does when an enrolled location is unreadable or
+      lost (compare p2-control-state-upgrade-contract). Depends on slice-21, and should be sequenced
+      with slice-22 because both change run admission. Real mount-isolation evidence runs only in
+      CI.
+  - id: p2-grace-origin-fake-clock-row
+    title: A fake-clock lifecycle row pins the SIGKILL grace origin when work precedes the first signal
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone one's cancellation rules (slice-12, done) say SIGKILL follows one fixed grace
+      counted from the first signal, never restarted. T-42 widens the native SIGKILL window to an
+      absolute tolerance so the engine tier stops flaking, and that lets a timer started a little
+      late, at teardown or at signal delivery, pass the native rows. Nothing else catches it.
+      TestLifecycleContract's grace case, TestLifecycleLocalContract's lost-signal row and
+      TestEngineFixtureBudgetContract, all in cmd/itos-container, spend no time before the first
+      signal, so the timer origin never differs between a correct and a late start. Add a fake-clock
+      row where work takes time before the first signal, and assert the exact kill instant. A fake
+      clock has no jitter, so the assertion can be exact. The coordinator's throwaway probe found
+      the right-origin case not held at 1.00 of grace and held at 1.10 and 1.30. The code lives
+      under cmd/, a proof.code path, so it gets the changed-code mutation and coverage proof and is
+      separate from T-42's features-only range. It tests existing behaviour, so it is a ledger task
+      with its checks, not a new scenario. Land it after T-42. It blocks no step of milestone two,
+      so p2.
+
+      This belongs inside p2-grace-origin-fake-clock-row. That item already adds a fake-clock row
+      asserting the exact SIGKILL instant, because a fake clock has no jitter and T-42's absolute
+      tolerance hides a mistimed grace timer on the native rows. A grace timer restarted by the
+      repeated SIGINT is the same defect (slice-12: one fixed grace from the first signal, never
+      restarted) with a different trigger. Extend the item so the fake-clock row also sends a repeat
+      signal before grace ends and asserts the kill still falls at first signal plus grace. Land it
+      before charter step 4 (p1-interactive-tty) changes Ctrl-C handling. Prefer this to sending
+      both signals at 80 percent, which changes a schedule T-42 fixes and two tests pin, and leaves
+      the repeat untimed.
+
+      That item already adds a fake-clock lifecycle row that asserts the exact SIGKILL instant, and
+      its latest note extends the row to send a repeat signal before grace ends and assert the kill
+      still falls at first signal plus grace. A fake clock is the controlled-time test this idea
+      asks for, so the gap T-42's widened window leaves is already covered. One detail to carry
+      over: the idea's repeat at 20 percent of grace is a concrete schedule. The row should pick a
+      repeat point well inside grace (the idea's 20 percent), not the 80 percent that T-42 fixes and
+      two tests pin. The item is p2 and the note says to land it before charter step 4
+      (p1-interactive-tty) changes Ctrl-C handling.
+
+      A recorder that journals when a held acknowledgement is cut would only sharpen the native
+      tier's inference. The defect it guards against is a grace timer started at the acknowledgement
+      or the cut instead of the first signal. That is what p2-grace-origin-fake-clock-row exists
+      for: a synthetic clock has no jitter and asserts the exact SIGKILL instant.
+      TestEngineFixtureBudgetContract's 'quiet and delayed signal' phase
+      (cmd/itos-container/engine_fixture_budget_test.go) already pins an acknowledgement delayed to
+      3/5 of grace, with the kill exactly at grace. It is not known to cover a hold the call limit
+      cuts. In the engine product copy the call limit is 1 s and the delay 0.6 s, so no cut happens
+      there. Extend the item's fake-clock row with a hold longer than what is left of the call
+      limit. It should assert the SIGKILL still falls at first signal plus grace, not at the cut
+      plus grace. That closes the gap on the native rows without touching the recorder, and a
+      CancelledAt field is then not worth a separate item. T-42's own comment on escalationWindow
+      already names this gap as known.
+
+      This is a question about ordering, not a new piece of work. p2-grace-origin-fake-clock-row
+      already holds the replacement coverage the codex thread asks for: its row sends a repeat
+      signal at about 20 percent of grace and asserts the kill still falls at first signal plus
+      grace. That is the first repeat's restart. The item says to land after T-42, and T-42's
+      escalationWindow comment points to it as the holder of this gap. The open decision is the
+      person's or the coordinator's: either accept the gap until that item lands and resolve the
+      thread, naming the item, or queue the item directly behind T-42 before the egress proof leans
+      on the lifecycle tier. The item adds nothing to charter step 1 itself, so it stays p2 in the
+      registry. If step 1 starts first, the person can move it up.
+
+      The item already carries this: a recorder that journals the cut would only sharpen the native
+      tier's inference, and the defect it guards against (a grace timer started at the
+      acknowledgement or the cut, not the first signal) is what the fake-clock row exists to catch,
+      since a synthetic clock has no jitter. The ask is to extend that row with a hold longer than
+      what is left of the call limit. It should assert SIGKILL still falls at first signal plus
+      grace, not at the cut plus grace. The engine product copy does not cut (1 s call limit, 0.6 s
+      delay), so the native rows cannot cover it. A recorded cut instant is not worth its own item,
+      and it touches the recorder outside T-42's range.
+
+      The item already holds everything this idea says. Its fake-clock row sends a repeat signal at
+      about 20 percent of grace (not the 80 percent T-42 fixes and two tests pin) and asserts the
+      kill still falls at first signal plus grace. It also says to land it before charter step 4
+      (p1-interactive-tty) changes Ctrl-C handling. The ordering is not a new piece of work. It is
+      for the person or coordinator to settle: queue the item before p1-interactive-tty (the queue
+      is T-45, T-42, p1-credentials-passed-in, p1-harness-home, p1-interactive-tty, and the item is
+      not in it), or accept the gap and say so. It stays p2 because it blocks no step on its own.
+      Move it up if step 4 starts first.
+
+      The item already carries this, in its note that a recorder journalling the cut would only
+      sharpen the native tier's inference. It also says a recorded cut instant is not worth its own
+      item and touches the recorder outside T-42's range. The gap is covered by extending the item's
+      fake-clock row with a hold longer than what is left of the call limit. The row asserts that
+      SIGKILL still falls at first signal plus grace, not at the cut plus grace. A synthetic clock
+      has no jitter, so no recorded instant is needed. T-42's escalationWindow comment already names
+      this gap as known.
+
+      The item already holds this. Its fake-clock row sends a repeat signal at about 20 percent of
+      grace, not the 80 percent T-42 fixes and two tests pin. It asserts the kill still falls at
+      first signal plus grace. It also says to land it before charter step 4 (p1-interactive-tty)
+      changes Ctrl-C handling. The only open point is ordering: the item is not in the queue (T-45,
+      T-42, p1-credentials-passed-in, p1-harness-home, p1-interactive-tty), so the person or
+      coordinator should queue it before p1-interactive-tty or accept the gap. It stays p2 because
+      it blocks no step on its own. Note on the item: a product whose repeated SIGINT restarts grace
+      fires at about 1.2 s and passes every LIFECYCLE-09 row under the widened 1 s to 3 s window, so
+      that timing is the row's failing-first case.
+
+      This item already covers the idea. Its notes say a recorder that journals the cut would only
+      sharpen the native tier's inference, and that a recorded cut instant is not worth its own item
+      because it touches the recorder outside T-42's range. The defect to catch is a grace timer
+      started at the acknowledgement or the cut instead of the first signal. A fake clock has no
+      jitter, so the item's fake-clock row can assert the exact SIGKILL instant (first signal plus
+      grace) without the recorder stamping either the cut or the start of the kill call. Extend that
+      row with a hold longer than what is left of the call limit, so the cut really happens. T-42's
+      escalationWindow comment already names this gap. The row's exact assertion also catches a
+      timer started late, which the delayed limit only refuses when the kill arrives early. The
+      recorder stays unchanged, so the idea is not a separate item.
+
+      The item's notes already settle this. A recorder that journals the cut only sharpens the
+      native tier's inference. The defect it guards against, a grace timer started at the
+      acknowledgement or the cut and not at the first signal, is what the item's fake-clock row
+      catches. That row takes a hold longer than what is left of the call limit and asserts SIGKILL
+      at first signal plus grace. A recorded cut instant is not worth its own item and touches the
+      recorder outside T-42's range. The new rationale (an acknowledgement-relative timer refused at
+      any arrival, the wait-after-cut rule and the bound reading the cut) is about making the native
+      tier's checks sharper, which the item has already ruled out as a separate piece of work.
+
+      This belongs inside the item. Its fake-clock row, with a hold longer than the call limit
+      leaves, asserts the exact SIGKILL instant at first signal plus grace. A product that sleeps a
+      grace after the cut, or restarts its grace without sending a request, kills at the cut plus
+      grace, so the exact assertion catches it. The idea's proposed check, that no grace timer
+      starts after the signal call returns, is another way to read the same row. Note on the item:
+      this sleeping or silent-restart product sends no /wait, so lifecycleSignals' wait rule does
+      not refuse it and only the fake-clock row's exact instant does. Make that the row's
+      failing-first case alongside the repeated-SIGINT restart.
+
+      This item already holds the idea. Its fake-clock row, extended with a hold longer than what is
+      left of the call limit so the cut really happens, asserts SIGKILL at exactly first signal plus
+      grace. A fake clock has no jitter, so no recorded cut instant is needed. The new rationale is
+      covered by that row. A timer started at the acknowledgement or the cut kills at the cut plus
+      grace, whenever the first signal arrives. A product that sleeps instead of waiting after a cut
+      kills at the same wrong instant. Neither sends the /wait request that lifecycleSignals' wait
+      rule looks for, so only the exact instant refuses them. Make both the row's failing-first
+      cases, alongside the repeated-SIGINT restart. The earlier notes already settle that a recorded
+      cut instant is not worth its own item, because it touches the recorder outside T-42's range
+      and only sharpens the native tier's inference. The item is not in the queue (T-45, T-42,
+      p1-credentials-passed-in, p1-harness-home, p1-interactive-tty). The person or coordinator
+      should queue it before p1-interactive-tty or accept the gap.
+  - id: p2-proxy-log-lost-tail-sink
+    title: Decide whether the proxy gets a log sink that can show a lost tail of the refusal log
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      For the person to decide before slice-28 is drafted. The per-process `seq` in the proxy's
+      refusal log exposes a hole inside the stored records but not a lost tail. A hostile worker can
+      fill a Docker data root that shares the checkout's filesystem. The proxy then keeps writing
+      without seeing a failure, the session continues, and the teardown copy succeeds on a truncated
+      log. That undermines the 'every refused CONNECT leaves a log record the person can read'
+      property that slice-28 builds on (AC-17). Only a second sink the proxy can see fail would
+      close it, for example a final count written somewhere the controller reads. That is a security
+      decision, so the drafter must stop for it and not invent a protection. It is p2 because T-39's
+      record discloses the limit, so step 1 can ship with the disclosure. It is separate from
+      p3-session-state-retention, which covers how long the log is kept, not whether it is complete.
+      The answer shapes T-40's teardown copy and slice-28's reading of the log, so settle it before
+      slice-28 is taken.
+
+      This item already records the problem and the open decision: a hostile worker fills a Docker
+      data root that shares the checkout's filesystem, the proxy's writes keep succeeding, and the
+      teardown copy succeeds on a truncated log. It is p2 and must be settled before slice-28 is
+      taken. Note to add: the open decision has two concrete candidates. (1) A proxy-held fsynced
+      volume sink that fails closed mid-run but gives the proxy a writable mount, which cuts against
+      its hardening. (2) A terminal record the proxy writes on clean stop, which shows a lost tail
+      at teardown without a new mount, but cannot stop a run that is already losing records. The
+      choice changes the log schema (a terminal record or final count) and the proxy's hardening, so
+      the person must decide it before slice-28 writes its copy check, and the drafter must stop for
+      it rather than invent a protection.
+
+      That item already puts this exact question to the person. A hostile worker fills a Docker data
+      root that shares the checkout's filesystem, and the proxy's writes keep succeeding. The
+      session continues, and the teardown copy succeeds on a truncated log. Its note names the two
+      candidates: a proxy-held fsynced volume sink that fails closed mid-run but gives the proxy a
+      writable mount, or a terminal record written on clean stop that needs no new mount but cannot
+      stop a run already losing records. It also says the drafter must stop for the person rather
+      than invent a protection, and that the answer must come before slice-28's copy check. The one
+      point to add is the order of work. Until the person answers, T-40's teardown copy and
+      slice-26, slice-27 and slice-28 must carry the disclosure that an incomplete log cannot be
+      detected. Slice-28 shows a count as complete only after the decision.
+  - id: T-43
+    title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-44
+    title: The Engine failure diagnostics step prints the slowest engine scenario timings, with LIFECYCLE-09's signal offsets
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-45
+    title: The engine suite returns near 3 minutes by shortening, through the harness-only budget seam, what T-41 lengthened
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p2-harness-env-clears-columns
+    title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. world.env() (features/steps_test.go:223) copies the caller's environment
+      and drops only GIT_, ITOS_, ITOS_CONTAINER_, GITHUB_, GH_, CI and PATH, so an inherited
+      COLUMNS reaches the product and Kong wraps help to it. Measured under COLUMNS=30:
+      ID-APPROVAL-29 fails a correct build at its step 'its standard output says "an agent on the
+      host can approve"', because the wrap splits the phrase. Only ID-APPROVAL-56 names its own
+      width (COLUMNS=200). Six other help scenarios are exposed: completion --help, count --help,
+      doctor --help in manifest.feature and policy.feature, and the product status/stop help in
+      recovery.feature. A suite that fails a correct build on a caller's terminal setting breaks the
+      charter's rule that suite and proof reliability fixes stay inside the first milestone. Fix:
+      have env() drop COLUMNS, or set a fixed wide value, and add a harness regression committed red
+      that runs a help scenario under a narrow inherited COLUMNS and fails before the fix. Check
+      that fixtures building their environment from os.Environ() directly, such as
+      sessionChildEnvironment, do not reintroduce it. Keep every scenario and assertion unchanged
+      and leave ID-APPROVAL-56's explicit width alone. Phase p2: nothing blocks the current step,
+      and CI normally exports no COLUMNS. The harness came from go-template-itos, so once this lands
+      the coordinator files it there as a backport issue.
+  - id: p2-approve-allowlist-added-removed-names
+    title: Approve's review shows an allowlist change as the names added and removed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Charter milestone two, step 1: the allowlist is part of the approved settings, and the
+      contract's AC-02 makes a change to network permissions need a new approval. The checkout is
+      hostile and can edit itos-container.yaml, so the person's re-approval review is the one place
+      a hostile added name is caught. Slice-26's spec compares /policy/network/allow as one value,
+      so a change prints as one difference holding the whole old and new arrays. The policy admits
+      lists of up to 2037 names, and one added name among them is hard to see before y/N. Show the
+      names added and the names removed, in sorted order, beside or instead of the whole arrays, in
+      bare approve's review and in the plain output of approve and doctor. Decide in the spec
+      whether the schema-1 JSON differences keep their {path,before,after} shape, which scenarios
+      already hold. It changes presentation only; it grants and binds nothing. It follows slice-26,
+      which supplies the record and the comparison. It is not a blocker, but it should land before
+      slice-27 makes an approved list a live route. Slice-26's spec chose the whole-array form on
+      purpose, so this is a follow-up that changes that scenario in a feat commit, not an edit to
+      slice-26.
+  - id: p2-ci-go-build-cache-rolling-key
+    title: CI jobs restore a Go build cache that follows main, not one frozen at go.sum's first save
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. ci.yml uses actions/setup-go with cache-dependency-path: go.sum in every
+      job (lines 40, 68, 184, 207, 230). The cache key is go.sum's hash, and as I read setup-go it
+      saves only when that key missed. The build cache is therefore frozen at the first save for
+      each go.sum, so every job recompiles all of this module's packages changed since then. The
+      engine step's 240 s gate (T-33) includes `go test -c`, so compile cost counts against the same
+      budget T-45 is trying to free. A work step measured it locally on 4 CPUs. The features binary
+      took 21 s cold and 4.7 s warm. The covered product build took 16 s cold and 0.8 s warm. That
+      is up to about 30 s in a step that has run at 199–245 s on slow runners. It was not measured
+      in CI. First read the `engine compilation timing:` lines from recent main and pull request
+      runs to confirm the share. If it holds, settle in the spec the key that rolls with main and
+      the restore order. Also settle whether it needs a pinned actions/cache in place of setup-go's
+      cache option, with the reason and version. Branch scoping must keep a pull request's cache
+      from feeding main. Keep the 240 s gate, the 4 m test timeout and compilation inside the
+      measurement unchanged. Phase p2: nothing blocks milestone two step 1, and it is CI polish that
+      the charter takes only when it does not delay the next step. It stays inside the first
+      milestone because it is a suite-speed fix for the engine tier, whose compile time sits inside
+      the gate.
+  - id: p2-lint-each-release-goos
+    title: golangci-lint runs for every GOOS the release builds, so depguard sees the OS-specific production files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks no charter step, so p2. CI's static tier runs `tools/bin/pinned golangci-lint run
+      ./...` once, for linux, and the linter skips files Go ignores for the build target. So
+      depguard, gosec and revive have never read the five OS-specific production files:
+      internal/engine/policy/disk/open_windows.go, manifest/disk/open_windows.go,
+      approval/disk/calls_windows.go, approval/disk/private_other.go and
+      session/disk/anchor_other.go. .goreleaser.yaml builds linux, darwin and windows, so a
+      forbidden import (another engine, `crypto/tls` outside egress, `os/exec`) in a new
+      `_windows.go` or `_darwin.go` adapter file passes CI and ships. A spec review measured it: an
+      `os` import in an engine domain's probe_windows.go gave no depguard issue on Linux and one
+      under GOOS=windows. This is not p2-architecture-stdlib-on-go-list. That item changes
+      tools/architecture so domains, ports and handlers hold per-role stdlib allowlists and refuses
+      `//go:build` lines there. All five files above are adapters, which it does not cover. The
+      architecture check's `--siblings --outside --linked --toplevel` arrows also run on the host's
+      build only, so a cross-slice import in an adapter's `_windows.go` is seen by neither gate.
+      Linting each release GOOS closes it for every depguard rule and every other linter at once.
+      T-39's raw-walk tests close it only for egress's TLS rule. Add `GOOS=windows` and
+      `GOOS=darwin` runs of the same lint command to the static tier in itos.yaml, with a
+      compile-first fixture for each: a forbidden import in a `_windows.go` and a `_darwin.go` file
+      in an adapter that fails only under that GOOS. itos.yaml is an enforcement input, so this runs
+      the full fixture matrix; do it in one change with p2-architecture-stdlib-on-go-list if both
+      are taken together. Measure the added static-tier time first, since lint is one of the longest
+      static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
+      own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
+      already ships.
+  - id: p3-workspace-copy-mode
+    title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person, 2026-11-09, after reading tryboxi (delta sync into a microVM, .git sanitizing, a
+      three-way apply back) and cloudycloud (a clone on a cloud machine, results pushed as a
+      branch): 'an alternative way of working'. Not now, and not instead of the mount. A copy mode
+      would clone or bundle the checkout into the sandbox's own volume and return the work as
+      commits (a bundle or a branch the host fetches), never writing the host checkout during the
+      run. That removes by construction the class milestone one hardened one case at a time (inode
+      swaps, host sockets, hard links, control state reached through the mount) and planted .git
+      hooks, lets several runs share one checkout, and is the only shape a microVM or remote
+      provider can use, since those share no filesystem with the host. Costs: sync time on large
+      repositories, no live view in the host editor, and divergence when the person edits the
+      checkout meanwhile (commits merge; uncommitted edits don't).
+  - id: p1-engine-timing-notice-every-run
+    title: Every engine job run publishes its slowest scenario timings and the runner's identity as a ::notice annotation, green runs included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks T-45, the head of the queue and a suite-speed fix the charter finishes before milestone
+      two step 1 gets far. Main ran the engine tier at 4 min 5 s against a 4 min test timeout, so
+      any slow runner fails every pull request's engine job, step 1's included. T-45 must read where
+      the time goes from a CI run on its own head. T-44's slowest-first section sits in the `if:
+      failure()` diagnostics step, so a green or merely slow run prints nothing. Job logs return 403
+      without a token, so an agent cannot read the log anyway. Add a step that runs on every engine
+      job, green included, and publishes a bounded number of `::notice` lines. `::notice` is a
+      separate annotation type from `::error`, so it does not use the ten errors per step that
+      T-43's report fills. Each line carries scenario name, duration and outcome only. One more line
+      carries the step's duration_ms, its 240000 ms limit, and the runner's identity: name, image
+      version, OS, architecture and CPU count. That identity lets the 162–196 s fast runners be told
+      apart from the 199–245 s slow ones, so runner variance is not mistaken for a regression. Print
+      no credentials, environment dump or file contents. Leave the failure-only step and its pins
+      unchanged except where the new step needs them. The `if: failure()` gate,
+      TestEngineFixtureWorkflow and TestEngineWorkflow pin the engine steps, so the change needs a
+      ledger task whose check extends TestEngineDiagnostics or TestEngineScenarioTiming. Land it
+      after T-43 and T-44, which edit the same workflow region, and rebase on them.
+
+      That item already adds a step that runs on every engine job, green included, and publishes a
+      ::notice line with the runner's name, image version, OS, architecture and CPU count, so a
+      runner-image change can be told from a regression. Engine jobs are now the three engine-shard
+      legs, and that item should cover each leg. Two notes for it. First, add the Docker server
+      version to the same line. Each leg's preflight prints it only in the token-gated job log.
+      Second, the preflight is an exact allowlist in validEnginePreflight, so it should leave the
+      preflight alone and read the image and Docker version in the new step. Reading /etc/os-release
+      in the preflight would need a reviewed allowlist change, and T-44's diagnostics step prints
+      only on failure, so it cannot carry this.
+
+      This belongs inside p1-engine-timing-notice-every-run, which already adds a step on every
+      engine job, failures included, publishing duration_ms and the 240000 ms limit as a notice.
+      That reaches a reader without the token-gated log. What the notice lacks is a label saying the
+      step failed on time alone. Fold that in: the engine_finish trap in ci.yml, at the branch that
+      sets result=1 when elapsed exceeds 240000 with a passing test run, also prints `::error
+      title=Engine step over its time limit` with measured and limit seconds and nothing else. Cover
+      it in TestEngineSuiteBudget's over-budget cases. Public data only. It edits the same workflow
+      region and pins, so it is one change with the notice step, not a separate item.
+  - id: T-46
+    title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
+    phase: 1
+    owner: null
+    status: dropped
+    depends_on: []
+    kind: task
+  - id: T-47
+    title: "Record the credentials decision: sources, per-command delivery, what approval binds, and what stays open"
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: slice-29
+    title: The policy file accepts named credential sources and doctor validates them without reading their contents
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: [T-47]
+    kind: slice
+    why: >
+      Was p1-credentials-policy-sources.
+      Charter step 2: the credential grants are part of the approved settings, so they start in
+      itos-container.yaml, as the egress allowlist did in slice-25. Scenarios first: a closed
+      credentials section naming each source by kind (Claude token file, Codex auth file, GitHub
+      token file) with an absolute host path. Unknown kinds, duplicates, relative or empty paths,
+      and paths inside the checkout or any mount are refused with a located diagnostic. Doctor
+      reports a missing, non-regular, group- or world-accessible, or foreign-owned source, and shows
+      the effective grants. It never prints, hashes or logs contents. It does not execute checkout
+      code and starts no engine. Offline policies without the section are unchanged. docs/CONFIG.md
+      and docs/CLI.md are updated, and the published policy schema moves with it. It takes the keys
+      and checks from the decision record. Broken down from p1-credentials-passed-in.
+  - id: slice-30
+    title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-29, slice-26]
+    kind: slice
+    why: >
+      Was p1-credentials-approval-grant.
+      Charter step 2 plus q-52: approve shows exactly which credential kinds and host paths the
+      worker will receive and asks for yes at a real terminal. --fingerprint is refused, with a fix
+      naming the interactive form, for any grant that includes credentials (and, per slice-26, an
+      egress allowlist). The canonical approved-settings record gains the grants as a set of names,
+      kinds and paths and never contents. Adding, removing or repointing a grant invalidates an
+      existing approval, and run refuses with the change explained. Reordering does not. Offline
+      approvals keep their identity. Status shows grants without secrets. Records, presentation and
+      refusal only: nothing is delivered to a worker yet. It follows the policy slice for the
+      validated grants and slice-26 for the shared canonical record and refusal rule. Broken down
+      from p1-credentials-passed-in.
+  - id: T-48
+    title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-47]
+    kind: task
+  - id: slice-31
+    title: run hands the approved Claude token to the workload; it appears nowhere in docker inspect, the checkout, status or logs
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48]
+    kind: slice
+    why: >
+      Was p1-credentials-claude-token-run.
+      The first user-visible credential behaviour, charter step 2. Scenarios first, real-engine ones
+      in CI, using a synthetic token marker and no real account. With an approved Claude grant, run
+      makes the token readable by the workload in the form the decision record chose. A scenario
+      that fails without the isolation shows that docker inspect of the worker, the session's
+      recovery and approval records, status output, doctor output, the refusal log and run's own
+      diagnostics never contain the marker, and that nothing is written under the checkout. Without
+      an approved grant, or after the source file changes mode or owner, run refuses before creating
+      anything. A second worker or project does not receive it. Offline runs without grants are
+      unchanged. Broken down from p1-credentials-passed-in.
+  - id: slice-32
+    title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48]
+    kind: slice
+    why: >
+      Was p1-credentials-codex-auth-run.
+      Charter step 2: Codex shares the host's own login and rewrites auth.json in place, so the
+      mount is the single file read-write (a directory mount would expose the host home), plus the
+      lock file when the host has one. Scenarios first, real-engine ones in CI, on a synthetic file
+      with no real login. A write by the workload reaches the host file in place. Nothing else from
+      the host directory is visible. A missing or replaced source, a symlink or a path outside the
+      approved one is refused before create. The mount appears in the session's records by path and
+      never by contents. The grant needs approval from a terminal. It also states, in approve's
+      review, that the worker can alter this file, since a read-write mount is the person's chosen
+      design. Broken down from p1-credentials-passed-in.
+  - id: slice-33
+    title: run hands the approved GitHub token to the workload the same way, for gh and pushes
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-31]
+    kind: slice
+    why: >
+      Was p1-credentials-github-token-run.
+      Charter step 2: a GitHub token for gh and pushes, passed like Claude's. Scenarios first, on a
+      synthetic marker. With an approved grant the workload can read the token where gh expects it.
+      The same absence properties hold: docker inspect, records, status, logs and the checkout. Git
+      push over the network needs the egress allowlist, so only the credential's delivery is in
+      scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
+      Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
+      approved grant. Broken down from p1-credentials-passed-in.
+  - id: p1-egress-refusal-log-writer
+    title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks charter milestone two, step 1 (egress through an allowlisting proxy), at slice-27.
+      T-40's spec has the controller copy the stopped proxy's stdout through port.RefusalLog before
+      removing it. It refuses an egress run with no log bound (nil is port.Internal), and a failed
+      copy keeps the stopped proxy, both networks, the anchor and the intent. So slice-27 can
+      neither run nor tear down an egress session until a real writer exists. cmd binds none in
+      T-40. The record (docs/decisions/0022-egress-proxy.md, 'Where the log lands') and arc42's
+      slice-28 row give the writer to slice-28, which depends on slice-27. No item schedules it
+      earlier. Approval's Publish refuses more than 1 MiB, so it cannot be reused. Build the adapter
+      as a task before slice-27: the streaming writer for
+      sessions/<lookup>/<id>/egress-refusals.jsonl, with Publish's private-file, fsync, rename and
+      parent-fsync rules, passing T-40's RefusalLogContract unchanged. It adds no command behaviour,
+      so it is a ledger task with a check, not part of slice-27's scenarios. It depends on T-40, and
+      slice-27 should depend on it. Slice-28 keeps the seq check and its typed gap error, status's
+      record count, display escaping of hostile names, and the proxy-failure scenarios. Update the
+      record and arc42 rows that now give the writer to slice-28. The writer does not wait for
+      p2-proxy-log-lost-tail-sink, since T-40 says either candidate is one more stdout line the
+      reader and copy carry unchanged. Retention stays with p3-session-state-retention.
+  - id: p1-offline-11-ipv6-route-flake
+    title: "ID-OFFLINE-11 flakes: a positive IPv6 route control times out on the CI runner"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      slice-21, 2026-11-09, run 42707809736 at 9c4ae47: the offline engine shard failed
+      ID-OFFLINE-11 (No external network path exists from the first workload instruction) on
+      positive route control first/gateway6-tcp: dial tcp6 [fd14:14::1]:42395: i/o timeout. The
+      re-run of the same head passed. A positive control that times out makes the boundary check red
+      with nothing wrong; give it a retry or a readiness wait before the dial, or say why one try is
+      the contract.
+  - id: p1-lifecycle-shard-flakes-on-main
+    title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      2026-11-09, main push runs: 42713010342 at 1b310df (a registry-only commit) failed Engine
+      transport loss reports an unknown workload outcome and retains recovery (worker readiness did
+      not reach the controller's foreground stream); 42716948746 at 1ca4e45 (slice-25's merge)
+      failed both rows of The primary receives the first signal and its observed exit wins
+      (lifecycle.feature:420; product did not reach the handle lifecycle barrier; lifecycle changed
+      unrelated native resources or image references). Both are waits on a barrier with a fixed
+      bound, like LIFECYCLE-09 before T-42. A red main run blocks itos work done on every item
+      merged onto it, so each flake stops a worker. Find which bound the hosted runner misses and
+      give it room through the harness budget seam, as T-42 did.
+
+      Belongs in the existing investigation of lifecycle barrier failures. Include controller exit
+      code, stderr and the request journal in failure messages to distinguish early controller exits
+      from missed timing bounds; T-43 already exposes those step errors in CI annotations.

@@ -3,6 +3,7 @@ package features
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -44,14 +45,18 @@ func (w *world) offlinePublicRecord() ([]byte, error) {
 		return nil, fmt.Errorf("retry must bind exactly one public registration")
 	}
 	var record map[string]any
-	if json.Unmarshal(data, &record) != nil || len(record) != 7 || record["schema"] != float64(1) || record["id"] != r.SessionID || record["project"] != w.approval.project || record["intent"] != s.reference {
+	if json.Unmarshal(data, &record) != nil || !publicRecordShape(record) || record["schema"] != float64(1) || record["id"] != r.SessionID || record["project"] != w.approval.project || record["intent"] != s.reference {
 		return nil, fmt.Errorf("retry registration lost the original project or intent")
 	}
 	if record["workload_exit"] != nil && record["workload_exit"] != float64(s.launch.child) {
 		return nil, fmt.Errorf("registration changed the workload exit")
 	}
 	if r.Cleanup == "cleanup-complete" {
-		if record["state"] != "stopped" || record["workload_exit"] != float64(s.launch.child) || record["last_problem"] != nil {
+		var expectedExit any = float64(s.launch.child)
+		if s.anchorFixture && r.Workload == nil {
+			expectedExit = nil
+		}
+		if record["state"] != "stopped" || record["workload_exit"] != expectedExit || record["last_problem"] != nil {
 			return nil, fmt.Errorf("completed registration lost its workload and cleanup facts")
 		}
 	} else if record["state"] != "running" && record["state"] != "stopping" && record["state"] != "failed" {
@@ -92,7 +97,7 @@ func (w *world) offlineCompletedRegistryPaths() (map[string]bool, error) {
 	}
 	want := map[string]any{"schema": 1, "id": id, "project": w.approval.project, "intent": w.session.reference,
 		"state": "stopped", "workload_exit": 0, "last_problem": nil}
-	if !recoveryJSONEqual(string(data), want) {
+	if !completedDetector(string(data), want) {
 		return nil, fmt.Errorf("native run lost its exact completed registration or original binding")
 	}
 	return allowed, nil
@@ -103,7 +108,7 @@ func (w *world) offlineRegistryObjects(id string) (map[string]bool, error) {
 	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions")
 	project := filepath.Join(root, w.recoveryIndexKey())
 	dir := filepath.Join(project, id)
-	tree, err := runTree(root)
+	tree, err := runTree(filepath.Dir(root))
 	if err != nil {
 		return nil, err
 	}
@@ -124,5 +129,19 @@ func (w *world) offlineRegistryObjects(id string) (map[string]bool, error) {
 		}
 		allowed[path] = true
 	}
+	var record map[string]any
+	if err := json.Unmarshal([]byte(tree[filepath.Join(dir, "record.json")].Data), &record); err != nil {
+		return nil, err
+	}
+	intent, ok := record["intent"].(string)
+	if !ok {
+		return nil, fmt.Errorf("registration has no original intent")
+	}
+	complete := record["state"] == "stopped" && record["last_problem"] == nil
+	admission, err := w.admissionPaths(tree, id, intent, &complete)
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(allowed, admission)
 	return allowed, nil
 }

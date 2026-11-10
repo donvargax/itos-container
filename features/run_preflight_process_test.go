@@ -84,6 +84,9 @@ func (w *world) runSnapshotPath() string {
 	return filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(w.approval.record))), "snapshots", w.approval.project, w.approval.generation+".json")
 }
 func (w *world) runCheckpoint() error {
+	if err := w.seedControlLocations(); err != nil {
+		return err
+	}
 	r := w.runFixture()
 	var err error
 	r.before, err = runTree(w.dir)
@@ -242,6 +245,16 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 	originalArgs := append([]string{}, args...)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	bin := w.bin
+	if w.doctor.engine.offline != nil && len(args) > 0 && args[0] == "run" {
+		var err error
+		bin, err = w.sessionProbeBinary()
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		args = append([]string{"-test.run=^TestLocalRunCommand$", "-test.count=1", "--"}, args...)
+		env = append(env, "SLICE_17_LOCAL_RUN=1", "SLICE_17_LOCAL_MOUNT_ROOT="+w.doctor.checkout)
+	}
 	r := w.runFixture()
 	if r.mask != "" {
 		helper, err := os.Executable()
@@ -258,7 +271,7 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 		return nil, err
 	}
 	p := &runProcess{approval: approvalBefore, cancel: cancel, done: make(chan struct{}), start: time.Now(), count: w.doctor.engine.listener.connections.Load()}
-	if cover := os.Getenv("GOCOVERDIR"); cover != "" && r.mask != "" {
+	if cover := w.coverageDir(); cover != "" && r.mask != "" {
 		dir, err := os.MkdirTemp(cover, "slice-8-mask-")
 		if err != nil {
 			cancel()
@@ -273,7 +286,7 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 	p.cmd.Stdout = &p.out
 	p.cmd.Stderr = &p.err
 	p.cmd.WaitDelay = time.Second
-	if err := p.cmd.Start(); err != nil {
+	if err := w.startLocalCommand(p.cmd); err != nil {
 		cancel()
 		return nil, err
 	}
@@ -287,7 +300,12 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 			}
 		}
 	}
-	go func() { _ = p.cmd.Wait(); close(p.done) }()
+	go func() {
+		_ = p.cmd.Wait()
+		unlock := w.lockLocalAPI()
+		defer unlock()
+		close(p.done)
+	}()
 	return p, nil
 }
 func (w *world) finishRun(p *runProcess) (runObservation, error) {
@@ -313,7 +331,7 @@ func (w *world) finishRun(p *runProcess) (runObservation, error) {
 	}
 	if p.coverage != "" {
 		defer func() { _ = os.RemoveAll(p.coverage) }()
-		if err := exportApprovalKernelCoverage(p.coverage, os.Getenv("GOCOVERDIR")); err != nil {
+		if err := exportApprovalKernelCoverage(p.coverage, w.coverageDir()); err != nil {
 			return r, err
 		}
 	}

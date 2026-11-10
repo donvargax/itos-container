@@ -8,8 +8,11 @@ import (
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/cli"
+	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
+	af "github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
 	"github.com/donvargax/itos-container/internal/slices/run/command"
 	"github.com/donvargax/itos-container/internal/slices/run/domain"
+	"github.com/donvargax/itos-container/internal/slices/run/port/porttest"
 )
 
 func TestRunReportsRefusals(t *testing.T) {
@@ -62,6 +65,57 @@ func TestRunReportsRefusals(t *testing.T) {
 	}
 }
 
+func TestRunRefusesEachMissingDependencyBeforePreflight(t *testing.T) {
+	for _, missing := range []string{"approval", "snapshots", "runner"} {
+		t.Run(missing, func(t *testing.T) {
+			a := &porttest.Approval{View: approval.View{
+				Status: "matching", Inspection: af.Ready(),
+				Candidate: approval.Candidate{Project: "p", Fingerprint: "hash", Canonical: "selected"},
+				Record:    approval.Record{Generation: "1"},
+			}}
+			snapshots := &af.Snapshots{}
+			runner := &porttest.Runner{}
+			request := command.CLI{
+				Args:     []string{"--", "git", "status"},
+				Approval: a, Snapshots: snapshots, Runner: runner,
+			}
+			switch missing {
+			case "approval":
+				request.Approval = nil
+			case "snapshots":
+				request.Snapshots = nil
+			case "runner":
+				request.Runner = nil
+			}
+			var stdout, stderr strings.Builder
+			ui := &cli.UI{Classify: command.Classify, Stdout: &stdout, Stderr: &stderr}
+			if code := request.Run(ui); code != cli.CodeInternal {
+				t.Fatalf("incomplete assembly exit = %d, want %d", code, cli.CodeInternal)
+			}
+			if stdout.Len() != 0 || !strings.Contains(stderr.String(), "run assembly is incomplete") {
+				t.Fatalf("incomplete assembly output = %q, %q", stdout.String(), stderr.String())
+			}
+			if a.Inspections != 0 || a.Selections != 0 || len(snapshots.Values) != 0 || len(runner.Argv) != 0 {
+				t.Fatal("incomplete assembly reached preflight or execution")
+			}
+		})
+	}
+}
+
+func TestPrerequisiteWithoutProblemsUsesInternalFallback(t *testing.T) {
+	// A prerequisite error without a diagnostic is an internal defect; it must
+	// not become a silent refusal merely because its error type is recognized.
+	err := fmt.Errorf("preflight: %w", domain.Prerequisite{})
+	var stdout, stderr strings.Builder
+	ui := &cli.UI{Classify: command.Classify, Stdout: &stdout, Stderr: &stderr}
+	if code := ui.Fail(err, false); code != cli.CodeInternal {
+		t.Fatalf("empty prerequisite exit = %d, want %d", code, cli.CodeInternal)
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), err.Error()) {
+		t.Fatalf("empty prerequisite output = %q, %q", stdout.String(), stderr.String())
+	}
+}
+
 func TestClassifierHandlesWrappedAndUnknownFailures(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
@@ -90,7 +144,8 @@ func TestClassifierHandlesWrappedAndUnknownFailures(t *testing.T) {
 
 func TestHelpExplainsForegroundScope(t *testing.T) {
 	help := (command.CLI{}).Help()
-	for _, text := range []string{"itos container run -- <command>", "ITOS_JSON=1", "schema-1", "offline worker", "streams remain separate", "2 ", "3 "} {
+	for _, text := range []string{"itos container run -- <command>", "ITOS_JSON=1", "schema-1", "offline worker", "streams remain separate", "2 ", "3 ",
+		"approval.state.exposed", "approve cannot fix it", "run.call-timeout", "records with no catalog"} {
 		if !strings.Contains(help, text) {
 			t.Errorf("help lacks %q", text)
 		}

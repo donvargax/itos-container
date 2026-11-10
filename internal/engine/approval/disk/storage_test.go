@@ -1,11 +1,13 @@
 package disk
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -25,6 +27,111 @@ func TestProtectedStorageContract(t *testing.T) {
 		})
 	})
 }
+
+func TestStoragePublicationSizeBoundary(t *testing.T) {
+	for _, previous := range [][]byte{nil, []byte("retained record")} {
+		t.Run("existing="+strconv.FormatBool(previous != nil), func(t *testing.T) {
+			for _, size := range []int{0, 1024*1024 - 1, 1024 * 1024, 1024*1024 + 1} {
+				t.Run(strconv.Itoa(size), func(t *testing.T) {
+					store, c, _ := diskFixture(t)
+					d, failure := (Storage{Store: store}).Open(t.Context(), c, "intents", true)
+					if failure != "" {
+						t.Fatal(failure)
+					}
+					defer d.Close()
+					if previous != nil {
+						if failure = d.Publish("1.json", nil, previous); failure != "" {
+							t.Fatal(failure)
+						}
+					}
+					next := bytes.Repeat([]byte("x"), size)
+					want, wantFailure := next, port.Failure("")
+					if size == 0 || size > 1024*1024 {
+						want, wantFailure = previous, "state.invalid"
+					}
+					if failure = d.Publish("1.json", previous, next); failure != wantFailure {
+						t.Fatalf("publish %d bytes = %s; want %s", size, failure, wantFailure)
+					}
+					got, failure := d.Read("1.json")
+					if failure != "" || !bytes.Equal(got, want) || (got == nil) != (want == nil) {
+						t.Fatalf("read after %d-byte publication = %d bytes, %s; want the complete retained record", size, len(got), failure)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestStorageControlLockLifetime(t *testing.T) {
+	for _, end := range []string{"publication", "refused publication", "close", "failed open"} {
+		t.Run(end, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				control, c, _, _, _ := controlFixture(t)
+				store := control.Store
+				store.Control = control
+				if end == "failed open" {
+					// Only the selected directory fails; the independent control
+					// adapter must acquire its real account lock first.
+					ops := store.operations()
+					ops.openDir = func(*os.Root, string) (*os.File, error) { return nil, os.ErrPermission }
+					store.ops = &ops
+				}
+				d, failure := (Storage{Store: store}).Open(t.Context(), c, "intents", true)
+				if d != nil {
+					defer d.Close()
+				}
+				if end == "failed open" {
+					if d != nil || failure != "state.write" {
+						t.Fatalf("failed open = %v, %s; want no directory and state.write", d, failure)
+					}
+				} else {
+					if d == nil || failure != "" {
+						t.Fatalf("open = %v, %s", d, failure)
+					}
+					// A second descriptor must not acquire the account lock
+					// between a successful Open and the first publication.
+					ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+					peer, f := control.Begin(ctx, c, true)
+					cancel()
+					if peer != nil {
+						peer.Close()
+					}
+					if peer != nil || f != "state.busy" {
+						t.Fatalf("unpublished intent released the account lock: %v, %s", peer, f)
+					}
+					switch end {
+					case "publication":
+						if f := d.Publish("1.json", nil, []byte("intent")); f != "" {
+							t.Fatal(f)
+						}
+					case "refused publication":
+						if f := d.Publish("1.json", nil, nil); f != "state.invalid" {
+							t.Fatal(f)
+						}
+					case "close":
+						d.Close()
+					}
+				}
+				ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+				defer cancel()
+				peer, failure := control.Begin(ctx, c, true)
+				if peer != nil {
+					peer.Close()
+				}
+				if peer == nil || failure != "" {
+					t.Fatalf("%s retained the account lock: %s", end, failure)
+				}
+				if end == "publication" {
+					data, failure := d.Read("1.json")
+					if failure != "" || string(data) != "intent" {
+						t.Fatalf("releasing the account lock invalidated the intent handle: %q, %s", data, failure)
+					}
+				}
+			})
+		})
+	}
+}
+
 func TestStorageLockRespectsCallerDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, c, _ := diskFixture(t)
@@ -41,7 +148,7 @@ func TestStorageLockRespectsCallerDeadline(t *testing.T) {
 		timed, cancel := context.WithTimeout(ctx, budget)
 		defer cancel()
 		started := time.Now()
-		if second, f := storage.Open(timed, c, "intents", false); second != nil || f != "state.unavailable" {
+		if second, f := storage.Open(timed, c, "intents", false); second != nil || f != "state.busy" {
 			t.Fatal(second, f)
 		}
 		if elapsed := time.Since(started); elapsed != budget || !errors.Is(timed.Err(), context.DeadlineExceeded) {
@@ -75,7 +182,7 @@ func TestStorageCancellationBeforeLockAcquisition(t *testing.T) {
 		return file, err
 	}
 	s.ops = &ops
-	if opened, f := (Storage{Store: s}).Open(ctx, c, "intents", false); opened != nil || f != "state.unavailable" {
+	if opened, f := (Storage{Store: s}).Open(ctx, c, "intents", false); opened != nil || f != "state.busy" {
 		t.Fatalf("canceled lock acquisition = %v, %s", opened, f)
 	}
 	if lockFile == nil {

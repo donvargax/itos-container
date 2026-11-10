@@ -1,0 +1,525 @@
+package features
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"time"
+)
+
+func (w *world) lifecycleResult(code int) error {
+	l := w.lifecycle
+	if l != nil && l.err != nil {
+		return l.err
+	}
+	if l == nil || l.run == nil {
+		return errors.New("no lifecycle invocation was observed")
+	}
+	if l.run.exit != code {
+		return fmt.Errorf("lifecycle run returned %d, expected %d; stderr %q", l.run.exit, code, l.run.errout.bytes())
+	}
+	return nil
+}
+
+func (w *world) lifecycleReceipts(signal string, child int) error {
+	if err := w.lifecycleResult(child); err != nil {
+		return err
+	}
+	l := w.lifecycle
+	data, err := os.ReadFile(filepath.Join(w.doctor.checkout, "slice-12-receipts"))
+	if err != nil || string(data) != signal+"\n" || l.ready.IsZero() || !l.signalled.After(l.ready) {
+		return errors.New("native worker did not record exactly the first signal after readiness")
+	}
+	for _, e := range l.journalAtReturn {
+		if strings.HasSuffix(e.Path, "/wait") && e.Status == 200 && !e.Cancelled && !e.Replied.IsZero() &&
+			e.Observation["StatusCode"] == float64(child) {
+			return nil
+		}
+	}
+	return errors.New("exit code was not backed by an authoritative native wait reply")
+}
+
+func (w *world) lifecycleCancelled() error {
+	l := w.lifecycle
+	if l.run == nil || l.err != nil {
+		return errors.Join(l.err, errors.New("no successful lifecycle observation"))
+	}
+	diagnostic := string(l.run.errout.bytes())
+	if !strings.Contains(diagnostic, "run.cancelled") || !strings.Contains(diagnostic, l.first) || l.first == "" {
+		return fmt.Errorf("cancellation is not reported separately with its first signal: %q", diagnostic)
+	}
+	return w.lifecycleSafeState()
+}
+
+func lifecycleSignalRequest(e offlineRequest) bool {
+	return e.Method == "POST" && (strings.HasSuffix(e.Path, "/kill") || strings.HasSuffix(e.Path, "/stop"))
+}
+
+// One signal request of a row's journal as the row's timing record carries it. The
+// offsets are in nanoseconds after the harness signalled the controller, the
+// cancellation the limits of LIFECYCLE-09 count from. A reader sets SIGKILL's
+// arrival against the grace window, the first signal's reply against the
+// acknowledgement hold, and the first signal's call, which starts after
+// PreviousNS (the daemon check in recoverySignal's order) and ends at its reply
+// or, when cut, just before NextNS, against the call budget, as heldAcknowledgement
+// reads a cut. The reply is absent for a request that was never answered, and the
+// neighbours' arrival at either end of the journal.
+type signalOffset struct {
+	Signal     string `json:"signal"`
+	AtNS       int64  `json:"at_ns"`
+	RepliedNS  *int64 `json:"replied_ns,omitempty"`
+	Status     int    `json:"status"`
+	Cancelled  bool   `json:"cancelled"`
+	PreviousNS *int64 `json:"previous_ns,omitempty"`
+	NextNS     *int64 `json:"next_ns,omitempty"`
+}
+
+// The offsets of the signal requests lifecycleSignalRequest selects from the
+// journal lifecycleSignals judges, in journal order: nil when the row never
+// signalled the controller or collected no journal, and an empty list when the
+// journal holds no signal request. They are taken whatever the row's outcome.
+func (l *lifecycleNative) signalOffsets() *[]signalOffset {
+	if l == nil || l.signalled.IsZero() || len(l.journalAtReturn) == 0 {
+		return nil
+	}
+	after := func(at time.Time) *int64 {
+		offset := int64(at.Sub(l.signalled))
+		return &offset
+	}
+	offsets := []signalOffset{}
+	for i, e := range l.journalAtReturn {
+		if !lifecycleSignalRequest(e) {
+			continue
+		}
+		query, _ := url.ParseQuery(e.Query)
+		offset := signalOffset{Signal: query.Get("signal"), AtNS: *after(e.At), Status: e.Status, Cancelled: e.Cancelled}
+		if !e.Replied.IsZero() {
+			offset.RepliedNS = after(e.Replied)
+		}
+		if i > 0 {
+			offset.PreviousNS = after(l.journalAtReturn[i-1].At)
+		}
+		if i+1 < len(l.journalAtReturn) {
+			offset.NextNS = after(l.journalAtReturn[i+1].At)
+		}
+		offsets = append(offsets, offset)
+	}
+	return &offsets
+}
+
+func lifecycleWaitRequest(e offlineRequest) bool {
+	return e.Method == "POST" && strings.HasSuffix(e.Path, "/wait")
+}
+
+func lifecycleSignalRequests(entries []offlineRequest) []offlineRequest {
+	var signals []offlineRequest
+	for _, e := range entries {
+		if lifecycleSignalRequest(e) {
+			signals = append(signals, e)
+		}
+	}
+	return signals
+}
+
+func (w *world) lifecycleSignals(escalate bool) error {
+	l := w.lifecycle
+	entries := lifecycleSignalRequests(l.journalAtReturn)
+	want := 1
+	if escalate {
+		want = 2
+	}
+	if len(entries) != want {
+		return fmt.Errorf("signal request count = %d, expected %d", len(entries), want)
+	}
+	for i, e := range entries {
+		query, err := url.ParseQuery(e.Query)
+		signal := l.first
+		if i == 1 {
+			signal = "SIGKILL"
+		}
+		if err != nil || e.Path != "/containers/"+w.recovery.worker+"/kill" || len(query) != 1 || query.Get("signal") != signal {
+			return errors.New("signal did not target the original full ID with the literal first signal/escalation")
+		}
+		if e.At.Before(l.signalled) {
+			return errors.New("worker signal preceded controller cancellation")
+		}
+		if i == 1 {
+			if err := l.escalationWindow(entries[0], e); err != nil {
+				return err
+			}
+		}
+	}
+	if escalate && !l.aliveBeforeGrace {
+		return errors.New("independent native observation did not find the primary alive before grace expired")
+	}
+	if l.delay > 0 && !l.heldAcknowledgement(entries[0]) {
+		return errors.New("signal acknowledgement delay did not execute")
+	}
+	return errors.Join(w.lifecycleRevalidated(l.journalAtReturn), w.lifecycleNoHostSignals())
+}
+
+// heldAcknowledgement reports whether the recorder held the first signal's
+// acknowledgement for the row's delay. The recorder holds it after the daemon's
+// reply, so a hold that outlasts what is left of the product's call limit is
+// rightly given up on: the request is cancelled with the engine's 204 journaled
+// and no Replied. The hold ran as long as the product waited, but that journal
+// records no time for the cut, and a product that gave up 100 ms after the reply
+// leaves the same one. A cancellation before the engine answered (a 502) is a
+// stall, and the hold never ran.
+//
+// So a cut counts only if it could be the call limit. The call limit runs from
+// the signal call's start, which is no earlier than the request before the
+// signal (recoverySignal checks the daemon, then signals) or than cancellation, so
+// the cut comes no earlier than engineCallBudget after the later of the two. Not
+// from cancellation alone: a first signal that arrives late leaves most of that
+// bound spent before the hold begins, and a product that gave up after 50 ms
+// would pass. Nor from the kill's own arrival, which follows the start of the
+// call: an honest cut can leave a next request less than a call limit after it. The
+// product's next request follows the cut: the moment the signal call returns it
+// goes on to inspect (terminateSession, then recoverySignal). The teardown is
+// sequential, so no other request of the product lands between them, and the
+// independent observer reads the daemon without the recorder. A next request
+// before that time means the product stopped waiting early.
+//
+// That next request is never a wait. The grace deadline is the teardown's start
+// plus the grace and the call limit equals the grace, so the signal call, which
+// starts after the teardown does, is cut after the deadline, and the product's
+// wait on the expired grace returns without a request. A wait after a cut can
+// only come from a grace that was restarted at the cut, or from a product that gave
+// up before the deadline, and is refused whatever its time. A product that sleeps
+// instead of waiting is not caught.
+func (l *lifecycleNative) heldAcknowledgement(first offlineRequest) bool {
+	if !first.Replied.IsZero() {
+		return first.Replied.Sub(first.At) >= l.delay
+	}
+	if !first.Cancelled || first.Status != http.StatusNoContent {
+		return false
+	}
+	for i, e := range l.journalAtReturn {
+		if !lifecycleSignalRequest(e) {
+			continue
+		}
+		if i+1 >= len(l.journalAtReturn) {
+			return false
+		}
+		next := l.journalAtReturn[i+1]
+		if lifecycleWaitRequest(next) {
+			return false
+		}
+		start := l.signalled
+		if i > 0 && l.journalAtReturn[i-1].At.After(start) {
+			start = l.journalAtReturn[i-1].At
+		}
+		return next.At.Sub(start) >= engineCallBudget
+	}
+	return false
+}
+
+// escalationWindow judges the SIGKILL's arrival after cancellation. It leaves
+// from the grace through the grace plus engineEscalationTolerance, both ends
+// inclusive. That alone would accept what LIFECYCLE-09 exists to refuse, a grace
+// timer restarted by an event, so it also refuses a SIGKILL from the first
+// instant a timer restarted by some of those events could fire. An honest SIGKILL
+// leaves at the later of the deadline and the first signal's reply, so the limit
+// differs by row. The figures are the fixture's budgets.
+//
+//   - an immediate row refuses the last repeat's restart: that repeat goes no
+//     earlier than lifecycleLastRepeat, so its timer fires no earlier than that
+//     plus the grace (1.8 s). The acknowledgement returns at once, so a timer it
+//     restarted fires at the first signal's arrival plus the grace, below that
+//     limit unless the arrival was 800 ms late, and is accepted.
+//   - a delayed row refuses an acknowledgement-relative timer: the hold begins
+//     when the first signal arrives (its At in the journal, since a cut hold has
+//     no Replied), and the timer begins after it, no earlier than the delay plus
+//     the grace after that. A hold that ran in full refuses that timer at any
+//     runner speed. A cut hold keeps this limit and the window, because holds are
+//     cut just when the runner is slow, but its timer starts at the cut,
+//     engineCallBudget after the call began, which is before At plus the delay.
+//     It is refused only when the request reached the recorder within
+//     engineCallBudget less the delay (400 ms) plus the work between the cut and
+//     the SIGKILL, and a slow runner lengthens that arrival. The limit moves with
+//     the arrival, so a delayed row refuses the last repeat's timer only when the
+//     first signal arrived within 200 ms.
+//
+// A timer restarted only by the first repeat, a fifth of grace in, fires 200 ms
+// after the grace and is accepted in every row. That gap is known: a fake clock
+// holds it, in p2-grace-origin-fake-clock-row.
+func (l *lifecycleNative) escalationWindow(first, kill offlineRequest) error {
+	elapsed := kill.At.Sub(l.signalled)
+	late := engineGraceBudget + engineEscalationTolerance
+	restart, cause := lifecycleLastRepeat+engineGraceBudget, "the last repeated signal"
+	if l.delay > 0 {
+		arrival := first.At.Sub(l.signalled)
+		restart, cause = arrival+l.delay+engineGraceBudget, fmt.Sprintf("the first signal's %s acknowledgement, which arrived at %s", l.delay, arrival)
+	}
+	switch {
+	case elapsed < engineGraceBudget:
+		return fmt.Errorf("SIGKILL at %s, before the original %s grace", elapsed, engineGraceBudget)
+	case elapsed > late:
+		return fmt.Errorf("SIGKILL at %s, past the original %s grace plus its %s scheduling tolerance (%s)", elapsed, engineGraceBudget, engineEscalationTolerance, late)
+	case elapsed >= restart:
+		return fmt.Errorf("SIGKILL at %s, no earlier than %s, when a grace timer restarted by %s could fire", elapsed, restart, cause)
+	}
+	return nil
+}
+
+func (w *world) lifecycleNoHostSignals() error {
+	data, err := os.ReadFile(w.lifecycle.signalTrace)
+	if err != nil {
+		return err
+	}
+	// Go's runtime uses SIGURG for asynchronous preemption. Any controller
+	// syscall issuing INT/TERM/KILL to a host PID/group is a forbidden action;
+	// observer signal-forward entries describe delivery TO the controller.
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.Contains(line, "signal-forward") {
+			continue
+		}
+		for _, ending := range []string{", 2)", ", 9)", ", 15)"} {
+			if strings.Contains(line, ending) {
+				return errors.New("controller attempted a host-process signal")
+			}
+		}
+	}
+	return nil
+}
+
+func (w *world) lifecycleRevalidated(entries []offlineRequest) error {
+	if err := w.anchorRevalidated(entries); err != nil {
+		return err
+	}
+	worker := w.recovery.worker
+	inspected, checked := false, false
+	for _, e := range entries {
+		if e.Method == "GET" && e.Path == "/info" && e.Status == 200 {
+			checked = true
+		}
+		if e.Method == "GET" && e.Path == "/containers/"+worker+"/json" && e.Status == 200 && e.Observation["Id"] == worker {
+			inspected = true
+		}
+		if e.Method == "DELETE" && strings.HasPrefix(e.Path, "/volumes/") {
+			// The resource-specific oracle above checks the complete volume tuple.
+			inspected, checked = false, false
+			continue
+		}
+		mutation := e.Method == "DELETE" || (e.Method == "POST" && (strings.HasSuffix(e.Path, "/kill") || strings.HasSuffix(e.Path, "/stop")))
+		if !mutation {
+			continue
+		}
+		var record map[string]any
+		if !checked || !inspected || !offlineHex(worker) || !strings.HasPrefix(e.Path, "/containers/"+worker) ||
+			json.Unmarshal([]byte(e.Record.Bytes), &record) != nil || record["container_id"] != worker ||
+			record["project"] != w.approval.project || e.Record.Mode != 0600 ||
+			w.offline.api.identity(e.Observation, worker) != nil {
+			return errors.New("mutation lacked fresh daemon, protected record and full-ID revalidation")
+		}
+		inspected, checked = false, false
+	}
+	return nil
+}
+
+func (w *world) lifecycleBound(origin time.Time) error {
+	l := w.lifecycle
+	if origin.IsZero() || l.returned.IsZero() {
+		return errors.Join(l.err, errors.New("missing lifecycle teardown start or return observation"))
+	}
+	if l.returned.Before(origin) || l.returned.Sub(origin) > 32*time.Second {
+		return fmt.Errorf("controller teardown elapsed %s; required at most 30 s plus 2 s scheduling tolerance", l.returned.Sub(origin))
+	}
+	return l.err
+}
+
+func (w *world) lifecycleComplete() error {
+	r, l := w.recovery, w.lifecycle
+	if l.err != nil {
+		return l.err
+	}
+	completing := l.run
+	if l.mode == "crash" || l.mode == "disconnect" || l.mode == "cleanup-signals" {
+		if len(r.stops) != 1 || r.stops[0].err != nil || r.stops[0].exit != 0 {
+			return errors.New("fresh public stop did not confirm cleanup successfully")
+		}
+		completing = r.stops[0]
+	}
+	if !offlineHex(r.worker) || w.doctor.real.read("/containers/"+r.worker+"/json", nil, 404) != nil {
+		return errors.New("independent observer did not confirm the original worker absent before harness cleanup")
+	}
+	s, err := w.recoveryEntry(r.after, "stopped", "absent", "complete")
+	if err != nil {
+		return err
+	}
+	if s.Retry != nil || s.StopCandidate || s.Anchor != "absent" {
+		return errors.New("confirmed cleanup retained a pending recovery retry")
+	}
+	processes := append([]*recoveryProcess{l.run}, r.stops...)
+	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
+	if err := recoveryDurableFile(filepath.Join(state, filepath.FromSlash(w.session.reference)), w.sessionExpectedRecord("absent", r.worker), processes); err != nil {
+		return err
+	}
+	path := filepath.Join(state, "sessions", w.recoveryIndexKey(), r.id, "record.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var record map[string]any
+	if json.Unmarshal(data, &record) != nil || record["id"] != r.id || record["intent"] != w.session.reference ||
+		record["project"] != w.approval.project || record["state"] != "stopped" {
+		return errors.New("completion record lost the original session/intent binding")
+	}
+	if err := recoveryDurableFile(path, record, processes); err != nil {
+		return err
+	}
+	a := w.offline.api
+	a.mu.Lock()
+	entries := append([]offlineRequest(nil), a.requests...)
+	a.mu.Unlock()
+	removed, confirmed := false, false
+	for _, e := range entries {
+		if e.Method == "DELETE" && e.Path == "/containers/"+r.worker && e.Status == 204 {
+			removed = true
+		}
+		if removed && e.Method == "GET" && e.Path == "/containers/"+r.worker+"/json" && e.Status == 404 &&
+			!e.Cancelled && !e.Replied.IsZero() && !e.At.Before(completing.started) && e.Replied.Before(completing.finished) {
+			confirmed = true
+		}
+	}
+	if !removed || !confirmed {
+		return errors.New("product did not remove and freshly confirm absence of the original full ID")
+	}
+	return errors.Join(w.lifecycleRevalidated(entries), w.anchorReleased(entries))
+}
+
+func (w *world) lifecycleRetained() error {
+	l := w.lifecycle
+	var record map[string]any
+	if json.Unmarshal([]byte(l.firstRecord.Bytes), &record) != nil || l.firstRecord.Mode != 0600 ||
+		record["id"] != w.recovery.id || record["intent"] != w.session.reference || record["state"] == "stopped" {
+		return errors.New("first invocation lost its protected recovery identity or claimed completed cleanup")
+	}
+	if l.mode == "disconnect" && record["workload_exit"] != nil {
+		return errors.New("transport loss invented an observed workload exit")
+	}
+	stage, id := "owned", w.recovery.worker
+	if l.barrier == "after accepted create before reply" {
+		stage, id = "intent", ""
+	}
+	if err := w.sessionExactRecord(l.firstIntent, stage, id); err != nil {
+		return err
+	}
+	return w.lifecycleSafeState()
+}
+
+func (w *world) lifecycleSafeState() error {
+	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
+	return filepath.WalkDir(state, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, marker := range []string{"SLICE_12_SYNTHETIC_", "/workspace/slice-12-probe", "slice-12:final"} {
+			if bytes.Contains(data, []byte(marker)) {
+				return errors.New("protected state retained raw workload argv/output or transport payload")
+			}
+		}
+		return nil
+	})
+}
+
+func (w *world) lifecyclePreserved() error {
+	r := w.recovery
+	current, err := w.lifecycleProtected()
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(r.before, current) {
+		return errors.New("lifecycle changed unrelated checkout files, approval or host state")
+	}
+	prestart := w.lifecycle.barrier == "after accepted create before reply"
+	data, err := os.ReadFile(filepath.Join(w.doctor.checkout, "slice-12-worker-edit"))
+	if prestart {
+		if !errors.Is(err, os.ErrNotExist) {
+			return errors.New("pre-start interruption executed a worker instruction")
+		}
+	} else if err != nil || string(data) != "slice-12 retained edit" {
+		return errors.New("lifecycle lost the worker checkout edit")
+	}
+	path := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "snapshots", w.approval.project, "1.json")
+	snapshot, err := sessionReadRecord(path)
+	if err != nil || snapshot != r.snapshot {
+		return errors.New("lifecycle changed the original frozen snapshot")
+	}
+	resources, err := w.doctor.real.snapshotResources()
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(recoveryWithoutWorkers(resources, []string{r.worker}), recoveryWithoutWorkers(w.offline.resourcesBefore, []string{r.worker})) {
+		return errors.New("lifecycle changed unrelated native resources or image references")
+	}
+	return w.lifecycleSafeState()
+}
+
+func (w *world) lifecycleOneLaunch() error {
+	a, r := w.offline.api, w.recovery
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := w.anchorRevalidated(a.requests); err != nil {
+		return err
+	}
+	creates, starts, removes := 0, 0, 0
+	for _, e := range a.requests {
+		if e.Status == 403 {
+			return errors.New("recorder refused an unsafe product request")
+		}
+		if e.Method == "POST" && e.Path == "/containers/create" {
+			creates++
+		}
+		if e.Method == "POST" && strings.HasSuffix(e.Path, "/start") {
+			starts++
+		}
+		if e.Method == "DELETE" {
+			if strings.HasPrefix(e.Path, "/volumes/") {
+				continue // Fully checked by anchorRevalidated, not a worker removal.
+			}
+			if e.Path != "/containers/"+r.worker {
+				return errors.New("removal targeted a name or unrelated worker")
+			}
+			if e.Status == 204 {
+				removes++
+			}
+		}
+	}
+	wantStarts := 1
+	if w.lifecycle.barrier == "after accepted create before reply" {
+		wantStarts = 0
+	}
+	if creates != 1 || starts != wantStarts || removes != 1 || len(a.created) != 1 {
+		return fmt.Errorf("create/start/successful remove = %d/%d/%d; expected 1/%d/1", creates, starts, removes, wantStarts)
+	}
+	return a.problem
+}
+
+func (w *world) lifecycleBoundary() error {
+	l := w.lifecycle
+	if !l.survivedLoss || len(l.initialBoundary) == 0 || len(l.lostBoundary) == 0 {
+		return errors.New("independent observations did not find the same worker alive after loss")
+	}
+	for _, key := range []string{"Id", "Image", "Name", "Config", "HostConfig", "Mounts", "NetworkSettings"} {
+		if !reflect.DeepEqual(l.initialBoundary[key], l.lostBoundary[key]) {
+			return fmt.Errorf("native %s changed across controller transport/liveness loss", key)
+		}
+	}
+	if !w.offline.api.safeObserved(l.lostBoundary) {
+		return errors.New("surviving worker no longer has the frozen offline boundary")
+	}
+	return isolationNetworkBoundary(l.lostBoundary)
+}

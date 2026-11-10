@@ -4,6 +4,7 @@ package porttest
 import (
 	"context"
 	"strings"
+	"sync"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
@@ -72,7 +73,8 @@ func (s *Store) open(ctx context.Context, ref string, fresh bool) (*memoryIntent
 	}
 	expected := b.Intent(token)
 	expected.Stage, expected.ContainerID = r.Stage, r.ContainerID
-	if expected != r {
+	expected.Schema, expected.Anchor = r.Schema, r.Anchor
+	if expected != r || !r.ValidAnchor(b) {
 		return nil, port.Invalid
 	}
 	if b.UID != s.UID || b.GID != s.GID || (fresh && b.Checkout.Root != s.Root) || s.UID == "0" {
@@ -88,6 +90,12 @@ func (s *Store) OpenCleanup(ctx context.Context, ref string) (port.Intent, port.
 	return s.open(ctx, ref, false)
 }
 func (s *Store) New(ctx context.Context, d approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, d, token, "intent")
+}
+func (s *Store) Prepare(ctx context.Context, d approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, d, token, "reserved")
+}
+func (s *Store) newIntent(ctx context.Context, d approval.Durable, token, stage string) (port.Intent, port.Outcome) {
 	if !port.HexID(token) || !port.HexID(d.Frozen.Project) {
 		return nil, port.Invalid
 	}
@@ -109,6 +117,7 @@ func (s *Store) New(ctx context.Context, d approval.Durable, token string) (port
 		return nil, failure
 	}
 	r := b.Intent(token)
+	r.Stage = stage
 	if s.UnsafeSnapshot {
 		return nil, port.Unsafe
 	}
@@ -172,9 +181,7 @@ func (i *memoryIntent) Save(next port.Record) port.Outcome {
 	if f := i.Validate(); f != "" {
 		return f
 	}
-	expected := i.record
-	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
-	if next != expected || !port.HexID(next.ContainerID) || (next.Stage != "owned" && next.Stage != "absent") || (i.record.Stage == "absent" && next != i.record) || (i.record.ContainerID != "" && next.ContainerID != i.record.ContainerID) {
+	if !i.record.ValidTransition(next) {
 		return port.Invalid
 	}
 	if next == i.record {
@@ -213,6 +220,9 @@ type EngineEvent struct {
 	Writes         []WriteEvent
 }
 type Engine struct {
+	// Resources may be inspected while a competing controller signals a worker.
+	// Tests may access the exported map only while those operations are quiescent.
+	resourcesMu                           sync.Mutex
 	Unavailable                           bool
 	Endpoint, DaemonID, CreateID          string
 	Resources                             map[string]port.Observation
@@ -278,10 +288,12 @@ func (c *memoryConnection) Create(ctx context.Context, r port.Record) (string, p
 		return "", port.Uncertain
 	}
 	o := port.Observation{ID: e.CreateID, Name: r.Name, ImageID: r.ImageID, Token: r.NameToken(), Project: r.Project, Fingerprint: r.Fingerprint, StatePresent: true, Status: "created"}
+	e.resourcesMu.Lock()
 	if e.Resources == nil {
 		e.Resources = map[string]port.Observation{}
 	}
 	e.Resources[o.ID] = o
+	e.resourcesMu.Unlock()
 	ref := port.Reference(r.Project, r.NameToken())
 	e.Events = append(e.Events, EngineEvent{Method: "CREATE", Target: r.Name, Record: r, Observation: o, Intent: string(e.Store.Records[ref]), Writes: append([]WriteEvent{}, e.Store.Events...)})
 	if e.Fault == "lost create response" || e.Fault == "empty create ID" || e.Fault == "delayed create" {
@@ -323,6 +335,8 @@ func (c *memoryConnection) inspect(ctx context.Context, target string) (port.Obs
 	case "explicit not-found":
 		return port.Observation{}, port.NotFound
 	}
+	e.resourcesMu.Lock()
+	defer e.resourcesMu.Unlock()
 	o, exists := e.Resources[target]
 	if !exists {
 		for _, candidate := range e.Resources {
@@ -379,6 +393,8 @@ func (c *memoryConnection) Remove(ctx context.Context, id string) {
 	}
 	e := c.engine
 	e.Removed = true
+	e.resourcesMu.Lock()
+	defer e.resourcesMu.Unlock()
 	resource := e.Resources[id]
 	ref := port.Reference(resource.Project, resource.Token)
 	e.Events = append(e.Events, EngineEvent{Method: "REMOVE", Target: id, Intent: string(e.Store.Records[ref]), Writes: append([]WriteEvent{}, e.Store.Events...)})

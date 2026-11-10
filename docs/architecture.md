@@ -49,7 +49,11 @@ Test files may read fixtures; production fakes keep their state in memory.
 The shared UI imports no other project package. It owns rendering, joined-error
 traversal and the unknown-error fallback; `cmd` supplies count's failure classifier
 from `internal/slices/count/command`. `internal/version` is a leaf. Release code
-remains separate; only its tests use `internal/release/releasetest`.
+remains separate. T-25's q-44 exception permits exactly `tools/bin/release-version`
+and `tools/bin/release-notes` to import `internal/release`, and their tests to import
+`internal/release/releasetest`. This named edge does not extend to nested helper
+packages, other tools or any other internal package. Production cannot import
+release test support; the compile-first fixtures hold both permitted and refused edges.
 
 Fakes and shared contracts live in `port/porttest`, reachable only by tests and
 test-support code. `FilesContract` runs unchanged against count's fake, disk and

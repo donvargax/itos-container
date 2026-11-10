@@ -120,7 +120,7 @@ func TestCreateRunRequiresSafeImageAndCertainIdentity(t *testing.T) {
 				// on the entire request already having reached the server.
 				argv = append(argv, strings.Repeat("x", 1<<20))
 			}
-			gotID, got := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), argv)
+			gotID, got := c.CreateRun(ctx, st.RunIntent(b), argv)
 			if got != tc.want || (tc.want == "" && gotID != id) || (tc.want != "" && gotID != "") {
 				t.Fatalf("create = %q, %s; want outcome %s", gotID, got, tc.want)
 			}
@@ -144,7 +144,7 @@ func TestVerifyRunRevalidatesSocketAroundInspection(t *testing.T) {
 		}
 		defer c.Close()
 		argv := []string{"probe"}
-		id, failure := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), argv)
+		id, failure := c.CreateRun(ctx, st.RunIntent(b), argv)
 		if failure != "" {
 			t.Fatal(failure)
 		}
@@ -175,7 +175,7 @@ func TestVerifyRunRequiresEveryOwnershipLabel(t *testing.T) {
 				}
 				defer c.Close()
 				argv := []string{"probe"}
-				id, failure := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), argv)
+				id, failure := c.CreateRun(ctx, st.RunIntent(b), argv)
 				if failure != "" {
 					t.Fatal(failure)
 				}
@@ -243,7 +243,7 @@ func TestVerifyRunAcceptsExplicitTmpfsMount(t *testing.T) {
 	}
 	defer c.Close()
 	argv := []string{"probe"}
-	id, failure := c.CreateRun(context.Background(), b.Intent(strings.Repeat("1", 64)), argv)
+	id, failure := c.CreateRun(context.Background(), st.RunIntent(b), argv)
 	if failure != "" {
 		t.Fatal(failure)
 	}

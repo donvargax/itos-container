@@ -30,7 +30,7 @@ func (w *world) sessionLocalFixture(mode, condition string) error {
 		if err := os.Mkdir(dir, 0700); err != nil {
 			return err
 		}
-		child := &world{root: w.root, bin: w.bin, dir: dir}
+		child := &world{root: w.root, bin: w.bin, coverdir: w.coverdir, dir: dir}
 		if err := child.sessionFixture(false, "0022"); err != nil {
 			return err
 		}
@@ -98,6 +98,9 @@ func (w *world) sessionGeneration() string {
 	return w.approval.generation
 }
 func (w *world) sessionSeedSnapshot() error {
+	if err := w.seedControlLocations(); err != nil {
+		return err
+	}
 	a := w.approval
 	return writeManifestFixture(w.sessionSnapshotPath(), approvalJSON(map[string]any{"schema": 1, "project": a.project, "generation": "1", "fingerprint": a.fingerprint, "settings": a.settings}), 0600)
 }

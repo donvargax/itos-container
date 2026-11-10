@@ -4,24 +4,32 @@ import (
 	"context"
 	"io"
 	"slices"
+	"sync"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
 // RunEngine is an in-memory lifecycle fake, including explicit boundary faults.
 type RunEngine struct {
+	Anchors map[string]port.AnchorObservation
+	eventMu sync.Mutex
 	*Engine
 	Boundary, AttachFailure, StartFailure, WaitFailure, DrainFailure port.Outcome
+	OpenFailure                                                      port.Outcome
 	Exit                                                             int
 	Argv                                                             []string
 	Events                                                           []string
 	Output, ErrorOutput                                              []byte
 	After                                                            func(string)
-	AfterStart                                                       func()
+	AfterStart, AfterWait                                            func()
 	WaitUntilCancel, IgnoreSignal                                    bool
 	SignalFailure                                                    port.Outcome
 	StdinClosed, DrainUntilCancel                                    bool
-	DrainContextErr                                                  error
+	// StdinFailures lets tests order input closure after a lifecycle barrier.
+	// Nil retains the immediate StdinClosed behavior used by stream contracts.
+	StdinFailures   <-chan port.Outcome
+	DrainContextErr error
+	WaitRelease     <-chan struct{}
 }
 type runConnection struct {
 	*memoryConnection
@@ -34,12 +42,17 @@ type runAttachment struct {
 }
 
 func (e *RunEngine) event(name string) {
+	e.eventMu.Lock()
 	e.Events = append(e.Events, name)
+	e.eventMu.Unlock()
 	if e.After != nil {
 		e.After(name)
 	}
 }
 func (e *RunEngine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection, port.Outcome) {
+	if e.OpenFailure != "" {
+		return nil, e.OpenFailure
+	}
 	c, f := e.Open(ctx, b)
 	if f != "" {
 		return nil, f
@@ -52,9 +65,12 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 	c.run.event("create")
 	id, f := c.Create(ctx, r)
 	if f == "" {
+		c.engine.resourcesMu.Lock()
 		o := c.engine.Resources[id]
 		o.Mounts = true
+		o.AnchorName, o.AnchorExact = r.Anchor.Name, r.Schema == 2
 		c.engine.Resources[id] = o
+		c.engine.resourcesMu.Unlock()
 	}
 	return id, f
 }
@@ -66,7 +82,9 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 	if c.run.Boundary != "" {
 		return c.run.Boundary
 	}
+	c.engine.resourcesMu.Lock()
 	o, ok := c.engine.Resources[id]
+	c.engine.resourcesMu.Unlock()
 	if !ok || o.Status != "created" || !slices.Equal(c.run.Argv, argv) {
 		return port.IsolationUnverified
 	}
@@ -108,12 +126,14 @@ func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 	if c.run.StartFailure != "" {
 		return c.run.StartFailure
 	}
+	c.engine.resourcesMu.Lock()
 	o := c.engine.Resources[id]
 	o.Status = "running"
 	o.Running = true
 	o.Started = true
 	o.PID = 123
 	c.engine.Resources[id] = o
+	c.engine.resourcesMu.Unlock()
 	if c.run.AfterStart != nil {
 		c.run.AfterStart()
 	}
@@ -121,17 +141,31 @@ func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 }
 func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome) {
 	c.run.event("wait")
-	if c.run.WaitUntilCancel && c.engine.Resources[id].Running {
+	if c.run.WaitRelease != nil {
+		select {
+		case <-c.run.WaitRelease:
+		case <-ctx.Done():
+		}
+	}
+	c.engine.resourcesMu.Lock()
+	running := c.engine.Resources[id].Running
+	c.engine.resourcesMu.Unlock()
+	if c.run.WaitUntilCancel && running {
 		<-ctx.Done()
 	}
 	if ctx.Err() != nil {
 		return 0, port.ExecutionFailed
 	}
+	c.engine.resourcesMu.Lock()
 	o := c.engine.Resources[id]
 	o.Status = "exited"
 	o.Running = false
 	o.PID = 0
 	c.engine.Resources[id] = o
+	c.engine.resourcesMu.Unlock()
+	if c.run.AfterWait != nil {
+		c.run.AfterWait()
+	}
 	return c.run.Exit, c.run.WaitFailure
 }
 func (c *runConnection) RemoveRun(ctx context.Context, id string) {
@@ -149,6 +183,8 @@ func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outc
 	if c.run.IgnoreSignal && signal != "SIGKILL" {
 		return ""
 	}
+	c.engine.resourcesMu.Lock()
+	defer c.engine.resourcesMu.Unlock()
 	o := c.engine.Resources[id]
 	o.Running, o.Status, o.PID = false, "exited", 0
 	c.engine.Resources[id] = o
@@ -168,18 +204,36 @@ func (a runAttachment) Drain(ctx context.Context) port.Outcome {
 	}
 	return a.run.DrainFailure
 }
-func (a runAttachment) Close()                        { a.run.event("detach") }
-func (a runAttachment) Failures() <-chan port.Outcome { return a.failures }
-
-type Workspace struct {
-	Failure port.Outcome
-	Changed bool
-	Closed  bool
+func (a runAttachment) Close() { a.run.event("detach") }
+func (a runAttachment) Failures() <-chan port.Outcome {
+	if a.run.StdinFailures != nil {
+		return a.run.StdinFailures
+	}
+	return a.failures
 }
 
-func (w *Workspace) Pin(port.Binding) port.Outcome { w.Closed = false; return w.Failure }
-func (w *Workspace) Unchanged() bool               { return !w.Changed && !w.Closed }
-func (w *Workspace) Close()                        { w.Closed = true }
+type Workspace struct {
+	AbsentProcesses map[int]bool
+	Descriptor      string
+	Mounts          map[int]port.MountSource
+	binding         port.Binding
+	Failure         port.Outcome
+	Changed         bool
+	Closed          bool
+}
+
+func (w *Workspace) Pin(b port.Binding) port.Outcome {
+	w.Closed = w.Failure != ""
+	w.binding = b
+	return w.Failure
+}
+func (w *Workspace) Validate() port.Outcome {
+	if w.Changed || w.Closed {
+		return port.Refused
+	}
+	return ""
+}
+func (w *Workspace) Close() { w.Closed = true }
 
 // RunEngineContract exercises the same frozen argv, independent observation and
 // stream lifecycle against the memory implementation and the SDK HTTP fixture.
@@ -194,7 +248,7 @@ func RunEngineContract(t Reporter, open func() (port.RunEngine, port.Binding)) {
 	}
 	defer c.Close()
 	argv := []string{"probe", "", "two words", "$HOME;*", "--", "--json"}
-	id, f := c.CreateRun(ctx, b.Intent("1111111111111111111111111111111111111111111111111111111111111111"), argv)
+	id, f := c.CreateRun(ctx, RunIntent(b), argv)
 	if f != "" {
 		t.Errorf("create: %s", f)
 		return

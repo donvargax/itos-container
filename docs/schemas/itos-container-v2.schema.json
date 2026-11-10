@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "itos-container policy version 2",
+  "description": "A policy request, never host approval or a granted route. Version 1 is unchanged beside this schema. YAML representation restrictions and the host-name canonicalisation rules in docs/CONFIG.md also apply: this schema checks the shape of each name, not its mapping.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "manifest"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 2
+    },
+    "manifest": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?![\\s\\S]*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\\\u0000-\\u001f\\u007f]+(?:/[^/\\\\\\u0000-\\u001f\\u007f]+)*$(?![\\s\\S])",
+      "description": "Literal relative path using slash separators; no empty or dot components, drives, backslashes or ASCII controls."
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "mode": "offline"
+      },
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "offline",
+            "allowlist"
+          ],
+          "default": "offline"
+        },
+        "allow": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A full DNS host name of at least two labels, at most 1024 bytes of UTF-8 text before canonicalising (JSON Schema counts characters, not bytes, so the limit is not expressed here). Case, one trailing dot and Unicode spellings are canonicalised before use. Literal addresses in any spelling, wildcards, suffix shortcuts, ports, URLs, paths and spaces are refused, as is a repeat of an earlier entry's canonical name."
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "description": "Offline, the default: mode is offline or absent and there is no allow, not even an empty one.",
+          "properties": {
+            "mode": {
+              "const": "offline"
+            }
+          },
+          "not": {
+            "required": [
+              "allow"
+            ]
+          }
+        },
+        {
+          "description": "Allowlist: mode is written, and so is a nonempty allow.",
+          "required": [
+            "mode",
+            "allow"
+          ],
+          "properties": {
+            "mode": {
+              "const": "allowlist"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

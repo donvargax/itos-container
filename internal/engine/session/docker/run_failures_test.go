@@ -13,6 +13,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
+	st "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
 
 func TestRunCreateOverridesImageDefaultsWithoutChangingLiteralArgv(t *testing.T) {
@@ -48,7 +49,7 @@ func TestRunCreateOverridesImageDefaultsWithoutChangingLiteralArgv(t *testing.T)
 	}
 	defer connection.Close()
 	argv := []string{"probe", "", "two words", "\t\n雪", "$HOME", "--json", "--"}
-	id, failure := connection.CreateRun(ctx, binding.Intent(strings.Repeat("1", 64)), argv)
+	id, failure := connection.CreateRun(ctx, st.RunIntent(binding), argv)
 	if failure != "" || id != strings.Repeat("c", 64) {
 		t.Fatal(id, failure)
 	}
@@ -89,7 +90,7 @@ func TestRunCreateRefusesUnverifiedImage(t *testing.T) {
 				t.Fatal(failure)
 			}
 			defer c.Close()
-			id, failure := c.CreateRun(context.Background(), b.Intent(strings.Repeat("1", 64)), []string{"probe"})
+			id, failure := c.CreateRun(context.Background(), st.RunIntent(b), []string{"probe"})
 			if id != "" || failure != tc.want {
 				t.Fatal(id, failure)
 			}
@@ -109,7 +110,7 @@ func TestRunOperationsRefuseReplacedEngineSocket(t *testing.T) {
 	defer c.Close()
 	pin.Current = false
 	id := strings.Repeat("c", 64)
-	if created, failure := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), []string{"probe"}); created != "" || failure != sp.Refused {
+	if created, failure := c.CreateRun(ctx, st.RunIntent(b), []string{"probe"}); created != "" || failure != sp.Refused {
 		t.Fatal(created, failure)
 	}
 	if failure := c.VerifyRun(ctx, id, []string{"probe"}); failure != sp.Refused {
@@ -143,8 +144,8 @@ func TestRunWaitRequiresAValidObservedExit(t *testing.T) {
 		{"negative exit", `{"StatusCode":-1}`, 200, 0, sp.ExecutionFailed},
 		{"invalid exit", `{"StatusCode":256}`, 200, 0, sp.ExecutionFailed},
 		{"daemon error", `{"StatusCode":0,"Error":{"Message":"synthetic daemon failure"}}`, 200, 0, sp.ExecutionFailed},
-		{"transport error", `{"message":"synthetic response"}`, 503, 0, sp.ExecutionFailed},
-		{"malformed", `{"StatusCode":`, 200, 0, sp.ExecutionFailed},
+		{"transport error", `{"message":"synthetic response"}`, 503, 0, sp.EngineLost},
+		{"malformed", `{"StatusCode":`, 200, 0, sp.EngineLost},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e, b, _ := sdkHandlerFixture(t, func(w http.ResponseWriter, r *http.Request, _ sp.Binding) {
@@ -214,7 +215,7 @@ func TestRunDrainReportsOutputFailure(t *testing.T) {
 		t.Fatal(failure)
 	}
 	defer c.Close()
-	id, failure := c.CreateRun(ctx, b.Intent(strings.Repeat("1", 64)), []string{"probe"})
+	id, failure := c.CreateRun(ctx, st.RunIntent(b), []string{"probe"})
 	if failure != "" {
 		t.Fatal(failure)
 	}

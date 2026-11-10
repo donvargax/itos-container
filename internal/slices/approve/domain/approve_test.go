@@ -36,7 +36,7 @@ func TestConsentAndPrecedence(t *testing.T) {
 				reviews, publications = 0, 0
 			case "matching":
 				service.View.Status = "matching"
-				reviews, publications = 0, 0
+				reviews, publications = 0, 1
 			case "fingerprint":
 				fingerprint = &good
 				ui.IsTerminal = false

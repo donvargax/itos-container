@@ -10,6 +10,7 @@
 //	GOCOVERDIR=<dir> go test ./features -count=1       either, itos-container
 //	                                                   built with -cover, what
 //	                                                   the scenarios ran in <dir>
+//	ITOS_CC_TEST_COVERDIR=<root> go test ./features    coverage in <root>/<ID>
 //
 // godog's own tag filter takes exact tags joined by commas; itos's run
 // templates join the IDs they select with |, as a regular expression
@@ -18,21 +19,14 @@
 // Ordinary runs exclude @wip. Manual CI can select exact IDs for red evidence;
 // @engine is still CI-only and @linux requires a Linux test process (see README.md).
 //
-// The scenarios run itos-container as another process, where Go records
-// coverage only for a binary built with -cover and run with GOCOVERDIR naming
-// an existing folder (go.dev/doc/build-cover); go test's own -cover sees none
-// of it. So with GOCOVERDIR set, the binary is built with -cover
-// -covermode=atomic -coverpkg=./..., every package of the module counted, and
-// what the scenarios run lands in that folder, where itos-cc merges it with go
-// test's. The build keys on GOCOVERDIR alone: a -cover binary run without it
-// writes "warning: GOCOVERDIR not set, no coverage data emitted" to its
-// stderr, which breaks every scenario that reads stderr, and only
-// GOCOVERDIR's being set guarantees every command a scenario starts has it.
-// w.env() passes it on unchanged, every environment a step runs a command in
-// is w.env() changed elsewhere (noGit, knowingNoOne, withGitConfig). Never
-// ITOS_CC_TEST_COVERDIR, which itos-cc sets alone for a listed test's first
-// coverage run and w.env() drops with every ITOS_ variable. With GOCOVERDIR
-// unset the build is the plain one.
+// Product subprocesses need -cover -covermode=atomic -coverpkg=./... and an
+// existing GOCOVERDIR. Either GOCOVERDIR or ITOS_CC_TEST_COVERDIR requests
+// covered CLI and test-assembly builds. The latter routes each scenario to its
+// absolute <root>/<ID> directory and takes precedence over aggregate coverage.
+// Destinations belong to worlds (including their secondary fixture worlds), not
+// process-global Before-hook mutations. Outline rows accumulate under one ID;
+// cleanup releases fixture state but preserves counters for the external reader.
+// With neither input, selected and whole runs retain plain builds and output.
 package features
 
 import (
@@ -47,6 +41,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -81,35 +76,45 @@ func TestFeatures(t *testing.T) {
 	if selection.skip != "" {
 		t.Skip(selection.skip)
 	}
+	selection.started = time.Now()
 	t.Cleanup(removeCallerPath)
 	root, err := moduleRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
-	bin, err := build(root, t.TempDir())
+	bin, err := buildProduct(root, t.TempDir(), selection.engine)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runScenarios(selection, godog.Options{
-		Format:   "pretty",
-		Output:   os.Stdout,
-		Paths:    []string{"."},
-		Strict:   true,
-		TestingT: t,
-	}, func(sc *godog.ScenarioContext) { initializeScenario(sc, root, bin) }) != 0 {
+	if runFeatureScenarios(selection, godog.Options{
+		Format:      "pretty",
+		Output:      os.Stdout,
+		Paths:       []string{"."},
+		Strict:      true,
+		TestingT:    t,
+		Concurrency: 4,
+	}, func(sc *godog.ScenarioContext, duringQuiet func()) {
+		w := initializeScenario(sc, root, bin)
+		w.duringQuiet = duringQuiet
+	}) != 0 {
 		t.Fatal("a scenario failed")
+	}
+	if dir := os.Getenv("ITOS_CC_TEST_COVERDIR"); selection.engine && dir != "" {
+		// The CI engine invocation keeps its behavior assertions and also proves
+		// that every selected ID exported readable, executed product counters.
+		readScenarioCoverage(t, dir, selection.ids)
 	}
 }
 
 // Environment and platform values enter the policy as data. Harness entry points
 // supply the real lookup; regression fixtures never enable engine access.
-type featureEnvironment struct{ engine, ci, actions, event, red, os, arch string }
+type featureEnvironment struct{ engine, ci, actions, event, red, shard, os, arch string }
 
 func readFeatureEnvironment(lookup func(string) string, hostOS, arch string) featureEnvironment {
 	env := featureEnvironment{
 		engine: lookup("ITOS_CONTAINER_ENGINE_TESTS"),
 		ci:     lookup("CI"), actions: lookup("GITHUB_ACTIONS"),
-		event: lookup("GITHUB_EVENT_NAME"), os: hostOS, arch: arch,
+		event: lookup("GITHUB_EVENT_NAME"), shard: lookup("ITOS_CONTAINER_ENGINE_FEATURES"), os: hostOS, arch: arch,
 	}
 	if env.manualDispatch() {
 		env.red = lookup("ITOS_CONTAINER_RED_SCENARIOS")
@@ -145,9 +150,12 @@ type scenarioSelection struct {
 	ids      []string
 	engine   bool
 	red      bool
+	paths    []string // the shard's feature files; empty reads whatever the run is given
 	count    int
 	skip     string
 	excluded []string
+	started  time.Time
+	timing   *engineTiming
 }
 
 func (env featureEnvironment) engineEnabled() (bool, error) {
@@ -164,10 +172,37 @@ func (env featureEnvironment) engineEnabled() (bool, error) {
 	}
 }
 
+// featureName is a feature file's basename: no path, no godog line suffix.
+var featureName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*\.feature$`)
+
+// engineFeatures reads ITOS_CONTAINER_ENGINE_FEATURES, the whitespace-separated
+// basenames of the feature files one engine shard runs. Blank is the whole tier.
+func (env featureEnvironment) engineFeatures(engine bool) ([]string, error) {
+	names := strings.Fields(env.shard)
+	if len(names) == 0 {
+		return nil, nil
+	}
+	if !engine {
+		return nil, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES applies only to the engine tier (ITOS_CONTAINER_ENGINE_TESTS=1)")
+	}
+	for i, name := range names {
+		if !featureName.MatchString(name) {
+			return nil, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES: %q is not a feature file basename ending in .feature", name)
+		}
+		if slices.Contains(names[:i], name) {
+			return nil, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES: %q is given twice", name)
+		}
+	}
+	return names, nil
+}
+
 // These tags select native binaries before any scenario hook or fixture runs.
 // The repository's macOS/Windows jobs are manual; Linux proof never runs them.
 func (env featureEnvironment) excludedPlatforms() []string {
 	var tags []string
+	if env.os != "linux" && env.os != "darwin" {
+		tags = append(tags, "@unix")
+	}
 	if env.os != "linux" || env.arch != "amd64" {
 		tags = append(tags, "@local-engine-fixture")
 	}
@@ -179,6 +214,12 @@ func (env featureEnvironment) excludedPlatforms() []string {
 
 // RetrieveFeatures compiles Gherkin pickles, including inherited Feature, Rule,
 // Outline and Examples tags. Selection runs before any binary build or hooks.
+//
+// An engine shard (ITOS_CONTAINER_ENGINE_FEATURES) selects from its own files alone,
+// and the filtered-pickle check below reads those same files: godog numbers pickles
+// across the files of one read, so a check over other files than the selection's
+// would never match. Red IDs and the expression are still validated against every
+// file, and the rows a shard leaves to the others are named among its exclusions.
 func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSelection, error) {
 	var result scenarioSelection
 	engine, err := env.engineEnabled()
@@ -186,6 +227,10 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 		return result, err
 	}
 	result.engine = engine
+	shard, err := env.engineFeatures(engine)
+	if err != nil {
+		return result, err
+	}
 	redIDs, err := env.redIDs()
 	if err != nil {
 		return result, err
@@ -203,56 +248,91 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 		return result, err
 	}
 	suite := godog.TestSuite{Options: &godog.Options{Paths: []string{dir}}}
-	features, err := suite.RetrieveFeatures()
+	inventory, err := suite.RetrieveFeatures()
 	if err != nil {
 		return result, err
+	}
+	features, paths := inventory, []string(nil)
+	if len(shard) > 0 {
+		engineFiles := map[string]bool{}
+		for _, feature := range inventory {
+			for _, scenario := range feature.Pickles {
+				for _, tag := range scenario.Tags {
+					engineFiles[filepath.Base(scenario.Uri)] = engineFiles[filepath.Base(scenario.Uri)] || tag.Name == "@engine"
+				}
+			}
+		}
+		for _, name := range shard {
+			if !engineFiles[name] {
+				return result, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES: no feature file %q has an @engine case", name)
+			}
+			paths = append(paths, filepath.Join(dir, name))
+		}
+		suite.Options.Paths = paths
+		if features, err = suite.RetrieveFeatures(); err != nil {
+			return result, err
+		}
 	}
 	matchedTags := map[string]bool{}
 	expected := map[string]bool{}
 	matched, liveEngine := 0, 0
+	inspect := func(scenario *godog.Scenario, mine bool) {
+		wip, needsEngine, needsLinux, matches := false, false, false, selection == ""
+		wrongPlatform := false
+		var ids []string
+		for _, tag := range scenario.Tags {
+			wrongPlatform = wrongPlatform || slices.Contains(env.excludedPlatforms(), tag.Name)
+			wip = wip || tag.Name == "@wip"
+			needsEngine = needsEngine || tag.Name == "@engine"
+			needsLinux = needsLinux || tag.Name == "@linux"
+			if strings.HasPrefix(tag.Name, "@ID-") {
+				ids = append(ids, tag.Name)
+			}
+			if selection != "" && pattern.MatchString(tag.Name) {
+				matches = true
+				matchedTags[tag.Name] = true
+			}
+		}
+		if needsEngine && !wip && mine {
+			liveEngine++
+		}
+		if !matches {
+			return
+		}
+		matched++
+		if (wip && !result.red) || needsEngine != engine || wrongPlatform || (needsLinux && env.os != "linux") {
+			reason := "other tier"
+			if wrongPlatform {
+				reason = "other platform"
+			}
+			if wip && !result.red {
+				reason = "@wip"
+			} else if needsEngine {
+				reason = "@engine disabled"
+			} else if needsLinux && env.os != "linux" {
+				reason = "@linux requires Linux"
+			}
+			result.excluded = append(result.excluded, fmt.Sprintf("%s %q (%s)", strings.Join(ids, ","), scenario.Name, reason))
+			return
+		}
+		if !mine {
+			result.excluded = append(result.excluded, fmt.Sprintf("%s %q (other engine shard)", strings.Join(ids, ","), scenario.Name))
+			return
+		}
+		expected[scenario.Uri+":"+scenario.Id] = true
+		result.ids = append(result.ids, ids...)
+		result.count++
+	}
 	for _, feature := range features {
 		for _, scenario := range feature.Pickles {
-			wip, needsEngine, needsLinux, matches := false, false, false, selection == ""
-			wrongPlatform := false
-			var ids []string
-			for _, tag := range scenario.Tags {
-				wrongPlatform = wrongPlatform || slices.Contains(env.excludedPlatforms(), tag.Name)
-				wip = wip || tag.Name == "@wip"
-				needsEngine = needsEngine || tag.Name == "@engine"
-				needsLinux = needsLinux || tag.Name == "@linux"
-				if strings.HasPrefix(tag.Name, "@ID-") {
-					ids = append(ids, tag.Name)
-				}
-				if selection != "" && pattern.MatchString(tag.Name) {
-					matches = true
-					matchedTags[tag.Name] = true
-				}
+			inspect(scenario, true)
+		}
+	}
+	for _, feature := range inventory {
+		for _, scenario := range feature.Pickles {
+			if len(shard) > 0 && !slices.Contains(shard, filepath.Base(scenario.Uri)) {
+				inspect(scenario, false)
 			}
-			if needsEngine && !wip {
-				liveEngine++
-			}
-			if !matches {
-				continue
-			}
-			matched++
-			if (wip && !result.red) || needsEngine != engine || wrongPlatform || (needsLinux && env.os != "linux") {
-				reason := "other tier"
-				if wrongPlatform {
-					reason = "other platform"
-				}
-				if wip && !result.red {
-					reason = "@wip"
-				} else if needsEngine {
-					reason = "@engine disabled"
-				} else if needsLinux && env.os != "linux" {
-					reason = "@linux requires Linux"
-				}
-				result.excluded = append(result.excluded, fmt.Sprintf("%s %q (%s)", strings.Join(ids, ","), scenario.Name, reason))
-				continue
-			}
-			expected[scenario.Uri+":"+scenario.Id] = true
-			result.ids = append(result.ids, ids...)
-			result.count++
 		}
 	}
 	for _, id := range redIDs {
@@ -265,6 +345,7 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	}
 	slices.Sort(result.ids)
 	result.ids = slices.Compact(result.ids)
+	result.paths = paths
 	if result.count == 0 {
 		result.skip = "no live scenarios in selected tier and platform (count 0)"
 		if result.red {
@@ -301,6 +382,7 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	}
 	// Check godog's actual filtered pickles before hooks. This also refuses a
 	// tag containing filter operators if it would broaden or lose the selection.
+	// suite still holds the shard's own paths, if it has any.
 	suite.Options.Tags = result.filter
 	filtered, err := suite.RetrieveFeatures()
 	if err != nil {
@@ -321,24 +403,55 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	return result, nil
 }
 
+// scope reads the files the selection read: a shard's own, whatever options named.
+func (selection scenarioSelection) scope(options godog.Options) godog.Options {
+	if len(selection.paths) > 0 {
+		options.Paths = selection.paths
+	}
+	return options
+}
+
 func runScenarios(selection scenarioSelection, options godog.Options, initialize func(*godog.ScenarioContext)) int {
 	if selection.skip != "" {
 		return 0 // TestFeatures reports the explicit testing.T skip before calling us.
 	}
+	options = selection.scope(options)
 	options.Tags = selection.filter
 	options.Strict = true
-	options.Concurrency = 1
+	// Local worlds own their processes, state and endpoints. Overlap their
+	// real deadline waits, without changing those deadlines or the selected set.
+	// Native resource audits and red evidence retain their serial ordering.
+	if selection.engine || selection.red || options.Concurrency < 1 {
+		options.Concurrency = 1
+	} else {
+		options.Concurrency = min(options.Concurrency, 4)
+	}
 	completed, unsuccessful := 0, false
 	suite := godog.TestSuite{Name: "itos-container", Options: &options, ScenarioInitializer: func(sc *godog.ScenarioContext) {
+		var started time.Time
+		rowFailed := false
+		if selection.timing != nil {
+			// Register before fixture setup, including a failing setup hook.
+			sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
+				started, rowFailed = time.Now(), false
+				return ctx, nil
+			})
+		}
 		initialize(sc)
 		if selection.engine || selection.red {
 			sc.StepContext().After(func(ctx context.Context, _ *godog.Step, status godog.StepResultStatus, err error) (context.Context, error) {
 				unsuccessful = unsuccessful || status != godog.StepPassed || err != nil
+				rowFailed = rowFailed || status != godog.StepPassed || err != nil
 				return ctx, nil
 			})
-			sc.After(func(ctx context.Context, _ *godog.Scenario, err error) (context.Context, error) {
+			sc.After(func(ctx context.Context, scenario *godog.Scenario, err error) (context.Context, error) {
 				completed++
 				unsuccessful = unsuccessful || err != nil
+				if selection.timing != nil {
+					// Godog runs After hooks in registration order. This is after
+					// all fixture cleanup and receives any cleanup error as well.
+					selection.timing.complete(scenario, started, rowFailed || err != nil, signalOffsetsOf(ctx))
+				}
 				return ctx, nil
 			})
 		}
@@ -357,9 +470,15 @@ func runScenarios(selection scenarioSelection, options godog.Options, initialize
 // stamped with stampedVersion and stampedCommit, once for every scenario of
 // the run: itos-container, or itos-container.exe on windows, where a
 // program is found by its extension. No VCS stamping, so the build runs no
-// git of the caller's. With GOCOVERDIR set it is a -cover build (see the
+// git of the caller's. Either coverage input requests a -cover build (see the
 // package's comment).
 func build(root, dir string) (string, error) {
+	return buildProduct(root, dir, false)
+}
+
+// buildProduct is build, except that the engine tier's product is built from a
+// copy of the sources with the shortened budget fixture (engineBudgetTree).
+func buildProduct(root, dir string, engine bool) (string, error) {
 	name := "itos-container"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
@@ -367,11 +486,18 @@ func build(root, dir string) (string, error) {
 	bin := filepath.Join(dir, name)
 	args := []string{"build", "-trimpath", "-buildvcs=false",
 		"-ldflags", "-X " + versionSymbol + "=" + stampedVersion + " -X " + commitSymbol + "=" + stampedCommit}
-	if os.Getenv("GOCOVERDIR") != "" {
+	source := root
+	if engine {
+		var err error
+		if source, err = engineBudgetTree(root, dir); err != nil {
+			return "", err
+		}
+	}
+	if productCoverageRequested() {
 		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	}
 	cmd := exec.Command("go", append(args, "-o", bin, "./cmd/itos-container")...)
-	cmd.Dir = root
+	cmd.Dir = source
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("building itos-container: %v\n%s", err, out)
 	}

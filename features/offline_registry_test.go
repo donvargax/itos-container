@@ -19,7 +19,7 @@ func TestOfflineRegistryPreservation(t *testing.T) {
 		"none", "missing registry", "missing lock", "lock contents", "symlink lock", "hardlinked lock",
 		"unsafe directory", "unsafe record", "wrong owner", "extra file", "extra session", "other project",
 		"changed checkout", "changed host", "changed preexisting record", "changed resources", "operation token reused",
-		"schema", "id", "project", "intent", "state", "workload_exit", "last_problem", "extra field",
+		"schema", "id", "project", "intent", "state", "workload_exit", "last_problem", "mount_detector", "extra field",
 	} {
 		t.Run(fault, func(t *testing.T) {
 			w, dir, record := offlineRegistryFixture(t)
@@ -73,7 +73,7 @@ func TestOfflineRegistryPreservation(t *testing.T) {
 				w.offline.resourcesAfter["unrelated"] = "changed"
 			case "operation token reused":
 				w.session.token = filepath.Base(dir)
-			case "schema", "id", "project", "intent", "state", "workload_exit", "last_problem", "extra field":
+			case "schema", "id", "project", "intent", "state", "workload_exit", "last_problem", "mount_detector", "extra field":
 				record[fault] = "wrong"
 				err = os.WriteFile(filepath.Join(dir, "record.json"), approvalJSON(record), 0600)
 			}
@@ -127,11 +127,12 @@ func offlineRegistryFixture(t *testing.T) (*world, string, map[string]any) {
 		t.Fatal(err)
 	}
 	record := map[string]any{"schema": 1, "id": id, "project": project, "intent": w.session.reference,
-		"state": "stopped", "workload_exit": 0, "last_problem": nil}
+		"mount_detector": "verified", "state": "stopped", "workload_exit": 0, "last_problem": nil}
 	for name, data := range map[string][]byte{"record.json": approvalJSON(record), "controller.lock": nil, "operation.lock": nil} {
 		if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
+	seedAdmissionRecord(t, w, id, w.session.reference, true)
 	return w, dir, record
 }

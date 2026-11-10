@@ -27,6 +27,7 @@ type sessionResult struct {
 	CleanupCode                                       int
 	SessionID                                         string
 	PublicRecords                                     map[string][]byte
+	Started                                           bool
 }
 
 type sessionEvent struct {
@@ -65,6 +66,8 @@ type sessionWorld struct {
 	boundary                                                string
 	offlineControl                                          *world
 	launch                                                  *offlineLaunchWorld
+	anchorFault                                             string
+	anchorFixture                                           bool
 }
 
 func (w *world) sessionFixture(real bool, umask string) error {
@@ -97,6 +100,9 @@ func (w *world) sessionFixture(real bool, umask string) error {
 		return err
 	}
 	if err := w.approvalSeed("1", false); err != nil {
+		return err
+	}
+	if err := w.seedControlLocations(); err != nil {
 		return err
 	}
 	s.reference = filepath.ToSlash(filepath.Join("intents", w.approval.project, s.token+".json"))
@@ -240,10 +246,51 @@ func (w *world) closeSession() error {
 
 func (w *world) sessionExpectedRecord(stage, id string) map[string]any {
 	a, d, s := w.approval, w.doctor, w.session
-	return map[string]any{"schema": float64(1), "project": a.project, "generation": w.sessionGeneration(), "fingerprint": a.fingerprint,
+	record := map[string]any{"schema": float64(1), "project": a.project, "generation": w.sessionGeneration(), "fingerprint": a.fingerprint,
 		"snapshot": "snapshots/" + a.project + "/" + w.sessionGeneration() + ".json", "uid": a.uid, "gid": a.gid,
 		"engine_endpoint": d.env["DOCKER_HOST"], "engine_id": d.engineID, "name": "itos-container-" + s.token,
 		"image_reference": d.image, "image_id": d.imageID, "container_id": id, "stage": stage}
+	if s.offline && stage != "reserved" {
+		for _, e := range s.create.Trace {
+			if e.Operation != "anchor inspect" || e.Status != 0 || e.Anchor["Created"] == "" {
+				continue
+			}
+			anchorStage := "owned"
+			if stage == "absent" {
+				anchorStage = "absent"
+			}
+			record["schema"] = float64(2)
+			record["anchor"] = map[string]any{"session": e.Anchor["Session"], "name": "itos-container-anchor-" + s.token, "source": e.Anchor["Source"], "device": e.Anchor["Device"], "inode": e.Anchor["Inode"], "created": e.Anchor["Created"], "stage": anchorStage}
+			break
+		}
+	}
+	if w.offline != nil && w.offline.api != nil {
+		if v := w.offline.api.anchorVolumes()["itos-container-anchor-"+s.token]; v != nil && v.observed != nil {
+			anchorStage := "owned"
+			if stage == "absent" || stage == "cancelled" {
+				anchorStage = "absent"
+			}
+			record["schema"] = float64(2)
+			record["anchor"] = map[string]any{"session": v.labels["io.itos-container.session"], "name": v.name, "source": v.options["device"], "device": v.labels["io.itos-container.device"], "inode": v.labels["io.itos-container.inode"], "created": v.observed["CreatedAt"], "stage": anchorStage}
+		}
+	}
+	if w.recoveryLocal != nil && w.recoveryLocal.runFixture {
+		for _, q := range s.api.requests {
+			if q.Method != "GET" || q.Status != 200 || q.Path != "/volumes/itos-container-anchor-"+s.token {
+				continue
+			}
+			v := q.Response
+			labels := object(v["Labels"])
+			anchorStage := "owned"
+			if stage == "absent" || stage == "cancelled" {
+				anchorStage = "absent"
+			}
+			record["schema"] = float64(2)
+			record["anchor"] = map[string]any{"session": labels["io.itos-container.session"], "name": v["Name"], "source": object(v["Options"])["device"], "device": labels["io.itos-container.device"], "inode": labels["io.itos-container.inode"], "created": v["CreatedAt"], "stage": anchorStage}
+			break
+		}
+	}
+	return record
 }
 
 func sessionDecodeRecord(bytes string) (map[string]any, error) {

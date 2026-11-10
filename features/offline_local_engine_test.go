@@ -21,6 +21,8 @@ type localOfflineAPI struct {
 	mu               sync.Mutex
 	w                *world
 	resources        map[string]map[string]any
+	volumes          map[string]map[string]any
+	allocated        map[string]map[string]any
 	created          map[string]map[string]any
 	attached         map[string]net.Conn
 	started, removed map[string]bool
@@ -31,7 +33,7 @@ type localOfflineAPI struct {
 }
 
 func (w *world) localOfflineFixture() {
-	a := &localOfflineAPI{w: w, resources: map[string]map[string]any{}, created: map[string]map[string]any{}, attached: map[string]net.Conn{}, started: map[string]bool{}, removed: map[string]bool{}, expected: map[int][]string{}}
+	a := &localOfflineAPI{w: w, resources: map[string]map[string]any{}, volumes: map[string]map[string]any{}, allocated: map[string]map[string]any{}, created: map[string]map[string]any{}, attached: map[string]net.Conn{}, started: map[string]bool{}, removed: map[string]bool{}, expected: map[int][]string{}}
 	w.doctor.engine.mu.Lock()
 	w.doctor.engine.offline = a
 	w.doctor.engine.mu.Unlock()
@@ -46,11 +48,20 @@ func (w *world) localOfflineFixture() {
 
 func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 	path := doctorRequestPath(r.URL.Path)
-	if !strings.HasPrefix(path, "/containers/") && path != "/images/"+doctorImageID+"/json" {
+	if !strings.HasPrefix(path, "/containers/") && !strings.HasPrefix(path, "/volumes/") && path != "/images/"+doctorImageID+"/json" {
 		return false
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if strings.HasPrefix(path, "/volumes/") {
+		serveLocalVolume(out, r, a.volumes)
+		if r.Method == "POST" && path == "/volumes/create" {
+			for name, v := range a.volumes {
+				a.allocated[name] = approvalClone(v)
+			}
+		}
+		return true
+	}
 	out.Header().Set("Content-Type", "application/json")
 	if path == "/images/"+doctorImageID+"/json" {
 		_ = json.NewEncoder(out).Encode(a.w.doctor.engine.image)
@@ -80,7 +91,7 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 			http.Error(out, "intent missing", 400)
 			return true
 		}
-		mounts := []any{map[string]any{"Type": "bind", "Source": a.w.doctor.checkout, "Destination": "/workspace", "RW": true, "Propagation": "rprivate"}}
+		mounts := localAnchorMount(host)
 		resource := map[string]any{"Id": id, "Name": "/" + r.URL.Query().Get("name"), "Image": doctorImageID, "Config": body, "HostConfig": host, "Mounts": mounts, "NetworkSettings": map[string]any{"Networks": map[string]any{"none": map[string]any{}}}, "State": map[string]any{"Status": "created", "Running": false, "Pid": 0}}
 		a.created[id], a.resources[id] = resource, resource
 		out.WriteHeader(201)
@@ -123,10 +134,15 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 			a.recoveryStart(out, resource, id)
 			return true
 		}
-		resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
+		resource["State"] = map[string]any{"Status": "running", "Running": true, "Pid": 123, "StartedAt": "2026-01-01T00:00:00Z"}
 		_ = a.attached[id].Close()
 		out.WriteHeader(204)
 	case len(parts) == 2 && parts[1] == "wait" && r.Method == "POST" && a.started[id]:
+		// Foreground interrupts arrive after launch and its mount detector.
+		// Separate startup-interrupt scenarios exercise cancellation before this.
+		if f := a.recovery; f != nil {
+			f.began.Do(func() { close(f.started) })
+		}
 		if f := a.recovery; f != nil && f.fault == "unread stdin" {
 			f.waits++
 			if f.waits == 1 {
@@ -179,6 +195,12 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 			}
 			a.mu.Lock()
 		}
+		// A canceled wait leaves the simulated worker running for owned signal
+		// delivery; ending the HTTP subscription is not a workload exit.
+		if r.Context().Err() != nil {
+			return true
+		}
+		resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
 		exit := 0
 		if a.recovery != nil {
 			exit = a.recovery.exitCode
@@ -230,7 +252,11 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		a.removed[id] = true
 		if a.recovery != nil {
 			a.recovery.finish.Do(func() { close(a.recovery.exit) })
-			_ = a.attached[id].Close()
+		}
+		// Removal ends the resource's attachment even if launch was refused
+		// before start. Otherwise a healthy final drain waits on fixture-only I/O.
+		if conn := a.attached[id]; conn != nil {
+			_ = conn.Close()
 		}
 		out.WriteHeader(204)
 	default:
@@ -247,8 +273,16 @@ func (a *localOfflineAPI) record(token, stage, id string) error {
 		return err
 	}
 	var r map[string]any
-	if json.Unmarshal(data, &r) != nil || len(r) != 14 || r["stage"] != stage || r["container_id"] != id || r["fingerprint"] != a.w.approval.fingerprint || r["image_id"] != doctorImageID {
+	if json.Unmarshal(data, &r) != nil || len(r) != 15 || r["schema"] != float64(2) || r["stage"] != stage || r["container_id"] != id || r["fingerprint"] != a.w.approval.fingerprint || r["image_id"] != doctorImageID {
 		return fmt.Errorf("wrong protected intent")
+	}
+	anchor := object(r["anchor"])
+	wantStage := "owned"
+	if stage == "absent" {
+		wantStage = "absent"
+	}
+	if len(anchor) != 7 || anchor["stage"] != wantStage || anchor["name"] != "itos-container-anchor-"+token || anchor["created"] == "" {
+		return fmt.Errorf("wrong protected anchor")
 	}
 	return nil
 }
@@ -269,7 +303,7 @@ func (w *world) localOfflineOwned() error {
 	if a.problem != nil {
 		return a.problem
 	}
-	if len(a.created) == 0 || len(a.resources) != 0 {
+	if len(a.created) == 0 || len(a.resources) != 0 || len(a.volumes) != 0 {
 		return fmt.Errorf("no worker or incomplete owned cleanup")
 	}
 	for id, r := range a.created {
@@ -281,8 +315,26 @@ func (w *world) localOfflineOwned() error {
 			return err
 		}
 	}
+	if len(a.allocated) != len(a.created) {
+		return fmt.Errorf("run allocated unrelated volumes")
+	}
+	for _, resource := range a.created {
+		token := fmt.Sprint(object(object(resource["Config"])["Labels"])["io.itos-container.intent"])
+		v := a.allocated["itos-container-anchor-"+token]
+		labels, opts := object(v["Labels"]), object(v["Options"])
+		if v == nil || v["Driver"] != "local" || len(labels) != 7 || labels["io.itos-container.intent"] != token || labels["io.itos-container.project"] != w.approval.project || labels["io.itos-container.fingerprint"] != w.approval.fingerprint || labels["io.itos-container.kind"] != "checkout-anchor" || len(opts) != 3 || opts["type"] != "none" || opts["o"] != "bind" {
+			return fmt.Errorf("run lost independently observed anchor ownership")
+		}
+	}
 	for _, r := range w.doctor.engine.requests() {
 		p := doctorRequestPath(r.Path)
+		if strings.HasPrefix(p, "/volumes/") {
+			name := strings.TrimPrefix(p, "/volumes/")
+			if (r.Method == "POST" && name == "create" && r.Query == "") || (a.allocated[name] != nil && (r.Method == "GET" && r.Query == "" || r.Method == "DELETE" && (r.Query == "" || r.Query == "force=false"))) {
+				continue
+			}
+			return fmt.Errorf("unowned volume operation")
+		}
 		if doctorAllowedRequest(r, w.doctor.image, true) || (r.Method == "GET" && p == "/images/"+doctorImageID+"/json") || (r.Method == "POST" && p == "/containers/create") {
 			continue
 		}

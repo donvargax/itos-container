@@ -2,7 +2,10 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
@@ -26,8 +29,13 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	if s.Registry != nil {
 		return s.registeredRun(ctx, frozen, argv, streams)
 	}
-	startup, cancel := context.WithTimeout(ctx, 120*time.Second)
+	startup, cancel := context.WithTimeout(ctx, budget.StartupDuration)
+	state := &startupState{}
+	startup = context.WithValue(startup, startupKey{}, state)
 	result, connection, attachment := s.launch(startup, frozen, argv, streams)
+	if state.detectorExit != nil {
+		result.Exit, result.Exited = *state.detectorExit, true
+	}
 	cancel()
 	if connection != nil {
 		defer connection.Close()
@@ -35,12 +43,17 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 	if attachment != nil {
 		defer attachment.Close()
 	}
-	if result.Outcome == "" {
+	result.Started = result.ID != ""
+	if result.Outcome == "" && !result.Exited {
 		// Waiting for the workload is not a startup operation or a lifetime limit.
 		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, connection, attachment, result.Reference, result.ID)
 	}
 	if result.Reference != "" {
 		teardown, end := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		result.Deadline, _ = teardown.Deadline()
+		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && (result.Outcome == "" || result.Outcome == port.ExecutionFailed) {
+			result.Signal, result.Outcome = interrupted.Signal, ""
+		}
 		if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok && !result.Exited {
 			result.Exit, result.Exited = s.interrupt(teardown, result.Reference, interrupted.Signal)
 			// Launch or wait already supplied the failure. Interruption must not
@@ -50,7 +63,7 @@ func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string,
 			// Exit can precede the last output, including an interrupted worker's
 			// diagnostics. Keep draining independent of the host signal, but inside
 			// the shared teardown budget and before cleanup closes the connection.
-			drain, stop := context.WithTimeout(teardown, 10*time.Second)
+			drain, stop := context.WithTimeout(teardown, budget.CallDuration)
 			if failure := attachment.Drain(drain); failure != "" {
 				result.Outcome = failure
 			}
@@ -83,7 +96,7 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	// A worker may close stdin on exit while input forwarding is still pending.
 	// Confirm that the exact worker exited before reacquiring its wait response;
 	// a running or unverifiable worker still requires failure and owned cleanup.
-	probe, end := context.WithTimeout(ctx, 10*time.Second)
+	probe, end := context.WithTimeout(ctx, budget.CallDuration)
 	defer end()
 	// The launch connection retains the startup deadline. Reopen protected
 	// authority and the original daemon within this one reconciliation budget,
@@ -93,7 +106,7 @@ func (s Runner) waitRun(ctx context.Context, connection port.RunConnection, atta
 	if s.Registry != nil {
 		entry, f := s.Registry.Open(probe, reference, true)
 		if f != "" {
-			if f == port.Incomplete && probe.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+			if f == port.Incomplete && errors.Is(budget.Cause(probe), context.DeadlineExceeded) && ctx.Err() == nil {
 				return 0, false, waitUnreconciled
 			}
 			return 0, false, port.ExecutionFailed
@@ -166,7 +179,7 @@ func (s Runner) interrupt(ctx context.Context, reference, signal string) (int, b
 	if signalOwned(ctx, intent, c, signal) != "" {
 		return 0, false
 	}
-	grace, end := context.WithTimeout(ctx, 10*time.Second)
+	grace, end := context.WithTimeout(ctx, budget.GraceDuration)
 	exit, outcome := c.Wait(grace, record.ContainerID)
 	end()
 	if outcome == "" {
@@ -213,7 +226,7 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 		result.Outcome = port.IdentityFailed
 		return result, nil, nil
 	}
-	intent, failure := s.Store.New(ctx, frozen, token)
+	intent, failure := s.Store.Prepare(ctx, frozen, token)
 	if failure != "" {
 		result.Outcome = failure
 		return result, nil, nil
@@ -234,7 +247,16 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 	if result.Outcome != "" {
 		return result, connection, nil
 	}
+	if failure = prepareAnchor(ctx, intent, connection, s.Workspace, token); failure != "" {
+		result.Outcome = failure
+		return result, connection, nil
+	}
 	record := intent.Record()
+	record.Stage = "intent"
+	if failure = intent.Save(record); failure != "" {
+		result.Outcome = failure
+		return result, connection, nil
+	}
 	id, failure := connection.CreateRun(ctx, record, argv)
 	if failure != "" {
 		result.Outcome = failure
@@ -276,9 +298,14 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 		result.Outcome = failure
 		return result, connection, attachment
 	}
+	if failure = verifyAnchor(ctx, intent.Record(), connection); failure != "" {
+		result.Outcome = failure
+		return result, connection, attachment
+	}
 	result.Outcome = connection.Start(ctx, id)
 	if result.Outcome == "" {
 		result.ID = id
+		_, result.Outcome = detectAnchor(ctx, intent, connection, s.Workspace)
 	}
 	return result, connection, attachment
 }
@@ -287,8 +314,8 @@ func validateLaunch(ctx context.Context, intent port.Intent, connection port.Run
 	if failure := intent.Validate(); failure != "" {
 		return failure
 	}
-	if !workspace.Unchanged() {
-		return port.Refused
+	if failure := workspace.Validate(); failure != "" {
+		return failure
 	}
 	return connection.Check(ctx)
 }
@@ -311,6 +338,18 @@ func (s Runner) Cleanup(ctx context.Context, reference string) port.Result {
 		return result
 	}
 	defer connection.Close()
+	if intent.Record().Schema == 2 && intent.Record().Stage == "reserved" {
+		result.Outcome = releaseAnchor(ctx, intent, connection)
+		if result.Outcome == "" {
+			r := intent.Record()
+			r.Stage = "cancelled"
+			result.Outcome = intent.Save(r)
+			if result.Outcome == "" {
+				result.Outcome = port.Complete
+			}
+		}
+		return result
+	}
 	result.Outcome = cleanupRun(ctx, intent, connection)
 	return result
 }
@@ -338,7 +377,7 @@ func cleanupRun(ctx context.Context, intent port.Intent, connection port.RunConn
 	}
 	observed, status := connection.Inspect(ctx, id)
 	if status == port.NotFound && record.ContainerID != "" {
-		return complete(intent, record, id)
+		return completeRun(ctx, intent, connection, record, id)
 	}
 	if status == port.Changed {
 		return port.Refused
@@ -367,7 +406,7 @@ func cleanupRun(ctx context.Context, intent port.Intent, connection port.RunConn
 	if status != port.NotFound {
 		return port.Incomplete
 	}
-	return complete(intent, record, id)
+	return completeRun(ctx, intent, connection, record, id)
 }
 
 func owns(record port.Record, observed port.Observation) bool {

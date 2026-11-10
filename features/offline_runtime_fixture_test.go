@@ -40,6 +40,10 @@ var (
 )
 
 func (w *world) offlineFixture(mode string) error {
+	return w.offlineFixtureWithProbe(mode, w.buildOfflineProbe)
+}
+
+func (w *world) offlineFixtureWithProbe(mode string, buildProbe func() error) error {
 	// Guard before even allocating a fixture or reading native-engine inputs.
 	if err := doctorRealGuard(); err != nil {
 		return err
@@ -61,7 +65,7 @@ func (w *world) offlineFixture(mode string) error {
 	if err := w.approvalManifest(); err != nil {
 		return err
 	}
-	if err := w.buildOfflineProbe(); err != nil {
+	if err := buildProbe(); err != nil {
 		return err
 	}
 	// Shell glob candidates and marker names make interpretation observable.
@@ -88,10 +92,14 @@ func (w *world) offlineCheckpoint() error {
 }
 
 func (w *world) offlineProtected() (map[string]string, error) {
+	return w.offlineProtectedWithWalk(nil, filepath.WalkDir)
+}
+
+func (w *world) offlineProtectedWithWalk(excluded map[string]bool, walk doctorTreeWalk) (map[string]string, error) {
 	result := map[string]string{}
 	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
 	for _, root := range []string{w.doctor.checkout, w.doctor.host} {
-		tree, err := doctorTree(root)
+		tree, err := doctorTreeWithWalk(root, excluded, walk)
 		if err != nil {
 			return nil, err
 		}

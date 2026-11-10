@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -133,7 +132,22 @@ func (w *world) recoveryRunSteps(sc *godog.ScenarioContext) {
 			if err := os.MkdirAll(dir, 0700); err != nil {
 				return err
 			}
-			if err := os.WriteFile(filepath.Join(dir, "record.json"), []byte("existing-public-registration"), 0600); err != nil {
+			// Occupy the public ID with valid completed ownership. A malformed
+			// public record now correctly refuses earlier control-state inspection.
+			record := map[string]any{"schema": 1, "id": w.recoveryLocal.id, "project": w.approval.project, "intent": w.session.reference, "state": "stopped", "workload_exit": nil, "last_problem": nil}
+			if err := os.WriteFile(filepath.Join(dir, "record.json"), approvalJSON(record), 0600); err != nil {
+				return err
+			}
+			for _, name := range []string{"controller.lock", "operation.lock"} {
+				if err := os.WriteFile(filepath.Join(dir, name), nil, 0600); err != nil {
+					return err
+				}
+			}
+			if err := writeManifestFixture(w.sessionRecordPath(), approvalJSON(w.sessionExpectedRecord("cancelled", "")), 0600); err != nil {
+				return err
+			}
+			claim := map[string]any{"schema": 1, "root": w.doctor.checkout, "id": w.recoveryLocal.id, "intent": w.session.reference, "complete": true}
+			if err := writeManifestFixture(w.admissionPath(w.recoveryLocal.id), approvalJSON(claim), 0600); err != nil {
 				return err
 			}
 		}
@@ -307,64 +321,63 @@ func (w *world) recoveryRunSteps(sc *godog.ScenarioContext) {
 		}
 		return w.recoveryInvocation("status", "--json")
 	})
-	sc.Step(`^stop and the later status report recovery.temporary with exit 75 state failed resource unknown cleanup unknown workload exit null and the exact retry argv$`, func() error {
+	sc.Step(`^stop and the later status report exit zero state stopped resource absent cleanup complete workload exit null and no retry$`, func() error {
 		l := w.recoveryLocal
 		if !l.barrierReached || len(l.results) != 3 {
 			return fmt.Errorf("run did not expose durable pre-create identity")
 		}
 		for _, i := range []int{0, 2} {
-			r := l.results[i]
-			if err := recoveryHasProblem(r, "recovery.temporary", 75); err != nil {
+			if _, err := w.recoveryLocalEntry(l.results[i], "stopped", "absent", "complete", "unknown"); err != nil {
 				return err
-			}
-			var report recoveryReport
-			_ = json.Unmarshal([]byte(r.stdout), &report)
-			if len(report.Sessions) != 1 {
-				return fmt.Errorf("uncertain session omitted")
-			}
-			e := report.Sessions[0]
-			if e.State != "failed" || e.Resource != "unknown" || e.Cleanup != "unknown" || e.WorkloadExit != nil || !reflect.DeepEqual(e.Retry, []string{"itos", "container", "stop", l.id}) {
-				return fmt.Errorf("uncertain cleanup fabricated a fact")
 			}
 		}
 		return nil
 	})
-	sc.Step(`^stop durably records that cleanup began before releasing the session operation lock$`, func() error {
+	sc.Step(`^stop durably records cancellation with an empty concrete ID and stopped progress before releasing the session operation lock$`, func() error {
 		data, err := os.ReadFile(w.recoveryRecordPath())
 		if err != nil {
 			return err
 		}
 		var record map[string]any
 		_ = json.Unmarshal(data, &record)
-		if record["state"] != "failed" || record["last_problem"] == nil {
-			return fmt.Errorf("stop did not retain cleanup progress")
+		if record["state"] != "stopped" || record["last_problem"] != nil || record["workload_exit"] != nil {
+			return fmt.Errorf("stop did not retain completed cancellation")
 		}
-		return recoveryDurableFile(w.recoveryRecordPath(), record, w.recoveryLocal.processes[:1])
+		if err = recoveryDurableFile(w.recoveryRecordPath(), record, w.recoveryLocal.processes[:1]); err != nil {
+			return err
+		}
+		intent := w.sessionExpectedRecord("cancelled", "")
+		return recoveryDurableFile(w.sessionRecordPath(), intent, w.recoveryLocal.processes[:1])
 	})
-	sc.Step(`^resumed run returns run.cleanup-temporary with exit 75 and unknown workload exit without overwriting cleanup progress$`, func() error {
+	sc.Step(`^resumed run returns a nonzero exit with unknown workload exit without overwriting cancellation$`, func() error {
 		r := w.recoveryLocal.results[1]
-		if r.exit != 75 || !strings.Contains(r.stderr, "run.cleanup-temporary") {
-			return fmt.Errorf("resumed run lost cleanup result: %+v", r)
+		if r.exit == 0 {
+			return fmt.Errorf("cancelled run invented workload success: %+v", r)
+		}
+		data, err := os.ReadFile(w.sessionRecordPath())
+		if err != nil {
+			return err
+		}
+		if !recoveryJSONEqual(string(data), w.sessionExpectedRecord("cancelled", "")) {
+			return fmt.Errorf("resumed run overwrote cancellation")
 		}
 		return nil
 	})
-	sc.Step(`^no create start stop kill or remove request occurs and the original intent retains its empty concrete ID without an absent update$`, func() error {
+	sc.Step(`^no create start stop kill or remove request or engine absence lookup occurs after the pre-create barrier$`, func() error {
 		if err := w.recoveryNoLaunch(); err != nil {
 			return err
 		}
 		if err := w.recoveryNoMutation(); err != nil {
 			return err
 		}
-		data, err := os.ReadFile(w.sessionRecordPath())
-		if err != nil {
-			return err
-		}
-		if !recoveryJSONEqual(string(data), w.sessionExpectedRecord("intent", "")) {
-			return fmt.Errorf("uncertain intent changed to absent")
+		for _, q := range w.session.api.requests {
+			if strings.HasPrefix(q.Path, "/containers/") {
+				return fmt.Errorf("pre-create cancellation inferred absence from the engine")
+			}
 		}
 		return nil
 	})
-	sc.Step(`^the registration and original snapshot remain discoverable without a stopped or complete claim$`, func() error {
+	sc.Step(`^the cancelled registration and original snapshot remain discoverable with complete cleanup$`, func() error {
 		if _, err := os.Stat(w.recoveryRecordPath()); err != nil {
 			return err
 		}
@@ -448,6 +461,12 @@ func (w *world) recoveryNoLaunch() error {
 	return nil
 }
 func (w *world) recoveryLocalDiscover() {
+	w.session.api.mu.Lock()
+	defer w.session.api.mu.Unlock()
+	w.recoveryLocalDiscoverLocked()
+}
+
+func (w *world) recoveryLocalDiscoverLocked() {
 	root := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", w.recoveryIndexKey())
 	dirs, _ := os.ReadDir(root)
 	for _, dir := range dirs {
@@ -514,9 +533,10 @@ func (a *sessionAPI) recoveryCreate(r *http.Request, q sessionRequest, index int
 	host := config["HostConfig"]
 	delete(config, "HostConfig")
 	c := map[string]any{"Id": id, "Name": "/" + r.URL.Query().Get("name"), "Image": config["Image"], "Config": config, "HostConfig": host, "State": map[string]any{"Status": "created", "Running": false, "Pid": 0, "StartedAt": "0001-01-01T00:00:00Z"}, "NetworkSettings": map[string]any{"Networks": map[string]any{"none": map[string]any{}}}, "Mounts": []any{map[string]any{"Type": "bind", "Source": w.doctor.checkout, "Destination": "/workspace", "RW": true, "Propagation": "rprivate"}}}
+	c["Mounts"] = localAnchorMount(object(host))
 	a.local[id], a.observed[id] = c, approvalClone(c)
 	a.created = append(a.created, id)
-	w.recoveryLocalDiscover()
+	w.recoveryLocalDiscoverLocked()
 	e := recoveryRegistration{path: w.recoveryRecordPath(), token: w.session.token, intent: q.Record}
 	e.record, _ = sessionReadRecord(e.path)
 	for _, p := range w.recovery.processes {

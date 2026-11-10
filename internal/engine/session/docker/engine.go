@@ -4,6 +4,7 @@ package docker
 import (
 	"context"
 	"errors"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"net"
 	"net/http"
 	"strings"
@@ -37,7 +38,7 @@ func (e Engine) Open(ctx context.Context, b port.Binding) (port.Connection, port
 // The foreground capability distinguishes missing local environment while the
 // separate unstarted-only capability retains its existing failure contract.
 func (e Engine) open(ctx context.Context, b port.Binding, unavailable port.Outcome) (port.Connection, port.Outcome) {
-	call, cancel := context.WithTimeout(ctx, 10*time.Second)
+	call, cancel := context.WithTimeout(ctx, budget.CallDuration)
 	defer cancel()
 	if call.Err() != nil {
 		return nil, port.Incomplete
@@ -85,7 +86,7 @@ func (e Engine) open(ctx context.Context, b port.Binding, unavailable port.Outco
 		transport.CloseIdleConnections()
 		return nil, port.Incomplete
 	}
-	c := &connection{api: api, pin: pin, transport: transport, binding: b, ctx: ctx}
+	c := &connection{api: api, pin: pin, transport: transport, binding: b, ctx: budget.Lifetime(ctx)}
 	success = true
 	return c, ""
 }
@@ -95,10 +96,10 @@ func (c *connection) call(ctx context.Context) (context.Context, context.CancelF
 	if deadline, ok := c.ctx.Deadline(); ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, deadline)
-		call, end := context.WithTimeout(ctx, 10*time.Second)
+		call, end := context.WithTimeout(ctx, budget.CallDuration)
 		return call, func() { end(); cancel() }
 	}
-	return context.WithTimeout(ctx, 10*time.Second)
+	return context.WithTimeout(ctx, budget.CallDuration)
 }
 func (c *connection) Check(ctx context.Context) port.Outcome {
 	if !c.pin.Unchanged() {
@@ -168,6 +169,11 @@ func (c *connection) Inspect(ctx context.Context, id string) (port.Observation, 
 	}
 	observed := port.Observation{ID: r.ID, Name: strings.TrimPrefix(r.Name, "/"), ImageID: r.Image, Token: r.Config.Labels["io.itos-container.intent"], Project: r.Config.Labels["io.itos-container.project"], Fingerprint: r.Config.Labels["io.itos-container.fingerprint"], StatePresent: r.State != nil}
 	observed.Mounts, observed.Volumes = len(r.Mounts) != 0, len(r.Config.Volumes) != 0
+	if r.HostConfig != nil && len(r.HostConfig.Mounts) == 1 {
+		m := r.HostConfig.Mounts[0]
+		observed.AnchorName = m.Source
+		observed.AnchorExact = safeAnchorMount(m, m.Source) && safeMounts(r.Mounts, m.Source)
+	}
 	if r.State != nil {
 		observed.Status = string(r.State.Status)
 		observed.Running = r.State.Running

@@ -18,6 +18,7 @@ func TestManifestContractCoverage(t *testing.T) {
 	if filteredFeatureRun(*scenarios, readFeatureEnvironment(os.Getenv, runtime.GOOS, runtime.GOARCH)) {
 		t.Skip("whole-suite harness regression; filtered runs must execute only their selected scenarios")
 	}
+	isolateProductCoverage(t)
 	root, err := moduleRoot()
 	if err != nil {
 		t.Fatal(err)

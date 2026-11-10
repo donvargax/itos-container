@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 )
 
 // Storage exposes the existing protected directory machinery through a port.
@@ -30,6 +30,20 @@ func (s Storage) Open(ctx context.Context, c port.Candidate, collection string, 
 	if ctx.Err() != nil {
 		return nil, "state.unavailable"
 	}
+	transaction := port.ControlTransaction(localTransaction{})
+	if create {
+		var failure port.Failure
+		transaction, failure = s.Store.control(ctx, c, true)
+		if failure != "" {
+			return nil, failure
+		}
+	}
+	success := false
+	defer func() {
+		if !success {
+			transaction.Close()
+		}
+	}()
 	store := s.Store
 	ops := store.operations()
 	if s.IO.Create != nil {
@@ -63,37 +77,32 @@ func (s Storage) Open(ctx context.Context, c port.Candidate, collection string, 
 	if exclusive == nil {
 		exclusive = (*os.Root).Link
 	}
-	return &directoryStore{pin: p, ctx: ctx, exclusive: exclusive}, ""
+	success = true
+	return &directoryStore{pin: p, ctx: budget.Lifetime(ctx), exclusive: exclusive, control: transaction, releaseControl: create}, ""
 }
 func lockBusy(err error) bool { return errors.Is(err, syscall.EWOULDBLOCK) }
 func lockContext(ctx context.Context, file *os.File) error {
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		err := tryLock(file)
-		if err == nil || !lockBusy(err) {
-			return err
-		}
-		timer := time.NewTimer(10 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
+	return sessionLock(ctx, file, false)
 }
 
 type directoryStore struct {
-	pin       *pin
-	ctx       context.Context
-	exclusive func(*os.Root, string, string) error
-	public    bool
+	pin            *pin
+	ctx            context.Context
+	exclusive      func(*os.Root, string, string) error
+	public         bool
+	control        port.ControlTransaction
+	releaseControl bool
 }
 
-func (d *directoryStore) Close()          { d.pin.close() }
-func (d *directoryStore) Unchanged() bool { return d.ctx.Err() == nil && d.pin.unchanged() }
+func (d *directoryStore) Close() {
+	d.pin.close()
+	if d.control != nil {
+		d.control.Close()
+	}
+}
+func (d *directoryStore) Unchanged() bool {
+	return d.ctx.Err() == nil && d.pin.unchanged() && (d.control == nil || d.control.Unchanged())
+}
 func recordName(name string) bool {
 	return strings.HasSuffix(name, ".json") && len(name) > 5 && strings.Trim(strings.TrimSuffix(name, ".json"), "0123456789abcdef") == ""
 }
@@ -112,7 +121,8 @@ func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 	if err != nil {
 		return nil, "state.unavailable"
 	}
-	if failure := recordSafety(info, p.uid); failure != "" {
+	links := p.recordLinks(info)
+	if failure := linkedRecordSafety(info, p.uid, links); failure != "" {
 		return nil, failure
 	}
 	file, err := p.ops.openRecord(p.root(), name, os.O_RDONLY|noFollow, 0)
@@ -124,7 +134,7 @@ func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 	if err != nil {
 		return nil, "state.path"
 	}
-	if failure := recordSafety(actual, p.uid); failure != "" {
+	if failure := linkedRecordSafety(actual, p.uid, links); failure != "" {
 		return nil, failure
 	}
 	if !os.SameFile(info, actual) {
@@ -138,12 +148,17 @@ func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 		return nil, "state.invalid"
 	}
 	latest, err := p.ops.lstat(p.root(), name)
-	if err != nil || !os.SameFile(actual, latest) || recordSafety(latest, p.uid) != "" || !d.Unchanged() {
+	if err != nil || !os.SameFile(actual, latest) || linkedRecordSafety(latest, p.uid, links) != "" || !d.Unchanged() {
 		return nil, "state.path"
 	}
 	return data, ""
 }
 func (d *directoryStore) Publish(name string, previous, next []byte) port.Failure {
+	// Initial intent publication ends the common transaction before its caller
+	// can perform engine I/O. The selected directory remains independently pinned.
+	if d.releaseControl && d.control != nil {
+		defer func() { d.control.Close(); d.control = nil }()
+	}
 	if len(next) == 0 || len(next) > 1024*1024 {
 		return "state.invalid"
 	}

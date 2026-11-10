@@ -11,6 +11,7 @@ import (
 
 type Registry struct {
 	Store                                   *Store
+	Admissions                              *Admissions
 	Project                                 string
 	Records                                 map[string]port.PublicRecord
 	Leases                                  map[string]bool
@@ -84,6 +85,11 @@ func (s *Registry) Register(ctx context.Context, d approval.Durable, id, token s
 	}
 	if s.SaveFailure != "" {
 		return nil, s.SaveFailure
+	}
+	if s.Admissions != nil {
+		if failure := s.Admissions.reserve(s.Store.Root, id, port.Reference(s.Project, token)); failure != "" {
+			return nil, failure
+		}
 	}
 	s.Records[id] = port.PublicRecord{Schema: 1, ID: id, Project: s.Project, Intent: port.Reference(s.Project, token), State: "preparing"}
 	s.Leases[id] = true
@@ -211,7 +217,8 @@ func (s *memorySession) Save(r port.PublicRecord) port.Outcome {
 		return s.registry.SaveFailure
 	}
 	if r.ID != s.record.ID || r.Schema != s.record.Schema || r.Project != s.record.Project || r.Intent != s.record.Intent ||
-		(s.record.State == "stopped" && (r.State != "stopped" || r.LastProblem != nil)) || (s.record.WorkloadExit != nil && (r.WorkloadExit == nil || *r.WorkloadExit != *s.record.WorkloadExit)) {
+		!port.ValidDetector(r.MountDetector) || (s.record.MountDetector != "" && r.MountDetector != s.record.MountDetector) ||
+		(s.record.State == "stopped" && (r.State != "stopped" || (r.LastProblem != nil && *r.LastProblem != port.StreamTimeout))) || (s.record.WorkloadExit != nil && (r.WorkloadExit == nil || *r.WorkloadExit != *s.record.WorkloadExit)) {
 		return port.Refused
 	}
 	if samePublic(s.record, r) {
@@ -220,6 +227,7 @@ func (s *memorySession) Save(r port.PublicRecord) port.Outcome {
 	s.record = copyPublic(r)
 	s.registry.Records[r.ID] = copyPublic(r)
 	s.registry.Writes++
+	s.completeAdmission()
 	return ""
 }
 func (s *memorySession) Sync() port.Outcome {
@@ -233,6 +241,7 @@ func (s *memorySession) Sync() port.Outcome {
 		return s.registry.SaveFailure
 	}
 	s.registry.Syncs++
+	s.completeAdmission()
 	return ""
 }
 func (s *memorySession) Close() {
@@ -284,8 +293,16 @@ func RegistryContract(t Reporter, open func() (port.Registry, port.Store, approv
 	n := 7
 	r.WorkloadExit = &n
 	r.State = "failed"
+	r.MountDetector = port.DetectorExited
 	if f = s.Save(r); f != "" {
 		t.Errorf("progress %s", f)
+	}
+	for _, changed := range []string{"", port.DetectorVerified, port.DetectorRefused} {
+		next := s.Record()
+		next.MountDetector = changed
+		if failure := s.Save(next); failure != port.Refused || s.Record().MountDetector != port.DetectorExited {
+			t.Errorf("detector observation was rewritten to %q: %s", changed, failure)
+		}
 	}
 	n = 1
 	if result := s.Record(); result.WorkloadExit == nil || *result.WorkloadExit != 7 {
@@ -299,6 +316,9 @@ func RegistryContract(t Reporter, open func() (port.Registry, port.Store, approv
 		return
 	}
 	defer s.Close()
+	if s.Record().MountDetector != port.DetectorExited {
+		t.Errorf("fresh recovery lost detector observation")
+	}
 	if state, f := s.Controller(); state != "absent" || f != "" {
 		t.Errorf("released controller %s %s", state, f)
 	}
@@ -362,5 +382,11 @@ func RegistryLaunchContract(t Reporter, open func() (port.Registry, port.Store, 
 			i.Close()
 		}
 		s.Close()
+	}
+}
+
+func (s *memorySession) completeAdmission() {
+	if s.registry.Admissions != nil && s.record.State == "stopped" && s.intent.Record().Completed() {
+		s.registry.Admissions.complete(s.registry.Store.Root, s.record.ID)
 	}
 }

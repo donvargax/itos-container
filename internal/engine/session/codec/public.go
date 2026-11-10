@@ -17,7 +17,17 @@ func (j JSON) DecodePublic(data []byte) (port.PublicRecord, port.Outcome) {
 		return bad()
 	}
 	v, issues := j.Parser.Parse(data, true)
-	if len(issues) != 0 || v.Kind != manifest.Object || len(v.Fields) != 7 {
+	if len(issues) != 0 || v.Kind != manifest.Object {
+		return bad()
+	}
+	fields := 7
+	if detector, ok := v.Fields["mount_detector"]; ok {
+		if detector.Kind != manifest.String || detector.Text == "" || !port.ValidDetector(detector.Text) {
+			return bad()
+		}
+		fields++
+	}
+	if len(v.Fields) != fields {
 		return bad()
 	}
 	for _, name := range []string{"id", "project", "intent", "state"} {
@@ -53,7 +63,7 @@ func (j JSON) DecodePublic(data []byte) (port.PublicRecord, port.Outcome) {
 	}
 	if r.LastProblem != nil {
 		switch *r.LastProblem {
-		case port.Unsafe, port.Invalid, port.Refused, port.Uncertain, port.Incomplete, port.Environment, port.EnvironmentMissing, port.Internal, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.ExecutionFailed, port.IsolationInspection, port.IsolationUnverified:
+		case port.TeardownTimeout, port.StreamTimeout, port.EngineLost, port.Unsafe, port.Invalid, port.Refused, port.Uncertain, port.Incomplete, port.Environment, port.EnvironmentMissing, port.Internal, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.ExecutionFailed, port.IsolationInspection, port.IsolationUnverified:
 		default:
 			return bad()
 		}

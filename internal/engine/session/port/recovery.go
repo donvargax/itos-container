@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	CheckoutOverlap       Outcome = "checkout-overlap"
 	Usage                 Outcome = "usage"
 	Environment           Outcome = "environment-unavailable"
 	Internal              Outcome = "internal"
@@ -16,16 +17,19 @@ const (
 
 // PublicRecord contains progress only. Its intent supplies the original authority.
 type PublicRecord struct {
-	Schema       int      `json:"schema"`
-	ID           string   `json:"id"`
-	Project      string   `json:"project"`
-	Intent       string   `json:"intent"`
-	State        string   `json:"state"`
-	WorkloadExit *int     `json:"workload_exit"`
-	LastProblem  *Outcome `json:"last_problem"`
+	MountDetector string   `json:"mount_detector,omitempty"`
+	Schema        int      `json:"schema"`
+	ID            string   `json:"id"`
+	Project       string   `json:"project"`
+	Intent        string   `json:"intent"`
+	State         string   `json:"state"`
+	WorkloadExit  *int     `json:"workload_exit"`
+	LastProblem   *Outcome `json:"last_problem"`
 }
 
 type PublicCodec interface {
+	EncodeAdmission(AdmissionRecord) []byte
+	DecodeAdmission([]byte) (AdmissionRecord, Outcome)
 	EncodePublic(PublicRecord) []byte
 	DecodePublic([]byte) (PublicRecord, Outcome)
 }
@@ -61,6 +65,8 @@ type RunRegistry interface {
 }
 
 type RecoveryEntry struct {
+	MountDetector string   `json:"mount_detector,omitempty"`
+	Anchor        string   `json:"anchor,omitempty"`
 	ID            string   `json:"id"`
 	Project       string   `json:"project"`
 	Fingerprint   string   `json:"fingerprint"`
@@ -87,4 +93,18 @@ type Recovery interface {
 
 type RecoveryPresentation interface {
 	Print(RecoveryResult, bool) int
+}
+
+// AdmissionRecord retains the validated root independently of intent publication.
+// Complete follows a durable absent or cancelled intent and stopped session.
+// The original seven-field public record remains compatible with old sessions.
+type AdmissionRecord struct {
+	Schema   int    `json:"schema"`
+	Root     string `json:"root"`
+	ID       string `json:"id"`
+	Intent   string `json:"intent"`
+	Complete bool   `json:"complete"`
+	// Pending is cleared durably before Register returns launch authority. A
+	// pending claim without a public record cannot have sent a create request.
+	Pending bool `json:"pending,omitempty"`
 }

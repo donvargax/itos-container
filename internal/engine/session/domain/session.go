@@ -6,6 +6,7 @@ import (
 	"time"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
@@ -16,7 +17,7 @@ type Service struct {
 }
 
 func (s Service) Create(ctx context.Context, frozen approval.Durable) port.Result {
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, budget.StartupDuration)
 	defer cancel()
 	token, failure := s.Entropy.Token()
 	if failure != "" || !port.HexID(token) {

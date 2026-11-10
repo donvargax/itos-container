@@ -86,6 +86,61 @@ func StoreContract(t Reporter, open func() (port.Store, approval.Durable)) {
 		}
 		next.Close()
 	}
+	preparedContract(t, store, d)
+}
+
+func preparedContract(t Reporter, store port.Store, d approval.Durable) {
+	t.Helper()
+	for n, stage := range []string{"cancelled", "intent"} {
+		token := strings.Repeat(fmt.Sprint(n+4), 64)
+		i, failure := store.Prepare(context.Background(), d, token)
+		if failure != "" {
+			t.Errorf("prepare: %s", failure)
+			return
+		}
+		r := i.Record()
+		if r.Stage != "reserved" || r.ContainerID != "" || r.Completed() {
+			t.Errorf("new preparation acquired create/completion authority")
+		}
+		bad := r
+		bad.Stage, bad.ContainerID = "owned", strings.Repeat("e", 64)
+		if failure = i.Save(bad); failure != port.Invalid {
+			t.Errorf("preparation skipped durable create boundary: %s", failure)
+		}
+		r.Stage = stage
+		if failure = i.Save(r); failure != "" {
+			t.Errorf("prepared transition to %s: %s", stage, failure)
+		}
+		i.Close()
+		i, failure = store.OpenCleanup(context.Background(), port.Reference(d.Frozen.Project, token))
+		if failure != "" {
+			t.Errorf("reopen prepared transition: %s", failure)
+			return
+		}
+		if i.Record() != r || r.Completed() != (stage == "cancelled") {
+			t.Errorf("prepared transition lost durable authority")
+		}
+		bad = r
+		bad.Stage = "reserved"
+		if failure = i.Save(bad); failure != port.Invalid {
+			t.Errorf("create/cancellation boundary rolled back: %s", failure)
+		}
+		if stage == "cancelled" {
+			if failure = i.Save(r); failure != "" {
+				t.Errorf("repeat cancellation durability: %s", failure)
+			}
+			bad.Stage = "intent"
+			if failure = i.Save(bad); failure != port.Invalid {
+				t.Errorf("cancelled intent acquired create authority: %s", failure)
+			}
+		} else {
+			bad.Stage = "cancelled"
+			if failure = i.Save(bad); failure != port.Invalid {
+				t.Errorf("uncertain create became cancellation: %s", failure)
+			}
+		}
+		i.Close()
+	}
 }
 
 // EngineContract checks unstarted identity, exact lookup and confirmed absence.
@@ -166,6 +221,7 @@ func (c *Codec) Snapshot(data []byte) (port.Binding, port.Outcome) {
 func Fixture() (port.Binding, *Store, *Engine) {
 	b := port.Binding{Frozen: approval.Frozen{Project: strings.Repeat("a", 64), Generation: "1", Fingerprint: "sha256:" + strings.Repeat("b", 64), Settings: "frozen"}, UID: "1000", GID: "1000", Endpoint: "unix:///fixture.sock", EngineID: "engine-A", ImageReference: "fixture.test/worker@sha256:" + strings.Repeat("c", 64), ImageID: "sha256:" + strings.Repeat("d", 64)}
 	b.Checkout.Root = "/checkout"
+	b.Checkout.Device, b.Checkout.Inode = "2049", "12345"
 	codec := &Codec{Value: b}
 	store := &Store{Codec: codec, Records: map[string][]byte{}, Snapshots: map[string][]byte{b.Intent(strings.Repeat("1", 64)).Snapshot: []byte("snapshot")}, UID: b.UID, GID: b.GID, Root: b.Checkout.Root}
 	engine := &Engine{Store: store, Endpoint: b.Endpoint, DaemonID: b.EngineID, CreateID: strings.Repeat("c", 64), Resources: map[string]port.Observation{}}

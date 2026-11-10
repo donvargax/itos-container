@@ -5,6 +5,12 @@ Slice-11 implements the settled recovery contract in
 details reserved to slice-11 in arc42's **Building blocks**, **Recovery** and
 **Decisions** sections; it adds no runtime platform or isolation claim.
 
+Slice-16's [admission decision](0014-checkout-admission.md), following coordinator
+q-28, supersedes this decision's pre-create uncertainty rule. A durable reserved
+intent permits cancellation under the operation lock before create is issued;
+an issued or uncertain create retains the concrete-ID recovery requirements below.
+RECOVERY-25 now covers proven cancellation; RECOVERY-14 retains uncertain create.
+
 Each invocation allocates a cryptographically random 32-byte public ID independently
 of its existing operation token. The seven-field record at
 `sessions/<project>/<id>/record.json` refers to the original protected intent and
@@ -22,21 +28,23 @@ lock identities remain checked; no stale-PID inference or state repair is added.
 
 Status is read-only and has a ten-second invocation budget. Stop has thirty
 seconds total, requests SIGTERM with ten seconds of grace and escalates only
-after fresh ownership and running-state observations. A missing intent name
-without a concrete ID remains uncertain. Cleanup that wins before create is
+after fresh ownership and running-state observations. After create may have been
+issued, a missing intent name without a concrete ID remains uncertain. Cleanup
+that wins before create is
 durable and terminal: resumed run cannot create, start or overwrite that progress.
 
-Completion requires freshly confirmed concrete-ID absence, a durable absent
-intent and a durable stopped session. Repeated stop confirms and syncs existing
+Completion of an issued create requires freshly confirmed concrete-ID absence,
+a durable absent intent and a durable stopped session. Repeated stop confirms and syncs existing
 completion without rewriting it. A later explicit workload observation may fill
 a previously null exit while retaining stopped state; it cannot change a known
 exit. Stop's zero result denotes cleanup, independently of workload success.
 
 Fresh status/stop use the effective checkout and host user to select a project.
 Foreground cleanup retains arc42's existing original-binding rule even if a
-worker changes checkout metadata. Both require the original protected snapshot,
-host identity, pinned socket, daemon and concrete resource ownership. Current
-requests and current approval do not authorize cleanup.
+worker changes checkout metadata. Both require the original protected snapshot
+and host identity. Issued creates also require the pinned socket, daemon and
+concrete resource ownership. Current requests and current approval do not
+authorize cleanup.
 
 Recovery reports schema-1 facts and typed, sorted problems; incomplete run prints
 `itos container stop <actual-id>` with same-project guidance. This supersedes
@@ -228,6 +236,15 @@ After stdin closes, a concurrent stopped/absent record for the same full worker 
 can settle reconciliation with an unknown exit. Remaining output is drained, known
 nonzero exits retain their precedence, and null stays null. Contradictory intent
 progress or a different worker ID cannot settle the wait.
+
+Slice-24's [unknown workload exit decision](0015-unknown-workload-exit.md)
+supersedes this section's original successful-run interpretation of concurrent
+completion, including RECOVERY-32 and RECOVERY-35. Successful cleanup with an
+unknown workload exit returns wrapper 75 and `run.workload-exit-unknown` unless
+another failure already determines the result. It does not report a wait or
+cleanup failure, suggest a cleanup retry, or write a synthetic exit/last problem.
+Stop and status still succeed. The red/green account below records slice-11's
+historical correction, not evidence for that superseded exit-zero expectation.
 
 RECOVERY-30/31/32 were committed pending in `a3d3136`. Running them live before
 the fixes failed all three at their Then assertions, with all six setup/action

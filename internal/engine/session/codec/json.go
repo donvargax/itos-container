@@ -23,7 +23,7 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 		return bad()
 	}
 	value, issues := j.Parser.Parse(data, true)
-	if len(issues) != 0 || value.Kind != manifest.Object || len(value.Fields) != 14 {
+	if len(issues) != 0 || value.Kind != manifest.Object {
 		return bad()
 	}
 	for _, name := range []string{"project", "generation", "fingerprint", "snapshot", "uid", "gid", "engine_endpoint", "engine_id", "name", "image_reference", "image_id", "container_id", "stage"} {
@@ -31,7 +31,25 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 			return bad()
 		}
 	}
-	if value.Fields["schema"].Kind != manifest.Number || value.Fields["schema"].Text != "1" {
+	if value.Fields["schema"].Kind != manifest.Number {
+		return bad()
+	}
+	switch value.Fields["schema"].Text {
+	case "1":
+		if len(value.Fields) != 14 {
+			return bad()
+		}
+	case "2":
+		a := value.Fields["anchor"]
+		if len(value.Fields) != 15 || a.Kind != manifest.Object || len(a.Fields) != 7 {
+			return bad()
+		}
+		for _, k := range []string{"session", "name", "source", "device", "inode", "created", "stage"} {
+			if a.Fields[k].Kind != manifest.String {
+				return bad()
+			}
+		}
+	default:
 		return bad()
 	}
 	var record port.Record
@@ -41,12 +59,22 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 	if !port.HexID(record.Project) || !port.HexID(record.NameToken()) {
 		return bad()
 	}
+	if record.Schema == 2 {
+		b := port.Binding{}
+		b.Checkout.Device, b.Checkout.Inode = record.Anchor.Device, record.Anchor.Inode
+		if !record.ValidAnchor(b) {
+			return bad()
+		}
+		if (record.Stage == "intent" || record.Stage == "owned") && record.Anchor.Stage != "owned" {
+			return bad()
+		}
+	}
 	n, err := strconv.ParseUint(record.Generation, 10, 64)
 	if err != nil || n == 0 || strconv.FormatUint(n, 10) != record.Generation {
 		return bad()
 	}
 	switch record.Stage {
-	case "intent":
+	case "intent", "reserved", "cancelled":
 		if record.ContainerID != "" {
 			return bad()
 		}

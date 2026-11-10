@@ -37,6 +37,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	input := prefix + "-input.json"
 	request := map[string]string{"Action": action, "Backend": s.backend, "Reference": reference, "Token": s.token, "Fault": s.fault, "Umask": s.umask, "Output": output, "Checkpoint": selected, "Journal": s.journal}
 	request["Boundary"] = s.boundary
+	request["AnchorFault"], request["AnchorFixture"] = s.anchorFault, strconv.FormatBool(s.anchorFixture)
 	if s.launch != nil {
 		request["LaunchBarrier"], request["ReplacedPath"] = s.launch.barrier, s.launch.replaced
 		request["CleanupCause"], request["ChildExit"] = s.launch.cause, strconv.Itoa(s.launch.child)
@@ -60,12 +61,12 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
 	args := []string{"-test.run=^TestSessionContractProbe$", "-test.count=1"}
-	if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+	if cover := w.coverageDir(); cover != "" {
 		args = append(args, "-test.gocoverdir="+cover)
 	}
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = w.doctor.checkout
-	cmd.Env = sessionChildEnvironment(os.Environ())
+	cmd.Env = w.coverageEnv(sessionChildEnvironment(os.Environ()))
 	for key, value := range w.doctor.env {
 		cmd.Env = setEnv(cmd.Env, key, value)
 	}
@@ -79,7 +80,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 		return result, err
 	}
 	defer func() { _ = stdin.Close() }()
-	if err := cmd.Start(); err != nil {
+	if err := w.startLocalCommand(cmd); err != nil {
 		return result, err
 	}
 	done := make(chan error, 1)
@@ -173,34 +174,64 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 	return result, err
 }
 
+// sessionProbeBinary is the session contract assembly. It always compiles the
+// checkout, so it keeps the production limits even in the engine tier, which the
+// engine rows of the session contract rely on (see features/README.md).
 func (w *world) sessionProbeBinary() (string, error) {
+	return w.probeAssembly(w.root, sessionProbeSuffix)
+}
+
+// productProbeBinary is the assembly a scenario world runs as its product, with
+// the account home its fixture isolates. In the engine tier it is compiled from
+// the fixture tree beside the suite's product, like that product, so the world's
+// native waits are the shortened ones; elsewhere it is the session assembly.
+func (w *world) productProbeBinary() (string, error) {
+	if source := productSource(w.root, w.bin); source != w.root {
+		return w.probeAssembly(source, engineProbeSuffix)
+	}
+	return w.sessionProbeBinary()
+}
+
+func (w *world) probeAssembly(source, suffix string) (string, error) {
 	path := filepath.Join(w.dir, "slice-9-contract-probe")
 	// The suite binary lives outside every scenario's writable checkout and
 	// survives their teardown. Reuse only the executable; requests, processes,
 	// state, journals and coverage destinations remain scenario-specific.
 	if filepath.IsAbs(w.bin) {
-		path = w.bin + "-session-probe"
+		path = probeProduct(w.bin) + suffix
 	}
-	covered := os.Getenv("GOCOVERDIR") != ""
+	covered := productCoverageRequested() || w.coverdir != ""
 	if covered {
 		path += "-cover"
 	}
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	args := []string{"test", "-c", "./cmd/itos-container", "-o", path}
+	// Portable manifest/approval fixtures also use this assembly. Their suite
+	// path need not have an extension, while Windows executable lookup needs one.
+	path += ".exe"
+	return featureBinary(path, func(target string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "go", probeBuildArgs(target, covered)...)
+		cmd.Dir, cmd.Env = source, sessionChildEnvironment(os.Environ())
+		data, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("build session test assembly: %w\n%s", err, data)
+		}
+		return nil
+	})
+}
+
+// probeBuildArgs compiles the test assembly the way the suite's product is
+// built. -trimpath keeps the source folder out of every compiled package's cache
+// key, so the assembly reuses the packages that product build (and the other
+// assembly) already compiled instead of compiling the whole module again. Without
+// it each cold covered assembly costs about as much as the product build itself;
+// the engine tier compiles two of them inside its measured step.
+func probeBuildArgs(target string, covered bool) []string {
+	args := []string{"test", "-c", "-trimpath", "./cmd/itos-container", "-o", target}
 	if covered {
 		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	}
-	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Dir, cmd.Env = w.root, sessionChildEnvironment(os.Environ())
-	data, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("build session test assembly: %w\n%s", err, data)
-	}
-	return path, nil
+	return args
 }
 
 func sessionChildEnvironment(env []string) []string {

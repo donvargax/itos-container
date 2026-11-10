@@ -1,12 +1,20 @@
 package port
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 const (
 	IsolationUnverified Outcome = "isolation-unverified"
 	IsolationInspection Outcome = "isolation-inspection"
 	ExecutionFailed     Outcome = "execution-unavailable"
 	EnvironmentMissing  Outcome = "engine-environment-missing"
+	CallTimeout         Outcome = "call-timeout"
+	StartupTimeout      Outcome = "startup-timeout"
+	TeardownTimeout     Outcome = "teardown-timeout"
+	StreamTimeout       Outcome = "stream-timeout"
+	EngineLost          Outcome = "engine-lost"
 	// StdinClosed is an attachment notification, not a final run outcome. An
 	// engine input write/half-close failed; the worker may already have exited.
 	StdinClosed Outcome = "stdin-closed"
@@ -21,15 +29,30 @@ type Streams struct {
 }
 
 type RunResult struct {
+	MountDiagnostic MountDiagnostic
+	Stream          Outcome
+	// Teardown retains a cleanup deadline failure separately from the run cause.
+	Teardown  Outcome
+	Operation string
 	Result
-	Exit   int
-	Exited bool
+	Exit    int
+	Exited  bool
+	Signal  string
+	Started bool
+	// Deadline bounds diagnostic delivery as part of the original teardown.
+	Deadline time.Time
 }
 
 // Workspace pins the approved subdirectory and refuses later substitution.
+// Pin also inspects the complete checkout, including .git, without following
+// symlinks. Any Unix socket (live or stale) returns IsolationUnverified; an
+// incomplete scan returns IsolationInspection. Failed pins release all handles.
+// This startup check does not deny sockets created or swapped in afterward.
 type Workspace interface {
 	Pin(Binding) Outcome
-	Unchanged() bool
+	// Validate returns Refused for a confirmed mismatch and Incomplete when the
+	// check could not finish. An interrupted observation is not a substitution.
+	Validate() Outcome
 	Close()
 }
 
@@ -39,6 +62,7 @@ type RunEngine interface {
 }
 type RunConnection interface {
 	Connection
+	AnchorConnection
 	CreateRun(context.Context, Record, []string) (string, Outcome)
 	VerifyRun(context.Context, string, []string) Outcome
 	Attach(context.Context, string, Streams) (Attachment, Outcome)

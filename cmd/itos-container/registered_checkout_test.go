@@ -45,7 +45,7 @@ func publicRegisteredCheckout(t *testing.T, change, boundary string) {
 					}
 				}
 			}
-			runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: &sf.Workspace{}, Entropy: &publicMemoryEntropy{}}
+			runner := domain.Runner{Store: m.registry.Store, Registry: m.registry, Engine: m.e, Workspace: sf.MountWorkspace(m.b), Entropy: &publicMemoryEntropy{}}
 			approval := &runfake.Approval{View: ap.View{Inspection: af.Ready(), Candidate: m.c, Record: ap.Record{Candidate: m.c, Generation: "1"}, Status: "matching"}}
 			var out, errout bytes.Buffer
 			code := (runcommand.CLI{Approval: approval, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "probe"}}).Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: runcommand.Classify})
@@ -62,9 +62,6 @@ func publicRegisteredCheckout(t *testing.T, change, boundary string) {
 			// Keep the changed identity in place for fresh status/stop. A launch
 			// refusal must not accidentally make cleanup depend on that identity.
 			wantCode, wantCleanup := 0, "complete"
-			if substitute && boundary == "open" {
-				wantCode, wantCleanup = 75, "unknown"
-			}
 			status := publicMemoryCommand(t, m.service(), "status", "", wantCode)
 			if len(status.Sessions) != 1 || status.Sessions[0].Project != m.c.Project || status.Sessions[0].Fingerprint != m.c.Fingerprint || status.Sessions[0].Cleanup != wantCleanup {
 				t.Fatal("fresh discovery lost original binding after launch", status)
@@ -82,8 +79,8 @@ func publicRegisteredCheckout(t *testing.T, change, boundary string) {
 					t.Fatal("run retained its controller lease")
 				}
 			}
-			if substitute && boundary == "open" && !slices.Equal(entry.Retry, []string{"itos", "container", "stop", entry.ID}) {
-				t.Fatal("pre-create uncertainty lost its exact retry", entry)
+			if substitute && boundary == "open" && (entry.Retry != nil || entry.State != "stopped" || entry.Resource != "absent") {
+				t.Fatal("proven pre-create cancellation retained uncertainty", entry)
 			}
 			if substitute && boundary == "attach" && (!m.e.Removed || slices.Contains(m.e.Events, "SIGTERM") || slices.Contains(m.e.Events, "SIGKILL")) {
 				t.Fatal("unstarted worker was signalled or not removed", m.e.Events)

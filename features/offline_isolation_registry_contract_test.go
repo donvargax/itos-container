@@ -15,7 +15,7 @@ func TestIsolationRegistryPreservesOnlyValidatedAdditions(t *testing.T) {
 	for _, fault := range []string{
 		"none", "missing registration", "extra session", "extra project", "extra file", "unsafe lock",
 		"changed earlier registration", "changed checkout", "changed host", "preexisting record",
-		"id", "intent", "project", "schema", "state", "workload_exit", "last_problem", "extra field",
+		"id", "intent", "project", "schema", "state", "workload_exit", "last_problem", "mount_detector", "extra field",
 	} {
 		t.Run(fault, func(t *testing.T) {
 			s := isolationRegistryFixture(t)
@@ -42,7 +42,7 @@ func TestIsolationRegistryPreservesOnlyValidatedAdditions(t *testing.T) {
 				err = os.WriteFile(filepath.Join(s.w.doctor.host, "sentinel"), []byte("changed"), 0600)
 			case "preexisting record":
 				s.before[path] = "original preexisting record"
-			case "id", "intent", "project", "schema", "state", "workload_exit", "last_problem", "extra field":
+			case "id", "intent", "project", "schema", "state", "workload_exit", "last_problem", "mount_detector", "extra field":
 				record, decodeErr := sessionDecodeRecord(r.registration.Bytes)
 				if decodeErr != nil {
 					t.Fatal(decodeErr)
@@ -109,6 +109,9 @@ func isolationRegistryFixture(t *testing.T) *isolationWorld {
 	if err := os.RemoveAll(filepath.Dir(filepath.Dir(dir))); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.RemoveAll(filepath.Dir(w.admissionPath(""))); err != nil {
+		t.Fatal(err)
+	}
 	s := &isolationWorld{w: w}
 	var err error
 	s.before, err = s.protected()
@@ -124,7 +127,7 @@ func isolationRegistryFixture(t *testing.T) *isolationWorld {
 			t.Fatal(err)
 		}
 		record := map[string]any{"schema": 1, "id": id, "project": w.approval.project,
-			"intent": s.registrationIntent(r), "state": "stopped", "workload_exit": 7, "last_problem": nil}
+			"intent": s.registrationIntent(r), "mount_detector": "verified", "state": "stopped", "workload_exit": 7, "last_problem": nil}
 		if n == 1 {
 			record["state"], record["last_problem"] = "failed", "cleanup-incomplete"
 		}
@@ -133,6 +136,7 @@ func isolationRegistryFixture(t *testing.T) *isolationWorld {
 				t.Fatal(err)
 			}
 		}
+		seedAdmissionRecord(t, w, id, s.registrationIntent(r), r.absent)
 		if err := s.observeRegistration(r); err != nil {
 			t.Fatal(err)
 		}

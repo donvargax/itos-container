@@ -26,11 +26,11 @@ func (w *world) recoveryReviewSteps(sc *godog.ScenarioContext) {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		args := []string{"-test.run=^TestPublicRecoveryReviewContract$", "-test.count=1", "-test.v"}
-		if cover := os.Getenv("GOCOVERDIR"); cover != "" {
+		if cover := w.coverageDir(); cover != "" {
 			args = append(args, "-test.gocoverdir="+cover)
 		}
 		command := exec.CommandContext(ctx, bin, args...)
-		command.Env = append(os.Environ(), "SLICE_11_REVIEW_CASE="+fixture)
+		command.Env = append(w.coverageEnv(os.Environ()), "SLICE_11_REVIEW_CASE="+fixture)
 		data, err := command.CombinedOutput()
 		result.stdout = string(data)
 		if err != nil {
@@ -46,6 +46,6 @@ func (w *world) recoveryReviewSteps(sc *godog.ScenarioContext) {
 	}
 	sc.Step(`^stop reports recovery.temporary with exit 75 within its original total and preserves ownership for a successful retry$`, assert)
 	sc.Step(`^stop completes owned termination and removal with controller unknown while status retains the probe problem and foreign resources survive$`, assert)
-	sc.Step(`^run finishes without a wait failure and status retains stopped cleanup with unknown workload exit and no repeated mutation$`, assert)
+	sc.Step(`^run reports wrapper exit 75 and run.workload-exit-unknown while status retains stopped cleanup with unknown workload exit and no repeated mutation$`, assert)
 	sc.Step(`^registered run refuses the substituted checkout before the barred launch operation while retaining checkout-independent recovery$`, assert)
 }

@@ -4,6 +4,7 @@ package disk
 import (
 	"bytes"
 	"context"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"strconv"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -39,19 +40,20 @@ func (s Store) identity() (string, string, port.Outcome) {
 	}
 	return uid, gid, ""
 }
-func (s Store) acquire(ctx context.Context, project, token string, create, fresh bool) (*intent, port.Outcome) {
-	return s.acquireMissing(ctx, project, token, create, fresh, port.Refused)
-}
-
-func (s Store) acquireMissing(ctx context.Context, project, token string, create, fresh bool, missing port.Outcome) (*intent, port.Outcome) {
+func (s Store) candidate(project, token string) (approval.Candidate, port.Outcome) {
 	if !port.HexID(project) || !port.HexID(token) {
-		return nil, port.Invalid
+		return approval.Candidate{}, port.Invalid
 	}
 	uid, gid, failure := s.identity()
 	if failure != "" {
-		return nil, failure
+		return approval.Candidate{}, failure
 	}
-	candidate := approval.Candidate{UID: uid, GID: gid, Root: s.Input.Root, Project: project}
+	return approval.Candidate{UID: uid, GID: gid, Root: s.Input.Root, Project: project}, ""
+}
+
+// openIntents opens the intent collection; missing is the outcome when a
+// read-only open finds no collection.
+func (s Store) openIntents(ctx context.Context, candidate approval.Candidate, create bool, missing port.Outcome) (approval.Directory, port.Outcome) {
 	directory, f := s.Storage.Open(ctx, candidate, "intents", create)
 	if f != "" {
 		return nil, storageFailure(f, create)
@@ -59,27 +61,62 @@ func (s Store) acquireMissing(ctx context.Context, project, token string, create
 	if directory == nil {
 		return nil, missing
 	}
+	return directory, ""
+}
+
+func (s Store) acquireMissing(ctx context.Context, project, token string, fresh bool, missing port.Outcome) (*intent, port.Outcome) {
+	candidate, failure := s.candidate(project, token)
+	if failure != "" {
+		return nil, failure
+	}
+	directory, failure := s.openIntents(ctx, candidate, false, missing)
+	if failure != "" {
+		return nil, failure
+	}
 	if fresh && s.Checkout.Pin(s.Input.Root) != readiness.None {
 		directory.Close()
 		return nil, port.Refused
 	}
-	return &intent{store: s, ctx: ctx, directory: directory, candidate: candidate, name: token + ".json", fresh: fresh}, ""
+	return &intent{store: s, ctx: budget.Lifetime(ctx), directory: directory, candidate: candidate, name: token + ".json", fresh: fresh}, ""
 }
 func (s Store) New(ctx context.Context, durable approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, durable, token, "intent")
+}
+func (s Store) Prepare(ctx context.Context, durable approval.Durable, token string) (port.Intent, port.Outcome) {
+	return s.newIntent(ctx, durable, token, "reserved")
+}
+func (s Store) newIntent(ctx context.Context, durable approval.Durable, token, stage string) (port.Intent, port.Outcome) {
 	binding, failure := s.Codec.Frozen(durable.Frozen)
 	if failure != "" {
 		return nil, failure
 	}
-	t, failure := s.acquire(ctx, durable.Frozen.Project, token, true, true)
+	candidate, failure := s.candidate(durable.Frozen.Project, token)
 	if failure != "" {
 		return nil, failure
 	}
+	t := &intent{store: s, ctx: budget.Lifetime(ctx), candidate: candidate, binding: binding, name: token + ".json", fresh: true}
+	t.record = binding.Intent(token)
+	t.record.Stage = stage
 	success := false
 	defer func() {
 		if !success {
 			t.Close()
 		}
 	}()
+	// The checkout scans may use their whole call budget, and a hostile checkout
+	// can make them slow. Creating the intent collection takes the account-wide
+	// control lock, so scan first and hold that lock only for the record checks
+	// and the publication: one slow checkout must not delay other projects.
+	if s.Checkout.Pin(s.Input.Root) != readiness.None {
+		return nil, port.Refused
+	}
+	if failure = t.validateCheckout(); failure != "" {
+		return nil, failure
+	}
+	t.directory, failure = s.openIntents(ctx, candidate, true, port.Refused)
+	if failure != "" {
+		return nil, failure
+	}
 	old, f := t.directory.Read(t.name)
 	if f != "" {
 		return nil, storageFailure(f, true)
@@ -87,9 +124,7 @@ func (s Store) New(ctx context.Context, durable approval.Durable, token string) 
 	if old != nil {
 		return nil, port.Refused
 	}
-	t.binding = binding
-	t.record = binding.Intent(token)
-	if failure = t.validateBinding(); failure != "" {
+	if failure = t.validateRecord(); failure != "" {
 		return nil, failure
 	}
 	data := s.Codec.Encode(t.record)
@@ -115,7 +150,7 @@ func (s Store) openMissing(ctx context.Context, reference string, fresh bool, mi
 	if !ok {
 		return nil, port.Invalid
 	}
-	t, failure := s.acquireMissing(ctx, project, token, false, fresh, missing)
+	t, failure := s.acquireMissing(ctx, project, token, fresh, missing)
 	if failure != "" {
 		return nil, failure
 	}
@@ -184,6 +219,18 @@ func (t *intent) snapshot() (port.Binding, port.Outcome) {
 	return t.store.Codec.Snapshot(data)
 }
 func (t *intent) validateBinding() port.Outcome {
+	if failure := t.validateRecord(); failure != "" {
+		return failure
+	}
+	if t.fresh {
+		return t.validateCheckout()
+	}
+	return ""
+}
+
+// validateRecord checks the snapshot, the record and the host identity against
+// the binding; it never scans the checkout.
+func (t *intent) validateRecord() port.Outcome {
 	b, failure := t.snapshot()
 	if failure != "" {
 		return failure
@@ -193,18 +240,22 @@ func (t *intent) validateBinding() port.Outcome {
 	}
 	expected := b.Intent(t.record.NameToken())
 	expected.Stage, expected.ContainerID = t.record.Stage, t.record.ContainerID
-	if t.record != expected {
+	expected.Schema, expected.Anchor = t.record.Schema, t.record.Anchor
+	if t.record != expected || !t.record.ValidAnchor(b) {
 		return port.Invalid
 	}
 	uid, gid, failure := t.store.identity()
 	if failure != "" || b.UID != uid || b.GID != gid {
 		return port.Refused
 	}
-	if t.fresh {
-		checkout, f := t.store.Checkout.Inspect()
-		if f != readiness.None || checkout != b.Checkout || !t.store.Checkout.Unchanged() {
-			return port.Refused
-		}
+	return ""
+}
+
+// validateCheckout runs the two full checkout scans against the pinned root.
+func (t *intent) validateCheckout() port.Outcome {
+	checkout, f := t.store.Checkout.Inspect()
+	if f != readiness.None || checkout != t.binding.Checkout || !t.store.Checkout.Unchanged() {
+		return port.Refused
 	}
 	return ""
 }
@@ -214,7 +265,9 @@ func (t *intent) Close() {
 	if t.fresh {
 		t.store.Checkout.Close()
 	}
-	t.directory.Close()
+	if t.directory != nil {
+		t.directory.Close()
+	}
 }
 func (t *intent) Validate() port.Outcome {
 	data, f := t.directory.Read(t.name)
@@ -230,9 +283,7 @@ func (t *intent) Save(next port.Record) port.Outcome {
 	if failure := t.Validate(); failure != "" {
 		return failure
 	}
-	expected := t.record
-	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
-	if next != expected || !port.HexID(next.ContainerID) || (next.Stage != "owned" && next.Stage != "absent") || (t.record.Stage == "absent" && next != t.record) || (t.record.ContainerID != "" && next.ContainerID != t.record.ContainerID) {
+	if !t.record.ValidTransition(next) {
 		return port.Invalid
 	}
 	data := t.store.Codec.Encode(next)

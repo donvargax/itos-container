@@ -35,6 +35,7 @@ type Result struct {
 }
 
 type Record struct {
+	Anchor         Anchor `json:"anchor,omitzero"`
 	Schema         int    `json:"schema"`
 	Project        string `json:"project"`
 	Generation     string `json:"generation"`
@@ -90,11 +91,39 @@ type Entropy interface{ Token() (string, Outcome) }
 // original snapshot and actual host identity, never current startup inputs.
 type Store interface {
 	New(context.Context, approval.Durable, string) (Intent, Outcome)
+	// Prepare publishes an intent that cannot create until durably advanced to
+	// intent under the public session operation lock. It may instead be cancelled.
+	Prepare(context.Context, approval.Durable, string) (Intent, Outcome)
 	Open(context.Context, string) (Intent, Outcome)
 	// OpenCleanup validates protected evidence and host identity independently
 	// of mutable checkout identity. It grants no new launch authority.
 	OpenCleanup(context.Context, string) (Intent, Outcome)
 }
+
+// ValidTransition preserves authority and makes both forms of completion terminal.
+func (r Record) ValidTransition(next Record) bool {
+	expected := r
+	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
+	expected.Schema, expected.Anchor = next.Schema, next.Anchor
+	if next != expected || !r.anchorTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
+		return false
+	}
+	switch r.Stage {
+	case "reserved":
+		return next.ContainerID == "" && (next.Stage == "reserved" || next.Stage == "intent" || next.Stage == "cancelled") &&
+			(next.Schema == 1 || next.Stage == "reserved" || (next.Stage == "intent" && next.Anchor.Stage == "owned") || next.Stage == "cancelled")
+	case "cancelled", "absent":
+		return next.Stage == r.Stage && next.ContainerID == r.ContainerID && (next == r || r.Schema == 2 && r.anchorTransition(next))
+	default:
+		return HexID(next.ContainerID) && (next.Stage == "owned" || next.Stage == "absent")
+	}
+}
+
+// Completed includes cancellation proven before create, never an unknown create.
+func (r Record) Completed() bool {
+	return (r.Schema == 1 || r.Anchor.Stage == "absent") && ((r.Stage == "absent" && HexID(r.ContainerID)) || (r.Stage == "cancelled" && r.ContainerID == ""))
+}
+
 type Intent interface {
 	Record() Record
 	Binding() Binding
@@ -104,6 +133,8 @@ type Intent interface {
 }
 
 type Observation struct {
+	AnchorName                  string
+	AnchorExact                 bool
 	ID, Name, ImageID           string
 	Token, Project, Fingerprint string
 	StatePresent                bool

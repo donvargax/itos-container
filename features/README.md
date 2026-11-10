@@ -27,10 +27,18 @@ release's. Each scenario gets a scratch folder in a temporary directory, runs th
 and reads its exit code, its output and the files it leaves. A step judges the program by its
 command line alone: it never reads its source or calls its code to decide a result.
 
+The ordinary non-engine suite runs four independent scenarios concurrently so real
+filesystem I/O and deadline observations fit the existing ten-minute package budget.
+Each keeps its own processes, state, recording engine and assertions. Compiled test
+helpers are shared only after a serialized build and atomic publication outside the
+scenario checkouts. Engine runs, red-evidence selections and focused harness controls
+remain serial. No scenario deadline or assertion is shortened or omitted.
+
 Commands run in a clean environment: no `GIT_*`, `ITOS_*`, `ITOS_CONTAINER_*`, `GITHUB_*`,
 `GH_*` or `CI` variable of the caller's, no global or system git config, a fixed author, and none
-of the caller's claude, itos or its extensions on the PATH. A `GOCOVERDIR` that exists builds the
-binary with `-cover` and collects what each run did, for itos-cc to merge with `go test`'s.
+of the caller's claude, itos or its extensions on the PATH. Either `GOCOVERDIR` or
+`ITOS_CC_TEST_COVERDIR` requests a covered product build. The harness reads the latter before
+filtering `ITOS_` variables and gives each scenario its own `GOCOVERDIR` for collection.
 
 Slice-2 also specifies a shared metadata-validator contract. Its four metadata
 scenario IDs use a test-only `cmd/itos-container` assembly, built as a Go test binary,
@@ -38,7 +46,7 @@ with in-memory file data and the real parser, reference adapter, domain and doct
 presenter. The runner sends raw input and asserts actual output; it imports no
 production packages and supplies no engine fake or product injection flag. File
 scenarios still run the product binary. Slice-3 owns binary-to-engine evidence.
-When `GOCOVERDIR` is set, the test assembly also builds with atomic coverage across
+When either coverage variable is set, the test assembly also builds with atomic coverage across
 the module. Go's exit hooks export counters for both success and refusal exits.
 `TestManifestContractCoverage` checks each metadata ID's exported product coverage
 in a separate directory. It runs in the unfiltered suite; `-scenarios` and active manual red
@@ -46,18 +54,20 @@ selections skip these independent reruns so only selected product IDs execute. E
 retains ordinary coverage; memory-only harness regressions still run.
 
 Slice-4's identity, publication and frozen-input contract IDs use a test-only
-`cmd/itos-container` assembly too. Their nested `go test` enables atomic coverage
-across the module when `GOCOVERDIR` is set and passes that directory explicitly
-through `-test.gocoverdir`, since `go test` supplies its own temporary directory.
+`cmd/itos-container` assembly too. Manifest, approval, preflight and session
+contracts share its compiled executable, while each invocation keeps separate
+inputs, processes and results. A covered executable is cached separately from
+the plain one; it enables atomic coverage across the module and passes the
+scenario's effective measurement directory explicitly through `-test.gocoverdir`.
 `TestApprovalContractCoverage` requires executed approval-domain counters for each
 of the five IDs in separate directories. Like the manifest regression, it skips
 filtered and active manual red selections so they execute only the requested IDs.
 
 The older-kernel approval fixture runs the product with umask `0777` as well as
 `0022`. Go applies that umask to its coverage files too. Each child therefore
-writes coverage to a private temporary subdirectory of the caller's `GOCOVERDIR`.
+writes coverage to a private temporary subdirectory of the scenario's effective `GOCOVERDIR`.
 After it exits, the harness gives only those metadata/counter files owner access
-and moves them unchanged into the caller's collection directory. The product's
+and moves them unchanged into that scenario's collection directory. The product's
 umask and approval-state permissions remain as tested. Missing metadata or counters
 fails collection. `TestApprovalKernelCoverage` runs both examples and requires
 successful conversion with executed private-directory initialization coverage.
@@ -69,8 +79,16 @@ It preserves the same filtered, platform and engine selection boundaries.
 go test ./features -count=1                         # live non-engine scenarios and harness tests
 go test ./features -count=1 -scenarios='^@ID-CLI-'  # matching live non-engine scenarios
 GOCOVERDIR=$d go test ./features -count=1           # non-engine coverage in existing directory $d
+ITOS_CC_TEST_COVERDIR=$d go test ./features -count=1 # non-engine coverage in $d/<ID>
 itos tests smoke run scenario                      # eligible smoke IDs; engine IDs explicitly skip
 ```
+
+Run the full feature suite without `-race`. A full-package race run consumed
+22 GB and starved the machine on 2026-11-08. Limit race detection to the changed
+tests with an explicit `-run` selection; for changed production packages, select
+only those packages. A test killed at the memory limit needs its memory use
+fixed, not a higher limit. Do not repeat the historical full-feature race command
+recorded in ADR 0020.
 
 `-scenarios` takes a regular expression over each effective tag, `@` included. Godog's
 pinned Gherkin parser supplies inheritance from Feature, Rule, Scenario Outline and Examples;
@@ -88,9 +106,127 @@ PTY allocation or verification failures on Linux remain failures, never skips.
 Invalid regexes, unreadable/malformed features and expressions matching no scenario's effective
 tags fail. A selection containing only excluded cases explicitly skips `TestFeatures`, with
 the reason, excluded IDs and count. A mixed selection runs eligible cases and logs exclusions.
+
+The ordinary local `TestFeatures` run schedules at most four independent
+scenarios at once. Each keeps its own checkout, state, child processes and HTTP
+endpoint. Shared helper executables live outside those checkouts and are
+published only after a successful build, with one build per cache path. All
+selected rows, assertions, real operation deadlines and cleanup checks still run. Native engine
+and manual red selections remain serial. Harness tests use serial execution
+unless explicitly testing this scheduler. Local API setup and subprocess
+completion synchronize with their recorder locks; live fault edits use those
+locks too. Request snapshots are copied and probe-specific inputs go directly
+to the child, so observers never depend on an unprotected shared environment.
+
 Use `-v` to see successful-run logs and Go's skip report. Selection precedes the binary build,
 scenario initialization, Background steps and any engine access. Each eligible scenario is a
 subtest of `TestFeatures`, named after the scenario.
+
+### Product coverage
+
+Both the CLI and the shared command test assembly use
+`-cover -covermode=atomic -coverpkg=./...` when coverage is requested. Plain and
+covered assemblies have separate cache paths; neither input means plain builds,
+including selected runs, without missing-coverage warnings or changed output.
+
+| Harness inputs | Product coverage destination |
+| --- | --- |
+| Neither variable | No product coverage |
+| `GOCOVERDIR` only | Aggregate counters in that directory |
+| `ITOS_CC_TEST_COVERDIR` only | `<root>/<ID>` for each selected scenario |
+| Both variables | `<ITOS_CC_TEST_COVERDIR>/<ID>`; the per-ID root wins |
+
+The harness resolves relative roots against its working directory (`features/`)
+and creates an absolute destination before fixture setup starts product code.
+For per-ID collection, each scenario must have exactly one complete
+`@ID-AREA-number` tag; missing, ambiguous or malformed IDs and unusable directories
+fail the run. Outline rows
+accumulate under their shared ID. The destination stays on the scenario world
+and its secondary fixture worlds, so concurrent IDs and nested native scenarios
+keep independent counters without changing the process environment.
+
+CLI launches, contract probes and recovery controllers use the same destination.
+The approval older-kernel and run umask helpers stage their counters there before
+exporting them after child exit, preserving the child's umask and state permissions.
+Returning recovery probes also stage each invocation's `GOCOVERDIR` and matching
+`-test.gocoverdir` in a private subdirectory. Go's test runner rereads that directory
+to report coverage after printing `PASS`; under the syscall observer, rereading
+sibling counters can exceed the drain bound even after product cleanup completes.
+After joining each probe, cleanup moves its generated files into the captured
+scenario destination and removes the staging directory. Export failures fail cleanup;
+deliberately killed controllers need not have completed counters.
+Scenario cleanup removes fixture state but leaves coverage for the collector.
+When coverage is requested, local overlap fixtures end their simulated workloads
+after the final assertion and give active controllers a shared 35-second drain
+bound before forced cleanup. This lets Go export their executed counters; a drain
+timeout fails cleanup. Plain runs retain direct cancellation and joining because
+their controllers have no counters to export. Native teardown is unchanged.
+Independent harness regressions use private temporary coverage roots and restore
+the caller's inputs, keeping their reruns outside the listed-ID inventory.
+
+`TestScenarioCoverageContract` checks this routing through real hooks and binaries,
+including secondary worlds, concurrent IDs, outline rows, restrictive umasks,
+retained counters, invalid destinations and plain/covered cache transitions. It
+requires readable atomic metadata and counters with executed product blocks.
+COUNT-01 alone must reach `internal/slices/count/domain/`; CLI-01 legitimately
+reaches count's command help during Kong initialization. The T-36 ledger also
+checks the unchanged full non-engine inventory once, without `-race`, within
+600 seconds. Native coverage and fresh pinned-itos-cc proof remain CI evidence.
+
+### Scenario memory
+
+Run the complete feature suite without `-race`. Use race detection only on named
+harness regressions, such as
+`go test -race ./features -count=1 -run '^TestFeatureMemoryRetention$'`.
+`itos task T-35` runs the full ordinary suite and the focused regression in both
+modes, requiring each measured invocation to stay within 4,194,304 KiB peak RSS.
+Its Linux `getrusage(RUSAGE_CHILDREN).ru_maxrss` measurement includes reaped
+descendants and reports the largest individual process high-water mark, not the
+sum of simultaneous processes or cumulative Go allocations.
+
+Godog v0.16.0 stores matched step handlers in its results. Those handlers retain
+their scenario's `world`, including output and fixture snapshots, after the
+scenario finishes. Manifest snapshots include the complete bytes of executable
+sentinels; at case 576 they accounted for over 95% of the pre-repair live heap.
+The initializer now clears the world after assertions, owned fixture cleanup and
+scratch removal finish. Godog keeps its captured errors and step locations.
+No snapshot assertion, scenario selection, fixture preparation or GC setting changes.
+
+On 2026-11-08, using `go1.27.3-X:nodwarf5` on Linux amd64, T-35 collected heap
+profiles inside one serial non-engine suite, after cleanup and explicit diagnostic
+GC at cases 8 and 576, while earlier results remained live:
+
+| Measurement (bytes) | Before repair | After repair |
+| --- | ---: | ---: |
+| Live heap at case 8 | 21,996,544 | 21,701,288 |
+| Live heap at case 576 | 2,239,996,256 | 58,728,640 |
+| Cumulative allocations at case 576 | 26,507,812,632 | 26,514,033,448 |
+
+Both samples had three goroutines, all belonging to the test runner/profile;
+no fixture goroutine survived those cleanup boundaries. The pre-repair diagnostic
+was stopped at 4,235,888 KiB observed RSS. The repaired diagnostic completed all
+1,274 selected cases at 446,472 KiB peak RSS. These profiling runs used a sandbox
+that remapped `/tmp` ownership and caused approval fixtures to fail, so neither
+is a passing suite check. Their comparable heap samples identify retained state;
+the ordinary task check uses normal ancestor ownership and no profiling hooks.
+Profiles and logs remain uncommitted T-35 scratch artifacts.
+
+The red regression commit `44b218327428d37223893a08ad73c8901c203479` retained
+235,644,976 additional live bytes normally and 235,648,112 under `-race`, exceeding
+its 32 MiB allowance. With repair `3f1c8e25ca43673eb75a79cd33d4d02cd876f8b9`,
+the same measurements were 774,152 and 758,824 bytes, respectively, and both runs
+passed. All 64 payload cases and their cleanup completions are required. Small
+failure subtests also require original diagnostics, nonzero suite results, joined
+owned pipe cleanup, removed directories and an independent succeeding scenario.
+GC is explicit only in these regression/diagnostic samples, never normal cleanup.
+
+At the repair SHA above, `itos task T-35` passed both unchanged ledger checks.
+The full uncached `go test ./features -count=1` exited 0 in 303.464 seconds with
+470,196 KiB peak RSS: all 1,274 eligible product scenario rows, plus the normal
+harness and coverage regressions. The exact-name focused ordinary and race runs
+both exited 0, with a combined high-water measurement of 406,028 KiB. These are
+local non-engine results, not a full-suite race measurement or native-engine
+support evidence. Fresh engine evidence remains the coordinator's CI work.
 
 ### The CI engine tier
 
@@ -110,12 +246,55 @@ receive a Docker socket and never run the engine tier locally or spoof the CI co
 `TestEngineWorkflow` and `TestEngineFixtureWorkflow` parse the workflow and reject broken
 fixtures without executing Docker. The latter also checks the pinned recipe and helper guards.
 
-The sole engine job in `.github/workflows/ci.yml` has the stable check name
-**`Engine scenarios (Linux amd64)`** for the coordinator's repository settings. It runs on main
-pushes, non-draft pull requests and manual dispatch, checking out the exact `${{ env.TO }}`
-head on native `ubuntu-latest`. `ci` depends on it, runs with `always()` plus the event guard,
-and explicitly fails if the engine result is anything other than success. Remote branch
-protection settings remain the coordinator's responsibility.
+Since T-45 the engine tier runs in three engine shards, the matrix of the `engine-shard` job in
+`.github/workflows/ci.yml`: **offline** (`offline.feature`), **lifecycle** (`lifecycle.feature`,
+whose four `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row) and **other**
+(every other feature with an engine case). A shard is a job of whole feature files on its own
+native `ubuntu-latest` runner and daemon, with its own checkout of the exact `${{ env.TO }}`
+head, preflight, fixture preparation and cleanup. Nothing crosses runners, `fail-fast` is off
+so a red shard hides no other, and no feature is ever split. Each runs on main pushes,
+non-draft pull requests and manual dispatch.
+
+The stable check name **`Engine scenarios (Linux amd64)`**, for the coordinator's repository
+settings, belongs to the `engine` aggregate job. It needs `engine-shard` alone, runs under
+`always()` plus the event guard for one minute, and its one step, **Require every engine
+shard**, fails unless the shard job's result is `success`. GitHub's contexts reference does
+not spell out a matrix job's result in `needs`; the gate takes success to mean that every
+shard succeeded, and the loop confirms that on the first red shard. `ci` depends on the
+aggregate, runs with `always()` plus the event guard, and explicitly fails if the engine
+result is anything other than success; `release` needs it as before. Remote branch protection
+settings remain the coordinator's responsibility.
+
+`ITOS_CONTAINER_ENGINE_FEATURES` names a shard's files. It is a second harness-only input,
+read through the same lookup as the red input (`readFeatureEnvironment`), so tests hold it
+as data, and set only as the Engine scenarios step's `${{ matrix.features }}`. It holds
+whitespace-separated feature file basenames. Unset or blank is the complete tier. Before any
+build or fixture, `selectScenarios` refuses, naming it, a nonempty value outside the engine
+tier, a name that is not a basename ending in `.feature`, a name given twice, and a name that
+no feature file with an effective `@engine` case, live or `@wip`, bears. In the engine tier it
+keeps only the named files' rows, intersected with the tier, platform, `-scenarios` and red
+selection. Red IDs and a `-scenarios` expression are still validated against the full
+inventory, and an unknown one fails. A red list matching only other shards' rows leaves the
+shard the explicit red skip, which names those IDs as left to another engine shard. A
+`-scenarios` expression matching only other shards' rows leaves it the plain count-0 skip,
+`no live scenarios in selected tier and platform (count 0)`, which names no ID: those
+shards' rows appear only in the separate `excluded N scenario(s)` log line. The selection and
+its check of godog's filtered pickles read the shard's files alone, and the run and the
+nested schedule read the same files (`scenarioSelection.paths`): godog numbers pickles
+across the files of one read, so a check over other files than the selection's never
+matches. Exact completion counts, the timing records and the coverage check follow the
+shard's selection. The `ITOS_CONTAINER_ENGINE_` prefix keeps it from product children and
+harness subprocesses, as for the switch.
+
+`TestEngineShards` holds all of this without an engine. Its workflow subtest parses the actual
+workflow; its partition subtest selects each shard over the real feature files and requires
+each shard's rows and IDs to be the unsharded selection's in its files, the three together the
+whole tier exactly once, every feature with an engine case in exactly one shard, and
+`ID-LIFECYCLE-09` and `-13` in the lifecycle shard; its selector subtest runs fixture
+features with memory-only steps; and its broken-workflows subtest refuses a dropped, doubled,
+unknown or path-named feature, an empty or fourth shard, a weakened aggregate, a gate that
+accepts another result, `continue-on-error`, `fail-fast: true`, the feature input at job
+level and a second engine switch.
 
 A read-only server preflight targets `unix:///var/run/docker.sock`, clearing caller-selected
 Docker host/context and TLS/API overrides. Missing CLI/socket, denied access, daemon failure,
@@ -123,14 +302,22 @@ wrong server platform or timeout fails the job. It records only server version, 
 OS, architecture and the tested commit. Its 29-second deadline plus a 1-second kill grace
 bounds it to 30 seconds. The preflight attempts no install/start, image pull/build, container
 creation or fallback. A separate preparation step supplies the cached fixture described below.
-The Engine scenarios step first compiles the test binary, then alone enables the switch
-for this **CI-only** invocation (the workflow also supplies the fixture environment):
+The Engine scenarios step first compiles the test binary, creates a fresh coverage
+root beneath `RUNNER_TEMP`, then alone enables the switch for this **CI-only**
+invocation (the workflow also supplies the fixture environment):
 
 ```sh
 go test -c -o "$RUNNER_TEMP/slice-11-features.test" ./features
+ITOS_CC_TEST_COVERDIR=$(mktemp -d "$RUNNER_TEMP/T-36-engine-coverage.XXXXXX")
+export ITOS_CC_TEST_COVERDIR
 cd features
-ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=5m -test.paniconexit0 -test.run '^TestFeatures$'
+ITOS_CONTAINER_ENGINE_TESTS=1 setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=4m -test.paniconexit0 -test.run '^TestFeatures$'
 ```
+
+After the selected scenarios succeed, the same `TestFeatures` invocation checks
+that the root contains exactly their IDs and converts each ID's data with
+`go tool covdata`, requiring atomic coverage and executed product blocks. This
+also follows manual red selection; it does not start a second engine run.
 
 The engine tests run in their own session. Coordinator-reviewed run 42233015284
 at `9af619c` traced the entire test process tree and found no product or harness
@@ -140,9 +327,46 @@ The workflow no longer runs strace, which consumed its five-minute budget.
 The workflow streams both output channels to the log and
 `$RUNNER_TEMP/slice-11-features.log`, prints the binary's exit status and decodes exits of
 128 plus a signal number. It preserves the test's failure even when output capture succeeds;
-a capture failure also fails a successful test run. A failure-only step prints the last
-50 kernel messages, `free -m` and the last 100
-test-output lines before unconditional cleanup.
+a capture failure also fails a successful test run. Each shard's failure-only step first runs
+`tools/bin/engine-failure-report` on that log, under `timeout 40`, then prints the last
+50 kernel messages, `free -m`, the `engine scenario timing:` records slowest first and the
+last 100 test-output lines before unconditional cleanup. The report exists because job logs return
+403 without a token and agents have no `gh`, while a failed job's annotations are public:
+it prints one `::error title=<name>` annotation for each failure it finds in the log,
+then each failure again as a `--- FAIL: <name>` block, both with godog's step error as the
+text. A failure is a failed scenario (title its go-test name, `TestFeatures/<name>#NN`,
+text its last `suite.go` block, as `pretty` prints the same error only at its step); a
+`panic:` or `fatal error:` the run died on (title `go test`, which for a timeout holds the
+`running tests:` list naming the scenario in flight); the run's own test, when no scenario
+failed; or `Engine scenarios`, when the log holds no go-test failure line, as a kill, a
+caught signal, a capture failure or a passing run over the 180 s shard budget leave, or no log
+at all because the binary never ran. Only the run's own lines steer it: an error that
+quotes `=== RUN`, `--- FAIL:` or `panic:` lines stays whole inside its scenario. That holds
+because an engine run executes one scenario at a time (LIFECYCLE-09's rows run inside the
+quiet interval's step, which waits for them): `TestFeatures` asks godog for four at once,
+`runScenarios` runs an engine or red selection at one (`TestFeatureConcurrency` holds that),
+and go test prints a failing scenario's block, with its further lines, before the next
+one starts. Run concurrently, godog's scenarios would interleave those blocks line by line, and
+the report would keep only the first chunk of each error. A block start is tried before a
+failure line, so an error whose first line quotes `--- FAIL:` keeps its block, and the report
+reads in the C locale, so that an error quoting a workload's stderr, which can hold bytes that
+are no UTF-8, still starts its block in a UTF-8 locale. The runner
+keeps ten error annotations per step, so above ten failures the first nine are annotated and
+the tenth, `<N> more failed`, lists the other titles one per line, which keeps the set of
+names comparable between re-runs; it cuts a message at 4096 characters, and the report cuts
+each text at 4096 bytes before building anything from it, the same for ASCII, which also
+keeps its time linear in the
+log. The log above the cut holds the rest. Everything the report reads comes from the
+checkout: it is data, never instructions.
+
+The timing records come under the line
+`Engine scenario timing records, slowest first: N`, N being their count: each is its
+duration in seconds with milliseconds, truncated, then the record as the log has it. Equal
+durations keep their log order and a record without a duration, as a killed run can leave
+last, counts as zero. All of them are printed, not the last few: a timeout's log holds the
+rows that finished, and only the whole list shows which took the time. The row in flight
+has no record yet; the timeout's `running tests:` list names it. The step reads the log as
+text, so a NUL byte or invalid UTF-8 in the workload's output does not hide records.
 The explicit `-test.paniconexit0` retains `go test`'s protection against an early `os.Exit(0)`.
 TestMain logs catchable signals to stderr in the engine tier, including its PID, and exits
 nonzero for terminating signals. SIGKILL and SIGSTOP cannot be caught; the supervising shell
@@ -150,14 +374,193 @@ and kernel output supply that evidence. These diagnostics address the coordinato
 2026-11-06 silent engine failures; the trace cleared product and harness signalling,
 while each engine run must still establish its own runtime evidence.
 `TestEngineDiagnostics` exercises the workflow shell with disposable compiler/program fixtures,
-and `TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
+and runs the failure-only step against logs that `TestEngineDiagnosticsLogChild`, a re-executed
+child of the test binary, leaves by failing real scenarios through memory-only steps (a timeout,
+ten and eleven failures of sixty-line errors, a quoted error, errors whose first line quotes a
+failure line or holds invalid bytes, a bare failed test), plus a few
+hand-written logs for branches no cheap run reaches, so that a Go or godog upgrade changing a
+log's shape fails there. The child asks godog for `TestFeatures`'s four at once, so that
+dropping the engine tier's clamp to one cuts those errors short and fails the ten and eleven
+failures cases.
+`TestFeatureSignalDiagnostics` checks a child-only SIGTERM without engine access.
 
-The step has a five-minute budget and the job a ten-minute budget. These are test-infrastructure
-budgets, not product startup/resource limits. With no red input the step selects every live
-engine case, independent of smoke selections, changed IDs or a green baseline. A manual red
-list narrows it to the named eligible IDs, live or `@wip`. Pending, undefined, failed or skipped
+T-33 restores the step's five-minute limit and the job's ten-minute limit. The test
+binary's four-minute timeout leaves time for Go's panic and goroutine dump before the
+step limit. In that dump a goroutine waiting a minute or more can carry its whole minutes in
+its header, as in `goroutine 8 [chan receive, 1 minutes]:` (Go writes `minutes` for one as
+well). The label is approximate, as a scratch test measured on go1.27.3: the runtime stamps a
+waiting goroutine only when a garbage collection's marking finds it, and with the time the
+collection before began its mark termination (`runtime/mgcmark.go:275` copies `work.tstart`,
+which `gcMark`, `runtime/mgc.go:1976`, sets only after marking). So a 35-second wait seen by
+the process's second collection showed `1 minutes`, and a goroutine that waited 70 s with only
+the first collection behind it had no label at all. In a 4-minute engine run collections are
+frequent, so a long wait is labelled, give or take the time between two of them.
+The workflow measures the entire Engine scenarios step, starting before
+test compilation and ending after output capture and exit diagnostics. It separately
+prints compilation time and rejects a total above 180 seconds even if the binary and
+capture both succeed. The 180-second budget is T-45's, per shard, down from the 240 seconds
+T-33 set for the unsharded step; the job, step and Go test limits stay 10, 5 and 4 minutes. The shell reads monotonic Linux uptime at 10 ms resolution;
+missing, invalid or backwards timing fails. Compilation, test, signal and capture
+failures keep their original exit status. Fixture preparation retains its separate
+budget, followed by the existing failure diagnostics and unconditional owned cleanup.
+These are test-infrastructure budgets, not product startup/resource limits. With no red input the step
+selects every live engine case, independent of smoke selections, changed IDs or a green
+baseline. A manual red list narrows it to the named eligible IDs, live or `@wip`.
+Pending, undefined, failed or skipped
 runtime steps fail; losing selected engine cases also fails. Manual non-engine red runs
 apply the same completion checks.
+
+Each completed engine scenario example streams an `engine scenario timing:` JSON
+record after its final cleanup, including failed setup, steps and cleanup. Records
+contain only feature URI, stable scenario ID, source row line, monotonic duration in
+nanoseconds and outcome, except that the record of an `@ID-LIFECYCLE-09` row, and of no
+other, also carries `signals` when the row signalled the controller and collected a journal.
+`signals` holds one object for each signal request (a kill or stop) of the journal
+`lifecycleSignals` judges, in journal order: `signal`, the request's `signal` query value,
+empty when it has none; `at_ns`, its arrival; `replied_ns`, its reply, absent when it was
+never answered, as a cut acknowledgement; `status`, the journaled status; `cancelled`; and
+`previous_ns` and `next_ns`, the arrival of the journal's request just before it and just
+after it, each absent at the journal's end. Every offset is in nanoseconds after the
+harness signalled the controller, the cancellation the limits count from, so a reader can
+set SIGKILL's `at_ns` against the grace window, the first signal's reply, or its cut,
+against the acknowledgement hold, and that signal's call, which starts after `previous_ns`
+(the daemon check) and ends at its reply or, when cut, just before `next_ns`, against the
+1 s call budget. `signals` is `[]` when the journal holds no signal request and absent when
+the row never signalled or collected no journal. The offsets are taken whatever the row's
+outcome, and the record holds no path or secret. Identical outline names/values still have
+distinct row lines; a later failure does not hide earlier records. The single `engine suite timing:`
+summary gives selected/completed example counts, outcome and elapsed time from before
+the product build through the scheduled suites. Nested row durations overlap and must
+not be added to obtain elapsed suite time. The whole-step measurement also includes
+test compilation, remaining test-process cleanup and log capture. Ordinary non-engine
+runs emit no engine timing records.
+
+`TestEngineScenarioTiming` exercises these records using memory-only steps and controlled
+Go time; its `LIFECYCLE-09 rows carry their signal offsets` subtest runs the real
+scenario hooks over hand-built journals, each row passing or failing, and compares the
+`signals` it gets with the exact JSON. `TestEngineFailureTimings` runs the failure step's
+real shell over disposable logs (a timeout with a NUL and an invalid byte, a record cut
+by a kill, no records and no log) and compares what follows the kernel and memory messages
+with the section and the log's last 100 lines. `TestEngineSuiteBudget` parses the actual workflow and executes its timing and
+failure wrapper with disposable compiler/program fixtures and a controlled uptime read.
+Its cases include successful but over-budget execution, missing timing, compilation,
+capture and signal failures. Neither test enables an engine or waits four real minutes.
+Run the full feature suite without `-race`; use `-race` only on changed focused tests.
+
+The coordinator's before measurement is run `42457394504` at
+`cdd38978c57440d0a8d6328614acc5d84d68adf3`: 47 engine examples, 285 seconds overall
+and 246 seconds in the measured step, which correctly failed the then 240-second gate.
+The quiet `ID-LIFECYCLE-13` row took 128 seconds; the other slow stream rows took
+22 and 12 seconds. The four `ID-LIFECYCLE-09` rows took 11–14 seconds each.
+
+Following q-40, the engine harness builds its disposable product from a copy of
+`cmd`, `internal`, `go.mod` and `go.sum` in which only
+`internal/engine/budget/domain/limits.go` differs. That fixture
+uses call/startup/grace budgets of 1/3/1 seconds. Normal builds, releases and
+ordinary contract tests retain 10/120/10 seconds, checked by
+`TestProductionBudgetLimits`. No product environment variable, argument or policy
+can enable the fixture. The copy and binary live outside the writable scenario
+checkouts, and their preparation and compilation remain inside the measured step.
+The 30-second teardown budget and independent process guards are unchanged.
+
+The fixture reaches the disposable product, the `w.bin` that `buildProduct`
+returns, and the assembly that replaces it in a scenario world. The real product
+reads the account home from `/etc/passwd`, so the fixture that builds a checkout
+(`doctorCheckout`) swaps `w.bin` for a test assembly that honors the world's isolated
+account home. In the engine tier `productProbeBinary` compiles that assembly from the
+copy, beside the product, so the native rows keep 1/3/1 seconds. Compiled from the
+checkout it ran every native wait at 10/120/10 seconds: run 42600688807 spent its
+four-minute test timeout there and printed no scenario result. The session contract
+test assembly does not use the copy: `sessionProbeBinary`
+runs `go test -c ./cmd/itos-container` in the checkout, so that assembly compiles
+the checkout's `limits.go` and keeps 10/120/10 seconds even in the engine tier. The
+engine rows `ID-SESSION-11` and `ID-SESSION-12` run it through `sessionRun`, so a
+wait in those rows follows the production limits, not 1/3/1 seconds.
+Those rows were not among the slow rows measured above, and building the assembly
+from the copy would change what they exercise, so it stays on the production limits.
+`TestEngineSuiteBudget` runs the budget contract in both assemblies: the world's
+product assembly must report 1/3/1 seconds and the session assembly 10/120/10. The
+contract compilation it checks first is the copy's.
+
+Both assemblies are compiled with `-trimpath`, as the product is, so the product build
+and the two assemblies share one build cache. Without the flag each covered assembly
+recompiled the whole module: with the product built first and an empty cache, a
+covered assembly took about 20 s to the product's 15 s on a fast machine, and 5 s with
+the flag. The engine tier builds two assemblies inside its measured step;
+`TestProbeAssemblySharesTheProductBuildCache` pins the flag.
+
+The first version used `go build -overlay` instead of a copy and never took effect in
+CI: with `-cover`, which the engine step always sets, `cmd/go` passes the cover tool
+each package file's path on disk and ignores the overlay, so the product kept its
+production limits. Worse, the build cache keyed the overlay's text while holding the
+production build, so a cache restored from such a run served production limits to
+any build of the same text. The fixture's text therefore carries a header no overlay
+ever had. Run 42566251698 spent its whole four minutes in the unshortened waits.
+
+The quiet observation lasts at least four real seconds after readiness, beyond
+both configured budgets. Repeated signals occur at 20 and 80 percent of grace;
+delayed acknowledgements take 60 percent. Escalation cannot occur early. It may
+leave up to an absolute two seconds late (`engineEscalationTolerance`, as the 30 s
+teardown assertion's 2 s), 1 s to 3 s after cancellation with the fixture grace, but
+not from a grace timer that the last repeat restarted (an immediate row) or that the
+first signal's acknowledgement restarted (a delayed row). An immediate row refuses a
+SIGKILL from 1.8 s after cancellation, the last repeat at 80 percent of grace plus the
+grace. A delayed row refuses it from the delay plus the grace after the first signal's
+arrival in the journal. The recorder holds that signal's acknowledgement, and the
+product waits for the reply before it can act on the grace deadline, so a delayed
+row's SIGKILL leaves at the later of the deadline and that reply, plus the work
+before a signal; a window closing 200 ms after the grace refused it on a slow
+runner. A delayed row whose hold ran in full refuses an acknowledgement-relative
+timer at any runner speed; an immediate row does not, and a cut hold (below) refuses
+it only when the request reached the recorder within 400 ms plus the later work. A
+timer restarted by the first repeat is the known gap below. Blocked pipes remain
+blocked until independent controller termination.
+`TestEngineSuiteBudget` also compiles the actual command contract in that copy,
+under the engine step's `-cover -coverpkg=./...` instrumentation, and checks startup
+expiry, drain expiry, quiet lifetime, delayed acknowledgement and owned cleanup
+against the fixture durations. These checks use memory backends
+and controlled time; they do not supply native runtime proof.
+
+Ordinary engine runs selecting both `ID-LIFECYCLE-09` and `ID-LIFECYCLE-13` retain
+the existing schedule: the four escalation rows run serially inside the quiet
+worker's stable lifetime, each with its own checkout, controller and full-ID worker.
+The quiet worker is cancelled only after every nested assertion and cleanup and
+its own minimum observation interval. Inventory audits still see a stable unrelated
+worker. If quiet startup fails, the deferred rows run after the main suite, retaining
+both failures. Exact completion counts cover the full selection. Filtered selections
+missing either ID and manual red runs remain serial. One observed quiet control may
+be reused only within the stream outline and the same product build.
+
+The unsharded step ran 75 examples one at a time, 28 more than the 47 measured at
+`cdd3897`; a suite near 100 seconds was an estimate, never a measured result. The
+coordinator read the Engine scenarios step's time from public job metadata for 33 main
+pushes, from T-33's merge (`4641ad4`) to T-42's (`19a188f`): 162 to 196 seconds on 11 runs
+and 199 to 245 seconds on 22. T-33's own merge took 238 seconds, inside its 240-second
+budget by about two seconds, and run `42635414385` took 245 seconds and ended in the test
+binary's four-minute timeout. T-41 lengthened nothing the engine step runs: before it merged
+(`d1099fc`) the runs split 5 and 8, at 162 to 173 and 199 to 242 seconds, and after it 6 and
+14, at 164 to 196 and 212 to 245. Nothing measured points at one step; the spread reads as
+runner speed. T-33's rule applied: the
+measured unsharded step exceeded 240 seconds, so whole-feature shards on separate native
+runners with an exact parsed-example partition check. Offline holds 24 examples, lifecycle 19
+and other 32, of which 12 are `ID-SOCKETS-01` refusals before any worker exists. An estimate
+from those shares and a cold compile, not a measurement, puts the slowest shard between two
+and two and a half minutes on the slowest runner seen.
+
+The loop records each shard's step time from the public job metadata and, from its log, the
+runner image (`/etc/os-release`) and the preflight's Docker version, so a later image change
+is not taken for a regression. Move a whole feature to another shard only on measured shard
+times that show the need. In the prepared CI tier only, the coordinator measures each shard
+with:
+
+```sh
+for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
+  env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
+done
+```
+
+The loop owns native CI runs and closure. No local engine or mutation run substitutes for
+that evidence.
 
 Doctor's ID-DOCTOR-23 and ID-DOCTOR-24 are live engine scenarios for cached-image
 inspection and a missing digest. They run after preflight and fixture preparation,
@@ -192,19 +595,50 @@ syscalls without engine access, including failure, ordering and controller death
 controls do not provide native recovery red or green evidence; the coordinator must
 still dispatch the three pending engine scenarios before their implementation.
 
+Slice-15's live ID-LIFECYCLE-15 reuses that observer and slice-14's exact probe
+clients and positive controls. One primary waits for atomically published checkout
+challenges independently of stdin/attach. The harness collects a baseline, kills
+only the recorded controller, waits for confirmed death, then generates a fresh
+nonce for the post-loss round. A third round follows fresh status and precedes its
+literal stop retry. Reports bind to the original native full ID and process start
+identity; empty, cached or incomplete reports cannot establish isolation.
+The combined network/DNS control retains the complete slice-14 inventory. Only
+that isolated control reconnects to refresh real Docker DNS aliases for each new
+nonce, retaining its full ID and addresses; its resolver file is restored inside
+the control only. Preservation accounts for its generated endpoint ID/MAC while
+comparing all other resource fields. No subject permission or resolver changes.
+Listener receipts are checked through confirmed product removal. Stop must also
+produce the existing file-fsync/publication/parent-fsync evidence. Local harness
+checks compile the probe and reject invalid evidence without executing it.
+Within each network or DNS phase, independent route clients run concurrently;
+the complete report still waits for every attempt and preserves inventory order.
+Client deadlines, per-attempt nonces, before/after controls and the ordering of
+phases and controller-loss rounds are unchanged. This avoids accumulating each
+route's denial wait inside the five-minute CI step. `TestIsolationRouteAttempts`
+exercises only the scheduler with in-memory clients and virtual time on the host;
+the real probe and clients still run only in the guarded engine tier.
+The coordinator's guarded `red_scenarios=ID-LIFECYCLE-15` dispatch
+[42390615242](https://github.com/donvargax/itos-container/actions/runs/42390615242)
+at `e22aa6366a7bf024322d8b59f2b9f112c4cb26dd` passed all eight steps. Under q-32
+(2026-11-07), this activates as regression coverage of merged slice-12, consuming
+slice-11 recovery/termination and slice-14 boundary controls. The dispatch supplies
+passing evidence, not an assertion-level red. The coordinating loop must still
+obtain ordinary green CI without red input at the actual pushed activation head,
+including the engine tier and any required changed-code proof, before closure.
+
 Code proof obtains its listed tests through `tools/bin/scenario-list`. It uses the same
 Gherkin tier/platform selector as execution, before any fixture setup, and preserves
 core itos's TSV files and fingerprints. Thus ordinary Linux proof lists local Engine API
 fixtures but excludes the native non-Linux ID-DOCTOR-22 and real-engine IDs. The manual
-platform jobs and engine job still execute their eligible scenarios. Listing never
+platform jobs and engine shards still execute their eligible scenarios. Listing never
 substitutes for per-ID coverage: every listed ID must emit real product counters.
 
 ### Cached fixture protocol
 
-T-20's [helper](../tools/bin/engine-fixture) runs only in the existing engine job, after
+T-20's [helper](../tools/bin/engine-fixture) runs only in the engine shard job, after
 preflight. Both `prepare` and `cleanup` refuse outside GitHub Actions on an actual Linux amd64
 host, before engine access. Agents never invoke these modes against an engine or spoof CI.
-The helper uses the existing Docker CLI, shell/coreutils, curl and jq; it installs nothing.
+The helper uses the existing Docker CLI, shell/coreutils, curl, jq and tar; it installs nothing.
 Every engine call clears Docker host/context/TLS/API overrides, uses
 `unix:///var/run/docker.sock` explicitly and supplies a disposable empty Docker configuration,
 without logins or credential helpers. It never changes the daemon or its registry trust.
@@ -242,22 +676,50 @@ smoke, with a separate 30-second cleanup attempt on failure. It performs these c
    discovered from that exact container. Registry storage is container-managed tmpfs; there
    are no host mounts, host networking, extra capabilities, privileged mode or restart policy.
    `OTEL_TRACES_EXPORTER=none` disables trace export. Readiness has a 20-second limit.
-2. Build the reviewed recipe for `linux/amd64`, record the config ID and push to the attempt's
-   unique loopback repository. Read the single-platform manifest through the registry API,
-   hash its exact bytes, compare with `Docker-Content-Digest` and match its config digest to
-   the built ID. Reject an index or a mismatch.
+2. Build the reviewed recipe for `linux/amd64`, record the raw `--iidfile` image ID and push
+   to the attempt's unique loopback repository. Independently obtain its raw config with
+   [a daemon image export](https://docs.docker.com/reference/cli/docker/image/save/) by that
+   immutable ID. Read the export's single Config member with tar to stdout, accepting only a
+   digest-shaped member path; hash its exact bytes, match the member digest and validate its
+   Linux amd64 config. Read the single-platform manifest through the registry API, hash its
+   exact bytes and compare with `Docker-Content-Digest`. Require its config digest to match
+   the independently measured daemon config. Report `store=graph-driver` when the built ID
+   equals that config digest and differs from the manifest digest, or `store=containerd`
+   when the built ID equals the manifest digest. Reject any other relationship or an index.
 3. Remove only the recorded derived tag/digest references, confirm the exact requested
    `repository@sha256` reference is absent, then
    [pull that digest](https://docs.docker.com/reference/cli/docker/image/pull/). Inspect that
-   exact reference and require its complete `RepoDigests` entry, matching config ID,
+   exact reference and require its complete `RepoDigests` entry, matching daemon image ID,
    Linux amd64 platform, numeric non-root user, empty entrypoint, no declared volumes and no
    `devcontainer.metadata`. Build/push results alone are not cached-image proof. The measured
-   manifest digest and distinct config ID are retained together; neither is assumed stable.
+   manifest digest, daemon image ID and measured config digest are logged together; none is
+   assumed stable across builds or image stores.
 4. Execute a ten-second bounded benign smoke command from the cached digest with pull disabled,
    network none, read-only root, all capabilities dropped, no-new-privileges, the recorded
    UID/GID and no host mounts. Require the actual UID/GID, fixed marker and exit zero.
 5. Remove the smoke container and registry, discarding registry tmpfs, then inspect the cached
    digest again. Only then publish `image`, `image_id`, `uid` and `gid` as step outputs.
+
+T-34 makes failures from the push through output publication name their stage and expected
+and observed values. The shared [validation functions](../tools/lib/engine-fixture-checks.sh)
+check captured manifest bytes/headers, cached-image inspection and smoke state/output in both
+preparation and ordinary regression tests. Each manifest observation contains `schemaVersion`,
+`mediaType`, `hasManifests`, `configDigest`, the raw `--iidfile` value as `builtID`, and the
+advertised and measured manifest digests. Selected values are bounded and escaped; missing,
+wrong-type and invalid JSON observations remain visible without dumping image configurations.
+Read/hash failures report unavailable observations and retain the failing stage. An observation
+rendering failure also rejects the response.
+
+Diagnostic [run 42497992377](https://github.com/donvargax/itos-container/actions/runs/42497992377)
+at `4eedcec4f994ee15223532bf753631057adbae40` used Docker 29.4.2 / API 1.54 and showed a single
+OCI manifest whose advertised and measured digest equaled the built ID, with a different config
+digest. The coordinator's q-43 decision identifies the containerd store as the cause of the old
+distinct-ID assertion failure. The repair accepts both stores while independently verifying the
+config; it preserves the builder and push strategy. The coordinator retains the actual repaired
+pushed SHA, server/API/platform, pins, identities, cold-pull, cache and smoke results, and both
+cleanup verdicts for comparison with that failure. Completion still requires preparation,
+the complete live engine scenario selection and final cleanup to pass on that runner.
+Captured-response tests and source guard checks supply no native-engine evidence.
 
 The Engine scenarios step receives these fixture inputs beside its tier switch and the
 optional `ITOS_CONTAINER_RED_SCENARIOS` selector described below:
@@ -265,7 +727,7 @@ optional `ITOS_CONTAINER_RED_SCENARIOS` selector described below:
 | Variable | Meaning |
 | --- | --- |
 | `ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE` | Exact loopback repository and measured manifest digest |
-| `ITOS_CONTAINER_ENGINE_FIXTURE_ID` | Distinct image config digest |
+| `ITOS_CONTAINER_ENGINE_FIXTURE_ID` | Daemon image ID: config digest on graph-driver, manifest digest on containerd |
 | `ITOS_CONTAINER_ENGINE_FIXTURE_UID` | Runner's non-root effective UID |
 | `ITOS_CONTAINER_ENGINE_FIXTURE_GID` | Runner's effective GID |
 
@@ -280,11 +742,14 @@ when scenarios start. Product request-journal assertions still have to prove zer
 an unavailable registry is not that proof. Those steps and journals belong to the behaviour
 items, including slice-3's doctor cases, not T-20.
 
-Preparation attempts cleanup on failure. The engine job's final `always()` step retries cleanup
+Preparation attempts cleanup on failure. Each engine shard's final `always()` step retries cleanup
 after failures/cancellation and removes the remaining derived image references on success.
 Each attempt has a 30-second bound. Cleanup verifies recorded container IDs, names, image IDs
 and attempt labels before removal; interrupted creates can be recovered by their recorded
 unique names plus image and label. Image removal requires the recorded config identity.
+Every removal operation explicitly checks its own failures, including calls inside conditional
+cleanup paths where Bash disables implicit `errexit`. Cleanup attempts all recorded resources
+and retains the original preparation status if bounded cleanup also fails.
 Cleanup is idempotent, preserves an earlier failure and fails an otherwise successful job
 when incomplete. It never prunes, removes shared pinned inputs, or deletes checkout files.
 A killed runner cannot promise cleanup: that run is incomplete, not evidence.
@@ -331,9 +796,11 @@ today's live-only selection in both tiers. Agents never spoof this context or ac
 
 A nonempty list selects only its exact IDs, live or `@wip`, while retaining every tier and
 platform restriction. Inherited Feature, Rule, Outline and Examples tags apply; an outline ID
-selects all eligible rows. The input never enables the engine. The same list may reach all
-three jobs: engine IDs skip on manual platforms, non-engine IDs skip in the engine job, and
-`@linux` cases remain excluded on macOS/Windows. A wholly excluded selection reports its IDs,
+selects all eligible rows. The input never enables the engine. The same list may reach the
+manual platform jobs and every engine shard: engine IDs skip on manual platforms; in an engine
+shard, non-engine IDs and IDs left to another shard skip; and
+`@linux` cases remain excluded on macOS/Windows. The `@unix` examples for manifest
+FIFOs run on Linux and macOS; Windows retains every portable manifest-path example. A wholly excluded selection reports its IDs,
 reasons and count, runs no scenario setup and supplies no red evidence. Eligible selections must finish
 all expected cases successfully for the test command to pass; actual failures stay failed.
 
@@ -363,7 +830,138 @@ be available on the default branch for GitHub manual dispatch.
 Non-engine cases that can run locally retain the ordinary local red-first procedure. This
 manual route adds no product scenarios, supported-host claim or runtime evidence by itself.
 
+Slice-12's native step checkpoint defines all 18 rows of `ID-LIFECYCLE-08`, `09`,
+`11`, `12`, `13` and `16`. The complete `11` case and all four `16` rows are live
+slice-11 recovery regressions, accepted by the coordinator at `9ac4f11` from runs
+`42297748701` and `42298705984`. The implementation also activates `08`, `09`,
+`12` and `13`; their native green run remains the coordinator's CI responsibility.
+The trusted worker writes independent signal receipts and checkout edits. The recorder
+keeps its full-ID mutation checks, streams acknowledged waits, delays only signal
+acknowledgements and disconnects only product transports. The recovery observer records
+successful file/directory fsyncs and controller signal syscalls; real pipe-capacity
+observations establish output backpressure before cancellation. Initial readiness
+and diagnostic bytes are preserved before releasing the output flood, freeing any
+partially occupied pipe page. No further pipe read occurs until controller exit.
+Inspection preserves nonblocking descriptors and collection has a two-second read
+deadline. A missing barrier aborts immediately; collection caps teardown at 32 seconds
+from the recorded cancellation/exit origin, including the two-second scheduling
+tolerance, and os/exec capture waits are bounded after process death. Harness aborts
+remain failures, never successful product cancellation or cleanup. One observed
+budget-relative quiet control may be shared within the stream outline, as q-40 permits.
+
+Local `TestLifecycle*` checks verify step registration, probe compilation, recorder
+forwarding/faults and rejection of incorrect observations. They do not execute the probe
+or provide native red/green evidence. Run `42297748701` supplied accepted assertion
+red for `08`, `09`, `12` and `13`'s quiet row. Its blocked stdout/stderr rows supplied
+no evidence: the harness missed a barrier and hung in collection. After the harness
+repair, coordinator run `42304766391` at `b4a8478` supplied accepted assertion-level
+red for all four `13` rows. Do not raise suite timeouts. Separate red dispatches
+keep the existing engine-job budget.
+Record complete passing rows as earlier-slice regressions under q-6/q-11, including
+exit 17 and LIFECYCLE-09, and assertion-level failures for missing behaviour. Keep
+LIFECYCLE-15 with slice-15. Local `14` now runs the real run command through port
+fakes and protected record adapters over memory storage, with controlled time.
+Both rows failed at their typed stream-timeout assertion before implementation
+and pass afterward. Local 01–07 and 10 now exercise the complete command entry and registered
+recovery with controlled time. The combined 37-row local selection (including 14)
+passes. Step checkpoints df8b8e6, 9b9ebd3 and e67210a preserve red-first
+assertions and verified regressions; decision 0014 records the evidence. Native
+signal evidence remains separate: coordinator run 42312330532 at 41529b1 passed
+all 18 engine cases before these local budget changes. The loop owns fresh CI
+and changed-code proof at the pushed head.
+
+Review regression LIFECYCLE-17 covers interrupted checkout pinning, inspection,
+revalidation and borrowed policy/manifest reads through the same command assembly.
+Its ten rows failed at checkout lifetime assertions after the step checkpoint
+`c274c49`, with `@wip` removed locally: pending reads lost their pins and late pins
+were never released. They pass with closure serialized behind those operations;
+the combined local lifecycle selection now has 47 passing rows. The controller
+still returns at cancellation or its ten-second call bound, before the blocked
+operation is released. Late completion cannot resume launch.
+
+LIFECYCLE-09's independent liveness read starts immediately after cancellation,
+with repeated signals still scheduled at 20 and 80 percent of the run's grace
+budget (200 ms and 800 ms against the 1-second fixture grace). Observer I/O does
+not hold the request recorder's lock, and a delayed running reply remains evidence
+for the same never-restarted primary. The journal rejects SIGKILL before the grace
+budget or after it plus two seconds (1 s to 3 s with the fixture grace, both ends
+accepted), and from the first instant a timer restarted by the last repeat could fire
+in an immediate row (1.8 s after cancellation), or one restarted by the first
+signal's acknowledgement in a delayed row (the delay plus the grace, 1.6 s, after the
+first signal's arrival). A delayed acknowledgement that the product's call limit cut
+(the engine's 204, a cancelled request, no reply) counts as a hold that ran only if
+the cut could be the call limit: the journal records no time for the cut, but the
+product's next request follows it at once and must come a call limit or
+more after the request before the signal (the daemon check), or after cancellation if
+that is later, since the call limit runs from the signal call's start and a first
+signal that arrives late has spent most of it before the hold begins. The bound runs
+from that check, not from the kill's own arrival, which follows the start of the call
+and would refuse an honest cut. That next request is never a wait, and a wait there
+is refused whenever it comes: the call limit equals the grace and the call starts
+after teardown does, so the cut falls after the grace deadline and the product's
+wait on the expired grace sends nothing. Only a grace restarted at the cut, or a hold
+given up before the deadline, sends one. A product that sleeps instead of waiting
+still passes. The cut keeps
+both limits, though its timer starts before
+the arrival plus the delay, so the delayed limit refuses it only when the request
+reached the recorder within 400 ms plus the later work.
+`TestLifecycleSignalWindow` pins these limits on journals it writes, for the four rows
+the engine step selects, with no engine and no waiting. Controlled-time harness tests
+cover delayed replies and early controller exit; fresh native-engine evidence remains
+CI-only. Two restarts pass these limits. A grace timer restarted only by the first
+repeat, a SIGINT at a fifth of grace, fires 200 ms after the grace and is accepted in
+every row; a late start that no event restarted passes too. No other test sends a
+repeat and times the kill. A fake-clock row holds both, in
+`p2-grace-origin-fake-clock-row`, not in this suite.
+
+LIFECYCLE-18/19 cover teardown diagnostics and primary-cause preservation through
+both local backends. They freeze output at command return, before disposing of
+abandoned writers, matching main's immediate exit. Checkpoints a020fe5/d606209
+supplied eight assertion-level failures; the two blocked-stderr rows retained
+existing slice-12 behavior. All ten pass after reserving reporting time inside
+the original teardown total and keeping timeout separate from engine/wait loss.
+Decision 0018 records the evidence; no native-engine or mutation run is implied.
+
+LIFECYCLE-20 covers launch operations that ignore cancellation, including a
+socket identity syscall. Step checkpoint `e932db6` supplied assertion-level red
+for all twelve rows on both local backends with `@wip` removed for the run.
+The controller exceeded its call, startup or cancellation plus teardown bound;
+late attach results also leaked their handles. Finite connection calls now end
+the controller wait independently, retain the connection until the operation
+returns, and discard late attachments. All twelve rows pass without native
+engine access; the existing 57 local lifecycle rows also pass. Fresh native
+engine checks and changed-code proof remain the coordinating loop's work.
+
+LIFECYCLE-21 covers an exited worker whose recovery wait ignores cancellation
+before returning an exit code. Checkpoint `0347743` failed at the teardown-bound
+Then on both local backends with `@wip` removed: the controller was still waiting
+at the 31-second guard. The connection wrapper now bounds observation by its
+caller's context while retaining the connection until the adapter finishes.
+The scenario passes, including retained recovery, rejection of the late exit,
+fresh owned cleanup and a healthy 121-second foreground wait. All live local
+lifecycle scenarios pass; native-engine checks and changed-code proof remain
+CI-only and belong to the coordinating loop.
+
 ## Tags
+
+Slice-17 includes slice-18's accepted `anchors.feature` under coordinator q-36.
+The seven native rows in `ID-ANCHORS-09` through `ID-ANCHORS-13` are live after
+q-37 accepted their assertion-level CI red in run 42400524477. They use actual
+product processes, the native request recorder, independently inspected volumes,
+and the existing file/publication fsync observer. The trusted worker probe reports
+inode, nonce, progress and denied control-record reads after controller loss.
+Successful create/start responses and last-volume deletion have bounded barriers;
+foreign-volume substitution occurs only after independently confirmed worker absence.
+The recorder never fabricates successful native resource operations.
+
+`TestAnchorRecovery*` checks registration, CI-only guards, probe compilation,
+barriers and rejection of missing/incorrect observations without an engine.
+These are harness checks, not native red evidence. Local `ID-ANCHORS-01` through
+`08` are also live: `8a0bb23`, `4a39085` and `ac433f5` provide the step checkpoints
+and assertion-level red for all 49 rows. The combined implementation passes those
+rows and the 25 local OFFLINE anchor rows. Fresh-process recovery is part of
+slice-17 under q-36/q-38; schema-2 status and stop account for the original anchor.
+Native green at the actual pushed head remains the coordinator's CI obligation.
 
 | Tag               | Meaning                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------ |
@@ -406,8 +1004,8 @@ commits name. The rule, which `itos tests smoke check scenario` checks:
 
 So a `feat` that adds a feature file, or makes a `@wip` one live, picks its smoke scenario in the
 same commit. This includes engine-only features: each still supplies a live smoke ID.
-The ordinary smoke run may explicitly skip that ID because the required engine job runs all
-live engine cases at the same head. Listing, footer validation and smoke-coverage rules remain
+The ordinary smoke run may explicitly skip that ID because the required engine shards run all
+live engine cases between them at the same head. Listing, footer validation and smoke-coverage rules remain
 unchanged.
 
 ## Writing a scenario

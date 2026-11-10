@@ -196,11 +196,11 @@ func TestRegisteredRunRetainsObservedExitWhenPublicationFails(t *testing.T) {
 	registry := &f.Registry{Store: store, Project: b.Frozen.Project}
 	runEngine := &f.RunEngine{Engine: engine, Exit: 7}
 	runEngine.After = func(event string) {
-		if event == "drain" {
+		if event == "wait" {
 			registry.SaveFailure = port.IntentWrite
 		}
 	}
-	runner := domain.Runner{Store: store, Registry: registry, Engine: runEngine, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: &f.Workspace{}}
+	runner := domain.Runner{Store: store, Registry: registry, Engine: runEngine, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: f.MountWorkspace(b)}
 	result := runner.Run(t.Context(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
 	if result.SessionID == "" || !result.Exited || result.Exit != 7 || result.Outcome != "" || result.Cleanup != port.IntentWrite {
 		t.Fatal("failed exit publication erased the observed result or claimed cleanup", result)

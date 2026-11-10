@@ -23,6 +23,19 @@ func (r offlineRegistry) ForRun(d ap.Durable) sp.Registry {
 }
 
 func (r offlineRegistry) Open(ctx context.Context, id string, readOnly bool) (sp.Session, sp.Outcome) {
+	if r.o.exited && r.o.drained != nil {
+		// This cleanup-cause fixture uses a healthy output stream. Hold its
+		// registry call until the actual drain is recorded, selecting the
+		// drain-before-reopen schedule asserted by its positive control.
+		// Registered run drains concurrently; scheduler luck must not decide
+		// that order or race the observer's record/durability snapshots.
+		// A missing drain still fails within the original operation budget.
+		select {
+		case <-r.o.drained:
+		case <-ctx.Done():
+			return nil, sp.Incomplete
+		}
+	}
 	if r.o.exited && r.o.request.CleanupCause == "internal" {
 		f := sp.Outcome("slice-13-private-adapter-failure")
 		r.o.event(offlineEvent{Operation: "reopen", Failure: string(f)})

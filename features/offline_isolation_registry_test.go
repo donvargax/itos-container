@@ -79,7 +79,7 @@ func (s *isolationWorld) registryPaths() (map[string]bool, error) {
 		if !r.absent {
 			want["state"], want["last_problem"] = "failed", "cleanup-incomplete"
 		}
-		if !recoveryJSONEqual(record.Bytes, want) {
+		if !completedDetector(record.Bytes, want) {
 			return nil, errors.New("public registration lost its original binding, workload exit or cleanup result")
 		}
 		maps.Copy(allowed, paths)

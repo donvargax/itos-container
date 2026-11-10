@@ -218,12 +218,13 @@ func (t *tree) visit(node *yaml.Node) port.Value {
 		}
 		return port.Value{Kind: port.Object, Fields: fields}
 	case yaml.SequenceNode:
+		var items []port.Value
 		for i, value := range node.Content {
 			t.path = append(t.path, strconv.Itoa(i))
-			t.visit(value)
+			items = append(items, t.visit(value))
 			t.path = t.path[:len(t.path)-1]
 		}
-		return port.Value{Kind: port.Array}
+		return port.Value{Kind: port.Array, Items: items}
 	default:
 		value, failure := scalar(node)
 		switch failure {

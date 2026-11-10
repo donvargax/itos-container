@@ -153,9 +153,8 @@ func (w *world) manifestSentinels() error {
 	// Compile trusted test material once per feature run, outside snapshotted
 	// directories. The copied programs record only; they never delegate.
 	target := w.bin + ".slice-2-sentinel.exe"
-	data, err := os.ReadFile(target)
-	if os.IsNotExist(err) {
-		source := w.bin + ".slice-2-sentinel.go"
+	data, err := nativeProbeBytes(target, func(output string) error {
+		source := output + ".go"
 		code := `package main
 import ("os"; "path/filepath")
 func main() {
@@ -164,13 +163,13 @@ func main() {
 		if err := os.WriteFile(source, []byte(code), 0o600); err != nil {
 			return err
 		}
-		cmd := exec.Command("go", "build", "-buildvcs=false", "-o", target, source)
+		cmd := exec.Command("go", "build", "-buildvcs=false", "-o", output, source)
 		cmd.Dir = w.root
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("build manifest sentinel: %w: %s", err, output)
 		}
-		data, err = os.ReadFile(target)
-	}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
@@ -215,18 +214,8 @@ func (w *world) manifestUnchanged() error {
 
 func (w *world) runManifestContract(mode string) error {
 	w.manifest.metadata = true
-	bin := w.bin + ".slice-2-contract.exe"
-	if _, err := os.Stat(bin); os.IsNotExist(err) {
-		args := []string{"test", "-c", "-o", bin}
-		if os.Getenv("GOCOVERDIR") != "" {
-			args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
-		}
-		cmd := exec.Command("go", append(args, "./cmd/itos-container")...)
-		cmd.Dir = w.root
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("build manifest contract assembly: %w: %s", err, output)
-		}
-	} else if err != nil {
+	bin, err := w.sessionProbeBinary()
+	if err != nil {
 		return err
 	}
 	manifest, err := os.ReadFile(w.manifestPath())

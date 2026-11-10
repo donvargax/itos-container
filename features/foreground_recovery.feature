@@ -1,14 +1,17 @@
 @phase-1 @linux
 Feature: Foreground failures retain owned cleanup authority
-  Slice-10 review regressions exercise the product binary against a local HTTP
-  engine fixture. Deadline and trailing-output cases use the real command through
-  a test-only cmd assembly for short budgets and drain barriers. They prove
+  Slice-10 review regressions exercise the real command against a local HTTP
+  engine fixture through test-only cmd assemblies. Their syscall seam supplies
+  the fixture's simulated mounted identity; deadline and trailing-output cases
+  also shorten budgets and observe drain barriers. They prove
   controller decisions, not native signal delivery
   or isolation; slice-12 and slice-14 retain their CI runtime proof obligations.
   Use the existing SDK and standard-library signal/stream support, with no dependency.
   Forward the first SIGINT or SIGTERM once, allow 10 seconds, then SIGKILL.
   Repeated signals do not interrupt the 30-second owned teardown budget.
-  An observed nonzero worker exit wins; otherwise interrupted execution fails.
+  An observed worker exit wins over cancellation when cleanup and streams succeed.
+  Cancellation is reported separately with the first signal; an unknown result
+  retains the signal-derived wrapper status.
   Observed exit drains trailing output within the uncanceled teardown budget,
   including after interruption. A worker may exit without consuming all stdin;
   a closed engine input connection must not hide its observed exit or output.
@@ -106,13 +109,15 @@ Feature: Foreground failures retain owned cleanup authority
       | launch | ownership-refused    |
       | wait   | ownership-refused    |
 
+  # Slice-12 replaces OS signal death with the typed 130/143 cancellation result.
+  # The held-inspection barrier, prompt abort and absence of effects remain.
   @slice-10 @ID-OFFLINE-24
   Scenario Outline: Host signals abort preflight before snapshot publication
     Given an approval checkout and isolated host state
     And a seeded matching approval at generation "1"
     And the run preflight is held at fresh image inspection
     When the run receives "<signal>" during preflight
-    Then preflight aborts before release without a snapshot or worker
+    Then preflight reports cancellation and aborts before release without a snapshot or worker
 
     Examples:
       | signal  |

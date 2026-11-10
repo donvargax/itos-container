@@ -10,11 +10,13 @@ isolation is not implemented.
 The first milestone is an offline owned run: explicit argv in an approved, hardened
 container with no network, the checkout as its only host mount, a non-root identity
 and owned resources cleaned up on exit. Linux amd64 with native Docker is the target,
-requiring passing runtime evidence before any support claim. Network egress,
-credentials/accounts, network Git, LAN ingress, Compose and other platforms are
-deferred. Describing later pilot commands here does not authorize their implementation
-or settle an open security decision. Real-engine scenarios run only in CI; agents
-never receive the Docker socket.
+requiring passing runtime evidence before any support claim. A policy can request an
+exact host-name egress allowlist, which only `doctor --policy-only` and
+`doctor --manifest-only` read: nothing approves, enforces or runs it yet, and the other
+commands refuse it. Credentials/accounts, network Git, LAN ingress, Compose and other
+platforms are deferred. Describing later pilot commands here does not authorize their
+implementation or settle an open security decision. Real-engine scenarios run only in CI;
+agents never receive the Docker socket.
 
 ## Sources and comparison
 
@@ -87,7 +89,7 @@ The charter determines which slices may be built next.
 | Command after `itos container` | Required behaviour |
 | --- | --- |
 | `init` | Prepare non-runnable policy and single-worker manifest examples without overwriting existing files. Output paths remain unspecified. |
-| `doctor` | Inspect strict policy, the restricted manifest, selected local engine, cached images/metadata, checkout layout, identity, preparation and approval. Inspect only; do not execute checkout code or change resources. |
+| `doctor` | Inspect the policy file, the restricted manifest, selected local engine, cached images/metadata, checkout layout, identity, preparation and approval. Inspect only; do not execute checkout code or change resources. |
 | `approve` | Show effective permissions, differences from prior approval and applicable weaker-mode warnings; record explicit host-user consent in host-owned state outside the writable checkout. Approval cannot start a session. |
 | `run -- <argv...>` | Require an explicit command, validate matching approval and start an approved foreground session with bounded startup. Preserve every argument boundary; use no implicit shell. |
 | `exec <session> -- <argv...>` | Run an explicit command only in a live owned session, under its frozen policy, identity, mounts and restrictions. Never extend its foreground lifetime. |
@@ -126,6 +128,15 @@ Rule IDs are specified in [policy.feature](../features/policy.feature). Exit 0 m
 policy, 2 means invalid policy/usage, and 3 means unreadable policy. Multiple problems
 use the highest exit. Diagnostics never include source lines, raw parser errors or
 rejected values. Valid policy is neither host readiness nor approval.
+
+A version 2 policy can request `network.mode: allowlist` with `network.allow`, a list of
+host names (see [CONFIG.md](CONFIG.md)). Policy-only output then shows the effective
+list: plain output has one `network.allow: <name>` line per canonical name in ascending
+byte order after `network.mode`, and JSON has `policy.network.allow` as the same sorted
+array. Offline has no list. Inspection reads and validates only: it runs no engine, proxy
+or helper. Ordinary doctor, approve and run refuse a valid version 2 policy for now
+with `policy.version` at `/version` and exit 2, and name `doctor --policy-only` as the
+way to read what it asks for.
 
 ## Implemented run refusals
 
@@ -189,7 +200,19 @@ JSON approval emits one schema-1 object with `ok`, complete `problems` and `appr
 An exact `--fingerprint` works without a terminal; malformed values exit 2 and stale
 values exit 1. Changes during review and concurrent replacement refuse a fresh
 publication. Identity/state refusals exit 1, unavailable observations exit 3, and
-uncertain durable publication exits 75. Detailed rules are in
+uncertain durable publication exits 75. Exit 75 also reports lock contention:
+`doctor`, `approve` and `run` share one private account lock, and a wait longer than
+the 10-second call budget ends as `approval.state.busy` (`run.call-timeout` for `run`)
+so the same command can be retried unchanged. The budget also covers the discovery scan
+that follows the lock: a scan it interrupts is reported the same way, not as a refusal. Exit 3 `approval.state.unavailable` also
+means the effective user has no local `/etc/passwd` record with an existing absolute home,
+which the fixed account anchor requires; LDAP or SSSD-only accounts are refused rather than
+guessed from HOME. It also reports a state location the account catalog retains that is gone,
+and session, admission or intent records with no catalog beside them. A lost location refuses
+doctor and approve on the account, whatever state location they select, until the host user
+restores it or removes its record. `run` shows these as exit 1 `run.approval-invalid`,
+`status` keeps working and `stop` exits 75. Reapproval cannot clear any of them;
+[CONFIG.md](CONFIG.md) states each outcome and the recovery. Detailed rules are in
 [approval.feature](../features/approval.feature).
 
 An agent on the host can approve through `--fingerprint` or a faked terminal:
