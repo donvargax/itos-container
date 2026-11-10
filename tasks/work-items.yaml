@@ -2,7 +2,7 @@
 phases:
   1: null
 queue:
-  - p1-lifecycle-shard-flakes-on-main
+  - T-49
   - p1-anchor-recovery-flake
   - p1-session-contract-coverage-flake
   - p1-harness-home
@@ -1787,27 +1787,13 @@ items:
       re-run of the same head passed. A positive control that times out makes the boundary check red
       with nothing wrong; give it a retry or a readiness wait before the dial, or say why one try is
       the contract.
-  - id: p1-lifecycle-shard-flakes-on-main
+  - id: T-49
     title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
-    kind: idea
-    why: >
-      2026-11-09, main push runs: 42713010342 at 1b310df (a registry-only commit) failed Engine
-      transport loss reports an unknown workload outcome and retains recovery (worker readiness did
-      not reach the controller's foreground stream); 42716948746 at 1ca4e45 (slice-25's merge)
-      failed both rows of The primary receives the first signal and its observed exit wins
-      (lifecycle.feature:420; product did not reach the handle lifecycle barrier; lifecycle changed
-      unrelated native resources or image references). Both are waits on a barrier with a fixed
-      bound, like LIFECYCLE-09 before T-42. A red main run blocks itos work done on every item
-      merged onto it, so each flake stops a worker. Find which bound the hosted runner misses and
-      give it room through the harness budget seam, as T-42 did.
-
-      Belongs in the existing investigation of lifecycle barrier failures. Include controller exit
-      code, stderr and the request journal in failure messages to distinguish early controller exits
-      from missed timing bounds; T-43 already exposes those step errors in CI annotations.
+    kind: task
   - id: p1-anchor-recovery-flake
     title: "Fresh recovery after controller loss and path replacement flakes: anchor recovery exits 75 and cleanup gets HTTP 409"
     phase: 1

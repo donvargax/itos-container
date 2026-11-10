@@ -5817,3 +5817,21 @@
     receives the Docker socket. The fake does no I/O. Broken down from p1-credentials-passed-in.
   done_when:
     - run: go test ./internal/engine/session/...
+- id: T-49
+  type: test
+  title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
+  why: >
+    2026-11-09, main push runs: 42713010342 at 1b310df (a registry-only commit) failed Engine
+    transport loss reports an unknown workload outcome and retains recovery (worker readiness did
+    not reach the controller's foreground stream); 42716948746 at 1ca4e45 (slice-25's merge) failed
+    both rows of The primary receives the first signal and its observed exit wins
+    (lifecycle.feature:420; product did not reach the handle lifecycle barrier; lifecycle changed
+    unrelated native resources or image references). Both are waits on a barrier with a fixed bound,
+    like LIFECYCLE-09 before T-42. A red main run blocks itos work done on every item merged onto
+    it, so each flake stops a worker. Find which bound the hosted runner misses and give it room
+    through the harness budget seam, as T-42 did. Belongs in the existing investigation of lifecycle
+    barrier failures. Include controller exit code, stderr and the request journal in failure
+    messages to distinguish early controller exits from missed timing bounds; T-43 already exposes
+    those step errors in CI annotations.
+  done_when:
+    - run: go test ./features -count=1 -run '^(TestLifecycle|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)'
