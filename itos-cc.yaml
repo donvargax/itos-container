@@ -87,3 +87,21 @@ mutation:
       replacement: "0"
       reason: This return is reached only after ownership(info) succeeded with exactly two links and opening the directory failed. Both callers, directoryStore.Read and pin.durableSnapshot, immediately pass the same FileInfo snapshot and the returned link count to linkedRecordSafety. Its actual != links check therefore refuses with state.unsafe for either expected count 1 or 0, before any further read, sync or publication. The failed open and all observable results are identical; testing the private helper return alone would distinguish an implementation detail, not behavior.
       line_text: return 1
+    - file: internal/engine/approval/domain/differences.go
+      function: github.com/donvargax/itos-container/internal/engine/approval/domain#differences
+      hash: 56fcb2ab86f87cbb
+      line_in_function: 13
+      column: 16
+      original: "true"
+      replacement: "false"
+      reason: "keys is a local map used only as a set: both insertion loops assign an entry, and the following loop ranges over keys without reading their boolean values. Assigning false still inserts every after key, including keys absent from before. The union of keys, recursive comparisons, sorted paths and before/after values are unchanged for every input. No boolean value escapes this function. Exact-result tests cover added, removed, shared and nested keys; no behavioral test can distinguish this mutation."
+      line_text: keys[key] = true
+    - file: internal/engine/approval/domain/differences.go
+      function: github.com/donvargax/itos-container/internal/engine/approval/domain#differences
+      hash: 56fcb2ab86f87cbb
+      line_in_function: 10
+      column: 16
+      original: "true"
+      replacement: "false"
+      reason: "This sibling of the CI-reported after-key insertion also writes an unread set value. keys is a local map: assigning false still inserts every before key, the second loop adds all after keys, and the final loop ranges over keys only. Shared keys may be overwritten and before-only values remain false, but neither value is read or escapes. The key union and every resulting Change are identical for all inputs. Exact-result tests cover removed, added, shared and nested keys; no behavioral test can distinguish this mutation."
+      line_text: keys[key] = true
