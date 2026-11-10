@@ -178,7 +178,10 @@ func (f *CredentialFiles) Descriptor(h port.CredentialHandle) (port.CredentialDe
 		n.MountID = ids[min(f.Calls[key]-1, len(ids)-1)]
 	}
 	if f.MountIDUnavailable[n.Path] {
-		return port.CredentialDescriptor{Path: n.Path}, ok
+		return port.CredentialDescriptor{}, ok
+	}
+	if f.DescriptorErrors[n.Path] {
+		return port.CredentialDescriptor{}, false
 	}
 	if path, exists := f.DescriptorPaths[n.Path]; exists {
 		n.Path = path

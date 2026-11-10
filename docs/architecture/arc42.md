@@ -942,7 +942,7 @@ Non-path mount roots (namespace handles and deleted bind sources) remain in the
 table as unprojectable. Unrelated rows are harmless; a source/boundary descriptor
 using one, or one at, below or covering protected state, makes exclusion unavailable.
 
-The coordinator's 2026-11-10 04:42 UTC amendment refuses `overlay` and all `fuse.*`
+The coordinator's 2026-11-10 04:42 UTC amendment refuses `overlay` and all FUSE types (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`)
 types with `credential.filesystem` (exit 3). Their backing files can appear in a
 merged checkout/state view under different device identities, and mountinfo does
 not map those aliases. Refuse source/ancestor descriptors on these types and rows

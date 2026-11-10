@@ -105,7 +105,7 @@ Feature: Named credential requests and read-only source inspection
   #    its mountpoint is at, below or covering protected state; ignore unrelated
   #    unprojectable rows when judging an independent source.
   #    The coordinator's 2026-11-10 04:42 UTC decision also refuses overlay
-  #    and every fuse.* filesystem: mountinfo does not map their backing paths.
+  #    and every FUSE filesystem (fuse, fuse.*, fuseblk, fuseblk.*): mountinfo does not map their backing paths.
   #    A source/ancestor descriptor using one, or a row at, below or covering
   #    checkout or either state root, refuses with credential.filesystem (3).
   #    Check both observations, including covered rows and absent state roots.
@@ -134,7 +134,11 @@ Feature: Named credential requests and read-only source inspection
   # An absent protected state root is not created. An inaccessible existing
   # boundary refuses; an unreadable unrelated STATE descendant is immaterial.
   # Existing state-location/identity failures retain their shared rules and exits.
-  # Checkout/state overlap in either direction is state.path before any scan.
+  # Checkout/state overlap in either direction, including bind coordinates and
+  # pinned identities, is state.path before any scan. Compare checkout and its
+  # descendant mounts with every reserved state subtree; never enumerate an alias.
+  # Unavailable boundary mapping evidence prevents inventory. Validate the checkout
+  # descriptor before testing stacking rows, preserving mount_id/unavailable rules.
   # Absolute ITOS_ROOT paths are cleaned like the shared checkout pin; source
   # literals keep their stricter lexical rules and are never cleaned.
   # The mode does not establish approval readiness or inspect another project's
@@ -1488,3 +1492,79 @@ Feature: Named credential requests and read-only source inspection
       | fuse.bindfs | /checkout/private                          |
       | overlay     | /state/private                             |
       | fuse.bindfs | /state/private                             |
+
+  @wip @slice-29 @ID-CREDENTIALS-54 @linux
+  Scenario Outline: credential inspection refuses FUSE types with and without subtypes
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And credential observation exposes the source through "<filesystem>" at "<point>"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                  | path                  | exit |
+      | credential.filesystem | /credentials/0/source | 3    |
+    And it exits with code 3
+    And its standard output says "Overlay or FUSE backing paths cannot be excluded from credential exposure"
+    And the credential observation recorded no state record enumeration or metadata visits
+
+    Examples:
+      | filesystem  | point                               |
+      | fuse        | /checkout                           |
+      | fuseblk     | /checkout                           |
+      | fuseblk.ntfs | /checkout                          |
+      | fuse        | /state                              |
+      | fuseblk     | /state                              |
+      | fuseblk.ntfs | /state                             |
+      | fuse        | /account/.local/state/itos-container |
+      | fuseblk     | /account/.local/state/itos-container |
+      | fuseblk.ntfs | /account/.local/state/itos-container |
+      | fuse        | /checkout-sources                   |
+      | fuseblk     | /checkout-sources                   |
+      | fuseblk.ntfs | /checkout-sources                  |
+      | fuse        | /checkout/private                   |
+      | fuseblk     | /checkout/private                   |
+      | fuseblk.ntfs | /checkout/private                  |
+      | fuse        | /state/private                      |
+      | fuseblk     | /state/private                      |
+      | fuseblk.ntfs | /state/private                     |
+
+  # Bind coordinates and pinned identities must establish the boundary before
+  # inventory. The checkout spelling must never enumerate protected records.
+  @wip @slice-29 @ID-CREDENTIALS-52 @linux
+  Scenario Outline: aliased checkout and state overlap is refused before inventory
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And the credential checkout aliases "<boundary>" state through "<layout>"
+    When the credential observation contract runs in JSON mode
+    Then its JSON output names the problem "approval.state.path"
+    And it exits with code 1
+    And the credential observation recorded no checkout traversal
+    And the credential observation recorded no state record enumeration or metadata visits
+
+    Examples:
+      | boundary | layout           |
+      | selected | root bind        |
+      | selected | descendant bind  |
+      | selected | ancestor bind    |
+      | selected | descendant mount |
+      | selected | inverse bind     |
+      | account  | root bind        |
+      | account  | descendant bind  |
+      | account  | ancestor bind    |
+      | account  | descendant mount |
+      | account  | inverse bind     |
+
+  @wip @slice-29 @ID-CREDENTIALS-53 @linux
+  Scenario Outline: unrelated stacking mounts do not hide missing descriptor evidence
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And credential descriptors have "<fault>" beside an unrelated "<filesystem>" mount
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule   | path                  | exit |
+      | <rule> | /credentials/0/source | 3    |
+    And it exits with code 3
+    And the credential observation recorded no state record enumeration or metadata visits
+
+    Examples:
+      | fault                           | filesystem  | rule                   |
+      | missing mount ID                | overlay     | credential.mount_id    |
+      | missing mount ID                | fuse.portal | credential.mount_id    |
+      | unavailable checkout descriptor | overlay     | credential.unavailable |
+      | unavailable checkout descriptor | fuse.portal | credential.unavailable |

@@ -522,7 +522,7 @@ Namespace handles and deleted bind roots remain unprojectable mount rows. They d
 not block independent sources unless a required descriptor uses the row or its
 mountpoint is at, below or covering protected state.
 
-Overlay and all `fuse.*` filesystem types cannot establish backing-path exclusion.
+Overlay and all FUSE types (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) cannot establish backing-path exclusion.
 Inspection reports `credential.filesystem`, exit 3, when a source or its ancestor
 uses one, or such a mount is at, below or covering checkout or either protected
 state root. Covered mounts and absent state roots are included. Use source,

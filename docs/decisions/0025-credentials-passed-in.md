@@ -147,7 +147,7 @@ without symlinks and compared to their pins. There is no state directory enumera
 record read, persistent index or cross-project lock.
 
 The coordinator's 2026-11-10 04:42 UTC amendment in decision 0027 also refuses
-`overlay` and every `fuse.*` filesystem when a source/ancestor uses it or its row
+`overlay` and every FUSE filesystem (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) when a source/ancestor uses it or its row
 is at, below or covering checkout or either protected state root. Mountinfo cannot
 prove their backing aliases excluded; different device identities can hide exposure.
 Use the dedicated `credential.filesystem` diagnostic (exit 3), including covered

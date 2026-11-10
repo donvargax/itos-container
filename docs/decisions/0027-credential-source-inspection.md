@@ -23,7 +23,7 @@ renumbered it to 0027 because main already used 0026 for egress approval; those
 answers continue to refer to this credential-inspection decision.
 
 Amended by the coordinator's **2026-11-10 04:42 UTC** decision: fail closed on
-overlay and every `fuse.*` filesystem whose backing paths mountinfo cannot map.
+overlay and every FUSE filesystem (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) whose backing paths mountinfo cannot map.
 Different device numbers can hide a lower-layer credential in a merged checkout
 or protected state. Refuse these observations with `credential.filesystem` (exit 3)
 and the message "Overlay or FUSE backing paths cannot be excluded from credential
@@ -75,7 +75,14 @@ Checkout input follows the shared pin's absolute-then-clean rule, including trai
 or repeated separators and dot components. This normalization does not apply to
 credential source literals. Before any inventory, refuse `state.path` when the
 checkout and either protected state root overlap in either direction; a checkout
-inside state must never turn state records into checkout inventory.
+inside state must never turn state records into checkout inventory. This includes
+bind aliases: compare pinned boundary identities and intersect the checkout's
+filesystem coordinate and descendant-mount subtrees with all reserved state
+subtrees before traversal. Missing boundary mapping evidence prevents inventory;
+its credential diagnostic retains source symlink/ancestor precedence. Recheck
+boundary overlap in the second observation. Unrelated stacking rows cannot hide
+missing mount IDs or unavailable descriptors: validate the checkout mapping before
+using its descriptor path for mountpoint comparisons.
 
 The three explicit doctor scopes are mutually exclusive. `--policy-only` and
 `--manifest-only` continue to inspect only their existing inputs. The staged gate is:
@@ -160,7 +167,7 @@ prove, not a claim of an atomic kernel snapshot:
    at, below or covering either protected state path also refuses, including
    hidden covering mounts. Never discard the row or invent a coordinate for it.
    Retain each row's filesystem type. A source or source-ancestor descriptor on
-   `overlay` or any `fuse.*` type refuses with `credential.filesystem`. So does
+   `overlay` or any FUSE type (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) refuses with `credential.filesystem`. So does
    any such row at, below or covering the checkout or either state root, including
    hidden covering mounts and initially absent state roots. Apply this to both
    complete observations; either refusal prevents success. Unrelated rows are
