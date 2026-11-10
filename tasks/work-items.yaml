@@ -1790,8 +1790,8 @@ items:
   - id: T-49
     title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p1-anchor-recovery-flake
