@@ -215,3 +215,7 @@ questions:
     item: "slice-22"
     question: "slice-22: its implementer stopped because docs/charter.md defers it until milestone two steps 1 and 2 have landed, which they have not (slice-26, slice-27, slice-28, slice-29 and T-48 are open). Go on with it now, or wait?"
     answer: "Wait, as the charter says. The coordinator holds slice-22 (and slice-23) and releases them once steps 1 and 2 have landed; the item started only because the hold lapsed. When it is released, implement it as specified, with no further question."
+  - id: q-54
+    item: "T-48"
+    question: "T-48: its implementer stopped because its ledger entry bars implementation until slice-29 has recorded and proved the bounded, concurrency-safe state-descendant exclusion (ADR 0025 and arc42 still mark it unresolved), and slice-29 is still in progress. Go on with it now, or wait?"
+    answer: "Wait for slice-29, as the ledger says. T-48 now depends on slice-29, so itos next holds it until slice-29 is done. Then implement it as specified, with no further question."
