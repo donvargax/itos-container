@@ -5,17 +5,17 @@ sandbox policy. The [charter](charter.md) selects the milestone from the binding
 [pilot contract](plans/container-pilot.md); they take precedence over upstream
 examples. Strict policy validation is implemented through `doctor --policy-only`, and
 policy plus manifest validation through `doctor --manifest-only`. A policy can request an
-exact host-name egress allowlist (version 2 below); nothing approves or grants it yet. The inherited count,
-version and completion commands remain. Ordinary doctor inspects host readiness and approval. Explicit approval is implemented;
+exact host-name egress allowlist (version 2 below); terminal approval binds it, but run
+still refuses it. The inherited count, version and completion commands remain. Ordinary doctor inspects host readiness and approval. Explicit approval is implemented;
 runtime isolation remains unimplemented.
 
 The milestone is an offline owned run with no network, an approved hardened container,
 the checkout as its only host mount, a non-root identity and owned cleanup. Linux amd64
 with native Docker is a target requiring passing runtime evidence, not a supported-host
 claim. A policy may request network egress to an allowlist of host names, but no
-approval binds that request, no proxy enforces it and no run starts with it: ordinary
-doctor, approve and run refuse a valid version 2 file for now. Version 3 adds named
-credential requests and metadata-only inspection, without approval or delivery.
+proxy enforces it and no run starts with it yet. Ordinary doctor and approve bind
+the requested list; run still refuses a valid version 2 file for now. Version 3 adds
+named credential requests and metadata-only inspection, without approval or delivery.
 Credential delivery/accounts, network Git, LAN ingress, Compose and other platforms
 remain deferred. Describing the wider pilot does not authorize its later slices or settle an open security decision.
 Real-engine scenarios run only in CI.
@@ -71,7 +71,10 @@ and covers the reviewed effective policy and supported manifest settings. Includ
 effective defaults and applicable differences from prior approval in that review.
 Bare terminal approve reviews settings and changes, asks y/N, and remembers approval
 until settings change. The optional `--fingerprint <value>` approves only the exact
-value printed by doctor. State uses canonical JSON SHA-256 under absolute
+offline settings printed by doctor, without credential grants. An allowlist needs
+the person at a real terminal; any `--fingerprint` refuses with guidance to use bare
+`itos container approve`. An unchanged matching terminal approval needs no new prompt.
+State uses canonical JSON SHA-256 under absolute
 `$XDG_STATE_HOME/itos-container`, falling back to `$HOME/.local/state/itos-container`
 when XDG_STATE_HOME is absent or empty. A relative nonempty XDG_STATE_HOME refuses, and so
 does a relative HOME when XDG_STATE_HOME is absent or empty, and a selection whose path is
@@ -301,24 +304,27 @@ limit of its own.
 
 A fix names the schema the file was read against. For a version 2 file read by
 `doctor --policy-only`, no fix names version 1, and `policy.network_mode` says to use
-offline or allowlist mode. The one exception is the refusal below, which ordinary doctor,
-approve and run give a valid version 2 file: its fix says `use policy version 1, or read
+offline or allowlist mode. The one exception is the refusal below, which run gives a
+valid version 2 file: its fix says `use policy version 1, or read
 what a version 2 file requests with doctor --policy-only`. Where no supported version was
 read, the fix names all supported versions: `use policy version 1, 2 or 3` for an
 unsupported number, and
 `use the field type defined by policy version 1, 2 or 3` for a wrongly typed version or a
 root that is not an object.
 
-`doctor --policy-only`, `doctor --manifest-only` and `doctor --credentials-only` read
-a valid version 2 file for now. Ordinary doctor, approve and run refuse it with `policy.version` at `/version`, exit
-2, whatever its mode, before the manifest, the engine or host state, and the fix names
-`doctor --policy-only` so the request can still be read. Approval's canonical settings
-describe an offline profile only, so without this refusal approve would record offline
-settings for a request that asks for network, and an offline approval would appear to
-match it. A version 2 file that fails validation is refused for its own problems instead,
-as any invalid policy is. Binding the list into approval, enforcing it with a proxy and
-running with it are later slices; they must keep run from starting a version 2 policy
-until a run can honour it.
+Doctor and approve accept a valid version 2 policy. Canonical schema 1 uses
+`allowlist-v1` for an allowlist, binding `policy.version: 2`, the sorted names and
+`proxy.image`, a product-pinned digest that checkout files cannot select. Offline
+keeps `offline-v1`, with no `allow` or `proxy` member. It preserves the declared
+policy version, so changing 1 to 2 offline still needs one new approval. Reordering
+or equivalently respelling names keeps the same fingerprint; adding, removing or
+changing a name does not. Stored records must satisfy their profile's exact shape.
+
+Run alone still refuses every valid version 2 policy with `policy.version` at
+`/version`, exit 2, before the manifest, engine or host state. Its fix names
+`doctor --policy-only`. Invalid policies retain their own validation problems.
+No approval here starts a proxy or grants a route; slice-27 must prove enforcement
+before lifting run's gate. See the [approval decision](decisions/0026-egress-allowlist-approval.md).
 
 The canonicalising library is `golang.org/x/net v0.60.0` (BSD-3-Clause, maintained by the
 Go team; `net/http` uses the same Lookup profile for host names) with
@@ -528,7 +534,7 @@ credential source paths remain literal. Checkout/state overlap in either directi
 reports `approval.state.path` before any inventory of state records.
 
 These observations neither grant access nor establish continuous protection from trusted
-host changes. [Decision 0026](decisions/0026-credential-source-inspection.md) defines the
+host changes. [Decision 0027](decisions/0027-credential-source-inspection.md) defines the
 race argument and limits. The disk adapter uses `github.com/moby/sys/mountinfo` v0.7.2
 under Apache-2.0, with its upstream license retained in the module distribution.
 Ordinary doctor, approve and run still refuse valid version 3 with `policy.version`,

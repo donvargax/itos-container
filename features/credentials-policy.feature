@@ -9,7 +9,7 @@ Feature: Named credential requests and read-only source inspection
   # Revised after the review of f2b0e58. Slice-25's version 2 and helpers remain
   # prerequisites; this spec does not copy their code.
   # Both T-47 and slice-25 have landed; no dependency change is needed.
-  # docs/decisions/0026-credential-source-inspection.md amends T-47's source
+  # docs/decisions/0027-credential-source-inspection.md amends T-47's source
   # location rule and increment table, with the corresponding arc42 changes.
   # This revision withdraws the shared-state traversal and supplies its bounded
   # mount-projection replacement and race argument in BOTH decisions and arc42.
@@ -45,7 +45,7 @@ Feature: Named credential requests and read-only source inspection
   # name versions 1, 2 and 3. Plain paths use the existing Go-string escaping;
   # decoded JSON preserves the literal path. No contents or content hash is output.
   #
-  # Decision 0026 resolves a scope omission in T-47's increment table:
+  # Decision 0027 resolves a scope omission in T-47's increment table:
   # introduce doctor --credentials-only, scope "credentials", for policy plus
   # source metadata only. --policy-only and --manifest-only keep their existing
   # scopes and never inspect host sources. The three flags are mutually exclusive.
@@ -85,7 +85,7 @@ Feature: Named credential requests and read-only source inspection
   #    even when source ancestry contains neither root and link count is one.
   #    It also detects an outside source bound INTO the checkout. It does
   #    not reject an unrelated inode just for sharing a pathname prefix or device.
-  #    For STATE, never enumerate or stat unrelated records. Decision 0026's
+  #    For STATE, never enumerate or stat unrelated records. Decision 0027's
   #    mount projections reserve the state root's filesystem-coordinate subtree
   #    and the roots of all mounts at/below its path, including file mounts,
   #    different devices and covered backing subtrees. A descriptor's coordinate
@@ -207,7 +207,7 @@ Feature: Named credential requests and read-only source inspection
   # matching this closed data shape and documenting byte limits and host checks
   # that JSON Schema's character-count constraints cannot fully express.
   # Implementation updates docs/CONFIG.md, docs/CLI.md and doctor help. Decision
-  # 0026 and its arc42 amendment are part of this spec, not deferred to that PR.
+  # 0027 and its arc42 amendment are part of this spec, not deferred to that PR.
   # ID-POLICY-15 on slice-25 currently refuses version 3: the feat commit must move
   # that unsupported-version example to 4 and explain why. Update the corresponding
   # policy unit/port-contract fixtures and version-list diagnostic assertions,

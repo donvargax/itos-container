@@ -18,6 +18,10 @@ or enumerating other enrolled locations. The triage request to include every enr
 location is outside slice-29; a concrete leak path through another enrolled location
 belongs in a separate idea.
 
+This record was numbered 0026 when q-57 and q-58 were answered. Merging main
+renumbered it to 0027 because main already used 0026 for egress approval; those
+answers continue to refer to this credential-inspection decision.
+
 ## The sections this decision overrides
 
 T-47's record is [decision 0025](0025-credentials-passed-in.md). The first version

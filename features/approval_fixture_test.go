@@ -13,6 +13,8 @@ import (
 )
 
 type approvalWorld struct {
+	policyVersion                            int
+	allow                                    []string
 	settings                                 map[string]any
 	prior                                    map[string]any
 	project, fingerprint, record, generation string
@@ -93,6 +95,14 @@ func (w *world) approvalOracle() error {
 		"policy":   map[string]any{"version": 1, "manifest": path, "network": map[string]any{"mode": "offline"}},
 		"manifest": map[string]any{"name": name, "image": d.manifest["image"], "workspaceFolder": workspace, "containerEnv": env, "containerUser": a.uid, "remoteUser": a.uid},
 		"image":    map[string]any{"reference": d.manifest["image"], "id": imageID, "os": "linux", "architecture": "amd64"}}
+	if a.policyVersion != 0 {
+		a.settings["policy"].(map[string]any)["version"] = a.policyVersion
+	}
+	if a.allow != nil {
+		a.settings["profile"] = "allowlist-v1"
+		a.settings["policy"].(map[string]any)["network"] = map[string]any{"mode": "allowlist", "allow": a.allow}
+		a.settings["proxy"] = map[string]any{"image": busyboxFixturePin}
+	}
 	a.fingerprint = "sha256:" + approvalHash(a.settings)
 	a.project = approvalHash(map[string]any{"schema": 1, "uid": a.uid, "checkout": checkout})
 	state := d.env["XDG_STATE_HOME"]
@@ -199,7 +209,11 @@ func (w *world) approvalDefect(defect string) error {
 	case "record deeper than 32 levels":
 		data = []byte(strings.Repeat("[", 33) + "0" + strings.Repeat("]", 33))
 	default:
-		return fmt.Errorf("unknown defect %q", defect)
+		if err := approvalNetworkDefect(obj["settings"].(map[string]any), defect); err != nil {
+			return err
+		}
+		obj["fingerprint"] = "sha256:" + approvalHash(obj["settings"])
+		data = approvalJSON(obj)
 	}
 	if err := os.WriteFile(a.record, data, 0600); err != nil {
 		return err
@@ -293,7 +307,7 @@ func (w *world) approvalEdit(edit string) error {
 		d.replacementSnapshot, err = doctorTree(d.checkout)
 		return err
 	default:
-		return fmt.Errorf("unknown edit %q", edit)
+		return w.approvalNetworkEdit(edit)
 	}
 	return w.approvalManifest()
 }
