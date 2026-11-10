@@ -13,6 +13,10 @@ func (s Runner) waitEgress(ctx context.Context, c port.RunConnection, a port.Att
 	defer cancel()
 	watcher, f := (finiteEngine{s.Engine}).OpenRun(wait, b)
 	if f != "" {
+		if ctx.Err() != nil {
+			// Match the worker wait so registeredRun preserves the host signal.
+			return 0, false, port.ExecutionFailed
+		}
 		return 0, false, f
 	}
 	if watcher == nil {

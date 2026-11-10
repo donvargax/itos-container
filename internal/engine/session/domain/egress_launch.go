@@ -5,6 +5,18 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
+// Egress operations retain ordinary refusals as well as the shared timeout
+// diagnostics. Offline operations keep their existing reporting contract.
+func egressStartupOperation(ctx context.Context, name string, fn func(context.Context) port.Outcome) port.Outcome {
+	failure := startupOperation(ctx, name, fn)
+	if failure != "" {
+		if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
+			state.operation, state.failure = name, failure
+		}
+	}
+	return failure
+}
+
 func prepareEgress(ctx context.Context, i port.Intent, c port.RunConnection) port.Outcome {
 	if i.Binding().Egress == (port.EgressGrant{}) {
 		return ""
@@ -25,7 +37,7 @@ func prepareEgress(ctx context.Context, i port.Intent, c port.RunConnection) por
 			return f
 		}
 		var id string
-		f := startupOperation(ctx, "network creation", func(call context.Context) port.Outcome {
+		f := egressStartupOperation(ctx, "network creation", func(call context.Context) port.Outcome {
 			var f port.Outcome
 			id, f = c.CreateNetwork(call, r, kind)
 			return f
@@ -36,30 +48,28 @@ func prepareEgress(ctx context.Context, i port.Intent, c port.RunConnection) por
 		if !port.HexID(id) {
 			return port.Uncertain
 		}
-		var o port.NetworkObservation
-		f = startupOperation(ctx, "network inspection", func(call context.Context) port.Outcome {
-			var status port.Inspection
-			o, status = c.InspectNetwork(call, id)
+		f = egressStartupOperation(ctx, "network inspection", func(call context.Context) port.Outcome {
+			o, status := c.InspectNetwork(call, id)
 			if status == port.Changed {
 				return port.Refused
 			}
 			if status != port.Observed {
 				return port.IsolationInspection
 			}
+			if o.ID != id || !r.OwnsNetwork(o, kind) {
+				return port.Refused
+			}
+			resource.ID, resource.Stage = id, "owned"
+			if i.Save(r) != "" {
+				return port.OwnershipWrite
+			}
+			if !r.ExactNetwork(o, kind) || o.Endpoints != 0 {
+				return port.IsolationUnverified
+			}
 			return ""
 		})
 		if f != "" {
 			return f
-		}
-		if o.ID != id || !r.OwnsNetwork(o, kind) {
-			return port.Refused
-		}
-		resource.ID, resource.Stage = id, "owned"
-		if i.Save(r) != "" {
-			return port.OwnershipWrite
-		}
-		if !r.ExactNetwork(o, kind) || o.Endpoints != 0 {
-			return port.IsolationUnverified
 		}
 	}
 	r.Egress.Proxy.Stage = "intent"
@@ -70,14 +80,14 @@ func prepareEgress(ctx context.Context, i port.Intent, c port.RunConnection) por
 		return f
 	}
 	var id string
-	f := startupOperation(ctx, "proxy creation", func(call context.Context) port.Outcome { var f port.Outcome; id, f = c.CreateProxy(call, r); return f })
+	f := egressStartupOperation(ctx, "proxy creation", func(call context.Context) port.Outcome { var f port.Outcome; id, f = c.CreateProxy(call, r); return f })
 	if f != "" {
 		return f
 	}
 	if !port.HexID(id) {
 		return port.Uncertain
 	}
-	f = startupOperation(ctx, "proxy inspection", func(call context.Context) port.Outcome {
+	f = egressStartupOperation(ctx, "proxy inspection", func(call context.Context) port.Outcome {
 		o, status := c.Inspect(call, id)
 		if status == port.Changed {
 			return port.Refused
@@ -101,14 +111,14 @@ func prepareEgress(ctx context.Context, i port.Intent, c port.RunConnection) por
 		name string
 		call func(context.Context, string) port.Outcome
 	}{{"proxy verification", c.VerifyProxy}, {"proxy start", c.Start}, {"proxy readiness", c.ProxyReady}} {
-		if f := startupOperation(ctx, op.name, func(call context.Context) port.Outcome { return op.call(call, id) }); f != "" {
+		if f := egressStartupOperation(ctx, op.name, func(call context.Context) port.Outcome { return op.call(call, id) }); f != "" {
 			return f
 		}
 	}
 	return verifyLiveProxy(ctx, r, i.Binding(), c)
 }
 func verifyLiveProxy(ctx context.Context, r port.Record, b port.Binding, c port.RunConnection) port.Outcome {
-	return startupOperation(ctx, "proxy inspection", func(call context.Context) port.Outcome {
+	return egressStartupOperation(ctx, "proxy inspection", func(call context.Context) port.Outcome {
 		o, status := c.Inspect(call, r.Egress.Proxy.ID)
 		if status != port.Observed || !r.OwnsProxy(o, b) || !o.StatePresent || !o.Running || o.Status != "running" {
 			return port.ProxyFailed
@@ -129,7 +139,7 @@ func verifyEgressStart(ctx context.Context, i port.Intent, c port.RunConnection)
 		if kind == port.EgressNetwork {
 			id = r.Egress.Network.ID
 		}
-		f := startupOperation(ctx, "network inspection", func(call context.Context) port.Outcome {
+		f := egressStartupOperation(ctx, "network inspection", func(call context.Context) port.Outcome {
 			o, status := c.InspectNetwork(call, id)
 			if status == port.Changed {
 				return port.Refused

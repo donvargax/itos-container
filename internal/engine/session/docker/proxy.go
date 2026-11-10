@@ -7,7 +7,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 )
@@ -16,7 +16,9 @@ func (c *runConnection) CreateProxy(ctx context.Context, r port.Record) (string,
 	if !c.pin.Unchanged() {
 		return "", port.Refused
 	}
-	if r.Schema != 3 || !r.ValidEgress(c.binding) || r.Stage != "reserved" || r.Egress.Internal.Stage != "owned" || r.Egress.Network.Stage != "owned" || r.Egress.Proxy.Stage != "intent" || !filepath.IsAbs(c.executable) {
+	// The bind source belongs to the Linux daemon's filesystem, even when the
+	// SDK client (or its HTTP fixture) runs on a different host OS.
+	if r.Schema != 3 || !r.ValidEgress(c.binding) || r.Stage != "reserved" || r.Egress.Internal.Stage != "owned" || r.Egress.Network.Stage != "owned" || r.Egress.Proxy.Stage != "intent" || !path.IsAbs(c.executable) {
 		return "", port.Refused
 	}
 	call, cancel := c.call(ctx)
