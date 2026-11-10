@@ -1390,6 +1390,14 @@ Feature: Review and record approval of exact settings
     And its standard output says "doctor"
     And it exits with code 0
 
+  @wip @slice-26 @ID-APPROVAL-60
+  Scenario: Approval help names both host-agent self-approval routes
+    When itos-container runs with "approve --help" and the environment "COLUMNS=200"
+    Then its standard output says "an agent on the host can approve offline settings through --fingerprint"
+    And its standard output says "or any settings through a faked terminal while unsandboxed"
+    And its standard output says "what was approved, not who"
+    And it exits with code 0
+
   # Help wraps to an inherited COLUMNS, so the run names a wide one: a narrow terminal must not
   # fail a correct build.
   @slice-26 @ID-APPROVAL-56

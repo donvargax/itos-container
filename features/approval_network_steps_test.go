@@ -224,6 +224,7 @@ func approvalNetworkDefect(s map[string]any, defect string) error {
 		s["proxy"] = map[string]any{"image": "@sha256:" + strings.Repeat("a", 64)}
 	case "profile offline-v1 with mode allowlist":
 		s["profile"] = "offline-v1"
+		delete(n, "allow")
 		delete(s, "proxy")
 	case "an allowlist under offline-v1":
 		s["profile"] = "offline-v1"
