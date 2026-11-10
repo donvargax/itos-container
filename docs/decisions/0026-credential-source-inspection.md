@@ -11,6 +11,13 @@ mountinfo and refuse a change. Drop descriptor `st_dev` equality with the row's
 device. A missing `STATX_MNT_ID` refuses with its own actionable diagnostic.
 This supersedes the original device-equality requirement and its refusal fixture.
 
+Confirmed by **q-58**, the coordinator's settled decision of 2026-11-10 03:01 UTC:
+follow this decision's state-exclusion scope as written. Inspect the selected state
+root and fixed account control-state root without reading the coordination catalog
+or enumerating other enrolled locations. The triage request to include every enrolled
+location is outside slice-29; a concrete leak path through another enrolled location
+belongs in a separate idea.
+
 ## The sections this decision overrides
 
 T-47's record is [decision 0025](0025-credentials-passed-in.md). The first version
