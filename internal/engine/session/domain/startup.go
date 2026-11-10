@@ -11,6 +11,8 @@ import (
 
 type startupKey struct{}
 type startupState struct {
+	binding         port.Binding
+	record          port.Record
 	mountDiagnostic port.MountDiagnostic
 	detectorExit    *int
 	operation       string
