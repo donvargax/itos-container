@@ -154,6 +154,11 @@ func (s *credentialScan) project(source credentialWalk, boundary credentialProje
 			return p
 		}
 		p.source = append(p.source, m)
+		// The worker's non-recursive bind exposes checkout backing entries
+		// hidden from the host inventory by directory or file submounts.
+		if p.checkout.coordinate.device == m.coordinate.device && credentialDescendant(m.coordinate.path, p.checkout.coordinate.path) {
+			p.match = true
+		}
 		for _, tree := range p.reserved {
 			if tree.device == m.coordinate.device && credentialDescendant(m.coordinate.path, tree.path) {
 				p.match = true

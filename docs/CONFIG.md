@@ -506,7 +506,12 @@ The mode never reads, hashes or logs contents and creates no state or approval.
 
 The shared readiness observer inventories checkout metadata, including hidden, Git,
 ignored and mounted entries, in batches of 128, at most 100000 entries and directory
-depth 64. It never enumerates unrelated state records. Instead, two complete mount tables
+depth 64. Both mount observations also exclude sources and ancestors within the
+validated checkout coordinate subtree, matching device and path components. This
+rejects backing files or directories hidden under host submounts but exposed by the
+worker's non-recursive checkout bind. A match in either observation is
+`credential.location`; distinct devices and component siblings remain independent.
+It never enumerates unrelated state records. Instead, two complete mount tables
 reserve each protected root's filesystem subtree and every mount rooted below it, including
 covered backing trees. Each table is bounded to 8 MiB, 16384 rows and 65535 bytes per line;
 descriptor paths to 4096 bytes, coordinates to 8192, and fdinfo to 64 KiB. All observations

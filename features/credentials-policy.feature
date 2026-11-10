@@ -85,6 +85,11 @@ Feature: Named credential requests and read-only source inspection
   #    even when source ancestry contains neither root and link count is one.
   #    It also detects an outside source bound INTO the checkout. It does
   #    not reject an unrelated inode just for sharing a pathname prefix or device.
+  #    In BOTH mount observations, also compare every source/ancestor coordinate
+  #    to the validated checkout coordinate subtree, using the same device and
+  #    component ancestry. A match is credential.location. The non-recursive
+  #    worker bind exposes checkout backing directories/files hidden under host
+  #    submounts, so inventory of the host-visible entries alone is insufficient.
   #    For STATE, never enumerate or stat unrelated records. Decision 0027's
   #    mount projections reserve the state root's filesystem-coordinate subtree
   #    and the roots of all mounts at/below its path, including file mounts,
@@ -1574,7 +1579,7 @@ Feature: Named credential requests and read-only source inspection
   # ancestor. Only filesystem coordinates reveal its checkout membership.
   # First/final rows move the alias mapping outside the checkout in the other
   # observation; either complete observation's match must keep location precedence.
-  @wip @slice-29 @ID-CREDENTIALS-55 @linux
+  @slice-29 @ID-CREDENTIALS-55 @linux
   Scenario Outline: covered checkout entries remain excluded from credential sources
     Given a credential observation fixture for "checkout" with "distinct outside file"
     When the credential observation contract runs in JSON mode

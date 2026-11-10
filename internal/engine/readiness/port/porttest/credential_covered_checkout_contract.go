@@ -34,7 +34,7 @@ func credentialCoveredCheckoutContract(t Reporter, observe func(*CredentialFiles
 			}
 			f.Nodes[n.Path] = n
 			for i := range f.MountsText {
-				root, device := covered, 1
+				root, device, coverParent := covered, 1, 1
 				switch layout {
 				case "first", "final":
 					if layout == "first" && i == 1 || layout == "final" && i == 0 {
@@ -42,16 +42,22 @@ func credentialCoveredCheckoutContract(t Reporter, observe func(*CredentialFiles
 					}
 				case "checkout mount":
 					root = "/project" + covered
+					coverParent = 5
 					f.MountsText[i] += "5 1 0:1 /project/checkout /checkout rw - tmpfs tmpfs rw\n"
 					n := f.Nodes["/checkout"]
 					n.MountID = 5
 					f.Nodes[n.Path] = n
+					if kind == "file" {
+						n = f.Nodes["/checkout/private"]
+						n.MountID = 5
+						f.Nodes[n.Path] = n
+					}
 				case "same prefix":
 					root = "/checkout-sibling/private"
 				case "other device":
 					device = 4
 				}
-				f.MountsText[i] += fmt.Sprintf("2 1 0:%d %s %s rw - tmpfs tmpfs rw\n3 1 0:2 %s %s rw - tmpfs tmpfs rw\n", device, root, point, coverRoot, covered)
+				f.MountsText[i] += fmt.Sprintf("2 1 0:%d %s %s rw - tmpfs tmpfs rw\n3 %d 0:2 %s %s rw - tmpfs tmpfs rw\n", device, root, point, coverParent, coverRoot, covered)
 				if layout == "ancestor only" {
 					f.MountsText[i] += "4 2 0:1 /independent/token /vault/token rw - tmpfs tmpfs rw\n"
 				}

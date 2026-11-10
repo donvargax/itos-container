@@ -278,8 +278,11 @@ the [shared-inode decision](../decisions/0013-refuse-shared-checkout-inodes.md)
 extends admission and revalidation without adding link counts to the fingerprint.
 
 Slice-29 reuses pinned traversal for the checkout only, without imposing unrelated
-checkout readiness checks on credentials-only mode. State exclusion instead maps
-descriptor paths through mount IDs and filesystem roots, reserving both the selected
+checkout readiness checks on credentials-only mode. Both mount observations also
+exclude the checkout's validated coordinate subtree: the worker's non-recursive
+bind exposes backing directories/files hidden under the host inventory's submounts.
+State exclusion maps descriptor paths through mount IDs and filesystem roots,
+reserving both the selected
 state root and the fixed account-home control-state root, plus every descendant
 mount's backing subtree and covered backing coordinates. No state record is enumerated
 or read.
@@ -934,8 +937,13 @@ pinned identity and filesystem-coordinate aliases, refuses before enumeration.
 Compare checkout and descendant-mount subtrees with the reserved state subtrees;
 unavailable boundary evidence prevents traversal. Readiness compares source/ancestor
 identities with protected roots and every checkout entry, crossing mounts without
-symlink or file-data reads. Checkout limits remain batches of 128, 100,000 entries
-and depth 64. It never enumerates shared state. Instead, a descriptor's statx mount ID
+symlink or file-data reads. Both mount observations additionally compare every
+source/ancestor coordinate with the validated checkout coordinate subtree, using
+equal device and component ancestry. A match in either is `credential.location`:
+the worker's non-recursive checkout bind exposes backing directories and files
+covered by host submounts that inventory cannot see. Distinct devices and component
+siblings remain independent. Checkout limits remain batches of 128, 100,000 entries
+and depth 64. It never enumerates shared state. A descriptor's statx mount ID
 selects the kernel mount row (q-57), with the ID checked again after mountinfo;
 missing STATX_MNT_ID has its own refusal. Descriptor st_dev need not match the
 row's superblock device. Its decoded filesystem root plus relative descriptor

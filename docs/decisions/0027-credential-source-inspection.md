@@ -56,6 +56,11 @@ now identify the third scope, the bounded state mechanism and its unproven sourc
 contract. Decision 0025 is reconciled in this same commit; no conflicting scan
 instruction is left for the implementer to choose between.
 
+The covered-checkout review amendment also updates arc42's **Building-block view**
+and **Credential source location** below: checkout inventory is supplemented by
+the validated checkout coordinate subtree in both mount observations. This closes
+the difference between the host's inventory and the worker's non-recursive bind.
+
 The rest of T-47's proposal remains with that item, including its six questions for
 the person. This decision selects no Codex kind, delivery mechanism, approval grant,
 refresh policy, live-account permission or refusal-log change. It amends neither the
@@ -116,6 +121,19 @@ and device changes. Follow no symlinks, read no file data and do not prune repea
 directory identities. Compare each child pin to its preceding metadata observation.
 Unavailable metadata, disappearance, substitution or incomplete enumeration refuses
 with `credential.unavailable` (exit 3); a known match retains location precedence.
+
+The host inventory crosses submounts, but the worker receives a non-recursive bind
+of the checkout. That bind exposes the checkout filesystem's own directories and
+files hidden beneath host submounts. In **both** mount observations, compare every
+source and ancestor coordinate with the validated checkout coordinate subtree:
+same mount-row device, and the same path or a component-descendant. A match is
+`credential.location`, including a backing directory or individual file bound
+outside before being covered in the checkout. Either complete observation's match
+takes precedence over a changed mapping. Use the checkout descriptor's projected
+coordinate, not its visible pathname. Other devices and component siblings remain
+independent; a covered checkout root's underlying filesystem is not substituted
+for the validated root. This supplements inventory without following backing paths
+or adding a second scan, and preserves q-57's mount-ID mapping.
 
 The checkout alone keeps readiness's batches of 128, 100,000 total entries and depth
 64 (root depth zero), inclusive. All credential metadata work shares one 10-second
@@ -201,8 +219,8 @@ prove, not a claim of an atomic kernel snapshot:
 4. Take the second mount table after the checkout scan. Recheck source and boundary
    pins, pathname walks and mount
    IDs at the end. Build the coordinates/exclusion set independently from each
-   table. Either observation locating a source/ancestor in a reserved subtree is
-   a location refusal. Success requires both complete observations to exclude it
+   table. Either observation locating a source/ancestor in the checkout or a
+   reserved state subtree is a location refusal. Success requires both complete observations to exclude it
    and unchanged source/boundary mappings and identities. A changed relevant
    mapping, unavailable evidence or inconsistency is unavailable, with no retry
    loop or cached-safe fallback. Do not compare the whole tables byte for byte:
@@ -308,6 +326,7 @@ adapter. Alias rows apply to **both** protected trees; other rows name their sco
 | Protected root bound outside | Location refusal by shared root identity. |
 | Protected descendant directory bound outside | Location refusal although source ancestry contains neither protected root. |
 | Single protected file bound outside | Location refusal with one link and no matching protected root ancestor. |
+| Checkout backing directory or file covered by a host submount and bound outside | Location refusal by checkout coordinates in either observation, even when inventory sees no matching inode. |
 | Outside directory or individual file bound into a protected descendant | Location refusal from checkout inventory or the state mount projection. |
 | Distinct inode, same device and shared pathname prefix | Accepted when all other source checks succeed. |
 | Subvolume-like st_dev differs from mountinfo at source and boundary pins | Accepted by stable statx mount IDs; descendant aliases still refuse. |
@@ -410,3 +429,13 @@ The shared fake/disk contract also covers absent and covered state, independent
 sibling/device controls, and no traversal on boundary refusal. The fake now returns
 empty failed descriptors like the disk adapter. These runs used synthetic
 observations, no privileged mounts or native engine. Fresh code proof remains CI-owned.
+
+The covered-checkout regression was committed pending in `033781a`. With `@wip`
+removed before the fix, all six ID-CREDENTIALS-55 examples failed at the exact
+source-problem assertion. Stable covered directory/file aliases were accepted;
+first-only and final-only matches returned `credential.unavailable` instead of
+`credential.location`. All six now pass. The shared fake/disk contract also passes
+ancestor-only aliases, projected checkout roots, subvolume identities and safe
+sibling/device controls. Targeted readiness packages pass under the race detector.
+These fixtures supply raw observations without native mounts; native-engine
+evidence and fresh changed-code proof remain CI-owned.

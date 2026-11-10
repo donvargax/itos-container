@@ -126,6 +126,13 @@ checkout scan does today. Missing metadata, an incomplete scan or budget exhaust
 refuses. Repeat these comparisons on each source observation and revalidation, never
 trusting a set cached at approval. No file contents are needed for the scan.
 
+The worker's non-recursive checkout bind also exposes backing directories and
+files hidden beneath the host's submounts. Inventory alone cannot see them. In both
+mount observations, compare every source and ancestor coordinate to the validated
+checkout coordinate subtree: equal device plus the same path or component ancestry
+is `credential.location`. A complete match in either observation refuses. This
+uses decision 0027's mount-ID projections and leaves distinct siblings/devices valid.
+
 **Slice-29 specifies the state-side replacement in
 [decision 0027](0027-credential-source-inspection.md); its evidence remains required
 before handoff to slice-30, T-48, slice-31 or slice-33.** Do not apply this recursive scan to
