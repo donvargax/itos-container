@@ -19,6 +19,7 @@ type credentialOperations struct {
 	lstat     func(string) (os.FileInfo, error)
 	open      func(int, string) (int, error)
 	metadata  func(*os.File, os.FileInfo) (port.CredentialNode, bool)
+	statx     func(int) (uint64, uint32, error)
 	read      func(string, int64) ([]byte, bool)
 	readlink  func(string, []byte) (int, error)
 	entries   func(*os.File, int) ([]os.DirEntry, error)
@@ -38,7 +39,7 @@ func (f *CredentialFiles) operations() credentialOperations {
 	if f.ops != nil {
 		return *f.ops
 	}
-	return credentialOperations{lstat: os.Lstat, open: credentialOpen, metadata: func(_ *os.File, info os.FileInfo) (port.CredentialNode, bool) { return credentialMetadata(info) }, read: credentialReadBounded, readlink: credentialReadlink, entries: (*os.File).ReadDir, directory: os.Open, now: time.Now}
+	return credentialOperations{lstat: os.Lstat, open: credentialOpen, metadata: func(_ *os.File, info os.FileInfo) (port.CredentialNode, bool) { return credentialMetadata(info) }, statx: credentialStatx, read: credentialReadBounded, readlink: credentialReadlink, entries: (*os.File).ReadDir, directory: os.Open, now: time.Now}
 }
 
 func (f *CredentialFiles) Now() time.Time { return f.operations().now() }
@@ -122,13 +123,19 @@ func (f *CredentialFiles) Descriptor(h port.CredentialHandle) (port.CredentialDe
 	if p == nil {
 		return zero, false
 	}
+	mountID, mask, err := f.operations().statx(int(p.file.Fd()))
+	// STATX_MNT_ID is the reusable ID in mountinfo, not STATX_MNT_ID_UNIQUE.
+	// Validate the returned mask: older kernels can succeed without this field.
+	if err != nil || mask&0x1000 == 0 || mountID == 0 || mountID > 1<<32-1 {
+		return zero, true
+	}
 	fd := strconv.FormatUint(uint64(p.file.Fd()), 10)
 	data, ok := f.operations().read("/proc/self/fdinfo/"+fd, 64*1024)
 	if !ok {
 		return zero, false
 	}
 	id, ok := ParseCredentialMountID(data)
-	if !ok {
+	if !ok || id != int(mountID) {
 		return zero, false
 	}
 	buf := make([]byte, 4097)
@@ -136,7 +143,7 @@ func (f *CredentialFiles) Descriptor(h port.CredentialHandle) (port.CredentialDe
 	if err != nil || n > 4096 {
 		return zero, false
 	}
-	return port.CredentialDescriptor{Path: string(buf[:n]), MountID: id}, true
+	return port.CredentialDescriptor{Path: string(buf[:n]), MountID: int(mountID)}, true
 }
 
 // ParseCredentialMountID accepts complete bounded fdinfo evidence. The reader

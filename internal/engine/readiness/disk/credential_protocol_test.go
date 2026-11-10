@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -10,6 +11,55 @@ import (
 
 	"github.com/donvargax/itos-container/internal/engine/readiness/port"
 )
+
+func TestCredentialStatxMountEvidence(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("native descriptor calls require Linux")
+	}
+	f := &CredentialFiles{}
+	h, _, status := f.Open(0, t.TempDir())
+	if status != port.CredentialReadOK {
+		t.Fatal(status)
+	}
+	defer f.Close(h)
+	d, ok := f.Descriptor(h)
+	if !ok || d.MountID == 0 {
+		t.Fatalf("native statx mount identity unavailable: %#v %v", d, ok)
+	}
+	for _, tc := range []struct {
+		name     string
+		id       uint64
+		mask     uint32
+		err      error
+		want     port.CredentialDescriptor
+		complete bool
+	}{
+		{"exact field", uint64(d.MountID), 0x1000, nil, d, true},
+		{"additional fields", uint64(d.MountID), 0x1001, nil, d, true},
+		{"unsupported call", 0, 0, errors.ErrUnsupported, port.CredentialDescriptor{}, true},
+		{"field absent", uint64(d.MountID), 0, nil, port.CredentialDescriptor{}, true},
+		{"unique ID is not mountinfo ID", uint64(d.MountID), 0x4000, nil, port.CredentialDescriptor{}, true},
+		{"zero ID", 0, 0x1000, nil, port.CredentialDescriptor{}, true},
+		{"overflow ID", 1 << 32, 0x1000, nil, port.CredentialDescriptor{}, true},
+		{"fdinfo disagrees", uint64(d.MountID) + 1, 0x1000, nil, port.CredentialDescriptor{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ops := f.operations()
+			ops.statx = func(fd int) (uint64, uint32, error) {
+				if fd != int(f.handles[h].file.Fd()) {
+					t.Fatal("statx did not use the held descriptor")
+				}
+				return tc.id, tc.mask, tc.err
+			}
+			f.ops = &ops
+			defer func() { f.ops = nil }()
+			got, complete := f.Descriptor(h)
+			if got != tc.want || complete != tc.complete {
+				t.Fatalf("descriptor=%#v complete=%v, want %#v %v", got, complete, tc.want, tc.complete)
+			}
+		})
+	}
+}
 
 func TestCredentialMountEvidenceValidation(t *testing.T) {
 	if runtime.GOOS != "linux" {

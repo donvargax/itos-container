@@ -44,6 +44,36 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 	}
 	cases := []testCase{
 		{"independent", "", func(*CredentialFiles) {}},
+		{"subvolume devices", "", func(f *CredentialFiles) {
+			for path, n := range f.Nodes {
+				n.Device += 100
+				f.Nodes[path] = n
+			}
+		}},
+		{"mount ID changed across table", "credential.unavailable", func(f *CredentialFiles) {
+			for i := range f.MountsText {
+				f.MountsText[i] += "2 1 0:1 / / rw - tmpfs tmpfs rw\n"
+			}
+			f.MountIDsAfterTable = map[string]int{"/vault/token": 2}
+		}},
+		{"statx mount ID unavailable", "credential.mount_id", func(f *CredentialFiles) {
+			f.MountIDUnavailable = map[string]bool{"/vault/token": true}
+		}},
+		{"statx lost after table", "credential.mount_id", func(f *CredentialFiles) {
+			f.MountIDsAfterTable = map[string]int{"/vault/token": 0}
+		}},
+		{"statx missing only before table", "credential.mount_id", func(f *CredentialFiles) {
+			f.DescriptorMountIDs = map[string][]int{"/vault/token": {0, 1}}
+		}},
+		{"statx missing during rewalk", "credential.mount_id", func(f *CredentialFiles) {
+			f.DescriptorMountIDs = map[string][]int{"/vault/token": {1, 1, 0}}
+		}},
+		{"statx missing after final table", "credential.mount_id", func(f *CredentialFiles) {
+			f.DescriptorMountIDs = map[string][]int{"/vault/token": {1, 1, 1, 0}}
+		}},
+		{"mount ID changes during rewalk", "credential.unavailable", func(f *CredentialFiles) {
+			f.DescriptorMountIDs = map[string][]int{"/vault/token": {1, 1, 2}}
+		}},
 		{"source missing", "credential.missing", func(f *CredentialFiles) { delete(f.Nodes, "/vault/token") }},
 		{"inaccessible component", "credential.unavailable", func(f *CredentialFiles) { f.OpenErrors["/vault"] = port.CredentialReadUnavailable }},
 		{"source metadata unavailable", "credential.unavailable", func(f *CredentialFiles) { f.StatErrors["/vault/token"] = true }},
@@ -140,12 +170,30 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 	for _, activity := range []string{"approval publication", "intent publication", "snapshot publication", "session record cleanup", "publication and disappearing temp entries"} {
 		cases = append(cases, testCase{activity, "", func(f *CredentialFiles) { f.Activity = activity }})
 	}
+	for _, path := range []string{"/state", "/checkout", "/vault"} {
+		cases = append(cases, testCase{path + " missing statx", "credential.mount_id", func(f *CredentialFiles) {
+			f.MountIDUnavailable = map[string]bool{path: true}
+		}})
+		cases = append(cases, testCase{path + " changed mount ID", "credential.unavailable", func(f *CredentialFiles) {
+			for i := range f.MountsText {
+				f.MountsText[i] += "2 1 0:1 / / rw - tmpfs tmpfs rw\n"
+			}
+			f.MountIDsAfterTable = map[string]int{path: 2}
+		}})
+	}
 	for _, boundary := range []string{"/checkout", "/state"} {
 		for _, layout := range []string{"root", "descendant", "file", "inverse directory", "inverse file", "different device", "covered", "covered root"} {
 			if boundary == "/checkout" && (layout == "covered" || layout == "covered root") {
 				continue
 			}
 			cases = append(cases, testCase{boundary + " " + layout, "credential.location", func(f *CredentialFiles) { credentialAlias(f, boundary, layout) }})
+			cases = append(cases, testCase{boundary + " subvolume " + layout, "credential.location", func(f *CredentialFiles) {
+				credentialAlias(f, boundary, layout)
+				for path, n := range f.Nodes {
+					n.Device += 100
+					f.Nodes[path] = n
+				}
+			}})
 		}
 	}
 	for _, tc := range cases {

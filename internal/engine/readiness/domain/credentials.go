@@ -16,8 +16,10 @@ type Credentials struct {
 }
 
 type credentialPin struct {
-	handle port.CredentialHandle
-	node   port.CredentialNode
+	handle     port.CredentialHandle
+	node       port.CredentialNode
+	descriptor port.CredentialDescriptor
+	mapped     bool
 }
 
 type credentialWalk struct {
@@ -71,13 +73,6 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 	defer s.close()
 	tables := [2][]port.CredentialMount{}
 	complete := [2]bool{}
-	tables[0], complete[0] = s.fs.Mounts()
-	if s.expired() {
-		for i := range grants {
-			result.Issues = append(result.Issues, port.CredentialIssue{Rule: "credential.unavailable", Index: i})
-		}
-		return result
-	}
 	checkout := s.walk(c.Input.Root, credentialCheckout)
 	if checkout.rule != "" {
 		return boundary(checkout.rule)
@@ -93,6 +88,9 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 	for i, grant := range grants {
 		sources[i] = s.walk(grant.Source, credentialSource)
 	}
+	// Each walk has captured its descriptors' mount IDs before mountinfo.
+	// Projection re-reads those held descriptors after the table, without retry.
+	tables[0], complete[0] = s.fs.Mounts()
 	observations := make([][2]credentialProjection, len(grants))
 	for i, source := range sources {
 		if source.rule == "" {
@@ -114,6 +112,11 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 		if state.missing == "" && !sameCredentialPin(state.pins[len(state.pins)-1], finalStates[i].pins[len(finalStates[i].pins)-1]) {
 			return boundary("state.path")
 		}
+		if state.missing == "" {
+			// Existing boundaries retain their original descriptors and mount-ID
+			// baseline across both tables, not just a newly opened equivalent pin.
+			finalStates[i] = state
+		}
 	}
 	seen := map[[2]uint64]bool{}
 	for i, source := range sources {
@@ -124,6 +127,8 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 			switch {
 			case sourceMatches(source, checkout, states, identities) || first.ok && first.match || last.ok && last.match:
 				rule = "credential.location"
+			case first.failure == "credential.mount_id" || last.failure == "credential.mount_id":
+				rule = "credential.mount_id"
 			case !scanOK || !first.ok || !last.ok || !sameProjection(first, last) || s.expired():
 				rule = "credential.unavailable"
 			default:
@@ -163,7 +168,7 @@ func (s *credentialScan) open(parent port.CredentialHandle, name string) (creden
 	if status == port.CredentialReadOK {
 		s.opened = append(s.opened, h)
 	}
-	return credentialPin{h, node}, status
+	return credentialPin{handle: h, node: node}, status
 }
 
 func (s *credentialScan) close() {
@@ -250,6 +255,14 @@ func (s *credentialScan) walk(path string, kind credentialWalkKind) credentialWa
 			w.rule = "checkout.path"
 		} else {
 			w.rule = "checkout.unavailable"
+		}
+	}
+	if w.rule == "" {
+		for i := range w.pins {
+			if s.expired() {
+				break
+			}
+			w.pins[i].descriptor, w.pins[i].mapped = s.fs.Descriptor(w.pins[i].handle)
 		}
 	}
 	return w

@@ -31,7 +31,9 @@ const (
 	CredentialReadUnavailable
 )
 
-// CredentialDescriptor is a descriptor's independently observed procfs mapping.
+// CredentialDescriptor is a descriptor's independently observed mapping. MountID
+// comes from statx STATX_MNT_ID; zero reports that required kernel evidence is
+// unavailable, distinct from an unreadable pathname or inconsistent procfs data.
 type CredentialDescriptor struct {
 	Path    string
 	MountID int

@@ -306,10 +306,6 @@ func (w *world) credentialNamespaceFault(fault string) error {
 		n := o.Nodes[source]
 		n.MountID = 100
 		o.Nodes[source] = n
-	case "descriptor device disagrees":
-		n := o.Nodes[source]
-		n.Device = 99
-		o.Nodes[source] = n
 	case "source pathname now names another inode":
 		n := o.Nodes[source]
 		n.Inode++

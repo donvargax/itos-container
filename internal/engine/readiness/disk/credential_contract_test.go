@@ -46,6 +46,11 @@ func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) *Crede
 	// Open supplies the initial metadata; only subsequent Stat calls advance
 	// the shared final-stat schedule, just as they do for the in-memory fake.
 	opening := map[int]port.CredentialNode{}
+	type descriptorRead struct {
+		value port.CredentialDescriptor
+		ok    bool
+	}
+	descriptors := map[int]descriptorRead{}
 	backing := func(n port.CredentialNode) string {
 		key := n.Inode
 		if key >= 10000 {
@@ -122,12 +127,26 @@ func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) *Crede
 		}
 		return raw.Stat(byFD[fd])
 	}
+	ops.statx = func(fd int) (uint64, uint32, error) {
+		d, ok := raw.Descriptor(byFD[fd])
+		descriptors[fd] = descriptorRead{d, ok}
+		// Descriptor failures still reach the independent fdinfo/readlink seams.
+		// Only the explicit missing-statx fixture omits its returned field mask.
+		if ok && d.MountID == 0 {
+			return 0, 0, nil
+		}
+		id := d.MountID
+		if id == 0 {
+			id = 1
+		}
+		return uint64(id), 0x1000, nil
+	}
 	ops.readlink = func(path string, buf []byte) (int, error) {
-		d, ok := raw.Descriptor(byFD[fdFrom(path, "/proc/self/fd/")])
-		if !ok {
+		observation := descriptors[fdFrom(path, "/proc/self/fd/")]
+		if !observation.ok {
 			return 0, os.ErrPermission
 		}
-		return copy(buf, d.Path), nil
+		return copy(buf, observation.value.Path), nil
 	}
 	activityDone := false
 	ops.read = func(path string, limit int64) ([]byte, bool) {
@@ -156,7 +175,8 @@ func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) *Crede
 			data, ok := raw.RawMounts()
 			return data, ok && int64(len(data)) <= limit
 		}
-		d, ok := raw.Descriptor(byFD[fdFrom(path, "/proc/self/fdinfo/")])
+		observation := descriptors[fdFrom(path, "/proc/self/fdinfo/")]
+		d, ok := observation.value, observation.ok
 		if data, exists := raw.FDInfo[d.Path]; exists {
 			return []byte(data), ok && int64(len(data)) <= limit
 		}

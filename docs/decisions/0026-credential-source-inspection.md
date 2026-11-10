@@ -102,13 +102,13 @@ the coordination catalog or enumerate other enrolled locations. Observe their
 mount mappings, not their contents. The following is an algorithm to implement and
 prove, not a claim of an atomic kernel snapshot:
 
-1. Pin the source,
-   checkout and existing state root using the existing no-follow component walks.
-   Read each relevant descriptor's device/inode and mount ID using
+1. Pin the source, checkout and existing state root using the existing no-follow
+   component walks. Read each relevant descriptor's device/inode with fstat and
+   its mount ID using
    `statx(fd, "", AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, STATX_MNT_ID)` before
    reading mountinfo, and its current absolute pathname from
-   `/proc/self/fd/<fd>`. Rewalk that pathname without following symlinks and require
-   the same device, inode and mount ID. Do not strip a ` (deleted)` suffix and use
+   `/proc/self/fd/<fd>`. The mapping below rewalks that pathname without following
+   symlinks and requires the same device, inode and mount ID. Do not strip a ` (deleted)` suffix and use
    what remains: an unlinked, unreachable or ambiguous descriptor path refuses.
    Retain the source descriptor through observation and any later delivery read.
    Then acquire the first bounded mount table, retaining any error until the
@@ -284,3 +284,16 @@ regressions supply assertion-failing then passing runs. Native bind-mount proof 
 downstream CI work. The neighboring policy,
 parsing, manifest, doctor, approval, run and control-state scenarios remain relevant;
 slice-25 supplies version 2 and the manifest-policy/recorder steps this spec consumes.
+
+The q-57 regressions were committed pending in `e5eff2a` and run with `@wip`
+removed before implementation. ID-CREDENTIALS-43 refused the subvolume-like source
+with exit 3 instead of accepting it; 44 accepted a changed mount ID instead of
+refusing; 45 returned the generic unavailable rule instead of `credential.mount_id`.
+All three now pass their behavior assertions. The shared fake/disk contract also
+covers subvolume-like protected aliases, missing mount IDs before the first table,
+after the final table and during pathname rewalk, and changed source/checkout/state
+mount IDs. Native
+statx tests cover the field mask, syscall failure and disagreement with fdinfo.
+ID-CREDENTIALS-34's device-mismatch refusal row is superseded by 43 under q-57;
+its other incomplete-evidence refusals remain. These fixtures are not native btrfs
+mount or real-engine evidence; those runtime claims still require CI evidence.

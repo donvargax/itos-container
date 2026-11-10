@@ -18,6 +18,7 @@ type credentialMapping struct {
 }
 type credentialProjection struct {
 	ok, match  bool
+	failure    string
 	source     []credentialMapping
 	checkout   credentialMapping
 	state      []credentialCoordinate
@@ -39,8 +40,9 @@ func (s *credentialScan) project(source, checkout credentialWalk, states []crede
 	}
 	var reserved []credentialCoordinate
 	for i, state := range states {
-		stateMap, ok := s.mapping(state.pins[len(state.pins)-1], rows, credentialSource)
-		if !ok {
+		stateMap, failure := s.mapping(state.pins[len(state.pins)-1], rows, credentialSource)
+		if failure != "" {
+			p.failure = failure
 			return p
 		}
 		coordinate := stateMap.coordinate
@@ -61,14 +63,14 @@ func (s *credentialScan) project(source, checkout credentialWalk, states []crede
 			}
 		}
 	}
-	var ok bool
-	p.checkout, ok = s.mapping(checkout.pins[len(checkout.pins)-1], rows, credentialCheckout)
-	if !ok {
+	p.checkout, p.failure = s.mapping(checkout.pins[len(checkout.pins)-1], rows, credentialCheckout)
+	if p.failure != "" {
 		return p
 	}
 	for _, pin := range source.pins {
-		m, ok := s.mapping(pin, rows, credentialSource)
-		if !ok {
+		m, failure := s.mapping(pin, rows, credentialSource)
+		if failure != "" {
+			p.failure = failure
 			return p
 		}
 		p.source = append(p.source, m)
@@ -82,32 +84,37 @@ func (s *credentialScan) project(source, checkout credentialWalk, states []crede
 	return p
 }
 
-func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.CredentialMount, kind credentialWalkKind) (credentialMapping, bool) {
+func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.CredentialMount, kind credentialWalkKind) (credentialMapping, string) {
 	var m credentialMapping
 	current, ok := s.fs.Stat(pin.handle)
 	if !ok || current.Device != pin.node.Device || current.Inode != pin.node.Inode {
-		return m, false
+		return m, "credential.unavailable"
 	}
 	d, ok := s.fs.Descriptor(pin.handle)
-	if !ok || !absoluteCredentialPath(d.Path) {
-		return m, false
+	if pin.mapped && pin.descriptor.MountID == 0 || ok && d.MountID == 0 {
+		return m, "credential.mount_id"
+	}
+	if !pin.mapped || !ok || d != pin.descriptor || !absoluteCredentialPath(d.Path) {
+		return m, "credential.unavailable"
 	}
 	row, exists := rows[d.MountID]
-	if !exists || row.Device != current.Device || !credentialDescendant(d.Path, row.Point) {
-		return m, false
+	if !exists || !credentialDescendant(d.Path, row.Point) {
+		return m, "credential.unavailable"
 	}
 	// A descriptor's path is evidence only after a fresh no-follow rewalk binds
 	// that spelling to the held identity and the same mount, including file binds.
 	w := s.walk(d.Path, kind)
 	if w.rule != "" {
-		return m, false
+		return m, "credential.unavailable"
 	}
 	last := w.pins[len(w.pins)-1]
-	d2, ok := s.fs.Descriptor(last.handle)
-	if !ok || !sameCredentialPin(pin, last) || d2 != d {
-		return m, false
+	if last.mapped && last.descriptor.MountID == 0 {
+		return m, "credential.mount_id"
 	}
-	return credentialMapping{credentialCoordinate{row.Device, credentialMountCoordinate(row, d.Path)}, d.Path, d.MountID}, true
+	if !last.mapped || !sameCredentialPin(pin, last) || last.descriptor != d {
+		return m, "credential.unavailable"
+	}
+	return credentialMapping{credentialCoordinate{row.Device, credentialMountCoordinate(row, d.Path)}, d.Path, d.MountID}, ""
 }
 
 // Validated root and visible paths are each at most 4096 bytes. The relative

@@ -17,9 +17,13 @@ func TestOfflineRecorderCancellationEvidence(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			w := offlineRecorderWorld(t, http.HandlerFunc(func(out http.ResponseWriter, _ *http.Request) {
+			w := offlineRecorderWorld(t, http.HandlerFunc(func(out http.ResponseWriter, request *http.Request) {
 				if mode != "broken wait transport" {
 					cancel()
+					// Exercise cancellation before any response headers. Returning
+					// immediately races the transport against net/http's implicit
+					// 200, which instead exercises a canceled response body.
+					<-request.Context().Done()
 					return
 				}
 				conn, _, err := out.(http.Hijacker).Hijack()

@@ -8,8 +8,7 @@ Feature: Named credential requests and read-only source inspection
   # CLI.md and T-47's docs/decisions/0025-credentials-passed-in.md, now landed.
   # Revised after the review of f2b0e58. Slice-25's version 2 and helpers remain
   # prerequisites; this spec does not copy their code.
-  # Both T-47 and slice-25 are prerequisites. The coordinator must retain T-47
-  # and add slice-25 to the registry dependency list before implementation.
+  # Both T-47 and slice-25 have landed; no dependency change is needed.
   # docs/decisions/0026-credential-source-inspection.md amends T-47's source
   # location rule and increment table, with the corresponding arc42 changes.
   # This revision withdraws the shared-state traversal and supplies its bounded
@@ -90,7 +89,9 @@ Feature: Named credential requests and read-only source inspection
   #    mount projections reserve the state root's filesystem-coordinate subtree
   #    and the roots of all mounts at/below its path, including file mounts,
   #    different devices and covered backing subtrees. A descriptor's coordinate
-  #    uses its mount ID, that row's decoded root and its relative pathname.
+  #    uses its statx STATX_MNT_ID, that row's decoded root and relative pathname.
+  #    q-57 drops st_dev equality with the row's device. Capture descriptor mount
+  #    IDs before mountinfo and re-read them afterwards; a change refuses.
   #    Device plus component ancestry determines membership, not path-prefix or
   #    device alone. This catches state descendants bound outside and outside
   #    sources bound into state, even with one link and neither root in ancestry.
@@ -133,6 +134,7 @@ Feature: Named credential requests and read-only source inspection
   # Source rules are located at /credentials/<written-index>/source in the policy.
   # credential.missing (3): a source or ordinary ancestor is absent.
   # credential.unavailable (3): unavailable metadata, checkout scan or state projection.
+  # credential.mount_id (3): unavailable STATX_MNT_ID; name it and require kernel support.
   # credential.symlink (1): a symbolic link at any component, even dangling.
   # credential.ancestor (1): unsafe ancestor ownership or write permissions.
   # credential.location (1): an identity exposed in checkout or protected state.
@@ -1013,7 +1015,6 @@ Feature: Named credential requests and read-only source inspection
       | malformed mount row                     |
       | duplicate mount ID                      |
       | descriptor mount row missing            |
-      | descriptor device disagrees             |
       | source pathname now names another inode |
       | source mount mapping changed            |
       | 16385 mount rows                        |
@@ -1323,7 +1324,7 @@ Feature: Named credential requests and read-only source inspection
   # q-57 replaces the st_dev/mountinfo device equality with descriptor statx
   # mount IDs, sampled before and after mountinfo. Synthetic subvolume devices
   # differ at every pin, including checkout and state, not only at the source.
-  @slice-29 @ID-CREDENTIALS-43 @linux @wip
+  @slice-29 @ID-CREDENTIALS-43 @linux
   Scenario: subvolume device numbers do not prevent credential mount mapping
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And credential descriptors report subvolume devices distinct from mountinfo
@@ -1334,7 +1335,7 @@ Feature: Named credential requests and read-only source inspection
       | claude-token | token  | /run/itos-container/credentials/claude-token |
     And the credential observation recorded no state record enumeration or metadata visits
 
-  @slice-29 @ID-CREDENTIALS-44 @linux @wip
+  @slice-29 @ID-CREDENTIALS-44 @linux
   Scenario: a descriptor mount ID cannot change across the mount-table read
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the credential source mount ID changes during the first mount-table read
@@ -1344,7 +1345,7 @@ Feature: Named credential requests and read-only source inspection
       | credential.unavailable | /credentials/0/source | 3    |
     And it exits with code 3
 
-  @slice-29 @ID-CREDENTIALS-45 @linux @wip
+  @slice-29 @ID-CREDENTIALS-45 @linux
   Scenario: missing statx mount identity has an actionable diagnostic
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the credential source has no STATX_MNT_ID evidence
