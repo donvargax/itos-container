@@ -66,7 +66,7 @@ func TestCredentialMountEvidenceValidation(t *testing.T) {
 		t.Skip("kernel-format parser is Linux-specific")
 	}
 	valid := "1 0 0:1 / / rw unknown:field - tmpfs tmpfs rw\n"
-	for _, data := range []string{"", strings.TrimSuffix(valid, "\n"), "broken\n", strings.Replace(valid, "1 0", "bad 0", 1), strings.Replace(valid, "1 0", "1 -1", 1), strings.Replace(valid, "0:1", "0:1:2", 1), strings.Replace(valid, "0:1", "x:1", 1), strings.Replace(valid, "1 0", "4294967296 0", 1), strings.Replace(valid, "1 0", "0 0", 1), strings.Replace(valid, " / / ", " relative / ", 1), strings.Replace(valid, " / / ", " / /a/../b ", 1), strings.Replace(valid, " / / ", " / //a ", 1), strings.Replace(valid, " / / ", " / /a\\000 ", 1), strings.Replace(valid, " / / ", " / /a\\xxx ", 1), strings.Replace(valid, " - ", "  ", 1), valid + valid} {
+	for _, data := range []string{"", strings.TrimSuffix(valid, "\n"), "broken\n", strings.Replace(valid, "1 0", "bad 0", 1), strings.Replace(valid, "1 0", "1 -1", 1), strings.Replace(valid, "0:1", "0:1:2", 1), strings.Replace(valid, "0:1", "x:1", 1), strings.Replace(valid, "1 0", "4294967296 0", 1), strings.Replace(valid, "1 0", "0 0", 1), strings.Replace(valid, " / / ", " / /a/../b ", 1), strings.Replace(valid, " / / ", " / //a ", 1), strings.Replace(valid, " / / ", " / /a\\000 ", 1), strings.Replace(valid, " / / ", " /a\\000 / ", 1), strings.Replace(valid, " / / ", " / /a\\xxx ", 1), strings.Replace(valid, " - ", "  ", 1), valid + valid} {
 		if rows, ok := ParseCredentialMounts([]byte(data)); ok || rows != nil {
 			t.Fatalf("accepted malformed topology %q: %#v", data, rows)
 		}
@@ -111,6 +111,19 @@ func TestCredentialFDInfoBounds(t *testing.T) {
 	}
 	if _, ok := credentialReadBounded(t.TempDir()+"/absent", 1); ok {
 		t.Fatal("missing evidence accepted")
+	}
+}
+
+func TestCredentialNonPathMountRoots(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("kernel-format parser is Linux-specific")
+	}
+	for _, root := range []string{"net:[4026537384]", "mnt:[4026537385]", "/replaced//deleted", "relative"} {
+		data := "1 0 0:1 / / rw - tmpfs tmpfs rw\n2 1 0:4 " + root + " /run/netns/test rw - nsfs nsfs rw\n"
+		rows, ok := ParseCredentialMounts([]byte(data))
+		if !ok || len(rows) != 2 || rows[0].Unprojectable || !rows[1].Unprojectable || rows[1].Root != root || rows[1].Point != "/run/netns/test" || rows[1].ID != 2 {
+			t.Fatalf("lost unprojectable mount row for %q: %#v %v", root, rows, ok)
+		}
 	}
 }
 

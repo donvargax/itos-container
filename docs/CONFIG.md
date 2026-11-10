@@ -512,6 +512,9 @@ btrfs subvolumes. Missing statx mount identity reports `credential.mount_id`,
 exit 3, and names the required kernel support; there is no device/fdinfo fallback.
 Incomplete or changed required evidence refuses. An absent state root is not created;
 safe concurrent creation at its reserved coordinate is accepted after revalidation.
+Namespace handles and deleted bind roots remain unprojectable mount rows. They do
+not block independent sources unless a required descriptor uses the row or its
+mountpoint is at, below or covering protected state.
 
 Source problems are located at `/credentials/<written-index>/source`. Missing or
 unavailable metadata uses exit 3; symlink, ancestor, location, regular, owner, permissions,
@@ -520,6 +523,9 @@ first failure per source is reported, in that order; the highest exit wins. Requ
 grants remain visible. Existing boundary refusals retain their shared rules: checkout
 ancestors have no credential-source owner or permission requirement, symlinks report
 `doctor.checkout.path`, and checkout problems retain the requested root as their path.
+Absolute checkout inputs are cleaned before walking, as in the shared checkout pin;
+credential source paths remain literal. Checkout/state overlap in either direction
+reports `approval.state.path` before any inventory of state records.
 
 These observations neither grant access nor establish continuous protection from trusted
 host changes. [Decision 0026](decisions/0026-credential-source-inspection.md) defines the

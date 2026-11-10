@@ -129,6 +129,11 @@ func TestCredentialBoundaryRefusals(t *testing.T) {
 		{"unavailable account", "state.unavailable", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.AccountState = "" }},
 		{"relative state", "state.location", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.State = "relative" }},
 		{"state in checkout", "state.path", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.State = "/checkout/state" }},
+		{"checkout in selected state", "state.path", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.Root = "/state/work/project" }},
+		{"checkout in account state", "state.path", func(_ *porttest.CredentialFiles, i *port.CredentialInput) {
+			i.AccountState = "/account"
+			i.Root = "/account/work/project"
+		}},
 		{"checkout absent", "checkout.unavailable", func(f *porttest.CredentialFiles, _ *port.CredentialInput) { delete(f.Nodes, "/checkout") }},
 		{"checkout file", "checkout.unavailable", func(f *porttest.CredentialFiles, _ *port.CredentialInput) {
 			n := f.Nodes["/checkout"]
@@ -181,6 +186,45 @@ func TestCredentialBoundaryRefusals(t *testing.T) {
 			}
 			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{want}) {
 				t.Fatal(got)
+			}
+		})
+	}
+}
+
+func TestCredentialMountIDMissingDuringRewalk(t *testing.T) {
+	f, c, grants := credentialDomainFixture()
+	// The initial pin and its post-table recheck have IDs. Only the new
+	// pathname-walk descriptor lacks statx evidence.
+	f.DescriptorMountIDs = map[string][]int{"/vault/token": {1, 1, 0}}
+	want := []port.CredentialIssue{{Rule: "credential.mount_id", Index: 0}}
+	if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+		t.Fatalf("rewalk without mount identity: %#v, want %#v", got.Issues, want)
+	}
+}
+
+func TestCredentialUnprojectableMountRelevance(t *testing.T) {
+	for _, point := range []string{"/unrelated", "/state-sibling", "/state/child", "/state", "/", "/checkout", "/vault/token"} {
+		t.Run(point, func(t *testing.T) {
+			f, c, grants := credentialDomainFixture()
+			f.Parser = func([]byte) ([]port.CredentialMount, bool) {
+				return []port.CredentialMount{
+					{ID: 1, Device: 1, Root: "/", Point: "/"},
+					{ID: 2, Device: 4, Root: "net:[42]", Point: point, Unprojectable: true},
+				}, true
+			}
+			// Keep covering state rows hidden behind the original mount so the
+			// reservation check, not descriptor mapping, must reject those rows.
+			if point == "/checkout" || point == "/vault/token" {
+				n := f.Nodes[point]
+				n.MountID = 2
+				f.Nodes[point] = n
+			}
+			var want []port.CredentialIssue
+			if point != "/unrelated" && point != "/state-sibling" {
+				want = []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}
+			}
+			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+				t.Fatalf("issues %#v, want %#v", got.Issues, want)
 			}
 		})
 	}

@@ -196,6 +196,23 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 			}})
 		}
 	}
+	for _, root := range []string{"net:[4026537384]", "mnt:[4026537385]", "/replaced//deleted"} {
+		for _, point := range []string{"/unrelated", "/state-sibling", "/state", "/state/private", "/", "/vault/token", "/vault", "/checkout"} {
+			rule := "credential.unavailable"
+			if point == "/unrelated" || point == "/state-sibling" {
+				rule = ""
+			}
+			cases = append(cases, testCase{root + " at " + point, rule, func(f *CredentialFiles) {
+				for i := range f.MountsText {
+					f.MountsText[i] += "2 1 0:4 " + root + " " + point + " rw - nsfs nsfs rw\n"
+				}
+				if n, exists := f.Nodes[point]; exists && point != "/" {
+					n.MountID = 2
+					f.Nodes[point] = n
+				}
+			}})
+		}
+	}
 	for _, tc := range cases {
 		f := CredentialFixture()
 		tc.change(f)

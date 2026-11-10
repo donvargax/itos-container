@@ -52,7 +52,7 @@ func ParseCredentialMounts(data []byte) ([]port.CredentialMount, bool) {
 	seen := map[int]bool{}
 	result := make([]port.CredentialMount, 0, len(parsed))
 	for _, row := range parsed {
-		if row.ID <= 0 || seen[row.ID] || !credentialMountPath(row.Root) || !credentialMountPath(row.Mountpoint) {
+		if row.ID <= 0 || seen[row.ID] || len(row.Root) > 4096 || strings.ContainsRune(row.Root, 0) || !credentialMountPath(row.Mountpoint) {
 			return nil, false
 		}
 		seen[row.ID] = true
@@ -62,7 +62,7 @@ func ParseCredentialMounts(data []byte) ([]port.CredentialMount, bool) {
 		major, _ := strconv.ParseUint(deviceText[0], 10, 32)
 		minor, _ := strconv.ParseUint(deviceText[1], 10, 32)
 		device := (minor & 0xff) | (major&0xfff)<<8 | (minor&^uint64(0xff))<<12 | (major&^uint64(0xfff))<<32
-		result = append(result, port.CredentialMount{ID: row.ID, Device: device, Root: row.Root, Point: row.Mountpoint})
+		result = append(result, port.CredentialMount{ID: row.ID, Device: device, Root: row.Root, Point: row.Mountpoint, Unprojectable: !credentialMountPath(row.Root)})
 	}
 	return result, true
 }

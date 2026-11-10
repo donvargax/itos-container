@@ -59,6 +59,12 @@ names what was not checked. A valid policy without grants yields an empty array 
 a source/exposure scan. Policy problems retain the existing refusal envelope without
 partial effective data.
 
+Checkout input follows the shared pin's absolute-then-clean rule, including trailing
+or repeated separators and dot components. This normalization does not apply to
+credential source literals. Before any inventory, refuse `state.path` when the
+checkout and either protected state root overlap in either direction; a checkout
+inside state must never turn state records into checkout inventory.
+
 The three explicit doctor scopes are mutually exclusive. `--policy-only` and
 `--manifest-only` continue to inspect only their existing inputs. The staged gate is:
 
@@ -132,6 +138,12 @@ prove, not a claim of an atomic kernel snapshot:
    A bind alias has the same coordinate even though its visible path differs.
    Apply this to source ancestors too. Mount sources such as `/dev/sda1`, filesystem
    type names alone and equal device numbers alone are not location evidence.
+   Keep structurally valid rows with non-path roots, such as nsfs `net:[...]` or
+   `mnt:[...]` and replaced bind sources ending in `//deleted`, as unprojectable.
+   They supply no coordinate. An unrelated row does not invalidate inspection;
+   a held source/ancestor or boundary mapped to it refuses as unavailable. A row
+   at, below or covering either protected state path also refuses, including
+   hidden covering mounts. Never discard the row or invent a coordinate for it.
 3. The state exclusion set contains the state root's coordinate subtree, plus the
    coordinate subtree rooted at **every mountpoint at or below the pinned state's
    visible path**, using each such row's device and root. A file mount contributes
@@ -173,8 +185,10 @@ coordinate is at most 8192 by construction: the decoded root is at most 4096,
 its separator is one byte, and the relative visible suffix is at most 4095. The same
 bound holds for an absent root's suffix, whose complete visible path is bounded to
 4096. There is no independent coordinate-overflow input after those path checks.
-Cap each fdinfo at 64 KiB with EOF and require one valid mount ID. Reject malformed rows, duplicate mount IDs, invalid/non-absolute components,
-missing descriptor rows and missing observations. Keep the bounded fdinfo
+Cap each fdinfo at 64 KiB with EOF and require one valid mount ID. Reject malformed
+rows, duplicate mount IDs, invalid/non-absolute mountpoints, missing descriptor rows
+and missing observations. Non-path roots remain bounded, NUL-free and unprojectable
+as described above. Keep the bounded fdinfo
 mount ID as a consistency check against statx, never as its fallback. A missing
 statx mask, unavailable statx call or unusable mount ID produces
 `credential.mount_id` (exit 3), naming `STATX_MNT_ID` and advising a host kernel
@@ -265,6 +279,8 @@ adapter. Alias rows apply to **both** protected trees; other rows name their sco
 | State-only hard link, including one created before the final source stat | Links refusal without scanning state. |
 | Missing/malformed/truncated mount data, changed source mapping or boundary identity | Unavailable or existing boundary refusal; never root-only fallback. |
 | Unrelated mount changes; absent state root created safely at its reserved coordinate | Accepted if both complete observations exclude the unchanged source. |
+| Unrelated nsfs or deleted bind roots | Accepted; the rows remain unprojectable. |
+| Unprojectable source/boundary row or row overlapping protected state | Unavailable; no coordinate is inferred. |
 
 Alias fixtures have safe owners/permissions, one-link nonempty regular files and no
 symlink, so an unrelated refusal cannot satisfy them. Include file and directory mount
@@ -304,3 +320,12 @@ statx tests cover the field mask, syscall failure and disagreement with fdinfo.
 ID-CREDENTIALS-34's device-mismatch refusal row is superseded by 43 under q-57;
 its other incomplete-evidence refusals remain. These fixtures are not native btrfs
 mount or real-engine evidence; those runtime claims still require CI evidence.
+
+The follow-up review regressions were committed pending in `90b129d` and run
+with `@wip` removed before the fix. All nine examples failed at behavior assertions:
+ID-CREDENTIALS-46 returned unavailable for each unrelated namespace/deleted mount;
+47 accepted a checkout nested in either state tree; 48 rejected four absolute
+checkout spellings as non-absolute. All nine now pass. The shared fake/disk contract
+also refuses unprojectable source/ancestor/checkout/state mappings and mountpoints
+at, below or covering state, while accepting unrelated sibling mountpoints. No
+native mount or engine is needed for these topology observations.

@@ -99,6 +99,11 @@ Feature: Named credential requests and read-only source inspection
   #    Take complete mount tables before and after, recheck pins and mappings,
   #    and refuse unavailable/changed relevant evidence, never retry to obtain
   #    a pass. Unrelated mounts/record writes do not invalidate the observation.
+  #    Non-path mount roots (nsfs net/mnt handles and //deleted bind roots)
+  #    remain in the table as unprojectable, with no filesystem coordinate.
+  #    Refuse unavailable when a held source/boundary descriptor uses one or
+  #    its mountpoint is at, below or covering protected state; ignore unrelated
+  #    unprojectable rows when judging an independent source.
   #    Defer any initial table error to the location check, preserving earlier
   #    source symlink/ancestor refusal precedence.
   #    Either complete observation's source match is location; otherwise require
@@ -121,6 +126,9 @@ Feature: Named credential requests and read-only source inspection
   # An absent protected state root is not created. An inaccessible existing
   # boundary refuses; an unreadable unrelated STATE descendant is immaterial.
   # Existing state-location/identity failures retain their shared rules and exits.
+  # Checkout/state overlap in either direction is state.path before any scan.
+  # Absolute ITOS_ROOT paths are cleaned like the shared checkout pin; source
+  # literals keep their stricter lexical rules and are never cleaned.
   # The mode does not establish approval readiness or inspect another project's
   # admission history or record contents. Normal publication/removal does not
   # change the reserved subtrees or an independent source's metadata; no record
@@ -1356,7 +1364,7 @@ Feature: Named credential requests and read-only source inspection
     And it exits with code 3
     And its error output says "STATX_MNT_ID"
 
-  @slice-29 @ID-CREDENTIALS-46 @linux @wip
+  @slice-29 @ID-CREDENTIALS-46 @linux
   Scenario Outline: unrelated namespace and deleted mounts do not invalidate credential inspection
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And credential mount tables include root "<root>" at "/run/namespaces/unrelated"
@@ -1379,7 +1387,7 @@ Feature: Named credential requests and read-only source inspection
       | mnt:[4026537385]   |
       | /replaced//deleted |
 
-  @slice-29 @ID-CREDENTIALS-47 @linux @wip
+  @slice-29 @ID-CREDENTIALS-47 @linux
   Scenario Outline: checkout inside either state boundary is refused before inventory
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the credential checkout is inside "<boundary>" state
@@ -1394,7 +1402,7 @@ Feature: Named credential requests and read-only source inspection
       | selected |
       | account  |
 
-  @slice-29 @ID-CREDENTIALS-48 @linux @wip
+  @slice-29 @ID-CREDENTIALS-48 @linux
   Scenario Outline: credential inspection cleans absolute checkout paths like the shared checkout pin
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"

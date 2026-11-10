@@ -53,6 +53,10 @@ func (s *credentialScan) project(source, checkout credentialWalk, states []crede
 		p.stateMount = append(p.stateMount, stateMap.mount)
 		reserved = append(reserved, coordinate)
 		for _, m := range mounts {
+			if m.Unprojectable && (credentialDescendant(statePaths[i], m.Point) || credentialDescendant(m.Point, statePaths[i])) {
+				p.failure = "credential.unavailable"
+				return p
+			}
 			switch {
 			case credentialDescendant(statePaths[i], m.Point):
 				// Every covering row reserves its backing coordinate, including hidden
@@ -98,7 +102,7 @@ func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.Credential
 		return m, "credential.unavailable"
 	}
 	row, exists := rows[d.MountID]
-	if !exists || !credentialDescendant(d.Path, row.Point) {
+	if !exists || row.Unprojectable || !credentialDescendant(d.Path, row.Point) {
 		return m, "credential.unavailable"
 	}
 	// A descriptor's path is evidence only after a fresh no-follow rewalk binds

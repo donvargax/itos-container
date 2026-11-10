@@ -65,7 +65,7 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 		statePaths = append(statePaths, c.Input.AccountState)
 	}
 	for _, path := range statePaths {
-		if credentialDescendant(path, c.Input.Root) {
+		if credentialDescendant(path, c.Input.Root) || credentialDescendant(c.Input.Root, path) {
 			return boundary("state.path")
 		}
 	}

@@ -145,6 +145,9 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		if root == "" {
 			root, _ = os.Getwd()
 		}
+		if filepath.IsAbs(root) {
+			root = filepath.Clean(root)
+		}
 		state := os.Getenv("XDG_STATE_HOME")
 		if state == "" && filepath.IsAbs(os.Getenv("HOME")) {
 			state = filepath.Join(os.Getenv("HOME"), ".local", "state")

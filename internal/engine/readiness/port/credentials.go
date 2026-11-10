@@ -43,6 +43,9 @@ type CredentialMount struct {
 	ID          int
 	Device      uint64
 	Root, Point string
+	// Unprojectable retains a valid mount row whose root is not a filesystem
+	// path (for example nsfs or a deleted bind). It supplies no coordinate.
+	Unprojectable bool
 }
 
 // CredentialFS supplies raw, pinned metadata. Open never follows a symbolic

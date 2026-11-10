@@ -923,7 +923,9 @@ for paths does not settle safe identity or discovery. Init and example generatio
 deferred; successful validation neither grants approval nor starts a worker.
 
 **Credential source location — implemented by slice-29.** Root-only ancestry comparison
-misses descendant and single-file bind aliases. Readiness compares source/ancestor
+misses descendant and single-file bind aliases. Absolute checkout inputs are cleaned
+like the shared checkout pin. Checkout/state overlap in either direction refuses
+before enumeration. Readiness compares source/ancestor
 identities with protected roots and every checkout entry, crossing mounts without
 symlink or file-data reads. Checkout limits remain batches of 128, 100,000 entries
 and depth 64. It never enumerates shared state. Instead, a descriptor's statx mount ID
@@ -934,6 +936,9 @@ path gives a coordinate keyed by device. Each protected state root's coordinate
 subtree and all mount roots at/below its visible path are reserved, including other devices,
 file mounts and covered backing subtrees. Component comparisons detect outward and
 inward aliases without rejecting distinct siblings just for sharing a device.
+Non-path mount roots (namespace handles and deleted bind sources) remain in the
+table as unprojectable. Unrelated rows are harmless; a source/boundary descriptor
+using one, or one at, below or covering protected state, makes exclusion unavailable.
 
 Two complete mount-table observations bracket inspection; descriptor pathname walks,
 pins, mappings and final source metadata are rechecked. Each table is bounded to
