@@ -5821,17 +5821,168 @@
   type: test
   title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
   why: >
-    2026-11-09, main push runs: 42713010342 at 1b310df (a registry-only commit) failed Engine
+    On 2026-11-09, main push run 42713010342 at 1b310df (a registry-only commit) failed Engine
     transport loss reports an unknown workload outcome and retains recovery (worker readiness did
     not reach the controller's foreground stream); 42716948746 at 1ca4e45 (slice-25's merge) failed
-    both rows of The primary receives the first signal and its observed exit wins
+    two rows of The primary receives the first signal and its observed exit wins
     (lifecycle.feature:420; product did not reach the handle lifecycle barrier; lifecycle changed
-    unrelated native resources or image references). Both are waits on a barrier with a fixed bound,
-    like LIFECYCLE-09 before T-42. A red main run blocks itos work done on every item merged onto
-    it, so each flake stops a worker. Find which bound the hosted runner misses and give it room
-    through the harness budget seam, as T-42 did. Belongs in the existing investigation of lifecycle
-    barrier failures. Include controller exit code, stderr and the request journal in failure
-    messages to distinguish early controller exits from missed timing bounds; T-43 already exposes
-    those step errors in CI annotations.
+    unrelated native resources or image references). A red main run blocks closure of unrelated
+    work. Repair the lifecycle harness's readiness observation and retain enough failure evidence
+    to identify which bound a hosted runner actually missed. This maintains milestone runtime
+    proof; it adds no product behaviour, Gherkin scenario or ID. The drafter changes only this
+    ledger entry. The four LIFECYCLE-08 examples, not just the reported failing two, remain required.
+
+    Read features/lifecycle_native_fixture_test.go, lifecycle_native_actions_test.go,
+    lifecycle_native_assertions_test.go, lifecycle_native_steps_test.go, lifecycle_probe_test.go,
+    lifecycle_guard_test.go, lifecycle_harness_test.go and lifecycle_grace_test.go in full. Follow
+    their recoveryProcess, recoveryDiscover, recorder and cleanup paths in
+    recovery_native_fixture_test.go and lifecycle_recorder_test.go. Read engine_budgets_test.go,
+    engine_budget_test.go, engine_budgets_regression_test.go, engine_schedule_test.go and its
+    regressions, cmd/itos-container/engine_fixture_budget_test.go, lifecycle.feature,
+    features/README.md and the actual engine-shard workflow. The socket startup diagnostics and
+    their negative controls in features/sockets_diagnostics_test.go and offline_startup_test.go
+    show the existing restricted diagnostic pattern; do not dump a container inspection.
+
+    The source establishes a race, not yet the cause of every reported failure. The trusted
+    probe writes slice-12:ready to its stdout before publishing slice-12-ready. Nevertheless,
+    observing that file and a running worker does not establish that the controller's asynchronous
+    output capture has received the frame. lifecycleSignalAction currently takes one bytes.Contains
+    snapshot after lifecycleReady and signals even when the snapshot sets an error. LIFECYCLE-12's
+    healthy control uses that same action, so its failure can occur before the disconnect under
+    test. lifecycleReady itself waits up to 35 seconds for file/running observations;
+    lifecycleAwait returns the same false for timeout and early process exit. lifecycleAbortEarly
+    then adds a generic error, and lifecycleResult returns that error before reporting the exit
+    and stderr. Thus the handle-barrier message does not prove that 35 seconds elapsed, nor that
+    the disposable product's 1-second call or 3-second startup budget expired. Preserve the
+    resource-inventory failure too; an unremoved owned resource or a real unrelated mutation
+    must not become success by being labelled timing noise.
+
+    Readiness is one bounded observation. Name its existing 35-second allowance in
+    features/engine_budgets_test.go and use one absolute deadline from the recorded controller
+    start, covering ready-file publication, the independent running/identity observation and
+    receipt of the complete foreground frame. Partial bytes, repeated polls and progress do not
+    restart it. A captured-output path must wait for the exact slice-12:ready newline frame,
+    including when it arrives in pieces after the file; it must never send the requested signal
+    or trigger transport loss while that evidence is missing. All captured-output callers,
+    including the independent healthy control, use the same rule. Already complete evidence
+    returns promptly. An observed controller exit or observation failure ends the wait promptly
+    as failure; a live process with no complete frame fails at the original deadline. Keep
+    independent observer I/O bounded by the remaining allowance, not an unbounded callback after
+    a timer expires. Record readiness only after the required observations are complete.
+
+    Preserve the unread-output cases. The stdout-pipe path still reads and preserves only its
+    pre-release readiness prelude before releasing the workload writer; it cannot require bytes
+    in the unused stdout capture buffer. The stderr-pipe path still captures stdout readiness.
+    Neither path may drain the deliberately blocked workload output to make progress. Keep the
+    measured full-pipe barrier, quiet-control lifetime, delayed acknowledgements, first-signal
+    origins and every native receipt and durable-state assertion. Keep the 75/190-second process
+    guards, the 40-second startup collection guard, and the original 30-second teardown plus its
+    2-second observation tolerance. Collection or harness cancellation never supplies product
+    success, and failed observations still receive unconditional owned fixture cleanup.
+
+    On a missing barrier, report which observation was missing, the mode and condition, elapsed
+    time from the recorded origin and its configured limit, and whether the controller exited
+    before the deadline or the harness cancelled it after expiry. After collection, retain its
+    actual exit code, process/guard error, quoted stderr and a bounded ordered request-journal
+    summary even when l.err was already set. This evidence must reach the first failing Then
+    through lifecycleResult and healthy-control errors, not only a later skipped assertion or
+    cleanup hook. Put the cause and exit classification before verbose details so T-43's public
+    annotation retains them. Read exit/error fields only after done and snapshot recorder entries
+    under their lock. Preserve all original errors when adding context.
+
+    Journal diagnostics contain request method, API path, status, cancellation, elapsed arrival
+    and reply offsets, and the existing bounded engine diagnostic/state-error fields where
+    present. Missing reply, empty journal, unavailable recorder and unstarted process are explicit
+    observations, never zero-time success. Include the failed/refused request and last progress
+    when truncating, and state the total and omitted counts. Bound and quote stderr and text
+    fields; exclude request/response bodies, raw queries, headers, environment, argv, protected
+    record bytes and full inspection/configuration maps. Add synthetic sensitive fields to the
+    negative controls. This is fixture diagnostics, not permission to persist workload payloads
+    in product state or logs. Reuse the standard library and already pinned godog; no dependency,
+    production injection switch or product I/O seam is added.
+
+    Do not guess a larger call/startup budget from the old generic message. The fixed allowance
+    above gives stream propagation room through the harness seam, replacing the zero-wait
+    snapshot. Initially retain the compiled fixture's 1/3/1-second call/startup/grace values and
+    the production 10/120/10-second values. If the remaining handle failure is an early product
+    timeout, the implementer must name its operation and elapsed request/startup interval from
+    the new evidence, and record a concrete revised fixture limit and a deterministic delayed
+    success/expiry control in this entry before changing that limit. Only an evidenced
+    call/startup fixture adjustment through engineBudgetTree is within this task; no repeated
+    trial increases, production-default change, grace-window change or relaxed assertion is.
+    Such an adjustment must keep T-42's held/cut acknowledgement and restart-refusal controls
+    valid, including their timing relationships, and the compiled -cover budget contract passing.
+    If that cannot be achieved, return the conflict for a decision. A product defect or resource
+    ownership defect needs its own behaviour spec, not a workaround in the observer.
+
+    Add TestLifecycleReadinessBarrier and TestLifecycleBarrierDiagnostics as engine-free
+    regressions before repairing the helpers. Exercise the helpers used by the real actions,
+    not a separate demonstration predicate. Use controlled time and channels for deadline/order
+    cases, with the existing disposable recorder/pipe fixtures only where actual I/O matters.
+    No test waits 35 real seconds, starts a native worker or invokes approval against real state.
+    Readiness cases cover a delayed complete frame after file/running readiness; a split frame;
+    a wrong or permanently missing frame; progress that cannot extend the original deadline;
+    early exit before readiness; already-ready success; signal/disconnect blocked until readiness;
+    and preservation of the unread stdout/stderr paths. Assert both accepted delayed success and
+    rejected missing/late evidence, so an unconditional success or a longer sleep cannot pass.
+    Diagnostics cases cover early exit 75 with typed startup stderr and a failed start request;
+    live-process deadline expiry followed by harness cancellation; observation/recorder failure;
+    no process/no journal; and oversized/sensitive data with explicit truncation. A pre-existing
+    barrier error must retain those details, and failure must remain failure. Keep Linux-only pipe
+    observations guarded as existing tests do, while memory-only cases run on ordinary platforms.
+
+    The check below runs the promoted neighbour selection once, without -race, and requires both
+    new top-level tests to pass. Capturing go test's exit first preserves failures under POSIX sh;
+    explicit PASS checks refuse an absent, renamed or skipped test instead of accepting go test's
+    empty match. TestLifecycle includes T-42's signal windows, the recorder, process/collection
+    guards and loss controls. The other prefixes retain compiled fixture budgets under -cover,
+    workflow/fixture safety, full selection and the quiet/escalation schedule. No native scenario
+    runs under these test names: runtime rows are subtests of TestFeatures. Before implementation,
+    the new tests are absent; that is a discovery failure, not assertion-level red proof. Commit
+    their regressions first with test --item T-49 and record the actual failing assertions before
+    changing the helpers. Existing neighbours passing alone cannot close this task.
+
+    At specification baseline 80eb142, the promoted neighbour check passed in 26.882 seconds.
+    Two temporary Go-overlay probes, using only existing helpers and disposable recorder state,
+    compiled and failed at assertions. lifecycleReady accepted a ready file and running inspection
+    with no foreground frame. lifecycleResult, given a completed exit-75 process, typed synthetic
+    startup-timeout stderr, a failed POST start journal entry and a pre-existing barrier error,
+    returned only that barrier error, omitting the exit, stderr and request. These establish
+    harness defects without an engine; they do not reproduce the hosted failures or identify a
+    missed product budget. The exact check below also ran under sh: go test passed in 16.585
+    seconds, then awk exited 1 with TestLifecycleReadinessBarrier did not pass and
+    TestLifecycleBarrierDiagnostics did not pass. Its shell syntax check passed. No probe source
+    or generated evidence belongs in this spec commit.
+
+    Native evidence remains in the prepared Linux amd64 CI engine tier, never a task hook or
+    agent host. Require the full lifecycle.feature shard at the actual pushed head, including all
+    four LIFECYCLE-08 rows, LIFECYCLE-12 and its same-path control, the four LIFECYCLE-09 rows and
+    all three LIFECYCLE-13 rows. Retain its normal selector, exact selected/completed counts,
+    coverage export, T-43 annotations, T-44 timings and unconditional cleanup. T-45's measured
+    whole-step limit is 180 seconds per shard, not T-33's superseded 240 seconds; job/step/test
+    limits remain 10/5/4 minutes. Preserve the complete engine matrix and aggregate gate. No
+    retries, skipped rows, shared new success cache, broader concurrency or larger memory budget
+    may turn a failure green. One green run alone cannot prove an intermittent failure repaired;
+    the deterministic delayed-frame/diagnostic controls and explanation of the observed failure
+    path are required too. If another barrier fails, use its new diagnostics rather than claiming
+    the old timing hypothesis was established.
+
+    Implement the harness changes as test --task T-49 and explain the resulting readiness and
+    diagnostic rules in features/README.md with docs --item T-49. Only harness files and those
+    explanatory words change unless an evidenced fixture-limit amendment above is needed; keep
+    scenario text and tags, workflow, product behaviour, tool pins and proof settings intact.
+    Run no local mutation test and commit no generated proof. Agents commit and stop; the loop
+    owns push, native CI evidence and closure. Report the tested heads, every red/green regression,
+    the baseline neighbour result, measured failure cause and remaining uncertainty.
   done_when:
-    - run: go test ./features -count=1 -run '^(TestLifecycle|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)'
+    - run: |
+        output=$(go test ./features -count=1 -v -run '^(TestLifecycle|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)') || { printf '%s\n' "$output"; exit 1; }
+        printf '%s\n' "$output"
+        printf '%s\n' "$output" | awk '
+          /^--- PASS: TestLifecycleReadinessBarrier / { ready = 1 }
+          /^--- PASS: TestLifecycleBarrierDiagnostics / { diagnostic = 1 }
+          END {
+            if (!ready) print "TestLifecycleReadinessBarrier did not pass"
+            if (!diagnostic) print "TestLifecycleBarrierDiagnostics did not pass"
+            exit !(ready && diagnostic)
+          }'
