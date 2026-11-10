@@ -926,8 +926,10 @@ deferred; successful validation neither grants approval nor starts a worker.
 misses descendant and single-file bind aliases. Readiness compares source/ancestor
 identities with protected roots and every checkout entry, crossing mounts without
 symlink or file-data reads. Checkout limits remain batches of 128, 100,000 entries
-and depth 64. It never enumerates shared state. Instead, a descriptor's mount ID
-selects the kernel mount row; its decoded filesystem root plus relative descriptor
+and depth 64. It never enumerates shared state. Instead, a descriptor's statx mount ID
+selects the kernel mount row (q-57), with the ID checked again after mountinfo;
+missing STATX_MNT_ID has its own refusal. Descriptor st_dev need not match the
+row's superblock device. Its decoded filesystem root plus relative descriptor
 path gives a coordinate keyed by device. Each protected state root's coordinate
 subtree and all mount roots at/below its visible path are reserved, including other devices,
 file mounts and covered backing subtrees. Component comparisons detect outward and

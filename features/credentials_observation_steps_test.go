@@ -21,6 +21,8 @@ type credentialObservation struct {
 	ReadErrors                   map[string]bool
 	MountErrors                  map[int]bool
 	DescriptorErrors             map[string]bool
+	MountIDUnavailable           map[string]bool
+	MountIDsAfterTable           map[string]int
 	FinalNodes                   map[string]credentialNode
 	Activity                     string
 	Retained                     int
@@ -45,6 +47,23 @@ type credentialNode struct {
 
 func (w *world) credentialObservationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^a credential observation fixture for "([^"]*)" with "([^"]*)"$`, w.credentialObservationFixture)
+	sc.Step(`^credential descriptors report subvolume devices distinct from mountinfo$`, func() {
+		for path, node := range w.credentials.observation.Nodes {
+			node.Device += 100
+			w.credentials.observation.Nodes[path] = node
+		}
+	})
+	sc.Step(`^the credential source mount ID changes during the first mount-table read$`, func() {
+		o := w.credentials.observation
+		source := w.credentials.paths["token"]
+		for i := range o.Mounts {
+			o.Mounts[i] += "2 1 0:1 / / rw - tmpfs tmpfs rw\n"
+		}
+		o.MountIDsAfterTable = map[string]int{source: 2}
+	})
+	sc.Step(`^the credential source has no STATX_MNT_ID evidence$`, func() {
+		w.credentials.observation.MountIDUnavailable = map[string]bool{w.credentials.paths["token"]: true}
+	})
 	sc.Step(`^the credential checkout parent is "([^"]*)"$`, w.credentialCheckoutParent)
 	sc.Step(`^the final credential stat completes at (\d+) nanoseconds$`, func(elapsed int) {
 		o := w.credentials.observation

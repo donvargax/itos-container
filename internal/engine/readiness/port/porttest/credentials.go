@@ -37,6 +37,8 @@ type CredentialFiles struct {
 	ReadErrors                     map[string]bool
 	MountErrors                    map[int]bool
 	DescriptorErrors               map[string]bool
+	MountIDUnavailable             map[string]bool
+	MountIDsAfterTable             map[string]int
 	Activity                       string
 	Retained                       int
 	Deadline                       bool
@@ -162,6 +164,12 @@ func (f *CredentialFiles) Stat(h port.CredentialHandle) (port.CredentialNode, bo
 
 func (f *CredentialFiles) Descriptor(h port.CredentialHandle) (port.CredentialDescriptor, bool) {
 	n, ok := f.handles[h]
+	if id, exists := f.MountIDsAfterTable[n.Path]; f.mountReads > 0 && exists {
+		n.MountID = id
+	}
+	if f.MountIDUnavailable[n.Path] {
+		return port.CredentialDescriptor{Path: n.Path}, ok
+	}
 	if path, exists := f.DescriptorPaths[n.Path]; exists {
 		n.Path = path
 	}

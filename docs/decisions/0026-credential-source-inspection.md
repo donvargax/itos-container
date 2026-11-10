@@ -2,10 +2,14 @@
 
 Recorded on 2026-11-09 with the revised
 [credential scenarios](../../features/credentials-policy.feature). This is a drafter's
-design amendment under the charter's architecture hypothesis, not implemented behavior,
-runtime evidence or permission to use real credentials. T-47 has landed; slice-29
-still waits for slice-25. The coordinator must retain T-47 and add slice-25 to the registry's
-`depends_on` before scheduling implementation; this spec does not change that registry.
+design amendment under the charter's architecture hypothesis, not permission to use
+real credentials. T-47 and slice-25 have landed; no dependency change is needed.
+
+Amended by **q-57**, the coordinator's settled decision of 2026-11-10 02:12 UTC:
+match descriptor `statx(STATX_MNT_ID)` to mountinfo's first field, re-read it after
+mountinfo and refuse a change. Drop descriptor `st_dev` equality with the row's
+device. A missing `STATX_MNT_ID` refuses with its own actionable diagnostic.
+This supersedes the original device-equality requirement and its refusal fixture.
 
 ## The sections this decision overrides
 
@@ -98,19 +102,25 @@ the coordination catalog or enumerate other enrolled locations. Observe their
 mount mappings, not their contents. The following is an algorithm to implement and
 prove, not a claim of an atomic kernel snapshot:
 
-1. Acquire the first bounded mount table, retaining any error until the location
-   check so source symlink/ancestor refusals keep their precedence. Pin the source,
+1. Pin the source,
    checkout and existing state root using the existing no-follow component walks.
-   Read each relevant descriptor's device/inode and mount ID
-   (`/proc/self/fdinfo/<fd>`), and its current absolute pathname from
+   Read each relevant descriptor's device/inode and mount ID using
+   `statx(fd, "", AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, STATX_MNT_ID)` before
+   reading mountinfo, and its current absolute pathname from
    `/proc/self/fd/<fd>`. Rewalk that pathname without following symlinks and require
    the same device, inode and mount ID. Do not strip a ` (deleted)` suffix and use
    what remains: an unlinked, unreachable or ambiguous descriptor path refuses.
    Retain the source descriptor through observation and any later delivery read.
+   Then acquire the first bounded mount table, retaining any error until the
+   location check so source symlink/ancestor refusals keep their precedence.
+   Re-read each held descriptor's mount ID after the table; refuse a change.
+   Repeat the mount-ID recheck after the second table, including boundary pins.
 2. The table is a complete `/proc/self/mountinfo` in a bounded buffer. For a descriptor
    with pathname `p`, select its row by **mount ID**, not longest pathname prefix.
-   Require its device to match the row and `p` to be the row's mountpoint or a
-   component-descendant. Its filesystem coordinate is the row's decoded `root`
+   Require `p` to be the row's mountpoint or a component-descendant. Do not compare
+   `st_dev` with mountinfo's device: subvolume/overlay getattr identities can differ
+   from the superblock device. Continue comparing device/inode between held pins
+   and no-follow pathname rewalks. Its filesystem coordinate is the row's decoded `root`
    followed by the relative components from `mountpoint` to `p`, keyed by device.
    A bind alias has the same coordinate even though its visible path differs.
    Apply this to source ancestors too. Mount sources such as `/dev/sda1`, filesystem
@@ -157,7 +167,11 @@ its separator is one byte, and the relative visible suffix is at most 4095. The 
 bound holds for an absent root's suffix, whose complete visible path is bounded to
 4096. There is no independent coordinate-overflow input after those path checks.
 Cap each fdinfo at 64 KiB with EOF and require one valid mount ID. Reject malformed rows, duplicate mount IDs, invalid/non-absolute components,
-missing descriptor rows, device mismatches and missing observations. Oversize or
+missing descriptor rows and missing observations. Keep the bounded fdinfo
+mount ID as a consistency check against statx, never as its fallback. A missing
+statx mask, unavailable statx call or unusable mount ID produces
+`credential.mount_id` (exit 3), naming `STATX_MNT_ID` and advising a host kernel
+that exposes it. Other inconsistent mapping evidence remains `credential.unavailable`. Oversize or
 unavailable evidence yields `credential.unavailable`, never a shortened table.
 Unknown optional mount fields remain allowed. The limits are on topology, paths
 and elapsed time, independent of the number of retained state entries. Work is
@@ -233,6 +247,9 @@ adapter. Alias rows apply to **both** protected trees; other rows name their sco
 | Single protected file bound outside | Location refusal with one link and no matching protected root ancestor. |
 | Outside directory or individual file bound into a protected descendant | Location refusal from checkout inventory or the state mount projection. |
 | Distinct inode, same device and shared pathname prefix | Accepted when all other source checks succeed. |
+| Subvolume-like st_dev differs from mountinfo at source and boundary pins | Accepted by stable statx mount IDs; descendant aliases still refuse. |
+| Descriptor mount ID changes during the first mountinfo read | Unavailable even when both rows project to the same coordinate. |
+| STATX_MNT_ID is unavailable | Dedicated mount-ID diagnostic, no fdinfo or device fallback. |
 | Unreadable/disappearing checkout entry, unavailable identity or directory substitution | Unavailable refusal; never an incomplete-safe result. |
 | Exact checkout entry/depth and state topology limits; limits exceeded or deadline reached | Accepted at inclusive limits when complete; unavailable on exhaustion. |
 | Known alias plus unavailable checkout metadata | Location refusal for the alias; unavailable for an otherwise unmatched source. |

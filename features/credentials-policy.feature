@@ -1319,3 +1319,38 @@ Feature: Named credential requests and read-only source inspection
     Then it exits with code 0
     And its standard output says "unsafe credential source metadata or location"
     And its standard output says "missing credential source or unavailable credential evidence"
+
+  # q-57 replaces the st_dev/mountinfo device equality with descriptor statx
+  # mount IDs, sampled before and after mountinfo. Synthetic subvolume devices
+  # differ at every pin, including checkout and state, not only at the source.
+  @slice-29 @ID-CREDENTIALS-43 @linux @wip
+  Scenario: subvolume device numbers do not prevent credential mount mapping
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And credential descriptors report subvolume devices distinct from mountinfo
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                     |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+    And the credential observation recorded no state record enumeration or metadata visits
+
+  @slice-29 @ID-CREDENTIALS-44 @linux @wip
+  Scenario: a descriptor mount ID cannot change across the mount-table read
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And the credential source mount ID changes during the first mount-table read
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                   | path                  | exit |
+      | credential.unavailable | /credentials/0/source | 3    |
+    And it exits with code 3
+
+  @slice-29 @ID-CREDENTIALS-45 @linux @wip
+  Scenario: missing statx mount identity has an actionable diagnostic
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And the credential source has no STATX_MNT_ID evidence
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                | path                  | exit |
+      | credential.mount_id | /credentials/0/source | 3    |
+    And it exits with code 3
+    And its error output says "STATX_MNT_ID"
