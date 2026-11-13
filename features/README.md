@@ -1024,7 +1024,8 @@ writes and `TestEgressSyntheticELFCarriesExactlyItsProperty` reads back independ
 evidence at `intents/<project>/<token>.egress.json` (`{"proxy_image_id":…,"schema":1}`).
 
 With `@wip` removed for the run only, all 43 rows failed at their first Then on 2026-11-13;
-the failing assertions are in the checkpoint's hand-back. With a throwaway wiring of T-40's
+the failing assertions are in the checkpoint's hand-back. `ID-EGRESS-07` has since gone live
+with its readiness rule and ELF adapter; the other eleven stay work in progress. With a throwaway wiring of T-40's
 grant in the test assembly, never committed, all seven `ID-EGRESS-10` rows and every step
 of `ID-EGRESS-02` except the two that need the real inspection and durable evidence passed,
 so the fixture agrees with the session engine as built. `ID-EGRESS-04` also reads the

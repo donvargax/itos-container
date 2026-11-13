@@ -370,7 +370,7 @@ Feature: Run through the approved egress proxy
   # A wrong-architecture executable cannot itself run the CLI. Reach the actual
   # observation adapter with ELF fixture bytes and the same readiness contract,
   # not a flag to make the product pretend its own executable has another shape.
-  @wip @slice-27 @ID-EGRESS-07 @linux
+  @slice-27 @ID-EGRESS-07 @linux
   Scenario Outline: Proxy executable observations refuse unsafe delivery
     Given an egress executable contract with a static Linux amd64 control and defect "<defect>"
     When the shared egress readiness contract inspects both inputs through the fake and real observation adapter
