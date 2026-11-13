@@ -372,6 +372,24 @@ func TestCredentialIncompleteEvidence(t *testing.T) {
 	}
 }
 
+// A failed stat proves nothing, whatever node comes back with it: an adapter
+// may return the last metadata it saw. Each held pin is refused on the failure
+// alone, even when that node still carries the pinned device and inode.
+func TestCredentialFailedStatIgnoresItsReportedIdentity(t *testing.T) {
+	for _, path := range []string{"/vault/token", "/vault", "/checkout", "/state"} {
+		t.Run(path, func(t *testing.T) {
+			f, c, grants := credentialDomainFixture()
+			n := f.Nodes[path].CredentialNode
+			// Only the first stat fails, so no later check can refuse instead.
+			f.StatSequence = map[string][]porttest.CredentialStat{path: {{Node: n, OK: false}, {Node: n, OK: true}}}
+			want := []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}
+			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+				t.Fatalf("issues %#v, want %#v", got.Issues, want)
+			}
+		})
+	}
+}
+
 func TestCredentialStateMountIdentityCannotChangeAtSameCoordinate(t *testing.T) {
 	f, c, grants := credentialDomainFixture()
 	n := f.Nodes["/state"]
