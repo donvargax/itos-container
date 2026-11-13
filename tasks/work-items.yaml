@@ -1154,6 +1154,13 @@ items:
       this project's own session state, as an explicit act of the person. Until then every reader of
       a session folder ignores them, slice-28's status reader included; T-51's "What T-51 settled"
       section in decision 0022 tells the sibling drafters about the unswept temporary.
+
+      Widens this item's note on unswept temporaries, which names only a controller killed in the
+      middle of a copy. T-51's reviewed spec adds the ordinary cause: a controller that merely exits
+      while a timed-out Begin, Write or Commit is still running also leaves .refusals-<32 hex>.tmp
+      behind, because budget closes a late Begin's copy only once it returns and Close never waits
+      for a Write or a Commit. Each is up to about 40 MiB, and every retry of stop on a slow disk
+      can add another. The retention rule must cover both causes.
   - id: T-42
     title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
     phase: 1
