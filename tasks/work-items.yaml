@@ -1822,3 +1822,31 @@ items:
       The identical line merges cleanly with slice-29's. The scan passes locally under the
       distribution Go even when CI fails, so each worker would otherwise spend a CI cycle finding
       the same failure. If slice-29 merges first, close this as done by it.
+  - id: p2-engine-row-leftover-audit
+    title: Each engine row ends with an audit that nothing carrying its own labels is left on the runner, so a leak fails the row that made it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 1: T-50 closes the one known leak path, so this waits behind
+      it and is specified after it lands, in the same harness files. Confirmed on main: the after
+      hook (features/steps_test.go) runs each fixture's cleanup and then looks at nothing, and
+      tools/bin/engine-fixture cleanup removes only its own smoke and registry containers and
+      derived image references. Each fixture compares the engine inventory before and after its own
+      steps, so a worker or volume left by an earlier row is invisible while it stays still and
+      fails a later, unrelated row when it changes, with 'changed unrelated native resources'. Main
+      run 42716948746 has that shape, and T-49 and T-50 each spent a round on rows that were not the
+      cause. T-50's cleanup accounts only for creates the recorder forwarded. Milestone two's egress
+      rows (slice-27, slice-28) add a proxy container and two networks per row, and the credential
+      rows add mounts, so there is more to leave behind and more rows to blame wrongly. After the
+      hook's cleanup, make one read-only listing of containers (stopped included), volumes and
+      networks that carry the row's own io.itos-container project and session labels. Any hit fails
+      that row's hook with kinds and counts only: no name, ID or engine text, nothing removed by the
+      audit, no retry. Filtering by the row's own labels keeps a concurrent row's live resources and
+      the fixture's pinned images and registry out of it. It needs an engine-free regression against
+      a disposable engine, covering a leftover of each kind, a foreign-labelled resource that is
+      ignored, a failed listing reported as unavailable and never as clean, and a clean row.
+      Real-engine evidence comes only from CI. It is harness work, a ledger task with a check,
+      adding no product behaviour, scenario or ID.
