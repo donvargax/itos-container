@@ -389,6 +389,9 @@ func (w *world) runWith(env []string, args string) error {
 	if w.manifest != nil {
 		dir = w.manifest.checkout
 	}
+	if w.credentials != nil && w.credentials.cwd != "" {
+		dir = w.credentials.cwd
+	}
 	return w.runEnv(dir, env, w.bin, fields...)
 }
 

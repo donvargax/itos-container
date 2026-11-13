@@ -1606,3 +1606,74 @@ Feature: Named credential requests and read-only source inspection
       | file      | first       |
       | directory | final       |
       | file      | final       |
+
+  # Review of 027305f (the thread at cmd/itos-container/main.go:144): the policy
+  # and the checkout boundary must name one tree. The effective root is absolute
+  # ITOS_ROOT when set, otherwise the working directory, as ordinary doctor
+  # resolves it. This mode pins that root with the shared checkout pin, reads
+  # itos-container.yaml only through the pin, as ordinary doctor does, and holds
+  # the pin until the source observation returns. It never opens the policy of a
+  # different working directory, so one checkout's requests are never judged
+  # against another tree. --policy-only and --manifest-only keep reading the
+  # working directory: they observe no source and have no second root.
+  # A root that cannot be pinned refuses before any policy is read with the
+  # shared doctor.checkout.root (2), .unavailable (3), .path (1) or .changed (1)
+  # diagnostic, its path the root as given, in the credentials envelope with
+  # credentials [] because no request is known. This holds with and without
+  # grants: pinning the root identity is not a source or exposure scan.
+  # The new Given creates a sibling folder outside checkout, sources and state,
+  # writes there a valid version 3 policy requesting a private 0600 one-link
+  # file of that folder, and makes it the child's working directory only.
+  # ITOS_ROOT and the checkout's own policy are untouched. Before the fix that
+  # request was inspected against the checkout and accepted.
+  @slice-29 @ID-CREDENTIALS-56 @linux @wip
+  Scenario: credential inspection reads the effective root's policy from another working directory
+    Given a private credential inspection fixture
+    And credential source "token" has layout "private file at checkout root"
+    And the credential fixture requests these sources:
+      | kind         | source |
+      | claude-token | token  |
+    And the credential command runs in another directory with its own policy and private source
+    And credential inspection effects are snapshotted
+    When itos-container runs with "doctor --credentials-only --json"
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                | path                  | exit |
+      | credential.location | /credentials/0/source | 1    |
+    And it exits with code 1
+    And credential inspection has no side effects or helper execution
+    And the engine recorder has no connections
+
+  # The review's reproduction: only the working directory holds a policy.
+  @slice-29 @ID-CREDENTIALS-57 @linux @wip
+  Scenario: an effective root without a policy never borrows the working directory's
+    Given a private credential inspection fixture
+    And the credential fixture checkout has no policy file
+    And the credential command runs in another directory with its own policy and private source
+    And credential inspection effects are snapshotted
+    When itos-container runs with "doctor --credentials-only --json"
+    Then the credential fixture command reports exactly "policy.missing" at "" with exit 2
+    And credential inspection has no side effects or helper execution
+    And the engine recorder has no connections
+
+  # The root Given sets only ITOS_ROOT. "relative" is the checkout's literal
+  # relative name from the working directory, "absent" an unused absolute name
+  # beside the checkout, and "symbolic link" an absolute link to the checkout.
+  # Each already reported the same rule, beside the working directory's request;
+  # that request must now be absent because its policy is never read.
+  @slice-29 @ID-CREDENTIALS-58 @linux @wip
+  Scenario Outline: an effective root that cannot be pinned refuses before any policy is read
+    Given a private credential inspection fixture
+    And the credential command runs in another directory with its own policy and private source
+    And the credential effective root is "<root>"
+    And credential inspection effects are snapshotted
+    When itos-container runs with "doctor --credentials-only --json"
+    Then the credential boundary problem is "<rule>" with exit <exit> at the effective root and no grant is reported
+    And it exits with code <exit>
+    And credential inspection has no side effects or helper execution
+    And the engine recorder has no connections
+
+    Examples:
+      | root          | rule                        | exit |
+      | relative      | doctor.checkout.root        | 2    |
+      | absent        | doctor.checkout.unavailable | 3    |
+      | symbolic link | doctor.checkout.path        | 1    |
