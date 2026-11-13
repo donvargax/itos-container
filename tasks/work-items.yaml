@@ -1905,6 +1905,22 @@ items:
       ignored, a failed listing reported as unavailable and never as clean, and a clean row.
       Real-engine evidence comes only from CI. It is harness work, a ledger task with a check,
       adding no product behaviour, scenario or ID.
+
+      This belongs inside p2-engine-row-leftover-audit, which is specified after T-50 in the same
+      harness files and already lists volumes. It corrects that item's statement that T-50 closes
+      the one known leak path: a second path is known from reading the code, though no log shows it.
+      Checked on main: the recorder forwards POST /volumes/create through the same reverse proxy
+      under the controller's request context (features/offline_runtime_engine_test.go, serve), and
+      cleanupAnchorVolumes skips a volume whose inspection answers 404
+      (features/offline_anchor_engine_test.go:183). T-50's first rule detaches only POST
+      /containers/create and says nothing else is detached. So when a controller abandons a volume
+      create, the engine can finish it after cleanup, and after the audit's one listing too. The
+      audit would then call the row clean and the next row's inventory would differ, which is the
+      shape of main run 42716948746. When this item is specified, settle one of two things: the
+      recorder hears out every forwarded volume create before cleanup and the audit, as T-50 does
+      for container creates, or the audit states that it cannot see a create still open and reports
+      that row as unaccounted, never as clean. Add a regression for a volume create abandoned before
+      the engine answers.
   - id: p2-ci-proof-verdict-despite-red-engine
     title: The ci job runs itos verify and the code proof even when an engine shard is red, and requires engine success as its last step
     phase: 1
