@@ -264,6 +264,16 @@ means an empty result with no source, checkout-inventory or mount-table calls. T
 three explicit inspection scopes cannot be combined. JSON selection follows `ITOS_JSON`
 and explicit `--no-json`, as with the other doctor modes.
 
+The policy is the effective root's: absolute `ITOS_ROOT` when set, otherwise the working
+directory, as ordinary doctor resolves it. This mode pins that root, reads
+`itos-container.yaml` only through the pin and holds it until the sources are observed, so
+the requests and the checkout they are excluded from belong to one tree. A working directory
+that differs from `ITOS_ROOT` is never read. A root that cannot be pinned refuses before any
+policy is read with `doctor.checkout.root` (2), `doctor.checkout.unavailable` (3),
+`doctor.checkout.path` (1) or `doctor.checkout.changed` (1), its `path` the root as given and
+`credentials: []`, with or without grants. `--policy-only` and `--manifest-only` keep reading
+the working directory.
+
 Successful policy projection produces one `schema:1` JSON object with `scope:"credentials"`,
 `ok`, `problems` and `credentials` (always an array). Each sorted grant has exactly `kind`,
 its literal `source`, and the fixed target `/run/itos-container/credentials/<kind>`.

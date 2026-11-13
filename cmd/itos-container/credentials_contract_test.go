@@ -68,6 +68,8 @@ func credentialContractCommand(policy, manifest, argv, root string, files *readi
 	if root == "" {
 		root = "/checkout"
 	}
-	c.Doctor.Credentials = inspection.Credentials{FS: files, Input: readinessport.CredentialInput{Root: root, State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}, Account: &approvalfake.Account{Home: "/account"}}
+	// The in-memory policy has no second location, so its root pin always holds.
+	c.Doctor.RootPolicies = c.Doctor.Policies
+	c.Doctor.Credentials = inspection.Credentials{FS: files, Input: readinessport.CredentialInput{Root: root, State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}, Account: &approvalfake.Account{Home: "/account"}, Checkout: &readinessfake.Checkout{}}
 	return c.Doctor.Run(ui)
 }

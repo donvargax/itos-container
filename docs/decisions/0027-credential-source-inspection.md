@@ -31,6 +31,11 @@ and the message "Overlay or FUSE backing paths cannot be excluded from credentia
 exposure". Advise using source, checkout and state paths on filesystems with
 projectable backing paths. This preserves q-57 and q-58.
 
+Amended after the review of `027305f`: the mode took its checkout boundary from
+`ITOS_ROOT` but read the policy from the working directory, so one checkout's
+requests were judged against another tree. The policy is now read only through a
+pin of the effective root, as **A separate metadata scope** describes.
+
 ## The sections this decision overrides
 
 T-47's record is [decision 0025](0025-credentials-passed-in.md). The first version
@@ -76,6 +81,18 @@ an engine, execute helpers, create state or record approval. Its schema-1 JSON h
 names what was not checked. A valid policy without grants yields an empty array without
 a source/exposure scan. Policy problems retain the existing refusal envelope without
 partial effective data.
+
+The policy and the checkout boundary name one tree. The effective root is absolute
+`ITOS_ROOT` when set, otherwise the working directory, as ordinary doctor resolves
+it. The mode pins that root with the shared checkout pin, reads `itos-container.yaml`
+only through the pin and holds it until the source observation returns. It never
+opens the policy of a different working directory. A root that cannot be pinned
+refuses before any policy is read, with the shared `doctor.checkout.root`,
+`.unavailable`, `.path` or `.changed` diagnostic, the root as its path and an empty
+grant list because no request is known; this holds without grants too, since pinning
+a root identity is not a source or exposure scan. `--policy-only` and
+`--manifest-only` keep reading the working directory: they observe no source and
+have no second root.
 
 Checkout input follows the shared pin's absolute-then-clean rule, including trailing
 or repeated separators and dot components. This normalization does not apply to
@@ -287,7 +304,11 @@ The existing host-user/admin trust assumption remains; no global lock, privilege
 namespace operation, mount helper, engine connection or continuous enforcement is
 introduced. The controller uses its host mount namespace, as later native Docker
 delivery requires. An inaccessible or incomplete view refuses, never falls back to
-root-only comparison. Approve/run must repeat this entire check at their specified
+root-only comparison. The policy pin and the source observation each walk the
+effective root's path without following links, and the pin stays held meanwhile;
+their identities are not compared, so a trusted host renaming another directory
+onto that path between the two walks is, like the changes above, not detected.
+Approve/run must repeat this entire check at their specified
 validation points and run must read the retained checked descriptor. Ordinary
 credential admission and delivery remain gated until their own evidence exists.
 

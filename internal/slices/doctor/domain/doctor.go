@@ -11,9 +11,15 @@ import (
 // Inspect validates policy without inspecting its requested manifest.
 func Inspect(policies port.Policies) policy.Result { return policies.Inspect() }
 
-// InspectCredentials never observes sources after a policy refusal. File-only
-// scopes do not call this operation at all.
+// InspectCredentials pins the effective root before its policy is read and
+// holds it until the sources are observed, so both describe one tree. A root
+// that cannot be pinned refuses without a policy read. Sources are never
+// observed after a policy refusal. File-only scopes do not call this operation.
 func InspectCredentials(policies port.Policies, sources port.Credentials) (policy.Result, *readiness.CredentialResult) {
+	if refusal := sources.Pin(); len(refusal.Issues) != 0 {
+		return policy.Result{}, &refusal
+	}
+	defer sources.Close()
 	p := Inspect(policies)
 	if p.Policy == nil || len(p.Issues) != 0 {
 		return p, nil

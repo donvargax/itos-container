@@ -158,9 +158,9 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 			state = ""
 		}
 
-		c.Doctor.Credentials = inspection.Credentials{FS: &readinessdisk.CredentialFiles{}, Input: readinessport.CredentialInput{
+		c.Doctor.RootPolicies, c.Doctor.Credentials = credentialInspection(readinessport.CredentialInput{
 			Root: root, State: state, OS: runtime.GOOS, Architecture: runtime.GOARCH, UID: int64(os.Geteuid()),
-		}, Account: &approvalhost.Process{}}
+		})
 		return c.Doctor.Run(ui)
 	case "approve":
 		service, presentation := approvalServices(command, in, stdout, stderr)
@@ -311,6 +311,15 @@ func approvalServices(command string, in io.Reader, out, errout io.Writer) (appr
 
 func doctorPolicies() inspection.Policies {
 	return inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}, Names: policyidna.Names{}}
+}
+
+// credentialInspection gives the credentials scope's policy reader and source
+// observation one checkout pin. The policy is read only through the root that
+// bounds the sources, never from a working directory that names another tree.
+func credentialInspection(input readinessport.CredentialInput) (inspection.Policies, inspection.Credentials) {
+	pin := &readinessdisk.Checkout{}
+	policies := inspection.Policies{Source: policyyaml.Source{Files: disk.Files{OpenRoot: pin.OpenRoot}}, Names: policyidna.Names{}}
+	return policies, inspection.Credentials{FS: &readinessdisk.CredentialFiles{}, Input: input, Account: &approvalhost.Process{}, Checkout: pin}
 }
 
 // Only cmd binds the session ownership validator to the approval engine's

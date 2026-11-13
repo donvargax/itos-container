@@ -494,7 +494,10 @@ use the existing required/type/unknown-key rules. Independent problems are colle
 without partial effective data or rejected values in diagnostics. Fixes name the declared
 schema; unsupported-version fixes name versions 1, 2 and 3.
 
-`doctor --credentials-only` observes metadata on Linux amd64. Each source needs safe
+`doctor --credentials-only` reads the policy of the effective root (absolute `ITOS_ROOT`,
+otherwise the working directory) through a pin of that root, never from a different working
+directory, and judges its sources against that same checkout.
+It observes metadata on Linux amd64. Each source needs safe
 root- or host-owned ancestors, no symlink, a host-owned regular file with no group/other
 permission bits, exactly one link, and 1..65536 bytes. Owner read permission is not
 required. Two grants cannot name one inode. Sources and their ancestors must be outside

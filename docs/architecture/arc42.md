@@ -278,7 +278,9 @@ the [shared-inode decision](../decisions/0013-refuse-shared-checkout-inodes.md)
 extends admission and revalidation without adding link counts to the fingerprint.
 
 Slice-29 reuses pinned traversal for the checkout only, without imposing unrelated
-checkout readiness checks on credentials-only mode. Both mount observations also
+checkout readiness checks on credentials-only mode. That mode reads its policy only
+through the shared pin of the effective root, held until the sources are observed,
+never from a working directory that names another tree. Both mount observations also
 exclude the checkout's validated coordinate subtree: the worker's non-recursive
 bind exposes backing directories/files hidden under the host inventory's submounts.
 State exclusion maps descriptor paths through mount IDs and filesystem roots,

@@ -14,6 +14,7 @@ type CLI struct {
 	Approval        approval.Inspector    `kong:"-"`
 	Presentation    approval.Presentation `kong:"-"`
 	Policies        port.Policies         `kong:"-"`
+	RootPolicies    port.Policies         `kong:"-"` // reads through the root Credentials pins
 	Manifests       port.Manifests        `kong:"-"`
 	Readiness       port.Readiness        `kong:"-"`
 	Credentials     port.Credentials      `kong:"-"`
@@ -56,11 +57,11 @@ func (c CLI) Run(ui *cli.UI) int {
 		return presentPolicy(ui, domain.Inspect(c.Policies), c.JSON)
 	}
 	if c.CredentialsOnly {
-		policy, result := domain.InspectCredentials(c.Policies, c.Credentials)
+		policy, result := domain.InspectCredentials(c.RootPolicies, c.Credentials)
 		if result == nil {
 			return presentPolicy(ui, policy, c.JSON)
 		}
-		return presentCredentials(ui, policy.Policy.Credentials, *result, c.JSON)
+		return presentCredentials(ui, requestedCredentials(policy), *result, c.JSON)
 	}
 	if !c.ManifestOnly {
 		if c.Approval != nil {

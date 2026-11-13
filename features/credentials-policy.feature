@@ -59,7 +59,10 @@ Feature: Named credential requests and read-only source inspection
   #
   # The new mode parses policy first, then observes sources using the effective
   # host UID and pinned checkout/state roots, without creating either state or
-  # approval. It needs no manifest, Git helper, image or engine. On Linux amd64,
+  # approval. It reads that policy only through a pin of the effective root, the
+  # checkout the sources are excluded from, never from another working directory
+  # (ID-CREDENTIALS-56 to 58). It needs no manifest, Git helper, image or engine.
+  # On Linux amd64,
   # reuse the readiness source observation T-47 requires; no separate validator.
   # Observe each source in written order, collect one first failure per source:
   # 1. O_PATH/O_NOFOLLOW at every component; refuse any symlink, dangling included.
@@ -1626,7 +1629,7 @@ Feature: Named credential requests and read-only source inspection
   # file of that folder, and makes it the child's working directory only.
   # ITOS_ROOT and the checkout's own policy are untouched. Before the fix that
   # request was inspected against the checkout and accepted.
-  @slice-29 @ID-CREDENTIALS-56 @linux @wip
+  @slice-29 @ID-CREDENTIALS-56 @linux
   Scenario: credential inspection reads the effective root's policy from another working directory
     Given a private credential inspection fixture
     And credential source "token" has layout "private file at checkout root"
@@ -1644,7 +1647,7 @@ Feature: Named credential requests and read-only source inspection
     And the engine recorder has no connections
 
   # The review's reproduction: only the working directory holds a policy.
-  @slice-29 @ID-CREDENTIALS-57 @linux @wip
+  @slice-29 @ID-CREDENTIALS-57 @linux
   Scenario: an effective root without a policy never borrows the working directory's
     Given a private credential inspection fixture
     And the credential fixture checkout has no policy file
@@ -1660,7 +1663,7 @@ Feature: Named credential requests and read-only source inspection
   # beside the checkout, and "symbolic link" an absolute link to the checkout.
   # Each already reported the same rule, beside the working directory's request;
   # that request must now be absent because its policy is never read.
-  @slice-29 @ID-CREDENTIALS-58 @linux @wip
+  @slice-29 @ID-CREDENTIALS-58 @linux
   Scenario Outline: an effective root that cannot be pinned refuses before any policy is read
     Given a private credential inspection fixture
     And the credential command runs in another directory with its own policy and private source

@@ -18,6 +18,15 @@ type credentialGrant struct {
 	Target string `json:"target"`
 }
 
+// requestedCredentials is empty when the effective root was refused before
+// its policy could be read: no request is known then.
+func requestedCredentials(result policy.Result) []policy.Credential {
+	if result.Policy == nil {
+		return nil
+	}
+	return result.Policy.Credentials
+}
+
 func presentCredentials(ui *cli.UI, requests []policy.Credential, result readiness.CredentialResult, json bool) int {
 	grants := make([]credentialGrant, 0, len(requests))
 	for _, r := range requests {
@@ -97,6 +106,8 @@ func credentialProblem(issue readiness.CredentialIssue) readiness.Problem {
 		return readiness.Diagnostic(readiness.Issue{Kind: readiness.CheckoutPath, Subject: issue.Subject})
 	case "checkout.root":
 		return readiness.Diagnostic(readiness.Issue{Kind: readiness.CheckoutRoot, Subject: issue.Subject})
+	case "checkout.changed":
+		return readiness.Diagnostic(readiness.Issue{Kind: readiness.CheckoutChanged, Subject: issue.Subject})
 	case "host.unsupported":
 		return readiness.Diagnostic(readiness.Issue{Kind: readiness.HostUnsupported})
 	default:
