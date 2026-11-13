@@ -1122,6 +1122,15 @@ items:
       explicit act by the person, never silent automatic pruning. It also has to keep the
       exact-ownership guarantee: it may touch only this project's own session state, never foreign
       resources. Decide the rule, then specify it by scenarios.
+
+      This is part of the retention decision that item already holds, and T-51's spec defers to it
+      by name. A controller killed in the middle of a copy leaves .refusals-<32 hex>.tmp in
+      sessions/<lookup>/<id>/, up to about 40 MiB each, and T-51 sweeps nothing because deleting
+      from protected state is a retention decision. A killed Publish leaves its .intent- temporary
+      the same way. The retention rule must say what removes these, by exact shape and only inside
+      this project's own session state, as an explicit act of the person. Until then every reader of
+      a session folder ignores them, slice-28's status reader included; T-51's "What T-51 settled"
+      section in decision 0022 tells the sibling drafters about the unswept temporary.
   - id: T-42
     title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
     phase: 1
