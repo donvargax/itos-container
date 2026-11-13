@@ -1122,6 +1122,15 @@ items:
       explicit act by the person, never silent automatic pruning. It also has to keep the
       exact-ownership guarantee: it may touch only this project's own session state, never foreign
       resources. Decide the rule, then specify it by scenarios.
+
+      This is part of the retention decision that item already holds, and T-51's spec defers to it
+      by name. A controller killed in the middle of a copy leaves .refusals-<32 hex>.tmp in
+      sessions/<lookup>/<id>/, up to about 40 MiB each, and T-51 sweeps nothing because deleting
+      from protected state is a retention decision. A killed Publish leaves its .intent- temporary
+      the same way. The retention rule must say what removes these, by exact shape and only inside
+      this project's own session state, as an explicit act of the person. Until then every reader of
+      a session folder ignores them, slice-28's status reader included; T-51's "What T-51 settled"
+      section in decision 0022 tells the sibling drafters about the unswept temporary.
   - id: T-42
     title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
     phase: 1
@@ -1793,3 +1802,51 @@ items:
       a subprocess the instrumented, slower coverage run outruns; find it and give it room through
       the harness budget seam. A red code proof sends the item's implementer after code it never
       changed.
+  - id: p1-main-go-toolchain-1-27-4
+    title: main's Go toolchain pin is go1.27.4, so every branch's govulncheck step passes again
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's second milestone, step 1 (egress through an allowlisting proxy):
+      slice-27's pull request cannot go green, nor can slice-28 and T-51 after it, and the same
+      holds for step 2's T-48 and for slice-22 and T-50. go.mod on main pins toolchain go1.27.3, and
+      CI's `go tool govulncheck -test ./...` exits 3 there on GO-2026-6859 (net/http, fixed in
+      go1.27.4), because code already on main reaches net/http. Only slice-29 carries the one-line
+      move (commit c583023), and it is a large slice still in review. Checked on 2026-11-13: main,
+      origin/main, slice-27, slice-28, slice-30, T-48, slice-22, T-50 and T-51 all pin go1.27.3. A
+      foundation chore with a ledger task: move the toolchain line to go1.27.4 on main, checked by
+      the pin's value and by the unchanged govulncheck step passing in CI. The gate is not weakened.
+      The identical line merges cleanly with slice-29's. The scan passes locally under the
+      distribution Go even when CI fails, so each worker would otherwise spend a CI cycle finding
+      the same failure. If slice-29 merges first, close this as done by it.
+  - id: p2-engine-row-leftover-audit
+    title: Each engine row ends with an audit that nothing carrying its own labels is left on the runner, so a leak fails the row that made it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 1: T-50 closes the one known leak path, so this waits behind
+      it and is specified after it lands, in the same harness files. Confirmed on main: the after
+      hook (features/steps_test.go) runs each fixture's cleanup and then looks at nothing, and
+      tools/bin/engine-fixture cleanup removes only its own smoke and registry containers and
+      derived image references. Each fixture compares the engine inventory before and after its own
+      steps, so a worker or volume left by an earlier row is invisible while it stays still and
+      fails a later, unrelated row when it changes, with 'changed unrelated native resources'. Main
+      run 42716948746 has that shape, and T-49 and T-50 each spent a round on rows that were not the
+      cause. T-50's cleanup accounts only for creates the recorder forwarded. Milestone two's egress
+      rows (slice-27, slice-28) add a proxy container and two networks per row, and the credential
+      rows add mounts, so there is more to leave behind and more rows to blame wrongly. After the
+      hook's cleanup, make one read-only listing of containers (stopped included), volumes and
+      networks that carry the row's own io.itos-container project and session labels. Any hit fails
+      that row's hook with kinds and counts only: no name, ID or engine text, nothing removed by the
+      audit, no retry. Filtering by the row's own labels keeps a concurrent row's live resources and
+      the fixture's pinned images and registry out of it. It needs an engine-free regression against
+      a disposable engine, covering a leftover of each kind, a foreign-labelled resource that is
+      ignored, a failed listing reported as unavailable and never as clean, and a clean row.
+      Real-engine evidence comes only from CI. It is harness work, a ledger task with a check,
+      adding no product behaviour, scenario or ID.

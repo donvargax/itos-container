@@ -235,3 +235,6 @@ questions:
     item: "slice-29"
     question: "slice-29: the implementer (attempt 5) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-29-implementer-5.result.json"
     answer: "The coordinator, under the standing instructions: follow decision 0026; do not read the coordination catalog or enumerate other enrolled locations. Its state exclusion already covers both the selected state root and the fixed control-state root through mount mappings, and every project's control state lives under the latter. The triage note asking for every enrolled location is a finding to weigh, not a decision, and is out of slice-29's scope: catalog-only discovery is not implemented here. If a concrete path by which a credential source inside another enrolled location leaks state is found, it becomes its own idea. Answer the note's thread or report with this, and go on to land."
+  - id: q-59
+    item: "slice-29"
+    question: "slice-29: the implementer (attempt 16) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-29-implementer-16.result.json"
