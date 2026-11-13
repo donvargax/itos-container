@@ -6445,10 +6445,19 @@
     bound; if it is, fix it once and say so in the other task. T-49 landed at cc8d55d with lifecycle
     readiness and its diagnostics repaired. It changed neither the recorder's record of workers nor
     harness cleanup, and it recorded no result here. So this entry carries the check, the one repair
-    and the record for both tasks, which is where T-49's entry sends it; T-49's entry stays as
-    written. Triage attached two findings to weigh, and both hold below: ID-OFFLINE-29's failure
-    belongs to this investigation without being assumed to share the recovery flake's cause, and no
-    cause is attributed and no bound changed before fresh CI shows the first failure.
+    and the record for both tasks, which is where T-49's entry sends it. T-49 is closed and a
+    drafter touches only its own entry, so T-49's entry stays as written: the other task is told
+    here and in features/README.md, and a note in T-49's own entry, if one is wanted, is the
+    coordinator's at closure.
+
+    Triage attached five findings to weigh, and each is held below. Two are of 2026-11-10:
+    ID-OFFLINE-29's failure belongs to this investigation without being assumed to share the
+    recovery flake's cause, and no cause is attributed and no bound changed before fresh CI shows
+    the first failure. Three are of 2026-11-13: a reply that the recorder's own inspections made
+    late is not answered with a larger limit (the fourth rule); the plain rows that return the
+    recorder problem bare keep a problem, which now names the event (the first rule); and slice-29's
+    run at 8e5088e is the fresh CI this entry waited for, with the warm-up create proposed from it
+    (the evidence below and the fourth rule).
 
     The result of that check. The 409 is never the first failure of its own row, because the hook
     runs after the steps. It is the aftermath of one harness defect, which also produces each of the
@@ -6461,23 +6470,23 @@
     worker inspections and the create itself. The worker then exists, holds the anchor volume and is
     in no list, and cleanup removes only listed workers before it deletes the volumes.
 
-    From there the three reports are one event seen through three fixtures. Until the engine has
-    finished the create, the product finds nothing under the worker's reserved name. Afterwards it
-    finds the worker there, which the recorder allows, and its next request, by full ID, the
-    recorder refuses with HTTP 403. Either way the controller's teardown and every fresh status or
-    stop end as temporary failures, exit 75. A recovery fixture records no recorder problem for a
-    request its controller abandoned, and anchorsAwait returns silently when the controller exits
-    before the first probe report, so the anchor row runs on and fails at status with exit 75. A
-    plain offline fixture turns the same abandoned request into offline native recorder transport
-    failed. A lifecycle fixture misses its readiness barrier. In each case cleanup then finds no
-    listed worker and asks the engine to delete a volume that worker holds. The engine's source
-    (moby master: daemon/volume/service, daemon/volumes.go, daemon/delete.go) answers a volume
-    deletion with HTTP 409, volume is in use, while a container holds a reference to the volume; it
-    takes that reference inside container create, making the volume if it is missing, and drops it
-    inside container removal. Worker and volume stay on the runner. When cleanup runs before the
-    engine has taken the reference, the deletion succeeds instead and the worker appears, with a
-    volume of the same name made again, during the next row, whose inventory then differs. Run
-    42716948746 has that shape, though its log cannot confirm it.
+    Where a row takes that path, the three reports are one event seen through three fixtures. Until
+    the engine has finished the create, the product finds nothing under the worker's reserved name.
+    Afterwards it finds the worker there, which the recorder allows, and its next request, by full
+    ID, the recorder refuses with HTTP 403. Either way the controller's teardown and every fresh
+    status or stop end as temporary failures, exit 75. A recovery fixture records no recorder
+    problem for a request its controller abandoned, and anchorsAwait returns silently when the
+    controller exits before the first probe report, so the anchor row runs on and fails at status
+    with exit 75. A plain offline fixture turns the same abandoned request into offline native
+    recorder transport failed. A lifecycle fixture misses its readiness barrier. In each case
+    cleanup then finds no listed worker and asks the engine to delete a volume that worker holds.
+    The engine's source (moby master: daemon/volume/service, daemon/volumes.go, daemon/delete.go)
+    answers a volume deletion with HTTP 409, volume is in use, while a container holds a reference
+    to the volume; it takes that reference inside container create, making the volume if it is
+    missing, and drops it inside container removal. Worker and volume stay on the runner. When
+    cleanup runs before the engine has taken the reference, the deletion succeeds instead and the
+    worker appears, with a volume of the same name made again, during the next row, whose inventory
+    then differs. Run 42716948746 has that shape, though its log cannot confirm it.
 
     What is established and what is not. At specification baseline afb6a1c three temporary probes
     compiled and failed at assertions. They used only existing helpers and a disposable HTTP engine,
@@ -6489,16 +6498,33 @@
     exited 75 before any probe report, anchorsAwait recorded no error, and the first Then reported
     anchor recovery exit 75, expected 0 with the status report and the recorder's refusal, but named
     neither the launch controller, its exit nor the abandoned create; the formatter prints a create
-    request as /containers/<resource>/. So the probes reproduce the hook error, the recorder's
+    request as /containers/<resource>/. The spec review's own overlay probe at 871b044 reproduced
+    the journal entry, the refusals and the cleanup's 409, and showed what today's first Thens
+    print, which the rules below cite. So the probes reproduce the hook error, the recorder's
     refusals and the transport-failure problem, and the product's recovery code (inspectSession: by
     name, then by full ID) turns such a refusal into exit 75. The lifecycle barrier miss follows
-    from the controller's early exit and was not probed. None of this shows that the hosted rows
-    took this path: none of those runs can show a request journal, because each row's journal
-    diagnostics (440a6dc, e0682ee, T-49) reached its branch only after its last recorded failure. In
-    run 42748509569 the failing row took 9.78 seconds where its three sibling rows took 2.09 to
-    2.63, which fits a slow engine and names no call. Why a hosted controller stopped waiting, or
-    whether a reply was lost some other way, stays unknown until fresh CI shows it. No probe source
-    or generated evidence belongs in the spec commit.
+    from the controller's early exit and was not probed. No probe source or generated evidence
+    belongs in the spec commit.
+
+    Fresh CI has since shown the path once. None of the runs above can show a request journal,
+    because each row's journal diagnostics (440a6dc, e0682ee, T-49) reached its branch only after
+    its last failure there. slice-29's run at 8e5088e, on 2026-11-13, had them, and its implementer
+    reported it. In the lifecycle shard the first ID-LIFECYCLE-08 row's controller exited 75 before
+    the handle barrier with run.call-timeout; operation create response. That is the product's one
+    call around its image inspection and its create, 1 second in the engine fixture. The row's
+    journal has the create reaching the recorder 905.8 ms after the controller started and ending
+    HTTP 502, cancelled, recorder transport: context canceled, and the next row failed on its
+    inventory. In the same run ID-ANCHORS-09 failed with status and stop at exit 75 and the hook's
+    409, reason=in-use; it printed no launch journal, so there the path is inferred from the
+    signature. For ID-OFFLINE-29 no journal is on record, and it is still not assumed to share the
+    cause. Each of the three scenarios is the first engine scenario of the first file its shard
+    runs, and the tier runs at concurrency 1; whether each earlier failure was also its job's first
+    row is not confirmed. That run cannot show how the call's second was spent. Its journal has
+    neither the time the recorder forwarded the create nor the time the engine answered, and T-49's
+    formatter counts the 905.8 ms from the controller's start, not from the call's. The same report
+    notes that 8e5088e was the first head on a new Go toolchain, so each job had compiled with a
+    cold Go cache just before its first row: a correlate, not evidence. Why a job's first create is
+    slow stays unknown.
 
     The repair makes the harness account for every worker it let the product create, and makes a
     row's first failure say what it is. Four rules, each settled here.
@@ -6509,69 +6535,137 @@
     features/engine_budgets_test.go: the production call limit, so the engine gets as long as a
     production controller would have waited. Nothing on the controller side ends it: not a cancelled
     or closed request, a killed controller, a lifecycle disconnect fault or the recorder's server
-    closing. An answer of HTTP 201 with a full ID is recorded exactly as today, once, whether or not
-    the controller is still there: the worker is listed with the request's name and labels as its
-    identity, then inspected by the recorder itself. A connected controller sees what it sees today:
-    the same reply, after the same recording and inspection, behind the same ID-ANCHORS-11 and
-    lifecycle reply barriers. A controller that left receives nothing, and its create's journal
-    entry keeps the engine's status, marks the controller side cancelled, has no reply time and
-    gains the time the engine's answer reached the recorder. An abandoned create that the engine
-    answered is not a recorder transport failure and sets no recorder problem. When the allowance
-    ends first, the exchange ends as an engine-side failure does today, with one fixed diagnostic
-    naming the allowance. Engine-side failures and every other method and path keep today's
-    handling; nothing else is detached.
+    closing. Beside its arrival and reply times, a create's journal entry gains the time the
+    recorder forwarded it, after its own checks and volume inspection, and the time the engine's
+    answer reached the recorder. An answer of HTTP 201 with a full ID is recorded exactly as today,
+    once, whether or not the controller is still there: the worker is listed with the request's name
+    and labels as its identity, then inspected by the recorder itself.
+
+    A connected controller sees what it sees today: the same reply, after the same recording and
+    inspection, behind the same ID-ANCHORS-11 and lifecycle reply barriers. A reply barrier is
+    reached only by an answer whose controller is still connected when the recorder would hand it
+    the reply. An answer that arrives after its controller left is recorded, holds nothing and
+    reaches no barrier, so the fixture's wait for that barrier ends at the controller's exit or at
+    its own limit, the row's first Then reports that, and the fixture never kills a controller that
+    had already given up. A controller that left receives nothing, and its create's journal entry
+    keeps the engine's status, marks the controller side cancelled and has no reply time. A
+    controller whose request a lifecycle disconnect cancelled while its connection may still be open
+    is answered as today, with HTTP 502 and the fixture's transport-failure body, never with an
+    empty or successful reply.
+
+    What an abandoned create reports depends on the fixture, as an abandoned request does today. On
+    a plain fixture, neither recovery nor lifecycle, a create whose controller left before the reply
+    sets the recorder problem at that moment, under fixed words of its own, offline native recorder
+    create abandoned: the controller left before the reply, so observeAfter still hands it to the
+    first Then. It is no longer offline native recorder transport failed, which stays for
+    engine-side failures. Recovery and lifecycle fixtures set no problem for it, as today; the third
+    rule and T-49's diagnostics carry the report for this task's rows. This also settles triage's
+    either-or about the plain rows that return the problem bare (offlineLaunch, the hardlink rows
+    and the isolation rows): they keep a problem and it names the event, so wrapping those returns
+    in a request summary waits for a first plain-row failure that needs one. When the allowance ends
+    first, the exchange ends as an engine-side failure does today, with one fixed diagnostic naming
+    the allowance, and an abandonment already recorded is kept beside it. Engine-side failures and
+    every other method and path keep today's handling; nothing else is detached.
+
+    No Then judges an open exchange and no formatter prints one. After each step of a scenario the
+    harness waits for every forwarded create still unanswered on any native recorder that scenario
+    started, those of its control, second and overlap worlds included; it holds no recorder lock
+    while it waits, and each wait ends with its exchange. A late answer is therefore recorded before
+    a Then reads the recorder's lists and journal, several of which the plain anchor Thens read
+    without the lock. Each journal formatter waits the same way for its own recorder before it
+    prints, because the lifecycle control's evidence is formatted inside a When; a printed create
+    therefore always shows its outcome, the engine's answer or the expired allowance, and never only
+    how long it had been open.
 
     Second, cleanup accounts for every forwarded create before it releases a volume. For each
     forwarded create the recorder keeps the name it authorized, itos-container-<token>, and the
-    request's labels. The cleanup that closeOfflineRuntime runs first waits for every create still
-    unanswered, without holding the recorder lock, since the answer is recorded under it; each wait
-    ends with its exchange. It then removes the recorded workers as today. Then, for each forwarded
-    create that still has no recorded worker, it inspects the authorized name through its own
-    real-engine client. HTTP 404 leaves nothing to remove. HTTP 200 with a full ID and the Name,
-    Image and labels that identity() demands of a recorded worker is recorded and removed like one:
-    force=true and v=false, HTTP 204, then HTTP 404 by full ID. HTTP 200 with any other identity is
-    refused with the existing identity refusal, and nothing is deleted. Any other answer is an
-    error. A create whose exchange ended at its allowance is reported as a failure of its own even
-    when its name is absent, since the engine may still finish it. Volumes are released only when
-    all of that succeeded, in today's order and with today's requests. These are harness requests;
-    none enters the product journal. When a volume deletion answers anything but HTTP 204, the error
-    keeps today's words, native anchor harness cleanup HTTP <status> reason=<class>, and adds two
-    counts from one read-only listing by cleanup of the containers that mount that volume, stopped
-    ones included: the holders, and how many of them are recorded workers, or holders=unavailable
-    when the listing fails. It prints no name, ID or engine text, sends the deletion once and
-    retries nothing.
+    request's labels. The cleanup that closeOfflineRuntime runs first repeats that wait for every
+    create still unanswered, since the after hook must hold on its own: without the recorder lock,
+    as the answer is recorded under it, each wait ending with its exchange. It then removes the
+    recorded workers as today. Then, for each forwarded create that still has no recorded worker, it
+    inspects the authorized name through its own real-engine client. HTTP 404 leaves nothing to
+    remove. HTTP 200 with a full ID and the Name, Image and labels that identity() demands of a
+    recorded worker is recorded and removed like one: force=true and v=false, HTTP 204, then HTTP
+    404 by full ID. HTTP 200 with any other identity is refused with the existing identity refusal,
+    and nothing is deleted. Any other answer is an error. A create whose exchange ended at its
+    allowance is reported as a failure of its own even when its name is absent, since the engine may
+    still finish it. Volumes are released only when all of that succeeded, in today's order and with
+    today's requests. These are harness requests; none enters the product journal. When a volume
+    deletion answers anything but HTTP 204, the error keeps today's words, native anchor harness
+    cleanup HTTP <status> reason=<class>, and adds two counts from one read-only listing by cleanup
+    of the containers that mount that volume, stopped ones included: the holders, and how many of
+    them are recorded workers, or holders=unavailable when the listing fails. It prints no name, ID
+    or engine text, sends the deletion once and retries nothing.
 
     Third, a row's first failure says what it is. anchorsAwait records in recovery.err every wait
     that ends without its report: which wait it was (the first report or later progress), whether
     the controller exited or the existing 35-second limit expired with a live controller, the
     elapsed time and the limit, and for the first report the launch controller's exit code and its
-    time since start. The one exception is the uncertain-startup flow after the fixture has itself
-    killed the controller, where a dead controller is the fixture's doing and today's rule stays.
-    Every anchors native Then that returns recovery.err returns it with anchorRecoveryDiagnostics,
-    the cause first so that T-43's 4096-byte annotation keeps it, and errors.Is still finds the
-    original. Those diagnostics gain a first line for the launch controller, its exit and elapsed
-    time or pending, with its typed rule and operation printed only when they equal values the
-    harness lists and as unrecognized otherwise; and, before the recovery requests, a bounded
-    summary of the launch requests: their total, then in order every refused, failed, cancelled or
-    unanswered one and the create and start requests, at most twelve, with the omitted count. A
-    create request prints as /containers/create, not as a resource. Where the engine's answer time
-    is known and the controller's reply time is not, both journal formatters, this one and T-49's
-    lifecycle one, print the answer's offset. Each keeps its present limits: neither retries a
-    command or queries the engine, and neither prints a body, query, header, environment, argv,
-    record content or inspection map; the anchors formatter also prints no resource name and no raw
-    engine or workload text. Add synthetic private fields to the negative controls.
+    time since start. The uncertain-startup wait for the held reply, in anchorsUncertain, records
+    its end the same way; today it records nothing when the controller exits before the barrier.
+    After the fixture has itself killed the controller, in the uncertain-start flow, the dead
+    controller is the fixture's doing and ends no wait: the first-report wait runs to its report or
+    its limit and records a miss like any other. Today it gives up at its first 20 ms poll, so a
+    worker slow to write its first report fails the ID-ANCHORS-11 start row with missing post-event
+    probe checkpoint, a flake of the kind this task repairs.
 
-    Fourth, this task changes no budget. The compiled fixture keeps 1/3/1 seconds for call, startup
-    and grace and production 10/120/10; the 35-second barriers, the 30-second cleanup and teardown,
-    the 75/190-second process guards, the 180-second shard budget and the 10/5/4-minute job, step
-    and test limits stay. engineCreateOutcomeAllowance is harness bookkeeping, not a product or
-    scenario bound. If CI of the repaired harness shows one of these rows failing because a named
-    product operation outlived its fixture budget, the implementer first records in this entry the
-    operation, its measured interval, a concrete revised fixture limit and a deterministic
-    delayed-success and expiry control, then changes that limit only through engineBudgetTree,
-    keeping T-42's held and cut acknowledgement and restart-refusal controls valid with their timing
-    relationships and the compiled -cover budget contract passing. If that cannot be done, return
-    the conflict for a decision. No repeated trial increase, production-default change, grace-window
+    Every anchors native Then that returns a recorded cause returns it with the
+    anchorRecoveryDiagnostics of the world it belongs to, the cause first so that T-43's 4096-byte
+    annotation keeps it, and errors.Is still finds the original. Each first Then returns a recorded
+    cause before any bare precondition error. Today anchorsRelease, the first Then of both
+    ID-ANCHORS-11 rows, returns uncertain startup never reached its successful native response
+    barrier before it looks at recovery.err. anchorsPairCompleted, ID-ANCHORS-13's, returns two
+    stops did not overlap at the original anchor release ahead of it too, and judges B's progress
+    without B's recorded cause. Both return the cause first, anchorsPairCompleted A's and then B's.
+    On the plain anchor fixture ID-OFFLINE-29's first Then, anchorOriginal, already returns its
+    recorded cause with these diagnostics, and ID-OFFLINE-30's, anchorRetained, now does the same.
+
+    Those diagnostics gain a first line for the launch controller, its exit and elapsed time or
+    pending, with its typed rule and operation printed only when they equal values the harness lists
+    and as unrecognized otherwise. On the plain anchor fixture, whose controller is not a recorded
+    process, the line takes them from the offline run's exit and stderr and has no elapsed time.
+    They also gain, before the recovery requests, a bounded summary of the launch requests: their
+    total, then in order every refused, failed, cancelled or unanswered one, the create and start
+    requests and the request before each create, which is the image inspection that opens the
+    product's create call, at most twelve, with the omitted count. Where a fixture has no recovery
+    checkpoint, as on the plain anchor fixture, the existing listing already starts at the first
+    request. A create request prints as /containers/create, not as a resource, and an image
+    inspection as /images/<resource>/json. Both journal formatters, this one and T-49's lifecycle
+    one, print for a create when it was forwarded and when the engine's answer arrived, whether or
+    not a reply followed, and T-49's selection keeps every create and the request before it. Each
+    formatter keeps its present limits: beyond that wait neither blocks, retries a command or
+    queries the engine, and neither prints a body, query, header, environment, argv, record content
+    or inspection map; the anchors formatter also prints no resource name and no raw engine or
+    workload text. Add synthetic private fields to the negative controls.
+
+    Fourth, this task changes no budget and adds no warm-up. The compiled fixture keeps 1/3/1
+    seconds for call, startup and grace and production 10/120/10; the 35-second barriers, the
+    30-second cleanup and teardown, the 75/190-second process guards, the 180-second shard budget
+    and the 10/5/4-minute job, step and test limits stay. engineCreateOutcomeAllowance is harness
+    bookkeeping, not a product or scenario bound. The run at 8e5088e names the call that expired but
+    not what spent it, and both remedies on offer, a longer fixture call and a warm-up create before
+    a job's first row, would hide the cost if it is the harness's own: inside that one call the
+    recorder inspects the anchor volume before it forwards the create and the new worker after the
+    engine's 201. A warm-up would also be a guess: tools/bin/engine-fixture prepare already creates,
+    starts and removes a hardened container from the fixture image before any row, so the daemon's
+    first create is not what one would add, and nothing yet shows which request is slow.
+
+    So the remedy is read from the repaired harness. When one of these rows fails with its launch
+    controller stopped at a call limit, its first Then prints that call's intervals: the image
+    inspection from arrival to reply, and the create from arrival to forwarding, from forwarding to
+    the engine's answer and from the answer to the reply. The engine's own time is the inspection's
+    round trip plus the create from forwarding to answer. Only when that alone outlived the fixture
+    limit has a named product operation outlived its fixture budget. Then the implementer first
+    records in this entry the operation, its measured intervals, a concrete revised fixture limit
+    and a deterministic delayed-success and expiry control, and changes that limit only through
+    engineBudgetTree, keeping T-42's held and cut acknowledgement and restart-refusal controls valid
+    with their timing relationships and the compiled -cover budget contract passing. If that cannot
+    be done, return the conflict for a decision. When the engine's own time is inside the limit, the
+    recorder's inspections, or time outside both, carried the reply past it. Then no limit moves,
+    because a larger one would hide a harness cost and the first rule keeps those inspections before
+    the reply; the intervals return for a decision. A warm-up, or any remedy other than that one
+    limit, is not built here either: it returns for a decision with the intervals that call for it
+    and a control of its own. No repeated trial increase, production-default change, grace-window
     change, retry, skipped row or relaxed assertion belongs to this task, and a product or ownership
     defect needs its own behaviour spec, not a workaround in the recorder.
 
@@ -6582,42 +6676,70 @@
     pinned godog; add no dependency, no production switch and no product I/O seam.
 
     Read features/offline_runtime_engine_test.go, offline_anchor_engine_test.go,
-    offline_runtime_fixture_test.go and steps_test.go's after hook in full, then
-    anchors_native_fixture_test.go, anchors_native_assertions_test.go,
+    offline_runtime_fixture_test.go and the step and after hooks in steps_test.go in full, then
+    anchors_native_fixture_test.go, anchors_native_steps_test.go, anchors_native_assertions_test.go,
     anchors_native_conflicts_test.go, anchors_native_diagnostics_test.go,
     anchors_native_engine_test.go, recovery_native_fixture_test.go,
-    lifecycle_native_fixture_test.go, lifecycle_recorder_test.go, lifecycle_diagnostics_test.go,
-    offline_anchor_fixture_test.go and offline_anchor_assertions_test.go. For what the product does
-    with a lost create reply, read CreateRun in internal/engine/session/docker/run.go and, under
-    internal/engine/session/domain, its bounded call in finite_launch.go, cleanupRun in run.go and
-    inspectSession in recovery.go. The engine-free patterns to reuse are offlineRecorderWorld,
-    offlineStartupWorld, recoveryRecorderWorld and anchorOracleTransport, with T-49's
-    controlled-time tests as the model for deadlines.
+    lifecycle_native_fixture_test.go, lifecycle_native_actions_test.go, lifecycle_recorder_test.go,
+    lifecycle_diagnostics_test.go, offline_anchor_fixture_test.go, offline_anchor_assertions_test.go
+    and offline_anchor_retention_test.go, and overlap_fixture_test.go for the worlds a scenario can
+    start. For what the product does with a lost create reply, read CreateRun in
+    internal/engine/session/docker/run.go and, under internal/engine/session/domain, its bounded
+    call in finite_launch.go, cleanupRun in run.go and inspectSession in recovery.go; Acquire in
+    internal/engine/budget/domain/budget.go is the call limit, and Classify in
+    internal/slices/run/command/command.go writes the rule and operation the launch line reads. The
+    engine-free patterns to reuse are offlineRecorderWorld, offlineStartupWorld,
+    recoveryRecorderWorld and anchorOracleTransport, with T-49's controlled-time tests as the model
+    for deadlines.
 
     Add three engine-free top-level regressions before repairing anything, exercising the helpers
     the real fixtures use, not a separate demonstration predicate.
-    TestOfflineRecorderRecordsAbandonedCreate drives serve against a disposable engine: a create
-    abandoned before the engine answers is still answered, its worker listed with the request's
-    identity, its journal entry as the first rule says and no recorder problem set, after which a
-    full-ID inspection and an owned removal of that worker are forwarded while another full ID is
-    still refused with nothing forwarded; the same holds when the recorder's server closes or a
-    lifecycle disconnect fires during the exchange; an engine that never answers ends the exchange
-    at the allowance with nothing listed; an engine-side failure with the controller connected, and
-    an ordinary create with its reply barriers, behave as today.
+
+    TestOfflineRecorderRecordsAbandonedCreate drives serve against a disposable engine. A create
+    abandoned before the engine answers is still answered: its worker is listed with the request's
+    identity and its journal entry holds the engine's status, the cancelled controller side, no
+    reply time and the forwarding and answer times, after which a full-ID inspection and an owned
+    removal of that worker are forwarded while another full ID is still refused with nothing
+    forwarded. It runs on a plain, a recovery and a lifecycle fixture: only the plain one sets the
+    recorder problem, with its fixed words, when the controller leaves and before the engine
+    answers, and observeAfter returns it. The same accounting holds when the recorder's server
+    closes or a lifecycle disconnect fires during the exchange, and a controller still connected
+    through that disconnect reads HTTP 502. With the ID-ANCHORS-11 create barrier armed, and again
+    with the lifecycle create barrier, an abandoned create's late answer is recorded and the barrier
+    is not reached, while a connected controller's answer reaches it and is held as today. An engine
+    that never answers ends the exchange at the allowance with nothing listed and the fixed
+    diagnostic, and on the plain fixture the engine-side failure is kept beside the abandonment. The
+    step wait returns only when every open exchange of the world and of its control, second and
+    overlap worlds has ended, and takes no recorder lock while it waits. An engine-side failure with
+    the controller connected, and an ordinary create with its reply, behave as today.
+
     TestOfflineRecorderCleanupRemovesAuthorizedWorkers covers a create still unanswered when cleanup
     starts, a create that ended without a worker whose name holds the exact identity, each
     mismatched identity (labels, image, name, a short ID), a failed lookup, an absent name, an
     exchange that ended at its allowance, the conflict counts, and the unchanged control of one
     listed worker and its volume. It asserts the order of engine requests, that a refusal or error
     sends no deletion of the worker or the volume, and that the product journal gains no entry.
+
     TestAnchorRecoveryBarrierDiagnostics covers a controller that exits 75 before the first report,
-    a live controller at the limit, a missed later-progress wait, the uncertain-startup exception,
-    the launch line and launch summary reaching the first Then with the cause first, the create
-    route, the answer offset in both formatters, and oversized and private input. Assert accepted
-    and refused outcomes alike, so that neither an unconditional success nor a longer sleep passes.
-    Use controlled time for the 10-second and 35-second cases; no test waits that long for real,
-    starts a native worker or invokes approval against real state. A disposable engine must read the
-    request body before it waits, or its server never notices a closed connection.
+    a live controller at the limit, a missed later-progress wait, the uncertain-startup wait ended
+    by the controller's exit and by its limit, and the first-report wait after the fixture's kill,
+    which takes a late first report and records a missing one at the limit. It calls the first Then
+    of every anchor row this task requires. anchorsLostStatus, anchorsCompleted, anchorsRelease in
+    create and in start mode, anchorsForeignRefused and anchorsPairCompleted, with the cause on A
+    and on B, each return the recorded cause first, with the launch line and the launch summary,
+    ahead of any bare precondition. anchorOriginal and anchorRetained, on a plain fixture whose
+    create was abandoned, each return the fixed words with the launch line and the journal, and
+    neither run did not reach the submitted-start barrier nor missing original owned volume and
+    protected recovery evidence after controller exit. It covers the create and image-inspection
+    routes, the forwarding and answer times in both formatters, with T-49's lifecycleResult given an
+    abandoned create in its journal, a create still open when either formatter is called, which
+    waits and prints the outcome, and oversized and private input.
+
+    Assert accepted and refused outcomes alike, so that neither an unconditional success nor a
+    longer sleep passes. Use controlled time for the 10-second and 35-second cases; no test waits
+    that long for real, starts a native worker or invokes approval against real state. A disposable
+    engine must read the request body before it waits, or its server never notices a closed
+    connection.
 
     The check below runs, once and without -race, the promoted selection and the shared recorder's
     own tests, and requires the three new top-level tests to pass. Capturing go test's exit first
@@ -6631,19 +6753,29 @@
     job runs every top-level test of the package for each main push and each pull request out of
     draft, so the check does not repeat them. Before committing, the implementer still runs what the
     change reaches beyond it, TestAnchor, TestOfflineMount, TestLifecycle and
-    TestSocketStartupFailure, and the whole feature suite once, without -race. Before implementation
-    the new tests are absent; that is a discovery failure, not assertion-level red proof. Commit the
-    regressions first with test --item T-50 and report each failing assertion before changing a
-    helper. Existing neighbours passing alone cannot close this task.
+    TestSocketStartupFailure, and the whole feature suite once, without -race, since the step wait
+    runs in every scenario. Before implementation the new tests are absent; that is a discovery
+    failure, not assertion-level red proof. Commit the regressions first with test --item T-50 and
+    report each failing assertion before changing a helper. Existing neighbours passing alone cannot
+    close this task.
 
     At baseline afb6a1c the exact check below ran under sh: go test passed its 30 selected top-level
     tests in 37.197 seconds, then awk exited 1 with TestOfflineRecorderRecordsAbandonedCreate did
     not pass, TestOfflineRecorderCleanupRemovesAuthorizedWorkers did not pass and
-    TestAnchorRecoveryBarrierDiagnostics did not pass. Its shell syntax check passed. The probes
-    above, rewritten as assertions, failed where the regressions must: the full-ID inspection
-    returned 403 for a wanted 200 and the owned removal 403 for a wanted 204; cleanup returned the
-    409 and left the worker; and the first Then omitted the missed barrier, the launch controller's
-    exit, its rule and operation, and the create request.
+    TestAnchorRecoveryBarrierDiagnostics did not pass. Its shell syntax check passed. At 871b044 it
+    failed the same way, in 32.435 seconds here and in 29.8 seconds through itos task T-50 in the
+    spec review. The probes above, rewritten as assertions, failed where the regressions must: the
+    full-ID inspection returned 403 for a wanted 200 and the owned removal 403 for a wanted 204;
+    cleanup returned the 409 and left the worker; and the first Then omitted the missed barrier, the
+    launch controller's exit, its rule and operation, and the create request. The review's probe at
+    871b044 shows where the assertions added since fail today. A plain fixture's abandoned create
+    carries offline native recorder transport failed where its own words are wanted, and
+    anchorRetained returns that problem with no journal. anchorsUncertain records nothing when its
+    controller exits before the barrier, and anchorsRelease and anchorsPairCompleted return their
+    bare preconditions. Had the plain fixture lost its problem, as this entry first drafted,
+    anchorOriginal would print run did not reach the submitted-start barrier with no journal and
+    anchorRetained missing original owned volume and protected recovery evidence after controller
+    exit, which is why the regression refuses both texts.
 
     Native evidence stays in the prepared Linux amd64 CI engine tier, never a task hook or an
     agent's host. Require all three shards at the actual pushed head with their normal selectors:
@@ -6652,17 +6784,20 @@
     selected and completed counts, coverage export, T-43 annotations, T-44 timings and unconditional
     cleanup. No retry, skipped row, shared success cache, wider concurrency or larger memory budget
     may turn a failure green. One green run cannot prove an intermittent failure repaired; the
-    deterministic controls and the path explained above are required too. If one of these rows fails
-    again, read its first failure from the new diagnostics instead of assuming the hosted rows took
-    the path this entry reproduces.
+    deterministic controls and the path explained above are required too. This repair ends the leak,
+    the recorder's refusals of a worker it let be created and the hook's 409, and makes the first
+    failure name itself. It does not make a slow first create fast: a row whose controller stops at
+    its call limit still fails, with its intervals, until the fourth rule's reading chooses a
+    remedy. If one of these rows fails again, read its first failure from the new diagnostics
+    instead of assuming the hosted rows took the path this entry reproduces.
 
-    Implement the harness changes as test --task T-50 and explain the worker accounting, the cleanup
-    order and the barrier diagnostics in features/README.md with docs --item T-50, naming T-49's
-    rows as covered by the same repair. Only harness files under features and those words change,
-    unless the fourth rule's evidenced amendment is needed. Run no local mutation test and commit no
-    generated proof. Agents commit and stop; the loop owns push, native CI evidence and closure.
-    Report the tested heads, every red and green regression, the baseline neighbour result, what CI
-    showed of the first failure and what stays uncertain.
+    Implement the harness changes as test --task T-50 and explain the worker accounting, the step
+    wait, the cleanup order and the barrier diagnostics in features/README.md with docs --item T-50,
+    naming T-49's rows as covered by the same repair. Only harness files under features and those
+    words change, unless the fourth rule's evidenced amendment is needed. Run no local mutation test
+    and commit no generated proof. Agents commit and stop; the loop owns push, native CI evidence
+    and closure. Report the tested heads, every red and green regression, the baseline neighbour
+    result, what CI showed of the first failure and its intervals, and what stays uncertain.
   done_when:
     - run: |
         output=$(go test ./features -count=1 -v -run '^(TestAnchorRecovery|TestOfflineRecorder|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)') || { printf '%s\n' "$output"; exit 1; }
