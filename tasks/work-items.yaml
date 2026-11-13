@@ -953,8 +953,8 @@ items:
   - id: slice-27
     title: run reaches only the approved names through the proxy; every other route out is closed
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-26, T-39, T-40]
     kind: slice
     why: >
