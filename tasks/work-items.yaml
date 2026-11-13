@@ -1125,6 +1125,15 @@ items:
       p2-architecture-fixtures-load). It is p2: it blocks no step of charter milestone two. The
       itos-side warning, from `itos config check` or `itos work promote --check`, is a gap in itos
       itself; the coordinator files it after searching existing issues.
+
+      Same gap this item holds: itos runs each check with sh -c, which is bash here and dash in CI,
+      and pinning the shell makes the local run the one CI judges, which is the way asked for. New
+      fact for this item: the loop machine has no dash at all (command -v dash finds none; sh
+      resolves to /usr/bin/bash), so a drafter cannot try a check under CI's shell even by hand, and
+      this item's own step of confirming what CI's dash refuses cannot be done here. T-51's three
+      done_when scripts are multi-line shell with functions and were tried only under bash, so a
+      bashism in them would show first in CI. The itos-side part (a warning, or a way to choose the
+      shell for a check run) stays as this item already says: the coordinator files it on itos.
   - id: p3-session-state-retention
     title: Decide how long completed sessions' host state is kept, egress-refusals.jsonl included
     phase: 1
