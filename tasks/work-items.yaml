@@ -176,6 +176,18 @@ items:
       Already covers hook registration and verification instructions. Include the reported unset
       core.hooksPath and missing pre-commit/commit-msg hooks in that verification, confirming how
       subsequent commits enforce configured gates.
+
+      Belongs inside p1-refresh-remaining-template-guidance, which already takes in
+      features/README.md; this is a foundation docs leftover that blocks no charter step, so it
+      waits with that item. Note for it: features/README.md is 79,818 bytes on main and 83,280 on
+      the slice-27 branch, with no entry in tools/bin/doc-caps, which today caps only AGENTS.md and
+      docs/ORCHESTRATING.md, and every implementer is told to read it. Measured by section on main:
+      'The CI engine tier' 30.8 KB, 'Manual red-first evidence' 15.2 KB, 'Cached fixture protocol'
+      11.1 KB. Per-slice evidence paragraphs sit under '## Tags' ahead of the tag table: slice-17's
+      anchor note on main, and slice-27 adds another 3.4 KB there. When refreshing the file, move
+      per-slice red-evidence and history notes out of it (the commits and run numbers already record
+      them), keep only the standing harness rules, and add a doc-caps entry with headroom over the
+      shortened size so later slices cannot grow it back.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -1053,6 +1065,17 @@ items:
       The existing item already requires CGO_ENABLED=0 for normal and coverage builds before
       slice-27. Schedule it first and make slice-27 depend on it; that dependency is not yet
       recorded.
+
+      Belongs inside p1-acceptance-static-binary, which names only buildProduct and its -cover
+      variant. From slice-27's step work: the scenarios never run the plain product. Every checkout
+      fixture swaps in the `go test -c ./cmd/itos-container` assembly built by probeBuildArgs
+      (features/session_probe_test.go:229), run with sessionChildEnvironment(os.Environ()) and no
+      CGO_ENABLED setting. That assembly is the executable doctor inspects in ID-EGRESS-04 and the
+      file the proxy container runs in the engine tier. Set CGO_ENABLED=0 for both assemblies, plain
+      and covered, as well as for buildProduct, and have the item's static check read the assembly
+      too. With buildProduct alone fixed, the static-executable prerequisite still refuses every
+      allowlist scenario. slice-27 is in progress and this item is still unowned, so it has to land
+      before slice-27's implementation can go green.
   - id: p2-approval-no-record-step-checks-frozen-input
     title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
     phase: 1
@@ -1102,6 +1125,15 @@ items:
       p2-architecture-fixtures-load). It is p2: it blocks no step of charter milestone two. The
       itos-side warning, from `itos config check` or `itos work promote --check`, is a gap in itos
       itself; the coordinator files it after searching existing issues.
+
+      Same gap this item holds: itos runs each check with sh -c, which is bash here and dash in CI,
+      and pinning the shell makes the local run the one CI judges, which is the way asked for. New
+      fact for this item: the loop machine has no dash at all (command -v dash finds none; sh
+      resolves to /usr/bin/bash), so a drafter cannot try a check under CI's shell even by hand, and
+      this item's own step of confirming what CI's dash refuses cannot be done here. T-51's three
+      done_when scripts are multi-line shell with functions and were tried only under bash, so a
+      bashism in them would show first in CI. The itos-side part (a warning, or a way to choose the
+      shell for a check run) stays as this item already says: the coordinator files it on itos.
   - id: p3-session-state-retention
     title: Decide how long completed sessions' host state is kept, egress-refusals.jsonl included
     phase: 1
@@ -1131,6 +1163,13 @@ items:
       this project's own session state, as an explicit act of the person. Until then every reader of
       a session folder ignores them, slice-28's status reader included; T-51's "What T-51 settled"
       section in decision 0022 tells the sibling drafters about the unswept temporary.
+
+      Widens this item's note on unswept temporaries, which names only a controller killed in the
+      middle of a copy. T-51's reviewed spec adds the ordinary cause: a controller that merely exits
+      while a timed-out Begin, Write or Commit is still running also leaves .refusals-<32 hex>.tmp
+      behind, because budget closes a late Begin's copy only once it returns and Close never waits
+      for a Write or a Commit. Each is up to about 40 MiB, and every retry of stop on a slow disk
+      can add another. The retention rule must cover both causes.
   - id: T-42
     title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
     phase: 1
@@ -1802,3 +1841,112 @@ items:
       a subprocess the instrumented, slower coverage run outruns; find it and give it room through
       the harness budget seam. A red code proof sends the item's implementer after code it never
       changed.
+  - id: p1-main-go-toolchain-1-27-4
+    title: main's Go toolchain pin is go1.27.4, so every branch's govulncheck step passes again
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's second milestone, step 1 (egress through an allowlisting proxy):
+      slice-27's pull request cannot go green, nor can slice-28 and T-51 after it, and the same
+      holds for step 2's T-48 and for slice-22 and T-50. go.mod on main pins toolchain go1.27.3, and
+      CI's `go tool govulncheck -test ./...` exits 3 there on GO-2026-6859 (net/http, fixed in
+      go1.27.4), because code already on main reaches net/http. Only slice-29 carries the one-line
+      move (commit c583023), and it is a large slice still in review. Checked on 2026-11-13: main,
+      origin/main, slice-27, slice-28, slice-30, T-48, slice-22, T-50 and T-51 all pin go1.27.3. A
+      foundation chore with a ledger task: move the toolchain line to go1.27.4 on main, checked by
+      the pin's value and by the unchanged govulncheck step passing in CI. The gate is not weakened.
+      The identical line merges cleanly with slice-29's. The scan passes locally under the
+      distribution Go even when CI fails, so each worker would otherwise spend a CI cycle finding
+      the same failure. If slice-29 merges first, close this as done by it.
+  - id: p2-engine-row-leftover-audit
+    title: Each engine row ends with an audit that nothing carrying its own labels is left on the runner, so a leak fails the row that made it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 1: T-50 closes the one known leak path, so this waits behind
+      it and is specified after it lands, in the same harness files. Confirmed on main: the after
+      hook (features/steps_test.go) runs each fixture's cleanup and then looks at nothing, and
+      tools/bin/engine-fixture cleanup removes only its own smoke and registry containers and
+      derived image references. Each fixture compares the engine inventory before and after its own
+      steps, so a worker or volume left by an earlier row is invisible while it stays still and
+      fails a later, unrelated row when it changes, with 'changed unrelated native resources'. Main
+      run 42716948746 has that shape, and T-49 and T-50 each spent a round on rows that were not the
+      cause. T-50's cleanup accounts only for creates the recorder forwarded. Milestone two's egress
+      rows (slice-27, slice-28) add a proxy container and two networks per row, and the credential
+      rows add mounts, so there is more to leave behind and more rows to blame wrongly. After the
+      hook's cleanup, make one read-only listing of containers (stopped included), volumes and
+      networks that carry the row's own io.itos-container project and session labels. Any hit fails
+      that row's hook with kinds and counts only: no name, ID or engine text, nothing removed by the
+      audit, no retry. Filtering by the row's own labels keeps a concurrent row's live resources and
+      the fixture's pinned images and registry out of it. It needs an engine-free regression against
+      a disposable engine, covering a leftover of each kind, a foreign-labelled resource that is
+      ignored, a failed listing reported as unavailable and never as clean, and a clean row.
+      Real-engine evidence comes only from CI. It is harness work, a ledger task with a check,
+      adding no product behaviour, scenario or ID.
+  - id: p2-ci-proof-verdict-despite-red-engine
+    title: The ci job runs itos verify and the code proof even when an engine shard is red, and requires engine success as its last step
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 1 (egress through an allowlisting proxy): no pull request is
+      stopped by it, but each one loses a CI round whenever an engine flake and a proof failure
+      meet. Confirmed on main: the ci job's first step is Require engine success
+      (.github/workflows/ci.yml:33), so a red shard skips itos verify and itos ci run. slice-29 at
+      8e5088e has three commits with no proof verdict for that reason. A work step read 9 failed
+      shard jobs in 129 from the loop's log, and a run has three shards. Engine flakes have recurred
+      through T-31, T-42, T-49 and T-50, and slice-27, slice-28 and the credential slices add engine
+      rows. The proof is where most rework starts, so hiding its verdict costs a re-run and then
+      another attempt. No item covers it, and T-50 keeps the workflow unchanged. The position is
+      this project's own choice: T-16 (89e5389) put the gate first, T-21's spec says only that the
+      ci job must still require engine success, and features/engine_workflow_test.go:295 pins the
+      gate at ci.Steps[0]. Move the gate to the job's last step, after verify and the proof, with
+      the same env and command. The job keeps needs: [engine] and its always() guard, and release
+      keeps needing ci, engine and platform. Neither gate is weakened: the job is red whenever the
+      engine is not success, and whenever verify or the proof fails. The spec settles whether the
+      last step runs under always(), so the ci job shows both failures in one log. It is a
+      foundation task with a check, adding no product behaviour, scenario or ID. Commit the contract
+      regression red first: the gate is last, follows both commands, has no continue-on-error and no
+      false condition. The existing controls for an ignored result, a skipped guard and a lost
+      always guard stay, with new ones for a gate placed before the proof and a missing gate.
+      Explain the order in features/README.md. The cost is the proof's runner minutes on a head
+      whose engine is red for a real reason. Not for go-template-itos: the workflow the template
+      rendered here had no engine dependency before T-16, so there is nothing to backport.
+  - id: p2-harness-lists-undefined-wip-steps
+    title: A harness check lists every step no definition matches, per scenario, @wip and @engine scenarios included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. godog reports an undefined step only for scenarios it selects. Ordinary
+      runs exclude @wip, and @engine scenarios never run locally, so a step checkpoint can be
+      committed with steps missing and nothing says so until the coordinator's CI red dispatch comes
+      back 'undefined'. AGENTS.md does not accept that as red evidence, so each miss costs a push, a
+      dispatch and a wait. slice-27 showed it: egress.feature has twenty @wip scenarios, eight of
+      them @engine, and 171 step lines. Its checkpoint 9d06523 left ID-EGRESS-15 and 16 without
+      steps, and the implementer wrote a throwaway script to see which steps were defined. Six
+      hand-written checks already do this for one slice each, with their own tag filter and
+      hard-coded counts: TestAnchorRecoveryStepsDefined, TestLifecycleLossStepsDefined,
+      TestLifecycleNativeStepsDefined, TestDoctorStepDefinitions, TestOfflineRuntimeStepDefinitions
+      and TestSessionStepDefinitions. They share the collector at
+      features/lifecycle_harness_test.go:68. Egress has none. Wanted: one check over every feature
+      file and every tag, with no engine and no product build, that prints for each scenario ID the
+      steps matching no definition or more than one. It fails for the scenarios a selector names, so
+      an implementer and the coordinator can tell a complete checkpoint from a partial one before
+      dispatching, and it only reports the rest, since a @wip scenario may still owe steps before
+      its test commit. The spec settles whether godog's dry run or the existing collector does it,
+      and whether the six per-slice checks fold into it. It is harness work, so a ledger task with
+      checks: negative controls for an undefined and an ambiguous @wip step, committed red. Phase
+      p2: it blocks no charter step, but slice-28 and slice-30 to slice-33 each bring real-engine
+      scenarios whose red evidence is CI-only. The harness came from go-template-itos, so once it
+      lands it is a backport candidate.
