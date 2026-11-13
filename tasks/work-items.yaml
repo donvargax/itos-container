@@ -1850,3 +1850,34 @@ items:
       ignored, a failed listing reported as unavailable and never as clean, and a clean row.
       Real-engine evidence comes only from CI. It is harness work, a ledger task with a check,
       adding no product behaviour, scenario or ID.
+  - id: p2-ci-proof-verdict-despite-red-engine
+    title: The ci job runs itos verify and the code proof even when an engine shard is red, and requires engine success as its last step
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 1 (egress through an allowlisting proxy): no pull request is
+      stopped by it, but each one loses a CI round whenever an engine flake and a proof failure
+      meet. Confirmed on main: the ci job's first step is Require engine success
+      (.github/workflows/ci.yml:33), so a red shard skips itos verify and itos ci run. slice-29 at
+      8e5088e has three commits with no proof verdict for that reason. A work step read 9 failed
+      shard jobs in 129 from the loop's log, and a run has three shards. Engine flakes have recurred
+      through T-31, T-42, T-49 and T-50, and slice-27, slice-28 and the credential slices add engine
+      rows. The proof is where most rework starts, so hiding its verdict costs a re-run and then
+      another attempt. No item covers it, and T-50 keeps the workflow unchanged. The position is
+      this project's own choice: T-16 (89e5389) put the gate first, T-21's spec says only that the
+      ci job must still require engine success, and features/engine_workflow_test.go:295 pins the
+      gate at ci.Steps[0]. Move the gate to the job's last step, after verify and the proof, with
+      the same env and command. The job keeps needs: [engine] and its always() guard, and release
+      keeps needing ci, engine and platform. Neither gate is weakened: the job is red whenever the
+      engine is not success, and whenever verify or the proof fails. The spec settles whether the
+      last step runs under always(), so the ci job shows both failures in one log. It is a
+      foundation task with a check, adding no product behaviour, scenario or ID. Commit the contract
+      regression red first: the gate is last, follows both commands, has no continue-on-error and no
+      false condition. The existing controls for an ignored result, a skipped guard and a lost
+      always guard stay, with new ones for a gate placed before the proof and a missing gate.
+      Explain the order in features/README.md. The cost is the proof's runner minutes on a head
+      whose engine is red for a real reason. Not for go-template-itos: the workflow the template
+      rendered here had no engine dependency before T-16, so there is nothing to backport.
