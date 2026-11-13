@@ -1053,6 +1053,17 @@ items:
       The existing item already requires CGO_ENABLED=0 for normal and coverage builds before
       slice-27. Schedule it first and make slice-27 depend on it; that dependency is not yet
       recorded.
+
+      Belongs inside p1-acceptance-static-binary, which names only buildProduct and its -cover
+      variant. From slice-27's step work: the scenarios never run the plain product. Every checkout
+      fixture swaps in the `go test -c ./cmd/itos-container` assembly built by probeBuildArgs
+      (features/session_probe_test.go:229), run with sessionChildEnvironment(os.Environ()) and no
+      CGO_ENABLED setting. That assembly is the executable doctor inspects in ID-EGRESS-04 and the
+      file the proxy container runs in the engine tier. Set CGO_ENABLED=0 for both assemblies, plain
+      and covered, as well as for buildProduct, and have the item's static check read the assembly
+      too. With buildProduct alone fixed, the static-executable prerequisite still refuses every
+      allowlist scenario. slice-27 is in progress and this item is still unowned, so it has to land
+      before slice-27's implementation can go green.
   - id: p2-approval-no-record-step-checks-frozen-input
     title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
     phase: 1
