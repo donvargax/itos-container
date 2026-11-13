@@ -186,6 +186,15 @@ func (run *egressNativeRun) attach(o *egressObserved) {
 		}
 		run.attached = append(run.attached, f.name)
 	}
+	// The route and resolver control's network is one more fixture network: a
+	// proxy that forwarded would now have a leg on it.
+	if iso := run.n.isolation; iso != nil && iso.s.networkID != "" {
+		if _, err := run.n.cli.NetworkConnect(ctx, iso.s.networkID, client.NetworkConnectOptions{Container: o.proxy.ID}); err != nil {
+			run.err = errors.Join(run.err, fmt.Errorf("attach the proxy to the control network: %w", err))
+			return
+		}
+		run.attached = append(run.attached, iso.s.networkName)
+	}
 }
 
 // finish waits for the product to return, reads the probe's report and counts
@@ -228,10 +237,21 @@ func (run *egressNativeRun) stop() {
 	}
 }
 
+// newPhasedRun also gives the worker steps to take before its first barrier:
+// its earliest instructions, while the proxy has no fixture network at all.
+func (n *egressNative) newPhasedRun(first, running []egressStep, exit int) *egressNativeRun {
+	run := n.newRun(running, exit)
+	run.steps = append(append([]egressStep{}, first...), run.steps...)
+	return run
+}
+
 // drive is the common run: wait for the worker's first barrier, observe, attach
 // the proxy to the fixture endpoints, release, and wait for the product.
 func (n *egressNative) drive(steps []egressStep, exit int) (*egressNativeRun, error) {
-	run := n.newRun(steps, exit)
+	return n.driveRun(n.newRun(steps, exit))
+}
+
+func (n *egressNative) driveRun(run *egressNativeRun) (*egressNativeRun, error) {
 	if err := run.start(); err != nil {
 		return run, err
 	}

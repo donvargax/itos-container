@@ -67,6 +67,7 @@ type egressNative struct {
 	original  egressOriginal
 	consent   string
 	cleanup   []func() error
+	isolation *egressIsolation // the route or resolver control of ID-EGRESS-15 and -16
 }
 
 func egressNonce() string {
@@ -382,6 +383,11 @@ func (w *world) closeEgressNative() error {
 		if _, err := n.cli.NetworkRemove(ctx, target, client.NetworkRemoveOptions{}); err != nil && f.id != "" {
 			result = errors.Join(result, err)
 		}
+	}
+	// After every product container is gone: the control network may have
+	// carried the proxy.
+	if n.isolation != nil {
+		result = errors.Join(result, n.isolation.s.close())
 	}
 	for i := len(n.cleanup) - 1; i >= 0; i-- {
 		result = errors.Join(result, n.cleanup[i]())

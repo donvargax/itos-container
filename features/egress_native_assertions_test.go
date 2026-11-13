@@ -9,12 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cucumber/godog"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 )
 
-func (w *world) egressNativeAssertions(sc *godog.ScenarioContext) {
+func (w *world) egressNativeAssertions(sc lifecycleStepRegistrar) {
 	last := func(check func(*egressNative, *egressNativeRun) error) func() error {
 		return func() error {
 			n, err := w.egressNativeWorld()

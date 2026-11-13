@@ -22,7 +22,7 @@ type egressOriginal struct {
 // address, so a proxy that matched by suffix or by address would reach it.
 var egressUnlistedAliases = []string{"example.com", "api.example.com.other.example", "other.example", "xn--pi-6kc.example.com"}
 
-func (w *world) egressNativeSteps(sc *godog.ScenarioContext) {
+func (w *world) egressNativeSteps(sc lifecycleStepRegistrar) {
 	sc.Step(`^a CI egress checkout with policy spellings "([^"]*)" and matching protected approval$`, func(spellings string) error {
 		if spellings != "API.Example.COM. BÜCHER.example" {
 			return fmt.Errorf("no independent canonical form recorded for %q", spellings)
@@ -135,6 +135,7 @@ func (w *world) egressNativeSteps(sc *godog.ScenarioContext) {
 		n.controlAll()
 		return err
 	})
+	w.egressIsolationSteps(sc)
 	w.egressNativeAssertions(sc)
 }
 

@@ -1031,24 +1031,44 @@ so the fixture agrees with the session engine as built. `ID-EGRESS-04` also read
 built executable itself and stays red until the harness builds what the release ships
 (`p1-acceptance-static-binary`).
 
-Six of the eight real-engine scenarios have step definitions that no engine has run yet:
-`ID-EGRESS-12`, `-13`, `-14`, `-17`, `-18` and `-19`. Their Givens provision only trusted
-controls: a private checkout and state, a synthetic approval, the worker probe
-(`testdata/slice-27/probe`) and TLS endpoints (`testdata/slice-27/endpoint`) in fixture
-containers on `11.22.33.0/24`, `fd27:27::/64` and, for the private case, `192.168.227.0/24`.
-An endpoint generates its key in memory and publishes only certificates and receipts; a
-receipt is written for every exchange and for every connection, with its byte count. The
-product runs against the engine's own socket with no recorder. The worker stops at a
-barrier file in its checkout, where the harness inspects the product's resources by their
-labels and attaches the proxy to the fixture networks, recording that attachment apart; it
-never touches the worker or the product's two networks. Independent controls are the
-harness's own verified exchanges with each endpoint, before and after the run.
-`TestEgressTrustedProgramsExchangeWithoutAnEngine` runs both programs against each other
-through a stand-in proxy and has the standard library parse the crafted ClientHellos. The
-proxy container runs the same test assembly, whose `TestMain` hands `__egress-proxy` to the
-product's entry point. `ID-EGRESS-15` and `-16`, the route and DNS scenarios, have no step
-definitions yet: their independent controls belong in disposable namespaces, as slice-14's
-are, and are still to be written.
+The eight real-engine scenarios, `ID-EGRESS-12` to `-19`, have step definitions that no
+engine has run yet; `TestEgressNativeStepsDefined` holds every one of their steps to exactly
+one definition. Their Givens provision only trusted controls: a private checkout and state, a
+synthetic approval, the worker probe (`testdata/slice-27/probe`) and TLS endpoints
+(`testdata/slice-27/endpoint`) in fixture containers on `11.22.33.0/24`, `fd27:27::/64` and,
+for the private case, `192.168.227.0/24`. An endpoint generates its key in memory and
+publishes only certificates and receipts; a receipt is written for every exchange and for
+every connection, with its byte count. The product runs against the engine's own socket with
+no recorder. The worker stops at a barrier file in its checkout, where the harness inspects
+the product's resources by their labels and attaches the proxy to the fixture networks,
+recording that attachment apart; it never touches the worker or the product's two networks.
+Independent controls are the harness's own verified exchanges with each endpoint, before and
+after the run. `TestEgressTrustedProgramsExchangeWithoutAnEngine` runs both programs against
+each other through a stand-in proxy and has the standard library parse the crafted
+ClientHellos. The proxy container runs the same test assembly, whose `TestMain` hands
+`__egress-proxy` to the product's entry point.
+
+`ID-EGRESS-15` and `-16`, the route and DNS scenarios, reuse slice-14's control unchanged: its
+listener and resolver container on its own internal network (`172.30.14.0/24`,
+`fd14:14::/64`), holding the private, metadata and loopback destinations in its own
+namespace, with its host listeners and its nonce-and-receipt protocol. The egress fixture
+adds routes to that inventory before the control starts (`extraRoutes`): a host service
+bound to every IPv4 address, TCP and UDP on 443 and an alternate loopback address. The
+worker's attempts are made by slice-14's client, which the slice-27 probe starts inside the
+worker once before its barrier and once after, so the first phase runs while the proxy has
+no fixture network and the second after the harness has also attached the proxy to the
+control's network: a proxy that forwarded would then have a route. The probe adds what that
+client has no operation for, each ignoring the proxy variables: a direct TLS exchange with
+the allowed endpoint's address, a datagram shaped as a QUIC version 1 Initial, plain
+exchanges with other ports of the proxy's own address, non-CONNECT requests to the proxy,
+and DNS over TCP to Docker's embedded resolver for an alias on the control's network. Its
+positive controls run the same probe inside the control's namespace with other nonces. A
+worker attempt passes only if it was made and got no answer, and no listener, resolver or
+endpoint holds its nonce; Docker's own resolver may refuse a name without a transport
+error, every other route must fail. `TestEgressProbeReportsAReachableRouteAsReached` runs
+each of the probe's new operations against a local listener that answers and one that does
+not exist, so a denial is never the operation's own inability to report success;
+slice-14's client is not run on the host there, only a stand-in for its report.
 
 | Tag               | Meaning                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------ |

@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -18,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -46,6 +48,10 @@ type report struct {
 }
 
 const wait = 20 * time.Second
+
+// brief bounds one attempt that is expected to go nowhere: a route the worker
+// must not have. A reachable route answers well inside it.
+const brief = 2 * time.Second
 
 func proxyAddress() (string, error) {
 	value := os.Getenv("HTTPS_PROXY")
@@ -317,6 +323,158 @@ func redirect(s step, roots *x509.CertPool, r *result) error {
 	return nil
 }
 
+// isolation runs slice-14's trusted route and resolver client beside this
+// probe, once for the named phase, and keeps its framed report. That client
+// dials every planned destination itself and reads no proxy variable.
+func isolation(dir string, s step, r *result) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*wait)
+	defer cancel()
+	var out, problems bytes.Buffer
+	cmd := exec.CommandContext(ctx, filepath.Join(dir, "slice-14-probe"), "control", s.Target, s.Nonce, s.Name)
+	cmd.Stdout, cmd.Stderr = &out, &problems
+	err := cmd.Run()
+	r.Reply = out.String()
+	if err != nil {
+		return fmt.Errorf("route client: %w: %s", err, problems.String())
+	}
+	return nil
+}
+
+// line is one nonce exchange with a plain echo service: the nonce and a
+// newline out, one read back. A send that nothing answers is not an exchange.
+func line(protocol, address, nonce string) (string, error) {
+	conn, err := net.DialTimeout(protocol, address, brief)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetDeadline(time.Now().Add(brief))
+	if _, err = io.WriteString(conn, nonce+"\n"); err != nil {
+		return "", err
+	}
+	reply := make([]byte, 4096)
+	n, err := conn.Read(reply)
+	if n == 0 && err == nil {
+		err = errors.New("no reply")
+	}
+	return strings.TrimSpace(string(reply[:n])), err
+}
+
+// direct ignores the proxy variables: it dials the address itself and, only if
+// that connects, completes the same verified nonce exchange a tunnel carries.
+func direct(s step, roots *x509.CertPool, r *result) error {
+	conn, err := net.DialTimeout(s.Method, s.Target, brief)
+	if err != nil {
+		return fmt.Errorf("dial: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetDeadline(time.Now().Add(brief))
+	secure := tls.Client(conn, &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: s.Name})
+	if err = secure.Handshake(); err != nil {
+		return fmt.Errorf("handshake: %w", err)
+	}
+	state := secure.ConnectionState()
+	r.Peer = fingerprint(&state)
+	if _, err = fmt.Fprintf(secure, "GET /nonce?n=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", url.QueryEscape(s.Nonce), s.Name); err != nil {
+		return err
+	}
+	data, err := io.ReadAll(io.LimitReader(secure, 8192))
+	if at := bytes.Index(data, []byte("\r\n\r\n")); at >= 0 {
+		r.Reply = string(data[at+4:])
+	}
+	if r.Reply != "" {
+		return nil
+	}
+	return fmt.Errorf("no reply: %v", err)
+}
+
+// forward treats the proxy's own address as a plain forwarder: a nonce
+// exchange with another of its ports, with no CONNECT anywhere.
+func forward(s step, r *result) error {
+	address, err := proxyAddress()
+	if err != nil {
+		return err
+	}
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	r.Reply, err = line(s.Method, net.JoinHostPort(host, s.Target), s.Nonce)
+	if err == nil && r.Reply == "" {
+		err = errors.New("no reply")
+	}
+	return err
+}
+
+// quicInitial is a datagram shaped as a QUIC version 1 Initial: long header,
+// version, connection IDs, an empty token and a length, padded to the 1200
+// bytes a client's first flight must fill. Its payload is the nonce in the
+// clear; no handshake exists behind it.
+func quicInitial(nonce string) []byte {
+	packet := []byte{0xc3, 0, 0, 0, 1, 8}
+	packet = append(packet, bytes.Repeat([]byte{0x27}, 8)...)
+	packet = append(packet, 0, 0) // no source connection ID, no token
+	length := 1200 - len(packet) - 2
+	packet = append(packet, 0x40|byte(length>>8), byte(length))
+	packet = append(packet, nonce...)
+	return append(packet, make([]byte, 1200-len(packet))...)
+}
+
+func datagram(s step, r *result) error {
+	conn, err := net.DialTimeout(s.Method, s.Target, brief)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetDeadline(time.Now().Add(brief))
+	if _, err = conn.Write(quicInitial(s.Nonce)); err != nil {
+		return err
+	}
+	reply := make([]byte, 4096)
+	n, err := conn.Read(reply)
+	r.Received = n
+	// The echo returns the datagram behind its own identity; only that and
+	// whether the nonce came back are kept.
+	if identity, rest, found := bytes.Cut(reply[:n], []byte(":")); found && bytes.Contains(rest, []byte(s.Nonce)) {
+		r.Reply = string(identity) + ":" + s.Nonce
+	}
+	if r.Reply == "" && err == nil {
+		err = errors.New("no echo of the nonce")
+	}
+	return err
+}
+
+// lookup asks the resolver at Target for Name over the protocol Mode names,
+// as an absolute name so no search list is tried. The Go resolver does the
+// DNS framing; only the transport is chosen here.
+func lookup(s step, r *result) error {
+	protocol := "udp4"
+	if s.Mode == "docker-tcp" {
+		protocol = "tcp4"
+	}
+	resolver := &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{Timeout: brief}).DialContext(ctx, protocol, s.Target)
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*brief)
+	defer cancel()
+	addresses, err := resolver.LookupIP(ctx, s.Input, s.Name+".")
+	if len(addresses) != 0 {
+		r.Reply = addresses[0].String()
+		return nil
+	}
+	if err == nil {
+		err = errors.New("no answer")
+	}
+	return err
+}
+
+// routes reports the worker's own IPv4 routing table as the kernel prints it.
+func routes(r *result) error {
+	data, err := os.ReadFile("/proc/net/route")
+	r.Reply = string(data)
+	return err
+}
+
 func barrier(dir string, s step) error {
 	if err := os.WriteFile(filepath.Join(dir, "slice-27-barrier-"+s.Name), nil, 0600); err != nil {
 		return err
@@ -375,6 +533,18 @@ func main() {
 			err = loopback(s, &r)
 		case "redirect":
 			err = redirect(s, roots, &r)
+		case "isolation":
+			err = isolation(dir, s, &r)
+		case "direct":
+			err = direct(s, roots, &r)
+		case "forward":
+			err = forward(s, &r)
+		case "datagram":
+			err = datagram(s, &r)
+		case "lookup":
+			err = lookup(s, &r)
+		case "routes":
+			err = routes(&r)
 		default:
 			err = errors.New("unknown step")
 		}
