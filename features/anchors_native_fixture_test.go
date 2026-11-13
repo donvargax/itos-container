@@ -227,7 +227,14 @@ func (w *world) anchorsRetry(child int) {
 	w.anchorsLive()
 	if w.anchors.initial.Sequence > 0 {
 		w.anchors.later = w.anchorsProgress()
-		w.recovery.err = errors.Join(w.recovery.err, os.WriteFile(filepath.Join(w.anchor.original, "subdir", "slice-17-recovery-exit"), []byte(strconv.Itoa(child)), 0600))
+		// The worker polls this path. Publish a complete request so it cannot
+		// parse the empty file between creation and WriteFile's write as exit 96.
+		path := filepath.Join(w.anchor.original, "subdir", "slice-17-recovery-exit")
+		err := os.WriteFile(path+".next", []byte(strconv.Itoa(child)), 0600)
+		if err == nil {
+			err = os.Rename(path+".next", path)
+		}
+		w.recovery.err = errors.Join(w.recovery.err, err)
 	}
 	r := w.recovery
 	r.run.wait()

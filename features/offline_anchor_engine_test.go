@@ -2,8 +2,10 @@ package features
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -195,11 +197,14 @@ func (a *offlineAPI) cleanupAnchorVolumes(ctx context.Context) error {
 			result = errors.Join(result, err)
 			continue
 		}
-		_ = response.Body.Close()
 		if response.StatusCode != http.StatusNoContent {
-			result = errors.Join(result, fmt.Errorf("native anchor harness cleanup HTTP %d", response.StatusCode))
+			var body struct{ Message string }
+			_ = json.NewDecoder(io.LimitReader(response.Body, 8192)).Decode(&body)
+			_ = response.Body.Close()
+			result = errors.Join(result, fmt.Errorf("native anchor harness cleanup HTTP %d reason=%s", response.StatusCode, anchorDiagnosticReason(body.Message)))
 			continue
 		}
+		_ = response.Body.Close()
 		result = errors.Join(result, a.w.doctor.real.read(path, nil, 404))
 	}
 	return result

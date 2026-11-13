@@ -37,6 +37,7 @@ func (s Preflight) Inspect() port.View {
 		}
 		v.Status = "changed"
 		if !s.Canonical.LocalMatches(c, v.Record) {
+			v.ChangedPaths = s.Canonical.ChangedPaths(c, v.Record, true)
 			return false
 		}
 		localMatched = true
@@ -58,6 +59,8 @@ func (s Preflight) Inspect() port.View {
 	v.Status = "changed"
 	if v.Record.Canonical == v.Candidate.Canonical {
 		v.Status = "matching"
+	} else {
+		v.ChangedPaths = s.Canonical.ChangedPaths(v.Candidate, v.Record, false)
 	}
 	return v
 }

@@ -2,8 +2,8 @@
 phases:
   1: null
 queue:
-  - p1-lifecycle-shard-flakes-on-main
-  - p1-anchor-recovery-flake
+  - T-50
+  - p1-session-contract-coverage-flake
   - p1-harness-home
   - p1-interactive-tty
 items:
@@ -933,21 +933,9 @@ items:
     title: Approval binds the egress allowlist, and any change to it needs a new approval
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-25]
     kind: slice
-    why: >
-      Was p1-egress-allowlist-approval.
-      Charter step 1: the allowlist is part of the approved settings, and the contract's AC-02
-      requires a change to network permissions to refuse startup with no self-approval. The
-      canonical approved-settings record (engine/approval/canonical, profile offline-v1) and the
-      approve presentation extend to the allowlist. Scenarios first: approve shows the exact host
-      names the worker will be able to reach and the profile that grants network. Adding, removing
-      or changing a name invalidates an existing approval, and run refuses with the change
-      explained. Reordering the same names does not, since the canonical form is a set. Offline
-      approvals keep their existing profile and identity. This slice covers records, presentation
-      and refusal only. Nothing starts a proxy yet. It follows the policy slice, which supplies the
-      validated list. Broken down from p1-egress-allowlist-proxy.
   - id: T-39
     title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
     phase: 1
@@ -959,14 +947,14 @@ items:
     title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-38]
     kind: task
   - id: slice-27
     title: run reaches only the approved names through the proxy; every other route out is closed
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-26, T-39, T-40]
     kind: slice
     why: >
@@ -1739,35 +1727,13 @@ items:
       scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
       Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
       approved grant. Broken down from p1-credentials-passed-in.
-  - id: p1-egress-refusal-log-writer
+  - id: T-51
     title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Blocks charter milestone two, step 1 (egress through an allowlisting proxy), at slice-27.
-      T-40's spec has the controller copy the stopped proxy's stdout through port.RefusalLog before
-      removing it. It refuses an egress run with no log bound (nil is port.Internal), and a failed
-      copy keeps the stopped proxy, both networks, the anchor and the intent. So slice-27 can
-      neither run nor tear down an egress session until a real writer exists. cmd binds none in
-      T-40. The record (docs/decisions/0022-egress-proxy.md, 'Where the log lands') and arc42's
-      slice-28 row give the writer to slice-28, which depends on slice-27. No item schedules it
-      earlier. Approval's Publish refuses more than 1 MiB, so it cannot be reused. Build the adapter
-      as a task before slice-27: the streaming writer for
-      sessions/<lookup>/<id>/egress-refusals.jsonl, with Publish's private-file, fsync, rename and
-      parent-fsync rules, passing T-40's RefusalLogContract unchanged. It adds no command behaviour,
-      so it is a ledger task with a check, not part of slice-27's scenarios. It depends on T-40, and
-      slice-27 should depend on it. Slice-28 keeps the seq check and its typed gap error, status's
-      record count, display escaping of hostile names, and the proxy-failure scenarios. Update the
-      record and arc42 rows that now give the writer to slice-28. The writer does not wait for
-      p2-proxy-log-lost-tail-sink, since T-40 says either candidate is one more stdout line the
-      reader and copy carry unchanged. Retention stays with p3-session-state-retention.
-
-      The existing item already identifies the dependency cycle and moves the writer ahead of
-      slice-27. Schedule T-40 → writer → slice-27 → slice-28, record those dependencies, and update
-      the decision record and architecture ownership as specified.
+    kind: task
   - id: p1-offline-11-ipv6-route-flake
     title: "ID-OFFLINE-11 flakes: a positive IPv6 route control times out on the CI runner"
     phase: 1
@@ -1782,40 +1748,48 @@ items:
       re-run of the same head passed. A positive control that times out makes the boundary check red
       with nothing wrong; give it a retry or a readiness wait before the dial, or say why one try is
       the contract.
-  - id: p1-lifecycle-shard-flakes-on-main
+  - id: T-49
     title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      2026-11-09, main push runs: 42713010342 at 1b310df (a registry-only commit) failed Engine
-      transport loss reports an unknown workload outcome and retains recovery (worker readiness did
-      not reach the controller's foreground stream); 42716948746 at 1ca4e45 (slice-25's merge)
-      failed both rows of The primary receives the first signal and its observed exit wins
-      (lifecycle.feature:420; product did not reach the handle lifecycle barrier; lifecycle changed
-      unrelated native resources or image references). Both are waits on a barrier with a fixed
-      bound, like LIFECYCLE-09 before T-42. A red main run blocks itos work done on every item
-      merged onto it, so each flake stops a worker. Find which bound the hosted runner misses and
-      give it room through the harness budget seam, as T-42 did.
-
-      Belongs in the existing investigation of lifecycle barrier failures. Include controller exit
-      code, stderr and the request journal in failure messages to distinguish early controller exits
-      from missed timing bounds; T-43 already exposes those step errors in CI annotations.
-  - id: p1-anchor-recovery-flake
+    kind: task
+  - id: T-50
     title: "Fresh recovery after controller loss and path replacement flakes: anchor recovery exits 75 and cleanup gets HTTP 409"
     phase: 1
     owner: null
     status: todo
     depends_on: []
+    kind: task
+  - id: p1-platform-log-redaction
+    title: The controller scrubs the credentials it staged from every log it persists
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
     kind: idea
     why: >
-      2026-11-09/10, Engine shard (other): Fresh recovery preserves the anchored checkout after
-      controller loss and path replacement failed on three branches whose changes do not touch it
-      (T-47 run 42708074071, T-40 run 42731353707, slice-26 run 42731520745): step error anchor
-      recovery exit 75, expected 0; then the after-scenario hook failed with native anchor harness
-      cleanup HTTP 409. Exit 75 reads as a transient (the engine still busy with the replaced path),
-      and 409 as a container or volume still in use at cleanup. A red shard blocks each pull request
-      it lands on and sends its implementer after code it never changed. Find which wait the hosted
-      runner outruns and bound it through the harness budget seam, as T-42 did.
+      q-55, the person 2026-11-10: log redaction belongs to the platform, not to each program. The
+      controller stages each credential itself, so it knows the exact bytes; scrub them and their
+      common encodings (base64, URL, hex) from everything it persists: the egress refusal log copy,
+      proxy and worker output it keeps, status and diagnostics. dockerd's own json-file log of the
+      proxy is outside the controller's writes, so either route the proxy's output through the
+      controller (a log driver of none and the controller capturing stdout) or scrub that file at
+      teardown. AC-36's hostname-marker probe moves here. Until this lands the leak is disclosed.
+  - id: p1-session-contract-coverage-flake
+    title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      slice-26, run 42738076694 (2026-11-10): the code proof failed before judging any mutant
+      (count.preparation-failed at listed-coverage: the listed test all command exited 1) because
+      Frozen image inspection must exclude implicit volumes before create (session.feature:722) row
+      #01 failed: disk: session contract subprocess failed: exit status 2, after 0.57 s. The same
+      scenario passed in that run's Tests (ubuntu-latest) job. Like T-41's overlap hook, a bound or
+      a subprocess the instrumented, slower coverage run outruns; find it and give it room through
+      the harness budget seam. A red code proof sends the item's implementer after code it never
+      changed.

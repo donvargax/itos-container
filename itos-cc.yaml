@@ -60,15 +60,6 @@ mutation:
       replacement: "1"
       reason: openCandidate calls os.Root.OpenFile with O_RDONLY|O_NOFOLLOW|O_NONBLOCK and no creation flag. The os.OpenFile contract uses perm only when creating a file; Root.OpenFile rejects only bits outside 0777, so both 0 and 1 pass validation. Either value opens the same existing file read-only or returns the same error for a missing, unsafe or inaccessible path. Neither creates a file, changes contents or permissions, nor alters no-follow, nonblocking or subsequent identity checks. TestFilesContract, TestNoFollowAndPathFailures and TestCandidateChangesAfterInspection preserve these behaviors but cannot distinguish this equivalent mutant.
       line_text: return root.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-    - file: internal/engine/readiness/domain/inspect.go
-      function: github.com/donvargax/itos-container/internal/engine/readiness/domain.Inspector#InspectBeforeEngine
-      hash: 7716a814eaca5296
-      line_in_function: 21
-      column: 24
-      original: "||"
-      replacement: "&&"
-      reason: InspectBeforeEngine obtains m directly from manifest/domain.Inspect, not from an injected Result. That function returns read, parse and non-object failures with Effective nil and nonempty Issues. Its final return assigns Effective only when len(Issues) == 0, using a newly allocated Settings; otherwise Effective stays nil. Thus m.Effective == nil and len(m.Issues) != 0 always have the same truth value at this guard. Both OR and AND return on every failure and continue on every success, with identical diagnostics, checkout lifetime and engine access. Neither operand has side effects. Existing manifest domain success/refusal tests and readiness prerequisite tests exercise both outcomes; no reachable input can distinguish this mutant. Reassess this exception if manifest.Inspect changes its result invariant.
-      line_text: if m.Effective == nil || len(m.Issues) != 0 {
     - file: internal/engine/egress/domain/domain.go
       function: github.com/donvargax/itos-container/internal/engine/egress/domain#splitTarget
       hash: 08d1fac276e2dbc2
@@ -96,12 +87,21 @@ mutation:
       replacement: "0"
       reason: This return is reached only after ownership(info) succeeded with exactly two links and opening the directory failed. Both callers, directoryStore.Read and pin.durableSnapshot, immediately pass the same FileInfo snapshot and the returned link count to linkedRecordSafety. Its actual != links check therefore refuses with state.unsafe for either expected count 1 or 0, before any further read, sync or publication. The failed open and all observable results are identical; testing the private helper return alone would distinguish an implementation detail, not behavior.
       line_text: return 1
-    - file: internal/engine/readiness/domain/inspect.go
-      function: github.com/donvargax/itos-container/internal/engine/readiness/domain.Inspector#InspectBeforeEngine
-      hash: 7716a814eaca5296
-      line_in_function: 16
-      column: 21
-      original: "||"
-      replacement: "&&"
-      reason: InspectBeforeEngine obtains p directly from policy/domain.Inspect, not from an injected Result. Inspect returns source issues only when nonempty; refused always supplies one issue; inspectFields returns nonempty Issues without Policy on failure and a newly allocated Policy without Issues on success. The intervening version guard replaces a successful non-v1 result with a nil Policy and one Version issue. Thus p.Policy == nil and len(p.Issues) != 0 always have the same truth value here. OR and AND both return on every refusal and continue on every accepted policy, with identical diagnostics, checkout lifetime, manifest reads and engine access; neither operand has side effects. Policy domain success/refusal tests and readiness version/prerequisite tests exercise these outcomes. No reachable input distinguishes this mutant. Reassess if policy.Inspect or the version guard changes that invariant.
-      line_text: if p.Policy == nil || len(p.Issues) != 0 {
+    - file: internal/engine/approval/domain/differences.go
+      function: github.com/donvargax/itos-container/internal/engine/approval/domain#differences
+      hash: 56fcb2ab86f87cbb
+      line_in_function: 13
+      column: 16
+      original: "true"
+      replacement: "false"
+      reason: "keys is a local map used only as a set: both insertion loops assign an entry, and the following loop ranges over keys without reading their boolean values. Assigning false still inserts every after key, including keys absent from before. The union of keys, recursive comparisons, sorted paths and before/after values are unchanged for every input. No boolean value escapes this function. Exact-result tests cover added, removed, shared and nested keys; no behavioral test can distinguish this mutation."
+      line_text: keys[key] = true
+    - file: internal/engine/approval/domain/differences.go
+      function: github.com/donvargax/itos-container/internal/engine/approval/domain#differences
+      hash: 56fcb2ab86f87cbb
+      line_in_function: 10
+      column: 16
+      original: "true"
+      replacement: "false"
+      reason: "This sibling of the CI-reported after-key insertion also writes an unread set value. keys is a local map: assigning false still inserts every before key, the second loop adds all after keys, and the final loop ranges over keys only. Shared keys may be overwritten and before-only values remain false, but neither value is read or escapes. The key union and every resulting Change are identical for all inputs. Exact-result tests cover removed, added, shared and nested keys; no behavioral test can distinguish this mutation."
+      line_text: keys[key] = true

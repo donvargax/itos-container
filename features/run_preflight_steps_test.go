@@ -180,6 +180,9 @@ func (w *world) runEngineObservation(observation string) error {
 	r := w.runFixture()
 	a := w.doctor.engine
 	switch observation {
+	case "cached image reports another config digest":
+		a.image["Id"] = "sha256:" + strings.Repeat("c", 64)
+		r.imageObservation = true
 	case "missing daemon ID":
 		a.info["ID"] = ""
 	case "unsupported engine product":

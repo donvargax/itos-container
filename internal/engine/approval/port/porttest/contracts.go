@@ -89,7 +89,7 @@ func Ready() readiness.Result {
 		Checkout: &readiness.CheckoutIdentity{Root: "/checkout", Device: "1", Inode: "2", GitDevice: "1", GitInode: "3"},
 		Engine:   &readiness.EngineIdentity{Endpoint: "unix:///engine.sock", ID: "engine-A", OS: "linux", Architecture: "amd64"},
 		Image:    &readiness.ImageIdentity{Reference: reference, ID: "sha256:" + strings.Repeat("b", 64), OS: "linux", Architecture: "amd64"},
-		Policy:   &policy.Result{Policy: &policy.Policy{Version: 1, Manifest: "worker.json"}},
+		Policy:   &policy.Result{Policy: &policy.Policy{Version: 1, Manifest: "worker.json", Network: policy.Network{Mode: "offline"}}},
 		Manifest: &manifest.Result{Effective: &manifest.Settings{Image: reference, WorkspaceFolder: "/workspace", ContainerEnv: map[string]string{}}}}
 }
 
@@ -118,10 +118,11 @@ func (h *Host) Socket(string) string       { return h.Stamp }
 
 // Codec selects precomputed fixture values and records resolution inputs.
 type Codec struct {
-	Values        map[string]port.Candidate
-	UID, GID      string
-	Local         port.Candidate
-	LocalMismatch bool
+	Values            map[string]port.Candidate
+	UID, GID          string
+	Local             port.Candidate
+	LocalMismatch     bool
+	LocalPaths, Paths []string
 }
 
 func (c *Codec) Candidate(_ readiness.Result, uid, gid string) port.Candidate {
@@ -168,4 +169,12 @@ func (c *Codec) LocalCandidate(r readiness.Result, uid, gid string) port.Candida
 }
 func (c *Codec) LocalMatches(candidate port.Candidate, record port.Record) bool {
 	return !c.LocalMismatch && candidate.Canonical == record.Canonical
+}
+
+// ChangedPaths supplies comparison outcomes without inspecting serialized data.
+func (c *Codec) ChangedPaths(_ port.Candidate, _ port.Record, local bool) []string {
+	if local {
+		return append([]string(nil), c.LocalPaths...)
+	}
+	return append([]string(nil), c.Paths...)
 }

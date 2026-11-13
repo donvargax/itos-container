@@ -93,7 +93,7 @@ func offlineContract(t *testing.T, request sessionContractRequest, controllerFor
 	if request.Action == "run-cleanup" {
 		result = sessionContractOutput(assemble(ap.Durable{}).Cleanup(context.Background(), request.Reference))
 	} else {
-		service, _ := approvalServices(os.Stdin, io.Discard, io.Discard)
+		service, _ := approvalServices("run", os.Stdin, io.Discard, io.Discard)
 		preflight := &sessionContractPreflight{Preflight: approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}}}
 		observedRunner := offlineContractRunner{run: func(ctx context.Context, frozen ap.Durable, argv []string, streams sp.Streams) sp.RunResult {
 			writeSessionContract(t, request.Checkpoint, frozen)

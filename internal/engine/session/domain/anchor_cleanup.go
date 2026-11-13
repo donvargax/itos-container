@@ -24,7 +24,7 @@ func stopAnchoredSession(ctx context.Context, s port.Session, c port.RunConnecti
 		if state, ok := ctx.Value(recoveryAnchorKey{}).(recoveryAnchorState); ok {
 			state.entry.Resource = "absent"
 		}
-		if failure := releaseAnchor(ctx, s.Intent(), c); failure != "" {
+		if failure := releaseSessionResources(ctx, s.Intent(), c); failure != "" {
 			return failure
 		}
 		return cancelUncreated(s)
@@ -61,7 +61,7 @@ func completeRun(ctx context.Context, i port.Intent, c port.RunConnection, r por
 	if failure := i.Save(r); failure != "" {
 		return port.CompletionWrite
 	}
-	if failure := releaseAnchor(ctx, i, c); failure != "" {
+	if failure := releaseSessionResources(ctx, i, c); failure != "" {
 		return failure
 	}
 	return port.Complete
@@ -69,7 +69,7 @@ func completeRun(ctx context.Context, i port.Intent, c port.RunConnection, r por
 
 func finishOwnedSession(ctx context.Context, s port.Session, c port.RunConnection) port.Outcome {
 	i := s.Intent()
-	if i.Record().Schema == 2 {
+	if i.Record().Schema >= 2 {
 		if failure := completeRun(ctx, i, c, i.Record(), i.Record().ContainerID); failure != port.Complete {
 			return failure
 		}

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -72,7 +73,7 @@ func TestStartupResultRetainsTimeoutKindAndOperation(t *testing.T) {
 				cancel(tc.failure)
 				result := startupResult(ctx, ctx, context.Cause(ctx), "intent publication")
 				want := port.RunResult{Result: port.Result{Outcome: tc.outcome}, Operation: tc.operation, Deadline: time.Now().Add(30 * time.Second)}
-				if result != want {
+				if !reflect.DeepEqual(result, want) {
 					t.Fatal("timeout lost its cause, operation or fresh teardown deadline", result)
 				}
 			})

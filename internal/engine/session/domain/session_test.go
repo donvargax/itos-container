@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func TestOwnedLifecycleAndIndependentRecovery(t *testing.T) {
 		t.Fatal(cleanup)
 	}
 	events := len(engine.Events)
-	if again := s.Cleanup(ctx, created.Reference); again != cleanup {
+	if again := s.Cleanup(ctx, created.Reference); !reflect.DeepEqual(again, cleanup) {
 		t.Fatal(again)
 	}
 	for _, e := range engine.Events[events:] {
@@ -105,7 +106,7 @@ func TestCreateRetainsIntentWhenAuthorityRevalidationFails(t *testing.T) {
 			original := string(store.Codec.Encode(binding.Intent(token)))
 			tc.setup(store, engine)
 			got := s.Create(context.Background(), d)
-			if got != (port.Result{Outcome: tc.want, Reference: ref}) {
+			if !reflect.DeepEqual(got, port.Result{Outcome: tc.want, Reference: ref}) {
 				t.Fatalf("create = %+v; want %s with the intent reference and no usable ID", got, tc.want)
 			}
 			if len(store.Records) != 1 || string(store.Records[ref]) != original || store.Locked {
@@ -342,7 +343,7 @@ func TestCleanupRetainsEvidenceWhenRevalidationFails(t *testing.T) {
 			engine.Resources[id] = resource
 			tc.setup(store, engine)
 			got := (Service{Store: store, Engine: engine}).Cleanup(context.Background(), ref)
-			if got != (port.Result{Outcome: tc.want, Reference: ref}) {
+			if !reflect.DeepEqual(got, port.Result{Outcome: tc.want, Reference: ref}) {
 				t.Fatalf("cleanup = %+v, want %s with the surviving reference", got, tc.want)
 			}
 			// Reconciliation may durably advance intent to owned before a later
