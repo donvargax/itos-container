@@ -176,6 +176,18 @@ items:
       Already covers hook registration and verification instructions. Include the reported unset
       core.hooksPath and missing pre-commit/commit-msg hooks in that verification, confirming how
       subsequent commits enforce configured gates.
+
+      Belongs inside p1-refresh-remaining-template-guidance, which already takes in
+      features/README.md; this is a foundation docs leftover that blocks no charter step, so it
+      waits with that item. Note for it: features/README.md is 79,818 bytes on main and 83,280 on
+      the slice-27 branch, with no entry in tools/bin/doc-caps, which today caps only AGENTS.md and
+      docs/ORCHESTRATING.md, and every implementer is told to read it. Measured by section on main:
+      'The CI engine tier' 30.8 KB, 'Manual red-first evidence' 15.2 KB, 'Cached fixture protocol'
+      11.1 KB. Per-slice evidence paragraphs sit under '## Tags' ahead of the tag table: slice-17's
+      anchor note on main, and slice-27 adds another 3.4 KB there. When refreshing the file, move
+      per-slice red-evidence and history notes out of it (the commits and run numbers already record
+      them), keep only the standing harness rules, and add a doc-caps entry with headroom over the
+      shortened size so later slices cannot grow it back.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
