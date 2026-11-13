@@ -169,9 +169,7 @@ func TestCredentialNativeErrorsAndPinnedIdentity(t *testing.T) {
 		t.Fatal(status)
 	}
 	defer f.Close(h)
-	if _, _, ok := f.Entries(h); ok {
-		t.Fatal("regular source used as a directory")
-	}
+	credentialEntriesRefused(t, f, h, "regular source used as a directory")
 	if err := os.Rename(path, path+"-old"); err != nil {
 		t.Fatal(err)
 	}
@@ -186,21 +184,17 @@ func TestCredentialNativeErrorsAndPinnedIdentity(t *testing.T) {
 	if !ok || d.Path != path+"-old" || d.MountID <= 0 {
 		t.Fatalf("descriptor mapping lost: %#v %v", d, ok)
 	}
-	if _, _, status := f.Open(999, "child"); status != port.CredentialReadUnavailable {
-		t.Fatal(status)
-	}
-	if _, _, status := f.Open(0, root+"/missing"); status != port.CredentialReadMissing {
-		t.Fatal(status)
-	}
+	// The source's pin is still held here, so a refusal that handed out any
+	// nonzero number could name it.
+	credentialOpenRefused(t, f, 999, "child", port.CredentialReadUnavailable)
+	credentialOpenRefused(t, f, 0, root+"/missing", port.CredentialReadMissing)
 	if _, ok := f.Stat(999); ok {
 		t.Fatal("unknown handle stat accepted")
 	}
 	if _, ok := f.Descriptor(999); ok {
 		t.Fatal("unknown descriptor accepted")
 	}
-	if _, _, ok := f.Entries(999); ok {
-		t.Fatal("unknown directory accepted")
-	}
+	credentialEntriesRefused(t, f, 999, "unknown directory accepted")
 	f.Close(999)
 	for _, fault := range []string{"lstat", "open", "metadata", "read", "readlink", "long readlink"} {
 		t.Run(fault, func(t *testing.T) {
@@ -222,9 +216,7 @@ func TestCredentialNativeErrorsAndPinnedIdentity(t *testing.T) {
 			f.ops = &ops
 			defer func() { f.ops = nil }()
 			if fault == "lstat" || fault == "open" || fault == "metadata" {
-				if _, _, status := f.Open(0, path); status != port.CredentialReadUnavailable {
-					t.Fatal(status)
-				}
+				credentialOpenRefused(t, f, 0, path, port.CredentialReadUnavailable)
 			} else if _, ok := f.Descriptor(h); ok {
 				t.Fatal("incomplete descriptor accepted")
 			}
@@ -247,8 +239,31 @@ func TestCredentialNativeErrorsAndPinnedIdentity(t *testing.T) {
 		return credentialOpen(parent, name)
 	}
 	f.ops = &ops
-	if _, _, status := f.Open(0, dir); status != port.CredentialReadUnavailable {
-		t.Fatal("directory substitution accepted")
+	credentialOpenRefused(t, f, 0, dir, port.CredentialReadUnavailable)
+}
+
+// A refused open hands out no handle and no metadata. Handles are small
+// counters, so a nonzero one beside a failure status could name a live pin, and
+// a caller closing what it was given would release another object's descriptor.
+func credentialOpenRefused(t *testing.T, f *CredentialFiles, parent port.CredentialHandle, name string, want port.CredentialRead) {
+	t.Helper()
+	held := len(f.handles)
+	h, node, status := f.Open(parent, name)
+	if h != 0 || node != (port.CredentialNode{}) || status != want {
+		t.Fatalf("open %q under %d returned handle %d, node %#v and status %v; want no handle, no metadata and status %v", name, parent, h, node, status, want)
+	}
+	if len(f.handles) != held {
+		t.Fatalf("refused open %q under %d retained a pin: %d held, was %d", name, parent, len(f.handles), held)
+	}
+}
+
+// A failed directory read reports neither names nor completion. Completion
+// beside a failure would read as a fully enumerated directory, and names would
+// be a prefix of one.
+func credentialEntriesRefused(t *testing.T, f *CredentialFiles, h port.CredentialHandle, what string) {
+	t.Helper()
+	if names, done, ok := f.Entries(h); names != nil || done || ok {
+		t.Fatalf("%s: names=%q done=%v ok=%v", what, names, done, ok)
 	}
 }
 
@@ -256,7 +271,7 @@ func TestCredentialUnusableNativeHandles(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("native descriptor calls require Linux")
 	}
-	for _, mode := range []string{"closed pin", "directory unavailable", "directory replacement", "invalid fdinfo"} {
+	for _, mode := range []string{"closed pin", "directory unavailable", "directory replacement", "directory read failure", "invalid fdinfo"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			f := &CredentialFiles{}
@@ -279,6 +294,11 @@ func TestCredentialUnusableNativeHandles(t *testing.T) {
 			case "directory replacement":
 				other := t.TempDir()
 				ops.directory = func(string) (*os.File, error) { return os.Open(other) }
+			case "directory read failure":
+				// The kernel can fail a batch after yielding part of it.
+				ops.entries = func(*os.File, int) ([]os.DirEntry, error) {
+					return []os.DirEntry{credentialEntryName("partial")}, os.ErrPermission
+				}
 			case "invalid fdinfo":
 				ops.read = func(string, int64) ([]byte, bool) { return []byte("mnt_id: bad"), true }
 			}
@@ -287,8 +307,8 @@ func TestCredentialUnusableNativeHandles(t *testing.T) {
 				if _, ok := f.Descriptor(h); ok {
 					t.Fatal("invalid descriptor accepted")
 				}
-			} else if _, _, ok := f.Entries(h); ok {
-				t.Fatal("unusable directory accepted")
+			} else {
+				credentialEntriesRefused(t, f, h, "unusable directory accepted")
 			}
 		})
 	}
