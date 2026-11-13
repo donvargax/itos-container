@@ -1664,6 +1664,22 @@ items:
       title=Engine step over its time limit` with measured and limit seconds and nothing else. Cover
       it in TestEngineSuiteBudget's over-budget cases. Public data only. It edits the same workflow
       region and pins, so it is one change with the notice step, not a separate item.
+
+      This belongs inside p1-engine-timing-notice-every-run, the item that makes each row's timing
+      readable on green runs. Checked on main: engineTiming.complete
+      (features/engine_timing_test.go) writes one `engine scenario timing:` record for every row,
+      with ID-LIFECYCLE-09's signal offsets as a per-row extra, and ci.yml prints those records only
+      in the failure-only diagnostics step. Fold this in when the item is specified: the record of a
+      row that launches a worker also carries its create call's intervals, namely the image
+      inspection's round trip and the create's arrival, forwarding, engine answer and reply, and the
+      notice shows them at least for each shard leg's first row. The three slow creates on record
+      (ID-OFFLINE-29, ID-LIFECYCLE-08, ID-ANCHORS-09) were each the first engine row of its shard's
+      first file, and T-50 prints these intervals only when a row fails, so without this the remedy
+      for the slow first create has no baseline from passing rows. It needs the forwarding and
+      answer times T-50 adds to the journal, so this part waits for T-50 to land. Durations only: no
+      name, ID or engine text. It changes the item's line that a notice carries scenario name,
+      duration and outcome only, and the record's shape is pinned by TestEngineScenarioTiming, which
+      the item's check already extends. T-50's failure-time print stays as specified.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
