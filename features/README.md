@@ -1029,8 +1029,26 @@ grant in the test assembly, never committed, all seven `ID-EGRESS-10` rows and e
 of `ID-EGRESS-02` except the two that need the real inspection and durable evidence passed,
 so the fixture agrees with the session engine as built. `ID-EGRESS-04` also reads the
 built executable itself and stays red until the harness builds what the release ships
-(`p1-acceptance-static-binary`). The eight real-engine scenarios, `ID-EGRESS-12` to `-19`,
-have no step definitions yet.
+(`p1-acceptance-static-binary`).
+
+Six of the eight real-engine scenarios have step definitions that no engine has run yet:
+`ID-EGRESS-12`, `-13`, `-14`, `-17`, `-18` and `-19`. Their Givens provision only trusted
+controls: a private checkout and state, a synthetic approval, the worker probe
+(`testdata/slice-27/probe`) and TLS endpoints (`testdata/slice-27/endpoint`) in fixture
+containers on `11.22.33.0/24`, `fd27:27::/64` and, for the private case, `192.168.227.0/24`.
+An endpoint generates its key in memory and publishes only certificates and receipts; a
+receipt is written for every exchange and for every connection, with its byte count. The
+product runs against the engine's own socket with no recorder. The worker stops at a
+barrier file in its checkout, where the harness inspects the product's resources by their
+labels and attaches the proxy to the fixture networks, recording that attachment apart; it
+never touches the worker or the product's two networks. Independent controls are the
+harness's own verified exchanges with each endpoint, before and after the run.
+`TestEgressTrustedProgramsExchangeWithoutAnEngine` runs both programs against each other
+through a stand-in proxy and has the standard library parse the crafted ClientHellos. The
+proxy container runs the same test assembly, whose `TestMain` hands `__egress-proxy` to the
+product's entry point. `ID-EGRESS-15` and `-16`, the route and DNS scenarios, have no step
+definitions yet: their independent controls belong in disposable namespaces, as slice-14's
+are, and are still to be written.
 
 | Tag               | Meaning                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------ |

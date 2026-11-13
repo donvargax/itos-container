@@ -25,6 +25,7 @@ type egressWorld struct {
 	contractBefore      map[string]string
 	contractDir         string
 	status              *egressStatus
+	native              *egressNative
 }
 
 func (w *world) egressFixture() *egressWorld {
@@ -126,6 +127,7 @@ func (w *world) egressSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the terminal review describes allowlist-v1 without a temporary run refusal before exactly one y/N prompt$`, w.egressRunnableReview)
 	w.egressExecutableSteps(sc)
 	w.egressStatusSteps(sc)
+	w.egressNativeSteps(sc)
 }
 
 var egressBoundaryDefects = []string{
