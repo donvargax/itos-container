@@ -56,6 +56,7 @@ type world struct {
 	overlap             *overlapFixture
 	hardlinks           *hardlinkWorld
 	control             *controlFixture
+	egress              *egressWorld
 	duringQuiet         func() // Selected independent cases inside a stable quiet-worker lifetime.
 }
 
@@ -189,6 +190,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w.hardlinkSteps(sc)
 	w.controlStateSteps(sc)
 	w.runExitSteps(sc)
+	w.egressSteps(sc)
 	return w
 }
 

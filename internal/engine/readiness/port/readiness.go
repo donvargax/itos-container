@@ -37,6 +37,9 @@ const (
 	ImageDigest
 	ImagePlatform
 	ImageUser
+	// EgressExecutable refuses the controller's own program as the proxy's:
+	// unobserved, not a static Linux amd64 ELF, or inside the checkout.
+	EgressExecutable
 )
 
 // Issue contains only a typed failure and its safe subject, never source data.

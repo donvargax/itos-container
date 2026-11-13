@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"reflect"
 	"regexp"
@@ -364,11 +365,18 @@ func (w *world) doctorAllowedJournal(allowImage bool) error {
 		return nil
 	} // unavailable socket has no responder
 	for _, r := range w.doctor.engine.requests() {
-		if !doctorAllowedRequest(r, w.doctor.image, allowImage) {
+		if !doctorAllowedRequest(r, w.doctor.image, allowImage) && !w.egressProxyInspection(r, allowImage) {
 			return fmt.Errorf("forbidden API attempt: %+v", r)
 		}
 	}
 	return nil
+}
+
+// An allowlist fixture also permits the plain inspection of the pinned proxy
+// reference, only where image inspection is permitted at all. Every other image
+// path, any query, and every mutation or acquisition stays forbidden.
+func (w *world) egressProxyInspection(r doctorRequest, allowImage bool) bool {
+	return allowImage && w.doctor.engine.egress != nil && r.Method == http.MethodGet && r.Query == "" && doctorRequestPath(r.Path) == "/images/"+busyboxFixturePin+"/json"
 }
 func (w *world) doctorNoConnection() error {
 	a := w.doctor.engine

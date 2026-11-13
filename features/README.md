@@ -554,7 +554,7 @@ times that show the need. In the prepared CI tier only, the coordinator measures
 with:
 
 ```sh
-for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
+for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature egress.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
   env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
 done
 ```
@@ -1006,6 +1006,31 @@ and assertion-level red for all 49 rows. The combined implementation passes thos
 rows and the 25 local OFFLINE anchor rows. Fresh-process recovery is part of
 slice-17 under q-36/q-38; schema-2 status and stop account for the original anchor.
 Native green at the actual pushed head remains the coordinator's CI obligation.
+
+Slice-27's step checkpoint defines the twelve non-engine scenarios of `egress.feature`
+(`ID-EGRESS-01` to `-11` and `-20`). `an egress-capable local Engine API fixture` extends the
+recorded HTTP Engine API fixture with T-40's two networks, the proxy's stdout-ready record
+and exit, and a second, independent image response for the pinned proxy reference; its
+daemon is 28.0.0 with API 1.48, and the proxy image's config ID differs from the worker's.
+The fixture checks every create, start and removal against the protected intent the product
+must have written first, and keeps a mismatch for the Then steps. It executes no workload,
+proxy or helper. `no engine mutation or image acquisition was attempted` also permits, for
+an allowlist fixture only and only where image inspection is permitted, the plain inspection
+of that pinned reference. `ID-EGRESS-07` reaches the observation adapter through
+`TestEgressExecutableContractProbe` in the test assembly, with ELF inputs the scenario
+writes and `TestEgressSyntheticELFCarriesExactlyItsProperty` reads back independently.
+`ID-EGRESS-03` and `-20` run a copy of the built assembly from inside their checkout.
+`ID-EGRESS-09` seeds both original sessions itself, including the egress session's runtime
+evidence at `intents/<project>/<token>.egress.json` (`{"proxy_image_id":…,"schema":1}`).
+
+With `@wip` removed for the run only, all 43 rows failed at their first Then on 2026-11-13;
+the failing assertions are in the checkpoint's hand-back. With a throwaway wiring of T-40's
+grant in the test assembly, never committed, all seven `ID-EGRESS-10` rows and every step
+of `ID-EGRESS-02` except the two that need the real inspection and durable evidence passed,
+so the fixture agrees with the session engine as built. `ID-EGRESS-04` also reads the
+built executable itself and stays red until the harness builds what the release ships
+(`p1-acceptance-static-binary`). The eight real-engine scenarios, `ID-EGRESS-12` to `-19`,
+have no step definitions yet.
 
 | Tag               | Meaning                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------ |
