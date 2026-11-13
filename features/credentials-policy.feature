@@ -118,6 +118,9 @@ Feature: Named credential requests and read-only source inspection
   #    checkout or either state root, refuses with credential.filesystem (3).
   #    Check both observations, including covered rows and absent state roots.
   #    Ignore unrelated stacking rows; do not parse lowerdir/upperdir options.
+  #    After the review of 8e5088e the same refusal covers nfs and nfs4, matched
+  #    exactly: the kernel prints "/" as the root of every NFS mount row, so a
+  #    row cannot place a second mount of an export subdirectory in its tree.
   #    Known identity/location matches keep precedence. q-57 still governs
   #    descriptor mount identity; no st_dev equality requirement is restored.
   #    Defer any initial table error to the location check, preserving earlier
@@ -142,6 +145,8 @@ Feature: Named credential requests and read-only source inspection
   # An absent protected state root is not created. An inaccessible existing
   # boundary refuses; an unreadable unrelated STATE descendant is immaterial.
   # Existing state-location/identity failures retain their shared rules and exits.
+  # That includes a selected state location that is not valid UTF-8, refused as
+  # approval.state.location (2) with a relative one, before any path is opened.
   # Checkout/state overlap in either direction, including bind coordinates and
   # pinned identities, is state.path before any scan. Compare checkout and its
   # descendant mounts with every reserved state subtree; never enumerate an alias.
@@ -164,6 +169,7 @@ Feature: Named credential requests and read-only source inspection
   # credential.unavailable (3): unavailable metadata, checkout scan or state projection.
   # credential.mount_id (3): unavailable STATX_MNT_ID; name it and require kernel support.
   # credential.filesystem (3): overlay/FUSE backing aliases cannot be excluded.
+  #   The same rule refuses paths on NFS, whose mount rows hide the mounted subdirectory.
   # credential.symlink (1): a symbolic link at any component, even dangling.
   # credential.ancestor (1): unsafe ancestor ownership or write permissions.
   # credential.location (1): an identity exposed in checkout or protected state.
@@ -1680,3 +1686,69 @@ Feature: Named credential requests and read-only source inspection
       | relative      | doctor.checkout.root        | 2    |
       | absent        | doctor.checkout.unavailable | 3    |
       | symbolic link | doctor.checkout.path        | 1    |
+
+  # Review of 8e5088e (the thread at credentials.go:59): the selected state
+  # location was checked for being absolute, never for being valid UTF-8. Linux
+  # opens such a path normally, so this mode reported success for a selection
+  # that ordinary doctor refuses as approval.state.location (exit 2), where it
+  # promises the shared state-location rules and exits. The selected state path
+  # must be absolute and valid UTF-8 before any boundary is walked. Both
+  # XDG_STATE_HOME and its HOME fallback are selections.
+  # The new Given points the selection at an existing private tree, mode 0700
+  # and owned by the user, whose path holds the byte 0xff: nothing but its
+  # encoding can refuse it. Before the fix both examples exited 0.
+  @wip @slice-29 @ID-CREDENTIALS-59 @linux
+  Scenario Outline: a selected state path that is not valid UTF-8 keeps the shared state-location refusal
+    Given a private credential inspection fixture
+    And credential source "token" has layout "private regular file"
+    And the credential fixture requests these sources:
+      | kind         | source |
+      | claude-token | token  |
+    And the credential fixture selects state through "<selection>" with a path that is not valid UTF-8
+    And credential inspection effects are snapshotted
+    When itos-container runs with "doctor --credentials-only --json"
+    Then its JSON output names the problem "approval.state.location"
+    And it exits with code 2
+    And credential inspection has no side effects or helper execution
+    And the engine recorder has no connections
+
+    Examples:
+      | selection      |
+      | XDG_STATE_HOME |
+      | HOME fallback  |
+
+  # Review of 8e5088e (the thread at credential_projection.go:207): a mount
+  # row's root is the coordinate's backing path, and for NFS it is not a path.
+  # The kernel prints "/" for every nfs and nfs4 row (nfs_show_path), whatever
+  # export subdirectory the mount or bind is rooted at. A protected subdirectory
+  # mounted a second time therefore projects beside its tree, not inside it,
+  # and no pinned identity matches either: state is never enumerated, and a
+  # checkout entry hidden under a host submount is never inventoried.
+  # Refuse nfs and nfs4 with credential.filesystem (3) under the conditions of
+  # overlay and FUSE: a source or source-ancestor descriptor on such a row, or
+  # such a row at, below or covering checkout or either state root.
+  # The new Given mounts one export at <point> and a second time, rooted at
+  # <subdirectory>, over the source's parent directory. Both rows share the
+  # export's device and report root "/". A checkout subdirectory is also
+  # covered by a host submount, as in ID-CREDENTIALS-55, so the inventory sees
+  # only the covering entry. Before the fix all six examples exited 0.
+  @wip @slice-29 @ID-CREDENTIALS-60 @linux
+  Scenario Outline: credential inspection refuses NFS mounts, whose rows hide the mounted subdirectory
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And the credential source is a second "<filesystem>" mount of "<subdirectory>" from the export mounted at "<point>"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                  | path                  | exit |
+      | credential.filesystem | /credentials/0/source | 3    |
+    And it exits with code 3
+    And its standard output says "nor can paths on NFS"
+    And the credential observation recorded no state record enumeration or metadata visits
+
+    Examples:
+      | filesystem | subdirectory                                  | point    |
+      | nfs4       | /account/.local/state/itos-container/sessions | /account |
+      | nfs        | /account/.local/state/itos-container/sessions | /account |
+      | nfs4       | /state/private                                | /        |
+      | nfs        | /state/private                                | /        |
+      | nfs4       | /checkout/private                             | /        |
+      | nfs        | /checkout/private                             | /        |

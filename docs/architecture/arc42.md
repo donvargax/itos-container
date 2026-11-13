@@ -967,6 +967,10 @@ source. Do not infer backing coordinates from mount options. The statx mount-ID
 rule remains unchanged, and known location matches keep precedence. Synthetic
 checkout/state and shared fake/disk fixtures prove the refusal before downstream
 credential admission; native mounts remain CI-only evidence.
+The same refusal covers `nfs` and `nfs4` (decision 0027, amended after the review of
+`8e5088e`): the kernel prints `/` as the root of every NFS mount row, so a protected
+export subdirectory mounted a second time projects beside its tree. A home, checkout
+or state location on NFS is refused rather than judged from that row.
 
 Two complete mount-table observations bracket inspection; descriptor pathname walks,
 pins, mappings and final source metadata are rechecked. Each table is bounded to

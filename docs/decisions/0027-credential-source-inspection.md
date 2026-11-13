@@ -36,6 +36,24 @@ Amended after the review of `027305f`: the mode took its checkout boundary from
 requests were judged against another tree. The policy is now read only through a
 pin of the effective root, as **A separate metadata scope** describes.
 
+Amended after the review of `8e5088e`, on two points. First, a mount row's root
+is this decision's backing path, and for NFS it is not one: the kernel prints
+`/` for every `nfs` and `nfs4` row
+([`nfs_show_path`](https://github.com/torvalds/linux/blob/master/fs/nfs/super.c)),
+whatever export subdirectory the mount or bind is rooted at. A protected
+subdirectory mounted a second time projected beside its tree, and no pinned
+identity matched either, so its file was accepted. That is the fixture row
+"Protected descendant directory bound outside" this decision requires refusing.
+The 04:42 amendment's rule covers it: refuse `nfs` and `nfs4` with
+`credential.filesystem` under the conditions of overlay and FUSE. A home, checkout
+or state location on NFS is therefore refused outright; proving exclusion there
+needs evidence the mount table does not hold, and is a decision of its own.
+The message becomes "Overlay or FUSE backing paths cannot be excluded from
+credential exposure, nor can paths on NFS". Second, the selected state location
+was checked for being absolute but not for being valid UTF-8, so this mode
+accepted a selection that ordinary doctor refuses. It now keeps the shared
+`approval.state.location` refusal (exit 2) for both, before any boundary is walked.
+
 ## The sections this decision overrides
 
 T-47's record is [decision 0025](0025-credentials-passed-in.md). The first version
@@ -79,7 +97,9 @@ It does not read source contents or state-record contents, require a manifest, c
 an engine, execute helpers, create state or record approval. Its schema-1 JSON has
 `scope: "credentials"`, the sorted grants and located problems; plain output explicitly
 names what was not checked. A valid policy without grants yields an empty array without
-a source/exposure scan. Policy problems retain the existing refusal envelope without
+a source/exposure scan. With grants, the selected state location must be absolute and
+valid UTF-8, from `XDG_STATE_HOME` or its `HOME` fallback alike: otherwise the mode
+refuses with the shared `approval.state.location` (exit 2) before it opens any path. Policy problems retain the existing refusal envelope without
 partial effective data.
 
 The policy and the checkout boundary name one tree. The effective root is absolute
@@ -207,7 +227,10 @@ prove, not a claim of an atomic kernel snapshot:
    any such row at, below or covering the checkout or either state root, including
    hidden covering mounts and initially absent state roots. Apply this to both
    complete observations; either refusal prevents success. Unrelated rows are
-   harmless. Do not interpret mount options as backing-path evidence: neither
+   harmless. The same refusal, under the same conditions, covers `nfs` and `nfs4`,
+   matched exactly: their rows print `/` as the root of every mount, so a row
+   does not say which export subdirectory it shows. `nfsd`, the server's own
+   control filesystem, is not an NFS mount. Do not interpret mount options as backing-path evidence: neither
    overlay's lowerdir/upperdir strings nor a FUSE source supplies this contract's
    pinned coordinate proof. Known identity/location matches retain precedence.
    This extends checkout exclusion beyond identity comparisons without adding
@@ -365,6 +388,10 @@ adapter. Alias rows apply to **both** protected trees; other rows name their sco
 | Unprojectable source/boundary row or row overlapping protected state | Unavailable; no coordinate is inferred. |
 | Overlay/FUSE source or ancestor; row at, below or covering checkout or either state root | Dedicated filesystem refusal, even when the backing file and merged view have different device identities. |
 | Unrelated overlay/FUSE row | Accepted when the source is otherwise independent. |
+| NFS (`nfs`, `nfs4`) source or ancestor; row at, below or covering checkout or either state root | The same filesystem refusal, in either observation. |
+| Protected subdirectory of an NFS export mounted a second time over the source's parent, both rows with root `/`; for checkout, its entry hidden under a host submount | Filesystem refusal; the same rows on ext4 name an independent file and are accepted. |
+| Unrelated NFS row; `nfsd` row anywhere | Accepted when the source is otherwise independent. |
+| Selected state location that is absolute but not valid UTF-8 | `approval.state.location` before any filesystem call; valid multi-byte paths are accepted. |
 
 Alias fixtures have safe owners/permissions, one-link nonempty regular files and no
 symlink, so an unrelated refusal cannot satisfy them. Include file and directory mount

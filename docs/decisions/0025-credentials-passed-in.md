@@ -163,6 +163,9 @@ rows and absent state roots, in either observation. Unrelated stacking mounts re
 harmless. Preserve q-57's statx mount-ID mapping and revalidation without requiring
 st_dev equality. Synthetic checkout/state regression evidence is required before
 credential admission; real-mount evidence belongs only in CI.
+Decision 0027's amendment after the review of `8e5088e` extends that refusal to
+`nfs` and `nfs4`, whose mount rows print `/` as every mount's root and so cannot
+place a second mount of an export subdirectory inside its protected tree.
 
 Two complete bounded mount-table observations bracket inspection; source and boundary
 identities/mappings and final source link metadata are rechecked. Each table has

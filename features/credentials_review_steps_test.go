@@ -9,6 +9,7 @@ import (
 
 func (w *world) credentialReviewSteps(sc *godog.ScenarioContext) {
 	w.credentialBoundaryReviewSteps(sc)
+	w.credentialExportReviewSteps(sc)
 	sc.Step(`^credential observation exposes the source through "([^"]*)" at "([^"]*)"$`, w.credentialStackingMount)
 	sc.Step(`^the credential source has (\d+) additional ancestor directories$`, func(depth int) error {
 		o := w.credentials.observation

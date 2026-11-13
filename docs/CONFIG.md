@@ -538,6 +538,11 @@ state root. Covered mounts and absent state roots are included. Use source,
 checkout and state paths on filesystems with projectable backing paths. Unrelated
 overlay/FUSE mounts do not block an otherwise independent source. Mount options
 are not treated as backing-path proof; the mount-ID checks above still apply.
+NFS (`nfs`, `nfs4`) is refused the same way and under the same conditions. The
+kernel reports `/` as the root of every NFS mount, whichever export subdirectory
+it shows, so a second mount of a protected subdirectory cannot be recognized.
+A source, checkout or state location on NFS, an NFS home included, reports
+`credential.filesystem`; unrelated NFS mounts do not.
 
 Source problems are located at `/credentials/<written-index>/source`. Missing or
 unavailable metadata uses exit 3; symlink, ancestor, location, regular, owner, permissions,
@@ -549,7 +554,9 @@ ancestors have no credential-source owner or permission requirement, symlinks re
 Absolute checkout inputs are cleaned before walking, as in the shared checkout pin;
 credential source paths remain literal. Checkout/state overlap in either direction
 reports `approval.state.path` before inventory, including aliases established by
-pinned identities and mount coordinates. Unavailable boundary evidence prevents
+pinned identities and mount coordinates. A selected state location that is relative
+or not valid UTF-8 reports `approval.state.location` (exit 2), as ordinary doctor
+does, before any source, checkout or state path is opened. Unavailable boundary evidence prevents
 inventory. An unrelated stacking mount cannot override a missing mount ID or an
 unavailable checkout descriptor diagnostic.
 
