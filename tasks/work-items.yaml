@@ -1802,3 +1802,23 @@ items:
       a subprocess the instrumented, slower coverage run outruns; find it and give it room through
       the harness budget seam. A red code proof sends the item's implementer after code it never
       changed.
+  - id: p1-main-go-toolchain-1-27-4
+    title: main's Go toolchain pin is go1.27.4, so every branch's govulncheck step passes again
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's second milestone, step 1 (egress through an allowlisting proxy):
+      slice-27's pull request cannot go green, nor can slice-28 and T-51 after it, and the same
+      holds for step 2's T-48 and for slice-22 and T-50. go.mod on main pins toolchain go1.27.3, and
+      CI's `go tool govulncheck -test ./...` exits 3 there on GO-2026-6859 (net/http, fixed in
+      go1.27.4), because code already on main reaches net/http. Only slice-29 carries the one-line
+      move (commit c583023), and it is a large slice still in review. Checked on 2026-11-13: main,
+      origin/main, slice-27, slice-28, slice-30, T-48, slice-22, T-50 and T-51 all pin go1.27.3. A
+      foundation chore with a ledger task: move the toolchain line to go1.27.4 on main, checked by
+      the pin's value and by the unchanged govulncheck step passing in CI. The gate is not weakened.
+      The identical line merges cleanly with slice-29's. The scan passes locally under the
+      distribution Go even when CI fails, so each worker would otherwise spend a CI cycle finding
+      the same failure. If slice-29 merges first, close this as done by it.
