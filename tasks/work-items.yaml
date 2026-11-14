@@ -2129,3 +2129,25 @@ items:
       retry, skipped row, relaxed assertion or production default change. Phase p2: a re-run clears
       each failure, so it blocks no step of milestone two, but it taxes every pull request of steps
       1 and 2.
+  - id: p2-native-mount-evidence-credential-inspection
+    title: A CI-only tier runs credential source inspection against real bind mounts made in a private user and mount namespace
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Decisions 0025 and 0027 call native bind-mount proof "downstream CI work", and no item owns
+      it. Every alias, stacking and filesystem row of slice-29 is simulated through observation
+      seams. That gap already let one defect through: the 4096-byte row passed the disk contract
+      only because its fixture replaced readlink, while a real kernel refuses that length (fixed in
+      8f081a7). A private namespace (unshare -Urm) makes real mounts without root or Docker; the
+      implementer confirmed with it that mountinfo prints roots longer than PATH_MAX, and the
+      reviewer used it for 23 layouts. A CI tier built this way would run the disk adapter against
+      real bind aliases of checkout and protected-state descendants, file and directory mount
+      crossings, and an overlong mount root, for slice-29's rows and slice-30's reuse of the same
+      observation. It does not block charter step 2, because decision 0025 requires only synthetic
+      evidence before admission; it is the runtime evidence behind the source-exclusion claim that
+      slice-31 to slice-33 rely on. Not checked: whether the hosted ubuntu-latest runner permits
+      unprivileged user namespaces (Ubuntu 24.04 restricts them through AppArmor by default); the
+      runner has sudo if it does not.
