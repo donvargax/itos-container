@@ -1681,6 +1681,23 @@ items:
       name, ID or engine text. It changes the item's line that a notice carries scenario name,
       duration and outcome only, and the record's shape is pinned by TestEngineScenarioTiming, which
       the item's check already extends. T-50's failure-time print stays as specified.
+
+      The same need as this item's note on the create call's intervals, seen from a failed run, so
+      it is one more line for this item's spec, not an item. In T-50's run 43543693012 at 73cbd13
+      three first rows stopped at run.call-timeout. T-50's diagnostics print the create's forwarding
+      and answer times in the launch journal, below the cause, the launch line and the status and
+      stop reports. itos ci watch keeps 10 lines of a failed scenario and T-43's annotation 4096
+      bytes, so the intervals reached a reader for the lifecycle row only: 39 and 110 lines were
+      left out for the other two. T-50's third rule fixes what the launch line holds (the
+      controller's exit, elapsed time, rule and operation), so an implementer cannot add this there,
+      and T-50 is at its landing decision (q-63). This item already changes the timing record to
+      carry these intervals and waits for T-50 to land. When it is specified, weigh one more spec
+      line: when the launch controller stopped at a call limit, the launch line of both formatters,
+      anchorRecoveryDiagnostics and T-49's lifecycle one, also carries that call's intervals: the
+      image inspection's round trip, and the create from arrival to forwarding, from forwarding to
+      the engine's answer and from the answer to the reply. Durations only, pinned in
+      TestAnchorRecoveryBarrierDiagnostics. The notice covers each shard's first row. The launch
+      line covers any row, in the two channels an agent can read today.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
