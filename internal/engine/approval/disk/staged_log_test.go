@@ -67,15 +67,63 @@ func storedLog(t *testing.T, dir string) []byte {
 	return append([]byte{}, data...)
 }
 
-// openDescriptors counts this process's descriptors: a released staged log has
-// closed its file and every directory of its pin.
-func openDescriptors(t *testing.T) int {
-	t.Helper()
-	entries, err := os.ReadDir("/proc/self/fd")
-	if err != nil {
-		t.Fatal(err)
+// handles records every directory and file a store opens through its
+// operations, so a test can show that a released staged log kept none of them:
+// neither its file nor any directory of its pin.
+type handles struct {
+	roots []*os.Root
+	files []*os.File
+}
+
+// trackHandles wraps the operations as they stand, so install it after any fault.
+func trackHandles(ops *operations) *handles {
+	h := &handles{}
+	openRoot, openChild, openDir, create := ops.openRoot, ops.openChild, ops.openDir, ops.create
+	ops.openRoot = func(name string) (*os.Root, error) {
+		root, err := openRoot(name)
+		if err == nil {
+			h.roots = append(h.roots, root)
+		}
+		return root, err
 	}
-	return len(entries)
+	ops.openChild = func(parent *os.Root, name string) (*os.Root, error) {
+		root, err := openChild(parent, name)
+		if err == nil {
+			h.roots = append(h.roots, root)
+		}
+		return root, err
+	}
+	ops.openDir = func(root *os.Root, name string) (*os.File, error) {
+		file, err := openDir(root, name)
+		if err == nil {
+			h.files = append(h.files, file)
+		}
+		return file, err
+	}
+	ops.create = func(root *os.Root, name string) (*os.File, error) {
+		file, err := create(root, name)
+		if err == nil {
+			h.files = append(h.files, file)
+		}
+		return file, err
+	}
+	return h
+}
+
+// open counts the recorded handles that have not been closed.
+func (h *handles) open() int {
+	n := 0
+	for _, root := range h.roots {
+		if _, err := root.Stat("."); !errors.Is(err, os.ErrClosed) {
+			n++
+		}
+	}
+	for _, file := range h.files {
+		if _, err := file.Stat(); !errors.Is(err, os.ErrClosed) {
+			n++
+		}
+	}
+	return n
 }
 
 // publishLog stages, writes and publishes one clean log.
@@ -216,15 +264,16 @@ func TestStagedLogFaults(t *testing.T) {
 				published, visible = "state.path", "next\n"
 				ops.syncParent = func(file *os.File) error { err := file.Sync(); replace(); return err }
 			}
+			opened := trackHandles(&ops)
 			s.ops = &ops
-			descriptors := openDescriptors(t)
 			staged, failure := (Registry{Store: s}).Stage(context.Background(), c, id)
 			if failure != stage || (staged == nil) != (stage != "") {
 				t.Fatalf("stage = %v, %s; want %q", staged, failure, stage)
 			}
 			if staged != nil {
-				if openDescriptors(t) <= descriptors {
-					t.Fatal("a staged log holds its file and its pin")
+				// The file, the session directory and one root for each level of the pin.
+				if held := opened.open(); held != len(strings.Split(dir, string(filepath.Separator)))+2 {
+					t.Fatal("a staged log holds its file and its pin", held)
 				}
 				if names := stagedTemporaries(t, dir); len(names) != 1 {
 					t.Fatal("a staged log has exactly one temporary", names)
@@ -252,8 +301,8 @@ func TestStagedLogFaults(t *testing.T) {
 				}
 				staged.Close()
 			}
-			if after := openDescriptors(t); after != descriptors {
-				t.Fatalf("the pin or the file was not released: %d descriptors, %d before staging", after, descriptors)
+			if held := opened.open(); held != 0 || len(opened.files) == 0 {
+				t.Fatalf("the pin or the file was not released: %d of %d handles are open", held, len(opened.roots)+len(opened.files))
 			}
 			if strings.HasPrefix(kind, "replaced") {
 				dir = strings.Replace(dir, state, moved, 1)
@@ -332,14 +381,17 @@ func TestStagedLogUnsafeTargets(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			before, descriptors := sessionNames(t, inspected), openDescriptors(t)
+			ops := r.Store.operations()
+			opened := trackHandles(&ops)
+			r.Store.ops = &ops
+			before := sessionNames(t, inspected)
 			staged, failure := r.Stage(context.Background(), c, id)
 			if failure != tc.stage || (staged == nil) != (tc.stage != "") {
 				t.Fatalf("stage = %v, %s; want %q", staged, failure, tc.stage)
 			}
 			if staged == nil {
-				if after := sessionNames(t, inspected); !slices.Equal(after, before) || openDescriptors(t) != descriptors {
-					t.Fatal("a refused stage created something or kept its pin", after)
+				if after := sessionNames(t, inspected); !slices.Equal(after, before) || opened.open() != 0 {
+					t.Fatal("a refused stage created something or kept its pin", after, opened.open())
 				}
 				return
 			}
@@ -349,8 +401,8 @@ func TestStagedLogUnsafeTargets(t *testing.T) {
 			if failure = staged.Publish(); failure != tc.publish {
 				t.Fatalf("publish = %s, want %q", failure, tc.publish)
 			}
-			if names := stagedTemporaries(t, dir); len(names) != 0 {
-				t.Fatal("temporary left", names)
+			if names := stagedTemporaries(t, dir); len(names) != 0 || opened.open() != 0 {
+				t.Fatal("temporary or pin left", names, opened.open())
 			}
 			info, err := os.Lstat(final)
 			if err != nil {
