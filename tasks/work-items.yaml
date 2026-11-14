@@ -967,7 +967,7 @@ items:
     phase: 1
     owner: donvargax
     status: doing
-    depends_on: [slice-26, T-39, T-40]
+    depends_on: [slice-26, T-39, T-40, T-51, p1-acceptance-static-binary]
     kind: slice
     why: >
       Was p1-egress-run-through-proxy.
