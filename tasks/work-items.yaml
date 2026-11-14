@@ -2034,3 +2034,27 @@ items:
       scenario first committed without the tag is the case left. The red selector is this project's
       own (T-21), on top of the template's harness, so if this lands it goes to go-template-itos
       with the rest of the item.
+  - id: p2-code-proof-draw-stable-across-main-merges
+    title: The code proof's draw stays put when main is merged into an item's branch, so a repair is judged on the sites that failed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 2 (credentials): items still land, but each large one pays a
+      CI round and an attempt per redraw. itos.yaml:125 seeds the proof with {base}, and itos-cc
+      ranks sites by SHA-256 over the seed and each site's identity, taking the first ten. {base} is
+      the judged range's start (ci.yml:47-55, from the pull request's base), and itos push merges
+      main into the branch on every push, so the seed moves with main. slice-29 has 18 merges of
+      main in 57 commits: nearly every pushed head drew ten fresh sites from the whole branch (20
+      production files, about 1,450 added lines), and attempts 14, 17 and 18 each began with a CI
+      survivor, the last two in different files. T-13 chose this seed to be deterministic per range
+      and to end "each push draws anew"; AGENTS.md's "the same base and eligible sites give the same
+      draw" seldom applies in practice. slice-27, slice-28 and slice-30 to slice-33 are ahead. The
+      person chooses, since it changes a gate's input: a seed that does not move with main (a
+      constant, or the item's id), so a repair head re-judges the same sites plus those of functions
+      it changed; or a manually dispatched full-range run that lists every survivor before review,
+      as T-21 did for @wip scenarios; or both. Neither is a redraw to escape a failure. The same
+      item settles one sentence in AGENTS.md: whether `itos-cc mutation list`, which runs no test,
+      may be used locally to see the sites, given that local mutation runs are forbidden.
