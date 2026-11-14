@@ -98,6 +98,32 @@ func TestCredentialLocationInEitherObservation(t *testing.T) {
 	}
 }
 
+// A protected root reached through a mount whose row places it elsewhere is
+// known only by its pinned identity. No coordinate puts the source in the
+// tree, and inventory lists a checkout's entries, never the root itself. The
+// account state is the second reserved root, so each one must be compared.
+// The same row over a directory of its own names an independent file.
+func TestCredentialProtectedRootIdentityNeedsNoCoordinate(t *testing.T) {
+	for root, rule := range map[string]string{"/checkout": "credential.location", "/state": "credential.location", "/fixed": "credential.location", "": ""} {
+		f, c, grants := credentialDomainFixture()
+		fixed := f.Nodes["/state"]
+		fixed.Path, fixed.Inode = "/fixed", 90
+		f.Nodes[fixed.Path] = fixed
+		c.Input.AccountState = fixed.Path
+		if root != "" {
+			alias := f.Nodes[root]
+			alias.Path = "/vault"
+			f.Nodes[alias.Path] = alias
+		}
+		credentialOnMount(f, 2, "/vault", "/vault/token")
+		rows := []port.CredentialMount{credentialRootRow, {ID: 2, Device: 1, Root: "/elsewhere", Point: "/vault"}}
+		credentialTables(f, rows, rows)
+		if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, credentialIssue(rule)) {
+			t.Fatalf("source below an alias of %q: %#v, want %q", root, got.Issues, rule)
+		}
+	}
+}
+
 func TestCredentialFilesystemRefusalInEitherObservation(t *testing.T) {
 	merged := port.CredentialMount{ID: 2, Device: 64, Root: "/", Point: "/checkout/child", Filesystem: "overlay"}
 	plain := merged
