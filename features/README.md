@@ -554,7 +554,7 @@ times that show the need. In the prepared CI tier only, the coordinator measures
 with:
 
 ```sh
-for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
+for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature egress.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
   env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
 done
 ```
@@ -1006,6 +1006,70 @@ and assertion-level red for all 49 rows. The combined implementation passes thos
 rows and the 25 local OFFLINE anchor rows. Fresh-process recovery is part of
 slice-17 under q-36/q-38; schema-2 status and stop account for the original anchor.
 Native green at the actual pushed head remains the coordinator's CI obligation.
+
+Slice-27's step checkpoint defines the twelve non-engine scenarios of `egress.feature`
+(`ID-EGRESS-01` to `-11` and `-20`). `an egress-capable local Engine API fixture` extends the
+recorded HTTP Engine API fixture with T-40's two networks, the proxy's stdout-ready record
+and exit, and a second, independent image response for the pinned proxy reference; its
+daemon is 28.0.0 with API 1.48, and the proxy image's config ID differs from the worker's.
+The fixture checks every create, start and removal against the protected intent the product
+must have written first, and keeps a mismatch for the Then steps. It executes no workload,
+proxy or helper. `no engine mutation or image acquisition was attempted` also permits, for
+an allowlist fixture only and only where image inspection is permitted, the plain inspection
+of that pinned reference. `ID-EGRESS-07` reaches the observation adapter through
+`TestEgressExecutableContractProbe` in the test assembly, with ELF inputs the scenario
+writes and `TestEgressSyntheticELFCarriesExactlyItsProperty` reads back independently.
+`ID-EGRESS-03` and `-20` run a copy of the built assembly from inside their checkout.
+`ID-EGRESS-09` seeds both original sessions itself, including the egress session's runtime
+evidence at `intents/<project>/<token>.egress.json` (`{"proxy_image_id":…,"schema":1}`).
+
+With `@wip` removed for the run only, all 43 rows failed at their first Then on 2026-11-13;
+the failing assertions are in the checkpoint's hand-back. `ID-EGRESS-07` has since gone live
+with its readiness rule and ELF adapter; the other eleven stay work in progress. With a throwaway wiring of T-40's
+grant in the test assembly, never committed, all seven `ID-EGRESS-10` rows and every step
+of `ID-EGRESS-02` except the two that need the real inspection and durable evidence passed,
+so the fixture agrees with the session engine as built. `ID-EGRESS-04` also reads the
+built executable itself and stays red until the harness builds what the release ships
+(`p1-acceptance-static-binary`).
+
+The eight real-engine scenarios, `ID-EGRESS-12` to `-19`, have step definitions that no
+engine has run yet; `TestEgressNativeStepsDefined` holds every one of their steps to exactly
+one definition. Their Givens provision only trusted controls: a private checkout and state, a
+synthetic approval, the worker probe (`testdata/slice-27/probe`) and TLS endpoints
+(`testdata/slice-27/endpoint`) in fixture containers on `11.22.33.0/24`, `fd27:27::/64` and,
+for the private case, `192.168.227.0/24`. An endpoint generates its key in memory and
+publishes only certificates and receipts; a receipt is written for every exchange and for
+every connection, with its byte count. The product runs against the engine's own socket with
+no recorder. The worker stops at a barrier file in its checkout, where the harness inspects
+the product's resources by their labels and attaches the proxy to the fixture networks,
+recording that attachment apart; it never touches the worker or the product's two networks.
+Independent controls are the harness's own verified exchanges with each endpoint, before and
+after the run. `TestEgressTrustedProgramsExchangeWithoutAnEngine` runs both programs against
+each other through a stand-in proxy and has the standard library parse the crafted
+ClientHellos. The proxy container runs the same test assembly, whose `TestMain` hands
+`__egress-proxy` to the product's entry point.
+
+`ID-EGRESS-15` and `-16`, the route and DNS scenarios, reuse slice-14's control unchanged: its
+listener and resolver container on its own internal network (`172.30.14.0/24`,
+`fd14:14::/64`), holding the private, metadata and loopback destinations in its own
+namespace, with its host listeners and its nonce-and-receipt protocol. The egress fixture
+adds routes to that inventory before the control starts (`extraRoutes`): a host service
+bound to every IPv4 address, TCP and UDP on 443 and an alternate loopback address. The
+worker's attempts are made by slice-14's client, which the slice-27 probe starts inside the
+worker once before its barrier and once after, so the first phase runs while the proxy has
+no fixture network and the second after the harness has also attached the proxy to the
+control's network: a proxy that forwarded would then have a route. The probe adds what that
+client has no operation for, each ignoring the proxy variables: a direct TLS exchange with
+the allowed endpoint's address, a datagram shaped as a QUIC version 1 Initial, plain
+exchanges with other ports of the proxy's own address, non-CONNECT requests to the proxy,
+and DNS over TCP to Docker's embedded resolver for an alias on the control's network. Its
+positive controls run the same probe inside the control's namespace with other nonces. A
+worker attempt passes only if it was made and got no answer, and no listener, resolver or
+endpoint holds its nonce; Docker's own resolver may refuse a name without a transport
+error, every other route must fail. `TestEgressProbeReportsAReachableRouteAsReached` runs
+each of the probe's new operations against a local listener that answers and one that does
+not exist, so a denial is never the operation's own inability to report success;
+slice-14's client is not run on the host there, only a stand-in for its report.
 
 | Tag               | Meaning                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------ |

@@ -100,3 +100,7 @@
   scenarios:
     - id: "@ID-SOCKETS-01"
       why: checkout Unix sockets cause typed refusal before any worker create while preserving host listeners in the guarded CI engine tier
+- file: egress.feature
+  scenarios:
+    - id: "@ID-EGRESS-07"
+      why: the file's only live scenario until the allowlist run is built, and fast with no engine; the proxy executable rule and its ELF adapter admit the static control and refuse each unsafe delivery. Choose the run through the proxy in its place once that is live

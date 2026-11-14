@@ -32,6 +32,12 @@ import (
 // Its host port supplies a disposable account home, independently of HOME/XDG.
 // Normal binaries have neither this environment switch nor this assembly.
 func TestMain(m *testing.M) {
+	// A proxy container starts this assembly as the product's hidden command,
+	// with the inert image's environment alone. It must reach the product's
+	// entry point and never the test runner.
+	if len(os.Args) > 1 && os.Args[1] == "__egress-proxy" {
+		os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	if os.Getenv("SLICE_21_ACCOUNT_PROBE") == "1" {
 		home, failure := (approvalhost.Process{}).AccountHome()
 		if json.NewEncoder(os.Stdout).Encode(struct {

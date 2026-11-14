@@ -56,6 +56,7 @@ type world struct {
 	overlap             *overlapFixture
 	hardlinks           *hardlinkWorld
 	control             *controlFixture
+	egress              *egressWorld
 	duringQuiet         func() // Selected independent cases inside a stable quiet-worker lifetime.
 }
 
@@ -74,7 +75,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		// Before the world is reset, whatever the row's outcome: a failing row is the
 		// one whose offsets matter, and godog skips the steps after a failure.
 		ctx = withSignalOffsets(ctx, w.lifecycle.signalOffsets())
-		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession())
+		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative())
 		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
@@ -189,6 +190,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w.hardlinkSteps(sc)
 	w.controlStateSteps(sc)
 	w.runExitSteps(sc)
+	w.egressSteps(sc)
 	return w
 }
 

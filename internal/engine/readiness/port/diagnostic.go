@@ -69,6 +69,8 @@ func Diagnostic(issue Issue) Problem {
 		p.Rule, p.Message, p.Fix = "image.platform", "Cached image platform is incompatible", "prepare the exact requested Linux amd64 image outside doctor"
 	case ImageUser:
 		p.Rule, p.Message, p.Fix = "image.user", "Image user does not match the manifest's numeric identity request", "prepare an image with a positive numeric UID matching each specified manifest user"
+	case EgressExecutable:
+		p.Rule, p.Exit, p.Message, p.Fix = "egress-executable", 3, "This program cannot be delivered to the egress proxy", "use the installed static Linux amd64 release of itos-container, from a path outside the checkout"
 	default:
 		p.Rule, p.Exit, p.Message, p.Fix = "internal", 70, "Unknown inspection failure", "report this as a bug"
 	}

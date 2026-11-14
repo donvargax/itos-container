@@ -83,6 +83,9 @@ func (s *isolationWorld) prepareNetwork() error {
 	default:
 		err = s.dnsRoutes()
 	}
+	if err == nil && s.extraRoutes != nil {
+		err = s.extraRoutes()
+	}
 	if err != nil {
 		return err
 	}
