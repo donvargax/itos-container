@@ -2005,3 +2005,23 @@ items:
       captured arguments; four egress When steps have that shape. The general check must accept a
       trailing table (and doc string) argument, or it will misreport every table step in slice-28
       and slice-30 to 33, and it should fold this seventh check in with the other six.
+
+      Belongs inside this item, which is still todo and already gives the harness a local selector
+      that names scenarios, @wip ones included; the same selector can serve the local red run.
+      Checked on main: AGENTS.md requires failing-then-passing evidence with @wip removed, locally
+      for non-engine scenarios, but readFeatureEnvironment (features/features_test.go:119) reads
+      ITOS_CONTAINER_RED_SCENARIOS only under CI=true, GITHUB_ACTIONS=true and a workflow_dispatch
+      event, and ordinary selection and -scenarios both exclude @wip. So the implementer takes the
+      tag out by hand, runs, and puts it back before the test commit; the work step counts that at
+      twice per round. When this item is specified, decide whether named non-engine @wip scenarios
+      can also be run locally, with @wip lifted in memory as the dispatch does, so no feature file
+      is edited. Three things constrain it. Decision 0002 and features/README.md say on purpose that
+      local contexts never read the variable and that agents never spoof the dispatch context, so
+      this needs an amendment to that decision or a local form of its own (a flag, say), not a quiet
+      widening. It must never enable the engine: @engine IDs stay skipped locally, as they are on
+      the manual platform jobs. And product children keep having the variable stripped. The work
+      step's risk, a tag left out by mistake, is partly held already: decision 0002 records that the
+      scenario-moves gate refuses a test commit that removes @wip from an existing scenario; a
+      scenario first committed without the tag is the case left. The red selector is this project's
+      own (T-21), on top of the template's harness, so if this lands it goes to go-template-itos
+      with the rest of the item.
