@@ -1681,6 +1681,39 @@ items:
       name, ID or engine text. It changes the item's line that a notice carries scenario name,
       duration and outcome only, and the record's shape is pinned by TestEngineScenarioTiming, which
       the item's check already extends. T-50's failure-time print stays as specified.
+
+      The same need as this item's note on the create call's intervals, seen from a failed run, so
+      it is one more line for this item's spec, not an item. In T-50's run 43543693012 at 73cbd13
+      three first rows stopped at run.call-timeout. T-50's diagnostics print the create's forwarding
+      and answer times in the launch journal, below the cause, the launch line and the status and
+      stop reports. itos ci watch keeps 10 lines of a failed scenario and T-43's annotation 4096
+      bytes, so the intervals reached a reader for the lifecycle row only: 39 and 110 lines were
+      left out for the other two. T-50's third rule fixes what the launch line holds (the
+      controller's exit, elapsed time, rule and operation), so an implementer cannot add this there,
+      and T-50 is at its landing decision (q-63). This item already changes the timing record to
+      carry these intervals and waits for T-50 to land. When it is specified, weigh one more spec
+      line: when the launch controller stopped at a call limit, the launch line of both formatters,
+      anchorRecoveryDiagnostics and T-49's lifecycle one, also carries that call's intervals: the
+      image inspection's round trip, and the create from arrival to forwarding, from forwarding to
+      the engine's answer and from the answer to the reply. Durations only, pinned in
+      TestAnchorRecoveryBarrierDiagnostics. The notice covers each shard's first row. The launch
+      line covers any row, in the two channels an agent can read today.
+
+      Belongs with this item's runner evidence. It is a per-run reading that must print on green
+      runs too, so cold and warm runs can be compared, and the preflight's exact allowlist
+      (validEnginePreflight) cannot carry it. It is a hypothesis, not a finding: the cold compile
+      before a shard's first row leaves the runner writing back a large build cache, and the
+      engine's create waits on disk. T-51's run 43538972827 logged 'Cache is not found' and 19 to 24
+      s of compilation before each failed first row, and T-50's run 43543693012 measured 2.33 s of
+      engine time for the lifecycle row's create. Fold in: just before the first engine row, record
+      /proc/pressure/io and the Dirty and Writeback lines of /proc/meminfo, and publish them in the
+      notice beside the first row's create intervals. Two cold builds precede that row: go test -c
+      in the step (ci.yml:135) and the product's -cover build at the start of TestFeatures
+      (features/features_test.go:85). So read after the second, in the harness, not between the
+      step's compile and its test run. Numbers only, and an absent /proc/pressure/io is said, not a
+      failure. The reading confirms or refutes the hypothesis on the next cold run. The remedy is
+      not this item's: it belongs to p2-first-engine-row-slow-create, added by the same triage, and
+      the warm cache to p2-ci-go-build-cache-rolling-key.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
@@ -1797,7 +1830,7 @@ items:
     phase: 1
     owner: donvargax
     status: doing
-    depends_on: []
+    depends_on: [T-40]
     kind: task
   - id: p1-offline-11-ipv6-route-flake
     title: "ID-OFFLINE-11 flakes: a positive IPv6 route control times out on the CI runner"
@@ -1853,6 +1886,13 @@ items:
       proxy is outside the controller's writes, so either route the proxy's output through the
       controller (a log driver of none and the controller capturing stdout) or scrub that file at
       teardown. AC-36's hostname-marker probe moves here. Until this lands the leak is disclosed.
+
+      T-51's refusal-log writer takes no lock, and its late publication is safe only while two
+      complete reads of one stopped proxy store the same bytes (decision 0022, 'What T-51 settled').
+      Scrubbing bytes that only the staging controller knows breaks that premise: a run's copy and a
+      later stop's copy would differ, and which rename lands last would matter. Whoever drafts this
+      item must revisit that argument, either by scrubbing identically from every controller or by
+      running the copy's Commit through the session's gate.
   - id: p1-session-contract-coverage-flake
     title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
     phase: 1
@@ -2034,3 +2074,58 @@ items:
       scenario first committed without the tag is the case left. The red selector is this project's
       own (T-21), on top of the template's harness, so if this lands it goes to go-template-itos
       with the rest of the item.
+  - id: p2-code-proof-draw-stable-across-main-merges
+    title: The code proof's draw stays put when main is merged into an item's branch, so a repair is judged on the sites that failed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 2 (credentials): items still land, but each large one pays a
+      CI round and an attempt per redraw. itos.yaml:125 seeds the proof with {base}, and itos-cc
+      ranks sites by SHA-256 over the seed and each site's identity, taking the first ten. {base} is
+      the judged range's start (ci.yml:47-55, from the pull request's base), and itos push merges
+      main into the branch on every push, so the seed moves with main. slice-29 has 18 merges of
+      main in 57 commits: nearly every pushed head drew ten fresh sites from the whole branch (20
+      production files, about 1,450 added lines), and attempts 14, 17 and 18 each began with a CI
+      survivor, the last two in different files. T-13 chose this seed to be deterministic per range
+      and to end "each push draws anew"; AGENTS.md's "the same base and eligible sites give the same
+      draw" seldom applies in practice. slice-27, slice-28 and slice-30 to slice-33 are ahead. The
+      person chooses, since it changes a gate's input: a seed that does not move with main (a
+      constant, or the item's id), so a repair head re-judges the same sites plus those of functions
+      it changed; or a manually dispatched full-range run that lists every survivor before review,
+      as T-21 did for @wip scenarios; or both. Neither is a redraw to escape a failure. The same
+      item settles one sentence in AGENTS.md: whether `itos-cc mutation list`, which runs no test,
+      may be used locally to see the sites, given that local mutation runs are forbidden.
+  - id: p2-first-engine-row-slow-create
+    title: A shard's first engine row passes when the engine's first create takes seconds
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item owns this once T-50 lands. T-50 stops the leak and names the failure. Its fourth rule
+      leaves the slow first create to a remedy read from measured intervals, and its attempt 3
+      returned that the one limit it may move is not enough (q-63). In run 43543693012 at 73cbd13
+      all three shards failed at their first engine row (ID-OFFLINE-29, ID-ANCHORS-09,
+      ID-LIFECYCLE-08), each controller stopping with run.call-timeout, operation create response.
+      The lifecycle row's intervals: image inspection 10 ms, the recorder's checks 0.7 ms, the
+      engine's HTTP 201 2.329 s after forwarding and 3.729 s after controller start, 1.39 s of which
+      had passed before the call began. That outlives the fixture's 1-second call and also its
+      3-second startup budget, which starts before preflight
+      (internal/slices/run/command/command.go:80), so a longer call alone turns the failure into a
+      startup timeout. The same first rows failed in 5 of 6 shard jobs on slice-29's and T-51's
+      first go1.27.4 runs, and 9 in 129 are on record with a warm cache. Each costs a re-run, and
+      three have cost an implementer attempt and a question (q-59, q-61, q-63). Choose the remedy in
+      the spec, from more than this one cold-cache sample: the two create lines itos cut from that
+      run, and the passing-row intervals and I/O pressure readings that
+      p1-engine-timing-notice-every-run is to publish. If limits are the remedy, move call and
+      startup together, only through engineBudgetTree, each with a delayed-success and an expiry
+      control, T-42's cut and restart-refusal controls still valid, and the cost measured in CI
+      against the 180-second shard gate, since engineQuietInterval follows the larger limit. A warm
+      cache is p2-ci-go-build-cache-rolling-key's and does not explain the warm-cache failures. No
+      retry, skipped row, relaxed assertion or production default change. Phase p2: a re-run clears
+      each failure, so it blocks no step of milestone two, but it taxes every pull request of steps
+      1 and 2.
