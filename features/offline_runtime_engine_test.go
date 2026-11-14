@@ -30,6 +30,9 @@ type offlineRequest struct {
 	Diagnostic          string
 	State               map[string]any
 	At, Replied         time.Time
+	// Only a forwarded create has these: when the recorder forwarded it, after its
+	// own checks and volume inspection, and when the engine's answer reached it.
+	Forwarded, Answered time.Time
 }
 
 // Unlike doctor's read-only recorder and slice-9's unstarted recorder, this

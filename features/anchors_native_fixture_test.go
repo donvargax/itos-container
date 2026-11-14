@@ -16,6 +16,7 @@ type anchorRecoveryWorld struct {
 	mode                                       string
 	ready, release                             chan struct{}
 	held, reached, failDelete, parkLost        bool // recorder fields protected by offlineAPI.mu
+	killed                                     bool // the fixture itself killed the launch controller
 	pidPath                                    string
 	initial, later                             anchorRecoveryProbe
 	workerBefore                               map[string]any
@@ -255,17 +256,10 @@ func (w *world) anchorsRetry(child int) {
 
 func (w *world) anchorsUncertain() {
 	w.anchorsStart()
-	s, r := w.anchors, w.recovery
-	timer := time.NewTimer(35 * time.Second)
-	select {
-	case <-s.ready:
-		s.reached = true
+	s := w.anchors
+	if w.anchorsHeldReply() {
 		w.anchorsKill()
-	case <-r.run.done:
-	case <-timer.C:
-		r.err = errors.Join(r.err, errors.New("successful startup response barrier not reached"))
 	}
-	timer.Stop()
 	close(s.release)
 	if s.mode == "start" && s.reached {
 		w.anchorsLive()
@@ -274,6 +268,22 @@ func (w *world) anchorsUncertain() {
 	w.anchorsCapture()
 	w.anchorsStatus()
 	w.anchorsStopTwice()
+}
+
+// The uncertain-startup wait for the recorder to hold the successful reply.
+func (w *world) anchorsHeldReply() bool {
+	s, r := w.anchors, w.recovery
+	timer := time.NewTimer(35 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-s.ready:
+		s.reached = true
+		return true
+	case <-r.run.done:
+	case <-timer.C:
+		r.err = errors.Join(r.err, errors.New("successful startup response barrier not reached"))
+	}
+	return false
 }
 
 // A complete state tree comparison is used around status: creating a lock or
