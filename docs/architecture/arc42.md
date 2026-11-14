@@ -168,7 +168,8 @@ modes. Egress through an allowlisting proxy is the charter's second-milestone st
 **proposed**: [the egress proxy record](../decisions/0022-egress-proxy.md) fixes its design.
 T-39 has built the proxy engine and T-40 the session lifecycle for its networks and
 container. Neither is bound until slice-27. Slices 25 to 28 supply the command-facing
-configuration, approval, delivery and durable refusal log; runtime proof remains pending.
+configuration, approval and delivery; T-51 has built the durable refusal-log writer, which
+slice-27 binds, and runtime proof remains pending.
 Its context differs from the diagram above only for a run whose approved policy lists host
 names: one owned proxy container, on its own egress network, reaches the listed names on
 port 443, and the worker, on an internal network with no gateway, reaches only that proxy.
@@ -235,12 +236,12 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/engine/policy` | Implemented by slice-1, slice-5 and slice-25 | Closed schema/default/value validation for policy version 1 (offline) and version 2 (offline or an exact host-name allowlist), bounded parsing and typed failures. | Own domain/port, disk, YAML and IDNA adapters; reusable policy contracts and I/O-free porttest fakes. See [decision 0023](../decisions/0023-policy-version-2-allowlist.md). |
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
 | `internal/engine/readiness` | Implemented prerequisite, extended by slice-20 | Read-only checkout, regular-file inode independence, local-engine and cached-image observations. | Policy/manifest contracts; own inspection ports. No dependency on approval. |
-| `internal/engine/approval` | Implemented through slice-26 | Effective host identity, canonical offline/allowlist profiles, shared sorted differences, q-52 terminal consent for network grants, protected recording and frozen input, cross-root control-state separation and durable location enrollment. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
+| `internal/engine/approval` | Implemented through slice-26; T-51 adds the staged session log | Effective host identity, canonical offline/allowlist profiles, shared sorted differences, q-52 terminal consent for network grants, protected recording and frozen input, cross-root control-state separation and durable location enrollment. T-51's `SessionLogs` stages `egress-refusals.jsonl` beside a session's record: a private temporary in the pinned session directory, published by fsync, one rename and a directory fsync, taking no operation lock. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
 | `internal/engine/budget` | Implemented by slice-12 | Shared phase and finite-operation deadlines, late-result handling and retained handle lifetimes. | Context/time only; typed values in ports, policy in domain. |
 | `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, cross-project checkout admission, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
 | `internal/engine/egress` | Implemented by T-39, not bound by `cmd` until slice-27; its design is still proposed (see the first paragraph), with no runtime evidence; real-engine proof in slice-27/28 | Our own CONNECT proxy on Go's standard library: CONNECT head parsing, exact name and port 443 decision, address check, ClientHello peek, replay and splice, and one-line JSON refusal records. No TLS interception, library or `net/http`. | Own `domain`, `port` with its `porttest` fake and shared contract, and the adapter `internal/engine/egress/tcp`; imports no other engine. Production code may import `crypto/tls` only in the adapter, held by `egress-tls` and `TestNoInterceptionCode`. `egress-x509` bans production `crypto/x509` imports; `egress-imports` restricts egress's dependencies. `TestNoRelaxingCode` rejects build constraints, platform-specific or ignored files, external settings reads and panic recovery. Fuzz tests cover head parsing and the peek. [Record](../decisions/0022-egress-proxy.md). |
 | `internal/slices/egressproxy` | **Proposed**, slice-27; command package only | The hidden `__egress-proxy` command the proxy container runs: a thin handler over the egress engine's port, with `cmd` binding its adapter. | No domain or port directory of its own; no network I/O in the command. Not a public command. |
-| Session networks and proxy (in `internal/engine/session`) | Implemented by T-40, unbound until slice-27; the design remains proposed as described above, with no runtime evidence | Create, verify, own and tear down the internal network, the egress network and the proxy container beside the worker, with durable intent before each and no fallback network. | Extends the session ports, fake and Docker adapter; ownership by durable intent, random name and inspected full ID, never labels alone. |
+| Session networks and proxy (in `internal/engine/session`) | Implemented by T-40, with T-51's refusal-log adapter; unbound until slice-27; the design remains proposed as described above, with no runtime evidence | Create, verify, own and tear down the internal network, the egress network and the proxy container beside the worker, with durable intent before each and no fallback network. T-51's `RefusalLog` adapter in `session/disk` copies the stopped proxy's stdout through approval's staged log, storing every record but `ready`. | Extends the session ports, fake and Docker adapter; ownership by durable intent, random name and inspected full ID, never labels alone. The adapter reaches protected storage only through approval's `SessionLogs` port. |
 | Credential requests (in `internal/engine/policy`) | **Proposed**, slice-29; depends on T-47 and slice-25 | Version 3 extends slice-25's version 2 with optional closed credentials entries, exactly `kind` and literal absolute `source`; two token kinds, no Codex kind. | Versions 1/2 retain their meaning; shared pure validation, schema and file-only doctor modes. [T-47](../decisions/0025-credentials-passed-in.md). |
 | Credential source observation (in `internal/engine/readiness`) | **Proposed**, slice-29; state-side mechanism unresolved | Shared descriptor-based metadata checks for doctor, approve and run: no symlinks, trusted ancestors, private owned regular single-link files outside checkout and control state, bounded size and distinct inodes. Exclude source inodes found anywhere in either tree, including mounted descendants, as well as root aliases. | Reuse the bounded checkout metadata scan; incomplete checkout observations refuse. Do not scan the host-wide state tree: slice-29 must settle bounded state-side exclusion independent of other projects' concurrent writes and retained history before implementation or handoff to slice-30, T-48 or slice-31/33. No content read, hash or log; own port and disk adapter beside checkout inspection. Only run later reads the checked inode. |
 | Credential approval (in `internal/engine/approval`) | **Proposed**, slice-30 | Bind sorted `{kind, source, target}` grants, never contents, with `offline-credentials-v1` or `allowlist-credentials-v1`; review scope and exposure; apply q-52's terminal rule. | Reuse slice-26 canonicalization, differences and presentation. No-grant profiles keep their identity; source-content changes do not change approval. |
@@ -325,8 +326,9 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | slice-26 — implemented approval of the allowlist | slice-25 | `allowlist-v1` binds the canonical list and proxy digest; terminal review/status disclose handshake and logging limits and the remaining run gate. q-52 refuses network fingerprint approval. Shared comparisons explain changed fields without values in run. [Decision](../decisions/0026-egress-allowlist-approval.md). |
 | T-39 — implemented egress engine | T-38 | `internal/engine/egress`: domain, port, adapter and fake, its three depguard rules and fixtures, and fuzz tests, all driven over loopback listeners without Docker. Nothing binds it until slice-27, and none of it is runtime evidence. |
 | T-40 — implemented session networks and proxy | T-38 | Session ports, codec, stores, fake, Docker adapter and domain implement schema 3 ownership, ordered launch, proxy monitoring, stdout-only log reads and reverse teardown. Fake and HTTP-fixture tests cover them; no command binds the grant or refusal writer yet. |
-| slice-27 — proposed run through the proxy | slice-26, T-39, T-40; the record also names `p1-acceptance-static-binary` | `internal/slices/egressproxy`, the hidden `__egress-proxy` command, the static harness build, and the real-engine scenarios, in CI only, that prove the topology, DNS and address rules. It edits `docs/security.md`. |
-| slice-28 — proposed refusal log, failure stop and cleanup | slice-27 | The streaming writer for `egress-refusals.jsonl`, status and cleanup of the proxy and networks, and the proxy-failure scenarios (AC-17, AC-23 and AC-36), in CI only. |
+| T-51 — implemented refusal-log writer | T-40 | Approval's `SessionLogs` and `StagedLog` with their fake and contract, the staged log in `approval/disk` and the `RefusalLog` adapter in `session/disk`: the streaming writer for `egress-refusals.jsonl`, private, fsynced and renamed, holding no operation lock. Tests use fakes and a temporary state root; nothing binds it until slice-27, and none of it is runtime evidence. |
+| slice-27 — proposed run through the proxy | slice-26, T-39, T-40, T-51; the record also names `p1-acceptance-static-binary` | `internal/slices/egressproxy`, the hidden `__egress-proxy` command, the binding of T-51's writer to run and recovery, the static harness build, and the real-engine scenarios, in CI only, that prove the topology, DNS and address rules. It edits `docs/security.md`. |
+| slice-28 — proposed refusal log, failure stop and cleanup | slice-27 | The `seq` check over the copy T-51's writer stores, with its typed gap, what reads the stored `egress-refusals.jsonl`, status and cleanup of the proxy and networks, and the proxy-failure scenarios (AC-17, AC-23 and AC-36), in CI only. |
 | T-47 — proposed credentials decision | Charter step 2 of the second milestone and q-52 | [Record](../decisions/0025-credentials-passed-in.md) for sources, per-command staging, approval, uncertain starts, refusal-log conflict and six questions. Documentation only. |
 | slice-29 — proposed credential policy and inspection | T-47 and slice-25 | Version 3 extends slice-25's version 2; source metadata observation, schema and CLI/config docs. Must settle and prove state-side exclusion independent of unrelated projects' writes/history before downstream handoff; no Codex kind until question 1 is answered. |
 | slice-30 — proposed credential approval | slice-29 and slice-26 | Canonical grants, profiles, review, status and q-52's terminal rule; help and `docs/security.md`. Delivery remains gated. |
@@ -723,7 +725,8 @@ roots and mixed controller versions require a separate upgrade contract.
 **Proposed**, for a run whose approved policy lists host names. T-39 implements the proxy
 side of steps 2 to 4, tested over loopback listeners. T-40 implements the session engine
 side of creation, readiness, monitoring and teardown, tested with fakes and an HTTP Engine
-API fixture. Command wiring and the durable refusal-log writer remain unbuilt. Every
+API fixture. T-51 implements the durable refusal-log writer, tested with fakes and a
+temporary state root; it is built and unbound. Command wiring remains unbuilt. Every
 runtime claim awaits slice-27 and slice-28 evidence on the real engine, in CI. An offline
 run keeps the sequence above with `NetworkMode` `none`, no proxy and no network. The reasons
 and measurements are in [the egress proxy record](../decisions/0022-egress-proxy.md).
@@ -960,6 +963,10 @@ whole-invocation startup and finite-call budgets in the shared budget engine.
 Late results cannot resume launch. Acquired handles retain the phase lifetime;
 requests keep their individual deadlines. Pending storage operations retain their
 locks until they finish, and failed fsync retains visible but uncertain progress.
+The staged refusal log is the exception (T-51): it holds no lock, so a commit that
+outlives its call can publish after the session's lock is released, beside another
+controller's copy. [The egress proxy record](../decisions/0022-egress-proxy.md),
+"What T-51 settled", says why that is safe.
 Slice-11 supplies fresh 10 s status and 30 s stop totals. Stop may retry bounded
 lock observations within its original total; mutations are never blindly retried. Registered foreground cleanup
 and final drain proceed concurrently. Registered run reserves the final second
@@ -971,7 +978,8 @@ changing resource absence or the authoritative workload exit. Open security
 choices follow the charter stop rule, not a blanket reopening of settled limits.
 
 **Refusal log.** T-39 implements the record format below; its delivery stays **proposed**,
-since slice-27 binds stdout and slice-28 copies the log. The egress proxy writes one JSON object per line on stdout, at
+since slice-27 binds stdout and the writer. T-51's writer copies the log and slice-28 checks
+`seq`. The egress proxy writes one JSON object per line on stdout, at
 most 2 KiB each: schema 1, a per-process `seq`, time, and an event of `ready`, `refused`,
 `upstream-failed` or `log-full`, with method, target, port and a reason only on the two
 failure events. Target and port appear only for a plain host and a one-to-five-digit port; nothing else of the
@@ -980,8 +988,8 @@ SNI or client addresses. An allowed tunnel writes nothing. A failed write to the
 stdout ends the proxy; a failure of dockerd's json-file store behind that write is not
 visible to it. During the run the log is the proxy's json-file log; at teardown the
 controller copies every record but `ready` to `egress-refusals.jsonl` under the protected
-session directory, with a streaming writer slice-28 adds, and a gap in `seq` is a reported
-failure. A lost tail is not detectable (a disk full to teardown, or the copier cut off at
+session directory, with T-51's streaming writer, and a gap in `seq`, which slice-28 checks,
+is a reported failure. A lost tail is not detectable (a disk full to teardown, or the copier cut off at
 10 s), so the count status shows is the records stored, not a proof that every refusal is
 in it; approve, status and `docs/security.md` say so (slice-26 and slice-27), and closing
 that gap is an open decision for the person. The proxy stops after 20,000 records. Retention across sessions is open

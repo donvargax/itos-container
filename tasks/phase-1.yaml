@@ -6442,27 +6442,480 @@
   type: chore
   title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
   why: >
-    Blocks charter milestone two, step 1 (egress through an allowlisting proxy), at slice-27. T-40's
-    spec has the controller copy the stopped proxy's stdout through port.RefusalLog before removing
-    it. It refuses an egress run with no log bound (nil is port.Internal), and a failed copy keeps
-    the stopped proxy, both networks, the anchor and the intent. So slice-27 can neither run nor
-    tear down an egress session until a real writer exists. cmd binds none in T-40. The record
-    (docs/decisions/0022-egress-proxy.md, 'Where the log lands') and arc42's slice-28 row give the
-    writer to slice-28, which depends on slice-27. No item schedules it earlier. Approval's Publish
-    refuses more than 1 MiB, so it cannot be reused. Build the adapter as a task before slice-27:
-    the streaming writer for sessions/<lookup>/<id>/egress-refusals.jsonl, with Publish's
-    private-file, fsync, rename and parent-fsync rules, passing T-40's RefusalLogContract unchanged.
-    It adds no command behaviour, so it is a ledger task with a check, not part of slice-27's
-    scenarios. It depends on T-40, and slice-27 should depend on it. Slice-28 keeps the seq check
-    and its typed gap error, status's record count, display escaping of hostile names, and the
-    proxy-failure scenarios. Update the record and arc42 rows that now give the writer to slice-28.
-    The writer does not wait for p2-proxy-log-lost-tail-sink, since T-40 says either candidate is
-    one more stdout line the reader and copy carry unchanged. Retention stays with
-    p3-session-state-retention. The existing item already identifies the dependency cycle and moves
-    the writer ahead of slice-27. Schedule T-40 → writer → slice-27 → slice-28, record those
-    dependencies, and update the decision record and architecture ownership as specified. Already
-    covers the dependency cycle and architecture ownership. Schedule T-40 → writer → slice-27 →
-    slice-28, record those dependencies, and update ADR 0022 and arc42 to move writer ownership
-    ahead of slice-27.
+    Blocks charter milestone two, step 1 (egress through an allowlisting proxy), at slice-27. T-40
+    has the controller copy the stopped proxy's stdout through port.RefusalLog before removing it.
+    Registered run refuses an egress grant with no log bound (a nil Refusals is port.Internal), and
+    a failed copy keeps the stopped proxy, both networks, the anchor and the intent, so slice-27 can
+    neither run nor tear down an egress session until a real writer exists. cmd binds none in T-40.
+    The record (docs/decisions/0022-egress-proxy.md, "Where the log lands") and arc42's slice-28 row
+    give the writer to slice-28, which depends on slice-27, and no item schedules it earlier.
+    Approval's Publish refuses more than 1 MiB, which this log can exceed, so it cannot be reused.
+    T-51 builds the writer as a task before slice-27: the streaming writer for
+    sessions/<lookup>/<id>/egress-refusals.jsonl, with Publish's private-file, fsync, rename and
+    parent-fsync rules, passing T-40's RefusalLogContract unchanged. It adds no command behaviour,
+    so it is a ledger task with checks and no scenario. The order is T-40, T-51, slice-27, slice-28.
+    The registry still lists no dependency for T-51, and slice-27's entry does not name it:
+    recording both is the coordinator's, since no drafter edits the registry.
+
+    Read first: the record whole, with its "What T-40 settled"; T-40's entry above, "The copy" and
+    "The fake and the contracts"; decision 0017 on finite operations, with arc42's Bounded
+    operations; docs/architecture.md's Slices; approval/disk's storage.go, registry.go and store.go;
+    and session/disk's registry.go with domain/egress_copy.go, which calls the writer, and
+    domain/finite.go, whose gate that call runs outside. This entry repeats each rule T-51 builds to
+    and settles what those left open. It departs from them in one place, "A late publication" below,
+    which narrows decision 0017's lock rule and says so; where it differs from them otherwise, stop
+    and say so. The drafter changes only this entry.
+
+    Binding names, because slice-27 binds them, slice-28 extends them or the checks read them:
+    approval's port.SessionLogs with Stage; port.StagedLog with Write, Publish and Close; the Stage
+    methods of approval/disk's Registry and of porttest's Registry; porttest.SessionLogsContract;
+    session/disk's RefusalLog with its fields Store and Storage; the file name
+    egress-refusals.jsonl; the temporary's shape; every test this entry names; and the phrases the
+    third check reads in the two documents, quoted under Documents. Any other name here only
+    describes. New code goes in new files: revive's file-length-limit holds each Go file to 600
+    lines, and approval/disk's store.go and control.go are near it. T-51 adds no package,
+    dependency, depguard rule or fixture, and no build tag to production code: the staged log uses
+    only the store's existing operations, which every release target already builds. One test file
+    is tagged. TestStagedLogPublication's umask rows set the process umask, which only a Unix build
+    can (unix.Umask), so that test sits in a test file under //go:build unix, as umask_unix_test.go
+    does, and the three packages' tests go on building for Windows, where the manual job runs go
+    test ./... (Beyond the checks, below).
+
+    Where the writer stands. In the product every copy starts inside Recovery.stop, which holds the
+    session open for writing from Registry.Open until it returns, so RefusalLog.Begin is always
+    called under the session's exclusive operation lock. The unregistered path, whose teardown is
+    Runner.Cleanup, refuses a grant before any egress resource exists, and cmd assembles no runner
+    without a registry. That lock is a flock on operation.lock, held by the open file description
+    that took it. The writer therefore cannot reach the session directory through
+    RegistryStorage.Open. Measured here with a throwaway overlay test in approval/disk, committed
+    nowhere: a second Open of a session already held for writing, exclusive or shared, waited out
+    its context and returned state.unavailable, which under the product's budget is one whole 10 s
+    call for every copy and a teardown that never completes. Nor can the writer go around approval's
+    storage: session/disk has no state root, and the pinned, no-follow, private-ancestor checks that
+    protect one live in approval/disk, which an adapter of another engine may not import (the
+    architecture check's sibling rule, tests included). So the staged publication is a new
+    capability of approval's protected storage, reached through approval's port like everything else
+    session/disk stores, and it neither takes nor checks the operation lock. Its caller holds that
+    lock for as long as its calls stay inside their budgets, and nothing else needs the capability.
+    The staged log's own integrity does not rest on the lock: each staged file has its own random
+    name and is published by one rename of a file already fsynced, so two publications cannot tear a
+    file, the later one wins as a second copy must, and a reader sees the old file or the new one.
+    The same probe pinned the held session's directory a second time without any lock, created a
+    temporary there, wrote 3 MiB, fsynced it, renamed it to egress-refusals.jsonl and fsynced the
+    directory. The held handle stayed Unchanged and still read and published record.json, List and
+    admission's Sessions answered as before, the file had mode 0600, and the existing Publish
+    refused 1 MiB and one byte and Read refused the name, both with state.invalid. Run again for
+    this revision of the entry, the probe gave the same answers and left the session directory
+    holding exactly controller.lock, egress-refusals.jsonl, operation.lock and record.json.
+
+    A late publication. The caller's lock does not outlive a call that times out. egress_copy.go
+    runs Begin, the log copy and Commit through budget's calls, outside the session's gate, and
+    finiteSession.Close (domain/finite.go) keeps the lock only while a gated operation of the
+    session or its intent is still pending. So when a Commit outlives its 10 s call, Recovery.stop
+    reports port.Incomplete and releases operation.lock while Publish may still be inside an fsync
+    or the rename, and another controller's stop can take the lock and copy beside it. Decision 0017
+    says that cannot happen ("A pending storage operation keeps its lock until it returns, so
+    another controller cannot overlap a publication whose result is unknown"), and so does arc42's
+    Bounded operations ("Pending storage operations retain their locks until they finish"). T-51
+    narrows both sentences to the operations that hold a lock, which the staged refusal log does
+    not, and the documents say so in the same pull request (Documents, below). That is this entry's
+    own decision, for the person to confirm or overturn. The overlap is safe because of what a copy
+    publishes, not because of a lock. Commit is called only after CopyProxyLog has returned success,
+    so every publication is one controller's complete read. Every copy of a session reads the same
+    proxy container, which its controller saw not running before the copy began and which nobody
+    removes until a copy has succeeded, so its log has stopped changing and two complete reads store
+    the same bytes. Each publication is one rename of its own fsynced temporary, so the name holds
+    one whole copy whichever rename lands last, never a mix of two. And a copy is not a record:
+    nothing compares the earlier bytes before publishing, so a late rename undoes no later state, as
+    a late record publication would. A Publish that reaches its check after its controller's phase
+    has ended renames nothing: the handle's lifetime is that phase, so it answers state.path and
+    removes its temporary. A late publication therefore lands only from a Publish already past that
+    check, or while the phase outlives the lock, as run's teardown does while it drains output.
+    Keeping the lock instead would mean running Commit through the session's gate in session/domain,
+    where a pending commit would then stall the failed record that stop saves next; that changes
+    T-40's protocol and is not this task's.
+
+    The staged log. approval's port gains SessionLogs, with Stage(context.Context, Candidate,
+    string) (StagedLog, Failure), and StagedLog, with Write([]byte) Failure, Publish() Failure and
+    Close(). Its methods answer with a Failure as the rest of that port does, so no system error or
+    path crosses it, and it closes as every other handle here does, RefusalCopy included. The string
+    is the public session ID, and the candidate is the one RegistryStorage.Open takes for that
+    session. There is no name parameter: the one file a session directory stages is
+    egress-refusals.jsonl, fixed in the adapter, so no caller can aim a write at record.json, a lock
+    or a path. approval/disk's Registry implements Stage, so cmd's one Registry value serves both
+    ports and its SnapshotIO and Stat seams reach the new operations. Stage refuses an ID that is
+    not 64 lowercase hex digits with state.invalid and an ended context with state.unavailable. It
+    then pins sessions/<lookup>/<id> exactly as Open pins it: from the filesystem root, following no
+    link, comparing each directory after opening it, and holding the four managed levels to the
+    candidate's UID and mode 0700. It creates no directory and takes no directory lock. A session
+    that was never registered stages nothing and answers nil with no failure, as Open does. Stage
+    then fsyncs each pinned directory, as Publish does before its own temporary, creates the
+    temporary through the store's create operation, exclusively and without following a link, and
+    sets its mode to 0600. The temporary is named .refusals-, then the 32 lowercase hex digits of a
+    fresh 128-bit nonce, then .tmp. That prefix is not Publish's .intent-, so recordLinks never
+    takes it for a record's twin. A pin that refuses keeps its own failure; a failed directory sync,
+    nonce, create or chmod is state.write and leaves no temporary. The handle keeps budget.Lifetime
+    of the context, as every storage handle does, so the call that began a copy can end without
+    ending it.
+
+    Write hands its bytes to the file before it returns. An error or a short write is state.write
+    and poisons the handle, and a poisoned handle refuses every later Write with state.write,
+    writing nothing. The staged log's Publish runs once, in the order a record's publication keeps
+    after its write: a poisoned handle is state.write; file fsync and close, else state.write; the
+    handle unchanged, which is the pin as it was and the lifetime live, else state.path; rename of
+    the temporary over egress-refusals.jsonl in the pinned directory, else state.write; fsync of
+    that directory, else state.write; the handle unchanged again, else state.path. Whatever Publish
+    returns, a poisoned handle's answer included, the temporary's name is gone, renamed or removed,
+    and the pin is released. A failure before the rename leaves the earlier file as it was. One
+    after it leaves the new bytes visible without a durability claim, as Save already treats a
+    record whose parent fsync failed, and the retry publishes again. The rename replaces the earlier
+    file, or a symlink at that name, without following it; a directory there fails the rename. A
+    handle with nothing written publishes an empty file, which is how a session whose proxy refused
+    nothing shows that its log was copied. Close without Publish removes the temporary and releases
+    the pin, on a poisoned handle as on a healthy one; after Publish it changes nothing. So Publish
+    and Close are the only calls that release a staged log, and each does so on every return. Write
+    after either is state.write, and Publish after either is state.conflict. A handle serves one
+    caller at a time: the session adapter serializes its calls. A controller that is killed in the
+    middle of a copy leaves its temporary behind, as a killed Publish leaves its own. So does one
+    that merely exits while a timed-out Begin, Write or Commit is still running: budget closes a
+    late Begin's copy only once it returns, and Close never waits for a Write or a Commit (below).
+    Each such attempt can leave a temporary of up to the log's size, which the record bounds at
+    about 40 MiB a session, and each retry on a slow disk can leave another. Nothing reads them, and
+    T-51 sweeps nothing, since deleting from protected state is p3-session-state-retention's
+    decision. That idea's note, on main, names only the killed controller; widening it is the
+    coordinator's.
+
+    The fake and its contract. porttest's Registry gains Stage, modelling all of this in memory: the
+    staged bytes stay with the handle until Publish, the published bytes are kept with the session
+    where a test can read them, and Stage never waits for the session's writer or readers. Beside
+    those bytes the fake counts the session's handles staged and not yet released by Publish or
+    Close, where a test can read the count. The fake's existing Fault names serve the staged file,
+    with events as a record's publication has them: write fails Write and poisons the handle, file
+    fsync and atomic publication fail Publish before the bytes are visible, and parent fsync fails
+    it after. Failure fails Stage, an Unsafe session is state.unsafe at Stage and a Changed one
+    state.path at Publish. It does no I/O. SessionLogsContract runs unchanged against the fake and
+    approval/disk's Registry. A malformed ID, an ended context and an unregistered session answer as
+    above. With the session registered and held open for writing through Open, Stage succeeds
+    without waiting for it, nothing is visible before Publish, writes that total more than 1 MiB
+    publish byte for byte, the held directory is still Unchanged and reads and publishes its record,
+    and List and admission's Sessions answer as they did before the file existed. A second
+    publication replaces the first, also when both handles were staged before either published: the
+    name then holds the bytes of the handle that published last, whole. A handle closed unpublished
+    changes nothing, and an empty one publishes an empty file. Write after Publish or Close is
+    state.write, Publish after either is state.conflict and Close after Publish changes nothing.
+    Each fault returns state.write with the visible bytes the rules above give, and a clean retry
+    then publishes; under the write fault Write fails, the Publish after it fails too, and a second
+    handle under the same fault is closed instead. A handle staged under a call context that has
+    since ended still publishes while its lifetime lives (budget's WithLifetime) and returns
+    state.path once the lifetime has ended. After every outcome the fixture counts no staged
+    temporary: for the fake the count above, and for approval/disk the names of the temporary's
+    shape in the session directory.
+
+    The adapter. session/disk's RefusalLog has Store, the session Store, and Storage, an approval
+    SessionLogs, and implements port.RefusalLog. Begin refuses a session that is not 64 lowercase
+    hex digits with port.Invalid before any storage call. It takes the candidate from the registry's
+    own lookup, the host identity and the cleaned Input.Root, port.Refused when either fails;
+    Register already refuses a session whose frozen root differs, so run's sessions and stop's sit
+    under one key. Then it stages. A storage failure maps as the store's read path maps it,
+    storageFailure with writing false: state.path, state.unsafe and state.location are port.Unsafe,
+    state.invalid is port.Invalid, state.conflict port.Refused and anything else port.Incomplete. A
+    nil handle is port.Refused, as Registry.Open answers a missing session. The domain turns every
+    Begin failure into Incomplete and retries, which T-40 settled.
+
+    The copy reads its input as lines ending in a newline, whatever the Write boundaries, since
+    stdcopy hands over one frame at a time and the contract a whole log. It drops a line whose bytes
+    before the newline number at most 2,048 and are the ready record as T-40's ready read judges it
+    (session/docker's validReady): one JSON object with exactly the keys schema, seq, time and
+    event, schema the number 1, seq the number 1, event "ready" and time an RFC 3339 UTC time ending
+    in Z, with nothing after the object. Every other byte is stored unchanged and in order: every
+    other line, valid JSON or not, with its seq; a line longer than 2,048 bytes; and a last line
+    with no newline, which Commit stores as it is. So the file holds every record but ready, as the
+    record says, and nothing is dropped that the ready read would not have accepted. The judgement
+    lives in the adapter, with encoding/json: an adapter may not import a sibling adapter, and the
+    port's allowlist has no JSON. Each Write hands every complete line it holds to the staged log
+    before it returns, so a failed write fails that Write, which the contract's write fault
+    requires, and between calls the copy holds only an unfinished line, never more than 2,048 bytes
+    of one. A Write that succeeds reports every byte it was given, dropped and held ones included,
+    as stdcopy and the contract require. A Write that fails returns an error of fixed text, with no
+    path or system text in it.
+
+    Commit stores a held unfinished line, then publishes. On a live copy it always runs the staged
+    log's Publish, once, whatever the Writes before it returned: no path through Commit returns
+    before Publish has. After a failed Write, or a failed store of the held line, the handle is
+    poisoned, so Publish answers state.write, which the mapping above makes port.Incomplete, and
+    removes the temporary and releases the pin as it does on every return. On success Commit returns
+    the zero report and no outcome, and after a failed Publish the zero report and the mapped
+    outcome. Either way Commit ends the copy: a Write after it fails, and a second Commit returns
+    the zero report with port.Incomplete and calls nothing. T-51 derives no report from the bytes:
+    slice-28 adds the seq check, ahead of the ready filter, and its gap.
+
+    Write and Commit run one at a time on a copy, each to its end, and Close alone never waits. T-40
+    closes a copy whose call timed out while the adapter may still be writing (egress_copy.go's
+    deferred Close and budget.Acquire's discard), and decision 0017 lets no uninterruptible write or
+    fsync hold the controller past its budget. Close ends the copy at once: a Write or Commit that
+    gets its turn after Close fails, the Commit with the zero report and port.Incomplete, and
+    neither calls the staged log. A Write still running when Close arrives finishes or fails, and
+    closes the staged log, unpublished, before it returns. A Commit that had begun is not undone and
+    may publish, which the contract accepts as the commit winning. Close with nothing running closes
+    the staged log before it returns, at the cost of one file close, one unlink and the pin's
+    release, with no write and no fsync. Close after a Commit, successful or failed, changes
+    nothing, and so does a second Close.
+
+    So a copy releases its staged log exactly once, on every path, and nothing else owns it. When
+    Commit returns, the staged log is no longer open, published or not: on a live copy that Commit's
+    own Publish has returned, on a second call the first Commit's has, and on a copy that Close
+    ended, Close itself has closed it or the Write that was running has, which the Commit waited
+    for. When Close has been called and no Write or Commit is running, the same holds. Only a
+    process that exits early leaves a temporary, as above.
+
+    What T-51 leaves. cmd is unchanged. Slice-27's spec, on its branch, binds the real writer to
+    Runner.Refusals and Recovery.Refusals and holds both bindings in cmd tests; the value it binds
+    is RefusalLog{Store: store, Storage: approvaldisk.Registry{Store: protected}}, from what
+    sessionServices already builds. Slice-28 keeps the seq check and its typed gap error, status's
+    record count, display escaping of hostile names and the proxy-failure scenarios. It also adds
+    whatever reads the stored file, since Directory.Read refuses that name and anything over 1 MiB.
+    The writer does not wait for p2-proxy-log-lost-tail-sink: T-40 says either candidate is one more
+    stdout line the reader and copy carry unchanged, and a line that is not ready is stored.
+    Scrubbing staged credentials from this copy is p1-platform-log-redaction's (q-56), and a refused
+    host name stays verbatim. Retention stays with p3-session-state-retention. T-51 puts no size
+    bound of its own on a copy: the proxy stops at 20,000 records, T-40 verifies the json-file cap
+    before start, and the contract's resource limits stay open.
+
+    Documents, amended in the same pull request under the charter's drift rule. In the record, the
+    opening says T-51 built the durable writer and that command wiring alone remains with slice-27.
+    "Where the log lands" gives the streaming writer to T-51. "For the sibling items" names T-51,
+    its list reading "T-39, T-40, T-51, slice-26, slice-27 and slice-28 take these decisions". In
+    "What T-40 settled", the writer is T-51's, and the copy preserves stdout for T-51's ready filter
+    and slice-28's sequence check. A section headed "## What T-51 settled" lists for the siblings
+    what this entry settled: SessionLogs and StagedLog, the fixed name and the temporary's shape, no
+    operation lock and why, the late publication and why it is safe, the publication order, the
+    empty file, the ready filter and its 2,048 bytes, byte-for-byte storage of everything else, no
+    report until slice-28, a Close that never waits, the one release of every staged log, the
+    outcome mapping, the unswept temporary and what leaves one, and that nothing binds the adapter
+    until slice-27. That section links decision 0017 by its file,
+    0017-controller-operation-budgets.md, quotes the sentence of it that T-51 narrows and leaves
+    that decision's own text as recorded. It also names the arc42 sections it changes, Bounded
+    operations among them. In arc42, Context and scope's sentence beginning "Slices 25 to 28 supply"
+    says T-51 built the writer and no longer lists the durable refusal log among what those slices
+    supply. The building-block rows for internal/engine/approval and for the session networks and
+    proxy name the staged log and the adapter, and both name T-51. The work-item table gains the row
+    "T-51 — implemented refusal-log writer" after T-40's, slice-27's row names T-51 among what it
+    depends on, and slice-28's row no longer holds the streaming writer. The Egress run's opening
+    says the writer is built and unbound. In Cross-cutting concepts, Bounded operations gains a
+    sentence straight after the one ending "visible but uncertain progress.": it begins "The staged
+    refusal log is the exception", says that log holds no lock, so a commit that outlives its call
+    can publish after the session's lock is released, and points to the record for why that is safe.
+    Refusal log says T-51's writer copies the log and slice-28 checks seq. Sibling specs, the
+    contract, decision 0017 and the registry stay as they are.
+
+    Tests, with fakes and a real temporary state root, and no engine. Each asserts exact bytes,
+    modes, orders and outcomes, and each refusal has a healthy control beside it. In approval/disk:
+    TestSessionLogsContract, with the subtests memory and disk, each calling
+    porttest.SessionLogsContract by that name. TestStagedLogPublication, in the test file tagged
+    unix: the file is sessions/<lookup>/<id>/egress-refusals.jsonl, regular, with one link, the
+    caller's, and mode 0600 whether the umask is 0 or 0777, where the create leaves no bit and the
+    chmod restores them; the journal of injected operations reads directory syncs, create of a name
+    of the temporary's shape, chmod 0600, each Write's bytes before that Write returns, file fsync,
+    close, rename, parent fsync; a body over 1 MiB and an empty one; and no temporary after Publish
+    or Close. TestStagedLogFaults: a row each for directory sync, nonce, create, chmod, short write,
+    write, file sync, close, rename, parent sync, and the state directory replaced before the rename
+    and after it, as TestPublicationFaults has them, each with its failure, no temporary left and
+    the earlier or the new bytes as the rules above give. In the short write and write rows the
+    Write fails, a second Write fails without reaching the file, and the Publish that follows
+    answers state.write; each of those two rows runs again with Close in place of Publish and leaves
+    no temporary either. TestStagedLogUnsafeTargets: a session directory with a group or other bit
+    is state.unsafe at Stage and one that is a symlink state.path, each with nothing created; a
+    symlink at the final name is replaced and its target left untouched; a directory there fails
+    Publish with state.write and leaves no temporary. Both renames were measured here on os.Root,
+    and again for this revision.
+
+    In session/disk, over porttest's Registry: TestRefusalLogContract runs RefusalLogContract
+    unchanged, called by its package-qualified name, on T-40's clean input, ready seq 1 and a
+    refusal seq 2, whose stored bytes are the refusal line alone, with a replacement that differs in
+    its reason. The session is held open for writing through the fake's Open throughout, the
+    contract's write fault is the fake's write fault and its commit fault the fake's file fsync, and
+    Report is a function that does nothing. The contract passes the fixed name "session", which no
+    registry holds: the fixture's Log is a test wrapper that hands Begin a registered 64-hex ID in
+    its place, with the contract untouched and the adapter still refusing "session" itself. When the
+    contract returns the fake counts no staged handle: its write-fault phase, a failed Write, then
+    Commit, then Close, is where a Commit that returned before Publish would leave one. The
+    contract's gap case waits for slice-28's check, since this writer reports none.
+    TestRefusalLogDropsOnlyReady: the ready line of porttest's ProxyStdout is dropped. Kept, each
+    beside a refusal, are the rows TestProxyReadyReadsStdoutOnly refuses: "failure", an extra key,
+    seq 2, event refused, a time ending +00:00 and 2,049 spaces. A ready record behind leading
+    spaces is dropped at 2,048 bytes and kept at 2,049, and "{" with no newline is kept. As that
+    read judges them (measured against validReady here), reordered keys and a fractional-second time
+    are still ready, while a trailing space, a repeated key and schema 1.0 are not.
+    TestRefusalLogStreamsLines: one byte to a Write, a split inside the ready line, a split at a
+    newline and the whole log at once store the same bytes; after each Write the staged log has
+    every stored byte up to the input's last newline and the copy holds at most 2,048 bytes; more
+    than 1 MiB of records is stored whole; an unterminated last line is stored with no newline
+    added; an empty copy and a ready-only one each publish an empty file.
+    TestRefusalLogBeginRefusals: a session that is not 64 hex, a relative root and a refused host
+    identity, each with no storage call; each storage failure mapped; an unregistered session; an
+    ended context. TestRefusalLogFailuresKeepEarlierCopy: a write fault in the middle of a stream
+    fails that Write and the Commit after it; file fsync and atomic publication faults keep the
+    earlier copy; a parent fsync fault returns port.Incomplete with the new bytes visible, and the
+    next copy publishes cleanly. In every row the fake counts no staged handle once Commit has
+    returned, before the row's Close, and Close then changes nothing. One more row runs the
+    product's own failed copy, a write fault followed by Close with no Commit: the earlier copy
+    stays and no staged handle is left. TestRefusalLogCloseNeverWaits: the holds are the test's own,
+    a SessionLogs in the test file that wraps porttest's Registry and holds one staged log's Write
+    or Publish until the test releases it; the fake gains no gate. With Write held, Close returns
+    while it is held; once the Write is released it returns, nothing is published, no staged handle
+    is left, and a later Write and a later Commit fail without another call to the staged log. With
+    Publish held, Close returns while it is held. The test then closes the session it held for
+    writing, and a second copy of that session begins, writes and commits under a fresh Open,
+    storing its own bytes: the late publication above, as it would meet another controller. The
+    released first Commit returns the zero report and no outcome, the stored bytes are the first
+    copy's, whole, and no staged handle is left. In cmd, where alone concrete adapters meet:
+    TestRefusalLogDiskContract runs the same contract, called by its package-qualified name, against
+    RefusalLog over approval/disk's Registry on a temporary state root. The session is registered
+    through session/disk's Registry as TestPublicRegistryContracts builds it, held open for writing
+    throughout, and still validates afterwards. The contract's write fault is SnapshotIO.Write and
+    its commit fault SnapshotIO.FileSync. The stored file is the one beside that session's
+    record.json, with mode 0600, and when the contract returns that directory holds exactly
+    controller.lock, egress-refusals.jsonl, operation.lock and record.json, so no name of the
+    temporary's shape is left.
+
+    Commits, decided before editing, each with itos commit --task T-51, because CI runs no check of
+    a task the range's Task: footers do not name. First a test commit, red first: every test above
+    with what it needs to compile, the port's two interfaces whole, Stage in the fake and in
+    approval/disk's Registry staging nothing (nil and no failure), and a RefusalLog whose Begin
+    returns port.Internal, so each test reaches its assertions and fails there, reported test by
+    test. Then chore commits: approval's port, fake and contract; approval/disk's staged log; the
+    session adapter. Then a docs commit for the two documents.
+
+    Beyond the checks, run once: go test ./cmd/... ./internal/..., which CI runs with
+    RAPID_CHECKS=1, since Stage joins approval's Registry and its fake, which every session and
+    registry contract uses; GOOS=windows go vet ./internal/engine/approval/disk
+    ./internal/engine/session/disk ./cmd/itos-container, which passes today and must go on passing,
+    since one test file is tagged and CI vets for Linux alone; golangci-lint through its hook; and
+    tools/bin/architecture-check. No scenario reaches this code, because cmd's assembly does not
+    change, so T-51 names no feature run. The code proof measures changed lines with the engine off
+    and samples mutants in changed functions, so every added production line needs a test here,
+    never an exception, and agents make no local mutation run.
+
+    The checks. The first replaces the promoted check, which a comment holding RefusalLogContract(
+    would pass, since go test of session/disk passes at the base (0.03 s here). The first draft of
+    this entry kept that grep beside the named tests, and the declaration func
+    TestRefusalLogContract( satisfied it for good. The check now reads the test files of
+    approval/disk, session/disk and cmd for a call of each package's contract by its
+    package-qualified name, on a line with no // before the call, so neither a test's own name nor a
+    comment passes, and none of the three is found at the base; each of the three tests must
+    therefore call its contract by that name and not through a variable. It then runs approval/disk,
+    session/disk and cmd verbosely and requires a passing report for each named test, because go
+    test passes when a name matches nothing, and a skipped test proves nothing: the disk fixtures
+    skip off Linux and cmd's skips for root. It exits 1 today with fifteen lines: the three missing
+    calls and the twelve names. The second runs only the new tests under the race detector, for the
+    copy's Write, Commit and Close together and for the contract on a real file system, and requires
+    the five that carry those claims. It exits 1 today naming all five; go test itself passes there,
+    selecting nothing. It is a check, as T-40's race run was, because this repository has no nightly
+    tier to carry it. The third reads the two documents with whitespace flattened, so rewrapping can
+    neither hide nor break a phrase, and four of arc42's table rows by their first cell, each row
+    being one line: that ties the streaming writer to slice-28's row alone, so T-51's own row may
+    use the words, and T-51 to slice-27's row and to both building blocks'. It exits 1 today on all
+    eighteen lines: the missing work-item row, section, sibling list, link to decision 0017, Bounded
+    operations in the record and exception sentence in arc42; T-51 missing from three rows; and the
+    nine places that still give the writer to slice-28 or call it unbuilt. All three failures are
+    missing work, not assertion-level red: that is the test commit's.
   done_when:
-    - run: grep -rqs 'RefusalLogContract(' internal/engine/session/disk && go test -count=1 ./internal/engine/session/disk
+    - run: |
+        missing=0
+        calls() {
+          grep -rqsE --include='*_test.go' "^([^/]|/[^/])*[.]${2}[(]" "$1" || {
+            echo "T-51: no test in $1 calls $2"
+            missing=1
+          }
+        }
+        calls internal/engine/approval/disk SessionLogsContract
+        calls internal/engine/session/disk RefusalLogContract
+        calls cmd/itos-container RefusalLogContract
+        passes() {
+          pkg=$1
+          shift
+          output=$(go test -count=1 -v "./$pkg" 2>&1) || {
+            printf '%s\n' "$output"
+            echo "T-51: go test ./$pkg failed"
+            exit 1
+          }
+          for name in "$@"; do
+            printf '%s\n' "$output" |
+              awk -v name="$name" '$1 == "---" && $2 == "PASS:" && $3 == name { found = 1 } END { exit !found }' || {
+              echo "T-51: ./$pkg has no passing test named $name"
+              missing=1
+            }
+          done
+        }
+        passes internal/engine/approval/disk TestSessionLogsContract/memory TestSessionLogsContract/disk \
+          TestStagedLogPublication TestStagedLogFaults TestStagedLogUnsafeTargets
+        passes internal/engine/session/disk TestRefusalLogContract TestRefusalLogDropsOnlyReady \
+          TestRefusalLogStreamsLines TestRefusalLogBeginRefusals TestRefusalLogFailuresKeepEarlierCopy \
+          TestRefusalLogCloseNeverWaits
+        passes cmd/itos-container TestRefusalLogDiskContract
+        test "$missing" -eq 0
+    - run: |
+        missing=0
+        races() {
+          pkg=$1
+          pattern=$2
+          shift 2
+          output=$(go test -race -count=1 -v -run "$pattern" "./$pkg" 2>&1) || {
+            printf '%s\n' "$output"
+            echo "T-51: go test -race ./$pkg failed"
+            exit 1
+          }
+          for name in "$@"; do
+            printf '%s\n' "$output" |
+              awk -v name="$name" '$1 == "---" && $2 == "PASS:" && $3 == name { found = 1 } END { exit !found }' || {
+              echo "T-51: ./$pkg has no test named $name passing under the race detector"
+              missing=1
+            }
+          done
+        }
+        races internal/engine/approval/disk '^(TestSessionLogsContract|TestStagedLog)' \
+          TestSessionLogsContract/memory TestSessionLogsContract/disk
+        races internal/engine/session/disk '^TestRefusalLog' TestRefusalLogContract TestRefusalLogCloseNeverWaits
+        races cmd/itos-container '^TestRefusalLogDiskContract$' TestRefusalLogDiskContract
+        test "$missing" -eq 0
+    - run: |
+        wrong=0
+        flat() { tr -s '[:space:]' ' ' < "$1"; }
+        says() { flat "$1" | grep -qF -- "$2" || { echo "T-51: $1 does not say: $2"; wrong=1; }; }
+        drops() { if flat "$1" | grep -qF -- "$2"; then echo "T-51: $1 still says: $2"; wrong=1; fi; }
+        row() { awk -v cell="$2" 'index($0, cell) == 1' "$1"; }
+        rowsays() { row "$1" "$2" | grep -qF -- "$3" || { echo "T-51: $1, row $2 does not say: $3"; wrong=1; }; }
+        rowdrops() {
+          found=$(row "$1" "$2")
+          if [ -z "$found" ]; then
+            echo "T-51: $1 has no row $2"
+            wrong=1
+          elif printf '%s\n' "$found" | grep -qF -- "$3"; then
+            echo "T-51: $1, row $2 still says: $3"
+            wrong=1
+          fi
+        }
+        arc42=docs/architecture/arc42.md
+        record=docs/decisions/0022-egress-proxy.md
+        says "$arc42" 'T-51 — implemented refusal-log writer'
+        rowsays "$arc42" '| slice-27 ' 'T-51'
+        rowdrops "$arc42" '| slice-28 ' 'streaming writer'
+        rowsays "$arc42" '| `internal/engine/approval` ' 'T-51'
+        rowsays "$arc42" '| Session networks and proxy ' 'T-51'
+        drops "$arc42" 'delivery and durable refusal log'
+        drops "$arc42" 'a streaming writer slice-28 adds'
+        drops "$arc42" 'slice-28 copies the log'
+        drops "$arc42" 'the durable refusal-log writer remain unbuilt'
+        says "$arc42" 'visible but uncertain progress. The staged refusal log is the exception'
+        grep -q '^## What T-51 settled' "$record" || {
+          echo "T-51: $record has no section headed What T-51 settled"
+          wrong=1
+        }
+        says "$record" 'T-39, T-40, T-51, slice-26, slice-27 and slice-28 take these decisions'
+        says "$record" '0017-controller-operation-budgets.md'
+        says "$record" 'Bounded operations'
+        drops "$record" 'so slice-28 adds a streaming writer'
+        drops "$record" 'slice-28 supplies the durable refusal-log writer'
+        drops "$record" 'the durable refusal-log writer remain with the following slices'
+        drops "$record" 'filtering and sequence check'
+        test "$wrong" -eq 0
