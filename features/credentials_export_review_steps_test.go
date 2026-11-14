@@ -35,12 +35,19 @@ func (w *world) credentialStateEncoding(selection string) error {
 }
 
 // One export is mounted at point and a second time, rooted at subdirectory,
-// over the source's parent. Both rows carry the export's device and the root
-// "/" the kernel prints for every NFS mount, so the rows alone do not say that
-// the source is the subdirectory's own file. The table is raw kernel text and
-// the nodes raw identities: neither holds a verdict.
+// over the source's parent. Both rows carry the root "/" the kernel prints for
+// every NFS and 9p mount, so the rows alone do not say that the source is the
+// subdirectory's own file. NFS mounts share the export's device. Every 9p
+// mount has a device of its own, so there the file's two names differ in
+// device and agree only on the server's inode number. The table is raw kernel
+// text and the nodes raw identities: neither holds a verdict.
 func (w *world) credentialExportAlias(filesystem, subdirectory, point string) error {
-	if filesystem != "nfs" && filesystem != "nfs4" {
+	second := uint64(50)
+	switch filesystem {
+	case "nfs", "nfs4":
+	case "9p":
+		second = 51
+	default:
 		return fmt.Errorf("unknown export fixture filesystem %q", filesystem)
 	}
 	below := func(p, root string) bool { return p == root || strings.HasPrefix(p, strings.TrimSuffix(root, "/")+"/") }
@@ -67,13 +74,13 @@ func (w *world) credentialExportAlias(filesystem, subdirectory, point string) er
 	}
 	// The second mount shows the subdirectory itself and its one-link file.
 	dir := o.Nodes[subdirectory]
-	dir.Path, dir.MountID = outside, 6
+	dir.Path, dir.Device, dir.MountID = outside, second, 6
 	o.Nodes[outside] = dir
 	token := o.Nodes[source]
-	token.Device, token.MountID = 50, 6
+	token.Device, token.MountID = second, 6
 	o.Nodes[source] = token
-	rows := fmt.Sprintf("5 1 0:50 / %s rw - %s server:/export rw\n6 1 0:50 / %s rw - %s server:/export/subdirectory rw\n", point, filesystem, outside, filesystem)
-	if below(subdirectory, "/checkout") {
+	rows := fmt.Sprintf("5 1 0:50 / %s rw - %s server:/export rw\n6 1 0:%d / %s rw - %s server:/export/subdirectory rw\n", point, filesystem, second, outside, filesystem)
+	if second == 50 && below(subdirectory, "/checkout") {
 		// A host submount covers the checkout's own entry: the inventory meets
 		// the covering directory, never the backing one the worker bind exposes.
 		cover := o.Nodes[subdirectory]
@@ -81,10 +88,12 @@ func (w *world) credentialExportAlias(filesystem, subdirectory, point string) er
 		o.Nodes[subdirectory] = cover
 		rows += "7 5 0:2 / " + subdirectory + " rw - tmpfs tmpfs rw\n"
 	} else {
-		// Protected state keeps the same file under its own name. Nothing may
-		// visit it there: state records are never enumerated.
+		// The protected tree keeps the same file under its own name, on the
+		// first mount's device. Nothing may visit it in state, whose records
+		// are never enumerated. Inventory does meet it in a checkout no
+		// submount covers, and on 9p finds another device beside the same inode.
 		hidden := token
-		hidden.Path, hidden.MountID = subdirectory+"/token", 5
+		hidden.Path, hidden.Device, hidden.MountID = subdirectory+"/token", 50, 5
 		o.Nodes[hidden.Path] = hidden
 	}
 	for i := range o.Mounts {

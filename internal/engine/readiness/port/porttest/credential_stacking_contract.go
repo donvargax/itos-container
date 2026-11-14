@@ -11,7 +11,7 @@ import (
 func credentialStackingContract(t Reporter, observe func(*CredentialFiles, []policy.Credential, port.CredentialInput) port.CredentialResult, grants []policy.Credential, input port.CredentialInput) {
 	input.AccountState = "/fixed"
 	// nfsd is the NFS server's own control filesystem, not an NFS mount.
-	for _, filesystem := range []string{"overlay", "fuse", "fuseblk", "fuse.bindfs", "fuse.sshfs", "fuseblk.ntfs", "nfs", "nfs4", "nfsd", "ext4"} {
+	for _, filesystem := range []string{"overlay", "fuse", "fuseblk", "fuse.bindfs", "fuse.sshfs", "fuseblk.ntfs", "nfs", "nfs4", "9p", "nfsd", "ext4"} {
 		for _, point := range []string{"/", "/checkout", "/checkout/private", "/checkout/private/token", "/state", "/state/private", "/fixed", "/fixed/private", "/vault", "/vault/token", "/unrelated", "/checkout-sibling", "/state-sibling", "/fixed-sibling"} {
 			for _, observation := range []string{"both", "first", "final"} {
 				f := CredentialFixture()

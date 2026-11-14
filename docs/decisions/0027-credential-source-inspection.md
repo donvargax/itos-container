@@ -54,6 +54,32 @@ was checked for being absolute but not for being valid UTF-8, so this mode
 accepted a selection that ordinary doctor refuses. It now keeps the shared
 `approval.state.location` refusal (exit 2) for both, before any boundary is walked.
 
+Amended after the local review of `2ac05a4`: the filesystem refusal names types,
+and `9p` was not among them. Every 9p mount gets a superblock and device of its own
+([`v9fs_get_tree`](https://github.com/torvalds/linux/blob/master/fs/9p/vfs_super.c)
+calls `sget_fc` with no test function), and its row prints `/` whatever directory
+of the export it attaches. A protected subdirectory mounted a second time therefore
+has another device and the root `/`. No coordinate places it in its tree and no
+pinned identity matches, although the server's inode numbers do: not even the
+checkout inventory, which meets the same file under the first device, sees the
+alias. Refuse `9p`, matched exactly, with `credential.filesystem` under the
+conditions of overlay, FUSE and NFS. A home, checkout or state location on 9p,
+such as a virtual machine's shared host folder, is therefore refused outright, as
+on NFS. The message becomes "Overlay or FUSE backing paths cannot be excluded
+from credential exposure, nor can paths on NFS or 9p".
+
+That amendment adds a name and leaves the rule a list of named types. It does not
+settle whether the rule should be one. The list has grown one review at a time,
+and the loop's triage of 2026-11-14 names further types claimed to share one of
+its two faults, a backing tree under two superblocks or a row root that is not the
+backing path: `cifs` and `smb3`, `ceph`, `virtiofs` and `ecryptfs`. None of them
+was checked against the kernel, and none is refused. The alternative accepts only
+named filesystems whose rows do place a file and refuses every other type. It
+refuses a source, checkout or state location on any type not yet named, where the
+list accepts every type nobody has examined. Triage routes that choice to the
+person, with the outright NFS and 9p refusals to confirm. Nothing admits a
+credential before slice-30, whose specification takes the answer as a precondition.
+
 ## The sections this decision overrides
 
 T-47's record is [decision 0025](0025-credentials-passed-in.md). The first version
@@ -230,9 +256,12 @@ prove, not a claim of an atomic kernel snapshot:
    harmless. The same refusal, under the same conditions, covers `nfs` and `nfs4`,
    matched exactly: their rows print `/` as the root of every mount, so a row
    does not say which export subdirectory it shows. `nfsd`, the server's own
-   control filesystem, is not an NFS mount. Do not interpret mount options as
-   backing-path evidence: neither overlay's lowerdir/upperdir strings nor a FUSE
-   or NFS source supplies this contract's pinned coordinate proof. Known
+   control filesystem, is not an NFS mount. It covers `9p` too, matched exactly:
+   every 9p mount has a device of its own and prints `/` as its root, so neither
+   a coordinate nor a pinned identity places a second mount of a protected
+   subdirectory in its tree. Do not interpret mount options as
+   backing-path evidence: neither overlay's lowerdir/upperdir strings nor a FUSE,
+   NFS or 9p source supplies this contract's pinned coordinate proof. Known
    identity/location matches retain precedence. This extends checkout exclusion
    beyond identity comparisons without adding state enumeration or restoring
    descriptor/mount-row device equality.
@@ -392,6 +421,9 @@ adapter. Alias rows apply to **both** protected trees; other rows name their sco
 | NFS (`nfs`, `nfs4`) source or ancestor; row at, below or covering checkout or either state root | The same filesystem refusal, in either observation. |
 | Protected subdirectory of an NFS export mounted a second time over the source's parent, both rows with root `/`; for checkout, its entry hidden under a host submount | Filesystem refusal; the same rows on ext4 name an independent file and are accepted. |
 | Unrelated NFS row; `nfsd` row anywhere | Accepted when the source is otherwise independent. |
+| 9p source or ancestor; row at, below or covering checkout or either state root | The same filesystem refusal, in either observation. |
+| Protected subdirectory of a 9p export mounted a second time over the source's parent, the rows differing in device and both with root `/`; the checkout's own entry visible to inventory under the first device | Filesystem refusal; the same rows on ext4 are two devices, name an independent file and are accepted. |
+| Unrelated 9p row | Accepted when the source is otherwise independent. |
 | Selected state location that is absolute but not valid UTF-8 | `approval.state.location` before any filesystem call; valid multi-byte paths are accepted. |
 
 Alias fixtures have safe owners/permissions, one-link nonempty regular files and no

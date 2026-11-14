@@ -543,6 +543,12 @@ kernel reports `/` as the root of every NFS mount, whichever export subdirectory
 it shows, so a second mount of a protected subdirectory cannot be recognized.
 A source, checkout or state location on NFS, an NFS home included, reports
 `credential.filesystem`; unrelated NFS mounts do not.
+9p (`9p`) is refused the same way and under the same conditions. Every 9p mount
+has a device of its own and reports `/` as its root, so a second mount of a
+protected subdirectory matches its tree in neither position nor identity. A source,
+checkout or state location on 9p, such as a virtual machine's shared host folder,
+reports `credential.filesystem`; unrelated 9p mounts do not. Other filesystem
+types are judged from their mount rows.
 
 Source problems are located at `/credentials/<written-index>/source`. Missing or
 unavailable metadata uses exit 3; symlink, ancestor, location, regular, owner, permissions,

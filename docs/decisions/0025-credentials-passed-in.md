@@ -166,6 +166,9 @@ credential admission; real-mount evidence belongs only in CI.
 Decision 0027's amendment after the review of `8e5088e` extends that refusal to
 `nfs` and `nfs4`, whose mount rows print `/` as every mount's root and so cannot
 place a second mount of an export subdirectory inside its protected tree.
+Its amendment after the local review of `2ac05a4` adds `9p`, whose every mount has a
+device of its own beside that root, and records that the list-or-allowlist form of
+the rule is open for the person before slice-30 admits a credential.
 
 Two complete bounded mount-table observations bracket inspection; source and boundary
 identities/mappings and final source link metadata are rechecked. Each table has

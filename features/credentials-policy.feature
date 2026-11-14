@@ -121,6 +121,11 @@ Feature: Named credential requests and read-only source inspection
   #    After the review of 8e5088e the same refusal covers nfs and nfs4, matched
   #    exactly: the kernel prints "/" as the root of every NFS mount row, so a
   #    row cannot place a second mount of an export subdirectory in its tree.
+  #    After the local review of 2ac05a4 it covers 9p too, matched exactly:
+  #    every 9p mount has a device of its own and prints "/" as its root, so
+  #    neither a coordinate nor an identity places a second mount in its tree.
+  #    The rule stays a list of named types. Whether to accept only named types
+  #    instead is the person's open decision, recorded in decision 0027.
   #    Known identity/location matches keep precedence. q-57 still governs
   #    descriptor mount identity; no st_dev equality requirement is restored.
   #    Defer any initial table error to the location check, preserving earlier
@@ -170,6 +175,7 @@ Feature: Named credential requests and read-only source inspection
   # credential.mount_id (3): unavailable STATX_MNT_ID; name it and require kernel support.
   # credential.filesystem (3): overlay/FUSE backing aliases cannot be excluded.
   #   The same rule refuses paths on NFS, whose mount rows hide the mounted subdirectory.
+  #   It refuses paths on 9p as well, whose every mount has a device of its own.
   # credential.symlink (1): a symbolic link at any component, even dangling.
   # credential.ancestor (1): unsafe ancestor ownership or write permissions.
   # credential.location (1): an identity exposed in checkout or protected state.
@@ -1752,3 +1758,36 @@ Feature: Named credential requests and read-only source inspection
       | nfs        | /state/private                                | /        |
       | nfs4       | /checkout/private                             | /        |
       | nfs        | /checkout/private                             | /        |
+
+  # Local review of 2ac05a4 (the thread at credential_projection.go:215): the
+  # refusal names filesystem types, and 9p was not among them. Every 9p mount
+  # gets a superblock and device of its own (v9fs_get_tree calls sget_fc with
+  # no test function), and its row prints "/" whatever directory of the export
+  # it attaches. A protected subdirectory mounted a second time therefore has
+  # another device and the root "/". No coordinate places it in its tree. No
+  # identity matches either, although the server's inode numbers do: not even
+  # the checkout inventory, which meets the same file under the first device.
+  # Refuse 9p, matched exactly, with credential.filesystem (3) under the
+  # conditions of overlay, FUSE and NFS: a source or source-ancestor descriptor
+  # on such a row, or such a row at, below or covering checkout or either state root.
+  # ID-CREDENTIALS-60's Given mounts one export at <point> and a second time,
+  # rooted at <subdirectory>, over the source's parent directory. For 9p the
+  # second row carries a device of its own, and no submount covers the
+  # checkout's entry: inventory visits it. Before the fix all three examples exited 0.
+  @wip @slice-29 @ID-CREDENTIALS-61 @linux
+  Scenario Outline: credential inspection refuses 9p mounts, each of which has a device of its own
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And the credential source is a second "9p" mount of "<subdirectory>" from the export mounted at "<point>"
+    When the credential observation contract runs in JSON mode
+    Then its credential JSON reports exactly these source problems and retains the requested grants:
+      | rule                  | path                  | exit |
+      | credential.filesystem | /credentials/0/source | 3    |
+    And it exits with code 3
+    And its standard output says "nor can paths on NFS or 9p"
+    And the credential observation recorded no state record enumeration or metadata visits
+
+    Examples:
+      | subdirectory                                  | point    |
+      | /account/.local/state/itos-container/sessions | /account |
+      | /state/private                                | /        |
+      | /checkout/private                             | /        |
