@@ -2117,6 +2117,12 @@ items:
       retry, skipped row, relaxed assertion or production default change. Phase p2: a re-run clears
       each failure, so it blocks no step of milestone two, but it taxes every pull request of steps
       1 and 2.
+
+      A warm cache does not prevent it. main's run 43546719957 at bcb9be2 (a docs commit, go1.27.3)
+      restored the setup-go cache, compiled the engine suite in 4.9 s, and still failed the
+      lifecycle shard's first engine row (ID-LIFECYCLE-08) with run.call-timeout on operation
+      create, then cleanup HTTP 409. So the slow first create of a job is the engine's, not the
+      compile's: p2-ci-go-build-cache-rolling-key alone is not the remedy.
   - id: p2-native-mount-evidence-credential-inspection
     title: A CI-only tier runs credential source inspection against real bind mounts made in a private user and mount namespace
     phase: 1
