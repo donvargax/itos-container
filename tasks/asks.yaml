@@ -254,3 +254,4 @@ questions:
   - id: q-63
     item: "T-50"
     question: "T-50: the implementer (attempt 3) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-50-implementer-3.result.json"
+    answer: "Option A: re-run the failed jobs of run 43543693012 at 73cbd13 and land T-50 as it is. The run is T-50's first on go1.27.4 and failed only at each shard's first engine row, with the engine answering the create 2.3 s after forwarding against the 1 s fixture call; T-50's spec says such a row still fails until a remedy is chosen, and the remedy is p2-first-engine-row-slow-create's, not T-50's. No limit is moved from one cold sample. T-51's re-run of the same signature (43538972827) passed whole. The failed jobs were re-run by the coordinator on 2026-11-14."
