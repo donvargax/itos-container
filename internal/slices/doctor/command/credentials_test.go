@@ -23,6 +23,14 @@ func TestCredentialDiagnosticEnvelope(t *testing.T) {
 			t.Fatal(p)
 		}
 	}
+	// The first written source is index zero: it is located like any other,
+	// and only a boundary refusal has no source path.
+	if p := credentialProblem(readiness.CredentialIssue{Rule: "credential.missing", Index: 0}); p.Path == nil || *p.Path != "/credentials/0/source" {
+		t.Fatalf("first written source lost its location: %#v", p)
+	}
+	if p := credentialProblem(readiness.CredentialIssue{Rule: "state.location", Index: -1}); p.Path != nil && *p.Path != "" {
+		t.Fatalf("boundary refusal located at a source: %#v", p)
+	}
 	// One rule refuses every filesystem whose mount rows cannot place a file.
 	message := credentialProblem(readiness.CredentialIssue{Rule: "credential.filesystem"}).Message
 	for _, kind := range []string{"Overlay", "FUSE", "NFS"} {
@@ -68,6 +76,9 @@ func TestCredentialPresentationRetainsSortedRequestsOnFailure(t *testing.T) {
 	errout.Reset()
 	if code := presentCredentials(ui, requests, result, false); code != 3 || !strings.Contains(out.String(), `/a\u0080`) || !strings.Contains(out.String(), "Credential contents, manifest, engine and approval were not checked") {
 		t.Fatalf("%d %s", code, out.String())
+	}
+	if !strings.Contains(errout.String(), "itos-container.yaml/credentials/0/source: Credential source is absent; ") {
+		t.Fatalf("plain output does not locate the first written source: %s", errout.String())
 	}
 }
 
