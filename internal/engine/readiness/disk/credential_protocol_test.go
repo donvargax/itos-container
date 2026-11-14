@@ -113,15 +113,27 @@ func TestCredentialEmptyMountSource(t *testing.T) {
 }
 
 func TestCredentialFDInfoBounds(t *testing.T) {
-	for _, data := range []string{"", "mnt_id: 0\n", "mnt_id: -1\n", "mnt_id: +1\n", "mnt_id: nope\n", "mnt_id: 99999999999999999999999\n", "mnt_id: 1\nmnt_id: 2\n"} {
-		if _, ok := ParseCredentialMountID([]byte(data)); ok {
-			t.Fatalf("accepted %q", data)
+	// A refusal carries no ID: 1 is a real mount ID, and a caller reading the
+	// number beside a false result must not find a row to match.
+	for _, data := range []string{"", "pos:\t0\n", "mnt_id\n", "mnt_id:\n", "mnt_id: 0\n", "mnt_id: -1\n", "mnt_id: +1\n", "mnt_id: nope\n", "mnt_id: 99999999999999999999999\n", "mnt_id: 1\nmnt_id: 2\n", "mnt_id: 7\nmnt_id: 7\n", "mnt_id: 7\nmnt_id: nope\n", "mnt_id: 0\nmnt_id: 5\n"} {
+		if id, ok := ParseCredentialMountID([]byte(data)); ok || id != 0 {
+			t.Fatalf("refused fdinfo %q returned %d %v", data, id, ok)
+		}
+	}
+	// The kernel's other fdinfo lines carry numbers too; only mnt_id is the ID.
+	for data, want := range map[string]int{"mnt_id:\t1\n": 1, "pos:\t0\nflags:\t02000000\nmnt_id:\t42\nino:\t7\n": 42} {
+		if id, ok := ParseCredentialMountID([]byte(data)); !ok || id != want {
+			t.Fatalf("fdinfo %q returned %d %v, want %d", data, id, ok, want)
 		}
 	}
 	for _, size := range []int{65536, 65537} {
 		data := "mnt_id:\t42\n" + strings.Repeat("x", size-len("mnt_id:\t42\n"))
 		id, ok := ParseCredentialMountID([]byte(data))
-		if ok != (size == 65536) || ok && id != 42 {
+		want := 42
+		if size > 65536 {
+			want = 0
+		}
+		if ok != (size == 65536) || id != want {
 			t.Fatalf("fdinfo size %d: %d %v", size, id, ok)
 		}
 		if runtime.GOOS != "linux" {
