@@ -893,6 +893,110 @@ unchanged. The old generic barrier errors do not establish a product timeout or
 explain a resource-inventory failure. Fresh full-shard native evidence and any
 remaining failure diagnosis belong to the coordinating loop in CI.
 
+T-50 makes the native recorder account for every worker it let the product create.
+One harness defect stood behind three flaking rows: `ID-ANCHORS-09`, `ID-OFFLINE-29`
+and `ID-LIFECYCLE-08`, one of T-49's rows, which the same repair covers. The recorder
+used to forward a create under the controller's request, so a controller that stopped
+waiting, or died, cancelled the exchange while the engine could still finish the
+create. The worker then existed, held the anchor volume and was in no list. The
+recorder refused the product's requests for it by full ID with HTTP 403, so teardown,
+status and stop ended as exit 75, and cleanup, finding no listed worker, asked the
+engine to delete a volume that worker held: `native anchor harness cleanup HTTP 409`.
+
+**Worker accounting.** The engine side of an authorized `POST /containers/create` now
+lives until the engine answers or until `engineCreateOutcomeAllowance` ends, 10 seconds
+from forwarding: the production call limit, harness bookkeeping and no product or
+scenario bound. Nothing on the controller side ends it: not a cancelled or closed
+request, a killed controller, a lifecycle disconnect or the recorder's server closing.
+An answer of HTTP 201 with a full ID is recorded once, whether or not the controller
+is still there: the worker is listed under the request's name and labels, then
+inspected by the recorder. A connected controller sees what it saw before, the same
+reply after the same recording and inspection, behind the same `ID-ANCHORS-11` and
+lifecycle reply barriers. An answer whose controller has left holds nothing and
+reaches no barrier, so the fixture's wait for that barrier ends at the controller's
+exit or at its own limit. A controller that left receives nothing; one whose request a
+lifecycle disconnect cancelled reads HTTP 502 and the transport-failure body. The
+journal entry of a create gains the time it was forwarded, after the recorder's own
+checks and volume inspection, and the time the engine's answer arrived. An abandoned
+create keeps the engine's status, a cancelled controller side and no reply time. When
+the allowance ends first, the entry ends as an engine-side failure does, with one
+fixed diagnostic that names the allowance. On a plain fixture, neither recovery nor
+lifecycle, an abandoned create sets the recorder problem at that moment, `offline
+native recorder create abandoned: the controller left before the reply`, which
+`observeAfter` hands to the first Then; `offline native recorder transport failed`
+stays for engine-side failures. Recovery and lifecycle fixtures set no problem for an
+abandoned request, as before. Every refusal the recorder made stays.
+
+**Step wait.** No Then judges an open exchange. After each step the harness waits for
+every forwarded create still unanswered on any native recorder the scenario started,
+those of its control, second and overlap worlds included (`awaitCreateOutcomes`). It
+holds no recorder lock while it waits, since the answer is recorded under it, and each
+wait ends with its exchange. Both journal formatters wait the same way for their own
+recorder before they print, because the lifecycle control's evidence is formatted
+inside a When.
+
+**Cleanup order.** The cleanup that `closeOfflineRuntime` runs repeats that wait first,
+without the lock. It then removes the listed workers as before. For each forwarded
+create that still lists no worker it inspects the authorized name,
+`itos-container-<token>`, through its own engine client. HTTP 404 leaves nothing to
+remove. HTTP 200 with a full ID and the name, image and labels a listed worker must
+have is recorded and removed like one: `force=true` and `v=false`, HTTP 204, then
+HTTP 404 by full ID. Any other identity is refused with the identity refusal, and any
+other answer is an error. A create whose exchange ended at its allowance is a failure
+of its own even when its name is absent, since the engine may still finish it. Volumes
+are released only when all of that succeeded, in the order and with the requests used
+before, and none of these requests enters the product journal. A volume deletion that
+answers anything but HTTP 204 keeps its words, `native anchor harness cleanup HTTP
+<status> reason=<class>`, and adds `holders=<n> recorded=<m>` from one read-only
+listing of the containers that mount the volume, or `holders=unavailable`. It names no
+resource, sends the deletion once and retries nothing.
+
+**Barrier diagnostics.** Every anchor fixture wait that ends without its report says so
+in the recorded cause: the first probe report, later probe progress or the held reply
+of uncertain startup; whether the controller exited or the 35-second limit expired,
+and with a live controller or after the fixture's own kill; the elapsed time and the
+limit; and for a wait on the launch the launch controller's exit and its time since
+start. After the fixture has itself killed the controller, the dead controller ends no
+wait: the first-report wait runs to its report or its limit. Each anchors native Then
+that returns a recorded cause returns it first, with the diagnostics of its own world,
+and each first Then returns it before any bare precondition; `ID-ANCHORS-13`'s returns
+A's cause, then B's. Those diagnostics begin with the launch controller: its exit and
+elapsed time, or pending, with its typed rule and operation where the harness lists
+them and `unrecognized` otherwise. On the plain anchor fixture the line comes from the
+offline run's exit and stderr and has no elapsed time. Before the recovery requests
+comes a summary of the launch requests: their total, then at most twelve in the
+journal's order, every create, the request before each create (the image inspection
+that opens the product's create call) and every start first, then each refused,
+failed, cancelled or unanswered request, with the omitted count. A create prints as
+`/containers/create`, an image inspection as `/images/<resource>/json`, each request
+with its arrival after the launch began, and a create with three intervals:
+`arrival-to-forward`, `forward-to-answer` and `answer-to-reply`. T-49's lifecycle
+journal prints `forwarded=` and `answer=` for a create and keeps every create and the
+request before it within its twelve. Neither formatter prints a body, query, header,
+environment, argv, record content or inspection map, and the anchors formatter prints
+no resource name and no raw engine or workload text.
+
+**Reading a failure.** T-50 changes no budget and adds no warm-up. The fixture keeps
+1/3/1 seconds for call, startup and grace, production 10/120/10. A row whose
+controller stops at its call limit still fails, and its first Then now prints how the
+call's second was spent. The engine's own time is the image inspection's `reply-after`
+plus the create's `forward-to-answer`. Only when that alone outlived the fixture limit
+has a named product operation outlived its fixture budget; a limit then moves only
+through `engineBudgetTree`, after the operation, its intervals, the revised limit and
+a delayed-success and expiry control are recorded in T-50's ledger entry. When the
+engine's time is inside the limit, the recorder's inspections (`arrival-to-forward`,
+`answer-to-reply`) or time outside both carried the reply past it: no limit moves, and
+the intervals return for a decision, as does any other remedy.
+
+`TestOfflineRecorderRecordsAbandonedCreate`,
+`TestOfflineRecorderCleanupRemovesAuthorizedWorkers` and
+`TestAnchorRecoveryBarrierDiagnostics` hold these rules without an engine: a disposable
+in-memory engine that finishes a create nobody waits for and refuses to delete a held
+volume, controlled time for the 10-second and 35-second cases, and journals the tests
+write. They are harness checks, not native evidence. Whether a hosted row took this
+path is read from its first failure, and why a job's first create is slow is still
+unknown.
+
 Local `TestLifecycle*` checks verify step registration, probe compilation, recorder
 forwarding/faults and rejection of incorrect observations. They do not execute the probe
 or provide native red/green evidence. Run `42297748701` supplied accepted assertion
