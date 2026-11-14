@@ -61,6 +61,29 @@ func TestCredentialStatxMountEvidence(t *testing.T) {
 	}
 }
 
+// mountinfo's ID field has 32 bits. The largest one is evidence when fdinfo
+// agrees; only a wider statx value is refused.
+func TestCredentialLargestMountID(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("native descriptor calls require Linux")
+	}
+	f := &CredentialFiles{}
+	root := t.TempDir()
+	h, _, status := f.Open(0, root)
+	if status != port.CredentialReadOK {
+		t.Fatal(status)
+	}
+	defer f.Close(h)
+	ops := f.operations()
+	ops.statx = func(int) (uint64, uint32, error) { return 1<<32 - 1, 0x1000, nil }
+	ops.read = func(string, int64) ([]byte, bool) { return []byte("mnt_id:\t4294967295\n"), true }
+	f.ops = &ops
+	want := port.CredentialDescriptor{Path: root, MountID: 1<<32 - 1}
+	if got, ok := f.Descriptor(h); !ok || got != want {
+		t.Fatalf("descriptor=%#v complete=%v, want %#v", got, ok, want)
+	}
+}
+
 func TestCredentialMountEvidenceValidation(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("kernel-format parser is Linux-specific")
@@ -76,12 +99,24 @@ func TestCredentialMountEvidenceValidation(t *testing.T) {
 	if !ok || len(rows) != 1 || rows[0].Root != "/root space" || rows[0].Point != "/mount space" || rows[0].Device != 1050625 {
 		t.Fatalf("escaped coordinates: %#v %v", rows, ok)
 	}
+	// A row's root and its mountpoint each keep the parser's own 4096 bytes:
+	// mountinfo is not held to PATH_MAX, unlike a descriptor's pathname.
 	for _, size := range []int{4096, 4097} {
 		path := "/" + strings.Repeat("a", size-1)
 		_, ok := ParseCredentialMounts([]byte("1 0 0:1 " + path + " / rw - tmpfs tmpfs rw\n"))
 		if ok != (size == 4096) {
 			t.Fatalf("mount path length %d accepted=%v", size, ok)
 		}
+		rows, ok := ParseCredentialMounts([]byte("1 0 0:1 / " + path + " rw - tmpfs tmpfs rw\n"))
+		if ok != (size == 4096) || ok && (len(rows) != 1 || rows[0].Point != path || rows[0].Unprojectable) {
+			t.Fatalf("mountpoint length %d accepted=%v: %d rows", size, ok, len(rows))
+		}
+	}
+	// makedev(3): the low 8 minor bits, 12 major bits from bit 8, the remaining
+	// minor bits from bit 20 and the remaining major bits from bit 32.
+	rows, ok = ParseCredentialMounts([]byte("1 0 4097:258 / / rw - tmpfs tmpfs rw\n"))
+	if want := uint64(2 | 1<<8 | 1<<20 | 1<<44); !ok || len(rows) != 1 || rows[0].Device != want {
+		t.Fatalf("wide device number: %#v %v, want %d", rows, ok, want)
 	}
 }
 
@@ -254,12 +289,67 @@ func TestCredentialNativeErrorsAndPinnedIdentity(t *testing.T) {
 	credentialOpenRefused(t, f, 0, dir, port.CredentialReadUnavailable)
 }
 
+// A source is never opened for reading. Listing a pin that is not a directory
+// is refused from its metadata, before anything is reopened.
+func TestCredentialEntriesNeverReopenAFile(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("native descriptor calls require Linux")
+	}
+	path := t.TempDir() + "/source"
+	if err := os.WriteFile(path, []byte("synthetic"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	f := &CredentialFiles{}
+	h, _, status := f.Open(0, path)
+	if status != port.CredentialReadOK {
+		t.Fatal(status)
+	}
+	defer f.Close(h)
+	ops := f.operations()
+	ops.directory = func(name string) (*os.File, error) {
+		t.Error("reopened a regular file for reading")
+		return os.Open(name)
+	}
+	f.ops = &ops
+	credentialEntriesRefused(t, f, h, "regular source listed as a directory")
+}
+
+// Close releases the pin and the directory reopened to list it, and forgets
+// the handle, so a long inventory holds descriptors only for its current depth.
+func TestCredentialCloseReleasesBothDescriptors(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("native descriptor calls require Linux")
+	}
+	f := &CredentialFiles{}
+	h, _, status := f.Open(0, t.TempDir())
+	if status != port.CredentialReadOK {
+		t.Fatal(status)
+	}
+	if _, done, ok := f.Entries(h); !ok || !done {
+		t.Fatalf("empty directory: done=%v ok=%v", done, ok)
+	}
+	held := f.handles[h]
+	if held == nil || held.directory == nil {
+		t.Fatal("listing kept no reopened directory")
+	}
+	f.Close(h)
+	if _, err := held.file.Stat(); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("pin still open after Close: %v", err)
+	}
+	if _, err := held.directory.Stat(); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("reopened directory still open after Close: %v", err)
+	}
+	if len(f.handles) != 0 {
+		t.Fatalf("Close kept %d handles", len(f.handles))
+	}
+}
+
 // A refused open hands out no handle and no metadata. Handles are small
 // counters, so a nonzero one beside a failure status could name a live pin, and
 // a caller closing what it was given would release another object's descriptor.
 func credentialOpenRefused(t *testing.T, f *CredentialFiles, parent port.CredentialHandle, name string, want port.CredentialRead) {
 	t.Helper()
-	held := len(f.handles)
+	held, descriptors := len(f.handles), credentialOpenDescriptors(t)
 	h, node, status := f.Open(parent, name)
 	if h != 0 || node != (port.CredentialNode{}) || status != want {
 		t.Fatalf("open %q under %d returned handle %d, node %#v and status %v; want no handle, no metadata and status %v", name, parent, h, node, status, want)
@@ -267,6 +357,20 @@ func credentialOpenRefused(t *testing.T, f *CredentialFiles, parent port.Credent
 	if len(f.handles) != held {
 		t.Fatalf("refused open %q under %d retained a pin: %d held, was %d", name, parent, len(f.handles), held)
 	}
+	// A descriptor opened before the refusal is closed with it, not left to a
+	// finalizer: an inventory refuses many entries within one descriptor limit.
+	if after := credentialOpenDescriptors(t); after != descriptors {
+		t.Fatalf("refused open %q under %d left %d descriptors open, was %d", name, parent, after, descriptors)
+	}
+}
+
+func credentialOpenDescriptors(t *testing.T) int {
+	t.Helper()
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(entries)
 }
 
 // A failed directory read reports neither names nor completion. Completion
@@ -336,6 +440,16 @@ func TestCredentialMetadataRequiresUnixIdentity(t *testing.T) {
 		if _, ok := credentialMetadata(info); ok {
 			t.Fatalf("accepted incomplete identity %#v", raw)
 		}
+	}
+	// The largest 32-bit owner and mode are metadata, and each field keeps its place.
+	tree := fstest.MapFS{"file": {Data: []byte("synthetic"), Sys: struct{ Dev, Ino, Nlink, Uid, Mode uint64 }{1, 2, 3, 1<<32 - 1, 1<<32 - 1}}}
+	info, err := tree.Stat("file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := port.CredentialNode{Device: 1, Inode: 2, Links: 3, UID: 1<<32 - 1, Mode: 1<<32 - 1, Size: int64(len("synthetic"))}
+	if got, ok := credentialMetadata(info); !ok || got != want {
+		t.Fatalf("metadata=%#v complete=%v, want %#v", got, ok, want)
 	}
 }
 

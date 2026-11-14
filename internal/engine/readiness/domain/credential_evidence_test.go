@@ -124,6 +124,91 @@ func TestCredentialProtectedRootIdentityNeedsNoCoordinate(t *testing.T) {
 	}
 }
 
+// A reserved state subtree is a coordinate on one device. The same root path
+// on another device is a different filesystem's directory.
+func TestCredentialStateCoordinateNeedsTheSameDevice(t *testing.T) {
+	for device, rule := range map[uint64]string{1: "credential.location", 7: ""} {
+		f, c, grants := credentialDomainFixture()
+		credentialOnMount(f, 2, "/vault", "/vault/token")
+		rows := []port.CredentialMount{credentialRootRow, {ID: 2, Device: device, Root: "/state/private", Point: "/vault"}}
+		credentialTables(f, rows, rows)
+		if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, credentialIssue(rule)) {
+			t.Fatalf("device %d: %#v, want %q", device, got.Issues, rule)
+		}
+	}
+}
+
+// A mount over the state root hides the backing directory without releasing
+// it: the coordinate the state path has under the covered row stays reserved.
+// The visible state root is another filesystem's root directory, so only that
+// hidden coordinate places a bind of the backing subdirectory.
+func TestCredentialCoveredStateKeepsItsBackingCoordinate(t *testing.T) {
+	for root, rule := range map[string]string{"/state/private": "credential.location", "/backing/private": ""} {
+		f, c, grants := credentialDomainFixture()
+		n := f.Nodes["/state"]
+		n.Device, n.Inode, n.MountID = 2, 103, 3
+		f.Nodes[n.Path] = n
+		credentialOnMount(f, 2, "/vault", "/vault/token")
+		rows := []port.CredentialMount{credentialRootRow, {ID: 2, Device: 1, Root: root, Point: "/vault"}, {ID: 3, Device: 2, Root: "/", Point: "/state"}}
+		credentialTables(f, rows, rows)
+		if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, credentialIssue(rule)) {
+			t.Fatalf("bind of %q beside a covered state root: %#v, want %q", root, got.Issues, rule)
+		}
+	}
+}
+
+// A mount below the checkout whose root is an ancestor of protected state
+// shows that state inside the checkout, as one rooted inside state does.
+func TestCredentialCheckoutMountCoveringState(t *testing.T) {
+	for root, overlap := range map[string]bool{"/": true, "/state": true, "/state/private": true, "/independent": false} {
+		f, c, grants := credentialDomainFixture()
+		rows := []port.CredentialMount{credentialRootRow, {ID: 2, Device: 1, Root: root, Point: "/checkout/shown"}}
+		credentialTables(f, rows, rows)
+		var want []port.CredentialIssue
+		if overlap {
+			want = []port.CredentialIssue{{Rule: "state.path", Index: -1}}
+		}
+		if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+			t.Fatalf("root %q below checkout: %#v, want %#v", root, got.Issues, want)
+		}
+		if overlap && f.Calls["checkout traversal"] != 0 {
+			t.Fatalf("root %q below checkout: inventoried an overlapping checkout", root)
+		}
+	}
+}
+
+// A descriptor's mount ID selects its row. A row mounted somewhere the
+// descriptor's path does not lie under gives it no coordinate.
+func TestCredentialDescriptorMustLieUnderItsRow(t *testing.T) {
+	for point, rule := range map[string]string{"/vault/token": "", "/vault/other": "credential.unavailable", "/elsewhere": "credential.unavailable"} {
+		f, c, grants := credentialDomainFixture()
+		credentialOnMount(f, 2, "/vault/token")
+		rows := []port.CredentialMount{credentialRootRow, {ID: 2, Device: 1, Root: "/independent", Point: point}}
+		credentialTables(f, rows, rows)
+		if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, credentialIssue(rule)) {
+			t.Fatalf("row mounted at %q: %#v, want %q", point, got.Issues, rule)
+		}
+	}
+}
+
+// A table reported incomplete is no evidence, whatever rows came with it.
+func TestCredentialIncompleteTableIgnoresItsRows(t *testing.T) {
+	for _, incomplete := range []int{1, 2} {
+		f, c, grants := credentialDomainFixture()
+		reads := 0
+		f.Parser = func([]byte) ([]port.CredentialMount, bool) {
+			reads++
+			return []port.CredentialMount{credentialRootRow}, reads != incomplete
+		}
+		if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, credentialIssue("credential.unavailable")) {
+			t.Fatalf("table %d incomplete beside its rows: %#v", incomplete, got.Issues)
+		}
+		if incomplete == 1 && f.Calls["checkout traversal"] != 0 {
+			t.Fatal("inventoried checkout without a complete first table")
+		}
+	}
+}
+
 func TestCredentialFilesystemRefusalInEitherObservation(t *testing.T) {
 	merged := port.CredentialMount{ID: 2, Device: 64, Root: "/", Point: "/checkout/child", Filesystem: "overlay"}
 	plain := merged
@@ -266,6 +351,25 @@ func TestCredentialInspectionReleasesEveryHandle(t *testing.T) {
 	}
 	if !inspect(limit, 3) {
 		t.Fatalf("a repeated inspection needs more than the first one's %d handles", limit)
+	}
+}
+
+// Inventory holds a child's pin only while it visits that child. A checkout
+// of many entries fits the handle budget of a checkout with one.
+func TestCredentialInventoryHoldsOneChildAtATime(t *testing.T) {
+	fits := func(entries, limit int) bool {
+		f, c, grants := credentialDomainFixture()
+		f.CheckoutEntries, f.HandleLimit = entries, limit
+		return len(c.Inspect(grants).Issues) == 0
+	}
+	limit := 1
+	for !fits(1, limit) {
+		if limit++; limit > 64 {
+			t.Fatal("no handle budget up to 64 fits a checkout with one entry")
+		}
+	}
+	if !fits(300, limit) {
+		t.Fatalf("300 entries need more than one entry's %d handles", limit)
 	}
 }
 

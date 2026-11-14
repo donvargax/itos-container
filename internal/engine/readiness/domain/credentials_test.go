@@ -141,6 +141,17 @@ func TestCredentialBoundaryRefusals(t *testing.T) {
 			f.Nodes[n.Path] = n
 		}},
 		{"dot component", "checkout.root", func(_ *porttest.CredentialFiles, i *port.CredentialInput) { i.Root = "/checkout/../root" }},
+		{"checkout link", "checkout.path", func(f *porttest.CredentialFiles, _ *port.CredentialInput) {
+			n := f.Nodes["/checkout"]
+			n.Mode = 0120777
+			f.Nodes[n.Path] = n
+		}},
+		// Root may own a state ancestor, never the state root itself.
+		{"state owned by root", "state.unsafe", func(f *porttest.CredentialFiles, _ *port.CredentialInput) {
+			n := f.Nodes["/state"]
+			n.UID = 0
+			f.Nodes[n.Path] = n
+		}},
 		{"state file", "state.unsafe", func(f *porttest.CredentialFiles, _ *port.CredentialInput) {
 			n := f.Nodes["/state"]
 			n.Mode = 0100600
@@ -181,7 +192,7 @@ func TestCredentialBoundaryRefusals(t *testing.T) {
 			f, c, grants := credentialDomainFixture()
 			tc.change(f, &c.Input)
 			want := port.CredentialIssue{Rule: tc.rule, Index: -1}
-			if tc.rule == "checkout.root" || tc.rule == "checkout.unavailable" {
+			if tc.rule == "checkout.root" || tc.rule == "checkout.unavailable" || tc.rule == "checkout.path" {
 				want.Subject = c.Input.Root
 			}
 			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{want}) {
