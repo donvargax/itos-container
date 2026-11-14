@@ -556,9 +556,9 @@ credential source paths remain literal. Checkout/state overlap in either directi
 reports `approval.state.path` before inventory, including aliases established by
 pinned identities and mount coordinates. A selected state location that is relative
 or not valid UTF-8 reports `approval.state.location` (exit 2), as ordinary doctor
-does, before any source, checkout or state path is opened. Unavailable boundary evidence prevents
-inventory. An unrelated stacking mount cannot override a missing mount ID or an
-unavailable checkout descriptor diagnostic.
+does, before any source, checkout or state path is opened. Unavailable boundary
+evidence prevents inventory. An unrelated stacking mount cannot override a missing
+mount ID or an unavailable checkout descriptor diagnostic.
 
 These observations neither grant access nor establish continuous protection from trusted
 host changes. [Decision 0027](decisions/0027-credential-source-inspection.md) defines the

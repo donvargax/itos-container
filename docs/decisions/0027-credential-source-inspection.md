@@ -99,8 +99,8 @@ an engine, execute helpers, create state or record approval. Its schema-1 JSON h
 names what was not checked. A valid policy without grants yields an empty array without
 a source/exposure scan. With grants, the selected state location must be absolute and
 valid UTF-8, from `XDG_STATE_HOME` or its `HOME` fallback alike: otherwise the mode
-refuses with the shared `approval.state.location` (exit 2) before it opens any path. Policy problems retain the existing refusal envelope without
-partial effective data.
+refuses with the shared `approval.state.location` (exit 2) before it opens any path.
+Policy problems retain the existing refusal envelope without partial effective data.
 
 The policy and the checkout boundary name one tree. The effective root is absolute
 `ITOS_ROOT` when set, otherwise the working directory, as ordinary doctor resolves
@@ -230,11 +230,12 @@ prove, not a claim of an atomic kernel snapshot:
    harmless. The same refusal, under the same conditions, covers `nfs` and `nfs4`,
    matched exactly: their rows print `/` as the root of every mount, so a row
    does not say which export subdirectory it shows. `nfsd`, the server's own
-   control filesystem, is not an NFS mount. Do not interpret mount options as backing-path evidence: neither
-   overlay's lowerdir/upperdir strings nor a FUSE source supplies this contract's
-   pinned coordinate proof. Known identity/location matches retain precedence.
-   This extends checkout exclusion beyond identity comparisons without adding
-   state enumeration or restoring descriptor/mount-row device equality.
+   control filesystem, is not an NFS mount. Do not interpret mount options as
+   backing-path evidence: neither overlay's lowerdir/upperdir strings nor a FUSE
+   or NFS source supplies this contract's pinned coordinate proof. Known
+   identity/location matches retain precedence. This extends checkout exclusion
+   beyond identity comparisons without adding state enumeration or restoring
+   descriptor/mount-row device equality.
 3. The state exclusion set contains the state root's coordinate subtree, plus the
    coordinate subtree rooted at **every mountpoint at or below the pinned state's
    visible path**, using each such row's device and root. A file mount contributes
