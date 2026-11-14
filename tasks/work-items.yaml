@@ -1853,6 +1853,13 @@ items:
       proxy is outside the controller's writes, so either route the proxy's output through the
       controller (a log driver of none and the controller capturing stdout) or scrub that file at
       teardown. AC-36's hostname-marker probe moves here. Until this lands the leak is disclosed.
+
+      T-51's refusal-log writer takes no lock, and its late publication is safe only while two
+      complete reads of one stopped proxy store the same bytes (decision 0022, 'What T-51 settled').
+      Scrubbing bytes that only the staging controller knows breaks that premise: a run's copy and a
+      later stop's copy would differ, and which rename lands last would matter. Whoever drafts this
+      item must revisit that argument, either by scrubbing identically from every controller or by
+      running the copy's Commit through the session's gate.
   - id: p1-session-contract-coverage-flake
     title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
     phase: 1
