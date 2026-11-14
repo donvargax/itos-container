@@ -1889,6 +1889,15 @@ items:
       The identical line merges cleanly with slice-29's. The scan passes locally under the
       distribution Go even when CI fails, so each worker would otherwise spend a CI cycle finding
       the same failure. If slice-29 merges first, close this as done by it.
+
+      Checked 2026-11-14 (UTC): T-51 now carries the go1.27.4 toolchain line too (d0fa77a, local and
+      origin), as slice-29 does (c583023). So the item's closing clause widens: whichever of T-51 or
+      slice-29 merges first settles it, and it closes as done by that merge. Its why is stale where
+      it lists T-51 among the go1.27.3 branches. Still pinning go1.27.3, local and origin alike:
+      main, slice-22, slice-27, slice-28, slice-30, T-48 and T-50. Each of those fails govulncheck
+      on GO-2026-6859 in CI until main has the line, so after the merge they need main merged in;
+      until then the one-line move on main first is still the cheaper route, and the identical line
+      merges cleanly with both carriers.
   - id: p2-engine-row-leftover-audit
     title: Each engine row ends with an audit that nothing carrying its own labels is left on the runner, so a leak fails the row that made it
     phase: 1
