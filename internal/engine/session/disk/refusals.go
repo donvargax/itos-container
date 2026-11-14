@@ -60,7 +60,8 @@ type refusalCopy struct {
 	staged approval.StagedLog
 	held   []byte
 	long   bool
-	// mu guards ended and writing, the only state Close reads.
+	// mu guards ended and writing, the only state Close reads, and is held
+	// over Close's own release of the staged log and over no other call to it.
 	mu      sync.Mutex
 	ended   bool
 	writing bool
@@ -143,14 +144,16 @@ func (c *refusalCopy) Commit() (port.RefusalReport, port.Outcome) {
 
 // Close ends the copy at once. A Write still running closes the staged log when
 // it returns; a Commit that had begun is not undone and releases it itself.
+// With neither running Close releases the staged log under mu, so a Write or a
+// Commit that finds the copy ended returns only after that release. Neither
+// holds mu across a call to the staged log, so Close still waits for none.
 func (c *refusalCopy) Close() {
 	c.mu.Lock()
-	release := !c.ended && !c.writing
-	c.ended = true
-	c.mu.Unlock()
-	if release {
+	defer c.mu.Unlock()
+	if !c.ended && !c.writing {
 		c.staged.Close()
 	}
+	c.ended = true
 }
 
 // readyRecord judges a line as the ready read does (session/docker's
