@@ -1993,3 +1993,14 @@ items:
       p2: it blocks no charter step, but slice-28 and slice-30 to slice-33 each bring real-engine
       scenarios whose red evidence is CI-only. The harness came from go-template-itos, so once it
       lands it is a backport candidate.
+
+      Belongs inside this item, which is still todo. Its text says 'Egress has none'; that is no
+      longer true on slice-27. TestEgressNativeStepsDefined
+      (features/egress_native_isolation_harness_test.go:51) is a seventh hand-written per-slice
+      check, with its own tag filter ('@slice-27 && @engine') and a hard-coded count of 8. It needed
+      its own collector, egressDefinitions, because the shared lifecycleDefinitions.Step
+      (features/lifecycle_harness_test.go:73) requires the function's argument count to equal the
+      pattern's capture count, so it fails any definition that takes a *godog.Table after its
+      captured arguments; four egress When steps have that shape. The general check must accept a
+      trailing table (and doc string) argument, or it will misreport every table step in slice-28
+      and slice-30 to 33, and it should fold this seventh check in with the other six.
