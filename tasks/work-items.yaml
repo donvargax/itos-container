@@ -2082,3 +2082,34 @@ items:
       as T-21 did for @wip scenarios; or both. Neither is a redraw to escape a failure. The same
       item settles one sentence in AGENTS.md: whether `itos-cc mutation list`, which runs no test,
       may be used locally to see the sites, given that local mutation runs are forbidden.
+  - id: p2-first-engine-row-slow-create
+    title: A shard's first engine row passes when the engine's first create takes seconds
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item owns this once T-50 lands. T-50 stops the leak and names the failure. Its fourth rule
+      leaves the slow first create to a remedy read from measured intervals, and its attempt 3
+      returned that the one limit it may move is not enough (q-63). In run 43543693012 at 73cbd13
+      all three shards failed at their first engine row (ID-OFFLINE-29, ID-ANCHORS-09,
+      ID-LIFECYCLE-08), each controller stopping with run.call-timeout, operation create response.
+      The lifecycle row's intervals: image inspection 10 ms, the recorder's checks 0.7 ms, the
+      engine's HTTP 201 2.329 s after forwarding and 3.729 s after controller start, 1.39 s of which
+      had passed before the call began. That outlives the fixture's 1-second call and also its
+      3-second startup budget, which starts before preflight
+      (internal/slices/run/command/command.go:80), so a longer call alone turns the failure into a
+      startup timeout. The same first rows failed in 5 of 6 shard jobs on slice-29's and T-51's
+      first go1.27.4 runs, and 9 in 129 are on record with a warm cache. Each costs a re-run, and
+      three have cost an implementer attempt and a question (q-59, q-61, q-63). Choose the remedy in
+      the spec, from more than this one cold-cache sample: the two create lines itos cut from that
+      run, and the passing-row intervals and I/O pressure readings that
+      p1-engine-timing-notice-every-run is to publish. If limits are the remedy, move call and
+      startup together, only through engineBudgetTree, each with a delayed-success and an expiry
+      control, T-42's cut and restart-refusal controls still valid, and the cost measured in CI
+      against the 180-second shard gate, since engineQuietInterval follows the larger limit. A warm
+      cache is p2-ci-go-build-cache-rolling-key's and does not explain the warm-cache failures. No
+      retry, skipped row, relaxed assertion or production default change. Phase p2: a re-run clears
+      each failure, so it blocks no step of milestone two, but it taxes every pull request of steps
+      1 and 2.
