@@ -88,14 +88,23 @@ func (w *world) anchorsStart() {
 	w.recovery.run = w.recoveryStart("run", "--", "/workspace/slice-17-recovery-probe")
 }
 
+// The bound of every anchor fixture wait for its worker or its recorder.
+const anchorsBarrierLimit = 35 * time.Second
+
+// anchorsAwait waits for the first probe report, or for progress past a report
+// already seen. Every wait that ends without its report says so in recovery.err.
 func (w *world) anchorsAwait(after int) anchorRecoveryProbe {
-	deadline, tick := time.NewTimer(35*time.Second), time.NewTicker(20*time.Millisecond)
+	started, wait := time.Now(), "the first probe report"
+	if after > 0 {
+		wait = "later probe progress"
+	}
+	deadline, tick := time.NewTimer(anchorsBarrierLimit), time.NewTicker(20*time.Millisecond)
 	defer deadline.Stop()
 	defer tick.Stop()
 	for {
 		select {
 		case <-deadline.C:
-			w.recovery.err = errors.Join(w.recovery.err, errors.New("anchor identity probe missed its bounded barrier"))
+			w.anchorsMissed(wait, w.anchorsExpiry(), started, after == 0)
 			return anchorRecoveryProbe{}
 		case <-tick.C:
 			var report anchorRecoveryProbe
@@ -103,16 +112,49 @@ func (w *world) anchorsAwait(after int) anchorRecoveryProbe {
 			if err == nil && json.Unmarshal(data, &report) == nil && report.Sequence > after {
 				return report
 			}
-			// After controller loss the worker is expected to outlive this process.
-			if after == 0 {
+			// A controller that exited by itself leaves no worker to report. After
+			// controller loss the worker is expected to outlive it, and a controller
+			// the fixture itself killed ends no wait: its worker may only be slow.
+			if after == 0 && !w.anchors.killed {
 				select {
 				case <-w.recovery.run.done:
-					return report
+					w.anchorsMissed(wait, "controller exited", started, true)
+					return anchorRecoveryProbe{}
 				default:
 				}
 			}
 		}
 	}
+}
+
+// How a wait that ran to its limit found the launch controller.
+func (w *world) anchorsExpiry() string {
+	select {
+	case <-w.recovery.run.done:
+		if w.anchors.killed {
+			return "limit expired after the fixture killed the controller"
+		}
+		return "limit expired after the controller exited"
+	default:
+		return "limit expired with live controller"
+	}
+}
+
+// anchorsMissed records a wait that ended without what it waited for: which
+// wait, how it ended, the elapsed time and the limit, and for a wait on the
+// launch itself the launch controller's exit and its time since start.
+func (w *world) anchorsMissed(wait, cause string, started time.Time, launch bool) {
+	text := fmt.Sprintf("anchor recovery wait for %s ended without it; %s; elapsed=%s limit=%s", wait, cause, time.Since(started), anchorsBarrierLimit)
+	if launch {
+		p := w.recovery.run
+		select {
+		case <-p.done:
+			text += fmt.Sprintf("; launch controller exit=%d after %s", p.exit, p.finished.Sub(p.started))
+		default:
+			text += "; launch controller pending"
+		}
+	}
+	w.recovery.err = errors.Join(w.recovery.err, errors.New(text))
 }
 
 func (w *world) anchorsLive() {
@@ -161,7 +203,10 @@ func (w *world) anchorsCapture() {
 
 func (w *world) anchorsKill() {
 	r := w.recovery
-	r.err = errors.Join(r.err, r.run.killController())
+	err := r.run.killController()
+	r.err = errors.Join(r.err, err)
+	// From here a dead controller is the fixture's doing and ends no wait.
+	w.anchors.killed = w.anchors.killed || err == nil
 	r.run.wait()
 	w.anchorsCapture()
 }
@@ -270,18 +315,22 @@ func (w *world) anchorsUncertain() {
 	w.anchorsStopTwice()
 }
 
-// The uncertain-startup wait for the recorder to hold the successful reply.
+// The uncertain-startup wait for the recorder to hold the successful reply. An
+// answer whose controller had already left holds nothing, so this wait then ends
+// at the controller's exit or at its limit, and says which.
 func (w *world) anchorsHeldReply() bool {
 	s, r := w.anchors, w.recovery
-	timer := time.NewTimer(35 * time.Second)
+	started := time.Now()
+	timer := time.NewTimer(anchorsBarrierLimit)
 	defer timer.Stop()
 	select {
 	case <-s.ready:
 		s.reached = true
 		return true
 	case <-r.run.done:
+		w.anchorsMissed("the held reply of uncertain startup", "controller exited", started, true)
 	case <-timer.C:
-		r.err = errors.Join(r.err, errors.New("successful startup response barrier not reached"))
+		w.anchorsMissed("the held reply of uncertain startup", w.anchorsExpiry(), started, true)
 	}
 	return false
 }

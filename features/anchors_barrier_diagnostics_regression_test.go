@@ -267,7 +267,7 @@ func requireCauseFirst(t *testing.T, name string, err, cause error, exit int, ba
 		}
 	}
 	for _, refused := range append(bare, anchorPrivate, strings.Repeat("a", 64)) {
-		if strings.Contains(text, refused) {
+		if refused != "" && strings.Contains(text, refused) {
 			t.Errorf("%s: diagnostics print %q:\n%s", name, refused, text)
 		}
 	}

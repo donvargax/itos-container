@@ -182,6 +182,19 @@ func testCreateServerClosed(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("closing the recorder server did not end the controller's request")
 	}
+	// The server notices its closed connection on a goroutine of its own. Let the
+	// recorder account for the departure before the engine answers, as the cases
+	// that drive serve directly do by waiting for the handler.
+	deadline := time.Now().Add(5 * time.Second)
+	for !createEntry(t, a).Cancelled {
+		if time.Now().After(deadline) {
+			t.Fatal("the recorder never noticed its closed server")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if problem := createProblem(a); problem != createAbandonedWords {
+		t.Errorf("plain fixture problem after its server closed = %q, want %q", problem, createAbandonedWords)
+	}
 	e.finish()
 	a.awaitCreates()
 	requireAbandonedAccounting(t, w, e, token)

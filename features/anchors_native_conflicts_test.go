@@ -25,8 +25,8 @@ func anchorsProblem(p *recoveryProcess, rule string, code int) error {
 }
 
 func (w *world) anchorsForeignRefused() error {
-	if w.recovery.err != nil {
-		return w.recovery.err
+	if err := w.anchorsCause(); err != nil {
+		return err
 	}
 	if !w.anchorsFailedRelease() || w.anchors.foreign == nil {
 		return errors.New("product never reached owned anchor release after confirmed worker absence")
@@ -85,6 +85,14 @@ func (w *world) anchorsForeignPreserved() error {
 
 func (w *world) anchorsPairCompleted() error {
 	r, s := w.recovery, w.anchors
+	// A's recorded cause, then B's, before any bare precondition: either explains
+	// why the stops never overlapped or why B stopped making progress.
+	if err := w.anchorsCause(); err != nil {
+		return err
+	}
+	if err := r.second.anchorsCause(); err != nil {
+		return err
+	}
 	if !s.reached || len(r.stops) != 3 || !r.stops[0].finished.After(r.stops[1].started) {
 		return errors.New("two stops did not overlap at the original anchor release")
 	}

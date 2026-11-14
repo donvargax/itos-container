@@ -50,9 +50,10 @@ func (w *world) anchorSelectedRecords() (map[string]string, error) {
 }
 
 func (w *world) anchorRetained() error {
-	s := w.anchor
+	s, o := w.anchor, w.offline
 	if s.err != nil {
-		return fmt.Errorf("native retention observations unavailable: %w", s.err)
+		return fmt.Errorf("native retention observations unavailable: %w\ncontroller exit=%d reached=%t probe-frames=%d\nnative anchor diagnostics:\n%s",
+			s.err, o.exit, s.reached, len(s.reports), w.anchorRecoveryDiagnostics())
 	}
 	if !s.reached || len(s.volumes) != 1 || len(s.records) == 0 || len(s.retainedRecords) == 0 {
 		return errors.New("missing original owned volume and protected recovery evidence after controller exit")

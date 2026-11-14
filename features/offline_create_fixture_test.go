@@ -268,7 +268,13 @@ func startCreate(t *testing.T, w *world, e *createEngine, token string) *createC
 	select {
 	case <-e.arrived:
 	case <-c.returned:
-		t.Fatalf("recorder answered HTTP %d before forwarding the create", c.response.Code)
+		// An engine that answers at once can have the handler return before this
+		// select runs; its arrival token is then already waiting.
+		select {
+		case <-e.arrived:
+		default:
+			t.Fatalf("recorder answered HTTP %d before forwarding the create", c.response.Code)
+		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("create never reached the engine")
 	}
