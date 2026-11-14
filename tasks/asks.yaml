@@ -251,3 +251,6 @@ questions:
     item: "T-51"
     question: "T-51 narrows decision 0017's sentence 'A pending storage operation keeps its lock until it returns' to the operations that hold a lock, which the staged refusal log does not (decision 0022, 'What T-51 settled'). Confirm the narrowing, or keep 0017 as written by running the copy's Commit through the session's gate, which changes T-40's protocol?"
     answer: "Confirmed by the coordinator for the person to ratify: the narrowing stands. The file's integrity does not rest on a lock (each publication is one rename of its own fsynced temporary, called only after a complete read of a stopped proxy), a copy is not a record, and the alternative stalls stop's failed record behind a pending commit and reopens T-40's protocol. The same confirmation covers Close's own cost outside a budget call (one close, one unlink, the pin's release). Its premise, that every complete read stores the same bytes, is now noted on p1-platform-log-redaction, which will break it. Undo: overturn this answer and add a task before slice-28 that runs Commit through the session's gate."
+  - id: q-63
+    item: "T-50"
+    question: "T-50: the implementer (attempt 3) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-50-implementer-3.result.json"
