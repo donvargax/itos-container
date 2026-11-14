@@ -54,7 +54,9 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 	if !absoluteCredentialPath(c.Input.Root) {
 		return boundary("checkout.root")
 	}
-	if !absoluteCredentialPath(c.Input.State) {
+	// Linux opens a path that is not UTF-8, but the shared state rules refuse
+	// such a selection. ToValidUTF8 returns only a valid string unchanged.
+	if !absoluteCredentialPath(c.Input.State) || strings.ToValidUTF8(c.Input.State, "") != c.Input.State {
 		return boundary("state.location")
 	}
 	if !absoluteCredentialPath(c.Input.AccountState) {

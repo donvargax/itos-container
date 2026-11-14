@@ -1697,7 +1697,7 @@ Feature: Named credential requests and read-only source inspection
   # The new Given points the selection at an existing private tree, mode 0700
   # and owned by the user, whose path holds the byte 0xff: nothing but its
   # encoding can refuse it. Before the fix both examples exited 0.
-  @wip @slice-29 @ID-CREDENTIALS-59 @linux
+  @slice-29 @ID-CREDENTIALS-59 @linux
   Scenario Outline: a selected state path that is not valid UTF-8 keeps the shared state-location refusal
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
@@ -1732,7 +1732,7 @@ Feature: Named credential requests and read-only source inspection
   # export's device and report root "/". A checkout subdirectory is also
   # covered by a host submount, as in ID-CREDENTIALS-55, so the inventory sees
   # only the covering entry. Before the fix all six examples exited 0.
-  @wip @slice-29 @ID-CREDENTIALS-60 @linux
+  @slice-29 @ID-CREDENTIALS-60 @linux
   Scenario Outline: credential inspection refuses NFS mounts, whose rows hide the mounted subdirectory
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the credential source is a second "<filesystem>" mount of "<subdirectory>" from the export mounted at "<point>"

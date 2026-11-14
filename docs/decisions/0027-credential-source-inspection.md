@@ -487,3 +487,17 @@ ancestor-only aliases, projected checkout roots, subvolume identities and safe
 sibling/device controls. Targeted readiness packages pass under the race detector.
 These fixtures supply raw observations without native mounts; native-engine
 evidence and fresh changed-code proof remain CI-owned.
+
+The NFS and state-encoding regressions were committed pending in `6957680`. With
+`@wip` removed before the fix, all eight examples failed at their behavior
+assertions. ID-CREDENTIALS-59's two selections exited 0 with `ok: true` instead of
+`approval.state.location`. ID-CREDENTIALS-60's six export layouts returned
+`ok: true`, no problems and exit 0 instead of `credential.filesystem`. All eight
+now pass, with ID-CREDENTIALS-47 and 51 to 55 run beside them. In the shared
+fake/disk contract, the 60 NFS mount-matrix rows and six export-subdirectory rows
+failed against each implementation before the fix and pass after it; the `nfsd`
+and ext4 controls passed throughout. No NFS export was mounted: these are
+synthetic observations, and the kernel behavior rests on its source. The code
+proof at `8e5088e` also left one change alive in the mount mapping, a failed stat
+that still reported the pinned identity; `8930ebe` pins that refusal. Fresh code
+proof remains CI-owned.

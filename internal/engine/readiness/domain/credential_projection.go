@@ -133,7 +133,7 @@ func (s *credentialScan) project(source credentialWalk, boundary credentialProje
 	// An empty failed descriptor must not make every absolute mount relevant.
 	protected := append([]string{p.checkout.visible}, statePaths...)
 	for _, m := range mounts {
-		if credentialStackingFilesystem(m) {
+		if credentialUnmappedFilesystem(m) {
 			for _, path := range protected {
 				if credentialDescendant(path, m.Point) || credentialDescendant(m.Point, path) {
 					p.failure = "credential.filesystem"
@@ -149,7 +149,7 @@ func (s *credentialScan) project(source credentialWalk, boundary credentialProje
 			p.failure = failure
 			return p
 		}
-		if credentialStackingFilesystem(rows[m.mount]) {
+		if credentialUnmappedFilesystem(rows[m.mount]) {
 			p.failure = "credential.filesystem"
 			return p
 		}
@@ -207,9 +207,14 @@ func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.Credential
 	return credentialMapping{credentialCoordinate{row.Device, credentialMountCoordinate(row, d.Path)}, d.Path, d.MountID}, ""
 }
 
-func credentialStackingFilesystem(row port.CredentialMount) bool {
+// A row of these types does not place the files it shows. Overlay and FUSE
+// present backing files under other identities. For nfs and nfs4 the kernel
+// prints "/" as the root of every mount, whatever export subdirectory it is
+// rooted at, so a second mount of a protected subdirectory projects beside it.
+func credentialUnmappedFilesystem(row port.CredentialMount) bool {
 	return row.Filesystem == "overlay" || row.Filesystem == "fuse" || row.Filesystem == "fuseblk" ||
-		strings.HasPrefix(row.Filesystem, "fuse.") || strings.HasPrefix(row.Filesystem, "fuseblk.")
+		strings.HasPrefix(row.Filesystem, "fuse.") || strings.HasPrefix(row.Filesystem, "fuseblk.") ||
+		row.Filesystem == "nfs" || row.Filesystem == "nfs4"
 }
 
 // Validated root and visible paths are each at most 4096 bytes. The relative

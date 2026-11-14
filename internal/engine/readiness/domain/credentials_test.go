@@ -314,6 +314,24 @@ func TestCredentialStackingMountRelevance(t *testing.T) {
 		{"/checkout-sibling", "overlay", false},
 		{"/unrelated", "fuse.bindfs", false},
 		{"/checkout", "ext4", false},
+		{"/checkout", "fuse", true},
+		{"/state", "fuseblk", true},
+		{"/vault", "fuseblk.ntfs", true},
+		// The kernel prints "/" as the root of every nfs and nfs4 row, so the
+		// row cannot place a second mount of an export subdirectory.
+		{"/", "nfs", true},
+		{"/checkout", "nfs", true},
+		{"/checkout/child", "nfs4", true},
+		{"/state", "nfs4", true},
+		{"/state/child", "nfs", true},
+		{"/fixed/child", "nfs4", true},
+		{"/vault", "nfs", true},
+		{"/vault/token", "nfs4", true},
+		{"/unrelated", "nfs", false},
+		{"/checkout-sibling", "nfs4", false},
+		// Neither control filesystem is a FUSE or an NFS mount.
+		{"/checkout", "nfsd", false},
+		{"/checkout", "fusectl", false},
 	} {
 		t.Run(tc.filesystem+tc.point, func(t *testing.T) {
 			f, c, grants := credentialDomainFixture()
@@ -336,6 +354,72 @@ func TestCredentialStackingMountRelevance(t *testing.T) {
 				t.Fatalf("issues %#v, want %#v", got.Issues, want)
 			}
 		})
+	}
+}
+
+// One export covers "/" and a protected tree's private subdirectory is mounted
+// a second time over the source's parent. Both rows carry the export's device
+// and the root "/", so the source projects beside the tree and no pinned
+// identity matches: state is never enumerated, and a submount hides the
+// checkout's entry from inventory. The same rows on ext4 name an independent file.
+func TestCredentialExportSubdirectoryMountedOverSource(t *testing.T) {
+	for _, filesystem := range []string{"nfs", "nfs4", "ext4"} {
+		for _, tree := range []string{"state", "checkout under a submount"} {
+			t.Run(filesystem+" "+tree, func(t *testing.T) {
+				f, c, grants := credentialDomainFixture()
+				for path, n := range f.Nodes {
+					n.Device, n.MountID = 50, 2
+					if path == "/vault" || path == "/vault/token" {
+						n.MountID = 3
+					}
+					f.Nodes[path] = n
+				}
+				rows := []port.CredentialMount{
+					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "tmpfs"},
+					{ID: 2, Device: 50, Root: "/", Point: "/", Filesystem: filesystem},
+					{ID: 3, Device: 50, Root: "/", Point: "/vault", Filesystem: filesystem},
+				}
+				if tree != "state" {
+					cover := f.Nodes["/checkout"]
+					cover.Path, cover.Device, cover.Inode, cover.MountID = "/checkout/private", 2, 92, 4
+					f.Nodes[cover.Path] = cover
+					rows = append(rows, port.CredentialMount{ID: 4, Device: 2, Root: "/", Point: cover.Path, Filesystem: "tmpfs"})
+				}
+				f.Parser = func([]byte) ([]port.CredentialMount, bool) { return rows, true }
+				var want []port.CredentialIssue
+				if filesystem != "ext4" {
+					want = []port.CredentialIssue{{Rule: "credential.filesystem", Index: 0}}
+				}
+				if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+					t.Fatalf("issues %#v, want %#v", got.Issues, want)
+				}
+				if f.Calls["state enumeration"] != 0 || f.Calls["state metadata"] != 0 {
+					t.Fatalf("visited state records: %v", f.Calls)
+				}
+			})
+		}
+	}
+}
+
+// Linux opens a path that is not UTF-8, so only this check keeps the shared
+// state-location refusal. It precedes every filesystem observation.
+func TestCredentialStateLocationMustBeValidUTF8(t *testing.T) {
+	for _, state := range []string{"/state\xff", "/\xc3(/state", "/state/\xed\xa0\x80"} {
+		f, c, grants := credentialDomainFixture()
+		c.Input.State = state
+		want := []port.CredentialIssue{{Rule: "state.location", Index: -1}}
+		if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+			t.Fatalf("%q: issues %#v, want %#v", state, got.Issues, want)
+		}
+		if len(f.Calls) != 0 {
+			t.Fatalf("%q: observed the filesystem before refusing: %v", state, f.Calls)
+		}
+	}
+	// A valid multi-byte selection, absent under a safe ancestor, stays accepted.
+	_, c, grants := credentialDomainFixture()
+	c.Input.State = "/\u00e9tat-\u65e5\u672c"
+	if got := c.Inspect(grants); len(got.Issues) != 0 {
+		t.Fatalf("valid UTF-8 state location refused: %#v", got.Issues)
 	}
 }
 
