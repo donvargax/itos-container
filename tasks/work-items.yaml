@@ -1698,6 +1698,22 @@ items:
       the engine's answer and from the answer to the reply. Durations only, pinned in
       TestAnchorRecoveryBarrierDiagnostics. The notice covers each shard's first row. The launch
       line covers any row, in the two channels an agent can read today.
+
+      Belongs with this item's runner evidence. It is a per-run reading that must print on green
+      runs too, so cold and warm runs can be compared, and the preflight's exact allowlist
+      (validEnginePreflight) cannot carry it. It is a hypothesis, not a finding: the cold compile
+      before a shard's first row leaves the runner writing back a large build cache, and the
+      engine's create waits on disk. T-51's run 43538972827 logged 'Cache is not found' and 19 to 24
+      s of compilation before each failed first row, and T-50's run 43543693012 measured 2.33 s of
+      engine time for the lifecycle row's create. Fold in: just before the first engine row, record
+      /proc/pressure/io and the Dirty and Writeback lines of /proc/meminfo, and publish them in the
+      notice beside the first row's create intervals. Two cold builds precede that row: go test -c
+      in the step (ci.yml:135) and the product's -cover build at the start of TestFeatures
+      (features/features_test.go:85). So read after the second, in the harness, not between the
+      step's compile and its test run. Numbers only, and an absent /proc/pressure/io is said, not a
+      failure. The reading confirms or refutes the hypothesis on the next cold run. The remedy is
+      not this item's: it belongs to p2-first-engine-row-slow-create, added by the same triage, and
+      the warm cache to p2-ci-go-build-cache-rolling-key.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
