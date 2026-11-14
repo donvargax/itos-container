@@ -534,3 +534,16 @@ synthetic observations, and the kernel behavior rests on its source. The code
 proof at `8e5088e` also left one change alive in the mount mapping, a failed stat
 that still reported the pinned identity; `8930ebe` pins that refusal. Fresh code
 proof remains CI-owned.
+
+The 9p regression was committed pending in `5e6c32a`. With `@wip` removed before
+the fix, all three ID-CREDENTIALS-61 examples failed at the source-problem
+assertion: inspection returned `ok: true`, no problems and exit 0 instead of
+`credential.filesystem`. All three now pass. In the shared fake/disk contract, the
+30 9p mount-matrix rows and three second-mount rows failed against each
+implementation before the fix and pass after it; the ext4 controls passed
+throughout. The domain's own tests hold the same rows, and a control in which the
+checkout's entry carries the source's device is refused as a known location, so
+inventory does reach that entry. No 9p export was mounted: these are synthetic
+observations, and the kernel behavior rests on its source. The code proof at
+`2ac05a4` left one change alive in the disk adapter, a nonzero mount ID returned
+beside a refused fdinfo parse; `5cdeabb` pins it. Fresh code proof remains CI-owned.

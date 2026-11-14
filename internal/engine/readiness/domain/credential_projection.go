@@ -211,10 +211,13 @@ func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.Credential
 // present backing files under other identities. For nfs and nfs4 the kernel
 // prints "/" as the root of every mount, whatever export subdirectory it is
 // rooted at, so a second mount of a protected subdirectory projects beside it.
+// Every 9p mount prints that root too and has a device of its own, so a second
+// mount matches its tree in neither coordinate nor identity.
+// This is a list of the types examined so far, not of every such type.
 func credentialUnmappedFilesystem(row port.CredentialMount) bool {
 	return row.Filesystem == "overlay" || row.Filesystem == "fuse" || row.Filesystem == "fuseblk" ||
 		strings.HasPrefix(row.Filesystem, "fuse.") || strings.HasPrefix(row.Filesystem, "fuseblk.") ||
-		row.Filesystem == "nfs" || row.Filesystem == "nfs4"
+		row.Filesystem == "nfs" || row.Filesystem == "nfs4" || row.Filesystem == "9p"
 }
 
 // Validated root and visible paths are each at most 4096 bytes. The relative

@@ -1774,7 +1774,7 @@ Feature: Named credential requests and read-only source inspection
   # rooted at <subdirectory>, over the source's parent directory. For 9p the
   # second row carries a device of its own, and no submount covers the
   # checkout's entry: inventory visits it. Before the fix all three examples exited 0.
-  @wip @slice-29 @ID-CREDENTIALS-61 @linux
+  @slice-29 @ID-CREDENTIALS-61 @linux
   Scenario Outline: credential inspection refuses 9p mounts, each of which has a device of its own
     Given a credential observation fixture for "protected state" with "distinct outside file"
     And the credential source is a second "9p" mount of "<subdirectory>" from the export mounted at "<point>"

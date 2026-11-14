@@ -79,7 +79,7 @@ func credentialProblem(issue readiness.CredentialIssue) readiness.Problem {
 	case "credential.mount_id":
 		p.Message, p.Fix, p.Exit = "Credential mount identity STATX_MNT_ID is unavailable", "use a host kernel that exposes STATX_MNT_ID for every source and protected boundary", 3
 	case "credential.filesystem":
-		p.Message, p.Fix, p.Exit = "Overlay or FUSE backing paths cannot be excluded from credential exposure, nor can paths on NFS", "use source, checkout and state paths on filesystems with projectable backing paths", 3
+		p.Message, p.Fix, p.Exit = "Overlay or FUSE backing paths cannot be excluded from credential exposure, nor can paths on NFS or 9p", "use source, checkout and state paths on filesystems with projectable backing paths", 3
 	case "credential.symlink":
 		p.Message, p.Fix = "Credential path contains a symbolic link", "use a source with no symbolic link in any path component"
 	case "credential.ancestor":

@@ -33,7 +33,7 @@ func TestCredentialDiagnosticEnvelope(t *testing.T) {
 	}
 	// One rule refuses every filesystem whose mount rows cannot place a file.
 	message := credentialProblem(readiness.CredentialIssue{Rule: "credential.filesystem"}).Message
-	for _, kind := range []string{"Overlay", "FUSE", "NFS"} {
+	for _, kind := range []string{"Overlay", "FUSE", "NFS", "9p"} {
 		if !strings.Contains(message, kind) {
 			t.Fatalf("filesystem refusal does not name %s: %q", kind, message)
 		}

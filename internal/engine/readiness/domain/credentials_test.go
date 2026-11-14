@@ -329,6 +329,17 @@ func TestCredentialStackingMountRelevance(t *testing.T) {
 		{"/vault/token", "nfs4", true},
 		{"/unrelated", "nfs", false},
 		{"/checkout-sibling", "nfs4", false},
+		// Every 9p mount has a device of its own and prints "/" as its root.
+		{"/", "9p", true},
+		{"/checkout", "9p", true},
+		{"/checkout/child", "9p", true},
+		{"/state", "9p", true},
+		{"/state/child", "9p", true},
+		{"/fixed/child", "9p", true},
+		{"/vault", "9p", true},
+		{"/vault/token", "9p", true},
+		{"/unrelated", "9p", false},
+		{"/checkout-sibling", "9p", false},
 		// Neither control filesystem is a FUSE or an NFS mount.
 		{"/checkout", "nfsd", false},
 		{"/checkout", "fusectl", false},
@@ -388,6 +399,65 @@ func TestCredentialExportSubdirectoryMountedOverSource(t *testing.T) {
 				f.Parser = func([]byte) ([]port.CredentialMount, bool) { return rows, true }
 				var want []port.CredentialIssue
 				if filesystem != "ext4" {
+					want = []port.CredentialIssue{{Rule: "credential.filesystem", Index: 0}}
+				}
+				if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+					t.Fatalf("issues %#v, want %#v", got.Issues, want)
+				}
+				if f.Calls["state enumeration"] != 0 || f.Calls["state metadata"] != 0 {
+					t.Fatalf("visited state records: %v", f.Calls)
+				}
+			})
+		}
+	}
+}
+
+// Every 9p mount has a device of its own and prints "/" as its root. A
+// protected tree's private subdirectory is mounted a second time over the
+// source's parent, so its rows differ in device and agree on the root. No
+// coordinate places the source in the tree and no identity matches, although
+// the inode numbers do: inventory meets the checkout's own entry on the first
+// device. The same rows on ext4 are two devices and an independent file.
+func TestCredentialSecondMountOnItsOwnDevice(t *testing.T) {
+	for _, filesystem := range []string{"9p", "ext4"} {
+		for _, tree := range []struct {
+			name, root string
+			shared     bool
+		}{{"state", "/state", false}, {"checkout", "/checkout", false}, {"checkout entry on the source's device", "/checkout", true}} {
+			root, shared := tree.root, tree.shared
+			t.Run(filesystem+" "+tree.name, func(t *testing.T) {
+				f, c, grants := credentialDomainFixture()
+				for path, n := range f.Nodes {
+					n.Device, n.MountID = 50, 2
+					f.Nodes[path] = n
+				}
+				private := f.Nodes["/vault"]
+				private.Path, private.Inode = root+"/private", 91
+				f.Nodes[private.Path] = private
+				token := f.Nodes["/vault/token"]
+				token.Path = private.Path + "/token"
+				if shared {
+					// The control: inventory does reach this entry, and under the
+					// source's own device it is the known identity it looks for.
+					token.Device = 51
+				}
+				f.Nodes[token.Path] = token
+				private.Path, private.Device, private.MountID = "/vault", 51, 3
+				f.Nodes[private.Path] = private
+				token.Path, token.Device, token.MountID = "/vault/token", 51, 3
+				f.Nodes[token.Path] = token
+				rows := []port.CredentialMount{
+					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "tmpfs"},
+					{ID: 2, Device: 50, Root: "/", Point: "/", Filesystem: filesystem},
+					{ID: 3, Device: 51, Root: "/", Point: "/vault", Filesystem: filesystem},
+				}
+				f.Parser = func([]byte) ([]port.CredentialMount, bool) { return rows, true }
+				var want []port.CredentialIssue
+				switch {
+				case shared:
+					// A known identity keeps its precedence over the filesystem refusal.
+					want = []port.CredentialIssue{{Rule: "credential.location", Index: 0}}
+				case filesystem != "ext4":
 					want = []port.CredentialIssue{{Rule: "credential.filesystem", Index: 0}}
 				}
 				if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
