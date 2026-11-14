@@ -1732,21 +1732,9 @@ items:
     title: The policy file accepts named credential sources and doctor validates them without reading their contents
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-47]
     kind: slice
-    why: >
-      Was p1-credentials-policy-sources.
-      Charter step 2: the credential grants are part of the approved settings, so they start in
-      itos-container.yaml, as the egress allowlist did in slice-25. Scenarios first: a closed
-      credentials section naming each source by kind (Claude token file, Codex auth file, GitHub
-      token file) with an absolute host path. Unknown kinds, duplicates, relative or empty paths,
-      and paths inside the checkout or any mount are refused with a located diagnostic. Doctor
-      reports a missing, non-regular, group- or world-accessible, or foreign-owned source, and shows
-      the effective grants. It never prints, hashes or logs contents. It does not execute checkout
-      code and starts no engine. Offline policies without the section are unchanged. docs/CONFIG.md
-      and docs/CLI.md are updated, and the published policy schema moves with it. It takes the keys
-      and checks from the decision record. Broken down from p1-credentials-passed-in.
   - id: slice-30
     title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
     phase: 1
