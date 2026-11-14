@@ -2,7 +2,9 @@ package command
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/donvargax/itos-container/internal/cli"
 	"github.com/donvargax/itos-container/internal/engine/policy/port"
@@ -11,9 +13,10 @@ import (
 type policyProblem = port.Problem
 
 type effectivePolicy struct {
-	Version  int              `json:"version"`
-	Manifest string           `json:"manifest"`
-	Network  effectiveNetwork `json:"network"`
+	Version     int               `json:"version"`
+	Manifest    string            `json:"manifest"`
+	Network     effectiveNetwork  `json:"network"`
+	Credentials []port.Credential `json:"credentials,omitempty"`
 }
 
 type effectiveNetwork struct {
@@ -33,7 +36,9 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 	}
 	var policy *effectivePolicy
 	if result.Policy != nil {
-		policy = &effectivePolicy{result.Policy.Version, result.Policy.Manifest, effectiveNetwork{result.Policy.Network.Mode, result.Policy.Network.Allow}}
+		grants := slices.Clone(result.Policy.Credentials)
+		slices.SortFunc(grants, func(a, b port.Credential) int { return strings.Compare(a.Kind, b.Kind) })
+		policy = &effectivePolicy{result.Policy.Version, result.Policy.Manifest, effectiveNetwork{result.Policy.Network.Mode, result.Policy.Network.Allow}, grants}
 	}
 	if withJSON {
 		u.JSON(struct {
@@ -50,6 +55,9 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 		// Canonical names are ASCII host-name characters, so they need no escaping.
 		for _, name := range policy.Network.Allow {
 			_, _ = fmt.Fprintf(u.Stdout, "network.allow: %s\n", name)
+		}
+		for _, grant := range policy.Credentials {
+			_, _ = fmt.Fprintf(u.Stdout, "credentials.%s.source: %s\n", grant.Kind, printable(grant.Source))
 		}
 		_, _ = fmt.Fprintln(u.Stdout, "Host readiness and approval were not checked")
 	}

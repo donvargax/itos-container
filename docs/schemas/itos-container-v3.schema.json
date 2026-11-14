@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "itos-container policy version 3",
+  "description": "A policy request, never approval or access to a credential. Versions 1 and 2 remain unchanged. YAML representation, UTF-8 byte limits and host metadata checks in docs/CONFIG.md also apply; JSON Schema cannot express those observations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "manifest"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 3
+    },
+    "manifest": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?![\\s\\S]*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\\\u0000-\\u001f\\u007f]+(?:/[^/\\\\\\u0000-\\u001f\\u007f]+)*$(?![\\s\\S])",
+      "description": "Literal relative path using slash separators; no empty or dot components, drives, backslashes or ASCII controls."
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "mode": "offline"
+      },
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "offline",
+            "allowlist"
+          ],
+          "default": "offline"
+        },
+        "allow": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A full DNS host name of at least two labels, at most 1024 bytes of UTF-8 text before canonicalising (JSON Schema counts characters, not bytes, so the limit is not expressed here). Case, one trailing dot and Unicode spellings are canonicalised before use. Literal addresses in any spelling, wildcards, suffix shortcuts, ports, URLs, paths and spaces are refused, as is a repeat of an earlier entry's canonical name."
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "description": "Offline, the default: mode is offline or absent and there is no allow, not even an empty one.",
+          "properties": {
+            "mode": {
+              "const": "offline"
+            }
+          },
+          "not": {
+            "required": [
+              "allow"
+            ]
+          }
+        },
+        {
+          "description": "Allowlist: mode is written, and so is a nonempty allow.",
+          "required": [
+            "mode",
+            "allow"
+          ],
+          "properties": {
+            "mode": {
+              "const": "allowlist"
+            }
+          }
+        }
+      ]
+    },
+    "credentials": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "description": "Optional requests, each kind at most once. Omission means no grants. Parsing neither opens nor stats source files.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "source"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "claude-token",
+              "github-token"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 4095,
+            "pattern": "^/(?!\\.{1,2}(?:/|$))(?![\\s\\S]*/\\.{1,2}(?:/|$))[^/\\\\\\u0000-\\u001f\\u007f]+(?:/[^/\\\\\\u0000-\\u001f\\u007f]+)*$(?![\\s\\S])",
+            "description": "Literal absolute slash-separated path, at most 4095 UTF-8 bytes, the longest path Linux names (maxLength counts characters only). No expansion, empty or dot components, backslashes, trailing slash or ASCII controls. Host checks separately require a private independent host-owned regular file of 1..65536 bytes, safe ancestors and exclusion from checkout and protected state."
+          }
+        }
+      },
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "kind": {
+                "const": "claude-token"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "kind": {
+                "const": "github-token"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        }
+      ]
+    }
+  }
+}

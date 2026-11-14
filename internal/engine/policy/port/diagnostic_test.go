@@ -27,8 +27,8 @@ func TestFixNamesTheVersionRead(t *testing.T) {
 	}{
 		{port.Issue{Kind: port.Type, Version: 1}, "policy.type", "use the field type defined by policy version 1"},
 		{port.Issue{Kind: port.Type, Version: 2}, "policy.type", "use the field type defined by policy version 2"},
-		{port.Issue{Kind: port.Type}, "policy.type", "use the field type defined by policy version 1 or 2"},
-		{port.Issue{Kind: port.Version}, "policy.version", "use policy version 1 or 2"},
+		{port.Issue{Kind: port.Type}, "policy.type", "use the field type defined by policy version 1, 2 or 3"},
+		{port.Issue{Kind: port.Version}, "policy.version", "use policy version 1, 2 or 3"},
 		{port.Issue{Kind: port.Version, Version: 2}, "policy.version", "use policy version 1, or read what a version 2 file requests with doctor --policy-only"},
 		{port.Issue{Kind: port.UnknownKey, Version: 1}, "policy.unknown_key", "remove fields absent from the version 1 schema"},
 		{port.Issue{Kind: port.UnknownKey, Version: 2}, "policy.unknown_key", "remove fields absent from the version 2 schema"},
@@ -59,5 +59,29 @@ func TestAllowlistDiagnostics(t *testing.T) {
 		if strings.Contains(got.Fix, "version 1") {
 			t.Errorf("a version 2 fix names version 1: %q", got.Fix)
 		}
+	}
+}
+
+// A source refusal's fix names the limit the rule applies: 4095 bytes, the
+// longest path Linux names, counted in UTF-8 bytes.
+func TestCredentialDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		kind       port.Failure
+		rule, path string
+		field      []string
+	}{
+		{port.CredentialsEmpty, "policy.credentials_empty", "/credentials", []string{"credentials"}},
+		{port.CredentialKind, "policy.credential_kind", "/credentials/1/kind", []string{"credentials", "1", "kind"}},
+		{port.CredentialDuplicate, "policy.credential_duplicate", "/credentials/1/kind", []string{"credentials", "1", "kind"}},
+		{port.CredentialSource, "policy.credential_source", "/credentials/1/source", []string{"credentials", "1", "source"}},
+	} {
+		got := port.Diagnostic(port.Issue{Kind: tc.kind, Path: tc.field, Version: 3})
+		if got.Rule != tc.rule || got.Exit != 2 || got.Message == "" || got.Fix == "" || got.File != "itos-container.yaml" || got.Path != tc.path {
+			t.Errorf("Diagnostic(%v) = %#v", tc.kind, got)
+		}
+	}
+	got := port.Diagnostic(port.Issue{Kind: port.CredentialSource, Version: 3})
+	if !strings.Contains(got.Fix, "at most 4095 UTF-8 bytes") {
+		t.Errorf("source fix does not name its byte limit: %q", got.Fix)
 	}
 }

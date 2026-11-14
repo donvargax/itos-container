@@ -11,14 +11,17 @@ import (
 
 // CLI is the doctor command, with its inspection capability injected by main.
 type CLI struct {
-	Approval     approval.Inspector    `kong:"-"`
-	Presentation approval.Presentation `kong:"-"`
-	Policies     port.Policies         `kong:"-"`
-	Manifests    port.Manifests        `kong:"-"`
-	Readiness    port.Readiness        `kong:"-"`
-	PolicyOnly   bool                  `name:"policy-only" negatable:"" help:"Validate only itos-container.yaml, without manifest, host or approval checks."`
-	ManifestOnly bool                  `name:"manifest-only" negatable:"" help:"Validate policy and manifest only; image metadata, host readiness and approval are not checked."`
-	JSON         bool                  `name:"json" negatable:"" env:"ITOS_JSON" help:"Print one JSON object."`
+	Approval        approval.Inspector    `kong:"-"`
+	Presentation    approval.Presentation `kong:"-"`
+	Policies        port.Policies         `kong:"-"`
+	RootPolicies    port.Policies         `kong:"-"` // reads through the root Credentials pins
+	Manifests       port.Manifests        `kong:"-"`
+	Readiness       port.Readiness        `kong:"-"`
+	Credentials     port.Credentials      `kong:"-"`
+	PolicyOnly      bool                  `name:"policy-only" negatable:"" help:"Validate only itos-container.yaml, without manifest, host or approval checks."`
+	ManifestOnly    bool                  `name:"manifest-only" negatable:"" help:"Validate policy and manifest only; image metadata, host readiness and approval are not checked."`
+	CredentialsOnly bool                  `name:"credentials-only" negatable:"" help:"Inspect source metadata without reading credential contents; does not approve."`
+	JSON            bool                  `name:"json" negatable:"" env:"ITOS_JSON" help:"Print one JSON object."`
 }
 
 // Help documents the implemented inspection scope and machine contract.
@@ -26,6 +29,8 @@ func (CLI) Help() string {
 	return "\nUse --policy-only to validate itos-container.yaml in the effective working directory.\n" +
 		"Use --manifest-only to validate the selected manifest and checkout workspace.\n" +
 		"Image metadata, host readiness and approval were not checked by these modes.\n\n" +
+		"    --credentials-only inspects metadata without reading credential contents.\n" +
+		"    This does not approve; manifest, engine and approval are not checked.\n\n" +
 		"    Ordinary doctor inspects the checkout, local engine and exact cached image.\n" +
 		"    --json prints schema 1, ok, problems, effective data and inspection facts.\n" +
 		"    File-only modes identify their scope as policy or manifest.\n" +
@@ -33,22 +38,30 @@ func (CLI) Help() string {
 		"    Exit codes:\n" +
 		"      0  policy validation succeeded; other requested inspections also succeeded\n" +
 		"      1  unsupported or changed checkout, host, engine or image, or control state that is\n" +
-		"         unsafe, invalid or exposed to a worker checkout\n" +
+		"         unsafe, invalid or exposed to a worker checkout; unsafe credential source metadata or location\n" +
 		"      2  invalid policy or command line, or invalid selected manifest, or a state location that\n" +
 		"         is relative or not valid UTF-8 (approval.state.location)\n" +
 		"      3  policy cannot be read, or another required local resource is unavailable,\n" +
-		"         including the account home or retained control state\n" +
+		"         including the account home or retained control state;\n" +
+		"         missing credential source or unavailable credential evidence\n" +
 		"      75 engine inspection failed or exceeded five seconds, or the control-state lock\n" +
 		"         was still held after ten seconds (approval.state.busy; retry the same command)\n"
 }
 
 // Run reports the domain's inspection result through the UI.
 func (c CLI) Run(ui *cli.UI) int {
-	if c.PolicyOnly && c.ManifestOnly {
-		return ui.Usage("doctor", fmt.Errorf("--manifest-only and --policy-only cannot be combined"), c.JSON)
+	if c.PolicyOnly && c.ManifestOnly || c.CredentialsOnly && (c.PolicyOnly || c.ManifestOnly) {
+		return ui.Usage("doctor", fmt.Errorf("--manifest-only, --policy-only and --credentials-only cannot be combined"), c.JSON)
 	}
 	if c.PolicyOnly {
 		return presentPolicy(ui, domain.Inspect(c.Policies), c.JSON)
+	}
+	if c.CredentialsOnly {
+		policy, result := domain.InspectCredentials(c.RootPolicies, c.Credentials)
+		if result == nil {
+			return presentPolicy(ui, policy, c.JSON)
+		}
+		return presentCredentials(ui, requestedCredentials(policy), *result, c.JSON)
 	}
 	if !c.ManifestOnly {
 		if c.Approval != nil {
