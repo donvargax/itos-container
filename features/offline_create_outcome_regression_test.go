@@ -3,14 +3,18 @@ package features
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/cucumber/godog"
 )
 
 // T-50: the recorder hears out every create it forwards. Each case drives serve,
@@ -41,7 +45,13 @@ func TestOfflineRecorderRecordsAbandonedCreate(t *testing.T) {
 		}
 		t.Run("connected controller", func(t *testing.T) { synctest.Test(t, func(t *testing.T) { testCreateAllowance(t, "plain", true) }) })
 	})
-	t.Run("step wait", func(t *testing.T) { synctest.Test(t, testCreateStepWait) })
+	t.Run("step wait", func(t *testing.T) {
+		(&world{}).awaitCreateOutcomes() // a scenario without a native recorder
+		for last, name := range createStepWorlds {
+			t.Run(name+" finishes last", func(t *testing.T) { synctest.Test(t, func(t *testing.T) { testCreateStepWait(t, last) }) })
+		}
+		t.Run("runs after every step of a scenario", testCreateStepHook)
+	})
 	t.Run("engine-side failure with the controller connected", testCreateEngineFailure)
 	t.Run("ordinary create", testCreateOrdinary)
 }
@@ -136,6 +146,11 @@ func testAbandonedCreate(t *testing.T, kind string) {
 }
 
 func testCreateServerClosed(t *testing.T) {
+	// The only case that starts the recorder's own server, on a Unix socket under
+	// /tmp. The others drive serve over in-memory pipes and run everywhere.
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux Unix-socket fixture")
+	}
 	w, e := createRecorderWorld(t, "plain")
 	a := w.offline.api
 	if err := w.startOfflineAPI(); err != nil {
@@ -316,10 +331,15 @@ func testCreateAllowance(t *testing.T, kind string, connected bool) {
 	}
 }
 
+// Every place a scenario's world can hold a native recorder, in the order
+// testCreateStepWait builds them.
+var createStepWorlds = []string{"the world itself", "anchor control", "recovery second", "lifecycle control", "overlap ancestor", "overlap descendant"}
+
 // The step wait returns only when every open exchange of the world and of its
 // control, second and overlap worlds has ended, and holds no recorder lock.
-func testCreateStepWait(t *testing.T) {
-	(&world{}).awaitCreateOutcomes() // a scenario without a native recorder
+// Each world in turn answers last: a wait that never looked at that world
+// returns while its exchange is the only one still open.
+func testCreateStepWait(t *testing.T, last int) {
 	w, engine := createRecorderWorld(t, "plain")
 	engines := []*createEngine{engine}
 	recorders := []*offlineAPI{w.offline.api}
@@ -334,23 +354,22 @@ func testCreateStepWait(t *testing.T) {
 	w.overlap = &overlapFixture{worlds: map[string]*world{"ancestor": child(), "descendant": child()}}
 	w.anchor.control.anchor = &anchorWorld{control: w} // shared references must stay finite
 	worlds := []*world{w, w.anchor.control, w.recovery.second, w.lifecycle.control, w.overlap.worlds["ancestor"], w.overlap.worlds["descendant"]}
+	if len(worlds) != len(createStepWorlds) {
+		t.Fatalf("the fixture builds %d worlds for %d names", len(worlds), len(createStepWorlds))
+	}
 	for i, p := range worlds {
 		startCreate(t, p, engines[i], createTokens[0]).abandon(t)
 	}
 	done := make(chan struct{})
 	go func() { defer close(done); w.awaitCreateOutcomes() }()
-	returned := func() bool {
+	// Whether the wait is still blocked once everything else in the bubble is,
+	// and that it blocks without a recorder lock.
+	blocked := func() bool {
 		synctest.Wait()
 		select {
 		case <-done:
-			return true
-		default:
 			return false
-		}
-	}
-	for i, e := range engines {
-		if returned() {
-			t.Fatalf("the step wait returned with %d exchanges still open", len(engines)-i)
+		default:
 		}
 		for _, a := range recorders {
 			if !a.mu.TryLock() {
@@ -358,15 +377,79 @@ func testCreateStepWait(t *testing.T) {
 			}
 			a.mu.Unlock()
 		}
-		e.finish()
+		return true
 	}
-	if !returned() {
+	open := len(engines)
+	for i, e := range engines {
+		if i == last {
+			continue
+		}
+		if !blocked() {
+			t.Fatalf("the step wait returned with %d exchanges still open", open)
+		}
+		e.finish()
+		open--
+	}
+	if !blocked() {
+		t.Fatalf("the step wait returned while the exchange of %s was still open", createStepWorlds[last])
+	}
+	if listed := createListed(recorders[last]); len(listed) != 0 {
+		t.Fatalf("%s listed a worker before its engine answered: %v", createStepWorlds[last], listed)
+	}
+	engines[last].finish()
+	synctest.Wait()
+	select {
+	case <-done:
+	default:
 		t.Fatal("the step wait outlived every exchange")
 	}
 	for i, a := range recorders {
 		if listed := createListed(a); !reflect.DeepEqual(listed, []string{engines[i].worker()}) {
-			t.Errorf("recorder %d returned from the step wait without its late answer: %v", i, listed)
+			t.Errorf("%s returned from the step wait without its late answer: %v", createStepWorlds[i], listed)
 		}
+	}
+}
+
+// The wait is a hook of the scenario itself: one whose When leaves a create
+// open reaches its Then only after the engine's late answer is recorded.
+func testCreateStepHook(t *testing.T) {
+	isolateProductCoverage(t)
+	dir := writeFeatureFixture(t, `Feature: step wait
+  Scenario: a late answer
+    When a controller abandons a create its engine has not answered
+    Then the recorder lists the worker of that create
+`)
+	selection, err := selectScenarios("", dir, featureEnvironment{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	judged := 0
+	code := runScenarios(selection, godog.Options{Paths: []string{dir}, Format: "pretty", Output: &output}, func(sc *godog.ScenarioContext) {
+		w := initializeScenario(sc, "unused-root", "unused-binary")
+		var e *createEngine
+		sc.Step(`^a controller abandons a create its engine has not answered$`, func() error {
+			var made *world
+			made, e = createRecorderWorld(t, "plain")
+			// The scenario's own world owns the recorder, as a native fixture's does.
+			a := made.offline.api
+			a.w, a.server = w, &http.Server{}
+			w.doctor, w.approval, w.session, w.offline = made.doctor, made.approval, made.session, made.offline
+			startCreate(t, w, e, createTokens[0]).abandon(t)
+			// The engine answers once this step has long returned.
+			time.AfterFunc(100*time.Millisecond, e.finish)
+			return nil
+		})
+		sc.Step(`^the recorder lists the worker of that create$`, func() error {
+			judged++
+			if listed := createListed(w.offline.api); e.worker() == "" || !reflect.DeepEqual(listed, []string{e.worker()}) {
+				return fmt.Errorf("the Then read the recorder with its create still open: listed %v", listed)
+			}
+			return nil
+		})
+	})
+	if code != 0 || selection.count != 1 || judged != 1 {
+		t.Fatalf("the scenario's Then judged an open create: code=%d selected=%d judged=%d\n%s", code, selection.count, judged, output.String())
 	}
 }
 

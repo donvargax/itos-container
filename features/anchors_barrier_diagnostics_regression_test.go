@@ -3,8 +3,13 @@ package features
 import (
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -30,7 +35,9 @@ func TestAnchorRecoveryBarrierDiagnostics(t *testing.T) {
 			t.Run(name, func(t *testing.T) { synctest.Test(t, test) })
 		}
 	})
+	t.Run("the fixture's kill is told apart from a controller that gave up", testAnchorKillMarksItself)
 	t.Run("first Thens return the recorded cause first", testAnchorCauseFirst)
+	t.Run("a failing foreign entry is formatted without the recorder lock", testAnchorForeignEntryUnlocked)
 	t.Run("plain fixture whose create was abandoned", testAnchorPlainAbandoned)
 	t.Run("launch line", testAnchorLaunchLine)
 	t.Run("oversized and private input", testAnchorOversizedJournal)
@@ -206,6 +213,56 @@ func testAnchorWaitAfterKillMissing(t *testing.T) {
 	requireWords(t, w.recovery.err, "first probe report", "limit expired after the fixture killed the controller", "elapsed=35s", "limit=35s")
 }
 
+// anchorsKill is where the fixture's own kill is told apart from a controller
+// that gave up. After it the first-report wait hears a slow worker out. A
+// controller that had already exited is not the fixture's doing: the fixture
+// kills nothing, and the dead controller still ends that wait.
+func testAnchorKillMarksItself(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux process fixture")
+	}
+	const missed = "anchor recovery wait for the first probe report ended without it"
+	for _, gaveUp := range []bool{false, true} {
+		w, _ := createRecorderWorld(t, "recovery")
+		wait := anchorWaitWorld(t)
+		w.anchor, w.anchors = wait.anchor, wait.anchors
+		controller := exec.Command("sleep", "60")
+		if err := controller.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = controller.Process.Kill() })
+		p := &recoveryProcess{exit: -1, done: make(chan struct{}), started: time.Now(), pid: filepath.Join(w.dir, "controller-pid")}
+		if err := os.WriteFile(p.pid, []byte(strconv.Itoa(controller.Process.Pid)), 0600); err != nil {
+			t.Fatal(err)
+		}
+		go func() { _ = controller.Wait(); p.finished = time.Now(); close(p.done) }()
+		w.recovery.run = p
+		if gaveUp {
+			_ = controller.Process.Kill() // not through the fixture: the controller is gone before its kill
+			p.wait()
+		}
+		w.anchorsKill()
+		if w.anchors.killed == gaveUp {
+			t.Fatalf("controller gave up=%t: the fixture recorded its own kill=%t", gaveUp, w.anchors.killed)
+		}
+		if gaveUp {
+			started := time.Now()
+			report := w.anchorsAwait(0)
+			if report.Sequence != 0 || w.recovery.err == nil || !strings.Contains(w.recovery.err.Error(), missed+"; controller exited") || time.Since(started) > 5*time.Second {
+				t.Errorf("a controller that gave up did not end the first-report wait: report %d after %s, recorded %v", report.Sequence, time.Since(started), w.recovery.err)
+			}
+			continue
+		}
+		// The worker writes its first report well after the wait's first 20 ms poll.
+		join := anchorWaitLater(200*time.Millisecond, func() { anchorWaitReport(t, w, 1) })
+		report := w.anchorsAwait(0)
+		join()
+		if report.Sequence != 1 || (w.recovery.err != nil && strings.Contains(w.recovery.err.Error(), missed)) {
+			t.Errorf("after the fixture's kill the first-report wait gave up on a slow worker: report %d, recorded %v", report.Sequence, w.recovery.err)
+		}
+	}
+}
+
 const anchorPrivate = "SYNTHETIC_PRIVATE_FIELD"
 
 // A recovery fixture whose launch controller stopped at its create call: the
@@ -299,6 +356,52 @@ func testAnchorCauseFirst(t *testing.T) {
 	w := anchorCauseWorld("pair", 0, nil)
 	w.recovery.second = anchorCauseWorld("control", 70, cause)
 	requireCauseFirst(t, "anchorsPairCompleted with the cause on B", w.anchorsPairCompleted(), cause, 70, overlap)
+}
+
+// ID-ANCHORS-12's second Then reads the journal under the recorder lock and the
+// foreign status and stop after it. An entry with an unexpected exit formats
+// the diagnostics, which wait for the recorder's creates and take that lock.
+func testAnchorForeignEntryUnlocked(t *testing.T) {
+	w := anchorCauseWorld("foreign", 75, nil)
+	volume := map[string]any{"Name": "foreign-volume", "Driver": "local", "Scope": "local", "CreatedAt": "now", "Labels": map[string]any{}, "Options": map[string]any{}}
+	// The foreign volume is unchanged and the original worker is gone.
+	client := &http.Client{Transport: anchorOracleTransport(func(r *http.Request) (*http.Response, error) {
+		status, body := http.StatusNotFound, `{"message":"`+anchorPrivate+`"}`
+		if strings.HasPrefix(r.URL.Path, "/volumes/") {
+			status, body = http.StatusOK, string(approvalJSON(volume))
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}, nil
+	})}
+	w.doctor = &doctorWorld{real: &doctorReal{client: client}}
+	w.offline.api.w = w
+	w.recovery.worker = strings.Repeat("a", 64)
+	refused := anchorLaunchProcess(75, "")
+	s := w.anchors
+	s.foreign = &anchorVolume{name: "foreign-volume", labels: map[string]any{}, options: map[string]any{}, observed: volume}
+	s.foreignIndex, s.foreignStatus, s.foreignStop = s.recoveryIndex, refused, refused
+	returned := make(chan error, 1)
+	go func() { returned <- w.anchorsForeignPreserved() }()
+	select {
+	case err := <-returned:
+		if err == nil {
+			t.Fatal("a foreign status that exited 75 passed")
+		}
+		for _, want := range []string{"anchor recovery exit 75, expected 1", "launch exit=75 elapsed=1.2s rule=run.call-timeout operation=create response", "product requests=9 showing-from=7"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("the failing foreign entry omits %q:\n%v", want, err)
+			}
+		}
+		if strings.Contains(err.Error(), anchorPrivate) {
+			t.Errorf("the failing foreign entry prints a private field:\n%v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("anchorsForeignPreserved formats a failing entry while it holds the recorder lock")
+	}
+	// A product mutation after the foreign replacement is still refused first.
+	w.offline.api.requests = append(w.offline.api.requests, offlineRequest{Method: "DELETE", Path: "/volumes/foreign-volume", Status: 204})
+	if err := w.anchorsForeignPreserved(); err == nil || err.Error() != "product attempted to mutate or adopt a foreign replacement" {
+		t.Errorf("a mutation of the foreign replacement returned %v", err)
+	}
 }
 
 // The plain anchor fixture of ID-OFFLINE-29 and ID-OFFLINE-30, its create
