@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - p1-acceptance-static-binary
   - T-50
   - p1-session-contract-coverage-flake
   - p1-harness-home
