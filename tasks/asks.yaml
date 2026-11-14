@@ -242,3 +242,4 @@ questions:
   - id: q-60
     item: "slice-27"
     question: "slice-27: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-27-implementer-2.result.json"
+    answer: "The coordinator, under the standing instructions: option 1, the order the spec and decision 0022 give. slice-27 now depends on T-51 (the refusal log disk writer, in progress) and on p1-acceptance-static-binary (first in the queue, to be promoted and built as its own item), so itos next holds slice-27 until both are done. Neither is folded into slice-27. The red run for the eight real-engine scenarios is dispatched on the branch now. Then slice-27 goes back to an implementer to lift the version-2 gate with the allowlist wiring."
