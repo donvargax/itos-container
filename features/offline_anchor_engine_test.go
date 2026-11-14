@@ -201,13 +201,33 @@ func (a *offlineAPI) cleanupAnchorVolumes(ctx context.Context) error {
 			var body struct{ Message string }
 			_ = json.NewDecoder(io.LimitReader(response.Body, 8192)).Decode(&body)
 			_ = response.Body.Close()
-			result = errors.Join(result, fmt.Errorf("native anchor harness cleanup HTTP %d reason=%s", response.StatusCode, anchorDiagnosticReason(body.Message)))
+			result = errors.Join(result, fmt.Errorf("native anchor harness cleanup HTTP %d reason=%s %s", response.StatusCode, anchorDiagnosticReason(body.Message), a.anchorHolders(ctx, v)))
 			continue
 		}
 		_ = response.Body.Close()
 		result = errors.Join(result, a.w.doctor.real.read(path, nil, 404))
 	}
 	return result
+}
+
+// Who still holds a volume the engine refused to delete: one read-only listing
+// of the containers that mount it, stopped ones included, as two counts. A
+// holder that is no recorded worker is not the harness's to name or remove.
+func (a *offlineAPI) anchorHolders(ctx context.Context, v *anchorVolume) string {
+	filters, err := json.Marshal(map[string][]string{"volume": {v.name}})
+	var holders []struct {
+		ID string `json:"Id"`
+	}
+	if err != nil || a.w.doctor.real.readContext(ctx, "/containers/json?all=1&filters="+url.QueryEscape(string(filters)), &holders, 200) != nil {
+		return "holders=unavailable"
+	}
+	recorded := 0
+	for _, holder := range holders {
+		if containsSessionID(a.created, holder.ID) {
+			recorded++
+		}
+	}
+	return fmt.Sprintf("holders=%d recorded=%d", len(holders), recorded)
 }
 
 func (a *offlineAPI) anchorVolumes() map[string]*anchorVolume {

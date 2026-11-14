@@ -30,6 +30,9 @@ type offlineRequest struct {
 	Diagnostic          string
 	State               map[string]any
 	At, Replied         time.Time
+	// Only a forwarded create has these: when the recorder forwarded it, after its
+	// own checks and volume inspection, and when the engine's answer reached it.
+	Forwarded, Answered time.Time
 }
 
 // Unlike doctor's read-only recorder and slice-9's unstarted recorder, this
@@ -40,6 +43,7 @@ type offlineAPI struct {
 	server      *http.Server
 	requests    []offlineRequest
 	created     []string
+	creates     []*offlineCreate // every create forwarded, answered or not
 	absent      map[string]bool
 	final       sessionRecord
 	problem     error
@@ -157,6 +161,11 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 	if a.anchorsBefore(out, request, entry, index) {
 		return
 	}
+	if entry.Method == http.MethodPost && entry.Path == "/containers/create" {
+		// The one exchange the harness hears out whatever its controller does.
+		a.forwardCreate(out, request, entry, index, body)
+		return
+	}
 	// ReverseProxy relays the attach upgrade in both directions and preserves
 	// half-close. Use the bare transport, without the inspection client's timeout:
 	// attach and wait live until the caller/scenario ends them.
@@ -226,21 +235,6 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 				message, _ := observed["message"].(string)
 				a.requests[index].Diagnostic = "engine response: " + message
 			}
-			if entry.Method == "POST" && entry.Path == "/containers/create" && response.StatusCode == http.StatusCreated {
-				id, _ := observed["Id"].(string)
-				if !offlineHex(id) {
-					a.problem = errors.New("native create reply lacks a full container ID")
-					a.mu.Unlock()
-					return nil
-				}
-				a.created = append(a.created, id)
-				a.identities[id] = map[string]any{"Name": "/itos-container-" + a.w.session.token, "Labels": entry.Body["Labels"]}
-				// A create reply alone never counts as observed ownership.
-				observed, err = a.inspect(id)
-				if err != nil {
-					a.problem = err
-				}
-			}
 			if observed != nil {
 				a.requests[index].Observation = observed
 				if state, ok := observed["State"].(map[string]any); ok {
@@ -280,7 +274,7 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.requests[index].Diagnostic = "recorder transport: " + err.Error()
 			a.requests[index].Cancelled = request.Context().Err() != nil
 			if a.lifecycle == nil && (!a.recovery || request.Context().Err() == nil) {
-				a.problem = errors.New("offline native recorder transport failed")
+				a.problem = errOfflineTransport
 			}
 			a.mu.Unlock()
 			http.Error(out, "offline fixture transport failed", http.StatusBadGateway)
@@ -422,8 +416,13 @@ func (a *offlineAPI) identity(c map[string]any, id string) error {
 	if original := a.identities[id]; original != nil {
 		name, labels = original["Name"], original["Labels"]
 	}
+	return a.identityOf(c, id, name, labels)
+}
+
+// identityOf is what identity demands of a worker listed under name and labels.
+func (a *offlineAPI) identityOf(c map[string]any, id string, name, labels any) error {
 	if !offlineHex(id) || c["Id"] != id || c["Name"] != name ||
-		c["Image"] != w.doctor.imageID || !reflect.DeepEqual(object(c["Config"])["Labels"], labels) {
+		c["Image"] != a.w.doctor.imageID || !reflect.DeepEqual(object(c["Config"])["Labels"], labels) {
 		return errors.New("offline native observation differs from selected identity")
 	}
 	return nil
@@ -545,7 +544,12 @@ func (a *offlineAPI) closeConnections() {
 	}
 }
 
+// cleanup accounts for every forwarded create before it releases a volume. None
+// of its requests enters the product journal.
 func (a *offlineAPI) cleanup() error {
+	// The after hook must hold on its own, so the step wait is repeated here, and
+	// before the lock: a late answer is recorded under it.
+	a.awaitCreates()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -560,25 +564,91 @@ func (a *offlineAPI) cleanup() error {
 			result = errors.Join(result, errors.New("offline harness refused cleanup without matching full identity"))
 			continue
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodDelete, "http://engine/containers/"+url.PathEscape(id)+"?force=true&v=false", nil)
-		if err != nil {
-			result = errors.Join(result, err)
-			continue
-		}
-		response, err := a.w.doctor.real.client.Do(request)
-		if err != nil {
-			result = errors.Join(result, err)
-			continue
-		}
-		_ = response.Body.Close()
-		if response.StatusCode != http.StatusNoContent {
-			result = errors.Join(result, fmt.Errorf("offline harness cleanup HTTP %d", response.StatusCode))
-			continue
-		}
-		result = errors.Join(result, a.w.doctor.real.read("/containers/"+id+"/json", nil, 404))
+		result = errors.Join(result, a.cleanupRemove(ctx, id))
 	}
+	result = errors.Join(result, a.cleanupUnlisted(ctx))
 	if result == nil {
 		result = a.cleanupAnchorVolumes(ctx)
 	}
 	return result
+}
+
+// Called under the recorder lock, after the identity check of a listed worker.
+func (a *offlineAPI) cleanupRemove(ctx context.Context, id string) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodDelete, "http://engine/containers/"+url.PathEscape(id)+"?force=true&v=false", nil)
+	if err != nil {
+		return err
+	}
+	response, err := a.w.doctor.real.client.Do(request)
+	if err != nil {
+		return err
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("offline harness cleanup HTTP %d", response.StatusCode)
+	}
+	return a.w.doctor.real.read("/containers/"+id+"/json", nil, 404)
+}
+
+// Called under the recorder lock, once every exchange has ended and the listed
+// workers are gone. A forwarded create that listed no worker may still have left
+// one: the engine finishes a create whose answer was lost, or finishes it late.
+// The name the recorder authorized for that create is the only place it can be.
+func (a *offlineAPI) cleanupUnlisted(ctx context.Context) error {
+	var result error
+	for _, x := range a.creates {
+		if x.id != "" {
+			continue
+		}
+		if x.expired {
+			// A failure of its own even when the name is absent: the engine may still
+			// finish the create after this look.
+			result = errors.Join(result, fmt.Errorf("offline harness cleanup found a forwarded create with no engine answer within its %s allowance", engineCreateOutcomeAllowance))
+		}
+		status, observed, err := a.cleanupInspect(ctx, x.name)
+		switch {
+		case err != nil:
+			result = errors.Join(result, err)
+		case status == http.StatusNotFound:
+		case status == http.StatusOK:
+			id, _ := observed["Id"].(string)
+			if a.identityOf(observed, id, "/"+x.name, x.labels) != nil {
+				result = errors.Join(result, errors.New("offline harness refused cleanup without matching full identity"))
+				continue
+			}
+			// Recorded and removed like a listed worker.
+			a.created = append(a.created, id)
+			a.identities[id] = map[string]any{"Name": "/" + x.name, "Labels": x.labels}
+			x.id = id
+			result = errors.Join(result, a.cleanupRemove(ctx, id))
+		default:
+			result = errors.Join(result, fmt.Errorf("offline harness cleanup inspection HTTP %d", status))
+		}
+	}
+	return result
+}
+
+// One inspection by the authorized name through the harness's own engine client.
+// Its error carries no name: a client error's text would quote the request.
+func (a *offlineAPI) cleanupInspect(ctx context.Context, name string) (int, map[string]any, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://engine/containers/"+url.PathEscape(name)+"/json", nil)
+	if err != nil {
+		return 0, nil, errors.New("offline harness cleanup inspection could not be built")
+	}
+	response, err := a.w.doctor.real.client.Do(request)
+	if err != nil {
+		var failure *url.Error
+		if errors.As(err, &failure) {
+			err = failure.Err
+		}
+		return 0, nil, fmt.Errorf("offline harness cleanup inspection failed: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	var observed map[string]any
+	if response.StatusCode == http.StatusOK {
+		if err := json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&observed); err != nil {
+			return 0, nil, errors.New("offline harness cleanup inspection JSON unavailable")
+		}
+	}
+	return response.StatusCode, observed, nil
 }

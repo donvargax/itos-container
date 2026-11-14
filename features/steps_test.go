@@ -68,6 +68,12 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		return ctx, w.setUp()
 	})
 	sc.StepContext().After(w.reportMountDiagnosticFailure)
+	// No Then judges an open create: after every step, wait for each one a native
+	// recorder of this scenario forwarded and has not heard the engine answer.
+	sc.StepContext().After(func(ctx context.Context, _ *godog.Step, _ godog.StepResultStatus, _ error) (context.Context, error) {
+		w.awaitCreateOutcomes()
+		return ctx, nil
+	})
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
