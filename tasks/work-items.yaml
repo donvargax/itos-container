@@ -1812,6 +1812,17 @@ items:
       re-run of the same head passed. A positive control that times out makes the boundary check red
       with nothing wrong; give it a retry or a readiness wait before the dial, or say why one try is
       the contract.
+
+      Belongs inside this item, which is still todo. slice-27's route and DNS scenarios,
+      ID-EGRESS-15 and ID-EGRESS-16 (@engine, still @wip on the slice-27 branch), reuse slice-14's
+      dual-stack control and its IPv6 positive controls: the route rows include gateway6-tcp, the
+      very control that timed out here (features/egress_native_isolation_test.go:43 on slice-27). So
+      the same runner flake will fail two more engine rows once egress.feature is live, in the
+      'other' engine shard that is already near its 180 s budget. Per the slice-27 implementer, each
+      of the two adds one control container, one or two endpoints, six execs and one product run to
+      that shard. This raises the item's priority for milestone two, step 1: whatever fix is chosen
+      (a retry, a readiness wait before the dial, or a stated one-try contract) must cover the
+      egress rows as well as ID-OFFLINE-11.
   - id: T-49
     title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
     phase: 1
