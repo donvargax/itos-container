@@ -57,9 +57,12 @@ func (w *world) anchorsForeignPreserved() error {
 	if w.doctor.real.read("/containers/"+w.recovery.worker+"/json", nil, 404) != nil {
 		return errors.New("original worker remains")
 	}
+	// Copy the journal and let go of the lock before reading the entries: an entry
+	// with an unexpected exit formats the diagnostics, which take this lock.
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	for _, q := range a.requests[s.foreignIndex:] {
+	requests := append([]offlineRequest(nil), a.requests[s.foreignIndex:]...)
+	a.mu.Unlock()
+	for _, q := range requests {
 		if anchorsMutates(q) {
 			return errors.New("product attempted to mutate or adopt a foreign replacement")
 		}
