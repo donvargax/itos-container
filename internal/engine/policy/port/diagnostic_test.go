@@ -61,3 +61,27 @@ func TestAllowlistDiagnostics(t *testing.T) {
 		}
 	}
 }
+
+// A source refusal's fix names the limit the rule applies: 4095 bytes, the
+// longest path Linux names, counted in UTF-8 bytes.
+func TestCredentialDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		kind       port.Failure
+		rule, path string
+		field      []string
+	}{
+		{port.CredentialsEmpty, "policy.credentials_empty", "/credentials", []string{"credentials"}},
+		{port.CredentialKind, "policy.credential_kind", "/credentials/1/kind", []string{"credentials", "1", "kind"}},
+		{port.CredentialDuplicate, "policy.credential_duplicate", "/credentials/1/kind", []string{"credentials", "1", "kind"}},
+		{port.CredentialSource, "policy.credential_source", "/credentials/1/source", []string{"credentials", "1", "source"}},
+	} {
+		got := port.Diagnostic(port.Issue{Kind: tc.kind, Path: tc.field, Version: 3})
+		if got.Rule != tc.rule || got.Exit != 2 || got.Message == "" || got.Fix == "" || got.File != "itos-container.yaml" || got.Path != tc.path {
+			t.Errorf("Diagnostic(%v) = %#v", tc.kind, got)
+		}
+	}
+	got := port.Diagnostic(port.Issue{Kind: port.CredentialSource, Version: 3})
+	if !strings.Contains(got.Fix, "at most 4095 UTF-8 bytes") {
+		t.Errorf("source fix does not name its byte limit: %q", got.Fix)
+	}
+}

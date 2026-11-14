@@ -256,11 +256,19 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 	credentialCoveredCheckoutContract(t, observe, grants, input)
 	credentialExportContract(t, observe, grants, input)
 	credentialSeparateSuperblockContract(t, observe, grants, input)
+	credentialPathBoundContract(t, observe, grants, input)
+}
+
+// The kernel names a descriptor in at most 4095 bytes: PATH_MAX counts the
+// terminator. That is the inclusive bound of a descriptor's pathname and of
+// each boundary path. A mount row's root keeps the parser's own 4096 bytes,
+// so the longest joined coordinate has 8191.
+func credentialPathBoundContract(t Reporter, observe func(*CredentialFiles, []policy.Credential, port.CredentialInput) port.CredentialResult, grants []policy.Credential, input port.CredentialInput) {
 	for _, over := range []bool{false, true} {
 		f := CredentialFixture()
 		n := f.Nodes["/vault/token"]
 		delete(f.Nodes, n.Path)
-		n.Path = "/" + strings.Repeat("x", 4095)
+		n.Path = "/" + strings.Repeat("x", 4094)
 		if over {
 			n.Path += "x"
 		}
@@ -270,10 +278,52 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 		f.MountsText = []string{table, table}
 		got := observe(f, []policy.Credential{{Kind: "claude-token", Source: n.Path}}, input)
 		if !over && len(got.Issues) != 0 {
-			t.Errorf("4096-byte descriptor and 8192-byte coordinate: %#v", got)
+			t.Errorf("4095-byte descriptor and 8191-byte coordinate: %#v", got)
 		}
 		if over && !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}) {
-			t.Errorf("descriptor overflow: %#v", got)
+			t.Errorf("4096-byte descriptor: %#v", got)
+		}
+	}
+	// One byte more keeps each boundary's own lexical refusal, before any
+	// filesystem observation.
+	for _, boundary := range []string{"checkout", "selected state", "account state"} {
+		for _, over := range []bool{false, true} {
+			f := CredentialFixture()
+			path := "/" + strings.Repeat("b", 4094)
+			if over {
+				path += "b"
+			}
+			bounded := input
+			want := port.CredentialIssue{Index: -1}
+			switch boundary {
+			case "checkout":
+				n := f.Nodes["/checkout"]
+				delete(f.Nodes, n.Path)
+				n.Path = path
+				f.Nodes[path] = n
+				bounded.Root = path
+				want.Rule, want.Subject = "checkout.root", path
+			case "selected state":
+				n := f.Nodes["/state"]
+				delete(f.Nodes, n.Path)
+				n.Path = path
+				f.Nodes[path] = n
+				bounded.State, bounded.AccountState = path, path
+				want.Rule = "state.location"
+			default:
+				n := f.Nodes["/state"]
+				n.Path, n.Inode = path, 90
+				f.Nodes[path] = n
+				bounded.AccountState = path
+				want.Rule = "state.unavailable"
+			}
+			got := observe(f, grants, bounded)
+			if !over && len(got.Issues) != 0 {
+				t.Errorf("4095-byte %s path: %#v", boundary, got.Issues)
+			}
+			if over && (!reflect.DeepEqual(got.Issues, []port.CredentialIssue{want}) || len(f.Calls) != 0) {
+				t.Errorf("4096-byte %s path: %#v after %v, want %#v before any observation", boundary, got.Issues, f.Calls, want)
+			}
 		}
 	}
 }

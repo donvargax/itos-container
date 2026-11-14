@@ -80,6 +80,35 @@ list accepts every type nobody has examined. Triage routes that choice to the
 person, with the outright NFS and 9p refusals to confirm. Nothing admits a
 credential before slice-30, whose specification takes the answer as a precondition.
 
+Amended after the local review of `1ee1e7a`: the path bound was 4096 bytes, and no
+real path of that length can be inspected. Linux counts the terminator in
+`PATH_MAX`, so the kernel names an open descriptor in at most 4095 bytes, and
+`readlink` of `/proc/self/fd/<fd>` fails with `ENAMETOOLONG` beyond that. The
+observation contract's 4096-byte row passed against the disk adapter only because
+its fixture replaces `readlink`. On a real kernel a source, a checkout or an
+existing state root of exactly 4096 bytes was refused as `credential.unavailable`
+with a fix that could not help, while `--policy-only` accepted that source. The
+inclusive bound is now **4095 bytes** for every path this mode takes or reads back,
+and one byte more keeps that path's own lexical refusal:
+
+| Path | Refusal at 4096 bytes |
+| --- | --- |
+| Policy source | `policy.credential_source`, exit 2, in every scope that parses version 3 |
+| Effective root | `doctor.checkout.root`, exit 2 |
+| Selected state location | `approval.state.location`, exit 2 |
+| Fixed account state path | `approval.state.unavailable`, exit 3 |
+| Descriptor pathname read back from `/proc/self/fd` | `credential.unavailable`, exit 3 |
+
+The first four are judged from the path's text, before the observation walks any
+boundary or source. The last cannot occur on a kernel that fails the read; the
+adapter still refuses a longer result.
+A mount row's decoded root and mountpoint keep their 4096-byte bound. That bound
+limits what the parser accepts and is reachable: mountinfo is not held to
+`PATH_MAX`, and a bind of a deeper directory, made in a private mount namespace,
+printed a root of 4196 bytes. The longest joined coordinate is therefore 8191
+bytes. This replaces decision 0025's 4096-byte source limit. Version 3 is not on
+the main branch or in a release, so no accepted policy changes meaning.
+
 ## The sections this decision overrides
 
 T-47's record is [decision 0025](0025-credentials-passed-in.md). The first version
@@ -308,11 +337,13 @@ prove, not a claim of an atomic kernel snapshot:
 Read each mount table at most once per observation: at most 8 MiB, 16,384 rows and
 65,535 bytes per line excluding the newline. Require EOF and a final complete line;
 probe beyond inclusive bounds to distinguish a complete input from truncation.
-Each decoded root/mountpoint and descriptor pathname is at most 4096 bytes; a joined
-coordinate is at most 8192 by construction: the decoded root is at most 4096,
-its separator is one byte, and the relative visible suffix is at most 4095. The same
-bound holds for an absent root's suffix, whose complete visible path is bounded to
-4096. There is no independent coordinate-overflow input after those path checks.
+Each decoded root/mountpoint is at most 4096 bytes and each descriptor pathname at
+most 4095, the longest the kernel returns. A joined coordinate is at most 8191 by
+construction: the decoded root is at most 4096, its separator is one byte, and the
+relative visible suffix is at most 4094. The same bound holds for an absent root's
+suffix, whose complete visible path is bounded to 4095, as is each boundary path
+given to the mode. There is no independent coordinate-overflow input after those
+path checks.
 Cap each fdinfo at 64 KiB with EOF and require one valid mount ID. Reject malformed
 rows, duplicate mount IDs, invalid/non-absolute mountpoints, missing descriptor rows
 and missing observations. Non-path roots remain bounded, NUL-free and unprojectable
@@ -425,6 +456,9 @@ adapter. Alias rows apply to **both** protected trees; other rows name their sco
 | Protected subdirectory of a 9p export mounted a second time over the source's parent, the rows differing in device and both with root `/`; the checkout's own entry visible to inventory under the first device | Filesystem refusal; the same rows on ext4 are two devices, name an independent file and are accepted. |
 | Unrelated 9p row | Accepted when the source is otherwise independent. |
 | Selected state location that is absolute but not valid UTF-8 | `approval.state.location` before any filesystem call; valid multi-byte paths are accepted. |
+| Descriptor pathname of exactly 4095 bytes under a 4096-byte mount root; one byte more | Accepted with its 8191-byte coordinate; unavailable at 4096. |
+| Checkout, selected state or account state path of exactly 4095 bytes; one byte more | Accepted; at 4096 that boundary's own refusal before any filesystem call. |
+| Real file whose path has exactly 4095 bytes, then 4096, with no seam replaced (disk adapter only) | The kernel's own bound: mapped at 4095, no descriptor evidence at 4096. |
 
 Alias fixtures have safe owners/permissions, one-link nonempty regular files and no
 symlink, so an unrelated refusal cannot satisfy them. Include file and directory mount

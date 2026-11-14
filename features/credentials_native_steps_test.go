@@ -39,6 +39,7 @@ func (w *world) credentialSteps(sc *godog.ScenarioContext) {
 	w.credentialObservationSteps(sc)
 	w.credentialReviewSteps(sc)
 	w.credentialEffectiveRootSteps(sc)
+	w.credentialPathBoundSteps(sc)
 	sc.Step(`^a private credential inspection fixture$`, w.credentialFixture)
 	sc.Step(`^credential source "([^"]*)" has layout "([^"]*)"$`, w.credentialLayout)
 	sc.Step(`^credential source "([^"]*)" is a regular file of (\d+) bytes with mode "([^"]*)"$`, w.credentialFile)
@@ -197,15 +198,19 @@ func (w *world) closeCredentials() {
 }
 
 func (w *world) credentialPolicy(version int) error {
-	p := map[string]any{"version": version, "manifest": w.manifest.selected, "network": map[string]string{"mode": "offline"}}
-	if len(w.credentials.grants) != 0 {
-		p["credentials"] = w.credentials.grants
-	}
-	data, err := json.Marshal(p)
+	data, err := w.credentialPolicyData(version)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(w.manifest.checkout, "itos-container.yaml"), data, 0o600)
+}
+
+func (w *world) credentialPolicyData(version int) ([]byte, error) {
+	p := map[string]any{"version": version, "manifest": w.manifest.selected, "network": map[string]string{"mode": "offline"}}
+	if len(w.credentials.grants) != 0 {
+		p["credentials"] = w.credentials.grants
+	}
+	return json.Marshal(p)
 }
 
 func (w *world) credentialFile(name string, size int, mode string) error {

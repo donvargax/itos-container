@@ -479,8 +479,9 @@ credentials:
     source: /private-host-sources/claude-token
 ```
 
-Sources are literal absolute slash-separated paths of at most 4096 UTF-8 bytes, with
-at least one component after `/`. Empty, dot and dot-dot components, trailing slash,
+Sources are literal absolute slash-separated paths of at most 4095 UTF-8 bytes, with
+at least one component after `/`. That is the longest path Linux names, since `PATH_MAX`
+counts the terminator. Empty, dot and dot-dot components, trailing slash,
 backslash and ASCII controls are refused. Nothing is trimmed, expanded or executed;
 `~` and `$` inside an absolute path are ordinary filename characters. JSON Schema's
 character limit cannot express the UTF-8 byte limit. Network defaults and allowlist
@@ -517,7 +518,10 @@ worker's non-recursive checkout bind. A match in either observation is
 It never enumerates unrelated state records. Instead, two complete mount tables
 reserve each protected root's filesystem subtree and every mount rooted below it, including
 covered backing trees. Each table is bounded to 8 MiB, 16384 rows and 65535 bytes per line;
-descriptor paths to 4096 bytes, coordinates to 8192, and fdinfo to 64 KiB. All observations
+a row's root and mountpoint to 4096 bytes each, descriptor paths to 4095, coordinates to
+8191, and fdinfo to 64 KiB. The effective root and the selected state location share the
+4095-byte bound: one byte more is refused as `doctor.checkout.root` or
+`approval.state.location`, exit 2. All observations
 share a ten-second monotonic deadline, which cannot preempt a blocked kernel call.
 A final source stat returning at or after that deadline is refused. Descriptor
 `statx(STATX_MNT_ID)` selects the mount row and must remain unchanged across the

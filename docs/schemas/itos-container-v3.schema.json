@@ -94,9 +94,9 @@
           },
           "source": {
             "type": "string",
-            "maxLength": 4096,
+            "maxLength": 4095,
             "pattern": "^/(?!\\.{1,2}(?:/|$))(?![\\s\\S]*/\\.{1,2}(?:/|$))[^/\\\\\\u0000-\\u001f\\u007f]+(?:/[^/\\\\\\u0000-\\u001f\\u007f]+)*$(?![\\s\\S])",
-            "description": "Literal absolute slash-separated path, at most 4096 UTF-8 bytes (maxLength counts characters only). No expansion, empty or dot components, backslashes, trailing slash or ASCII controls. Host checks separately require a private independent host-owned regular file of 1..65536 bytes, safe ancestors and exclusion from checkout and protected state."
+            "description": "Literal absolute slash-separated path, at most 4095 UTF-8 bytes, the longest path Linux names (maxLength counts characters only). No expansion, empty or dot components, backslashes, trailing slash or ASCII controls. Host checks separately require a private independent host-owned regular file of 1..65536 bytes, safe ancestors and exclusion from checkout and protected state."
           }
         }
       },

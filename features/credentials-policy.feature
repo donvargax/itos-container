@@ -24,8 +24,9 @@ Feature: Named credential requests and read-only source inspection
   # Display valid entries sorted by kind; diagnostic indices use written order.
   # Network defaults and version 2's allowlist rules carry into version 3 intact.
   #
-  # A source is a literal absolute slash-separated path of at most 4096 UTF-8
-  # bytes, with at least one component after /. No empty, . or .. components,
+  # A source is a literal absolute slash-separated path of at most 4095 UTF-8
+  # bytes, the longest path Linux names: PATH_MAX counts the terminator. It has
+  # at least one component after /. No empty, . or .. components,
   # trailing slash, backslash or ASCII control (U+0000..001F or U+007F). Never
   # trim, clean, expand ~ or variables, or evaluate text. Tilde/dollar characters
   # inside an already absolute path are literal filenames, not interpolation.
@@ -133,9 +134,15 @@ Feature: Named credential requests and read-only source inspection
   #    Either complete observation's source match is location; otherwise require
   #    two complete exclusions and unchanged source/boundary mappings/identities.
   #    Each table is at most 8 MiB, 16384 rows, 65535 bytes per line excluding LF;
-  #    EOF and the final LF are required. Paths are at most 4096 bytes, joined
-  #    coordinates 8192, fdinfo 64 KiB with EOF. Bounds are inclusive, shared by
+  #    EOF and the final LF are required. A mount row's root and mountpoint are
+  #    at most 4096 bytes each. A descriptor's pathname is at most 4095, the
+  #    longest the kernel returns from /proc/self/fd, so a joined coordinate is
+  #    at most 8191. fdinfo is 64 KiB with EOF. Bounds are inclusive, shared by
   #    both grants, and overflow/malformed/missing evidence is unavailable.
+  #    The effective root and the selected state location share the 4095-byte
+  #    bound and keep their own refusals, doctor.checkout.root (2) and
+  #    approval.state.location (2), before any boundary or source is walked
+  #    (ID-CREDENTIALS-62).
   #    These are topology limits; state history never consumes the checkout cap.
   #    An absent root reserves its projected coordinate under a pinned safe
   #    ancestor. Safe first creation is accepted after final validation at that
@@ -1791,3 +1798,48 @@ Feature: Named credential requests and read-only source inspection
       | /account/.local/state/itos-container/sessions | /account |
       | /state/private                                | /        |
       | /checkout/private                             | /        |
+
+  # Local review of 1ee1e7a (the thread at disk/credentials.go:143): the
+  # documented inclusive bound of 4096 bytes was never reachable. Linux counts
+  # the terminator in PATH_MAX, so the kernel names an open descriptor in at
+  # most 4095 bytes and readlink of /proc/self/fd/<fd> fails beyond that. A real
+  # source, checkout or existing state root of exactly 4096 bytes was refused
+  # as credential.unavailable (3), with a fix that could not help, although
+  # --policy-only accepted that source. Only the observation contract's seam,
+  # which replaces readlink, accepted 4096.
+  # The bound is 4095 for every path this mode takes or reads back. One byte
+  # more keeps each path's own lexical refusal, exit 2, before any boundary or
+  # source is walked: policy.credential_source, doctor.checkout.root and
+  # approval.state.location.
+  # The new Given builds real nested private directories, each name within
+  # NAME_MAX, so that the named path has exactly the given length: the token
+  # file itself, a checkout holding the fixture's policy, or the selected
+  # itos-container state root, mode 0700, under XDG_STATE_HOME. The child keeps
+  # its short working directory; ITOS_ROOT or XDG_STATE_HOME names the long path.
+  # Nothing is mounted and no seam is replaced: this is the built binary on the
+  # host's kernel. Before the fix all three examples fail at the problem
+  # assertion, with credential.unavailable and exit 3.
+  @slice-29 @ID-CREDENTIALS-62 @linux @wip
+  Scenario Outline: the longest path the kernel names is the inclusive bound of each inspected path
+    Given a private credential inspection fixture
+    And credential source "token" has layout "private regular file"
+    And the credential fixture requests these sources:
+      | kind         | source |
+      | claude-token | token  |
+    And the credential fixture "<path>" lies at a real path of exactly 4095 bytes
+    When itos-container runs with "doctor --credentials-only --json"
+    Then it exits with code 0
+    And its credential JSON reports exactly these grants and no problems:
+      | kind         | source | target                                       |
+      | claude-token | token  | /run/itos-container/credentials/claude-token |
+    Given the credential fixture "<path>" lies at a real path of exactly 4096 bytes
+    When itos-container runs with "doctor --credentials-only --json"
+    Then its JSON output names the problem "<rule>"
+    And it exits with code 2
+    And the engine recorder has no connections
+
+    Examples:
+      | path           | rule                     |
+      | source         | policy.credential_source |
+      | checkout       | doctor.checkout.root     |
+      | selected state | approval.state.location  |

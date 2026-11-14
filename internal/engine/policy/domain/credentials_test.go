@@ -54,8 +54,10 @@ func TestCredentialPolicyClosedShape(t *testing.T) {
 }
 
 func TestCredentialLiteralPathBoundaries(t *testing.T) {
-	valid := []string{"/a", "/C:/file", "/ñ/~/$HOME/$(touch forbidden)", "/" + strings.Repeat("ñ", 2047) + "a"}
-	invalid := []string{"", "relative", "/", "/a/", "//a", "/a//b", "/a/./b", "/a/../b", "/a\\b", "/" + strings.Repeat("ñ", 2048)}
+	// 4095 bytes is the longest path Linux names: PATH_MAX counts the
+	// terminator. The limit counts UTF-8 bytes, never characters.
+	valid := []string{"/a", "/C:/file", "/ñ/~/$HOME/$(touch forbidden)", "/" + strings.Repeat("ñ", 2047), "/" + strings.Repeat("a", 4094)}
+	invalid := []string{"", "relative", "/", "/a/", "//a", "/a//b", "/a/./b", "/a/../b", "/a\\b", "/" + strings.Repeat("ñ", 2047) + "a", "/" + strings.Repeat("a", 4095)}
 	for _, c := range []rune{0, 1, 9, 10, 31, 127} {
 		invalid = append(invalid, "/a"+string(c))
 	}

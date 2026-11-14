@@ -82,9 +82,11 @@ grants; an empty list is refused, as an empty allowlist is. Each list entry is a
 object with exactly `kind` and `source`:
 
 - `kind` is exactly `claude-token` or `github-token`, case-sensitive and at most once.
-- `source` is a literal absolute host path, at most 4096 bytes, slash-separated, with
+- `source` is a literal absolute host path, at most 4095 bytes, slash-separated, with
   no empty, dot or dot-dot component, trailing slash, backslash or ASCII control.
-  There is no tilde, variable, interpolation or other expansion.
+  There is no tilde, variable, interpolation or other expansion. The limit was 4096
+  until [decision 0027](0027-credential-source-inspection.md) found that the kernel
+  names no path of that length.
 
 Entries retain their written order for diagnostics; everywhere else they are a set
 keyed by kind. Parsing a valid file reads no host source. Collect located problems

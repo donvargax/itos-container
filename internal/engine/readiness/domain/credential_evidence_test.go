@@ -365,8 +365,9 @@ func TestCredentialPathShape(t *testing.T) {
 	if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "host.unsupported", Index: -1}}) {
 		t.Fatalf("another architecture: %#v", got.Issues)
 	}
-	// A descriptor pathname of exactly 4096 bytes is evidence; one more is not.
-	for length, rule := range map[int]string{4096: "", 4097: "credential.unavailable"} {
+	// The kernel names a descriptor in at most 4095 bytes. A pathname of
+	// exactly that length is evidence; one more byte is not.
+	for length, rule := range map[int]string{4095: "", 4096: "credential.unavailable"} {
 		f, c, _ := credentialDomainFixture()
 		n := f.Nodes["/vault/token"]
 		n.Path = "/" + strings.Repeat("x", length-1)
@@ -374,6 +375,45 @@ func TestCredentialPathShape(t *testing.T) {
 		got := c.Inspect([]policy.Credential{{Kind: "claude-token", Source: n.Path}})
 		if !reflect.DeepEqual(got.Issues, credentialIssue(rule)) {
 			t.Fatalf("%d-byte source path: %#v, want %q", length, got.Issues, rule)
+		}
+	}
+}
+
+// Each boundary path shares the descriptor's 4095-byte bound. One byte more
+// keeps that boundary's own lexical refusal, before anything is observed.
+func TestCredentialBoundaryPathLength(t *testing.T) {
+	for _, boundary := range []string{"checkout", "selected state", "account state"} {
+		for length, refused := range map[int]bool{4095: false, 4096: true} {
+			f, c, grants := credentialDomainFixture()
+			path := "/" + strings.Repeat("b", length-1)
+			want := port.CredentialIssue{Index: -1}
+			switch boundary {
+			case "checkout":
+				n := f.Nodes["/checkout"]
+				n.Path = path
+				f.Nodes[path] = n
+				c.Input.Root = path
+				want.Rule, want.Subject = "checkout.root", path
+			case "selected state":
+				n := f.Nodes["/state"]
+				n.Path = path
+				f.Nodes[path] = n
+				c.Input.State, c.Input.AccountState = path, path
+				want.Rule = "state.location"
+			default:
+				n := f.Nodes["/state"]
+				n.Path, n.Inode = path, 90
+				f.Nodes[path] = n
+				c.Input.AccountState = path
+				want.Rule = "state.unavailable"
+			}
+			got := c.Inspect(grants)
+			if !refused && len(got.Issues) != 0 {
+				t.Fatalf("%d-byte %s path: %#v", length, boundary, got.Issues)
+			}
+			if refused && (!reflect.DeepEqual(got.Issues, []port.CredentialIssue{want}) || len(f.Calls) != 0) {
+				t.Fatalf("%d-byte %s path: %#v after %v, want %#v before any observation", length, boundary, got.Issues, f.Calls, want)
+			}
 		}
 	}
 }
