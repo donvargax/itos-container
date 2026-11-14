@@ -239,3 +239,6 @@ questions:
     item: "slice-29"
     question: "slice-29: the implementer (attempt 16) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-29-implementer-16.result.json"
     answer: "The coordinator, under the standing instructions: option 1. The red run 43521888544 at 8e5088e is the flake T-50 owns (ID-ANCHORS-09 and ID-LIFECYCLE-08), not slice-29: its failed jobs are re-run with no code change. slice-29 does not repair the engine harness and does not wait for T-50. The same signature red again is re-run again; any other red is slice-29s to fix."
+  - id: q-60
+    item: "slice-27"
+    question: "slice-27: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-27-implementer-2.result.json"
