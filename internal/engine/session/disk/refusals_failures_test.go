@@ -272,6 +272,45 @@ func TestRefusalLogCloseNeverWaits(t *testing.T) {
 		t.Fatal("an ended copy reached the staged log again", logs.calls.Load())
 	}
 
+	// Close is held inside the release it makes when nothing is running. A Commit
+	// and a Write that get their turn meanwhile find the copy ended, and neither
+	// returns while its staged log is still open.
+	logs.hold = "close"
+	ending := f.begin(t)
+	released := make(chan struct{})
+	go func() { ending.Close(); close(released) }()
+	<-logs.entered
+	type refused struct {
+		call   string
+		ok     bool
+		staged int
+	}
+	after := make(chan refused, 2)
+	go func() {
+		_, failure := ending.Commit()
+		after <- refused{"Commit", failure == sp.Incomplete, f.staged()}
+	}()
+	go func() {
+		n, err := ending.Write([]byte(refusal))
+		after <- refused{"Write", n == 0 && err != nil, f.staged()}
+	}()
+	select {
+	case got := <-after:
+		t.Fatalf("%s returned with %d staged while Close was still releasing the staged log", got.call, got.staged)
+	case <-time.After(100 * time.Millisecond):
+	}
+	logs.release <- struct{}{}
+	<-released
+	for range 2 {
+		if got := <-after; !got.ok || got.staged != 0 {
+			t.Fatalf("%s on the ended copy: refused %t with %d staged", got.call, got.ok, got.staged)
+		}
+	}
+	// Close alone reached the staged log, and nothing was published.
+	if got := string(f.stored()); got != "earlier\n" || f.staged() != 0 || logs.calls.Load() != 3 {
+		t.Fatalf("after the held Close the log is %q with %d staged and %d calls", got, f.staged(), logs.calls.Load())
+	}
+
 	// A Commit is held inside Publish, past the point where its call timed out.
 	logs.hold = "publish"
 	late := f.begin(t)
