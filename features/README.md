@@ -927,13 +927,26 @@ native recorder create abandoned: the controller left before the reply`, which
 stays for engine-side failures. Recovery and lifecycle fixtures set no problem for an
 abandoned request, as before. Every refusal the recorder made stays.
 
+That hand-off has one limit. The recorder sets the problem on the request's own
+handler, when its server notices the closed connection, and a launch step reads it as
+soon as it has collected the controller. A controller that gives up by itself tears
+down through the recorder before it exits, which gives the handler that time. One
+that the fixture's own 45-second deadline kills inside a create can be collected
+first. Its first Then then reports that deadline without the abandonment's words, or,
+on the anchor fixture when the launch loop takes the collected process before the
+deadline, only its bare precondition. The deadline lands inside a create only when the
+product's 1-second call limit and 3-second startup limit have both failed, and the row
+fails either way.
+
 **Step wait.** No Then judges an open exchange. After each step the harness waits for
 every forwarded create still unanswered on any native recorder the scenario started,
 those of its control, second and overlap worlds included (`awaitCreateOutcomes`). It
 holds no recorder lock while it waits, since the answer is recorded under it, and each
 wait ends with its exchange. Both journal formatters wait the same way for their own
 recorder before they print, because the lifecycle control's evidence is formatted
-inside a When.
+inside a When. A Then that reads the journal under the recorder lock therefore lets go
+of it before it formats a failure: `ID-ANCHORS-12`'s second Then copies the requests
+first, as `anchorsRelease` does.
 
 **Cleanup order.** The cleanup that `closeOfflineRuntime` runs repeats that wait first,
 without the lock. It then removes the listed workers as before. For each forwarded
@@ -993,9 +1006,11 @@ the intervals return for a decision, as does any other remedy.
 `TestAnchorRecoveryBarrierDiagnostics` hold these rules without an engine: a disposable
 in-memory engine that finishes a create nobody waits for and refuses to delete a held
 volume, controlled time for the 10-second and 35-second cases, and journals the tests
-write. They are harness checks, not native evidence. Whether a hosted row took this
-path is read from its first failure, and why a job's first create is slow is still
-unknown.
+write. The step wait is held once per world, with that world's engine answering last,
+and once through a scenario's own after-step hook; the fixture's kill is held against
+a real child process. They are harness checks, not native evidence. Whether a hosted
+row took this path is read from its first failure, and why a job's first create is
+slow is still unknown.
 
 Local `TestLifecycle*` checks verify step registration, probe compilation, recorder
 forwarding/faults and rejection of incorrect observations. They do not execute the probe
