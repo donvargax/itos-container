@@ -1797,7 +1797,7 @@ items:
     phase: 1
     owner: donvargax
     status: doing
-    depends_on: []
+    depends_on: [T-40]
     kind: task
   - id: p1-offline-11-ipv6-route-flake
     title: "ID-OFFLINE-11 flakes: a positive IPv6 route control times out on the CI runner"
