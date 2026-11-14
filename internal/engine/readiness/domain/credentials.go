@@ -301,11 +301,14 @@ func credentialFile(n port.CredentialNode, uid int64) string {
 	}
 }
 
+// The kernel names a path in at most 4095 bytes: PATH_MAX counts the
+// terminator. A longer boundary could never be read back from its descriptor,
+// and a longer descriptor pathname is not one the kernel returns.
 func absoluteCredentialPath(path string) bool {
 	if path == "/" {
 		return true
 	}
-	if !strings.HasPrefix(path, "/") || len(path) > 4096 {
+	if !strings.HasPrefix(path, "/") || len(path) > 4095 {
 		return false
 	}
 	for _, part := range strings.Split(path[1:], "/") {

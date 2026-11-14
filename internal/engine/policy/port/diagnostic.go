@@ -87,7 +87,7 @@ func Diagnostic(issue Issue) Problem {
 	case CredentialDuplicate:
 		p.Rule, p.Message, p.Fix = "credential_duplicate", "Credential kind repeats an earlier entry", "request each credential kind once"
 	case CredentialSource:
-		p.Rule, p.Message, p.Fix = "credential_source", "Credential source path is invalid", "use a literal absolute path of at most 4096 UTF-8 bytes without empty or dot components, backslashes or controls"
+		p.Rule, p.Message, p.Fix = "credential_source", "Credential source path is invalid", "use a literal absolute path of at most 4095 UTF-8 bytes without empty or dot components, backslashes or controls"
 	default:
 		p.Rule, p.Message, p.Fix = "internal", "Unknown policy failure", "report this as a bug"
 		p.Exit = 70

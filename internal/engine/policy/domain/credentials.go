@@ -54,8 +54,10 @@ func inspectCredentials(value port.Value) ([]port.Credential, []port.Issue) {
 	return grants, issues
 }
 
+// A source has at most 4095 bytes, the longest path Linux names: PATH_MAX
+// counts the terminator, so no file can be inspected under a longer one.
 func credentialPath(path string) bool {
-	if len(path) > 4096 || !strings.HasPrefix(path, "/") || strings.Contains(path, "\\") {
+	if len(path) > 4095 || !strings.HasPrefix(path, "/") || strings.Contains(path, "\\") {
 		return false
 	}
 	for _, c := range path {

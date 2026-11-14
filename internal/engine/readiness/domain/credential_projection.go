@@ -220,8 +220,9 @@ func credentialUnmappedFilesystem(row port.CredentialMount) bool {
 		row.Filesystem == "nfs" || row.Filesystem == "nfs4" || row.Filesystem == "9p"
 }
 
-// Validated root and visible paths are each at most 4096 bytes. The relative
-// suffix is at most 4095, so their joined coordinate cannot exceed 8192 bytes.
+// A validated row root is at most 4096 bytes and a visible path at most 4095.
+// The relative suffix is at most 4094, so their joined coordinate cannot
+// exceed 8191 bytes.
 func credentialMountCoordinate(row port.CredentialMount, path string) string {
 	relative := strings.TrimPrefix(strings.TrimPrefix(path, row.Point), "/")
 	if relative == "" {

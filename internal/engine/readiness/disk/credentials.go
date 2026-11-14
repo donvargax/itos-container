@@ -138,9 +138,12 @@ func (f *CredentialFiles) Descriptor(h port.CredentialHandle) (port.CredentialDe
 	if !ok || id != int(mountID) {
 		return zero, false
 	}
-	buf := make([]byte, 4097)
+	// The kernel names a descriptor in at most 4095 bytes and fails the read
+	// beyond that. One byte of room tells a longer or cut result from that
+	// name, should a kernel ever return one.
+	buf := make([]byte, 4096)
 	n, err := f.operations().readlink("/proc/self/fd/"+fd, buf)
-	if err != nil || n > 4096 {
+	if err != nil || n > 4095 {
 		return zero, false
 	}
 	return port.CredentialDescriptor{Path: string(buf[:n]), MountID: int(mountID)}, true

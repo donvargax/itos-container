@@ -581,3 +581,20 @@ inventory does reach that entry. No 9p export was mounted: these are synthetic
 observations, and the kernel behavior rests on its source. The code proof at
 `2ac05a4` left one change alive in the disk adapter, a nonzero mount ID returned
 beside a refused fdinfo parse; `5cdeabb` pins it. Fresh code proof remains CI-owned.
+
+The path-bound regression was committed pending in `b6e365c`. With `@wip` removed
+before the fix, each of ID-CREDENTIALS-62's three examples passed its 4095-byte
+half and failed at the problem assertion for 4096 bytes, with
+`credential.unavailable` and exit 3 instead of `policy.credential_source`,
+`doctor.checkout.root` or `approval.state.location`. ID-CREDENTIALS-08, live at
+4096 and 4097 bytes, was changed by the fix to 4095 and 4096; run that way before
+the fix, both examples failed at the refusal of 4096 bytes, which exited 0. All
+five examples pass now, and the fix text names 4095 bytes. In the shared fake/disk
+contract the 4096-byte descriptor row and the three 4096-byte boundary rows failed
+against each implementation before the fix and pass after it. These fixtures are
+real files on the host's kernel, tmpfs here, with nothing mounted and no seam
+replaced in the scenario or in the disk adapter's native test; that test passed
+before the fix too, because the kernel refuses 4096 bytes itself. An overlong root
+or state location keeps its shared message, which names absoluteness and encoding
+but not length. `4620db6` pins the survivor the code proof at `1ee1e7a` left in the
+identity comparison of protected roots. Fresh code proof remains CI-owned.

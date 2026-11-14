@@ -458,19 +458,25 @@ Feature: Named credential requests and read-only source inspection
   # / followed by repeated UTF-8 text and ASCII padding to exactly the given
   # decoded byte length, with no other slash. It creates no source on disk.
   # New Then compares the complete effective policy to that generated literal.
+  # Local review of 1ee1e7a (the thread at disk/credentials.go:143): the limit
+  # was 4096 bytes, one more than any path the kernel names, so the longest
+  # source a policy accepted could never be inspected. It is 4095, and the fix
+  # text names it. Before the fix both examples failed at the refusal of 4096
+  # bytes, which exited 0.
   @slice-29 @ID-CREDENTIALS-08
   Scenario Outline: source length counts UTF-8 bytes and accepts the exact limit
-    Given a credential policy source repeats "<text>" to exactly 4096 bytes
+    Given a credential policy source repeats "<text>" to exactly 4095 bytes
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
     Then it exits with code 0
     And its policy JSON preserves the generated credential source exactly
     And it finishes before the deadline
-    Given a credential policy source repeats "<text>" to exactly 4097 bytes
+    Given a credential policy source repeats "<text>" to exactly 4096 bytes
     When itos-container runs with "doctor --policy-only --json" and a 5 second deadline
     Then its policy JSON reports exactly these problems:
       | rule                     | path                  | exit |
       | policy.credential_source | /credentials/0/source | 2    |
     And it exits with code 2
+    And its standard output says "at most 4095 UTF-8 bytes"
     And it finishes before the deadline
     And the engine recorder has no connections
 
@@ -1819,7 +1825,7 @@ Feature: Named credential requests and read-only source inspection
   # Nothing is mounted and no seam is replaced: this is the built binary on the
   # host's kernel. Before the fix all three examples fail at the problem
   # assertion, with credential.unavailable and exit 3.
-  @slice-29 @ID-CREDENTIALS-62 @linux @wip
+  @slice-29 @ID-CREDENTIALS-62 @linux
   Scenario Outline: the longest path the kernel names is the inclusive bound of each inspected path
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
