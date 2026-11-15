@@ -74,6 +74,32 @@ func TestOverlapProtectedMarkerRename(t *testing.T) {
 }
 
 func TestOverlapProtectedBoundaries(t *testing.T) {
+	t.Run("legacy_run_without_marker", func(t *testing.T) {
+		f := overlapPreservationFixture(t)
+		w := f.worlds["ancestor"]
+		f.runs = append(f.runs, &overlapRun{w: w})
+		if _, exists := overlapCapture(t, f)[w.doctor.checkout]; !exists {
+			t.Fatal("legacy run excluded checkout root metadata")
+		}
+	})
+	t.Run("marker_directory_children", func(t *testing.T) {
+		f := overlapPreservationFixture(t)
+		r := f.runs[0]
+		path := filepath.Join(r.w.doctor.checkout, r.marker)
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		child := filepath.Join(path, "sentinel")
+		recoveryWrite(t, child, "retained")
+		before := overlapCapture(t, f)
+		if _, exists := before[child]; !exists {
+			t.Fatal("marker directory child missing from snapshot")
+		}
+		recoveryWrite(t, child, "changed")
+		if after := overlapCapture(t, f); maps.Equal(before, after) || before[child] == after[child] {
+			t.Fatal("marker directory child change was not detected")
+		}
+	})
 	for _, relative := range []string{
 		"sentinel", "slice-16-marker-99", "slice-16-marker-99.next",
 		"slice-16-marker-1.keep", "slice-16-marker-1.next.keep",
