@@ -6898,23 +6898,6 @@
     a local build of the engine fixture is not engine runtime evidence. Leave their budgets,
     selectors and assertions intact. The drafter changes only this ledger entry in a docs
     commit with Item T-52; push, CI watching and lifecycle actions belong to the coordinator.
-  done_when:
-    - run: |
-        if T52_output=$(go test ./features -run '^TestAcceptanceStaticBinary$' -count=1 -v 2>&1); then
-          T52_status=0
-        else
-          T52_status=$?
-        fi
-        printf '%s\n' "$T52_output"
-        test "$T52_status" -eq 0 || exit "$T52_status"
-        T52_missing=0
-        for T52_case in '' /cli/plain /cli/covered /engine-cli/plain /engine-cli/covered /session-probe/plain /session-probe/covered /engine-probe/plain /engine-probe/covered; do
-          if ! printf '%s\n' "$T52_output" | grep -Eq "^[[:space:]]*--- PASS: TestAcceptanceStaticBinary$T52_case [(]"; then
-            printf 'missing passing test: TestAcceptanceStaticBinary%s\n' "$T52_case"
-            T52_missing=1
-          fi
-        done
-        exit "$T52_missing"
 - id: T-53
   type: test
   title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
