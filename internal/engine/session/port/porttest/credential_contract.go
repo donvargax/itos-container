@@ -35,11 +35,20 @@ func (s *CredentialSourceFixture) Checked() []port.CheckedCredential {
 func (s *CredentialSourceFixture) Close() { s.Closes++ }
 
 type CredentialFixture struct {
+	UID     string
 	Fault   func(string) port.CredentialStager
 	Stager  port.CredentialStager
 	Sources *CredentialSourceFixture
 	Read    func(string) []byte
 	Present func(string) bool
+}
+
+func (f CredentialFixture) Intent() port.Record {
+	r := CredentialIntent(f.Sources.Kinds())
+	if f.UID != "" {
+		r.UID = f.UID
+	}
+	return r
 }
 
 func CredentialIntent(kinds port.CredentialKinds) port.Record {
@@ -63,7 +72,7 @@ func CredentialStagingContract(t Reporter, create func(map[string][]byte) Creden
 				values[kind] = data
 			}
 			f := create(values)
-			r := CredentialIntent(kinds)
+			r := f.Intent()
 			publications := 0
 			failure := f.Stager.Stage(context.Background(), r, f.Sources, func(s port.CredentialStaging) port.Outcome { publications++; r.Credentials = s; return "" })
 			if failure != "" {
@@ -98,7 +107,7 @@ func CredentialStagingContract(t Reporter, create func(map[string][]byte) Creden
 	for _, fault := range []string{"non-tmpfs", "occupied", "read", "short read", "write", "short write"} {
 		fixture := create(map[string][]byte{"claude-token": []byte("synthetic\n"), "github-token": []byte("another\n")})
 		stager := fixture.Fault(fault)
-		record := CredentialIntent(fixture.Sources.Kinds())
+		record := fixture.Intent()
 		failure := stager.Stage(context.Background(), record, fixture.Sources, func(staging port.CredentialStaging) port.Outcome { record.Credentials = staging; return "" })
 		if failure == "" {
 			t.Errorf("staging fault accepted: %s", fault)
@@ -111,7 +120,7 @@ func CredentialStagingContract(t Reporter, create func(map[string][]byte) Creden
 	}
 	f := create(map[string][]byte{"claude-token": []byte("synthetic\n")})
 	f.Sources.Failure = port.CredentialRefused
-	r := CredentialIntent(f.Sources.Kinds())
+	r := f.Intent()
 	if fail := f.Stager.Stage(context.Background(), r, f.Sources, func(port.CredentialStaging) port.Outcome {
 		t.Errorf("revalidation refusal published staging")
 		return ""

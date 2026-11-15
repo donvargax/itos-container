@@ -40,7 +40,7 @@ func diskCredentialFixture(t *testing.T, values map[string][]byte) f.CredentialF
 	mapped := func(path string) string {
 		return filepath.Join(root, filepath.Base(filepath.Dir(path)), filepath.Base(path))
 	}
-	return f.CredentialFixture{Fault: func(fault string) port.CredentialStager {
+	return f.CredentialFixture{UID: strconv.Itoa(os.Getuid()), Fault: func(fault string) port.CredentialStager {
 		copy := s
 		switch fault {
 		case "non-tmpfs":

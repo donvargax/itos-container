@@ -10,6 +10,7 @@ import (
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,7 +38,7 @@ func TestCredentialMetadataWidths(t *testing.T) {
 
 func stageCredentialFixture(t *testing.T, fixture f.CredentialFixture) (port.Record, port.Outcome) {
 	t.Helper()
-	r := f.CredentialIntent(fixture.Sources.Kinds())
+	r := fixture.Intent()
 	fail := fixture.Stager.Stage(t.Context(), r, fixture.Sources, func(s port.CredentialStaging) port.Outcome { r.Credentials = s; return "" })
 	return r, fail
 }
@@ -46,7 +47,7 @@ func TestCredentialStagingRefusals(t *testing.T) {
 		t.Run(fault, func(t *testing.T) {
 			fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
 			s := fixture.Stager.(Credentials)
-			r := f.CredentialIntent(fixture.Sources.Kinds())
+			r := fixture.Intent()
 			publish := func(next port.CredentialStaging) port.Outcome { r.Credentials = next; return "" }
 			switch fault {
 			case "non-tmpfs":
@@ -81,6 +82,106 @@ func TestCredentialStagingRefusals(t *testing.T) {
 			if r.Credentials.Stage == "owned" {
 				if cleanup := s.Remove(t.Context(), r); cleanup != "" {
 					t.Fatal("partial staging lost safe cleanup", cleanup)
+				}
+			}
+		})
+	}
+}
+
+func TestCredentialFilePublicationFailure(t *testing.T) {
+	for _, kinds := range []port.CredentialKinds{{Claude: true}, {GitHub: true}, {Claude: true, GitHub: true}} {
+		for _, failedKind := range kinds.List() {
+			t.Run(strings.Join(kinds.List(), "+")+"/"+failedKind, func(t *testing.T) {
+				values := map[string][]byte{}
+				for _, kind := range kinds.List() {
+					values[kind] = []byte("synthetic\n")
+				}
+				fixture := diskCredentialFixture(t, values)
+				s := fixture.Stager.(Credentials)
+				r := fixture.Intent()
+				index := port.CredentialIndex(failedKind)
+				path := filepath.Join(s.root, filepath.Base(r.Credentials.Directory), failedKind)
+				reached := false
+				fail := s.Stage(t.Context(), r, fixture.Sources, func(next port.CredentialStaging) port.Outcome {
+					if next.Files[index] != "" {
+						reached = true
+						info, err := os.Stat(path)
+						if err != nil || info.Size() != 0 {
+							t.Fatal("file identity was not published before copying")
+						}
+						return port.IntentWrite
+					}
+					r.Credentials = next
+					return ""
+				})
+				if !reached || fail != port.IntentWrite {
+					t.Fatal("file publication failure lost its primary outcome", fail)
+				}
+				if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+					t.Error("unpublished file remained outside durable cleanup authority")
+				}
+				if kinds.Claude && failedKind == "github-token" && !bytes.Equal(fixture.Read(r.Credentials.Directory+"/claude-token"), values["claude-token"]) {
+					t.Fatal("earlier published copy was lost before owned cleanup")
+				}
+				for range 2 {
+					if fail := s.Remove(t.Context(), r); fail != "" {
+						t.Fatal("durable recovery cannot remove partial staging", fail)
+					}
+				}
+				if presence, fail := s.Observe(t.Context(), r); fail != "" || presence != "absent" {
+					t.Fatal("partial staging cleanup did not confirm absence")
+				}
+			})
+		}
+	}
+}
+
+func TestCredentialUnpublishedFileSubstitution(t *testing.T) {
+	for _, substitution := range []string{"file", "symlink", "missing"} {
+		t.Run(substitution, func(t *testing.T) {
+			fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
+			s := fixture.Stager.(Credentials)
+			r := fixture.Intent()
+			path := filepath.Join(s.root, filepath.Base(r.Credentials.Directory), "claude-token")
+			retained := filepath.Join(t.TempDir(), "retained")
+			reached := false
+			fail := s.Stage(t.Context(), r, fixture.Sources, func(next port.CredentialStaging) port.Outcome {
+				if next.Files[0] == "" {
+					r.Credentials = next
+					return ""
+				}
+				reached = true
+				if err := os.Rename(path, retained); err != nil {
+					t.Fatal(err)
+				}
+				switch substitution {
+				case "file":
+					if err := os.WriteFile(path, []byte("replacement"), 0400); err != nil {
+						t.Fatal(err)
+					}
+				case "symlink":
+					if err := os.Symlink(retained, path); err != nil {
+						t.Fatal(err)
+					}
+				}
+				return port.IntentWrite
+			})
+			if !reached || fail != port.IntentWrite {
+				t.Fatal("substitution changed the publication failure", fail)
+			}
+			if _, err := os.Stat(retained); err != nil {
+				t.Fatal("cleanup removed the retained descriptor's other name")
+			}
+			if substitution == "missing" {
+				if fail := s.Remove(t.Context(), r); fail != "" {
+					t.Fatal("already absent unpublished file blocked cleanup", fail)
+				}
+			} else {
+				if _, err := os.Lstat(path); err != nil {
+					t.Fatal("publication cleanup removed a substituted entry")
+				}
+				if fail := s.Remove(t.Context(), r); fail != port.CredentialRefused {
+					t.Fatal("durable cleanup accepted a substituted unpublished entry", fail)
 				}
 			}
 		})
@@ -174,7 +275,7 @@ func TestCredentialSourcesAndIndependentCommands(t *testing.T) {
 	if fail != "" {
 		t.Fatal(fail)
 	}
-	second := f.CredentialIntent(fixture.Sources.Kinds())
+	second := fixture.Intent()
 	second.Credentials.Directory = "/dev/shm/itos-container-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	fail = fixture.Stager.Stage(t.Context(), second, fixture.Sources, func(s port.CredentialStaging) port.Outcome { second.Credentials = s; return "" })
 	if fail != "" {
