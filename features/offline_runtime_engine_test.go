@@ -202,8 +202,8 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 					}
 					if err != nil {
 						a.requests[index].Diagnostic = "recorder wait stream: " + err.Error()
-						if !a.recovery || request.Context().Err() == nil {
-							a.problem = errors.New("offline native recorder wait stream failed")
+						if !a.cancelledObservation(request, entry) {
+							a.problem = errors.Join(a.problem, fmt.Errorf("offline native recorder %s %s wait stream failed: %w", entry.Method, entry.Path, err))
 						}
 					} else if !a.requests[index].Cancelled {
 						// Recovery needs the completed reply as evidence that an exit
@@ -279,14 +279,23 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.requests[index].Status = http.StatusBadGateway
 			a.requests[index].Diagnostic = "recorder transport: " + err.Error()
 			a.requests[index].Cancelled = request.Context().Err() != nil
-			if a.lifecycle == nil && (!a.recovery || request.Context().Err() == nil) {
-				a.problem = errors.New("offline native recorder transport failed")
+			if a.lifecycle == nil && !a.cancelledObservation(request, entry) {
+				a.problem = errors.Join(a.problem, fmt.Errorf("offline native recorder %s %s transport failed: %w", entry.Method, entry.Path, err))
 			}
 			a.mu.Unlock()
 			http.Error(out, "offline fixture transport failed", http.StatusBadGateway)
 		},
 	}
 	proxy.ServeHTTP(out, request)
+}
+
+// A canceled wait carries no exit evidence, but cancellation is a normal part
+// of stdin-close reconciliation and teardown. Retain its failed journal entry;
+// the scenario must still prove workload results and owned resource absence.
+// Required inspections/mutations and uncanceled transport failures remain fatal.
+func (a *offlineAPI) cancelledObservation(request *http.Request, entry offlineRequest) bool {
+	return errors.Is(request.Context().Err(), context.Canceled) &&
+		(a.recovery || entry.Method == "POST" && strings.HasSuffix(entry.Path, "/wait"))
 }
 
 // Retain bounded journal data while forwarding bytes immediately. Close runs

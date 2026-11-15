@@ -53,7 +53,7 @@ func TestVersionIsRequiredAndExact(t *testing.T) {
 		{port.Value{}, port.Type}, {text("1"), port.Type}, {port.Value{Kind: port.Boolean}, port.Type},
 		{object(nil), port.Type}, {port.Value{Kind: port.Array}, port.Type},
 		{number("100000000000000000000000000001", "-29"), port.Type},
-		{number("-1", "0"), port.Version}, {number("0", "0"), port.Version}, {number("3", "0"), port.Version},
+		{number("-1", "0"), port.Version}, {number("0", "0"), port.Version}, {number("4", "0"), port.Version},
 		{number("1", "29"), port.Version},
 		{number("1", "999999999999999999999"), port.Version},
 		{number("1", "-999999999999999999999"), port.Type},

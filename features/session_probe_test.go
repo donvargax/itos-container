@@ -158,7 +158,7 @@ func (w *world) sessionProbe(action, reference string, checkpoint func() error) 
 		return result, observerErr
 	}
 	if err != nil {
-		return result, fmt.Errorf("session contract subprocess failed: %w", err)
+		return result, fmt.Errorf("session contract subprocess failed: %w\n%s", err, transcript.String())
 	}
 	data, err := os.ReadFile(output)
 	if err != nil {

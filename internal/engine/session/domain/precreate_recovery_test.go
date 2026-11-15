@@ -117,7 +117,7 @@ func TestRegisteredRunPreservesPrecreateStopResult(t *testing.T) {
 			if fault == "" {
 				want.Cleanup, want.Outcome = port.Complete, port.Incomplete
 			}
-			if result != want {
+			if !reflect.DeepEqual(result, want) {
 				t.Fatalf("resumed run lost stop's cleanup result or invented a workload exit: got %#v, want %#v", result, want)
 			}
 			if !reflect.DeepEqual(registry.Records[id], stoppedRecord) || string(store.Records[ref]) != stoppedIntent ||

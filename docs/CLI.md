@@ -11,9 +11,10 @@ The first milestone is an offline owned run: explicit argv in an approved, harde
 container with no network, the checkout as its only host mount, a non-root identity
 and owned resources cleaned up on exit. Linux amd64 with native Docker is the target,
 requiring passing runtime evidence before any support claim. A policy can request an
-exact host-name egress allowlist, which only `doctor --policy-only` and
-`doctor --manifest-only` read: nothing approves, enforces or runs it yet, and the other
-commands refuse it. Credentials/accounts, network Git, LAN ingress, Compose and other
+exact host-name egress allowlist, which the explicit policy-only, manifest-only and
+credentials-only doctor scopes read: nothing approves, enforces or runs it yet, and the
+other commands refuse it. Named credential requests and metadata inspection are implemented;
+credential delivery/accounts, network Git, LAN ingress, Compose and other
 platforms are deferred. Describing later pilot commands here does not authorize their
 implementation or settle an open security decision. Real-engine scenarios run only in CI;
 agents never receive the Docker socket.
@@ -134,9 +135,9 @@ host names (see [CONFIG.md](CONFIG.md)). Policy-only output then shows the effec
 list: plain output has one `network.allow: <name>` line per canonical name in ascending
 byte order after `network.mode`, and JSON has `policy.network.allow` as the same sorted
 array. Offline has no list. Inspection reads and validates only: it runs no engine, proxy
-or helper. Ordinary doctor, approve and run refuse a valid version 2 policy for now
-with `policy.version` at `/version` and exit 2, and name `doctor --policy-only` as the
-way to read what it asks for.
+or helper. Ordinary doctor and approve bind a valid version 2 policy in the
+canonical approval. Run still refuses every version 2 policy with `policy.version`
+at `/version` and exit 2 before engine access, naming `doctor --policy-only`.
 
 ## Implemented run refusals
 
@@ -189,16 +190,22 @@ or invalid state is a typed refusal. File-only modes do not inspect identity/sta
 or emit a fingerprint.
 
 Bare `itos container approve` requires terminal stdin and stdout and plain output.
-It shows all settings, fixed offline restrictions and changes since the last approval,
+It shows all settings, the profile restrictions and changes since the last approval,
 then asks y/N. Only a complete y/yes line consents; other input or EOF declines.
 Matching settings need no further prompt. Without both terminals, bare approve
-refuses and names `--fingerprint <value>`; `doctor` provides that optional exact value.
+refuses. For offline grants without credentials it names `--fingerprint <value>`;
+`doctor` provides that optional exact value. Network grants name only terminal approval.
 A person using the terminal flow never types a hash.
 
 `approve --json` or `ITOS_JSON=1` never prompts. `--no-json` overrides inherited JSON.
 JSON approval emits one schema-1 object with `ok`, complete `problems` and `approval`.
-An exact `--fingerprint` works without a terminal; malformed values exit 2 and stale
-values exit 1. Changes during review and concurrent replacement refuse a fresh
+For offline grants without credentials, an exact `--fingerprint` works without a
+terminal; malformed values exit 2 and stale values exit 1. An egress allowlist requires
+the person at a real terminal: any `--fingerprint` refuses with
+`approve.terminal-required` (exit 1), regardless of its value or an existing approval.
+Bare nonterminal or JSON grant requests use `approve.confirmation-required` and name
+`itos container approve` at a terminal. Prerequisite failures take precedence.
+Changes during review and concurrent replacement refuse a fresh
 publication. Identity/state refusals exit 1, unavailable observations exit 3, and
 uncertain durable publication exits 75. Exit 75 also reports lock contention:
 `doctor`, `approve` and `run` share one private account lock, and a wait longer than
@@ -215,15 +222,23 @@ restores it or removes its record. `run` shows these as exit 1 `run.approval-inv
 [CONFIG.md](CONFIG.md) states each outcome and the recovery. Detailed rules are in
 [approval.feature](../features/approval.feature).
 
-An agent on the host can approve through `--fingerprint` or a faked terminal:
-approval records what was approved, not who. See [security.md](security.md).
+The `allowlist-v1` review and plain status list every canonical host name and disclose
+the proxy's handshake and logging limits. They also say that run cannot start this
+profile yet. The profile binds the sorted allowlist and pinned proxy image; changing
+any name or the proxy digest needs new consent. Offline retains `offline-v1`; changing
+policy version also needs consent. Run's changed-approval diagnostic lists sorted
+JSON-pointer paths, never their values.
+
+An unsandboxed agent on the host can fake a terminal; the offline fingerprint route
+also permits automation. Approval records what was approved, not who. See
+[security.md](security.md).
 
 ## Implemented manifest inspection
 
 `doctor --manifest-only` validates policy, the selected manifest and its requested
 workspace directory. Ordinary doctor currently performs these same file checks.
 Both refuse missing manifests rather than searching conventional locations or
-choosing a worker. `--policy-only` and `--manifest-only` cannot be combined.
+choosing a worker. `--policy-only`, `--manifest-only` and `--credentials-only` are mutually exclusive.
 
 JSON success has `schema: 1`, `scope: "manifest"`, `ok: true`, `problems: []` and
 `manifest` containing `valid`, `path`, all six `effective` fields, sorted `unused`
@@ -239,6 +254,39 @@ there is no CLI or environment channel for injecting it. Label problems identify
 Accepted editor settings and metadata are unused, never executed or merged. See
 [manifest.feature](../features/manifest.feature) for the complete profile and rules.
 Configuration validity supplies neither host readiness nor approval.
+
+### Credential metadata inspection
+
+`doctor --credentials-only` parses policy and observes requested host source metadata
+without reading credential contents, requiring a manifest, executing helpers, contacting
+an engine or recording approval. It accepts policy versions 1, 2 and 3; no credentials
+means an empty result with no source, checkout-inventory or mount-table calls. The
+three explicit inspection scopes cannot be combined. JSON selection follows `ITOS_JSON`
+and explicit `--no-json`, as with the other doctor modes.
+
+The policy is the effective root's: absolute `ITOS_ROOT` when set, otherwise the working
+directory, as ordinary doctor resolves it. This mode pins that root, reads
+`itos-container.yaml` only through the pin and holds it until the sources are observed, so
+the requests and the checkout they are excluded from belong to one tree. A working directory
+that differs from `ITOS_ROOT` is never read. A root that cannot be pinned refuses before any
+policy is read with `doctor.checkout.root` (2), `doctor.checkout.unavailable` (3),
+`doctor.checkout.path` (1) or `doctor.checkout.changed` (1), its `path` the root as given and
+`credentials: []`, with or without grants. `--policy-only` and `--manifest-only` keep reading
+the working directory.
+
+Successful policy projection produces one `schema:1` JSON object with `scope:"credentials"`,
+`ok`, `problems` and `credentials` (always an array). Each sorted grant has exactly `kind`,
+its literal `source`, and the fixed target `/run/itos-container/credentials/<kind>`.
+Source failures retain this list and located diagnostics; policy failures use the existing
+policy envelope without partial data. There is no approval fingerprint or readiness claim.
+Plain output names “Credentials only”, the same grants, and “Credential contents, manifest,
+engine and approval were not checked”. Paths use the existing terminal escaping.
+
+The [configuration contract](CONFIG.md#policy-version-3-credential-requests) defines the
+metadata rules, bounds and refusal precedence. Ordinary doctor, approve and run remain
+gated on version 3, including a version-3 policy with no credentials. File-only scopes
+accept its requests without inspecting the named host files. No token is delivered and
+no real credential use is authorized by these observations.
 
 ## Names, help and arguments
 

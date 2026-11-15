@@ -27,6 +27,8 @@ type PreflightCodec interface {
 	Codec
 	LocalCandidate(readiness.Result, string, string) Candidate
 	LocalMatches(Candidate, Record) bool
+	// ChangedPaths returns sorted pointers only; local omits unobserved engine/image facts.
+	ChangedPaths(candidate Candidate, record Record, local bool) []string
 }
 
 // FrozenRecords validates the same envelope from independent selected bytes.

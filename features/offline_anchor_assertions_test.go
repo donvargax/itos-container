@@ -12,7 +12,8 @@ import (
 func (w *world) anchorOriginal() error {
 	s, o := w.anchor, w.offline
 	if s.err != nil {
-		return fmt.Errorf("native anchor observations unavailable: %w", s.err)
+		return fmt.Errorf("native anchor observations unavailable: %w\ncontroller exit=%d submitted-start reached=%t held=%t probe-frames=%d\nnative anchor diagnostics:\n%s",
+			s.err, o.exit, s.reached, s.held, len(s.reports), w.anchorRecoveryDiagnostics())
 	}
 	if !s.reached || !s.held {
 		return fmt.Errorf("run did not reach the submitted-start barrier (exit %d, stderr %q)", o.exit, o.stderr)
