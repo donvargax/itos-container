@@ -258,6 +258,7 @@ questions:
   - id: q-64
     item: "slice-30"
     question: "slice-30: the implementer (attempt 1) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-30-implementer-1.result.json"
+    answer: "An allowlist, with every filesystem type it does not name refused (the person, 2026-11-15). Accepted for a credential source: ext4, btrfs and xfs. NFS and 9p stay refused outright, as decision 0027 says; cifs, smb3, ceph, virtiofs, ecryptfs and every other type are refused by not being on the list, with no per-type analysis owed. Widening the list is a new decision with its own evidence. The implementer's two other findings (a mismatch-refusal scenario for the policy pin against the observed identity, and 4096-byte root and state boundary rows whose diagnostics name the 4095-byte limit) are spec changes: raise them as a spec defect in the usual way."
   - id: q-65
     item: "T-50"
     question: "T-50: the implementer (attempt 8) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-50-implementer-8.result.json"
