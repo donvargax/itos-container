@@ -6863,6 +6863,25 @@
     nor exit 2 establishes which operation failed. Do not change product limits or the native
     engineBudgetTree fixture to conceal it.
 
+    Coordinator q-68, settled 2026-11-15 21:15 UTC, identifies the failed ci job of run
+    42738076694, attempt 1, in the supplied T-53-run-42738076694.log; the later green rerun
+    does not replace that incident. Inspection of lines 7015-7085 finds the different-image-config-ID
+    row and only the parent error at lines 7028, 7067 and 7076. The log does not contain the
+    failing child's combined stdout/stderr, a panic/runtime message or stack trace, an explicit
+    exit cause, an operation/deadline diagnostic, or its result JSON. The listed-coverage
+    count.preparation-failed at lines 7083-7085 is downstream of the failed scenario and does
+    not identify the child's failing operation.
+
+    The omission is consistent with the original reporting path: commit
+    195b834fad0231ae5860d388b3d9127ec8058685 subsequently appended transcript.String() to the
+    session contract subprocess error. Its parent captured that output but returned only the
+    exit status. Neither the supplied log nor this reporting change establishes that the child
+    emitted nothing or explains why it exited 2. The evidence still needed is that disk/create
+    child's captured stdout/stderr for ID-SESSION-22 row #01, or a recurrence with the current
+    transcript-preserving harness that identifies the failing operation. Do not invent
+    TestSessionContractCoverageFailureRegression from the exit code alone or claim a timeout
+    repair without that evidence.
+
     Read features/session_probe_test.go, session_fixture_test.go, session_local_fixture_test.go,
     session_local_steps_test.go, session_memory_test.go, session_engine_test.go,
     session_coverage_test.go, coverage_routing_test.go and features_test.go; the session and offline
@@ -6962,6 +6981,24 @@
     create_refusal failed the assertion requiring the recorded cause in the returned error, while
     offline_refusal passed. This confirms the reporting defect and that the proposed fixture
     reaches its assertion, but is not the implementer's committed red test or an exit-2 repair.
+
+    Implementation evidence already on this branch is 38c62d7 (the diagnostic regression)
+    followed by 63678bf (the reporting repair). The latter records create_refusal failing its
+    recorded-cause and exit-context assertions before the repair, with offline_refusal passing
+    as the control. The q-68 continuation reran itos task T-53 before editing: both refusal
+    subtests passed, all ten covered repetitions passed in 36.266 s, and the existing coverage
+    contract passed in 5.409 s. The task still failed its required missing-test guard for
+    TestSessionContractCoverageFailureRegression. These passing checks do not reproduce or
+    repair the original exit 2.
+
+    The continuation's all-live non-engine session selection initially failed in 8.699 s under
+    restricted execution with state.unsafe preflight refusals and ownership-unsafe cleanup,
+    matching the drafting environment issue rather than the original subprocess exit 2.
+    The same selection passed with normal process visibility in 13.206 s. The full non-engine
+    feature suite then passed with a private ITOS_CC_TEST_COVERDIR in 356.777 s, without -race;
+    the temporary collector was removed after the run. No original exit 2 recurred. This
+    continuation changes only the evidence record; the missing child transcript and the absent
+    deterministic regression still prevent completion of T-53.
   done_when:
     - run: >-
         log=$(mktemp) || exit 1; trap 'rm -f "$log"' EXIT;
