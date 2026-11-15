@@ -3,6 +3,7 @@ package features
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -53,7 +54,49 @@ func TestOfflineRecorderRecordsAbandonedCreate(t *testing.T) {
 		t.Run("runs after every step of a scenario", testCreateStepHook)
 	})
 	t.Run("engine-side failure with the controller connected", testCreateEngineFailure)
+	t.Run("earlier recorder problem survives", testCreatePreservesProblem)
 	t.Run("ordinary create", testCreateOrdinary)
+}
+
+func testCreatePreservesProblem(t *testing.T) {
+	for _, event := range []string{"abandonment", "transport failure", "abandonment then failure", "failure then abandonment"} {
+		t.Run(event, func(t *testing.T) {
+			w, e := createRecorderWorld(t, "plain")
+			a := w.offline.api
+			prior := errors.New("earlier recorder identity problem")
+			a.problem = prior
+			e.drop = event != "abandonment"
+			c := startCreate(t, w, e, createTokens[0])
+			if event == "abandonment" || event == "abandonment then failure" {
+				c.abandon(t)
+			}
+			e.finish()
+			a.awaitCreates()
+			c.wait(t)
+			if event == "failure then abandonment" {
+				// Order the two recorder callbacks explicitly: the transport failure
+				// has been recorded before the handler notices the controller left.
+				a.createAbandoned(a.creates[0], 0)
+				a.createAbandoned(a.creates[0], 0) // noticing it again adds no duplicate
+			}
+			err := a.observeAfter()
+			if !errors.Is(err, prior) {
+				t.Errorf("observeAfter lost the earlier recorder problem: %v", err)
+			}
+			want := []error{prior}
+			if event != "transport failure" {
+				want = append(want, errOfflineCreateAbandoned)
+			}
+			if event != "abandonment" {
+				want = append(want, errOfflineTransport)
+			}
+			for _, problem := range want {
+				if !errors.Is(err, problem) || strings.Count(fmt.Sprint(err), problem.Error()) != 1 {
+					t.Errorf("observeAfter must keep %q exactly once: %v", problem, err)
+				}
+			}
+		})
+	}
 }
 
 // The accounting every abandoned create must end with, whatever made its
