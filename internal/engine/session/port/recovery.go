@@ -65,6 +65,7 @@ type RunRegistry interface {
 }
 
 type RecoveryEntry struct {
+	Staging       string   `json:"staging,omitempty"`
 	MountDetector string   `json:"mount_detector,omitempty"`
 	Anchor        string   `json:"anchor,omitempty"`
 	ID            string   `json:"id"`

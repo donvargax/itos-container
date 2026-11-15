@@ -109,8 +109,8 @@ type Store interface {
 func (r Record) ValidTransition(next Record) bool {
 	expected := r
 	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
-	expected.Schema, expected.Anchor, expected.Egress = next.Schema, next.Anchor, next.Egress
-	if next != expected || !r.anchorTransition(next) || !r.egressTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
+	expected.Schema, expected.Anchor, expected.Egress, expected.Credentials = next.Schema, next.Anchor, next.Egress, next.Credentials
+	if !r.CredentialShape() || !next.CredentialShape() || next != expected || !r.anchorTransition(next) || !r.egressTransition(next) || !r.credentialTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
 		return false
 	}
 	switch r.Stage {
@@ -126,7 +126,7 @@ func (r Record) ValidTransition(next Record) bool {
 
 // Completed includes cancellation proven before create, never an unknown create.
 func (r Record) Completed() bool {
-	return r.EgressGone() && r.ValidEgressShape() && (r.Schema == 1 || r.Anchor.Stage == "absent") && ((r.Stage == "absent" && HexID(r.ContainerID)) || (r.Stage == "cancelled" && r.ContainerID == ""))
+	return (r.Schema != 4 || r.Credentials.Valid() && r.Credentials.Stage == "absent") && r.EgressGone() && r.ValidEgressShape() && (r.Schema == 1 || r.Anchor.Stage == "absent") && ((r.Stage == "absent" && HexID(r.ContainerID)) || (r.Stage == "cancelled" && r.ContainerID == ""))
 }
 
 type Intent interface {
@@ -138,6 +138,8 @@ type Intent interface {
 }
 
 type Observation struct {
+	CredentialMounts            [2]CredentialMount
+	CredentialExact             bool
 	Kind, Session               string
 	AnchorName                  string
 	AnchorExact                 bool

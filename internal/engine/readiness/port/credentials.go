@@ -81,3 +81,9 @@ type CredentialIssue struct {
 }
 
 type CredentialResult struct{ Issues []CredentialIssue }
+
+// CredentialReadPaths names a retained metadata descriptor for the copying
+// adapter. It opens no data and never returns an original policy pathname.
+type CredentialReadPaths interface {
+	ReadPath(CredentialHandle) (string, bool)
+}

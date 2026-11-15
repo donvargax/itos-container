@@ -1,7 +1,7 @@
 package disk
 
 import (
-	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
+	"errors"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 	"os"
@@ -25,14 +25,42 @@ func diskCredentialFixture(t *testing.T, values map[string][]byte) f.CredentialF
 				t.Fatal("source setup failed")
 			}
 			t.Cleanup(func() { _ = file.Close() })
-			sources.Entries = append(sources.Entries, port.CheckedCredential{Kind: kind, ReadPath: "/proc/self/fd/" + strconv.FormatUint(uint64(file.Fd()), 10), Node: readiness.CredentialNode{Size: int64(len(data))}})
+			info, statErr := file.Stat()
+			if statErr != nil {
+				t.Fatal("source setup stat failed")
+			}
+			node, ok := credentialNode(info)
+			if !ok {
+				t.Fatal("source metadata unavailable")
+			}
+			sources.Entries = append(sources.Entries, port.CheckedCredential{Kind: kind, ReadPath: "/proc/self/fd/" + strconv.FormatUint(uint64(file.Fd()), 10), Node: node})
 		}
 	}
 	s := Credentials{OS: "linux", root: root, tmpfs: func(string) bool { return true }}
 	mapped := func(path string) string {
 		return filepath.Join(root, filepath.Base(filepath.Dir(path)), filepath.Base(path))
 	}
-	return f.CredentialFixture{Stager: s, Sources: sources, Read: func(path string) []byte { data, _ := os.ReadFile(mapped(path)); return data }, Present: func(path string) bool {
+	return f.CredentialFixture{Fault: func(fault string) port.CredentialStager {
+		copy := s
+		switch fault {
+		case "non-tmpfs":
+			copy.tmpfs = func(string) bool { return false }
+		case "occupied":
+			r := f.CredentialIntent(sources.Kinds())
+			if err := os.Mkdir(filepath.Join(root, filepath.Base(r.Credentials.Directory)), 0700); err != nil {
+				t.Fatal("collision setup failed")
+			}
+		case "read":
+			copy.read = func(*os.File, []byte) (int, error) { return 0, errors.New("synthetic read error") }
+		case "short read":
+			copy.read = func(*os.File, []byte) (int, error) { return 1, nil }
+		case "write":
+			copy.write = func(*os.File, []byte) (int, error) { return 0, errors.New("synthetic write error") }
+		case "short write":
+			copy.write = func(*os.File, []byte) (int, error) { return 1, nil }
+		}
+		return copy
+	}, Stager: s, Sources: sources, Read: func(path string) []byte { data, _ := os.ReadFile(mapped(path)); return data }, Present: func(path string) bool {
 		_, err := os.Lstat(filepath.Join(root, filepath.Base(path)))
 		return err == nil
 	}}

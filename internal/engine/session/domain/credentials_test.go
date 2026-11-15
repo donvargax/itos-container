@@ -17,6 +17,7 @@ func credentialRunner(t *testing.T) (Runner, *f.Registry, *f.RunEngine, string, 
 	fixture := f.MemoryCredentialFixture(map[string][]byte{"claude-token": []byte("synthetic\n")})
 	registry.Store.Codec.(*f.Codec).Value.Credentials = fixture.Sources.Kinds()
 	runner.Credentials, runner.Sources, runner.StagingEntropy = fixture.Stager, fixture.Sources, credentialEntropy{}
+	engine.CredentialStaging = fixture.Stager.(*f.CredentialStager)
 	return runner, registry, engine, id, fixture
 }
 func TestCredentialLifecycle(t *testing.T) {

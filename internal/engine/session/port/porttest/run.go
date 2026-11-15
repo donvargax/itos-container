@@ -11,6 +11,7 @@ import (
 
 // RunEngine is an in-memory lifecycle fake, including explicit boundary faults.
 type RunEngine struct {
+	CredentialStaging                   *CredentialStager
 	CredentialMounts                    []port.CredentialMount
 	CredentialPaths, CredentialAcquired []byte
 	OpenNil                             bool
@@ -73,6 +74,10 @@ func (e *RunEngine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnec
 	return &runConnection{c.(*memoryConnection), e}, ""
 }
 func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []string) (string, port.Outcome) {
+	if !r.ValidCredentials(c.binding) || r.Schema == 4 && !r.Credentials.Ready() {
+		return "", port.CredentialRefused
+	}
+	c.run.CredentialMounts = r.Credentials.Mounts()
 	c.run.Argv = slices.Clone(argv)
 	c.run.event("create")
 	id, f := c.Create(ctx, r)
@@ -81,6 +86,10 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		o := c.engine.Resources[id]
 		o.Mounts = true
 		o.AnchorName, o.AnchorExact = r.Anchor.Name, r.Schema >= 2
+		for _, m := range r.Credentials.Mounts() {
+			o.CredentialMounts[port.CredentialIndex(m.Kind)] = m
+		}
+		o.CredentialExact = true
 		c.engine.Resources[id] = o
 		c.engine.resourcesMu.Unlock()
 	}
@@ -97,7 +106,11 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 	c.engine.resourcesMu.Lock()
 	o, ok := c.engine.Resources[id]
 	c.engine.resourcesMu.Unlock()
-	if !ok || o.Status != "created" || !slices.Equal(c.run.Argv, argv) {
+	expected := [2]port.CredentialMount{}
+	for _, m := range c.run.CredentialMounts {
+		expected[port.CredentialIndex(m.Kind)] = m
+	}
+	if !ok || o.Status != "created" || !slices.Equal(c.run.Argv, argv) || o.CredentialMounts != expected || len(c.run.CredentialMounts) > 0 && (!o.CredentialExact || !o.AnchorExact || o.ImageID != c.binding.ImageID) {
 		return port.IsolationUnverified
 	}
 	return ""
@@ -137,6 +150,15 @@ func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 	c.run.event("start")
 	if ctx.Err() != nil {
 		return port.ExecutionFailed
+	}
+	if len(c.run.CredentialMounts) > 0 {
+		c.run.CredentialAcquired = slices.Clone(c.run.CredentialPaths)
+		if c.run.CredentialStaging != nil {
+			c.run.CredentialAcquired = nil
+			for _, m := range c.run.CredentialMounts {
+				c.run.CredentialAcquired = append(c.run.CredentialAcquired, c.run.CredentialStaging.Files[m.Source]...)
+			}
+		}
 	}
 	if c.run.StartFailure != "" {
 		return c.run.StartFailure
@@ -186,6 +208,16 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 	}
 	return c.run.Exit, c.run.WaitFailure
 }
+func (c *runConnection) Remove(ctx context.Context, id string) {
+	c.memoryConnection.Remove(ctx, id)
+	c.engine.resourcesMu.Lock()
+	_, present := c.engine.Resources[id]
+	c.engine.resourcesMu.Unlock()
+	if !present {
+		clear(c.run.CredentialAcquired)
+		c.run.CredentialAcquired = nil
+	}
+}
 func (c *runConnection) RemoveRun(ctx context.Context, id string) {
 	if c.isProxy(id) {
 		c.removeProxy(ctx, id)
@@ -193,6 +225,10 @@ func (c *runConnection) RemoveRun(ctx context.Context, id string) {
 	}
 	c.run.event("remove")
 	c.Remove(ctx, id)
+	if _, status := c.Inspect(ctx, id); status == port.NotFound {
+		clear(c.run.CredentialAcquired)
+		c.run.CredentialAcquired = nil
+	}
 }
 func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outcome {
 	if c.isProxy(id) {

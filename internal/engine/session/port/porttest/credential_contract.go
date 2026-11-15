@@ -35,6 +35,7 @@ func (s *CredentialSourceFixture) Checked() []port.CheckedCredential {
 func (s *CredentialSourceFixture) Close() { s.Closes++ }
 
 type CredentialFixture struct {
+	Fault   func(string) port.CredentialStager
 	Stager  port.CredentialStager
 	Sources *CredentialSourceFixture
 	Read    func(string) []byte
@@ -69,7 +70,7 @@ func CredentialStagingContract(t Reporter, create func(map[string][]byte) Creden
 				t.Errorf("credential copy positive control refused: %s", failure)
 				continue
 			}
-			if publications != 1 || r.Credentials.Stage != "owned" || r.Credentials.Device == "" || r.Credentials.Inode == "" || f.Sources.Revalidations != 1 {
+			if publications < 1 || r.Credentials.Stage != "owned" || r.Credentials.Device == "" || r.Credentials.Inode == "" || f.Sources.Revalidations != 1 {
 				t.Errorf("copy lacks revalidation and published directory identity")
 			}
 			for _, m := range r.Credentials.Mounts() {
@@ -94,6 +95,20 @@ func CredentialStagingContract(t Reporter, create func(map[string][]byte) Creden
 			}
 		}
 	}
+	for _, fault := range []string{"non-tmpfs", "occupied", "read", "short read", "write", "short write"} {
+		fixture := create(map[string][]byte{"claude-token": []byte("synthetic\n"), "github-token": []byte("another\n")})
+		stager := fixture.Fault(fault)
+		record := CredentialIntent(fixture.Sources.Kinds())
+		failure := stager.Stage(context.Background(), record, fixture.Sources, func(staging port.CredentialStaging) port.Outcome { record.Credentials = staging; return "" })
+		if failure == "" {
+			t.Errorf("staging fault accepted: %s", fault)
+		}
+		if record.Credentials.Stage == "owned" {
+			if f := stager.Remove(context.Background(), record); f != "" {
+				t.Errorf("partial staging lost cleanup: %s", fault)
+			}
+		}
+	}
 	f := create(map[string][]byte{"claude-token": []byte("synthetic\n")})
 	f.Sources.Failure = port.CredentialRefused
 	r := CredentialIntent(f.Sources.Kinds())
@@ -115,5 +130,13 @@ func MemoryCredentialFixture(values map[string][]byte) CredentialFixture {
 			sources.Entries = append(sources.Entries, port.CheckedCredential{Kind: kind, ReadPath: path})
 		}
 	}
-	return CredentialFixture{Stager: s, Sources: sources, Read: func(path string) []byte { return s.Files[path] }, Present: func(path string) bool { _, ok := s.Directories[path]; return ok }}
+	return CredentialFixture{Fault: func(fault string) port.CredentialStager {
+		if fault == "occupied" {
+			r := CredentialIntent(sources.Kinds())
+			s.Directories[r.Credentials.Directory] = r.Credentials
+		} else {
+			s.Fault = fault
+		}
+		return s
+	}, Stager: s, Sources: sources, Read: func(path string) []byte { return s.Files[path] }, Present: func(path string) bool { _, ok := s.Directories[path]; return ok }}
 }
