@@ -47,6 +47,7 @@ golangci-lint)
 	*) asset=golangci-lint-$version-$platform.tar.gz exe= ;;
 	esac
 	url=https://api.github.com/repos/golangci/golangci-lint/releases/assets/$asset_id
+	download_url=https://github.com/golangci/golangci-lint/releases/download/v$version/$asset
 	member=golangci-lint-$version-$platform/golangci-lint$exe
 	;;
 goreleaser)
@@ -60,6 +61,7 @@ goreleaser)
 	*) die "no pinned $tool for $platform" ;;
 	esac
 	url=https://api.github.com/repos/goreleaser/goreleaser/releases/assets/$asset_id
+	download_url=https://github.com/goreleaser/goreleaser/releases/download/v$version/$asset
 	member=goreleaser exe=
 	;;
 git-cliff)
@@ -78,6 +80,7 @@ git-cliff)
 	esac
 	asset=git-cliff-$version-$target.tar.gz
 	url=https://api.github.com/repos/orhun/git-cliff/releases/assets/$asset_id
+	download_url=https://github.com/orhun/git-cliff/releases/download/v$version/$asset
 	member=git-cliff-$version/git-cliff exe=
 	;;
 itos-cc)
@@ -95,6 +98,7 @@ itos-cc)
 	*) asset=itos-cc-$version-$platform.tar.gz exe= ;;
 	esac
 	url=https://api.github.com/repos/donvargax/itos-cc/releases/assets/$asset_id
+	download_url=https://github.com/donvargax/itos-cc/releases/download/v$version/$asset
 	member=itos-cc$exe
 	;;
 *) die "unknown pinned tool: $tool" ;;
@@ -108,13 +112,20 @@ if [ ! -x "$bin" ]; then
 	tmp=$(mktemp -d)
 	trap 'rm -rf "$tmp"' EXIT
 	# Six attempts let a short release-service outage recover beyond the first
-	# seven seconds of exponential backoff. Start retries for at most 45 seconds;
-	# a final 60-second transfer fits inside the fixtures' two-minute call budget.
+	# seven seconds of exponential backoff. On each route, start retries for at
+	# most 45 seconds and bound each transfer to 60 seconds.
 	# Use the official asset API: the browser download route can return persistent
 	# gateway errors while this route still serves the identical pinned archive.
+	# If the unauthenticated API is forbidden (for example, a shared IP's rate
+	# limit), use the public release URL with the same version and archive pin.
 	# A failed fetch still fails the gate. Only a checksum-verified archive is cached.
-	curl -fsSL --retry 5 --retry-max-time 45 --connect-timeout 10 --max-time 60 \
-		-H 'Accept: application/octet-stream' -o "$tmp/$asset" "$url" || die "cannot fetch $url"
+	if ! status=$(curl -fsSL --retry 5 --retry-max-time 45 --connect-timeout 10 --max-time 60 \
+		-H 'Accept: application/octet-stream' -w '%{http_code}' -o "$tmp/$asset" "$url"); then
+		[ "$status" = 403 ] || die "cannot fetch $url"
+		echo "pinned: asset API returned HTTP 403; trying public release download" >&2
+		curl -fsSL --retry 5 --retry-max-time 45 --connect-timeout 10 --max-time 60 \
+			-o "$tmp/$asset" "$download_url" || die "cannot fetch $download_url"
+	fi
 	(cd "$tmp" && echo "$sum  $asset" | $check >/dev/null) || die "$asset SHA-256 did not match the pinned release"
 	case "$asset" in
 	*.zip) (cd "$tmp" && unzip -q "$asset" "$member") || die "$asset holds no $member" ;;

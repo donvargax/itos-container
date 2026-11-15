@@ -36,6 +36,10 @@
   scenarios:
     - id: "@ID-POLICY-01"
       why: policy inspection reads the fixed file, supplies offline defaults and returns the effective policy without engine access
+- file: credentials-policy.feature
+  scenarios:
+    - id: "@ID-CREDENTIALS-16"
+      why: metadata inspection reports both requests without reading or retaining synthetic token contents or contacting an engine
 - file: manifest.feature
   scenarios:
     - id: "@ID-MANIFEST-01"

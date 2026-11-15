@@ -498,6 +498,7 @@ func buildProduct(root, dir string, engine bool) (string, error) {
 	}
 	cmd := exec.Command("go", append(args, "-o", bin, "./cmd/itos-container")...)
 	cmd.Dir = source
+	cmd.Env = setEnv(os.Environ(), "CGO_ENABLED", "0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("building itos-container: %v\n%s", err, out)
 	}
