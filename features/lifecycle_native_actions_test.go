@@ -136,6 +136,10 @@ func (w *world) lifecycleHeartbeat() int {
 	return value
 }
 
+func (w *world) lifecycleLaterHeartbeat() {
+	w.lifecycle.later = w.lifecycleHeartbeat()
+}
+
 func (w *world) lifecycleDisconnect() {
 	l := w.lifecycle
 	if err := w.lifecycleControl(false); err != nil {
@@ -152,7 +156,7 @@ func (w *world) lifecycleDisconnect() {
 		return
 	}
 	w.lifecycleCollect()
-	l.later = w.lifecycleHeartbeat()
+	w.lifecycleLaterHeartbeat()
 	l.survivedLoss = w.recoveryNativePresent(true)
 	var err error
 	l.lostBoundary, err = w.offline.api.inspect(w.recovery.worker)
