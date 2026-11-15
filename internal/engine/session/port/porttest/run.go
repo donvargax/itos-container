@@ -11,15 +11,17 @@ import (
 
 // RunEngine is an in-memory lifecycle fake, including explicit boundary faults.
 type RunEngine struct {
-	OpenNil                       bool
-	AfterProxyWait                func()
-	Networks                      map[string]port.NetworkObservation
-	EgressFault                   string
-	ProxyOutput, ProxyErrorOutput string
-	ProxyExit                     <-chan struct{}
-	ProxyID                       string
-	Anchors                       map[string]port.AnchorObservation
-	eventMu                       sync.Mutex
+	CredentialMounts                    []port.CredentialMount
+	CredentialPaths, CredentialAcquired []byte
+	OpenNil                             bool
+	AfterProxyWait                      func()
+	Networks                            map[string]port.NetworkObservation
+	EgressFault                         string
+	ProxyOutput, ProxyErrorOutput       string
+	ProxyExit                           <-chan struct{}
+	ProxyID                             string
+	Anchors                             map[string]port.AnchorObservation
+	eventMu                             sync.Mutex
 	*Engine
 	Boundary, AttachFailure, StartFailure, WaitFailure, DrainFailure port.Outcome
 	OpenFailure                                                      port.Outcome

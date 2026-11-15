@@ -36,25 +36,27 @@ type Result struct {
 }
 
 type Record struct {
-	Egress         EgressRecord `json:"egress,omitzero"`
-	Anchor         Anchor       `json:"anchor,omitzero"`
-	Schema         int          `json:"schema"`
-	Project        string       `json:"project"`
-	Generation     string       `json:"generation"`
-	Fingerprint    string       `json:"fingerprint"`
-	Snapshot       string       `json:"snapshot"`
-	UID            string       `json:"uid"`
-	GID            string       `json:"gid"`
-	Endpoint       string       `json:"engine_endpoint"`
-	EngineID       string       `json:"engine_id"`
-	Name           string       `json:"name"`
-	ImageReference string       `json:"image_reference"`
-	ImageID        string       `json:"image_id"`
-	ContainerID    string       `json:"container_id"`
-	Stage          string       `json:"stage"`
+	Credentials    CredentialStaging `json:"credentials,omitzero"`
+	Egress         EgressRecord      `json:"egress,omitzero"`
+	Anchor         Anchor            `json:"anchor,omitzero"`
+	Schema         int               `json:"schema"`
+	Project        string            `json:"project"`
+	Generation     string            `json:"generation"`
+	Fingerprint    string            `json:"fingerprint"`
+	Snapshot       string            `json:"snapshot"`
+	UID            string            `json:"uid"`
+	GID            string            `json:"gid"`
+	Endpoint       string            `json:"engine_endpoint"`
+	EngineID       string            `json:"engine_id"`
+	Name           string            `json:"name"`
+	ImageReference string            `json:"image_reference"`
+	ImageID        string            `json:"image_id"`
+	ContainerID    string            `json:"container_id"`
+	Stage          string            `json:"stage"`
 }
 
 type Binding struct {
+	Credentials                                           CredentialKinds
 	Egress                                                EgressGrant
 	Frozen                                                approval.Frozen
 	Checkout                                              readiness.CheckoutIdentity
