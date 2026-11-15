@@ -14,6 +14,14 @@ The command helper keeps stdout values separate from stderr diagnostics, so a
 recovered download retry cannot become part of the linter's executable path.
 Exhausted retries, failed commands and checksum mismatches still fail the gate.
 
+T-52's CI later failed when that asset API returned HTTP 403. The launcher now
+falls back on that status to the same release's public download URL, retaining
+the version and SHA-256 pins and checking the archive before extraction. No token
+is required. `TestPinnedForbiddenAssetFallback` first failed all five rows at
+the forbidden API response; it covers public-download success, retries, cache
+reuse, checksum rejection and download failure, with `--path` diagnostics kept
+on stderr. Other API errors retain their existing retry and failure handling.
+
 Before the correction, `TestPinnedAssetRedirect` failed to obtain a binary asset,
 and `TestSuccessfulCommandKeepsStderrOutOfValue` failed because the returned path
 included the retry diagnostic. The focused checks cover media-type negotiation,
