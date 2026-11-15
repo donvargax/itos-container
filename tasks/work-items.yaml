@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - T-50
   - T-53
   - p1-harness-home
   - p1-interactive-tty
@@ -1829,7 +1828,7 @@ items:
     title: "Fresh recovery after controller loss and path replacement flakes: anchor recovery exits 75 and cleanup gets HTTP 409"
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-platform-log-redaction
