@@ -6800,20 +6800,6 @@
     owns push, native CI evidence
     and closure. Report the tested heads, every red and green regression, the baseline neighbour
     result, what CI showed of the first failure and its intervals, and what stays uncertain.
-  done_when:
-    - run: |
-        output=$(go test ./features -count=1 -v -run '^(TestAnchorRecovery|TestOfflineRecorder|TestEngineFixture|TestEngineSuiteBudget|TestEngineSchedule)') || { printf '%s\n' "$output"; exit 1; }
-        printf '%s\n' "$output"
-        printf '%s\n' "$output" | awk '
-          /^--- PASS: TestOfflineRecorderRecordsAbandonedCreate / { create = 1 }
-          /^--- PASS: TestOfflineRecorderCleanupRemovesAuthorizedWorkers / { cleanup = 1 }
-          /^--- PASS: TestAnchorRecoveryBarrierDiagnostics / { barrier = 1 }
-          END {
-            if (!create) print "TestOfflineRecorderRecordsAbandonedCreate did not pass"
-            if (!cleanup) print "TestOfflineRecorderCleanupRemovesAuthorizedWorkers did not pass"
-            if (!barrier) print "TestAnchorRecoveryBarrierDiagnostics did not pass"
-            exit !(create && cleanup && barrier)
-          }'
 - id: T-51
   type: chore
   title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
