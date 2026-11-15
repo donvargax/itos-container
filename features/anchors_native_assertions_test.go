@@ -57,9 +57,20 @@ func (w *world) anchorsEntry(p *recoveryProcess, code int) (anchorRecoveryEntry,
 	return entry, nil
 }
 
+// anchorsCause is the world's recorded cause with the diagnostics of that
+// world: the cause first, so that a truncated annotation keeps it, and still
+// found by errors.Is.
+func (w *world) anchorsCause() error {
+	cause := w.recovery.err
+	if cause == nil {
+		return nil
+	}
+	return &lifecycleEvidenceError{text: cause.Error() + "\n" + w.anchorRecoveryDiagnostics(), causes: []error{cause}}
+}
+
 func (w *world) anchorsLostStatus() error {
-	if w.recovery.err != nil {
-		return w.recovery.err
+	if err := w.anchorsCause(); err != nil {
+		return err
 	}
 	s, err := w.anchorsEntry(w.recovery.status, 0)
 	if err != nil {
@@ -72,8 +83,8 @@ func (w *world) anchorsLostStatus() error {
 }
 
 func (w *world) anchorsPendingStatus() error {
-	if w.recovery.err != nil {
-		return w.recovery.err
+	if err := w.anchorsCause(); err != nil {
+		return err
 	}
 	s, err := w.anchorsEntry(w.recovery.status, 0)
 	if err != nil {
@@ -113,8 +124,8 @@ func (w *world) anchorsContinuity() error {
 }
 
 func (w *world) anchorsOwned() (*anchorVolume, error) {
-	if w.recovery.err != nil {
-		return nil, w.recovery.err
+	if err := w.anchorsCause(); err != nil {
+		return nil, err
 	}
 	if len(w.anchor.volumes) != 1 || len(w.anchor.records) == 0 || !offlineHex(w.recovery.worker) {
 		return nil, errors.New("missing original worker and independently owned anchor recovery evidence")
@@ -149,6 +160,10 @@ func (w *world) anchorsOwned() (*anchorVolume, error) {
 }
 
 func (w *world) anchorsRelease() error {
+	// A recorded cause explains a missed barrier; the bare precondition does not.
+	if err := w.anchorsCause(); err != nil {
+		return err
+	}
 	if (w.anchors.mode == "create" || w.anchors.mode == "start") && !w.anchors.reached {
 		return errors.New("uncertain startup never reached its successful native response barrier")
 	}

@@ -109,6 +109,8 @@ func (w *world) lifecycleJournal(p *recoveryProcess) (string, error) {
 		return "engine recorder unavailable; journal unavailable", nil
 	}
 	a := w.offline.api
+	// A printed create always shows its outcome, never how long it had been open.
+	a.awaitCreates()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	origin := time.Time{}
@@ -132,6 +134,11 @@ func (w *world) lifecycleJournal(p *recoveryProcess) (string, error) {
 		fmt.Fprintf(&out, "#%d %s %s HTTP %d cancelled=%t arrival=%s reply=%s diagnostic=%s",
 			i+1, lifecycleQuoted(e.Method, 16), lifecycleQuoted(path, 192), e.Status, e.Cancelled,
 			lifecycleOffset(origin, e.At), lifecycleOffset(origin, e.Replied), lifecycleQuoted(e.Diagnostic, 256))
+		if e.Method == "POST" && path == "/containers/create" {
+			// Whether or not a reply followed: what the recorder spent before it
+			// forwarded, and what the engine spent.
+			fmt.Fprintf(&out, " forwarded=%s answer=%s", lifecycleOffset(origin, e.Forwarded), lifecycleOffset(origin, e.Answered))
+		}
 		if e.State != nil {
 			// Type-check scalar values so a malformed field cannot dump a nested map.
 			status, _ := e.State["Status"].(string)
@@ -165,6 +172,16 @@ func lifecycleJournalSelection(entries []offlineRequest) []int {
 		}
 	}
 	selected[0] = true
+	// Every create and the request before it, the image inspection that opens the
+	// product's create call: together they say how that call's time was spent.
+	for i, e := range entries {
+		if e.Method == "POST" && e.Path == "/containers/create" && len(selected)+2 <= limit {
+			selected[i] = true
+			if i > 0 {
+				selected[i-1] = true
+			}
+		}
+	}
 	for i := len(entries) - 1; i >= 0 && len(selected) < limit; i-- {
 		selected[i] = true
 	}
