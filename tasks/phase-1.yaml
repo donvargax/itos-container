@@ -6253,15 +6253,16 @@
     Question 5 bars real credentials. Question 6 bars an integrated refusal-log absence claim;
     this task neither fixes the logging contract nor declares AC-36 satisfied.
 
-    Implementation and downstream delivery handoff wait for slice-29 to record its bounded,
-    concurrency-safe state-side descendant-exclusion design and race argument in ADR 0025 and
-    arc42, with the required evidence. That includes refusing a state-descendant alias while
-    admitting a distinct source during another project's publications and removals and with
-    more than 100,000 unrelated retained entries. T-47 being done is insufficient. The registry
-    currently lists only T-47; the coordinator must gate scheduling on slice-29 as well. This
-    draft changes no registry dependency, owner or status. Do not implement the withdrawn
-    host-wide state scan, a current-project-only substitute, or a fallback in this task. The
-    source capability below consumes that handoff; it does not invent its exclusion algorithm.
+    The coordinator's q-67 decision of 2026-11-15 21:15 UTC confirms the slice-29 prerequisite
+    is met: slice-29 merged at ae2e666 and closed at 07a596e on 2026-11-14, and q-54 applies.
+    Implement T-48 as specified without another prerequisite question. Consume slice-29's
+    bounded, concurrency-safe state-side descendant-exclusion handoff, including refusal of a
+    state-descendant alias while admitting a distinct source during another project's
+    publications and removals and with more than 100,000 unrelated retained entries. Older
+    unresolved-state wording in ADR 0025 or arc42 predates that merge; do not rewrite it in
+    this task. Do not implement the withdrawn host-wide state scan, a current-project-only
+    substitute, or a fallback. The source capability below consumes that handoff; it does not
+    invent its exclusion algorithm.
 
     Extend internal/engine/session's domain, port, port/porttest, disk, docker, codec and entropy
     responsibilities, preserving the existing slice/engine arrows. Keep OS, filesystem and SDK

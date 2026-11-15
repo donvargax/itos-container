@@ -204,6 +204,11 @@ func (s Credentials) copy(ctx context.Context, dir *os.Root, uid string, source 
 		return port.CredentialUnavailable
 	}
 	if f := publish(*staging); f != "" {
+		// Recovery has no authority over this unpublished identity. Keep the
+		// descriptor open while checking its name, and never unlink a replacement.
+		if named, err := dir.Lstat(source.Kind); err == nil && os.SameFile(info, named) {
+			_ = dir.Remove(source.Kind)
+		}
 		return f
 	}
 	s.event("copy")
