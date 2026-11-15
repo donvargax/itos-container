@@ -351,9 +351,13 @@ func (f *overlapFixture) stop(r *overlapRun) {
 }
 
 func (f *overlapFixture) protected() (map[string]string, error) {
+	return f.protectedWithWalk(filepath.WalkDir)
+}
+
+func (f *overlapFixture) protectedWithWalk(walk doctorTreeWalk) (map[string]string, error) {
 	result := map[string]string{}
 	for _, w := range f.worlds {
-		tree, err := doctorTree(w.doctor.checkout)
+		tree, err := doctorTreeWithWalk(w.doctor.checkout, nil, walk)
 		if err != nil {
 			return nil, err
 		}
