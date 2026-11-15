@@ -14,9 +14,10 @@ the checkout as its only host mount, a non-root identity and owned cleanup. Linu
 with native Docker is a target requiring passing runtime evidence, not a supported-host
 claim. A policy may request network egress to an allowlist of host names, but no
 proxy enforces it and no run starts with it yet. Ordinary doctor and approve bind
-the requested list; run still refuses a valid version 2 file for now. Credentials/accounts,
-network Git, LAN ingress, Compose and other platforms remain deferred. Describing the
-wider pilot does not authorize its later slices or settle an open security decision.
+the requested list; run still refuses a valid version 2 file for now. Version 3 adds
+named credential requests and metadata-only inspection, without approval or delivery.
+Credential delivery/accounts, network Git, LAN ingress, Compose and other platforms
+remain deferred. Describing the wider pilot does not authorize its later slices or settle an open security decision.
 Real-engine scenarios run only in CI.
 
 Files owned by other tools retain their formats: `itos.yaml` configures core itos's
@@ -303,11 +304,12 @@ limit of its own.
 
 A fix names the schema the file was read against. For a version 2 file read by
 `doctor --policy-only`, no fix names version 1, and `policy.network_mode` says to use
-offline or allowlist mode. The one exception is the refusal below, which ordinary doctor,
-approve and run give a valid version 2 file: its fix says `use policy version 1, or read
+offline or allowlist mode. The one exception is the refusal below, which run gives a
+valid version 2 file: its fix says `use policy version 1, or read
 what a version 2 file requests with doctor --policy-only`. Where no supported version was
-read, the fix names both: `use policy version 1 or 2` for an unsupported number, and
-`use the field type defined by policy version 1 or 2` for a wrongly typed version or a
+read, the fix names all supported versions: `use policy version 1, 2 or 3` for an
+unsupported number, and
+`use the field type defined by policy version 1, 2 or 3` for a wrongly typed version or a
 root that is not an object.
 
 Doctor and approve accept a valid version 2 policy. Canonical schema 1 uses
@@ -460,6 +462,122 @@ do not establish sandbox argv or credential rules.
     order, one key per line, using only the permitted JSON-compatible data. Preserve
     meaning on read-back and avoid unrelated diff churn. `init` must not overwrite
     existing files; its non-runnable examples and paths still need specifications.
+
+## Policy version 3: credential requests
+
+[Version 3's schema](schemas/itos-container-v3.schema.json) extends version 2 with
+optional `credentials`. Omission means no grants. A present list is nonempty and each
+entry has exactly `kind` and `source`. The case-sensitive kinds are `claude-token` and
+`github-token`, each at most once. There is no Codex kind, inline value, target override,
+command or environment key. Versions 1 and 2 continue to reject `credentials`.
+
+```yaml
+version: 3
+manifest: .devcontainer/devcontainer.json
+credentials:
+  - kind: claude-token
+    source: /private-host-sources/claude-token
+```
+
+Sources are literal absolute slash-separated paths of at most 4095 UTF-8 bytes, with
+at least one component after `/`. That is the longest path Linux names, since `PATH_MAX`
+counts the terminator. Empty, dot and dot-dot components, trailing slash,
+backslash and ASCII controls are refused. Nothing is trimmed, expanded or executed;
+`~` and `$` inside an absolute path are ordinary filename characters. JSON Schema's
+character limit cannot express the UTF-8 byte limit. Network defaults and allowlist
+validation retain version 2's meaning. Effective output sorts requests by kind while
+problem indices retain their written order. Parsing never stats or opens sources.
+
+New exit-2 policy rules are `policy.credentials_empty` at `/credentials`,
+`policy.credential_kind` and `policy.credential_duplicate` at the entry's `/kind`, and
+`policy.credential_source` at its `/source`. Missing fields, wrong types and extra keys
+use the existing required/type/unknown-key rules. Independent problems are collected
+without partial effective data or rejected values in diagnostics. Fixes name the declared
+schema; unsupported-version fixes name versions 1, 2 and 3.
+
+`doctor --credentials-only` reads the policy of the effective root (absolute `ITOS_ROOT`,
+otherwise the working directory) through a pin of that root, never from a different working
+directory, and judges its sources against that same checkout.
+It observes metadata on Linux amd64. Each source needs safe
+root- or host-owned ancestors, no symlink, a host-owned regular file with no group/other
+permission bits, exactly one link, and 1..65536 bytes. Owner read permission is not
+required. Two grants cannot name one inode. Sources and their ancestors must be outside
+checkout and protected state by identity and filesystem coordinates, not pathname prefix.
+Protected roots include both the selected state location and the fixed
+`<account home>/.local/state/itos-container` control tree. Account home comes from the
+effective UID's local account record; `HOME` and `XDG_STATE_HOME` cannot move that anchor.
+The mode never reads, hashes or logs contents and creates no state or approval.
+
+The shared readiness observer inventories checkout metadata, including hidden, Git,
+ignored and mounted entries, in batches of 128, at most 100000 entries and directory
+depth 64. Both mount observations also exclude sources and ancestors within the
+validated checkout coordinate subtree, matching device and path components. This
+rejects backing files or directories hidden under host submounts but exposed by the
+worker's non-recursive checkout bind. A match in either observation is
+`credential.location`; distinct devices and component siblings remain independent.
+It never enumerates unrelated state records. Instead, two complete mount tables
+reserve each protected root's filesystem subtree and every mount rooted below it, including
+covered backing trees. Each table is bounded to 8 MiB, 16384 rows and 65535 bytes per line;
+a row's root and mountpoint to 4096 bytes each, descriptor paths to 4095, coordinates to
+8191, and fdinfo to 64 KiB. The effective root and the selected state location share the
+4095-byte bound: one byte more is refused as `doctor.checkout.root` or
+`approval.state.location`, exit 2. All observations
+share a ten-second monotonic deadline, which cannot preempt a blocked kernel call.
+A final source stat returning at or after that deadline is refused. Descriptor
+`statx(STATX_MNT_ID)` selects the mount row and must remain unchanged across the
+mount-table reads. Its `st_dev` need not equal the row's superblock device, as on
+btrfs subvolumes. Missing statx mount identity reports `credential.mount_id`,
+exit 3, and names the required kernel support; there is no device/fdinfo fallback.
+Incomplete or changed required evidence refuses. An absent state root is not created;
+safe concurrent creation at its reserved coordinate is accepted after revalidation.
+Namespace handles and deleted bind roots remain unprojectable mount rows. They do
+not block independent sources unless a required descriptor uses the row or its
+mountpoint is at, below or covering protected state.
+
+Overlay and all FUSE types (`fuse`, `fuse.*`, `fuseblk`, `fuseblk.*`) cannot establish
+backing-path exclusion.
+Inspection reports `credential.filesystem`, exit 3, when a source or its ancestor
+uses one, or such a mount is at, below or covering checkout or either protected
+state root. Covered mounts and absent state roots are included. Use source,
+checkout and state paths on filesystems with projectable backing paths. Unrelated
+overlay/FUSE mounts do not block an otherwise independent source. Mount options
+are not treated as backing-path proof; the mount-ID checks above still apply.
+NFS (`nfs`, `nfs4`) is refused the same way and under the same conditions. The
+kernel reports `/` as the root of every NFS mount, whichever export subdirectory
+it shows, so a second mount of a protected subdirectory cannot be recognized.
+A source, checkout or state location on NFS, an NFS home included, reports
+`credential.filesystem`; unrelated NFS mounts do not.
+9p (`9p`) is refused the same way and under the same conditions. Every 9p mount
+has a device of its own and reports `/` as its root, so a second mount of a
+protected subdirectory matches its tree in neither position nor identity. A source,
+checkout or state location on 9p, such as a virtual machine's shared host folder,
+reports `credential.filesystem`; unrelated 9p mounts do not. Other filesystem
+types are judged from their mount rows.
+
+Source problems are located at `/credentials/<written-index>/source`. Missing or
+unavailable metadata uses exit 3; symlink, ancestor, location, regular, owner, permissions,
+links, size and duplicate refusals use exit 1, under the `credential.` prefix. Only the
+first failure per source is reported, in that order; the highest exit wins. Requested
+grants remain visible. Existing boundary refusals retain their shared rules: checkout
+ancestors have no credential-source owner or permission requirement, symlinks report
+`doctor.checkout.path`, and checkout problems retain the requested root as their path.
+Absolute checkout inputs are cleaned before walking, as in the shared checkout pin;
+credential source paths remain literal. Checkout/state overlap in either direction
+reports `approval.state.path` before inventory, including aliases established by
+pinned identities and mount coordinates. A selected state location that is relative
+or not valid UTF-8 reports `approval.state.location` (exit 2), as ordinary doctor
+does, before any source, checkout or state path is opened. Unavailable boundary
+evidence prevents inventory. An unrelated stacking mount cannot override a missing
+mount ID or an unavailable checkout descriptor diagnostic.
+
+These observations neither grant access nor establish continuous protection from trusted
+host changes. [Decision 0027](decisions/0027-credential-source-inspection.md) defines the
+race argument and limits. The disk adapter uses `github.com/moby/sys/mountinfo` v0.7.2
+under Apache-2.0, with its upstream license retained in the module distribution.
+Ordinary doctor, approve and run still refuse valid version 3 with `policy.version`,
+exit 2, before manifest/source/engine inspection or state publication. Their fix points
+to policy-only and credentials-only inspection. Slice-30 owns approval integration;
+this mode grants no delivery and settles none of T-47's live-account questions.
 
 ## Remaining specification work
 

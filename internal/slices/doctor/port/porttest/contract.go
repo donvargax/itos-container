@@ -39,7 +39,7 @@ func PoliciesContract(t Reporter, open func(Fixture) port.Policies) {
 		{Issues: []policy.Issue{{Kind: policy.Missing}}, Result: policy.Result{Issues: []policy.Issue{{Kind: policy.Missing}}}},
 		{Issues: []policy.Issue{{Kind: policy.Unreadable}}, Result: policy.Result{Issues: []policy.Issue{{Kind: policy.Unreadable}}}},
 		{Value: policy.Value{Kind: policy.Object, Fields: map[string]policy.Value{
-			"version": {Kind: policy.Number, Number: policy.Decimal{Coefficient: "3", Exponent: "0"}},
+			"version": {Kind: policy.Number, Number: policy.Decimal{Coefficient: "4", Exponent: "0"}},
 		}}, Result: policy.Result{Issues: []policy.Issue{{Kind: policy.Version, Path: []string{"version"}}}}},
 	}
 	for _, fixture := range fixtures {

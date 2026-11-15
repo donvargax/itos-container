@@ -1681,6 +1681,39 @@ items:
       name, ID or engine text. It changes the item's line that a notice carries scenario name,
       duration and outcome only, and the record's shape is pinned by TestEngineScenarioTiming, which
       the item's check already extends. T-50's failure-time print stays as specified.
+
+      The same need as this item's note on the create call's intervals, seen from a failed run, so
+      it is one more line for this item's spec, not an item. In T-50's run 43543693012 at 73cbd13
+      three first rows stopped at run.call-timeout. T-50's diagnostics print the create's forwarding
+      and answer times in the launch journal, below the cause, the launch line and the status and
+      stop reports. itos ci watch keeps 10 lines of a failed scenario and T-43's annotation 4096
+      bytes, so the intervals reached a reader for the lifecycle row only: 39 and 110 lines were
+      left out for the other two. T-50's third rule fixes what the launch line holds (the
+      controller's exit, elapsed time, rule and operation), so an implementer cannot add this there,
+      and T-50 is at its landing decision (q-63). This item already changes the timing record to
+      carry these intervals and waits for T-50 to land. When it is specified, weigh one more spec
+      line: when the launch controller stopped at a call limit, the launch line of both formatters,
+      anchorRecoveryDiagnostics and T-49's lifecycle one, also carries that call's intervals: the
+      image inspection's round trip, and the create from arrival to forwarding, from forwarding to
+      the engine's answer and from the answer to the reply. Durations only, pinned in
+      TestAnchorRecoveryBarrierDiagnostics. The notice covers each shard's first row. The launch
+      line covers any row, in the two channels an agent can read today.
+
+      Belongs with this item's runner evidence. It is a per-run reading that must print on green
+      runs too, so cold and warm runs can be compared, and the preflight's exact allowlist
+      (validEnginePreflight) cannot carry it. It is a hypothesis, not a finding: the cold compile
+      before a shard's first row leaves the runner writing back a large build cache, and the
+      engine's create waits on disk. T-51's run 43538972827 logged 'Cache is not found' and 19 to 24
+      s of compilation before each failed first row, and T-50's run 43543693012 measured 2.33 s of
+      engine time for the lifecycle row's create. Fold in: just before the first engine row, record
+      /proc/pressure/io and the Dirty and Writeback lines of /proc/meminfo, and publish them in the
+      notice beside the first row's create intervals. Two cold builds precede that row: go test -c
+      in the step (ci.yml:135) and the product's -cover build at the start of TestFeatures
+      (features/features_test.go:85). So read after the second, in the harness, not between the
+      step's compile and its test run. Numbers only, and an absent /proc/pressure/io is said, not a
+      failure. The reading confirms or refutes the hypothesis on the next cold run. The remedy is
+      not this item's: it belongs to p2-first-engine-row-slow-create, added by the same triage, and
+      the warm cache to p2-ci-go-build-cache-rolling-key.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
@@ -1699,21 +1732,9 @@ items:
     title: The policy file accepts named credential sources and doctor validates them without reading their contents
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-47]
     kind: slice
-    why: >
-      Was p1-credentials-policy-sources.
-      Charter step 2: the credential grants are part of the approved settings, so they start in
-      itos-container.yaml, as the egress allowlist did in slice-25. Scenarios first: a closed
-      credentials section naming each source by kind (Claude token file, Codex auth file, GitHub
-      token file) with an absolute host path. Unknown kinds, duplicates, relative or empty paths,
-      and paths inside the checkout or any mount are refused with a located diagnostic. Doctor
-      reports a missing, non-regular, group- or world-accessible, or foreign-owned source, and shows
-      the effective grants. It never prints, hashes or logs contents. It does not execute checkout
-      code and starts no engine. Offline policies without the section are unchanged. docs/CONFIG.md
-      and docs/CLI.md are updated, and the published policy schema moves with it. It takes the keys
-      and checks from the decision record. Broken down from p1-credentials-passed-in.
   - id: slice-30
     title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
     phase: 1
@@ -2065,3 +2086,62 @@ items:
       as T-21 did for @wip scenarios; or both. Neither is a redraw to escape a failure. The same
       item settles one sentence in AGENTS.md: whether `itos-cc mutation list`, which runs no test,
       may be used locally to see the sites, given that local mutation runs are forbidden.
+  - id: p2-first-engine-row-slow-create
+    title: A shard's first engine row passes when the engine's first create takes seconds
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item owns this once T-50 lands. T-50 stops the leak and names the failure. Its fourth rule
+      leaves the slow first create to a remedy read from measured intervals, and its attempt 3
+      returned that the one limit it may move is not enough (q-63). In run 43543693012 at 73cbd13
+      all three shards failed at their first engine row (ID-OFFLINE-29, ID-ANCHORS-09,
+      ID-LIFECYCLE-08), each controller stopping with run.call-timeout, operation create response.
+      The lifecycle row's intervals: image inspection 10 ms, the recorder's checks 0.7 ms, the
+      engine's HTTP 201 2.329 s after forwarding and 3.729 s after controller start, 1.39 s of which
+      had passed before the call began. That outlives the fixture's 1-second call and also its
+      3-second startup budget, which starts before preflight
+      (internal/slices/run/command/command.go:80), so a longer call alone turns the failure into a
+      startup timeout. The same first rows failed in 5 of 6 shard jobs on slice-29's and T-51's
+      first go1.27.4 runs, and 9 in 129 are on record with a warm cache. Each costs a re-run, and
+      three have cost an implementer attempt and a question (q-59, q-61, q-63). Choose the remedy in
+      the spec, from more than this one cold-cache sample: the two create lines itos cut from that
+      run, and the passing-row intervals and I/O pressure readings that
+      p1-engine-timing-notice-every-run is to publish. If limits are the remedy, move call and
+      startup together, only through engineBudgetTree, each with a delayed-success and an expiry
+      control, T-42's cut and restart-refusal controls still valid, and the cost measured in CI
+      against the 180-second shard gate, since engineQuietInterval follows the larger limit. A warm
+      cache is p2-ci-go-build-cache-rolling-key's and does not explain the warm-cache failures. No
+      retry, skipped row, relaxed assertion or production default change. Phase p2: a re-run clears
+      each failure, so it blocks no step of milestone two, but it taxes every pull request of steps
+      1 and 2.
+
+      A warm cache does not prevent it. main's run 43546719957 at bcb9be2 (a docs commit, go1.27.3)
+      restored the setup-go cache, compiled the engine suite in 4.9 s, and still failed the
+      lifecycle shard's first engine row (ID-LIFECYCLE-08) with run.call-timeout on operation
+      create, then cleanup HTTP 409. So the slow first create of a job is the engine's, not the
+      compile's: p2-ci-go-build-cache-rolling-key alone is not the remedy.
+  - id: p2-native-mount-evidence-credential-inspection
+    title: A CI-only tier runs credential source inspection against real bind mounts made in a private user and mount namespace
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Decisions 0025 and 0027 call native bind-mount proof "downstream CI work", and no item owns
+      it. Every alias, stacking and filesystem row of slice-29 is simulated through observation
+      seams. That gap already let one defect through: the 4096-byte row passed the disk contract
+      only because its fixture replaced readlink, while a real kernel refuses that length (fixed in
+      8f081a7). A private namespace (unshare -Urm) makes real mounts without root or Docker; the
+      implementer confirmed with it that mountinfo prints roots longer than PATH_MAX, and the
+      reviewer used it for 23 layouts. A CI tier built this way would run the disk adapter against
+      real bind aliases of checkout and protected-state descendants, file and directory mount
+      crossings, and an overlong mount root, for slice-29's rows and slice-30's reuse of the same
+      observation. It does not block charter step 2, because decision 0025 requires only synthetic
+      evidence before admission; it is the runtime evidence behind the source-exclusion claim that
+      slice-31 to slice-33 rely on. Not checked: whether the hosted ubuntu-latest runner permits
+      unprivileged user namespaces (Ubuntu 24.04 restricts them through AppArmor by default); the
+      runner has sudo if it does not.
