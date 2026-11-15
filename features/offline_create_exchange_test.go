@@ -23,7 +23,6 @@ type offlineCreate struct {
 	// Under the recorder lock.
 	id        string // the listed worker, when the engine answered 201 with a full ID
 	expired   bool   // the exchange ended at engineCreateOutcomeAllowance
-	failed    bool   // the exchange ended in an engine-side failure
 	abandoned bool   // a plain fixture's controller left before the reply
 
 	// Written before done closes and read only after it.
@@ -141,7 +140,7 @@ func (a *offlineAPI) createOutcome(x *offlineCreate, outbound, request *http.Req
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err != nil {
-		x.failure, x.failed = err, true
+		x.failure = err
 		a.requests[index].Status = http.StatusBadGateway
 		a.requests[index].Diagnostic = "recorder transport: " + err.Error()
 		if errors.Is(outbound.Context().Err(), context.DeadlineExceeded) {
@@ -151,10 +150,7 @@ func (a *offlineAPI) createOutcome(x *offlineCreate, outbound, request *http.Req
 		// As for every engine-side failure: a recovery fixture reports none for a
 		// request its controller abandoned, a lifecycle fixture none at all.
 		if a.lifecycle == nil && (!a.recovery || request.Context().Err() == nil) {
-			a.problem = errOfflineTransport
-			if x.abandoned {
-				a.problem = errors.Join(errOfflineCreateAbandoned, errOfflineTransport)
-			}
+			a.problem = errors.Join(a.problem, errOfflineTransport)
 		}
 		return
 	}
@@ -197,14 +193,11 @@ func (a *offlineAPI) createAbandoned(x *offlineCreate, index int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.requests[index].Cancelled = true
-	if a.lifecycle != nil || a.recovery {
+	if a.lifecycle != nil || a.recovery || x.abandoned {
 		return
 	}
 	x.abandoned = true
-	a.problem = errOfflineCreateAbandoned
-	if x.failed {
-		a.problem = errors.Join(errOfflineCreateAbandoned, errOfflineTransport)
-	}
+	a.problem = errors.Join(a.problem, errOfflineCreateAbandoned)
 }
 
 // awaitCreates waits for every create this recorder forwarded whose engine-side
