@@ -62,6 +62,24 @@ func (a *offlineAPI) forwardCreate(out http.ResponseWriter, request *http.Reques
 		outbound.Header.Del(name)
 	}
 	a.mu.Lock()
+	// Admission and cleanup's closing mark share this lock. A request that left
+	// during the checks or anchor inspection must never become an engine create,
+	// and nothing may register beyond cleanup's snapshot of forwarded creates.
+	if err := request.Context().Err(); err != nil || a.closed {
+		a.requests[index].Status = http.StatusBadGateway
+		a.requests[index].Cancelled = err != nil
+		a.requests[index].Diagnostic = "recorder closed before create forwarding"
+		if err != nil {
+			a.requests[index].Diagnostic = "recorder transport: " + err.Error()
+		}
+		a.mu.Unlock()
+		cancel()
+		if err != nil {
+			a.createAbandoned(x, index)
+		}
+		http.Error(out, "offline fixture transport failed", http.StatusBadGateway)
+		return
+	}
 	a.creates = append(a.creates, x)
 	a.requests[index].Forwarded = time.Now()
 	a.mu.Unlock()

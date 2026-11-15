@@ -44,6 +44,7 @@ type offlineAPI struct {
 	requests    []offlineRequest
 	created     []string
 	creates     []*offlineCreate // every create forwarded, answered or not
+	closed      bool             // cleanup has closed create admission, under mu
 	absent      map[string]bool
 	final       sessionRecord
 	problem     error
@@ -556,6 +557,9 @@ func (a *offlineAPI) closeConnections() {
 // cleanup accounts for every forwarded create before it releases a volume. None
 // of its requests enters the product journal.
 func (a *offlineAPI) cleanup() error {
+	a.mu.Lock()
+	a.closed = true // no later create may register beyond the wait's snapshot
+	a.mu.Unlock()
 	// The after hook must hold on its own, so the step wait is repeated here, and
 	// before the lock: a late answer is recorded under it.
 	a.awaitCreates()
