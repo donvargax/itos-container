@@ -1014,6 +1014,30 @@ recorder's inspections (`arrival-to-forward`,
 `answer-to-reply`) or time outside both carried the reply past it: no limit moves, and
 the intervals return for a decision, as does any other remedy.
 
+The CI log supplied on 2026-11-15 shows a different failure in the first
+`Run's retry releases its retained native anchor after foreground cleanup fails`
+row. The launch exited 75 after `1.825833274s`, with `run.call-timeout`, operation
+`session registration`. The first-report wait observed that exit after
+`1.840607198s`, well before its 35-second limit. Fresh status exited 0 with no
+sessions. The launch journal had five requests, all omitted by the summary's
+selection; that selection retains every create, so no worker create was submitted.
+The supplied log reports no cleanup HTTP 409. The second example of the same
+scenario passed. The log supplies no run ID.
+
+This is outside q-63's slow-create signature. In `registeredRun`, the bounded
+`Registry.Register` precedes `registeredLaunch`, which allocates the anchor and
+creates the worker. Registration performs checkout identity checks, admission
+reservation and protected state publication through the disk adapters, including
+locks and fsyncs. The recovery fixture also traces the controller's syscalls and
+observes its fsyncs and proc-path reads. Neither the engine request journal nor the
+typed operation separates storage time, lock waits, tracer work and scheduling;
+the log establishes the expired registration call, not which of those spent it.
+There are no create intervals to compare, and no evidence here that the recorder's
+create accounting caused this failure. A registration remedy or additional timing
+instrumentation needs a coordinator decision under the fourth rule. Keep this
+failure distinct from the slow-create rerun exemption; do not increase the call or
+barrier limit, bypass durable publication or retry the launch to make it pass.
+
 `TestOfflineRecorderRecordsAbandonedCreate`,
 `TestOfflineRecorderCleanupRemovesAuthorizedWorkers` and
 `TestAnchorRecoveryBarrierDiagnostics` hold these rules without an engine: a disposable
