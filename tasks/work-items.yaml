@@ -1738,8 +1738,8 @@ items:
   - id: slice-30
     title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-29, slice-26]
     kind: slice
     why: >
