@@ -55,6 +55,9 @@ func (s *CredentialStager) Stage(ctx context.Context, r port.Record, sources por
 	staging.Inode = strconv.Itoa(100 + len(s.Directories))
 	s.Directories[staging.Directory] = staging
 	if f := publish(staging); f != "" {
+		unpublished := r
+		unpublished.Credentials = staging
+		_ = s.Remove(context.WithoutCancel(ctx), unpublished)
 		return f
 	}
 	if s.Files == nil {

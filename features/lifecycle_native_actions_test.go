@@ -137,7 +137,23 @@ func (w *world) lifecycleHeartbeat() int {
 }
 
 func (w *world) lifecycleLaterHeartbeat() {
-	w.lifecycle.later = w.lifecycleHeartbeat()
+	// A failed controller may exit before the probe's next tick. Observe the
+	// independent worker for a bounded interval after that exit, just as the
+	// recovery fixture does, without restoring transport or touching the worker.
+	deadline, tick := time.NewTimer(3*time.Second), time.NewTicker(10*time.Millisecond)
+	defer deadline.Stop()
+	defer tick.Stop()
+	for {
+		if value := w.lifecycleHeartbeat(); value > w.lifecycle.heartbeat {
+			w.lifecycle.later = value
+			return
+		}
+		select {
+		case <-deadline.C:
+			return
+		case <-tick.C:
+		}
+	}
 }
 
 func (w *world) lifecycleDisconnect() {
@@ -173,17 +189,24 @@ func (w *world) lifecycleDisconnectReady() {
 	if !w.lifecycleAwait(5*time.Second, func() bool {
 		a := w.offline.api
 		a.mu.Lock()
-		defer a.mu.Unlock()
+		acknowledged := false
 		for _, e := range a.requests {
 			if strings.HasSuffix(e.Path, "/wait") && e.Status == 200 {
-				return true
+				acknowledged = true
+				break
 			}
 		}
-		return false
+		a.mu.Unlock()
+		if !acknowledged {
+			return false
+		}
+		// Readiness output precedes the probe's first heartbeat. Keep a
+		// positive baseline before loss rather than racing that first tick.
+		l.heartbeat = w.lifecycleHeartbeat()
+		return l.heartbeat > 0
 	}) {
 		return
 	}
-	l.heartbeat = w.lifecycleHeartbeat()
 	l.signalled = time.Now() // transport-failure origin, not a synthetic signal
 	l.fault.disconnect()
 	w.offline.api.closeConnections()

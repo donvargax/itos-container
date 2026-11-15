@@ -144,6 +144,11 @@ func (s Credentials) Stage(ctx context.Context, r port.Record, sources port.Cred
 		return port.CredentialUnavailable
 	}
 	if f := publish(staging); f != "" {
+		// Recovery still has only the intent. Retain the open descriptor while
+		// removing by its validated identity; cleanup cannot replace the save failure.
+		unpublished := r
+		unpublished.Credentials = staging
+		_ = s.Remove(context.WithoutCancel(ctx), unpublished)
 		return f
 	}
 	dir, err := os.OpenRoot("/proc/self/fd/" + strconv.FormatUint(uint64(file.Fd()), 10))
