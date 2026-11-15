@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - T-52
   - T-50
   - T-53
   - p1-harness-home
