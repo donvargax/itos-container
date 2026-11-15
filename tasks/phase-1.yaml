@@ -6823,30 +6823,98 @@
   type: test
   title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
   why: >
-    Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy), through
-    slice-27. features/features_test.go buildProduct runs go build with no CGO_ENABLED setting, and
-    the binary it builds measured dynamically linked here. .goreleaser.yaml ships CGO_ENABLED=0.
-    Scenarios therefore exercise cgo paths for DNS and user lookup that no released binary uses, so
-    a pass does not prove the shipped binary, which matters beyond egress. slice-27 needs a static
-    binary for the proxy container and its real-engine scenarios. Landing the fix first lets the
-    existing suite show any static-versus-dynamic difference before the egress work is mixed in. Set
-    CGO_ENABLED=0 for the build, including the -cover variant used by the code proof. Add a check
-    that the built binary is static or matches the release setting. The existing scenarios must
-    still pass, with no gate weakened. slice-27 should depend on it. The existing item already
-    requires CGO_ENABLED=0 for normal and coverage builds before slice-27. Schedule it first and
-    make slice-27 depend on it; that dependency is not yet recorded. Belongs inside
-    p1-acceptance-static-binary, which names only buildProduct and its -cover variant. From
-    slice-27's step work: the scenarios never run the plain product. Every checkout fixture swaps in
-    the `go test -c ./cmd/itos-container` assembly built by probeBuildArgs
-    (features/session_probe_test.go:229), run with sessionChildEnvironment(os.Environ()) and no
-    CGO_ENABLED setting. That assembly is the executable doctor inspects in ID-EGRESS-04 and the
-    file the proxy container runs in the engine tier. Set CGO_ENABLED=0 for both assemblies, plain
-    and covered, as well as for buildProduct, and have the item's static check read the assembly
-    too. With buildProduct alone fixed, the static-executable prerequisite still refuses every
-    allowlist scenario. slice-27 is in progress and this item is still unowned, so it has to land
-    before slice-27's implementation can go green.
+    Blocks the charter's milestone two, step 1, through slice-27: the proxy container runs the
+    host executable in an inert root filesystem, and decision 0022 requires a static Linux
+    amd64 ELF. The release already sets CGO_ENABLED=0 in .goreleaser.yaml. The acceptance
+    harness instead inherits the caller's setting, exercising different DNS and user lookup
+    paths. Fix this before slice-27's implementation; its dependency on T-52 is already in
+    the registry. This is test infrastructure, not a new product behaviour or a release change.
+
+    Set CGO_ENABLED=0 explicitly in the environment of the go command in both buildProduct
+    (features/features_test.go) and world.probeAssembly (features/session_probe_test.go).
+    Replace any inherited value using setEnv, preserving the rest of each builder's current
+    environment, including sessionChildEnvironment's filtering for the assembly. Do not change
+    the test process's environment as the implementation, rely on CI or the caller to set it,
+    or apply it to every session child. Keep build flags, version stamps, coverage flags,
+    source selection, binary names, cache reuse, timeouts and error reporting intact.
+    No dependency is needed: Go's standard library supplies environment handling and artifact
+    inspection. No production package, release configuration or architecture change is needed.
+
+    Cover both builders, plain and covered. Fixtures replace the plain product with the test
+    assembly, so fixing buildProduct alone does not fix what doctor inspects or the proxy runs.
+    The session assembly compiles the checkout with production budgets; the engine product
+    assembly compiles the shortened-budget tree beside the suite's product. Both must retain
+    those distinct sources and be built without cgo. The engine tier's buildProduct also uses
+    that copied tree. Creating and compiling this fixture requires no container engine.
+
+    Add TestAcceptanceStaticBinary in features, using the real buildProduct,
+    sessionProbeBinary and productProbeBinary paths, not a separate build command that merely
+    repeats their flags. It has eight leaf subtests: cli/plain, cli/covered, engine-cli/plain,
+    engine-cli/covered, session-probe/plain, session-probe/covered, engine-probe/plain and
+    engine-probe/covered. Build sequentially into isolated temporary paths, so cached files
+    from another mode or test cannot satisfy the assertions. Reuse the engine fixture tree
+    within a mode where possible. The test sets the inherited CGO_ENABLED to 1 with t.Setenv
+    before calling the builders, restoring it afterwards; no parallel subtests or global
+    environment mutation outside the test. The assertion must still fail on a host whose
+    default is already CGO_ENABLED=0. Red evidence is collected on Linux with a working C
+    compiler so a compiler failure cannot stand in for the artifact assertion.
+
+    Inspect every resulting executable with debug/buildinfo.ReadFile and require an explicit
+    CGO_ENABLED=0 build setting. On Linux also inspect with debug/elf and require no PT_INTERP
+    segment and no DT_NEEDED libraries. Select the Linux-only assertion using the artifact's
+    GOOS setting as data; retain the build-setting assertion on macOS and Windows, without
+    requiring their binaries to be ELF or claiming additional container-host support. Missing
+    settings and unreadable artifacts fail, never skip. These standard-library inspections
+    need no external file, ldd or readelf command and do not execute the inspected binary.
+
+    Plain rows clear GOCOVERDIR and ITOS_CC_TEST_COVERDIR and leave world.coverdir empty.
+    Covered CLI rows request coverage through GOCOVERDIR for cli and ITOS_CC_TEST_COVERDIR
+    for engine-cli, pointing to private temporary directories. The covered session-probe row
+    uses only world.coverdir; the covered engine-probe row uses ITOS_CC_TEST_COVERDIR. Inspect
+    build settings for -cover=true on covered artifacts and its absence or false value on
+    plain ones, so dropping coverage cannot pass this regression. Restore each environment
+    change and keep counters out of the caller's proof destination. Existing coverage-routing
+    regressions retain the broader aggregate/per-ID execution and cache assertions.
+
+    First commit the new regression alone with itos commit --task T-52, type test, and run
+    it before changing the builders. Report each row failing at the CGO_ENABLED artifact
+    assertion; use nonfatal assertions or separate leaf runs so an early failure does not
+    hide other rows. Then change only the builders and necessary test helpers in a second
+    test commit with the same Task footer, and obtain a passing run. No scenario or step
+    definition is added, and no @wip tag or existing gate is weakened.
+
+    The done_when command runs only this deterministic regression and requires a PASS report
+    for every leaf and the parent, preserving go test's failure status. The promoted command
+    returned exit 0 with no tests to run before this spec, because the test does not exist.
+    This replacement exits 1 naming the missing test and all eight leaves. That is missing-test
+    evidence, not assertion-level red; the implementing agent supplies the latter first.
+    Keep this at the existing task CI tier, without a race run, new workflow or nightly job.
+
+    For preservation, the implementation needs the existing full non-engine features suite
+    once, without -race, through its configured checks. It includes TestScenarioCoverageContract,
+    TestManifestContractCoverage, TestEngineSuiteBudget, TestProbeAssemblySharesTheProductBuildCache
+    and the feature-binary cache tests, as well as CLI, counting, manifest, approval and session
+    scenarios that all consume these builders. Existing real-engine shards remain CI-only;
+    a local build of the engine fixture is not engine runtime evidence. Leave their budgets,
+    selectors and assertions intact. The drafter changes only this ledger entry in a docs
+    commit with Item T-52; push, CI watching and lifecycle actions belong to the coordinator.
   done_when:
-    - run: go test ./features -run '^TestAcceptanceStaticBinary$' -count=1
+    - run: |
+        if T52_output=$(go test ./features -run '^TestAcceptanceStaticBinary$' -count=1 -v 2>&1); then
+          T52_status=0
+        else
+          T52_status=$?
+        fi
+        printf '%s\n' "$T52_output"
+        test "$T52_status" -eq 0 || exit "$T52_status"
+        T52_missing=0
+        for T52_case in '' /cli/plain /cli/covered /engine-cli/plain /engine-cli/covered /session-probe/plain /session-probe/covered /engine-probe/plain /engine-probe/covered; do
+          if ! printf '%s\n' "$T52_output" | grep -Eq "^[[:space:]]*--- PASS: TestAcceptanceStaticBinary$T52_case [(]"; then
+            printf 'missing passing test: TestAcceptanceStaticBinary%s\n' "$T52_case"
+            T52_missing=1
+          fi
+        done
+        exit "$T52_missing"
 - id: T-53
   type: test
   title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
