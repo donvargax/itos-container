@@ -1002,11 +1002,15 @@ no resource name and no raw engine or workload text.
 1/3/1 seconds for call, startup and grace, production 10/120/10. A row whose
 controller stops at its call limit still fails, and its first Then now prints how the
 call's second was spent. The engine's own time is the image inspection's `reply-after`
-plus the create's `forward-to-answer`. Only when that alone outlived the fixture limit
-has a named product operation outlived its fixture budget; a limit then moves only
-through `engineBudgetTree`, after the operation, its intervals, the revised limit and
-a delayed-success and expiry control are recorded in T-50's ledger entry. When the
-engine's time is inside the limit, the recorder's inspections (`arrival-to-forward`,
+plus the create's `forward-to-answer`. The coordinator's settled q-63 decision
+(2026-11-14 02:18 UTC) assigns the slow first create to
+`p2-first-engine-row-slow-create`: run `43543693012` at `73cbd13` showed the engine
+answering 2.3 seconds after forwarding against the 1-second call. T-50 changes no
+code or limit for that signature. The failed jobs were re-run; another failure with
+the same signature returns to the coordinator for another re-run. Other failures
+remain T-50's to investigate. This replaces the earlier permission to raise a fixture
+limit through `engineBudgetTree`. When the engine's time is inside the limit, the
+recorder's inspections (`arrival-to-forward`,
 `answer-to-reply`) or time outside both carried the reply past it: no limit moves, and
 the intervals return for a decision, as does any other remedy.
 

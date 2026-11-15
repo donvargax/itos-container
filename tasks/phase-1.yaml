@@ -6650,22 +6650,22 @@
     starts and removes a hardened container from the fixture image before any row, so the daemon's
     first create is not what one would add, and nothing yet shows which request is slow.
 
-    So the remedy is read from the repaired harness. When one of these rows fails with its launch
+    Read the failure from the repaired harness. When one of these rows fails with its launch
     controller stopped at a call limit, its first Then prints that call's intervals: the image
     inspection from arrival to reply, and the create from arrival to forwarding, from forwarding to
     the engine's answer and from the answer to the reply. The engine's own time is the inspection's
-    round trip plus the create from forwarding to answer. Only when that alone outlived the fixture
-    limit has a named product operation outlived its fixture budget. Then the implementer first
-    records in this entry the operation, its measured intervals, a concrete revised fixture limit
-    and a deterministic delayed-success and expiry control, and changes that limit only through
-    engineBudgetTree, keeping T-42's held and cut acknowledgement and restart-refusal controls valid
-    with their timing relationships and the compiled -cover budget contract passing. If that cannot
-    be done, return the conflict for a decision. When the engine's own time is inside the limit, the
+    round trip plus the create from forwarding to answer. The coordinator's settled q-63 decision
+    of 2026-11-14 02:18 UTC replaces this entry's former permission to change a fixture limit:
+    run 43543693012 at 73cbd13 showed the job's slow first create, with the engine answering
+    2.3 seconds after forwarding against the 1-second call. Move no limit and change no code for
+    that signature. Its remedy belongs to p2-first-engine-row-slow-create. The failed jobs were
+    re-run; if a re-run fails with the same signature, hand it back for another re-run. Any other
+    failure remains this task's to investigate. When the engine's own time is inside the limit, the
     recorder's inspections, or time outside both, carried the reply past it. Then no limit moves,
     because a larger one would hide a harness cost and the first rule keeps those inspections before
-    the reply; the intervals return for a decision. A warm-up, or any remedy other than that one
-    limit, is not built here either: it returns for a decision with the intervals that call for it
-    and a control of its own. No repeated trial increase, production-default change, grace-window
+    the reply; the intervals return for a decision. A warm-up or any other remedy is not built
+    here either: it returns for a decision with the intervals that call for it and a control of
+    its own. No repeated trial increase, production-default change, grace-window
     change, retry, skipped row or relaxed assertion belongs to this task, and a product or ownership
     defect needs its own behaviour spec, not a workaround in the recorder.
 
@@ -6782,20 +6782,22 @@
     the seven ID-ANCHORS-09 to ID-ANCHORS-13 rows, the four ID-LIFECYCLE-08 rows, ID-LIFECYCLE-12
     and its same-path control, the four ID-OFFLINE-29 rows and both ID-OFFLINE-30 rows, with exact
     selected and completed counts, coverage export, T-43 annotations, T-44 timings and unconditional
-    cleanup. No retry, skipped row, shared success cache, wider concurrency or larger memory budget
-    may turn a failure green. One green run cannot prove an intermittent failure repaired; the
+    cleanup. No in-scenario retry, skipped row, shared success cache, wider concurrency or larger
+    memory budget may turn a failure green. One green run cannot prove an intermittent failure repaired; the
     deterministic controls and the path explained above are required too. This repair ends the leak,
     the recorder's refusals of a worker it let be created and the hook's 409, and makes the first
     failure name itself. It does not make a slow first create fast: a row whose controller stops at
-    its call limit still fails, with its intervals, until the fourth rule's reading chooses a
-    remedy. If one of these rows fails again, read its first failure from the new diagnostics
-    instead of assuming the hosted rows took the path this entry reproduces.
+    its call limit still fails, with its intervals, until p2-first-engine-row-slow-create supplies
+    its remedy. If one of these rows fails again, follow the fourth rule's q-63 decision and read
+    its first failure from the new diagnostics instead of assuming the hosted rows took the path
+    this entry reproduces.
 
     Implement the harness changes as test --task T-50 and explain the worker accounting, the step
     wait, the cleanup order and the barrier diagnostics in features/README.md with docs --item T-50,
     naming T-49's rows as covered by the same repair. Only harness files under features and those
-    words change, unless the fourth rule's evidenced amendment is needed. Run no local mutation test
-    and commit no generated proof. Agents commit and stop; the loop owns push, native CI evidence
+    words change, apart from aligning this entry with the coordinator's settled decisions.
+    Run no local mutation test and commit no generated proof. Agents commit and stop; the loop
+    owns push, native CI evidence
     and closure. Report the tested heads, every red and green regression, the baseline neighbour
     result, what CI showed of the first failure and its intervals, and what stays uncertain.
   done_when:
