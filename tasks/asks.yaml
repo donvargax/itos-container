@@ -267,3 +267,6 @@ questions:
     item: "T-52"
     question: "T-52: the implementer (attempt 4) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-52-implementer-4.result.json"
     answer: "Separately (the person, 2026-11-15). T-52 is not widened: the slow first create stays with p2-first-engine-row-slow-create, as q-63 left it. The failed jobs of T-52's red run at 47a5ad7 are re-run and T-52 lands on its own check. The local non-engine suite's state.unsafe and ownership-unsafe failure the implementer reported is unexplained and is not T-52's to repair; the next item that meets it reports it as its own finding."
+  - id: q-67
+    item: "T-48"
+    question: "T-48: its implementer (attempt 2) stopped again on the slice-29 prerequisite, reading slice-29 as still in progress and decision 0025 and arc42 as marking the state exclusion unresolved. Is the prerequisite met?"
