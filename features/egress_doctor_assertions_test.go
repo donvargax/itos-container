@@ -119,7 +119,11 @@ func egressStaticOutside(path, root string) error {
 	if err != nil {
 		return err
 	}
-	if inside, err := filepath.Rel(root, resolved); err != nil || !strings.HasPrefix(inside, "..") {
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	if relative, err := filepath.Rel(resolvedRoot, resolved); err != nil || (relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))) {
 		return fmt.Errorf("the scenario's product lies inside the checkout")
 	}
 	file, err := elf.Open(resolved)

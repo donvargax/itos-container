@@ -71,12 +71,39 @@ func TestEgressStaticOutsideRefusesEachDefect(t *testing.T) {
 	}
 	for name, path := range map[string]string{
 		"inside the checkout": filepath.Join(root, "inside"), "symlink into the checkout": link,
-		"interpreter": write(outside, "interp", egressELF(64, amd64, true, true)), "dynamic": write(outside, "dynamic", egressELF(64, amd64, false, true)),
+		"inside with parent-like basename": write(root, "..inside", static),
+		"interpreter":                      write(outside, "interp", egressELF(64, amd64, true, true)), "dynamic": write(outside, "dynamic", egressELF(64, amd64, false, true)),
 		"another machine": write(outside, "arm64", egressELF(64, 183, false, false)), "wrong class": write(outside, "x32", egressELF(32, amd64, false, false)),
 		"truncated": write(outside, "short", static[:40]), "absent": filepath.Join(outside, "absent"),
 	} {
 		if egressStaticOutside(path, root) == nil {
 			t.Errorf("%s was read as a static executable outside the checkout", name)
 		}
+	}
+	// macOS's temporary directory can itself be a symlink. Exercise both a
+	// checkout alias and an aliased parent on every host, without relying on its
+	// choice of temporary directory.
+	for _, tc := range []struct{ name, target, suffix string }{
+		{"checkout alias", root, ""},
+		{"parent alias", filepath.Dir(root), "checkout"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			alias := filepath.Join(t.TempDir(), "alias")
+			if err := os.Symlink(tc.target, alias); err != nil {
+				t.Fatal(err)
+			}
+			aliasedRoot := filepath.Join(alias, tc.suffix)
+			if err := egressStaticOutside(filepath.Join(outside, "control"), aliasedRoot); err != nil {
+				t.Errorf("static control outside an aliased checkout refused: %v", err)
+			}
+			for _, path := range []string{filepath.Join(root, "inside"), filepath.Join(aliasedRoot, "inside"), link} {
+				if egressStaticOutside(path, aliasedRoot) == nil {
+					t.Errorf("%s was read as outside the aliased checkout", path)
+				}
+			}
+		})
+	}
+	if egressStaticOutside(filepath.Join(outside, "control"), filepath.Join(outside, "absent")) == nil {
+		t.Error("an unresolved checkout root was accepted")
 	}
 }
