@@ -149,11 +149,13 @@ func testAnchorWaitProgress(t *testing.T) {
 	w.anchors.killed = true
 	anchorWaitExit(w.recovery.run, -1)
 	started := time.Now()
-	defer anchorWaitLater(time.Second, func() { anchorWaitReport(t, w, 4) })()
+	// Replace between 20 ms polls so the reader's handle is closed on Windows.
+	const progressAfter = 1010 * time.Millisecond
+	defer anchorWaitLater(progressAfter, func() { anchorWaitReport(t, w, 4) })()
 	if report := w.anchorsProgress(); report.Sequence != 4 || w.recovery.err != nil {
 		t.Errorf("later progress = report %d, recorded %v", report.Sequence, w.recovery.err)
 	}
-	requireElapsed(t, started, time.Second)
+	requireElapsed(t, started, progressAfter)
 }
 
 func testAnchorHeldReplyExit(t *testing.T) {
