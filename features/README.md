@@ -903,11 +903,17 @@ recorder refused the product's requests for it by full ID with HTTP 403, so tear
 status and stop ended as exit 75, and cleanup, finding no listed worker, asked the
 engine to delete a volume that worker held: `native anchor harness cleanup HTTP 409`.
 
-**Worker accounting.** The engine side of an authorized `POST /containers/create` now
-lives until the engine answers or until `engineCreateOutcomeAllowance` ends, 10 seconds
-from forwarding: the production call limit, harness bookkeeping and no product or
-scenario bound. Nothing on the controller side ends it: not a cancelled or closed
-request, a killed controller, a lifecycle disconnect or the recorder's server closing.
+**Worker accounting.** Before forwarding an authorized `POST /containers/create`, the
+recorder checks the controller's context and its own cleanup mark under the same lock
+that registers the exchange. A controller that left during pre-forward checks or anchor
+inspection gets no engine create: the journal records HTTP 502, cancellation and its
+cause, without forwarding, answer or reply times. A recorder whose cleanup has started
+also refuses a new create with HTTP 502. Only an admitted create becomes independent
+of its controller. Its engine side lives until the engine answers or until
+`engineCreateOutcomeAllowance` ends, 10 seconds from forwarding: the production call
+limit, harness bookkeeping and no product or scenario bound. Nothing on the controller
+side ends it: not a cancelled or closed request, a killed controller, a lifecycle
+disconnect or the recorder's server closing.
 An answer of HTTP 201 with a full ID is recorded once, whether or not the controller
 is still there: the worker is listed under the request's name and labels, then
 inspected by the recorder. A connected controller sees what it saw before, the same
@@ -948,9 +954,12 @@ inside a When. A Then that reads the journal under the recorder lock therefore l
 of it before it formats a failure: `ID-ANCHORS-12`'s second Then copies the requests
 first, as `anchorsRelease` does.
 
-**Cleanup order.** The cleanup that `closeOfflineRuntime` runs repeats that wait first,
-without the lock. It then removes the listed workers as before. For each forwarded
-create that still lists no worker it inspects the authorized name,
+**Cleanup order.** The cleanup that `closeOfflineRuntime` runs first marks the recorder
+closed to new creates under the admission lock, then repeats that wait without the
+lock. Every create admitted before that mark is in the wait's snapshot; a create still
+in pre-forward work cannot be forwarded after cleanup starts or finishes. Cleanup then
+removes the listed workers as before. For each forwarded create that still lists no
+worker it inspects the authorized name,
 `itos-container-<token>`, through its own engine client. HTTP 404 leaves nothing to
 remove. HTTP 200 with a full ID and the name, image and labels a listed worker must
 have is recorded and removed like one: `force=true` and `v=false`, HTTP 204, then
