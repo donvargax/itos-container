@@ -275,3 +275,6 @@ questions:
     item: "T-53"
     question: "T-53: its implementer (attempt 1) could not reproduce the original exit status 2 and could not fetch the transcript of run 42738076694, as agents hold no GitHub credentials. How does it get the transcript?"
     answer: "The coordinator fetched it (agreed by the person, 2026-11-15). Run 42738076694 was re-run green, so the failure is in its first attempt: the failed ci job's full log is in the loop's folder as T-53-run-42738076694.log, named in T-53's steering note, with the failing lines from 7028. Build the regression from what it shows. If it does not show the subprocess's own output, say what is missing and stop."
+  - id: q-69
+    item: "slice-30"
+    question: "slice-30: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-30-implementer-2.result.json"
