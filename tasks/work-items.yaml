@@ -2,7 +2,7 @@
 phases:
   1: null
 queue:
-  - p1-acceptance-static-binary
+  - T-52
   - T-50
   - p1-session-contract-coverage-flake
   - p1-harness-home
@@ -968,7 +968,7 @@ items:
     phase: 1
     owner: donvargax
     status: doing
-    depends_on: [slice-26, T-39, T-40, T-51, p1-acceptance-static-binary]
+    depends_on: [slice-26, T-39, T-40, T-51, T-52]
     kind: slice
     why: >
       Was p1-egress-run-through-proxy.
@@ -1044,39 +1044,13 @@ items:
       the network... remain outside this milestone' is also replaced by the charter's steps 2 to 4
       in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
       otherwise meet two disagreeing authorities, as T-38's did.
-  - id: p1-acceptance-static-binary
+  - id: T-52
     title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy), through
-      slice-27. features/features_test.go buildProduct runs go build with no CGO_ENABLED setting,
-      and the binary it builds measured dynamically linked here. .goreleaser.yaml ships
-      CGO_ENABLED=0. Scenarios therefore exercise cgo paths for DNS and user lookup that no released
-      binary uses, so a pass does not prove the shipped binary, which matters beyond egress.
-      slice-27 needs a static binary for the proxy container and its real-engine scenarios. Landing
-      the fix first lets the existing suite show any static-versus-dynamic difference before the
-      egress work is mixed in. Set CGO_ENABLED=0 for the build, including the -cover variant used by
-      the code proof. Add a check that the built binary is static or matches the release setting.
-      The existing scenarios must still pass, with no gate weakened. slice-27 should depend on it.
-
-      The existing item already requires CGO_ENABLED=0 for normal and coverage builds before
-      slice-27. Schedule it first and make slice-27 depend on it; that dependency is not yet
-      recorded.
-
-      Belongs inside p1-acceptance-static-binary, which names only buildProduct and its -cover
-      variant. From slice-27's step work: the scenarios never run the plain product. Every checkout
-      fixture swaps in the `go test -c ./cmd/itos-container` assembly built by probeBuildArgs
-      (features/session_probe_test.go:229), run with sessionChildEnvironment(os.Environ()) and no
-      CGO_ENABLED setting. That assembly is the executable doctor inspects in ID-EGRESS-04 and the
-      file the proxy container runs in the engine tier. Set CGO_ENABLED=0 for both assemblies, plain
-      and covered, as well as for buildProduct, and have the item's static check read the assembly
-      too. With buildProduct alone fixed, the static-executable prerequisite still refuses every
-      allowlist scenario. slice-27 is in progress and this item is still unowned, so it has to land
-      before slice-27's implementation can go green.
+    kind: task
   - id: p2-approval-no-record-step-checks-frozen-input
     title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
     phase: 1
