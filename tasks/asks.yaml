@@ -258,3 +258,20 @@ questions:
   - id: q-64
     item: "slice-30"
     question: "slice-30: the implementer (attempt 1) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-30-implementer-1.result.json"
+    answer: "An allowlist, with every filesystem type it does not name refused (the person, 2026-11-15). Accepted for a credential source: ext4, btrfs and xfs. NFS and 9p stay refused outright, as decision 0027 says; cifs, smb3, ceph, virtiofs, ecryptfs and every other type are refused by not being on the list, with no per-type analysis owed. Widening the list is a new decision with its own evidence. The implementer's two other findings (a mismatch-refusal scenario for the policy pin against the observed identity, and 4096-byte root and state boundary rows whose diagnostics name the 4095-byte limit) are spec changes: raise them as a spec defect in the usual way."
+  - id: q-65
+    item: "T-50"
+    question: "T-50: the implementer (attempt 8) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-50-implementer-8.result.json"
+    answer: "Instrumentation only (the person, 2026-11-15). T-50 may add timing instrumentation that tells storage, locking, tracer overhead and scheduling apart during session registration. No budget, limit or assertion changes on this evidence; a remedy is decided once a run shows where the time goes."
+  - id: q-66
+    item: "T-52"
+    question: "T-52: the implementer (attempt 4) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-52-implementer-4.result.json"
+    answer: "Separately (the person, 2026-11-15). T-52 is not widened: the slow first create stays with p2-first-engine-row-slow-create, as q-63 left it. The failed jobs of T-52's red run at 47a5ad7 are re-run and T-52 lands on its own check. The local non-engine suite's state.unsafe and ownership-unsafe failure the implementer reported is unexplained and is not T-52's to repair; the next item that meets it reports it as its own finding."
+  - id: q-67
+    item: "T-48"
+    question: "T-48: its implementer (attempt 2) stopped again on the slice-29 prerequisite, reading slice-29 as still in progress and decision 0025 and arc42 as marking the state exclusion unresolved. Is the prerequisite met?"
+    answer: "Yes (the coordinator, agreed by the person, 2026-11-15). slice-29 is done: merged at ae2e666 and closed at 07a596e on 2026-11-14, so the dependency q-54 added is satisfied and q-54's answer applies: implement T-48 as specified, with no further question. What slice-29 recorded and proved is decision 0027, 'State exclusion without enumerating records', with its scenarios on main. The credential test reports that itos task T-48 finds missing are T-48's own to write."
+  - id: q-68
+    item: "T-53"
+    question: "T-53: its implementer (attempt 1) could not reproduce the original exit status 2 and could not fetch the transcript of run 42738076694, as agents hold no GitHub credentials. How does it get the transcript?"
+    answer: "The coordinator fetched it (agreed by the person, 2026-11-15). Run 42738076694 was re-run green, so the failure is in its first attempt: the failed ci job's full log is in the loop's folder as T-53-run-42738076694.log, named in T-53's steering note, with the failing lines from 7028. Build the regression from what it shows. If it does not show the subprocess's own output, say what is missing and stop."

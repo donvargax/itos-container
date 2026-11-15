@@ -7223,3 +7223,16 @@
     before slice-27's implementation can go green.
   done_when:
     - run: go test ./features -run '^TestAcceptanceStaticBinary$' -count=1
+- id: T-53
+  type: test
+  title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
+  why: >
+    slice-26, run 42738076694 (2026-11-10): the code proof failed before judging any mutant
+    (count.preparation-failed at listed-coverage: the listed test all command exited 1) because
+    Frozen image inspection must exclude implicit volumes before create (session.feature:722) row
+    #01 failed: disk: session contract subprocess failed: exit status 2, after 0.57 s. The same
+    scenario passed in that run's Tests (ubuntu-latest) job. Like T-41's overlap hook, a bound or a
+    subprocess the instrumented, slower coverage run outruns; find it and give it room through the
+    harness budget seam. A red code proof sends the item's implementer after code it never changed.
+  done_when:
+    - run: sh -c 'coverage_dir=$(mktemp -d) || exit 1; trap '\''rm -rf "$coverage_dir"'\'' EXIT; ITOS_CC_TEST_COVERDIR="$coverage_dir" go test ./features -count=10 -scenarios="^@ID-SESSION-(01|22|23)$"'
