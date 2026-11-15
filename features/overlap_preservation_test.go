@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -74,6 +75,7 @@ func TestOverlapProtectedMarkerRename(t *testing.T) {
 }
 
 func TestOverlapProtectedBoundaries(t *testing.T) {
+	hostOS := runtime.GOOS
 	t.Run("legacy_run_without_marker", func(t *testing.T) {
 		f := overlapPreservationFixture(t)
 		w := f.worlds["ancestor"]
@@ -125,7 +127,12 @@ func TestOverlapProtectedBoundaries(t *testing.T) {
 		name := "missing_metadata"
 		op := "lstat"
 		if cached {
-			name, op = "missing_contents", "open"
+			name = "missing_contents"
+		}
+		// Windows directory entries retain the listing's FileInfo, so even
+		// the uncached row reaches the content read after removing the file.
+		if cached || hostOS == "windows" {
+			op = "open"
 		}
 		t.Run(name, func(t *testing.T) {
 			f := overlapPreservationFixture(t)
