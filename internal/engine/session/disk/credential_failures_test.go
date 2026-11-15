@@ -88,6 +88,86 @@ func TestCredentialStagingRefusals(t *testing.T) {
 	}
 }
 
+func TestCredentialDirectoryPublicationFailure(t *testing.T) {
+	for _, change := range []string{"unchanged", "cancelled", "directory", "symlink", "file", "missing", "extra entry", "mode"} {
+		t.Run(change, func(t *testing.T) {
+			fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
+			s := fixture.Stager.(Credentials)
+			r := fixture.Intent()
+			path := filepath.Join(s.root, filepath.Base(r.Credentials.Directory))
+			retained := filepath.Join(s.root, "retained")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			s.before = func(event string) {
+				if event == "read" || event == "file" || event == "copy" {
+					t.Fatal("failed directory publication reached token copying")
+				}
+			}
+			publications := 0
+			fail := s.Stage(ctx, r, fixture.Sources, func(next port.CredentialStaging) port.Outcome {
+				publications++
+				entries, err := os.ReadDir(path)
+				if err != nil || len(entries) != 0 || next.Stage != "owned" || next.Device == "" || next.Inode == "" {
+					t.Fatal("directory identity was not published before file creation")
+				}
+				switch change {
+				case "cancelled":
+					cancel()
+				case "directory", "symlink", "file", "missing":
+					if err := os.Rename(path, retained); err != nil {
+						t.Fatal(err)
+					}
+					switch change {
+					case "directory":
+						err = os.Mkdir(path, 0700)
+					case "symlink":
+						err = os.Symlink(retained, path)
+					case "file":
+						err = os.WriteFile(path, []byte("replacement"), 0600)
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+				case "extra entry":
+					if err := os.WriteFile(filepath.Join(path, "unexpected"), []byte("retain"), 0400); err != nil {
+						t.Fatal(err)
+					}
+				case "mode":
+					if err := os.Chmod(path, 0755); err != nil {
+						t.Fatal(err)
+					}
+				}
+				return port.IntentWrite
+			})
+			if fail != port.IntentWrite || publications != 1 || r.Credentials.Stage != "intent" {
+				t.Fatal("directory publication failure changed its primary outcome or durable authority", fail)
+			}
+			if change == "unchanged" || change == "cancelled" || change == "missing" {
+				if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+					t.Error("unpublished directory remained outside durable cleanup authority")
+				}
+				for range 2 {
+					if fail := s.Remove(t.Context(), r); fail != "" {
+						t.Error("intent-only recovery cannot confirm directory absence", fail)
+					}
+				}
+			} else {
+				if _, err := os.Lstat(path); err != nil {
+					t.Fatal("publication cleanup removed a substituted or unsafe directory")
+				}
+				if fail := s.Remove(t.Context(), r); fail != port.CredentialRefused {
+					t.Fatal("intent-only recovery accepted substituted or unsafe staging", fail)
+				}
+			}
+			if change == "directory" || change == "symlink" || change == "file" || change == "missing" {
+				if _, err := os.Stat(retained); err != nil {
+					t.Fatal("publication cleanup removed the descriptor's renamed directory")
+				}
+			}
+		})
+	}
+}
+
 func TestCredentialFilePublicationFailure(t *testing.T) {
 	for _, kinds := range []port.CredentialKinds{{Claude: true}, {GitHub: true}, {Claude: true, GitHub: true}} {
 		for _, failedKind := range kinds.List() {

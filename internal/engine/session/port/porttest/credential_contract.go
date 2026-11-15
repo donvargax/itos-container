@@ -118,6 +118,33 @@ func CredentialStagingContract(t Reporter, create func(map[string][]byte) Creden
 			}
 		}
 	}
+	for _, kinds := range []port.CredentialKinds{{Claude: true}, {GitHub: true}, {Claude: true, GitHub: true}} {
+		values := map[string][]byte{}
+		for _, kind := range kinds.List() {
+			values[kind] = []byte("synthetic\n")
+		}
+		fixture := create(values)
+		r := fixture.Intent()
+		publications := 0
+		fail := fixture.Stager.Stage(context.Background(), r, fixture.Sources, func(next port.CredentialStaging) port.Outcome {
+			publications++
+			if next.Stage != "owned" || next.Device == "" || next.Inode == "" || next.Files != [2]string{} || !fixture.Present(next.Directory) {
+				t.Errorf("directory publication lacks its created identity before file creation")
+			}
+			return port.IntentWrite
+		})
+		if fail != port.IntentWrite || publications != 1 {
+			t.Errorf("directory publication failure lost its primary outcome")
+		}
+		if presence, fail := fixture.Stager.Observe(context.Background(), r); fail != "" || presence != "absent" || fixture.Present(r.Credentials.Directory) {
+			t.Errorf("unpublished directory remained outside durable cleanup authority")
+		}
+		for range 2 {
+			if fail := fixture.Stager.Remove(context.Background(), r); fail != "" {
+				t.Errorf("intent-only recovery could not confirm unpublished directory absence")
+			}
+		}
+	}
 	f := create(map[string][]byte{"claude-token": []byte("synthetic\n")})
 	f.Sources.Failure = port.CredentialRefused
 	r := f.Intent()
