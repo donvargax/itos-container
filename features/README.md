@@ -1014,6 +1014,23 @@ recorder's inspections (`arrival-to-forward`,
 `answer-to-reply`) or time outside both carried the reply past it: no limit moves, and
 the intervals return for a decision, as does any other remedy.
 
+A later CI excerpt supplied on 2026-11-15, at head `84c3d88`, matches q-63's
+slow-create signature. The first `The primary receives the first signal and its
+observed exit wins` row exited 75 after `4.143169537s`, before the 35-second
+readiness limit, with `run.call-timeout`, operation `create response`. Its image
+inspection took `9.80337ms`. The create arrived at `1.395592154s`, was forwarded
+at `1.396251928s` and answered at `2.399647609s`, all from controller start:
+`659.774µs` before forwarding and `1.003395681s` in the engine. The engine's create
+alone exceeded the fixture's 1-second call, without counting the image inspection.
+The journal retained HTTP 201, `cancelled=true`, no reply time and the observed
+worker state `created`; the recorder diagnostic was empty. With no reply, the
+post-answer interval cannot be measured from this excerpt.
+
+The other three examples passed. The excerpt reports no cleanup HTTP 409, but
+does not establish cleanup success, and supplies no run ID. Return this job to
+the coordinator for another re-run under q-63, keeping the remedy in
+`p2-first-engine-row-slow-create` and changing no code or limit for this signature.
+
 The CI log supplied on 2026-11-15 shows a different failure in the first
 `Run's retry releases its retained native anchor after foreground cleanup fails`
 row. The launch exited 75 after `1.825833274s`, with `run.call-timeout`, operation
