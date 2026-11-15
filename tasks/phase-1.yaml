@@ -6849,14 +6849,143 @@
     - run: go test ./features -run '^TestAcceptanceStaticBinary$' -count=1
 - id: T-53
   type: test
-  title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
+  title: Diagnose and repair the session contract subprocess failure under coverage
   why: >
-    slice-26, run 42738076694 (2026-11-10): the code proof failed before judging any mutant
-    (count.preparation-failed at listed-coverage: the listed test all command exited 1) because
-    Frozen image inspection must exclude implicit volumes before create (session.feature:722) row
-    #01 failed: disk: session contract subprocess failed: exit status 2, after 0.57 s. The same
-    scenario passed in that run's Tests (ubuntu-latest) job. Like T-41's overlap hook, a bound or a
-    subprocess the instrumented, slower coverage run outruns; find it and give it room through the
-    harness budget seam. A red code proof sends the item's implementer after code it never changed.
+    Blocks reliable proof for the charter's second milestone. In slice-26's run 42738076694
+    (2026-11-10), listed-coverage preparation failed before judging a mutant: Frozen image
+    inspection must exclude implicit volumes before create (ID-SESSION-22), row #01, reported
+    disk: session contract subprocess failed: exit status 2 after 0.57 s. The same scenario passed
+    in that run's Tests job. Retain this incident as the reproduction target, including its
+    subprocess transcript; a passing retry alone does not establish a repair. The original entry's
+    analogy with T-41 is a hypothesis, not a decision to lengthen a timeout. sessionProbe already
+    allows 150 s, the child create context 120 s and cleanup 30 s, and sessionProbeBinary compiles
+    the checkout with production limits even in the engine tier. Neither the reported elapsed time
+    nor exit 2 establishes which operation failed. Do not change product limits or the native
+    engineBudgetTree fixture to conceal it.
+
+    Read features/session_probe_test.go, session_fixture_test.go, session_local_fixture_test.go,
+    session_local_steps_test.go, session_memory_test.go, session_engine_test.go,
+    session_coverage_test.go, coverage_routing_test.go and features_test.go; the session and offline
+    contract assemblies in cmd/itos-container/session_contract_test.go,
+    session_contract_io_test.go, session_memory_test.go, offline_contract_test.go and
+    control_state_probe_test.go; and features/README.md. Follow the failing operation into its
+    implementation before changing it. The local scenarios use memory and disk/SDK adapters
+    against a recording Unix-socket API, never a real engine. ID-SESSION-01 is the successful
+    create/cleanup control with umasks 0000 and 0777; ID-SESSION-22 has five frozen-image refusal
+    rows, with #01 the different-image-config-ID row; ID-SESSION-23 has two contradictory-storage
+    rows after create. Keep every assertion, both backends and all nine examples.
+
+    First improve the already recorded failure evidence, folding in the triage finding of
+    2026-11-15. sessionProbe unmarshals sessionResult and calls observeMemory; when memory is nil,
+    that returns 'memory backend produced no independent observations'. The parent appends Code,
+    Diagnostic and PreflightFailure only when session.offline is true. Append that same context
+    on any memory-observation error, including ordinary create, preserving the original error
+    through wrapping and leaving successful results unchanged. A preflight refusal remains a
+    failure, never an empty successful observation. Keep subprocess exit status and its captured
+    stdout/stderr in subprocess failures, and retain the existing observer-error and malformed-JSON
+    handling. This is test-harness reporting only, not a change to the product's diagnostics or
+    redaction policy; use synthetic fixture causes, never real credentials or host state.
+
+    Add TestSessionProbeDiagnostics in features/session_probe_diagnostics_test.go, with required
+    subtests create_refusal and offline_refusal. Use the real sessionProbe and test assembly with
+    fresh sessionFixture(false, "0022") worlds, a memory backend and a deliberately corrupt current
+    approval made by sessionChange("current approval is corrupt"). For create_refusal leave
+    offline false and call action create; for offline_refusal set offline true and call action run.
+    Both must get nil Memory and a nonempty recorded PreflightFailure, return an error containing
+    that exact recorded cause and the missing-observations message, and never reach the checkpoint
+    or create a worker. Require the reported exit field to match result.Code and, when nonempty,
+    include result.Diagnostic; the create result's zero Code is the protocol default, not a claim
+    that the refusal succeeded. Clean up the recording API, doctor fixture and caller path even on
+    failure. Give these standalone regressions their own temporary coverage directory with
+    isolateProductCoverage, so they neither pollute the external per-ID inventory nor accidentally
+    exercise only the plain assembly. Skip on non-Linux and preserve the existing filtered/red and
+    engine-selection boundary used by TestSessionContractCoverage. At today's parent code the
+    ordinary create case loses the cause; the offline case is the existing positive control.
+
+    Then investigate the original exit 2 with the covered repetition below and its full failing
+    transcript. Distinguish a panic/runtime error, a process exit, a preflight refusal and a deadline;
+    do not infer timeout from a nonzero status. Record the failing operation and the evidence in
+    this entry before implementing its repair. Add a deterministic regression named
+    TestSessionContractCoverageFailureRegression at the narrowest harness/assembly boundary that
+    actually reproduces that operation's failure. It must execute the affected path, fail at an
+    assertion against the old implementation and pass with the repair; an existence check, source
+    text check, sleep-only stress test or the diagnostic regression alone cannot prove this part.
+    If a harness wait is demonstrated to be too short, change that wait through a test-only budget
+    seam, with slow-completion and genuinely-stuck controls and bounded cleanup that joins the
+    child. Choose and explain the bound from the observed operation, not from arbitrary padding.
+    If evidence identifies a product defect or a security decision outside this task, report it
+    for specification rather than silently extending this harness task. If the original failure
+    cannot be reproduced, report that gap and do not claim that diagnostic improvement fixed it.
+
+    Scope is the session harness and its test-only cmd assembly, their regressions and any directly
+    affected harness documentation. No dependency is needed. Preserve scenario text and tags,
+    four-way ordinary scenario scheduling, child umasks, per-ID executed coverage, failure status,
+    independent observations and cleanup. T-52 owns CGO_ENABLED/static-binary settings for both
+    assemblies; accommodate its changes without duplicating that work. Leave workflows,
+    itos.yaml, itos-cc.yaml, the syscall observer and production budget constants unchanged.
+
+    The first two checks require the named tests to exist before running them, so Go's successful
+    'no tests to run' cannot close the task. The diagnostic check additionally requires PASS for
+    both refusal subtests, so a skipped parent is not evidence. They fail on the drafting base
+    5e0101ac340b00a7223885e6501b937c6532c7bd because neither test exists; that is missing-work
+    evidence, not assertion-level red. Commit the diagnostic tests first with test --item T-53,
+    record create_refusal's failing cause assertion and offline_refusal's passing control, then
+    repair reporting with test --task T-53. After identifying the exit-2 cause, commit its
+    deterministic regression red before its repair, using the same split. The implementing
+    commits must name Task T-53 so CI judges these checks; do not relabel production changes test.
+
+    The third check preserves the promoted check's ten covered repetitions of the same three
+    scenario IDs, scoped to TestFeatures so unrelated harness tests are not repeated ten times.
+    It is an intermittent reproduction/integration check, not guaranteed red. Its shell owns and
+    removes a private collector directory on success or failure. The fourth retains the existing
+    coverage contract, including plain-then-covered assembly reuse, separate ID-SESSION-01 and
+    ID-SESSION-08 destinations and executed session-domain counters. It is a preservation check
+    and may pass before the work; no invented red is required for it. Drafting did not run a code
+    proof or a real-engine scenario. Before implementation finishes, run all live non-engine
+    session scenarios once without coverage, then the full non-engine feature suite once with
+    ITOS_CC_TEST_COVERDIR pointing at a temporary directory, without -race. Only newly changed
+    focused tests may be selected for a race run; never race the whole features package. CI alone
+    runs fresh changed-code proof if assembly changes touch its paths. Report every check's actual
+    result, the original failure evidence, deterministic red/green assertions and remaining gaps.
+
+    Draft evidence on 2026-11-15. The first two exact checks exited 1 at their missing-test guards.
+    The covered repetition, with -v added for observation, initially failed all 90 examples in
+    27.437 s under the command sandbox: its process visibility made even the healthy preflight
+    return state.unsafe, hidden behind the missing-observations message. The existing coverage
+    contract also failed there, including ID-SESSION-08's disk cleanup. These are environmental
+    refusals, not the reported disk exit 2. With the same temporary-state, recording-API tests
+    outside that sandbox, all ten repetitions passed in 30.213 s and the existing coverage contract
+    passed in 2.533 s. No original exit 2 was reproduced.
+    A disposable Go test overlay (no repository code change) exercised the proposed diagnostic
+    fixtures with coverage outside the sandbox: healthy create returned owned-unstarted and
+    independent observations; corrupt approval returned state.invalid for both actions;
+    create_refusal failed the assertion requiring the recorded cause in the returned error, while
+    offline_refusal passed. This confirms the reporting defect and that the proposed fixture
+    reaches its assertion, but is not the implementer's committed red test or an exit-2 repair.
   done_when:
-    - run: sh -c 'coverage_dir=$(mktemp -d) || exit 1; trap '\''rm -rf "$coverage_dir"'\'' EXIT; ITOS_CC_TEST_COVERDIR="$coverage_dir" go test ./features -count=10 -scenarios="^@ID-SESSION-(01|22|23)$"'
+    - run: >-
+        log=$(mktemp) || exit 1; trap 'rm -f "$log"' EXIT;
+        go test ./features -list '^TestSessionProbeDiagnostics$' >"$log" 2>&1;
+        status=$?; cat "$log"; test "$status" -eq 0 || exit "$status";
+        grep -qx 'TestSessionProbeDiagnostics' "$log" || exit 1;
+        go test ./features -count=1 -v -run '^TestSessionProbeDiagnostics$' >"$log" 2>&1;
+        status=$?; cat "$log"; test "$status" -eq 0 || exit "$status";
+        awk '$1 == "---" && $2 == "PASS:" { seen[$3] = 1 }
+        END { exit !(seen["TestSessionProbeDiagnostics/create_refusal"] &&
+        seen["TestSessionProbeDiagnostics/offline_refusal"]) }' "$log"
+    - run: >-
+        log=$(mktemp) || exit 1; trap 'rm -f "$log"' EXIT;
+        go test ./features ./cmd/itos-container -list '^TestSessionContractCoverageFailureRegression$' >"$log" 2>&1;
+        status=$?; cat "$log"; test "$status" -eq 0 || exit "$status";
+        grep -qx 'TestSessionContractCoverageFailureRegression' "$log" || exit 1;
+        go test ./features ./cmd/itos-container -count=1 -v
+        -run '^TestSessionContractCoverageFailureRegression$' >"$log" 2>&1;
+        status=$?; cat "$log"; test "$status" -eq 0 || exit "$status";
+        awk '$1 == "---" && $2 == "PASS:" &&
+        $3 == "TestSessionContractCoverageFailureRegression" { passed = 1 }
+        END { exit !passed }' "$log"
+    - run: >-
+        coverage_dir=$(mktemp -d) || exit 1; trap 'rm -rf "$coverage_dir"' EXIT;
+        ITOS_CC_TEST_COVERDIR="$coverage_dir" go test ./features -count=10
+        -run '^TestFeatures$' -scenarios='^@ID-SESSION-(01|22|23)$'
+    - run: go test ./features -count=1 -run '^TestSessionContractCoverage$'
