@@ -1047,8 +1047,8 @@ items:
   - id: T-52
     title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-approval-no-record-step-checks-frozen-input
