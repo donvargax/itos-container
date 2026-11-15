@@ -47,7 +47,7 @@ func TestForegroundRecoveryCommand(t *testing.T) {
 	out, errout := open("SLICE_10_RECOVERY_STDOUT"), open("SLICE_10_RECOVERY_STDERR")
 	control := os.NewFile(3, "slice-10-recovery-observations")
 	defer func() { _ = control.Close() }()
-	service, _ := approvalServices(os.Stdin, out, errout)
+	service, _ := approvalServices("run", os.Stdin, out, errout)
 	source := service.Readiness.(inspection.Readiness)
 	engine := &recoveryEngine{RunEngine: docker.Engine{Readiness: readinessdocker.Engine{}, Selection: source.Input.Host},
 		control: json.NewEncoder(control), late: os.Getenv("SLICE_10_RECOVERY_LATE") == "1", ignored: os.Getenv("SLICE_10_RECOVERY_IGNORED") == "1"}

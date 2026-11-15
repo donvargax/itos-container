@@ -29,8 +29,8 @@ func allow(entries ...string) map[string]policy.Value {
 }
 
 // A valid version 2 file is refused as an unsupported version before the manifest,
-// the checkout identity or the engine, whatever network it asks for: canonical
-// settings v1 describe an offline profile and must not be recorded for it.
+// the checkout identity or the engine, whatever network it asks for. This is
+// run's zero-value gate until its proxy topology can honour that request.
 func TestValidVersion2PolicyIsRefusedBeforeAnyLaterStage(t *testing.T) {
 	for name, network := range map[string]map[string]policy.Value{
 		"allowlist": allow("api.example.com"), "offline": {"mode": {Kind: policy.String, Text: "offline"}}, "default": nil,
@@ -69,5 +69,20 @@ func TestInvalidVersion2PolicyReportsItsOwnProblem(t *testing.T) {
 	want := []policy.Issue{{Kind: policy.HostName, Path: []string{"network", "allow", "0"}, Version: 2}}
 	if result.Ready || result.Policy.Policy != nil || !reflect.DeepEqual(result.Policy.Issues, want) || result.Manifest != nil || e.Opens != 0 {
 		t.Fatalf("result %#v", result)
+	}
+}
+
+func TestReviewInspectionAdmitsVersion2WithoutSkippingPrerequisites(t *testing.T) {
+	for name, network := range map[string]map[string]policy.Value{"allowlist": allow("api.example.com"), "offline": nil} {
+		t.Run(name, func(t *testing.T) {
+			i, input, e, _ := fixture()
+			i.AllowVersion2 = true
+			i.Policy = &policyfake.Source{Value: version2(network)}
+			i.Names = &policyfake.Names{Table: map[string]string{"api.example.com": "api.example.com"}}
+			result := i.Inspect(input)
+			if !result.Ready || result.Policy.Policy.Version != 2 || result.Manifest == nil || result.Engine == nil || result.Image == nil || e.Opens != 1 {
+				t.Fatal(result, e.Opens)
+			}
+		})
 	}
 }

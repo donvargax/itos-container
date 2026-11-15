@@ -3,6 +3,7 @@ package canonical
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/donvargax/itos-container/internal/engine/approval/domain"
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 	readiness "github.com/donvargax/itos-container/internal/engine/readiness/port"
 )
@@ -41,4 +42,24 @@ func (j JSON) FrozenRecord(f port.Frozen) (port.Record, port.Failure) {
 	}
 	r := port.Record{Candidate: c, Generation: f.Generation}
 	return j.Decode(c, j.Encode(r))
+}
+
+// ChangedPaths compares decoded settings through the shared difference walk.
+// Before engine inspection, only locally observed fields may explain a refusal.
+func (JSON) ChangedPaths(c port.Candidate, r port.Record, local bool) []string {
+	var requested, approved map[string]any
+	if json.Unmarshal([]byte(c.Canonical), &requested) != nil || json.Unmarshal([]byte(r.Canonical), &approved) != nil {
+		return nil
+	}
+	if local {
+		delete(requested, "engine")
+		delete(approved, "engine")
+		delete(requested, "image")
+		delete(approved, "image")
+	}
+	var paths []string
+	for _, change := range domain.Differences(approved, requested) {
+		paths = append(paths, change.Path)
+	}
+	return paths
 }

@@ -27,6 +27,7 @@ func TestPreflightOrdersLocalApprovalBeforeFreshObservations(t *testing.T) {
 				engines = 0
 			case "locally changed":
 				codec.LocalMismatch = true
+				codec.LocalPaths = []string{"/policy/network/allow"}
 				wantStatus = "changed"
 				engines = 0
 			case "engine changed":
@@ -34,6 +35,7 @@ func TestPreflightOrdersLocalApprovalBeforeFreshObservations(t *testing.T) {
 				newCandidate := c
 				newCandidate.Canonical = "B"
 				codec.Values["2000:3000"] = newCandidate
+				codec.Paths = []string{"/image/id"}
 				wantStatus = "changed"
 			case "engine failure":
 				local := ready.Result
@@ -77,6 +79,12 @@ func TestPreflightOrdersLocalApprovalBeforeFreshObservations(t *testing.T) {
 			v := (Preflight{Service: service, Local: ready, Canonical: codec}).Inspect()
 			if v.Status != wantStatus || v.Failure != wantFailure || ready.EngineReads != engines || store.Writes != 0 {
 				t.Fatalf("view %#v, engine reads %d writes %d", v, ready.EngineReads, store.Writes)
+			}
+			if condition == "locally changed" && (len(v.ChangedPaths) != 1 || v.ChangedPaths[0] != "/policy/network/allow") {
+				t.Fatalf("lost local change paths: %#v", v)
+			}
+			if condition == "engine changed" && (len(v.ChangedPaths) != 1 || v.ChangedPaths[0] != "/image/id") {
+				t.Fatalf("lost observed change paths: %#v", v)
 			}
 			if condition == "matching" && (v.Candidate != c || v.Record.Generation != "7" || v.Socket != "socket") {
 				t.Fatalf("lost fresh candidate/selected generation: %#v", v)

@@ -20,15 +20,17 @@ import (
 )
 
 type Engine struct {
-	Readiness rp.Engine
-	Selection string
+	Executable string
+	Readiness  rp.Engine
+	Selection  string
 }
 type connection struct {
-	api       *client.Client
-	pin       rp.Session
-	transport *http.Transport
-	binding   port.Binding
-	ctx       context.Context
+	executable string
+	api        *client.Client
+	pin        rp.Session
+	transport  *http.Transport
+	binding    port.Binding
+	ctx        context.Context
 }
 
 func (e Engine) Open(ctx context.Context, b port.Binding) (port.Connection, port.Outcome) {
@@ -86,7 +88,7 @@ func (e Engine) open(ctx context.Context, b port.Binding, unavailable port.Outco
 		transport.CloseIdleConnections()
 		return nil, port.Incomplete
 	}
-	c := &connection{api: api, pin: pin, transport: transport, binding: b, ctx: budget.Lifetime(ctx)}
+	c := &connection{api: api, pin: pin, transport: transport, binding: b, ctx: budget.Lifetime(ctx), executable: e.Executable}
 	success = true
 	return c, ""
 }
@@ -167,7 +169,7 @@ func (c *connection) Inspect(ctx context.Context, id string) (port.Observation, 
 	if r.Config == nil || r.ID == "" || r.Name == "" || r.Image == "" {
 		return port.Observation{}, port.Unavailable
 	}
-	observed := port.Observation{ID: r.ID, Name: strings.TrimPrefix(r.Name, "/"), ImageID: r.Image, Token: r.Config.Labels["io.itos-container.intent"], Project: r.Config.Labels["io.itos-container.project"], Fingerprint: r.Config.Labels["io.itos-container.fingerprint"], StatePresent: r.State != nil}
+	observed := port.Observation{Kind: r.Config.Labels["io.itos-container.kind"], Session: r.Config.Labels["io.itos-container.session"], ID: r.ID, Name: strings.TrimPrefix(r.Name, "/"), ImageID: r.Image, Token: r.Config.Labels["io.itos-container.intent"], Project: r.Config.Labels["io.itos-container.project"], Fingerprint: r.Config.Labels["io.itos-container.fingerprint"], StatePresent: r.State != nil}
 	observed.Mounts, observed.Volumes = len(r.Mounts) != 0, len(r.Config.Volumes) != 0
 	if r.HostConfig != nil && len(r.HostConfig.Mounts) == 1 {
 		m := r.HostConfig.Mounts[0]

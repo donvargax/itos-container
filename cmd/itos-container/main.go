@@ -20,6 +20,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -70,7 +71,7 @@ type commandLine struct {
 	// and no environment variable.
 	ShowVersion kong.VersionFlag `name:"version" help:"Print the version and the commit it was built from, and exit."`
 
-	Approve    approve.CLI       `cmd:"" help:"Review and remember exact offline settings."`
+	Approve    approve.CLI       `cmd:"" help:"Review and remember exact settings."`
 	Count      command.CLI       `cmd:"" help:"Count the lines and words of a file, or of standard input."`
 	Doctor     doctor.CLI        `cmd:"" help:"Inspect the policy file and restricted worker manifest."`
 	Run        runcommand.CLI    `cmd:"" help:"Run a literal command in an approved offline worker."`
@@ -134,20 +135,40 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	case "count":
 		return c.Count.Run(ui)
 	case "doctor":
-		c.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}, Names: policyidna.Names{}}
+		c.Doctor.Policies = doctorPolicies()
 		c.Doctor.Manifests = inspection.Manifests{Files: manifestdisk.Files{}, Parser: jsonc.Parser{}, References: reference.References{}}
-		service, presentation := approvalServices(in, stdout, stderr)
+		service, presentation := approvalServices(command, in, stdout, stderr)
 		c.Doctor.Readiness = service.Readiness
 		c.Doctor.Approval = service
 		c.Doctor.Presentation = presentation
+		root := os.Getenv("ITOS_ROOT")
+		if root == "" {
+			root, _ = os.Getwd()
+		}
+		if filepath.IsAbs(root) {
+			root = filepath.Clean(root)
+		}
+		state := os.Getenv("XDG_STATE_HOME")
+		if state == "" && filepath.IsAbs(os.Getenv("HOME")) {
+			state = filepath.Join(os.Getenv("HOME"), ".local", "state")
+		}
+		if filepath.IsAbs(state) {
+			state = filepath.Join(state, "itos-container")
+		} else {
+			state = ""
+		}
+
+		c.Doctor.RootPolicies, c.Doctor.Credentials = credentialInspection(readinessport.CredentialInput{
+			Root: root, State: state, OS: runtime.GOOS, Architecture: runtime.GOARCH, UID: int64(os.Geteuid()),
+		})
 		return c.Doctor.Run(ui)
 	case "approve":
-		service, presentation := approvalServices(in, stdout, stderr)
+		service, presentation := approvalServices(command, in, stdout, stderr)
 		c.Approve.Service = service
 		c.Approve.Presentation = presentation
 		return c.Approve.Run(ui)
 	case "run":
-		service, _ := approvalServices(in, stdout, stderr)
+		service, _ := approvalServices(command, in, stdout, stderr)
 		c.Run.Approval = approvaldomain.Preflight{Service: service, Local: service.Readiness.(approvalport.StagedReadiness), Canonical: approvalcanonical.JSON{}}
 		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}
 		runner, _ := sessionServices(service)
@@ -159,13 +180,13 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
 		return c.Run.Run(ui)
 	case "status":
-		service, _ := approvalServices(in, stdout, stderr)
+		service, _ := approvalServices(command, in, stdout, stderr)
 		_, c.Status.Service = sessionServices(service)
 		c.Status.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr}
 		c.Status.JSON = recoveryJSON(args)
 		return c.Status.Run()
 	case "stop":
-		service, _ := approvalServices(in, stdout, stderr)
+		service, _ := approvalServices(command, in, stdout, stderr)
 		_, c.Stop.Service = sessionServices(service)
 		c.Stop.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr}
 		c.Stop.JSON = recoveryJSON(args)
@@ -268,14 +289,15 @@ func loggerFor(w io.Writer, isTerminal func(int) bool) *slog.Logger {
 
 // approvalServices assembles shared inspection and approval adapters. Construction
 // defers policy, engine and approval inspection until the command requests it.
-func approvalServices(in io.Reader, out, errout io.Writer) (approvaldomain.Service, approvalpresentation.UI) {
+func approvalServices(command string, in io.Reader, out, errout io.Writer) (approvaldomain.Service, approvalpresentation.UI) {
 	checkout := &readinessdisk.Checkout{}
 	root := os.Getenv("ITOS_ROOT")
 	if root == "" {
 		root, _ = os.Getwd()
 	}
 	source := inspection.Readiness{Inspector: readiness.Inspector{
-		Checkout: checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}}, Names: policyidna.Names{},
+		AllowVersion2: command == "doctor" || command == "approve",
+		Checkout:      checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}}, Names: policyidna.Names{},
 		Files: manifestdisk.Files{OpenRoot: checkout.OpenRoot}, Parser: jsonc.Parser{}, References: reference.References{}, Engine: docker.Engine{},
 		Digests: readinessreference.Digests{},
 	}, Input: readinessport.Input{Root: root, OS: runtime.GOOS, Architecture: runtime.GOARCH,
@@ -285,6 +307,19 @@ func approvalServices(in io.Reader, out, errout io.Writer) (approvaldomain.Servi
 	service := approvaldomain.Service{Readiness: source, Host: approvalhost.Process{}, Codec: codec, Store: approvaldisk.Store{StateHome: os.Getenv("XDG_STATE_HOME"), Home: os.Getenv("HOME"), Records: codec}}
 	service = coordinatedApproval(service, accountLookup)
 	return service, approvalpresentation.UI{In: in, Out: out, Err: errout}
+}
+
+func doctorPolicies() inspection.Policies {
+	return inspection.Policies{Source: policyyaml.Source{Files: disk.Files{}}, Names: policyidna.Names{}}
+}
+
+// credentialInspection gives the credentials scope's policy reader and source
+// observation one checkout pin. The policy is read only through the root that
+// bounds the sources, never from a working directory that names another tree.
+func credentialInspection(input readinessport.CredentialInput) (inspection.Policies, inspection.Credentials) {
+	pin := &readinessdisk.Checkout{}
+	policies := inspection.Policies{Source: policyyaml.Source{Files: disk.Files{OpenRoot: pin.OpenRoot}}, Names: policyidna.Names{}}
+	return policies, inspection.Credentials{FS: &readinessdisk.CredentialFiles{}, Input: input, Account: &approvalhost.Process{}, Checkout: pin}
 }
 
 // Only cmd binds the session ownership validator to the approval engine's

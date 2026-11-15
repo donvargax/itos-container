@@ -13,6 +13,10 @@ func Approve(service port.Service, ui engine.Reviewer, fingerprint *string, json
 	if !view.Inspection.Ready || view.Failure != "" {
 		return view
 	}
+	if fingerprint != nil && view.RequiresTerminal() {
+		view.Failure = "approve.terminal-required"
+		return view
+	}
 	if fingerprint != nil {
 		if !approval.ValidFingerprint(*fingerprint) {
 			view.Failure = "approve.fingerprint-format"

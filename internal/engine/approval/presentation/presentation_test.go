@@ -132,3 +132,25 @@ func TestReportsAndFailureRules(t *testing.T) {
 		}
 	}
 }
+
+func TestAllowlistReviewKeepsUnusedNoticesAfterDisclosureBeforeDifferences(t *testing.T) {
+	var stdout bytes.Buffer
+	ui := UI{In: strings.NewReader("yes\n"), Out: &stdout, Err: io.Discard}
+	v := port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: `{"profile":"allowlist-v1","policy":{"network":{"allow":["a.example"]}},"manifest":{"name":"new"}}`}, Record: port.Record{Generation: "1", Candidate: port.Candidate{Canonical: `{"profile":"allowlist-v1","policy":{"network":{"allow":["b.example"]}},"manifest":{"name":"old"}}`}}}
+	v.Inspection.Manifest.Unused = []string{"editor"}
+	v.Inspection.Manifest.Metadata.Unused = []string{"label"}
+	if !ui.Review(v) {
+		t.Fatal("declined")
+	}
+	text := stdout.String()
+	for _, part := range []string{"Effective settings:", "network.allow: a.example", "Run cannot start this profile yet", `Unused field: "editor"`, `Unused field: "label"`, `/manifest/name: "old" -> "new"`, "/policy/network/allow:", "y/N"} {
+		_, rest, ok := strings.Cut(text, part)
+		if !ok {
+			t.Fatalf("missing ordered %q in %q", part, stdout.String())
+		}
+		text = rest
+	}
+	if strings.Contains(stdout.String(), "network.allow: b.example") || strings.Contains(stdout.String(), "network none") {
+		t.Fatal(stdout.String())
+	}
+}

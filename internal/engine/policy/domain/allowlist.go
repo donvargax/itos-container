@@ -100,22 +100,25 @@ func canonicalHost(text string, names port.Names) (string, bool) {
 	// dot is removed after mapping, so an ideographic final dot counts as well.
 	// A final xn-- would read as that dot, so the port refuses it before this point.
 	name := strings.TrimSuffix(ascii, ".")
+	return name, ValidCanonicalHost(name)
+}
+
+// ValidCanonicalHost checks a stored ASCII name without mapping it or doing I/O.
+// Policy canonicalisation and approval record validation share this exact shape.
+func ValidCanonicalHost(name string) bool {
 	if len(name) > maxNameBytes {
-		return "", false
+		return false
 	}
 	labels := strings.Split(name, ".")
 	if len(labels) < 2 {
-		return "", false
+		return false
 	}
 	for _, label := range labels {
 		if len(label) == 0 || len(label) > maxLabelBytes || strings.Trim(label, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
-			return "", false
+			return false
 		}
 	}
-	if addressLike(labels[len(labels)-1]) {
-		return "", false
-	}
-	return name, true
+	return !addressLike(labels[len(labels)-1])
 }
 
 // addressLike is whether address parsers would read a final label as a number:

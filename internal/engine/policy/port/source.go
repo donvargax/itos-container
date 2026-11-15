@@ -62,6 +62,10 @@ const (
 	HostDuplicate
 	AllowEmpty
 	AllowOffline
+	CredentialsEmpty
+	CredentialKind
+	CredentialDuplicate
+	CredentialSource
 )
 
 // Issue locates one failure using decoded path components. Version is the
@@ -85,9 +89,17 @@ type Source interface {
 
 // Policy is the complete effective request. It never records approval.
 type Policy struct {
-	Version  int
-	Manifest string
-	Network  Network
+	Version     int
+	Manifest    string
+	Network     Network
+	Credentials []Credential
+}
+
+// Credential keeps the written order for located source observations. Display
+// orders requests by kind; neither a parsed request nor a path grants access.
+type Credential struct {
+	Kind   string `json:"kind"`
+	Source string `json:"source"`
 }
 
 // Network describes the requested network boundary. Allow holds the canonical

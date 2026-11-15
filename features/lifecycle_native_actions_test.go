@@ -16,14 +16,10 @@ import (
 func (w *world) lifecycleSignalAction(signal string, repeat bool) {
 	l := w.lifecycle
 	w.lifecycleStart()
-	if !w.lifecycleReady() {
+	if !w.lifecycleReadyAction(func() { w.lifecycleSignal(signal) }) {
 		w.lifecycleAbortEarly()
 		return
 	}
-	if !bytes.Contains(l.run.out.bytes(), []byte("slice-12:ready\n")) {
-		l.err = errors.New("worker readiness did not reach the controller's foreground stream")
-	}
-	w.lifecycleSignal(signal)
 	if repeat {
 		l.aliveBeforeGrace = lifecycleRepeatedSignals(l.run, l.signalled, w.lifecycleSignal, func() bool {
 			return w.recoveryNativePresent(true)
@@ -147,10 +143,26 @@ func (w *world) lifecycleDisconnect() {
 		return
 	}
 	w.lifecycleStart()
-	if !w.lifecycleReady() {
+	if !w.lifecycleReadyAction(w.lifecycleDisconnectReady) {
 		w.lifecycleAbortEarly()
 		return
 	}
+	if l.err != nil {
+		w.lifecycleAbortEarly()
+		return
+	}
+	w.lifecycleCollect()
+	l.later = w.lifecycleHeartbeat()
+	l.survivedLoss = w.recoveryNativePresent(true)
+	var err error
+	l.lostBoundary, err = w.offline.api.inspect(w.recovery.worker)
+	l.err = errors.Join(l.err, err)
+	l.fault.restore()
+	w.lifecycleFreshRecovery(true)
+}
+
+func (w *world) lifecycleDisconnectReady() {
+	l := w.lifecycle
 	// An acknowledged, still-pending wait proves a healthy same-path transport
 	// before we remove observation. Closing only the proxy's upgraded handles
 	// also makes stream loss visible without touching the daemon or observer.
@@ -165,21 +177,12 @@ func (w *world) lifecycleDisconnect() {
 		}
 		return false
 	}) {
-		w.lifecycleAbortEarly()
 		return
 	}
 	l.heartbeat = w.lifecycleHeartbeat()
 	l.signalled = time.Now() // transport-failure origin, not a synthetic signal
 	l.fault.disconnect()
 	w.offline.api.closeConnections()
-	w.lifecycleCollect()
-	l.later = w.lifecycleHeartbeat()
-	l.survivedLoss = w.recoveryNativePresent(true)
-	var err error
-	l.lostBoundary, err = w.offline.api.inspect(w.recovery.worker)
-	l.err = errors.Join(l.err, err)
-	l.fault.restore()
-	w.lifecycleFreshRecovery(true)
 }
 
 func (w *world) lifecycleCrash() {
@@ -230,16 +233,16 @@ func (w *world) lifecycleStreams() {
 	}
 	if l.pipe != nil {
 		stdout := l.condition == "unread workload stdout"
-		data, err := lifecyclePipePrelude(l.pipe, stdout)
-		if stdout {
-			_, _ = l.run.out.Write(data)
-		} else {
+		// Stdout's exact readiness prelude was already consumed by lifecycleReady.
+		// Stderr still preserves only its pre-release diagnostics here.
+		if !stdout {
+			data, err := lifecyclePipePrelude(l.pipe, false)
 			_, _ = l.run.errout.Write(data)
-		}
-		if err != nil {
-			l.err = errors.Join(l.err, err)
-			w.lifecycleAbortEarly()
-			return
+			if err != nil {
+				l.err = errors.Join(l.err, err)
+				w.lifecycleAbortEarly()
+				return
+			}
 		}
 		if err := os.WriteFile(filepath.Join(w.doctor.checkout, "slice-12-release-output"), []byte("release"), 0600); err != nil {
 			l.err = err

@@ -8,12 +8,11 @@ import (
 	"golang.org/x/term"
 	"io"
 	"os"
-	"reflect"
-	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf16"
 
+	"github.com/donvargax/itos-container/internal/engine/approval/domain"
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 )
 
@@ -62,32 +61,9 @@ func (u UI) Report(v port.View) port.Report {
 	if v.Record.Generation != "" {
 		g := v.Record.Generation
 		report.Generation = &g
-		differences("", object(v.Record.Canonical), report.Effective, &report.Differences)
+		report.Differences = domain.Differences(object(v.Record.Canonical), report.Effective)
 	}
-	sort.Slice(report.Differences, func(i, j int) bool { return report.Differences[i].Path < report.Differences[j].Path })
 	return report
-}
-func differences(path string, before, after any, out *[]port.Change) {
-	if reflect.DeepEqual(before, after) {
-		return
-	}
-	b, bok := before.(map[string]any)
-	a, aok := after.(map[string]any)
-	if bok && aok && path != "/manifest/containerEnv" {
-		keys := map[string]bool{}
-		for key := range b {
-			keys[key] = true
-		}
-		for key := range a {
-			keys[key] = true
-		}
-		for key := range keys {
-			escaped := strings.ReplaceAll(strings.ReplaceAll(key, "~", "~0"), "/", "~1")
-			differences(path+"/"+escaped, b[key], a[key], out)
-		}
-		return
-	}
-	*out = append(*out, port.Change{Path: path, Before: before, After: after})
 }
 
 // Problems reuses prerequisite rules and maps only approval's typed failures.
@@ -111,6 +87,9 @@ func (u UI) Print(v port.View, withJSON bool) int {
 		_, _ = fmt.Fprintln(u.Out, string(data))
 	} else {
 		_, _ = fmt.Fprintf(u.Out, "approval %s\nfingerprint: %s\n%s\n", report.Status, report.Fingerprint, terminalText(v.Candidate.Canonical))
+		if allowlist(report.Effective) != nil {
+			u.networkDisclosure(report.Effective)
+		}
 		if report.Status != "matching" {
 			_, _ = fmt.Fprintln(u.Out, "Review with itos container approve")
 		}
@@ -121,8 +100,14 @@ func (u UI) Print(v port.View, withJSON bool) int {
 // Review shows all data before accepting only a complete yes line. Display-only
 // escaping prevents terminal controls from altering the review or its differences.
 func (u UI) Review(v port.View) bool {
-	_, _ = fmt.Fprintln(u.Out, "Effective offline settings:", terminalText(v.Candidate.Canonical))
-	_, _ = fmt.Fprintln(u.Out, "offline-v1: checkout-only host mount at /workspace; UID:GID override; no supplementary groups; read-only root; dropped capabilities; no-new-privileges; network none; no ports, grants or hooks; ephemeral tmpfs; pids limit 4096")
+	effective := object(v.Candidate.Canonical)
+	if allowlist(effective) != nil {
+		_, _ = fmt.Fprintln(u.Out, "Effective settings:", terminalText(v.Candidate.Canonical))
+		u.networkDisclosure(effective)
+	} else {
+		_, _ = fmt.Fprintln(u.Out, "Effective offline settings:", terminalText(v.Candidate.Canonical))
+		_, _ = fmt.Fprintln(u.Out, "offline-v1: checkout-only host mount at /workspace; UID:GID override; no supplementary groups; read-only root; dropped capabilities; no-new-privileges; network none; no ports, grants or hooks; ephemeral tmpfs; pids limit 4096")
+	}
 	if m := v.Inspection.Manifest; m != nil {
 		for _, unused := range append(append([]string{}, m.Unused...), m.Metadata.Unused...) {
 			_, _ = fmt.Fprintln(u.Out, "Unused field:", jsonText(unused))
@@ -138,4 +123,29 @@ func (u UI) Review(v port.View) bool {
 	}
 	answer := strings.ToLower(strings.TrimSpace(line))
 	return answer == "y" || answer == "yes"
+}
+
+// allowlist reads only the validated candidate, never a previous approval.
+func allowlist(effective any) []any {
+	s, _ := effective.(map[string]any)
+	if s["profile"] != "allowlist-v1" {
+		return nil
+	}
+	p, _ := s["policy"].(map[string]any)
+	n, _ := p["network"].(map[string]any)
+	names, _ := n["allow"].([]any)
+	return names
+}
+
+func (u UI) networkDisclosure(effective any) {
+	_, _ = fmt.Fprintln(u.Out, "allowlist-v1: checkout-only host mount at /workspace; UID:GID override; no supplementary groups; read-only root; dropped capabilities; no-new-privileges; internal network with no route out; no ports, grants or hooks; ephemeral tmpfs; pids limit 4096")
+	_, _ = fmt.Fprintln(u.Out, "This profile grants network. The worker can reach only these host names, through an owned proxy, by CONNECT on port 443:")
+	for _, name := range allowlist(effective) {
+		_, _ = fmt.Fprintln(u.Out, "network.allow:", name)
+	}
+	_, _ = fmt.Fprintln(u.Out, "No TLS interception: the proxy verifies the CONNECT name and the first ClientHello's SNI.")
+	_, _ = fmt.Fprintln(u.Out, "It cannot see the HTTP Host inside TLS or anything after that hello, a second hello after a HelloRetryRequest included, so fronting remains a limit, as does a hello the upstream reads differently, and it cannot stop data sent to an allowed service.")
+	_, _ = fmt.Fprintln(u.Out, "Clients that omit SNI or send ECH, and SSH over 443, are refused.")
+	_, _ = fmt.Fprintln(u.Out, "The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one.")
+	_, _ = fmt.Fprintln(u.Out, "Run cannot start this profile yet: it refuses every version 2 policy for now.")
 }
