@@ -261,3 +261,6 @@ questions:
   - id: q-65
     item: "T-50"
     question: "T-50: the implementer (attempt 8) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-50-implementer-8.result.json"
+  - id: q-66
+    item: "T-52"
+    question: "T-52: the implementer (attempt 4) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-52-implementer-4.result.json"
