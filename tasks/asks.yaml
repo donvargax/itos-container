@@ -270,3 +270,6 @@ questions:
   - id: q-67
     item: "T-48"
     question: "T-48: its implementer (attempt 2) stopped again on the slice-29 prerequisite, reading slice-29 as still in progress and decision 0025 and arc42 as marking the state exclusion unresolved. Is the prerequisite met?"
+  - id: q-68
+    item: "T-53"
+    question: "T-53: its implementer (attempt 1) could not reproduce the original exit status 2 and could not fetch the transcript of run 42738076694, as agents hold no GitHub credentials. How does it get the transcript?"
