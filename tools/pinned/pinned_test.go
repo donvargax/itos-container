@@ -138,6 +138,92 @@ func TestPinnedAssetRedirect(t *testing.T) {
 	}
 }
 
+func TestPinnedForbiddenAssetFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		statuses  []int
+		corrupt   bool
+		wantCalls int32
+		wantText  string
+	}{
+		{"public download", []int{200}, false, 1, ""},
+		{"public download retries", []int{504, 200}, false, 2, ""},
+		{"bad public checksum", []int{200}, true, 1, "SHA-256 did not match the pinned release"},
+		{"missing public download", []int{404}, false, 1, "pinned: cannot fetch"},
+		{"public retries exhausted", []int{504}, false, 6, "pinned: cannot fetch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			archive := toolArchive(t)
+			body := archive
+			if tc.corrupt {
+				body = append(bytes.Clone(archive), []byte("corrupt release")...)
+			}
+			var apiCalls, downloadCalls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/asset":
+					apiCalls.Add(1)
+					if r.Header.Get("Accept") != "application/octet-stream" {
+						http.Error(w, "binary asset media type required", http.StatusNotAcceptable)
+						return
+					}
+					http.Error(w, "API rate limit exceeded", http.StatusForbidden)
+				case "/asset/download":
+					i := int(downloadCalls.Add(1)) - 1
+					status := tc.statuses[min(i, len(tc.statuses)-1)]
+					w.Header().Set("Retry-After", "1")
+					w.WriteHeader(status)
+					if status == http.StatusOK {
+						_, _ = w.Write(body)
+					}
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			root, launcher := fixtureLauncher(t, server.URL+"/asset", archive)
+			ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, "sh", launcher, "--path", "golangci-lint")
+			cmd.Env = append(os.Environ(), "NO_PROXY=*", "no_proxy=*")
+			var diagnostics bytes.Buffer
+			cmd.Stderr = &diagnostics
+			output, err := cmd.Output()
+			if ctx.Err() != nil || cmd.ProcessState == nil {
+				t.Fatalf("launcher did not finish: %v\n%s", err, &diagnostics)
+			}
+			if tc.wantText != "" {
+				if cmd.ProcessState.ExitCode() != 2 || len(output) != 0 || !strings.Contains(diagnostics.String(), tc.wantText) {
+					t.Errorf("failed fallback: exit %d, stdout %q, stderr %q; want exit 2 and %q", cmd.ProcessState.ExitCode(), output, diagnostics.String(), tc.wantText)
+				}
+				if _, err := os.Stat(filepath.Join(root, ".tools")); !os.IsNotExist(err) {
+					t.Errorf("failed fallback published a tool cache: %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("403 prevented checksum-verified public download: %v\n%s", err, &diagnostics)
+				}
+				run := exec.CommandContext(ctx, "sh", "-c", `exec "$1" "$2"`, "fixture", strings.TrimSpace(string(output)), "an argument with spaces")
+				result, err := run.CombinedOutput()
+				if run.ProcessState == nil || run.ProcessState.ExitCode() != 7 || string(result) != "an argument with spaces\n" {
+					t.Errorf("fallback tool path is unusable: %v, output %q", err, result)
+				}
+				// Reuse the verified cache without either release endpoint available.
+				server.Close()
+				cached := exec.CommandContext(ctx, "sh", launcher, "--path", "golangci-lint")
+				result, err = cached.CombinedOutput()
+				if err != nil || !bytes.Equal(result, output) {
+					t.Errorf("cached fallback path: %v, output %q, want %q", err, result, output)
+				}
+			}
+			if apiCalls.Load() != 1 || downloadCalls.Load() != tc.wantCalls {
+				t.Errorf("download attempts: API %d, public %d; want 1 and %d", apiCalls.Load(), downloadCalls.Load(), tc.wantCalls)
+			}
+		})
+	}
+}
+
 func fixtureLauncher(t *testing.T, url string, archive []byte) (string, string) {
 	t.Helper()
 	source, err := os.ReadFile("../bin/pinned")
@@ -150,7 +236,7 @@ func fixtureLauncher(t *testing.T, url string, archive []byte) (string, string) 
 	if start < 0 || end <= start {
 		t.Fatal("cannot locate launcher release metadata")
 	}
-	metadata := fmt.Sprintf("version=fixture\nasset=fixture.tar.gz\nmember=golangci-lint\nexe=\nurl=%s\nsum=%x\n", url, sha256.Sum256(archive))
+	metadata := fmt.Sprintf("version=fixture\nasset=fixture.tar.gz\nmember=golangci-lint\nexe=\nurl=%s\ndownload_url=%s/download\nsum=%x\n", url, url, sha256.Sum256(archive))
 	script = script[:start] + metadata + script[end:]
 	root := t.TempDir()
 	dir := filepath.Join(root, "tools", "bin")

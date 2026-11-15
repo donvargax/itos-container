@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - T-52
   - T-50
   - T-53
   - p1-harness-home
@@ -1048,7 +1047,7 @@ items:
     title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-approval-no-record-step-checks-frozen-input
