@@ -417,7 +417,8 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, network: {mode: [offline]}}                         | /network/mode |
 
   # Slice-25 added policy version 2, which made this table's example 2 untrue. Its feat
-  # commit changed that example to 3 and said so; the rule checked here did not change.
+  # commit changed that example to 3. Slice-29 now accepts 3 and moves it to 4;
+  # the unsupported-version rule remains unchanged.
   @slice-1 @ID-POLICY-15
   Scenario Outline: unsupported policy versions are not guessed or downgraded
     Given the policy file contains:
@@ -435,7 +436,7 @@ Feature: Strict offline sandbox policy
       | version |
       | 0       |
       | -1      |
-      | 3       |
+      | 4       |
 
   # Empty collections and false do not make unsupported permissions permissible.
   @slice-1 @ID-POLICY-16
@@ -628,9 +629,9 @@ Feature: Strict offline sandbox policy
   # A problem's fix depends on the version read. For a version 2 file under doctor
   # --policy-only, no fix names version 1, and policy.network_mode's says "use offline or
   # allowlist mode". Version 1 keeps its words exactly (ID-POLICY-29, 75 and 77) and never
-  # offers a mode it refuses. Where no supported version was read, the fix names both: "use
-  # policy version 1 or 2" for an unsupported number, and "use the field type defined by
-  # policy version 1 or 2" for a wrongly typed version or a root that is not an object.
+  # offers a mode it refuses. Where no supported version was read, the fix names supported versions: "use
+  # policy version 1, 2 or 3" for an unsupported number, and "use the field type defined by
+  # policy version 1, 2 or 3" for a wrongly typed version or a root that is not an object.
   # Ordinary doctor uses the same validation words (ID-POLICY-77).
   # Doctor and approve admit a valid version 2 request and bind its effective
   # network profile in approval. Run alone still refuses every valid version 2
@@ -1096,11 +1097,11 @@ Feature: Strict offline sandbox policy
     And its error output says "use offline mode"
     And its error output does not say "allowlist"
 
-  # The words are literal on purpose: a correct "version 1 or 2" has no separate "version 2"
+  # The words are literal on purpose: a correct "version 1, 2 or 3" has no separate "version 2"
   # for a looser step to find. The exact step holds version 1's policy.type words, which no
-  # other scenario pins: "says" would pass a build that wrote "version 1 or 2" there as well.
+  # other scenario pins: "says" would pass a build that wrote "version 1, 2 or 3" there as well.
   @slice-25 @ID-POLICY-77
-  Scenario Outline: a fix names both versions only where no supported version was read
+  Scenario Outline: a fix names supported versions only where no supported version was read
     Given the policy file contains:
       """
       <document>
@@ -1125,12 +1126,12 @@ Feature: Strict offline sandbox policy
     And the engine recorder has no connections
 
     Examples:
-      | document                         | fix                                                 |
-      | {version: 3, manifest: a.json}   | use policy version 1 or 2                           |
-      | {version: 0, manifest: a.json}   | use policy version 1 or 2                           |
-      | {version: '2', manifest: a.json} | use the field type defined by policy version 1 or 2 |
-      | {version: 2.5, manifest: a.json} | use the field type defined by policy version 1 or 2 |
-      | []                               | use the field type defined by policy version 1 or 2 |
+      | document                         | fix                                                    |
+      | {version: 4, manifest: a.json}   | use policy version 1, 2 or 3                           |
+      | {version: 0, manifest: a.json}   | use policy version 1, 2 or 3                           |
+      | {version: '2', manifest: a.json} | use the field type defined by policy version 1, 2 or 3 |
+      | {version: 2.5, manifest: a.json} | use the field type defined by policy version 1, 2 or 3 |
+      | []                               | use the field type defined by policy version 1, 2 or 3 |
 
   # The last entry repeats the first exactly. A refused entry has no canonical name to
   # repeat, so it is one more policy.host_name and never a policy.host_duplicate.

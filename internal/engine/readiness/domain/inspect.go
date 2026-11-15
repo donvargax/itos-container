@@ -40,9 +40,9 @@ func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result)
 	}
 	defer i.Checkout.Close()
 	p := policy.Inspect(i.Policy, i.Names)
-	if p.Policy != nil && p.Policy.Version != 1 && !i.AllowVersion2 {
+	if p.Policy != nil && p.Policy.Version != 1 && (p.Policy.Version != 2 || !i.AllowVersion2) {
 		// Run cannot honour version 2 until its proxy topology is implemented.
-		// Inspection and approval opt in explicitly; an omitted binding refuses.
+		// Inspection and approval opt in only to version 2; version 3 stays gated.
 		p = policyport.Result{Issues: []policyport.Issue{{Kind: policyport.Version, Path: []string{"version"}, Version: p.Policy.Version}}}
 	}
 	result.Policy = &p

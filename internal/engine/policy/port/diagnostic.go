@@ -59,12 +59,15 @@ func Diagnostic(issue Issue) Problem {
 			// A valid file some commands cannot act on yet: they can still show what it asks for.
 			p.Message = "Policy version is not accepted by this command yet"
 			p.Fix = "use policy version 1, or read what a version " + versions(issue.Version) + " file requests with doctor --policy-only"
+			if issue.Version == 3 {
+				p.Fix += " or doctor --credentials-only"
+			}
 		}
 	case UnknownKey:
 		p.Rule, p.Message, p.Fix = "unknown_key", "Field is not supported", "remove fields absent from the version "+versions(issue.Version)+" schema"
 	case NetworkMode:
 		p.Rule, p.Message, p.Fix = "network_mode", "Network mode is unsupported", "use offline mode"
-		if issue.Version == 2 {
+		if issue.Version >= 2 {
 			p.Fix = "use offline or allowlist mode"
 		}
 	case Path:
@@ -77,6 +80,14 @@ func Diagnostic(issue Issue) Problem {
 		p.Rule, p.Message, p.Fix = "allow_empty", "Allowlist is empty", "list at least one host name, or use offline mode"
 	case AllowOffline:
 		p.Rule, p.Message, p.Fix = "allow_offline", "Allowlist needs allowlist mode", "set network.mode to allowlist, or remove allow"
+	case CredentialsEmpty:
+		p.Rule, p.Message, p.Fix = "credentials_empty", "Credential requests are empty", "request at least one source, or omit credentials"
+	case CredentialKind:
+		p.Rule, p.Message, p.Fix = "credential_kind", "Credential kind is unsupported", "use claude-token or github-token"
+	case CredentialDuplicate:
+		p.Rule, p.Message, p.Fix = "credential_duplicate", "Credential kind repeats an earlier entry", "request each credential kind once"
+	case CredentialSource:
+		p.Rule, p.Message, p.Fix = "credential_source", "Credential source path is invalid", "use a literal absolute path of at most 4095 UTF-8 bytes without empty or dot components, backslashes or controls"
 	default:
 		p.Rule, p.Message, p.Fix = "internal", "Unknown policy failure", "report this as a bug"
 		p.Exit = 70
@@ -89,7 +100,7 @@ func Diagnostic(issue Issue) Problem {
 // against, or both supported ones where it declared none.
 func versions(version int) string {
 	if version == 0 {
-		return "1 or 2"
+		return "1, 2 or 3"
 	}
 	return strconv.Itoa(version)
 }
