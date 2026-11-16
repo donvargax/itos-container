@@ -7868,9 +7868,11 @@
     and platform-windows to go test ./... -count=1 -timeout=20m; each includes ./features. Preserve
     the package set, RAPID_CHECKS, manual-red environment, event guards and failure propagation.
     In features/engine_workflow_test.go, align only the two expected ordinary command strings in
-    engineWorkflowIssues and engineRedWorkflowIssues. Keep their exact comparisons and every
-    negative control. The engine invocation, 180-second shard gate, four-minute engine test
-    timeout, job/step limits, fixture limits, scenario inventory and assertions stay unchanged.
+    engineWorkflowIssues and engineRedWorkflowIssues. In tools/release/workflow_test.go, align
+    TestReleaseWorkflow's exact automatic Linux command expectation with the same timeout-bearing
+    command. Keep their exact comparisons and every negative control. The engine invocation,
+    180-second shard gate, four-minute engine test timeout, job/step limits, fixture limits,
+    scenario inventory and assertions stay unchanged.
 
     Audit active suite invocations and timeout overrides in the workflow and tools/bin. The
     baseline tools/bin/scenario-list runs only TestScenarioList, not the suite; domain-coverage
@@ -7884,13 +7886,17 @@
     each named platform job. At the specification baseline all three fail because these commands
     omit -timeout=20m. They assert configuration, not elapsed runtime or completed code proof.
     Neighbouring preservation checks are TestEngineWorkflow and TestEngineRedWorkflow, including
-    their negative controls, and TestEngineSuiteBudget. Run them through the configured hooks
+    their negative controls, TestEngineSuiteBudget and TestReleaseWorkflow. Reproduce the stale
+    release assertion with go test ./tools/release -run '^TestReleaseWorkflow$' -count=1 before
+    aligning it, then require that check to pass. Run the wider gates through the configured hooks
     and CI; the ordinary full suite remains without -race and native-engine evidence stays in
     CI. Never run the full features package with -race or change a memory limit to obtain a pass.
 
-    The drafter changes only this ledger entry in docs --item T-58. Implement the four named
-    configuration/test files together in one build --task T-58 commit. Preserve sibling ledger
-    entries and work ownership/status. Agents commit and stop; the loop owns push, CI watching
+    The drafter changes only this ledger entry in docs --item T-58. Implement the timeout
+    configuration and feature-test expectations together in one build --task T-58 commit. Align
+    the omitted release-test expectation and this specification in one follow-up build --task
+    T-58 commit, preserving published history. Preserve sibling ledger entries and work
+    ownership/status. Agents commit and stop; the loop owns push, CI watching
     and closure after the actual pushed head passes its required checks.
   done_when:
     - run: |
