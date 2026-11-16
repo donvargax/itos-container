@@ -180,13 +180,17 @@ Feature: Claude starts with onboarding completed in its private persistent home
   # - Each refusal/fault row includes a successful CLAUDE home control, so blanket
   #   rejection cannot pass. Retained files are seeded independently, not through
   #   a successful product run hidden in Given. Observe each invocation separately.
-  # - Add bindings alone in a red test commit with @wip retained. Non-engine red
-  #   is local; ALL @engine red/green is CI-only, with no agent Docker socket.
+  # - Add bindings for all 56 new step texts alone in a red test commit with @wip
+  #   retained. Run with @wip removed and require every expanded row to fail at
+  #   its behavior assertion before implementation: undefined steps and fixture
+  #   failures are not red evidence. Non-engine red is local; ALL @engine red/green
+  #   is CI-only, with no agent Docker socket.
   #   Native assertions precede fixture teardown; teardown only reclaims tracked
   #   disposable resources after product cleanup has been independently observed.
-  # - This draft owns only this feature file. Before its CI tests/red dispatch,
-  #   assign it to one engine shard and update inventory pins: TestEngineShards
-  #   inventories @wip engine files too, so waiting until activation is too late.
+  # - This spec assigns claude-home.feature to the existing other engine shard in
+  #   .github/workflows/ci.yml. TestEngineShards inventories @wip engine files too;
+  #   its workflow and partition checks require this assignment before activation.
+  #   Keep that assignment for CI red dispatch; all eleven scenarios remain @wip.
   #   Add a smoke entry when a scenario becomes live. No local engine, full-features
   #   race run, generated coverage or mutation evidence belongs to this draft.
   # - Neighbours: HOME policy/approval/runtime/recovery and retained-state cases,
