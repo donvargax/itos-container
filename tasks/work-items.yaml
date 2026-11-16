@@ -2151,14 +2151,15 @@ items:
       slice-12's bounded cancellation and ownership rules; preserve noninteractive behavior and exit
       precedence. Require black-box red/green scenarios, with real-engine evidence only in CI.
       Broken down from p1-interactive-tty.
-  - id: p1-exec-owned-session
+  - id: slice-38
     title: Execute literal argv within a running owned session
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p1-exec-owned-session.
       Implement internal/slices/exec with thin command handling and shared session-engine
       operations. Validate ownership and the live foreground workload; inherit frozen policy,
       identity and mounts without extending session lifetime. Cover exit status, cancellation,
@@ -2170,7 +2171,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [T-56, p1-exec-owned-session]
+    depends_on: [T-56, slice-38]
     kind: idea
     why: >
       Combine the exec slice with shared terminal support for raw input, initial dimensions, resizes
