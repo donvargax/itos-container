@@ -72,17 +72,18 @@ func TestLifecycleDisconnectWaitsForHealthyHeartbeat(t *testing.T) {
 func TestLifecycleDisconnectWaitsForIndependentProgress(t *testing.T) {
 	for _, tc := range []struct {
 		name, initial string
-		publish       bool
+		publish       int
 		wantProgress  bool
 	}{
-		{"already advanced", "8", false, true},
-		{"delayed progress", "7", true, true},
-		{"temporarily missing", "", true, true},
-		{"temporarily malformed", "partial", true, true},
-		{"regressed then advanced", "6", true, true},
-		{"missing", "", false, false},
-		{"unchanged", "7", false, false},
-		{"regressed", "6", false, false},
+		{"already advanced and still progressing", "8", 9, true},
+		{"already advanced then stalled", "8", 0, false},
+		{"delayed progress", "7", 8, true},
+		{"temporarily missing", "", 8, true},
+		{"temporarily malformed", "partial", 8, true},
+		{"regressed then advanced", "6", 8, true},
+		{"missing", "", 0, false},
+		{"unchanged", "7", 0, false},
+		{"regressed", "6", 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -95,21 +96,21 @@ func TestLifecycleDisconnectWaitsForIndependentProgress(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				if tc.publish {
+				if tc.publish != 0 {
 					written := make(chan struct{})
 					defer func() { <-written }()
 					go func() {
 						defer close(written)
 						time.Sleep(100 * time.Millisecond)
-						lifecyclePublishHeartbeat(t, w, 8)
+						lifecyclePublishHeartbeat(t, w, tc.publish)
 					}()
 				}
 				w.lifecycleDisconnectProgress()
 				if tc.wantProgress {
-					if l.later != 8 || l.err != nil {
+					if l.later != tc.publish || l.err != nil {
 						t.Errorf("did not await independent progress after controller exit: later=%d elapsed=%s err=%v", l.later, time.Since(l.returned), l.err)
 					}
-					if elapsed := time.Since(l.returned); tc.publish && (elapsed < 100*time.Millisecond || elapsed > 110*time.Millisecond) {
+					if elapsed := time.Since(l.returned); elapsed < 100*time.Millisecond || elapsed > 110*time.Millisecond {
 						t.Errorf("observer did not await the next heartbeat within one poll: %s", elapsed)
 					}
 				} else if l.err == nil || time.Since(l.returned) != 5*time.Second {

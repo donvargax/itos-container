@@ -76,7 +76,7 @@ func TestCredentialStagingFilesystemErrors(t *testing.T) {
 			if failure != test.want {
 				t.Fatal("failed filesystem operation did not refuse staging", failure)
 			}
-			if r.Credentials.Stage == "owned" && test.name != "file stat" {
+			if r.Credentials.Stage == "owned" {
 				if failure := fixture.Stager.Remove(t.Context(), r); failure != "" {
 					t.Fatal("published partial staging lost cleanup authority", failure)
 				}
