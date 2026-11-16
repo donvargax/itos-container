@@ -265,6 +265,17 @@ func (f *homeLocalFixture) seedHomeSession(t *testing.T, state string) (string, 
 	} else {
 		f.engine.Resources[worker] = o
 	}
+	if state == "running with live controller" {
+		files := f.m.files.Sessions[f.m.index().Project+"/"+id]
+		files.Controller = true
+		if f.disk != nil {
+			lease, failure := f.m.registry.Storage.Register(t.Context(), f.m.index(), id, files.Data)
+			if failure != "" {
+				t.Fatal("seed live controller lease", failure)
+			}
+			t.Cleanup(lease.Close)
+		}
+	}
 	if f.disk != nil {
 		f.disk.seed()
 		f.sdk.seed()

@@ -154,3 +154,18 @@ func TestAllowlistReviewKeepsUnusedNoticesAfterDisclosureBeforeDifferences(t *te
 		t.Fatal(stdout.String())
 	}
 }
+
+func TestReviewExplainsHomeLifetimeBeforeConsent(t *testing.T) {
+	var out bytes.Buffer
+	ui := UI{In: strings.NewReader("n\n"), Out: &out, Err: io.Discard}
+	v := port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: `{"profile":"offline-home-v1","home":{"storage":"volume"},"host":{"uid":"2001","gid":"3001"}}`}}
+	if ui.Review(v) {
+		t.Fatal("declined review consented")
+	}
+	before, _, found := strings.Cut(out.String(), "Approve these settings? y/N: ")
+	for _, text := range []string{"/home/itos", "0700", "2001:3001", "retained after exit and stop", "hostile worker data", "terminal-consented reset or delete", "disabling home does not delete it"} {
+		if !found || !strings.Contains(before, text) {
+			t.Fatal("missing pre-consent disclosure", text, out.String())
+		}
+	}
+}
