@@ -334,6 +334,7 @@ questions:
   - id: q-83
     item: "slice-37"
     question: "slice-37: its implementer (attempt 1) stopped for engine red evidence of @ID-RUNTTY-06, 07, 08, 09, 12 and 13. Does the dispatched run supply it?"
+    answer: "Yes (the coordinator, 2026-11-16). Run 43837837169 at 23270b6 ran fourteen cases of the six scenarios on the engine tier and all failed at the terminal launch, the product answering 'run: unknown flag --tty' with exit 2; no step was undefined and no fixture failed. Since the flag is refused outright, the steps after the launch have not executed yet; the green run after the implementation is their first execution. slice-37 implements."
   - id: q-84
     item: "slice-28"
     question: "slice-28: its implementer (attempt 3) stopped for engine red evidence of @ID-EGRESSLIFE-10, 12 and 13. Does the dispatched run supply it?"
