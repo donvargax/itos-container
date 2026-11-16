@@ -48,6 +48,15 @@ func (c *Checkout) pin(path string, open func(string) (*os.Root, port.Failure)) 
 	return port.None
 }
 
+// PinnedIdentity returns the descriptor identity captured before the policy read.
+func (c *Checkout) PinnedIdentity() (port.CheckoutIdentity, port.Failure) {
+	if c.root == nil {
+		return port.CheckoutIdentity{}, port.CheckoutUnavailable
+	}
+	device, inode := identity(c.rootInfo)
+	return port.CheckoutIdentity{Root: c.path, Device: device, Inode: inode}, port.None
+}
+
 // Inspect checks embedded Git storage without parsing configuration or following
 // indirection. Its identity belongs to the root already pinned by Pin.
 func (c *Checkout) Inspect() (port.CheckoutIdentity, port.Failure) {

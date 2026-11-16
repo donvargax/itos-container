@@ -103,6 +103,9 @@ func (w *world) finishApproval(p *approvalProcess) {
 	_ = p.master.Close()
 }
 func (w *world) approvalTerminal(mode, answer, edit, streams string) error {
+	if w.credentialApproval != nil {
+		return w.credentialApprovalTerminal(mode, answer, edit, streams)
+	}
 	if err := w.approvalOracle(); err != nil {
 		return err
 	}

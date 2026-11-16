@@ -8,10 +8,14 @@ import (
 	"slices"
 	"strconv"
 
+	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
-type UI struct{ Out, Err io.Writer }
+type UI struct {
+	Out, Err    io.Writer
+	Credentials func([]approval.CredentialGrant, bool) []string
+}
 type Problem struct {
 	Rule    string `json:"rule"`
 	Exit    int    `json:"exit"`
@@ -93,6 +97,12 @@ func (u UI) Print(r port.RecoveryResult, withJSON bool) int {
 				exit = strconv.Itoa(*e.WorkloadExit)
 			}
 			_, _ = fmt.Fprintf(u.Out, "session %s project %s fingerprint %s state %s resource %s controller %s cleanup %s workload_exit %s stop_candidate %t\n", e.ID, e.Project, e.Fingerprint, e.State, e.Resource, e.Controller, e.Cleanup, exit, e.StopCandidate)
+			if len(e.Credentials) > 0 && u.Credentials != nil {
+				_, _ = fmt.Fprintf(u.Out, "session %s credential grants:\n", e.ID)
+				for _, line := range u.Credentials(e.Credentials, e.CredentialNetwork) {
+					_, _ = fmt.Fprintln(u.Out, line)
+				}
+			}
 			if e.Anchor != "" {
 				_, _ = fmt.Fprintf(u.Out, "worker resource=%s anchor=%s cleanup=%s\n", e.Resource, e.Anchor, e.Cleanup)
 			}

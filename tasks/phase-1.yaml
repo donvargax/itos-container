@@ -7678,12 +7678,12 @@
     the small arc42 inventory update is a docs --item T-56 commit. Leave sibling ledger entries,
     ownership/status, existing command and feature files, dependency pins and enforcement inputs
     alone. Agents commit and stop; the loop owns push, CI watching and closure.
-  done_when:
-    - run: go test -count=1 -timeout=30s ./internal/engine/terminal/...
 - id: T-57
   type: test
   title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
   why: >
+    The coordinator's 2026-11-16 04:58 UTC decision settles q-79: implement the throwaway launch
+    below, without reopening the remedy or holding this task for a decision about limits.
     T-54's plain warm-up and T-55's product-shaped one are both on main and neither removes the slow
     first create. In run 43798922441 they took 100 to 120 ms and 200 to 280 ms on the three shards,
     and ID-LIFECYCLE-08, the lifecycle shard's first engine row, still failed with run.call-timeout
@@ -7692,9 +7692,163 @@
     suite are fast, and the first one made inside it is slow, so what is cold is on the suite's own
     path: the recorder that forwards engine calls, the built product's first launch, or what only
     that path asks of the engine. On 2026-11-16 the first row failed on main's run of slice-27's
-    merge commit (ID-ANCHORS-09, 1.026 s) and held its release for forty minutes. Remedy to prove:
-    before the first engine row, the suite itself launches the built product once through the same
-    recorder and fixture the rows use, under production limits, removes what it made, and prints
-    that launch's create interval. No fixture limit, assertion, retry or skipped row moves.
+    merge commit (ID-ANCHORS-09, 1.026 s) and held its release for forty minutes. T-54 and T-55 and
+    their two timing lines stay. This is test-harness maintenance, with no product behaviour,
+    Gherkin scenario or new scenario ID.
+
+    Once per suite process, after selection admits engine rows and before the first row's setup
+    or resource snapshot, launch the built product once through the suite's offlineAPI recorder,
+    using the same independently validated fixture image and numeric UID/GID that the rows use.
+    Run the literal argv /bin/true through the product's run command, reaching create, inspect,
+    attach, start, wait and owned teardown. Keep stdin open until the child exits so EOF does
+    not initiate cancellation of the successful launch. A create made by the harness itself,
+    a shell-shaped request, a version command or an unstarted container does not perform this
+    warm-up. Use a fresh disposable checkout, seeded synthetic approval, isolated account home and control state,
+    and its own recorder journal. Reuse the existing fixture and ownership machinery rather than
+    adding a permissive recorder. No real approval command, host state folder, new image, pull,
+    registry operation, dependency or service is needed.
+
+    Keep the native factory behind the existing featureEnvironment.engineEnabled and
+    doctorRealGuard checks. Ordinary non-engine runs, invalid selections and selections with no
+    eligible rows must perform no warm-up build, launch, fixture-input read or engine access.
+    Retain the single attempt and its result for the process, including failure, so multiple
+    TestFeatures invocations or nested scheduling cannot repeat it or turn failure into success.
+    Each existing CI shard is its own process and therefore makes its own one attempt. Do not
+    insert it into a per-scenario hook, the Gherkin inventory, or the nested quiet-worker suite.
+
+    The warm-up product and its account-home test assembly compile the original checkout's
+    production limits, CallDuration 10s, StartupDuration 120s and GraceDuration 10s. Build them in
+    a separate temporary directory: buildProduct(..., false) alone is insufficient if the later
+    productProbeBinary finds T-33-engine-tree beside the executable and switches to that copy.
+    The existing test assembly may isolate the account home exactly as it does for the rows;
+    it still invokes the product's real run entry point. It must use the production source and
+    the normal coverage/build-cache conventions. The actual rows retain their current binaries,
+    shortened 1/3/1-second fixture budgets, controls, assertions, order, retries and selected set.
+    Add no product runtime switch for budgets and change no production or fixture limit.
+
+    Bound preparation, compilation, invocation, recorder draining and cleanup; every child is
+    joined and every wait has a finite deadline. Reuse the existing 60-second assembly-build,
+    45-second offline invocation, 10-second create-outcome and 30-second owned-cleanup allowances
+    without extending them; any newly needed build or wait must also have a finite bound. These
+    harness watchdogs do not change the compiled product limits. A setup, build, launch, timeout,
+    nonzero workload exit, recorder, timing or cleanup failure fails TestFeatures before it enters
+    the scenario runner, with a diagnostic beginning engine suite warm-up: and naming the failed
+    stage. Preserve the original failure beside a cleanup failure; neither may be swallowed by a
+    later successful action. No sleep, retry, ignored exit, skipped row or budget change is a remedy.
+
+    On success and on every partial failure, close and join the controller and recorder, await
+    forwarded creates, and attempt cleanup using the existing full identity and ownership checks.
+    Account for a create answered after the controller leaves before releasing its checkout
+    anchor. Remove and independently verify absence of the warm-up worker and owned anchor before
+    permitting any row to begin; transport or inspection failure is not absence. Release sockets,
+    held descriptors, temporary checkout/state/build directories and any private coverage data
+    after their owners finish. Leave unrelated resources and the shared fixture image unchanged;
+    never prune or remove by an unverified name. A cleanup failure fails the suite in its own right.
+
+    Print one separate line per attempted warm-up, including a failed attempt, in this form:
+    engine suite warm-up timing: arrival_ns=<n|missing> forwarded_ns=<n|missing>
+    answer_ns=<n|missing> forward_to_answer_ns=<n|missing> outcome=<passed|failed>.
+    This is one physical line. Take arrival, forwarded and answer from that launch's single
+    POST /containers/create journal entry (At, Forwarded and Answered), relative to a monotonic
+    origin captured immediately before starting its controller. Compute forward_to_answer_ns
+    from Answered minus Forwarded, never from subprocess duration or the controller reply time.
+    Successful values are ordered nonnegative integer nanoseconds with HTTP 201 and no cancelled
+    controller; success also requires workload completion and verified cleanup. Missing, multiple
+    or unordered create entries fail with a timing diagnostic, never fabricated zero intervals.
+    A failure before a timestamp exists prints missing for that value. Check output errors and
+    fail if the line cannot be written. Print no raw request body, environment, approval, host
+    path or credential. Preserve T-54/T-55 and the existing compilation, scenario, suite and step
+    timing lines. Include warm-up work in elapsed suite/step time, without adding a selected or
+    completed scenario or changing any row's timing or outcome; the 180-second step gate stays.
+
+    Coverage requested by either input must still instrument the warm-up product, but its
+    counters go to a private disposable directory outside GOCOVERDIR and ITOS_CC_TEST_COVERDIR's
+    collected destinations. It has no scenario ID and must neither create an extra per-ID entry
+    nor credit any scenario with its executed lines. Do not mutate the caller's coverage inputs
+    or the following worlds' destinations. Plain runs remain plain.
+
+    Add TestEngineSuiteWarmup in features/engine_suite_warmup_test.go. It must exercise the same
+    preparation/launch orchestration that TestFeatures calls, not just a formatter, an unused
+    helper or a counter substituted for the launch. Provide a test-only fixture-factory seam
+    for a disposable stateful engine endpoint; never enable the real engine tier, spoof CI or
+    weaken doctorRealGuard to run it locally. One successful local case executes the built
+    product's run entry point through the actual offlineAPI recorder against that endpoint,
+    checks the literal argv and immutable fixture identity, sees the worker and anchor removed,
+    and compares the printed intervals with the recorded exchange. Reuse the existing session
+    fixture support where possible; keep all stand-ins in test code and add no production port
+    or package. Local protocol evidence proves the mechanism, not native-engine performance.
+
+    Under that named test, exercise disabled and empty selection without side effects; one
+    attempt before any row setup across repeated and nested invocations; retained failure with
+    no second launch; successful launch and exact timing; preparation/build failure; nonzero
+    child exit; a hanging child cancelled and joined at the watchdog; recorder failure; absent,
+    duplicate and unordered timing data; unwritable timing output; cleanup after partial setup,
+    an abandoned create and a late answer; cleanup failure and preservation of unrelated objects;
+    and plain, aggregate and per-ID coverage isolation. Use stateful fixtures and readiness
+    handshakes, with a controlled clock or shortened test-only watchdog for failure controls,
+    not real long waits or a fake Docker executable. Verify the compiled warm-up assembly carries
+    10/120/10 using the existing TestEngineFixtureBudgetContract and that rows still carry 1/3/1.
+    A successful warm-up followed by an intentionally failing synthetic row must retain that
+    row's failure and the original selected/completed counts; a warm-up failure must launch no row.
+    Test the real entry-point wiring as well as helper behaviour, so removing the call from
+    TestFeatures fails the regression. Synthetic rows stay in temporary files outside inventory.
+
+    The done_when check first requires the exact top-level test to exist, then runs it uncached
+    with a three-minute test watchdog, without a race detector or native engine. At specification
+    baseline e77aa15e8e6453438f1f38d72e2b1fc263b3e0ca the original placeholder exits 0 with no
+    tests to run; the discovery guard below exits 1 with missing required TestEngineSuiteWarmup. That is
+    missing-test evidence, not assertion-level red. The implementer first commits defined tests
+    and any minimal compiling seam/stub in test --item T-57, records failure at the missing-launch
+    assertion, then implements until the same tests pass. Keep the check in the existing ordinary
+    task/Go-test tier. Do not add a new workflow, engine dispatch, full-suite race run or a local
+    native-engine requirement. Configured hooks and CI retain the wider checks.
+
+    Neighbouring preservation checks are TestEngineSuiteBudget, TestProductSourceFollowsTheEngineFixture,
+    TestProbeAssemblySharesTheProductBuildCache, the engine selection/scheduling/shard and timing
+    regressions, TestFeatureConcurrency, TestOfflineRuntimeGuard, TestOfflineRecorderRecordsAbandonedCreate,
+    recorder cleanup controls, TestScenarioCoverageContract and TestEngineFixture regressions.
+    The full ordinary feature suite runs once without -race through the configured checks; the
+    existing native shards alone exercise Docker. Keep live offline, lifecycle, anchor, recovery
+    and session scenarios, all shard inventory and their assertions unchanged.
+
+    The coordinator's 2026-11-16 05:44 UTC instruction applies to each implementation attempt:
+    before reporting done, run tools/bin/pinned itos-cc mutation run --count 40 --since origin/main
+    --seed <seed> --fail-uncovered=lines --json cmd internal with two or three different seeds.
+    Kill every survivor with a test that fails on it; only a mutant that cannot behave differently
+    may be recorded as equivalent with its reason for review. Cover each uncovered changed line,
+    or remove it only if unreachable. Repeat after repairs, never change the draw to escape a
+    failure. This expressly overrides the general no-local-mutation rule for implementation;
+    a test-harness-only range may have no eligible production sites and must report that honestly.
+    Commit no generated mutation/coverage evidence. A red run showing only ID-OFFLINE-29,
+    ID-ANCHORS-09, ID-LIFECYCLE-08 or ID-LIFECYCLE-12 is the known flake the loop reruns; change
+    nothing for it. Documentation-only specification work supplies no code-proof claim.
+
+    The local acceptance evidence is the mechanism. After landing, the coordinator reads the
+    three warm-up timing lines and subsequent first-row create intervals, along with existing
+    row/step timings and cleanup verdicts. If a first row's create is still slow, that is for the
+    coordinator to act on, not grounds to hold T-57 or reopen the remedy. This supersedes the
+    earlier T-54/T-55 report-and-stop wording and the corresponding README guidance for this item;
+    do not require successful first rows as proof of this task's mechanism.
+
+    The drafter edits only this T-57 ledger entry in docs --item T-57. Implementation and its
+    regressions belong in features/*_test.go in test --task T-57, reusing the named suite, build,
+    recorder and fixture helpers; describe the new phase and evidence boundary in features/README.md
+    in docs --item T-57. No product code, limits, dependency pin, workflow, sibling ledger entry,
+    work ownership/status or generated evidence changes. Agents commit and stop; the loop owns
+    push, CI watching and closure.
+- id: T-58
+  type: build
+  title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
+  why: >
+    itos.yaml runs the feature suite as go test ./features -count=1, so Go's default ten-minute test
+    timeout is its limit, set by nobody. The suite has grown to it: T-48's code proof at f83f235
+    (run 43826396800) failed in preparation, the listed-coverage run of ./features ending in 'panic:
+    test timed out after 10m0s' at 600 s, so no mutant was judged; on main at cffa73a the same step
+    took 353 s and the Tests job as a whole ran ten minutes fifteen. slice-27 and slice-30 added
+    their scenarios this week and slice-34, slice-28 and slice-31 add more, so every item's proof is
+    near that edge and a slow runner tips it. Name the timeout in both of itos.yaml's whole-suite
+    commands (and the select form), sized from measured CI durations with headroom, inside the ci
+    job's own time limit. It is a time budget nobody chose becoming one somebody did; no scenario,
+    assertion or engine shard gate changes.
   done_when:
-    - run: go test ./features -count=1 -run 'EngineSuiteWarmup'
+    - run: grep -q -- '-timeout=' itos.yaml

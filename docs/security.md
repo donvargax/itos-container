@@ -92,11 +92,10 @@ a hash. Without a terminal, bare approve refuses and names the optional
 `--fingerprint <value>` route only for offline grants without credentials. `doctor`
 prints the fingerprint; for those grants the option approves only matching settings.
 Under q-52 an egress allowlist or credential grant requires the person at a real
-terminal. Allowlist approval refuses every `--fingerprint`, even a matching value or
+terminal. Network and credential approval refuse every `--fingerprint`, even a matching value or
 an already-approved request, with `approve.terminal-required` and a fix naming bare
 `itos container approve` at a terminal. Bare nonterminal or JSON requests retain
-`approve.confirmation-required` and name only that interactive form. Credential grant
-support will extend the same rule when it lands. Unchanged terminal approvals do not
+`approve.confirmation-required` and name only that interactive form. Unchanged terminal approvals do not
 prompt again; approval is asked again only when the settings fingerprint changes.
 
 Approval's plain review, differences and status, including the effective settings
@@ -117,6 +116,32 @@ now starts the owned proxy and its networks before the worker. Existing matching
 allowlist-v1 records remain valid without a new prompt. Local fixture tests cover
 the wiring; the real-engine scenarios in CI must pass at the pushed head before
 claiming runtime enforcement.
+
+Credential approval binds sorted kinds, literal sources and fixed targets, never credential
+contents or their hashes. Adding, removing or repointing a grant requires fresh consent;
+valid content rotation at the same path does not. Metadata is checked before and after
+engine inspection and after consent, including remembered grants. The policy root's
+pinned device and inode must match the independent source walk's checkout node. The
+shared filesystem rule accepts only ext4, btrfs and xfs; all other types, including NFS
+and 9p, refuse. Root and selected-state text above 4095 bytes refuses before source
+observation with a diagnostic naming that boundary and limit.
+
+The credential review and help describe prospective exposure. Each listed file will be
+readable by the worker; approval does not restrict token provider permissions. Delivery
+will copy current source bytes into memory-backed staging retained until that worker's
+teardown and never write the original. Workload output and traffic are not redacted.
+An allowlisted host can receive credential bytes. A refused hostname can itself contain
+credential bytes and is retained in proxy and host refusal logs; credential absence from
+those logs is not established. Approval help makes these limits visible before a grant
+is reviewed. **Delivery is still unavailable:** run refuses version 3 before manifest,
+engine or host-state access, even for approved settings or no-grant version-3 policies.
+
+Status shows only a session's validated protected frozen grants, without reading current
+requests, active approval or source data. It cannot repair missing grants from current
+requests. Seeded historical sessions prove presentation, not successful delivery. These
+metadata observations do not prove atomic host state or continuous protection from
+trusted-host transient changes. [Decision 0029](decisions/0029-credential-approval.md)
+records the integration and remaining run handoff.
 
 The fingerprint is SHA-256 of canonical effective JSON. Approval records
 live under `$XDG_STATE_HOME/itos-container` (default `$HOME/.local/state/itos-container`),

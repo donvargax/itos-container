@@ -2,7 +2,7 @@
 phases:
   1: null
 queue:
-  - T-57
+  - T-58
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -960,8 +960,8 @@ items:
   - id: slice-28
     title: Refusals are logged, a proxy failure stops the run, and cleanup removes the proxy and network
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-27]
     kind: slice
     why: >
@@ -1689,21 +1689,9 @@ items:
     title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-29, slice-26]
     kind: slice
-    why: >
-      Was p1-credentials-approval-grant.
-      Charter step 2 plus q-52: approve shows exactly which credential kinds and host paths the
-      worker will receive and asks for yes at a real terminal. --fingerprint is refused, with a fix
-      naming the interactive form, for any grant that includes credentials (and, per slice-26, an
-      egress allowlist). The canonical approved-settings record gains the grants as a set of names,
-      kinds and paths and never contents. Adding, removing or repointing a grant invalidates an
-      existing approval, and run refuses with the change explained. Reordering does not. Offline
-      approvals keep their identity. Status shows grants without secrets. Records, presentation and
-      refusal only: nothing is delivered to a worker yet. It follows the policy slice for the
-      validated grants and slice-26 for the shared canonical record and refusal rule. Broken down
-      from p1-credentials-passed-in.
   - id: T-48
     title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
     phase: 1
@@ -2118,14 +2106,14 @@ items:
     title: Add shared terminal ports, adapters and contract tests
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: slice-37
     title: Run an owned foreground workload with a TTY
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-56]
     kind: slice
     why: >
@@ -2169,8 +2157,8 @@ items:
   - id: T-57
     title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: p2-overlap-06-nondeterministic
@@ -2202,3 +2190,26 @@ items:
       foundation maintenance: no supplied evidence shows it blocks the charter's current
       harness-home step. Require focused regressions and platform CI evidence without weakening
       assertions or claiming additional container-host support.
+  - id: p2-lifecycle-09-startup-timeout
+    title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      main's run 43822382408 at ab99c7f, a docs commit, failed ID-LIFECYCLE-09's third example
+      (Ignored and repeated cancellation escalates once after the fixed grace) with
+      run.startup-timeout: the controller exited 75 at 3.97 s without reaching the ignore lifecycle
+      barrier, under the fixture's 3-second startup budget. In the same job T-57's throwaway launch
+      had taken the slow first create (forward-to-answer 1.063 s) and all four ID-LIFECYCLE-08 rows
+      passed, so this is not the first-row failure T-54, T-55 and T-57 dealt with. The journal
+      printed with the failure omits entries 2 to 18, which hold the launch itself. One occurrence;
+      with the next, read the full journal for which call took the time before choosing anything.
+  - id: T-58
+    title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task

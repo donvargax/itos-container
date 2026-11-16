@@ -207,17 +207,10 @@ func (s *credentialScan) mapping(pin credentialPin, rows map[int]port.Credential
 	return credentialMapping{credentialCoordinate{row.Device, credentialMountCoordinate(row, d.Path)}, d.Path, d.MountID}, ""
 }
 
-// A row of these types does not place the files it shows. Overlay and FUSE
-// present backing files under other identities. For nfs and nfs4 the kernel
-// prints "/" as the root of every mount, whatever export subdirectory it is
-// rooted at, so a second mount of a protected subdirectory projects beside it.
-// Every 9p mount prints that root too and has a device of its own, so a second
-// mount matches its tree in neither coordinate nor identity.
-// This is a list of the types examined so far, not of every such type.
+// q-64 permits exactly these named filesystems for exclusion evidence. In
+// particular NFS and 9p cannot project independent exports and stay refused.
 func credentialUnmappedFilesystem(row port.CredentialMount) bool {
-	return row.Filesystem == "overlay" || row.Filesystem == "fuse" || row.Filesystem == "fuseblk" ||
-		strings.HasPrefix(row.Filesystem, "fuse.") || strings.HasPrefix(row.Filesystem, "fuseblk.") ||
-		row.Filesystem == "nfs" || row.Filesystem == "nfs4" || row.Filesystem == "9p"
+	return row.Filesystem != "ext4" && row.Filesystem != "btrfs" && row.Filesystem != "xfs"
 }
 
 // A validated row root is at most 4096 bytes and a visible path at most 4095.

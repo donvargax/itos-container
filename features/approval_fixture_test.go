@@ -108,6 +108,9 @@ func (w *world) approvalOracle() error {
 		a.settings["policy"].(map[string]any)["network"] = map[string]any{"mode": "allowlist", "allow": allow}
 		a.settings["proxy"] = map[string]any{"image": busyboxFixturePin}
 	}
+	if w.credentialApproval != nil {
+		w.credentialApprovalSettings()
+	}
 	a.fingerprint = "sha256:" + approvalHash(a.settings)
 	a.project = approvalHash(map[string]any{"schema": 1, "uid": a.uid, "checkout": checkout})
 	state := d.env["XDG_STATE_HOME"]
@@ -135,6 +138,11 @@ func (w *world) approvalSeed(generation string, changed bool) error {
 	}
 	a.prior = settings
 	a.generation = generation
+	if w.credentialApproval != nil {
+		if err := w.seedControlLocations(); err != nil {
+			return err
+		}
+	}
 	return w.approvalCapture()
 }
 
@@ -142,6 +150,9 @@ func (w *world) approvalCapture() error {
 	a := w.approval
 	var err error
 	a.before, err = doctorTree(w.dir)
+	if w.credentialApproval != nil {
+		a.before, err = w.credentialApprovalTree()
+	}
 	if err != nil {
 		return err
 	}
@@ -378,6 +389,9 @@ func (w *world) approvalUnsafe(layout string) error {
 
 func (w *world) approvalSameTree() error {
 	actual, err := doctorTree(w.dir)
+	if w.credentialApproval != nil {
+		actual, err = w.credentialApprovalTree()
+	}
 	if err != nil {
 		return err
 	}

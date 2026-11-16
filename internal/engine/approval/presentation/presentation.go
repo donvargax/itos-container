@@ -58,6 +58,7 @@ func terminalText(text string) string {
 func (u UI) Report(v port.View) port.Report {
 	report := port.Report{Status: v.Status, Fingerprint: v.Candidate.Fingerprint, Effective: object(v.Candidate.Canonical), Differences: []port.Change{}}
 	report.EffectiveText = jsonText(report.Effective)
+	report.RequestedText = grantLines(requested(v))
 	if v.Record.Generation != "" {
 		g := v.Record.Generation
 		report.Generation = &g
@@ -75,20 +76,37 @@ func (u UI) Print(v port.View, withJSON bool) int {
 	code := 0
 	for _, p := range problems {
 		code = max(code, p.Exit)
-		_, _ = fmt.Fprintf(u.Err, "%s: %s; %s\n", p.Rule, p.Message, p.Fix)
+		location := p.Rule
+		if p.File != "" && p.Path != nil {
+			location += " " + jsonText(p.File+*p.Path)
+		}
+		_, _ = fmt.Fprintf(u.Err, "%s: %s; %s\n", location, p.Message, p.Fix)
 	}
 	if withJSON {
+		type inspectionState struct {
+			Ready bool `json:"ready"`
+		}
+		var inspection *inspectionState
+		if v.Inspection.Credentials != nil && len(v.Inspection.Credentials.Issues) > 0 {
+			inspection = &inspectionState{Ready: false}
+		}
 		data, _ := json.Marshal(struct {
-			Schema   int            `json:"schema"`
-			OK       bool           `json:"ok"`
-			Problems []port.Problem `json:"problems"`
-			Approval port.Report    `json:"approval"`
-		}{1, code == 0, problems, report})
+			Schema      int                    `json:"schema"`
+			OK          bool                   `json:"ok"`
+			Problems    []port.Problem         `json:"problems"`
+			Approval    port.Report            `json:"approval"`
+			Credentials []port.CredentialGrant `json:"credentials,omitempty"`
+			Inspection  *inspectionState       `json:"inspection,omitempty"`
+		}{1, code == 0, problems, report, requested(v), inspection})
 		_, _ = fmt.Fprintln(u.Out, string(data))
 	} else {
 		_, _ = fmt.Fprintf(u.Out, "approval %s\nfingerprint: %s\n%s\n", report.Status, report.Fingerprint, terminalText(v.Candidate.Canonical))
 		if allowlist(report.Effective) != nil {
 			u.networkDisclosure(report.Effective)
+		}
+		u.credentialDisclosure(report.Effective)
+		for _, line := range grantLines(requested(v)) {
+			_, _ = fmt.Fprintln(u.Out, line)
 		}
 		if report.Status != "matching" {
 			_, _ = fmt.Fprintln(u.Out, "Review with itos container approve")
@@ -101,13 +119,17 @@ func (u UI) Print(v port.View, withJSON bool) int {
 // escaping prevents terminal controls from altering the review or its differences.
 func (u UI) Review(v port.View) bool {
 	effective := object(v.Candidate.Canonical)
-	if allowlist(effective) != nil {
+	if allowlist(effective) != nil || len(grants(effective)) > 0 {
 		_, _ = fmt.Fprintln(u.Out, "Effective settings:", terminalText(v.Candidate.Canonical))
-		u.networkDisclosure(effective)
 	} else {
 		_, _ = fmt.Fprintln(u.Out, "Effective offline settings:", terminalText(v.Candidate.Canonical))
-		_, _ = fmt.Fprintln(u.Out, "offline-v1: checkout-only host mount at /workspace; UID:GID override; no supplementary groups; read-only root; dropped capabilities; no-new-privileges; network none; no ports, grants or hooks; ephemeral tmpfs; pids limit 4096")
 	}
+	if allowlist(effective) != nil {
+		u.networkDisclosure(effective)
+	} else {
+		_, _ = fmt.Fprintln(u.Out, restriction(effective))
+	}
+	u.credentialDisclosure(effective)
 	if m := v.Inspection.Manifest; m != nil {
 		for _, unused := range append(append([]string{}, m.Unused...), m.Metadata.Unused...) {
 			_, _ = fmt.Fprintln(u.Out, "Unused field:", jsonText(unused))
@@ -128,7 +150,7 @@ func (u UI) Review(v port.View) bool {
 // allowlist reads only the validated candidate, never a previous approval.
 func allowlist(effective any) []any {
 	s, _ := effective.(map[string]any)
-	if s["profile"] != "allowlist-v1" {
+	if s["profile"] != "allowlist-v1" && s["profile"] != "allowlist-credentials-v1" {
 		return nil
 	}
 	p, _ := s["policy"].(map[string]any)
@@ -138,7 +160,7 @@ func allowlist(effective any) []any {
 }
 
 func (u UI) networkDisclosure(effective any) {
-	_, _ = fmt.Fprintln(u.Out, "allowlist-v1: checkout-only host mount at /workspace; UID:GID override; no supplementary groups; read-only root; dropped capabilities; no-new-privileges; internal network with no route out; no ports, grants or hooks; ephemeral tmpfs; pids limit 4096")
+	_, _ = fmt.Fprintln(u.Out, restriction(effective))
 	_, _ = fmt.Fprintln(u.Out, "This profile grants network. The worker can reach only these host names, through an owned proxy, by CONNECT on port 443:")
 	for _, name := range allowlist(effective) {
 		_, _ = fmt.Fprintln(u.Out, "network.allow:", name)

@@ -1,12 +1,7 @@
 package inspection
 
 import (
-	"path/filepath"
-	"unicode/utf8"
-
-	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	policy "github.com/donvargax/itos-container/internal/engine/policy/port"
-	"github.com/donvargax/itos-container/internal/engine/readiness/domain"
 	"github.com/donvargax/itos-container/internal/engine/readiness/port"
 )
 
@@ -15,10 +10,9 @@ import (
 // Checkout is the shared pin the scope's policy reader opens through: assembly
 // gives both the same value, so the policy comes from Input.Root's own tree.
 type Credentials struct {
-	FS       port.CredentialFS
 	Input    port.CredentialInput
-	Account  approval.Account
 	Checkout port.Checkout
+	Observer port.CredentialObserver
 }
 
 // A pin failure outside this table is unavailable evidence, never a pass.
@@ -30,6 +24,9 @@ var credentialPinRules = map[port.Failure]string{
 
 // Pin holds Input.Root, never the working directory, before the policy is read.
 func (c Credentials) Pin() port.CredentialResult {
+	if len(c.Input.Root) > 4095 {
+		return port.CredentialResult{Issues: []port.CredentialIssue{{Rule: "checkout.root", Index: -1, Subject: c.Input.Root}}}
+	}
 	failure := c.Checkout.Pin(c.Input.Root)
 	if failure == port.None {
 		return port.CredentialResult{}
@@ -45,20 +42,8 @@ func (c Credentials) Pin() port.CredentialResult {
 func (c Credentials) Close() { c.Checkout.Close() }
 
 func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
-	input := c.Input
-	if len(grants) > 0 {
-		input = credentialAccountInput(input, c.Account)
+	if len(grants) == 0 {
+		return port.CredentialResult{}
 	}
-	return (domain.Credentials{FS: c.FS, Input: input}).Inspect(grants)
-}
-
-// AccountHome is the same environment-independent anchor used by control state.
-// HOME and XDG_STATE_HOME select ordinary state but cannot move this boundary.
-func credentialAccountInput(input port.CredentialInput, account approval.Account) port.CredentialInput {
-	home, failure := account.AccountHome()
-	input.AccountState = ""
-	if failure == "" && filepath.IsAbs(home) && home != string(filepath.Separator) && utf8.ValidString(home) {
-		input.AccountState = filepath.Join(home, ".local", "state", "itos-container")
-	}
-	return input
+	return c.Observer.Inspect(grants)
 }
