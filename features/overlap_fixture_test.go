@@ -351,16 +351,27 @@ func (f *overlapFixture) stop(r *overlapRun) {
 }
 
 func (f *overlapFixture) protected() (map[string]string, error) {
+	return f.protectedWithWalk(filepath.WalkDir)
+}
+
+func (f *overlapFixture) protectedWithWalk(walk doctorTreeWalk) (map[string]string, error) {
+	// Live native workers rename their staging files into heartbeat markers.
+	// Exclude each run's exact paths before metadata or content inspection,
+	// including when a descendant's marker is seen through its ancestor tree.
+	excluded := map[string]bool{}
+	for _, r := range f.runs {
+		if r.marker != "" {
+			path := filepath.Join(r.w.doctor.checkout, r.marker)
+			excluded[path], excluded[path+".next"] = true, true
+		}
+	}
 	result := map[string]string{}
 	for _, w := range f.worlds {
-		tree, err := doctorTree(w.doctor.checkout)
+		tree, err := doctorTreeWithWalk(w.doctor.checkout, excluded, walk)
 		if err != nil {
 			return nil, err
 		}
 		for path, value := range tree {
-			if strings.HasPrefix(filepath.Base(path), "slice-16-marker-") {
-				continue
-			}
 			result[path] = value
 		}
 		for _, path := range []string{w.approval.record, w.sessionSnapshotPath()} {

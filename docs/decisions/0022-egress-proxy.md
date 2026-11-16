@@ -3,11 +3,13 @@
 Recorded for T-38 on 2026-11-09. This is the design the second milestone's first step
 needs fixed before any code: the [charter](../charter.md), "The second milestone", step 1.
 It is a proposal under the architecture hypothesis, not runtime evidence and not a support
-claim. T-39 has since built only the engine package this design names,
-`internal/engine/egress`: nothing binds it until slice-27, and none of it is runtime
-evidence. The record itself changed no dependency, scenario, step definition, workflow or
-engine run, and the rest of the design is unbuilt. Real-engine proof belongs to slice-27 and
-slice-28, in CI only. T-39 and T-40 take their design from this record.
+claim. T-39 has since built `internal/engine/egress`, T-40 has built the session
+engine's networks, proxy lifecycle and log-copy protocol, and T-51 has built the durable
+refusal-log writer. None of the three is bound until slice-27, and none of these tests is
+runtime evidence. The record itself changed no dependency, scenario, step definition,
+workflow or engine run. Command wiring alone remains with slice-27. Real-engine proof
+belongs to slice-27 and slice-28, in CI only. T-39, T-40 and T-51 take their design from
+this record.
 
 [PLAN.md](../../PLAN.md), [README.md](../../README.md) and
 [docs/ORCHESTRATING.md](../ORCHESTRATING.md) still call egress out of scope. The charter's
@@ -468,8 +470,8 @@ before removing it, the controller copies every record but `ready`, fsynced and 
 to `sessions/<lookup>/<id>/egress-refusals.jsonl` under the protected state root.
 
 `Publish` in `internal/engine/approval/disk/storage.go` refuses more than 1 MiB, which this
-log can exceed, so slice-28 adds a streaming writer with the same private-file, fsync,
-rename and parent-fsync rules. A failed copy keeps the stopped proxy, its log and its
+log can exceed, so T-51 adds a streaming writer with the same private-file, fsync,
+rename and parent-fsync rules ("What T-51 settled"). A failed copy keeps the stopped proxy, its log and its
 recovery record, so stop retries and the stored log is not lost. Cleanup never deletes that
 file; status names it and the number of records stored, and display escapes a hostile name
 as approval's does (slice-28).
@@ -649,10 +651,192 @@ container-host support.
 
 ## For the sibling items
 
-T-39, T-40, slice-26, slice-27 and slice-28 take these decisions from this record,
+T-39, T-40, T-51, slice-26, slice-27 and slice-28 take these decisions from this record,
 including our own proxy and its fuzz tests, the `crypto/tls` depguard rule, the second
 network, the forwarding sysctl, `NO_PROXY`, the address check, the hello peek, the
 egressproxy slice, the inert image, the static harness build, the stop before the log copy,
 the streaming log writer and the handshake disclosure. Their registry entries predate
 these decisions, and this change edits none of them; where an entry differs, its drafter
 reconciles it with this record.
+
+## What T-40 settled
+
+T-40 implements the session engine's part of this design without changing `cmd` or
+introducing a command scenario. The existing codec still maps approval snapshots to an
+offline binding. Slices 26 and 27 fill the grant and bind the executable; T-51 supplies
+the durable refusal-log writer. Unit, fake and SDK HTTP-fixture tests exercise the engine;
+only the later CI scenarios can establish runtime isolation.
+
+- `Binding.Egress` is a comparable `EgressGrant`: approved names in order, separated by
+  newlines without a final newline, and the inspected local proxy image ID. Zero means
+  offline. Invalid nonzero grants and a missing refusal writer are refused immediately
+  after preparation, before registration or any resource creation. Unregistered runs
+  refuse any grant.
+- Schema 3 retains schema 2's anchor rules and adds exactly `internal`, `network` and
+  `proxy` resources, each with a name, ID and stage. Each create follows its durable
+  intent; owned IDs are saved before isolation checks can refuse them. Worker creation
+  requires all three owned. Cleanup reverses that order after worker absence and releases
+  the anchor last. Completion and checkout admission require all resources gone. Schema
+  1 and 2 encodings remain unchanged.
+- Resource names are `itos-container-internal-<token>`, `itos-container-egress-<token>`
+  and `itos-container-proxy-<token>`. Their labels bind intent, project, fingerprint,
+  anchor session and kind (`internal-network`, `egress-network`, `egress-proxy`). Network
+  labels are exactly those five; image labels may add to the proxy's. Fresh ownership
+  inspection and a recorded full ID authorize removal, never a name or labels alone.
+- The proxy runs `/itos-container`, `__egress-proxy`, `--`, then one argument per approved
+  name. Its environment is the inspected image's own environment. The executable is its
+  sole read-only bind mount. The adapter verifies the read-only root, UID/GID, dropped
+  capabilities, no-new-privileges, private namespaces, pids limit, disabled forwarding,
+  no restart and no additional mounts, devices or published ports. The json-file logger
+  explicitly uses `max-size=64m`, `max-file=1` and `mode=blocking`; verification tolerates
+  other daemon-inherited log options.
+- Both container create requests pin full NetworkIDs in their endpoint settings. The
+  proxy joins both networks and the worker only the internal one. Pre-start inspection
+  requires those IDs without assuming an allocated EndpointID, address, gateway or MAC.
+  The HTTP fixture preserves the submitted settings; only start allocates endpoints.
+  Before worker start, both networks must be owned and exact, with only the proxy attached.
+- The worker receives `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy` and `https_proxy` pointing
+  to the running proxy's inspected internal IPv4 address on port 3128. `NO_PROXY` and
+  `no_proxy` are `localhost,127.0.0.1,::1`. These override image and manifest values.
+- Only stdout is a record stream. Readiness and copying request stdout alone, with no
+  stderr, timestamps or details, and discard any stderr frames returned anyway. The ready
+  read follows once within one call budget and judges the first complete stdout line,
+  at most 2,048 bytes before its newline. It requires exactly schema 1, seq 1, event
+  `ready`, and an RFC 3339 UTC time ending in Z, with no trailing bytes. Daemon stream
+  errors fail the read. Copying reads once without following and preserves stdout bytes,
+  including ready, for T-51's ready filter and slice-28's sequence check.
+- Proxy exit is watched on a separate connection from the worker's wait. It triggers the
+  existing worker termination path and preserves an exit subsequently observed during
+  teardown. Teardown's own SIGKILL and not-running wait precede the log copy and do not
+  change the workload result.
+- `RefusalLog.Begin` opens a staged `RefusalCopy` for the public session ID. A failed
+  Begin, stream, Write or Commit retains the stopped proxy, networks, anchor and recovery
+  intent. Copies support concurrent Write, Commit and Close, including a close after a
+  call times out. A successful Commit publishes either a clean report or a committed
+  `RefusalLogGap` report with inclusive missing ranges. A gap preserves every copied byte
+  and permits resource release and admission completion. It remains separate from cleanup
+  failure, earlier run failure and workload exit in `Result.RefusalLog` and recovery's
+  failures; a later removal failure retains both diagnoses.
+- An uncertain create is looked up by its random name. A matching resource is adopted by
+  saving its full ID before removal. A name-only miss remains incomplete because it cannot
+  fence a delayed create. Status observes the same ownership without adopting or writing.
+
+The lost-tail question remains with `p2-proxy-log-lost-tail-sink`. T-40 adds no writable
+proxy mount or terminal record: it implements the existing SIGKILL and json-file design.
+Its stdout reader can carry an additional terminal record if the person later selects
+that design. The stored-record count still cannot prove that dockerd retained every
+refusal. Minimum-engine and static-executable preflight, command classification, status
+presentation and real-engine evidence remain with the sibling slices named above.
+
+## What T-51 settled
+
+T-51 builds the durable refusal-log writer as a ledger task ahead of slice-27, which can
+neither run nor tear down an egress session without one: a registered run refuses a grant
+with no writer bound, and a failed copy keeps the stopped proxy. It changes no command and
+`cmd` binds nothing new, so it has checks and no scenario. Its tests use fakes and a
+temporary state root, with no engine, and none of them is runtime evidence. The order is
+T-40, T-51, slice-27, slice-28.
+
+- Approval's port gains `SessionLogs`, with `Stage(context.Context, Candidate, string)
+  (StagedLog, Failure)`, and `StagedLog`, with `Write([]byte) Failure`, `Publish() Failure`
+  and `Close()`. The string is the public session ID and the candidate is the one
+  `RegistryStorage.Open` takes for that session. `approval/disk`'s `Registry` implements
+  it, so one value serves both ports, and porttest's `Registry` models it in memory.
+  `SessionLogsContract` runs unchanged against both.
+- The one file a session directory stages is `egress-refusals.jsonl`, fixed in the adapter.
+  There is no name parameter, so no caller can aim a write at `record.json`, a lock or a
+  path. The temporary is `.refusals-`, then the 32 lowercase hex digits of a fresh 128-bit
+  nonce, then `.tmp`, created exclusively without following a link and set to mode 0600.
+  Its prefix is not `Publish`'s `.intent-`, so a record's link check never takes it for a
+  twin.
+- The staged log neither takes nor checks the session's operation lock. Every copy starts
+  inside recovery's stop, which already holds the session open for writing, and that lock
+  is a flock held by the open file description that took it. A second `Open` of a held
+  session waits out its context and answers `state.unavailable`
+  (`TestRegistryLockBudgetAndIndependentSession`), which would cost every copy a whole 10 s
+  call and a teardown that never completes. Nor can the writer go around approval's
+  storage: the pinned, no-follow, private-ancestor checks live in `approval/disk`, which
+  another engine's adapter may not import. So staging is a capability of the protected
+  storage itself. `Stage` pins `sessions/<lookup>/<id>` exactly as `Open` does, holds the
+  four managed levels to the candidate's UID and mode 0700, creates no directory, and
+  answers nil with no failure for a session that was never registered. The file's
+  integrity does not rest on the lock: each staged file has its own random name and is
+  published by one rename of a file already fsynced, so two publications cannot tear it
+  and a reader sees the old file or the new one.
+- A late publication is possible, and safe. The copy's Begin, stream and Commit are finite
+  calls outside the session's gate. When a Commit outlives its 10 s call, stop reports an
+  incomplete cleanup and releases the operation lock while `Publish` may still be inside
+  an fsync or the rename, and another controller's stop can take the lock and copy beside
+  it. [Decision 0017](0017-controller-operation-budgets.md) says: "A pending storage
+  operation keeps its lock until it returns, so another controller cannot overlap a
+  publication whose result is unknown." T-51 narrows that sentence to the operations that
+  hold a lock, which the staged refusal log does not. The decision's own text stays as
+  recorded. The overlap is safe because of what a copy publishes, not because of a lock.
+  Commit is called only after the log read has returned success, so every publication is
+  one controller's complete read. Every copy of a session reads the same proxy container,
+  which its controller saw not running before the copy began and which nobody removes
+  until a copy has succeeded, so its log has stopped changing and two complete reads store
+  the same bytes. Each publication is one rename of its own fsynced temporary, so the name
+  holds one whole copy whichever rename lands last, never a mix of two. And a copy is not
+  a record: nothing compares the earlier bytes before publishing, so a late rename undoes
+  no later state, as a late record publication would. A `Publish` that reaches its check
+  after its controller's phase has ended renames nothing and answers `state.path`. Keeping
+  the lock instead would mean running Commit through the session's gate, where a pending
+  commit would stall the failed record that stop saves next. That changes T-40's protocol
+  and is not T-51's. The narrowing is T-51's own decision, for the person to confirm or
+  overturn.
+- `Publish` runs once, in the order a record's publication keeps after its write. A
+  poisoned handle is `state.write`. Then come file fsync and close, the pin unchanged and
+  the lifetime live (else `state.path`), the rename over `egress-refusals.jsonl`, the
+  directory's fsync, and the same check again. A failure before the rename leaves the
+  earlier file as it was. One after it leaves the new bytes visible without a durability
+  claim, and the retry publishes again. The rename replaces an earlier file, or a symlink
+  at that name, without following it; a directory there fails it.
+- A handle with nothing written publishes an empty file, which is how a session whose
+  proxy refused nothing shows that its log was copied.
+- The copy drops only the ready record: a line of at most 2,048 bytes before its newline
+  that the ready read accepts, which is one JSON object with exactly `schema` 1, `seq` 1,
+  `event` `ready` and an RFC 3339 UTC `time` ending in Z, and nothing after it. The
+  judgement is repeated in `session/disk`, because an adapter may not import a sibling
+  adapter and the port's allowlist has no JSON.
+- Every other byte is stored unchanged and in order: every other line, valid JSON or not,
+  with its `seq`; a line longer than 2,048 bytes; and a last line with no newline. Each
+  Write stores the complete lines it holds before it returns, and between calls the copy
+  holds at most 2,048 bytes of an unfinished line.
+- T-51 derives no report from the bytes, so Commit returns the zero report. slice-28 adds
+  the `seq` check, ahead of the ready filter, and its gap.
+- Write and Commit run one at a time, each to its end, and Close alone never waits, because
+  a copy whose call timed out is closed while a write or an fsync that cannot be
+  interrupted may still be running. A Write or Commit that gets its turn after Close fails
+  without calling the staged log. A Write still running when Close arrives closes the
+  staged log itself before it returns. A Commit that had begun is not undone and may
+  publish.
+- A copy releases its staged log exactly once, on every path. `Publish` and `Close` are
+  the only calls that release one, each on every return, and Commit always runs `Publish`
+  on a live copy, so a handle poisoned by a failed write still gives up its temporary and
+  its pin.
+- Storage failures map as the session store's read path maps them: `state.path`,
+  `state.unsafe` and `state.location` are `Unsafe`, `state.invalid` is `Invalid`,
+  `state.conflict` is `Refused` and anything else is `Incomplete`. A session that is not
+  64 lowercase hex digits is `Invalid` before any storage call, and one that was never
+  registered is `Refused`. The domain turns every Begin failure into `Incomplete` and
+  retries, which T-40 settled.
+- A temporary can be left behind, and nothing sweeps it. A controller killed in the middle
+  of a copy leaves its temporary, and so does one that merely exits while a timed-out
+  Begin, Write or Commit is still running. Each such attempt can leave up to the log's
+  size, about 40 MiB a session, and each retry on a slow disk can leave another. Nothing
+  reads them, and deleting from protected state is `p3-session-state-retention`'s
+  decision.
+- Nothing binds the adapter until slice-27, which binds `RefusalLog`, over the same
+  `approval/disk` `Registry` the session registry uses, to run and recovery. slice-28
+  keeps the `seq` check and its typed gap, status's record count, display escaping, the
+  proxy-failure scenarios and whatever reads the stored file, since a session directory's
+  `Read` refuses that name and anything over 1 MiB. Scrubbing staged credentials from the
+  copy is `p1-platform-log-redaction`'s, and the lost tail stays with
+  `p2-proxy-log-lost-tail-sink`.
+
+[arc42](../architecture/arc42.md) is updated in the same change, under the charter's drift
+rule: Context and scope, the building-block rows for `internal/engine/approval` and for the
+session networks and proxy, the work-item table, the Egress run's opening, and in
+Cross-cutting concepts both Refusal log and Bounded operations, which gains the exception
+above. Sibling specs, the pilot contract, decision 0017 and the registry are not edited.

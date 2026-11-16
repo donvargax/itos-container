@@ -12,8 +12,10 @@ type StagedReadiness interface {
 
 // Durable is the immutable selected input and its protected material reference.
 type Durable struct {
-	Frozen    Frozen
-	Reference string
+	// ProxyImageID is fresh execution evidence, never an approved setting.
+	ProxyImageID string
+	Frozen       Frozen
+	Reference    string
 }
 
 // Snapshots publishes only independent selected values, never checkout paths.
@@ -27,6 +29,8 @@ type PreflightCodec interface {
 	Codec
 	LocalCandidate(readiness.Result, string, string) Candidate
 	LocalMatches(Candidate, Record) bool
+	// ChangedPaths returns sorted pointers only; local omits unobserved engine/image facts.
+	ChangedPaths(candidate Candidate, record Record, local bool) []string
 }
 
 // FrozenRecords validates the same envelope from independent selected bytes.

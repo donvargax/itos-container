@@ -67,7 +67,16 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		result.Outcome = failure
 		return result
 	}
+	binding := i.Binding()
 	i.Close()
+	if !binding.Egress.Valid() {
+		result.Outcome = port.Invalid
+		return result
+	}
+	if binding.Egress != (port.EgressGrant{}) && s.Refusals == nil {
+		result.Outcome = port.Internal
+		return result
+	}
 	type leased struct {
 		lease   port.Lease
 		failure port.Outcome
@@ -113,7 +122,11 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		defer attachment.Close()
 	}
 	if result.Outcome == "" && !result.Exited {
-		result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, c, attachment, id, result.ID)
+		if binding.Egress != (port.EgressGrant{}) {
+			result.Exit, result.Exited, result.Outcome = s.waitEgress(ctx, c, attachment, state.binding, state.record)
+		} else {
+			result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, c, attachment, id, result.ID)
+		}
 	}
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer finish()
@@ -146,7 +159,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		// Stop already won a transition. Observe its result without repeating or
 		// rewriting cleanup; an unstarted workload never becomes successful.
 		result.Outcome = port.Incomplete
-		observed := (Recovery{Registry: s.Registry, Engine: s.Engine}).status(teardown, id)
+		observed := (Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals}).status(teardown, id)
 		result.Cleanup = port.Incomplete
 		if len(observed.Failures) == 0 && len(observed.Entries) == 1 && observed.Entries[0].Cleanup == "complete" {
 			result.Cleanup = port.Complete
@@ -156,7 +169,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		}
 		return result
 	}
-	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, immediate: result.Outcome == port.MountRefused && result.Started}
+	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, immediate: result.Outcome == port.MountRefused && result.Started}
 	// The output subscription is independent of termination and removal. A blocked
 	// consumer must never hold the operation lock or prevent owned cleanup.
 	drain := startDrain(teardown, attachment)
@@ -165,8 +178,8 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		if len(prepared.Entries) == 1 && prepared.Entries[0].WorkloadExit != nil {
 			result.Exit, result.Exited = *prepared.Entries[0].WorkloadExit, true
 		}
-		if len(prepared.Failures) != 0 {
-			result.Cleanup = prepared.Failures[0].Outcome
+		if f := recoveryCleanup(prepared, &result.RefusalLog); f != port.Complete {
+			result.Cleanup = f
 			result.Stream = <-drain
 			if budget.Cause(teardown) != nil {
 				result.Teardown = port.TeardownTimeout
@@ -179,10 +192,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		exit = &result.Exit
 	}
 	cleaned := recovery.stop(teardown, id, signal, exit, true)
-	result.Cleanup = port.Complete
-	if len(cleaned.Failures) != 0 {
-		result.Cleanup = cleaned.Failures[0].Outcome
-	}
+	result.Cleanup = recoveryCleanup(cleaned, &result.RefusalLog)
 	if !result.Exited && len(cleaned.Entries) == 1 && cleaned.Entries[0].WorkloadExit != nil {
 		result.Exit, result.Exited = *cleaned.Entries[0].WorkloadExit, true
 	}
@@ -285,6 +295,12 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if failure = verifyAnchor(ctx, intent.Record(), c); failure != "" {
 		return c, a, "", failure
 	}
+	if failure = verifyEgressStart(ctx, intent, c); failure != "" {
+		return c, a, "", failure
+	}
+	if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
+		state.binding, state.record = intent.Binding(), intent.Record()
+	}
 	if failure = startupOperation(ctx, "start acknowledgement", func(call context.Context) port.Outcome {
 		if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
 			state.started = true
@@ -328,6 +344,9 @@ func createRegistered(ctx context.Context, entry port.Session, c port.RunConnect
 	r := i.Record()
 	if r.Stage == "reserved" && r.ContainerID == "" {
 		if failure := prepareAnchor(ctx, i, c, workspace, entry.Record().ID); failure != "" {
+			return "", failure
+		}
+		if failure := prepareEgress(ctx, i, c); failure != "" {
 			return "", failure
 		}
 		r = i.Record()

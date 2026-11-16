@@ -63,6 +63,7 @@ type RunEngine interface {
 type RunConnection interface {
 	Connection
 	AnchorConnection
+	EgressConnection
 	CreateRun(context.Context, Record, []string) (string, Outcome)
 	VerifyRun(context.Context, string, []string) Outcome
 	Attach(context.Context, string, Streams) (Attachment, Outcome)

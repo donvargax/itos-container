@@ -15,14 +15,16 @@ import (
 // Inspector's file readers must use the checkout pin established by Pin.
 // Assembly binds that capability; file-only inspection does not depend on it.
 type Inspector struct {
-	Checkout   port.Checkout
-	Policy     policyport.Source
-	Names      policyport.Names
-	Files      manifestport.Files
-	Parser     manifestport.Parser
-	References manifestport.References
-	Digests    port.Digests
-	Engine     port.Engine
+	Executables port.Executables
+	ProxyImage  string
+	Checkout    port.Checkout
+	Policy      policyport.Source
+	Names       policyport.Names
+	Files       manifestport.Files
+	Parser      manifestport.Parser
+	References  manifestport.References
+	Digests     port.Digests
+	Engine      port.Engine
 }
 
 // Inspect stops at unsafe prerequisites and retains only facts actually read.
@@ -38,10 +40,8 @@ func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result)
 	}
 	defer i.Checkout.Close()
 	p := policy.Inspect(i.Policy, i.Names)
-	if p.Policy != nil && p.Policy.Version != 1 {
-		// Canonical settings v1 hardcode an offline profile: recording them for a
-		// request that asks for network would approve what was never reviewed.
-		// Only doctor --policy-only reads such a file until approval can bind it.
+	if p.Policy != nil && p.Policy.Version != 1 && p.Policy.Version != 2 {
+		// Credential-bearing version 3 belongs to its later readiness increment.
 		p = policyport.Result{Issues: []policyport.Issue{{Kind: policyport.Version, Path: []string{"version"}, Version: p.Policy.Version}}}
 	}
 	result.Policy = &p
@@ -118,6 +118,10 @@ func (i Inspector) inspectEngine(result *port.Result, session port.Session) {
 		fail(failure)
 		return
 	}
+	if result.Policy.Policy.Network.Mode == "allowlist" && !egressVersion(version) {
+		fail(port.EgressEngine)
+		return
+	}
 	result.Engine = &port.EngineIdentity{Endpoint: session.Endpoint(), ID: info.ID, APIVersion: version.Negotiated, OS: info.OS, Architecture: architecture(info.Architecture)}
 	request := result.Manifest.Effective
 	image, failure := session.Image(request.Image)
@@ -132,6 +136,9 @@ func (i Inspector) inspectEngine(result *port.Result, session port.Session) {
 	result.Issues = append(result.Issues, i.imageIssues(image, *request)...)
 	validated := manifest.WithMetadata(*result.Manifest, image.Label, i.Parser)
 	result.Manifest = &validated
+	if len(result.Issues) == 0 && len(validated.Issues) == 0 && result.Policy.Policy.Network.Mode == "allowlist" {
+		i.inspectProxy(result, session)
+	}
 	if !session.Unchanged() {
 		fail(port.EngineChanged)
 		return

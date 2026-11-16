@@ -47,7 +47,7 @@ func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.S
 		return approval.Durable{}, ApprovalRefusal{Reason: "invalid"}
 	}
 	if view.Status != "matching" {
-		return approval.Durable{}, ApprovalRefusal{Reason: view.Status}
+		return approval.Durable{}, ApprovalRefusal{Reason: view.Status, Paths: view.ChangedPaths}
 	}
 	if !view.Inspection.Ready {
 		return approval.Durable{}, ApprovalRefusal{Reason: "invalid"}
@@ -83,6 +83,9 @@ func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.S
 	}
 	if failure != "" {
 		return approval.Durable{}, SnapshotRefusal{Failure: failure, Reference: durable.Reference}
+	}
+	if view.Inspection.ProxyImage != nil {
+		durable.ProxyImageID = view.Inspection.ProxyImage.ID
 	}
 	return durable, nil
 }

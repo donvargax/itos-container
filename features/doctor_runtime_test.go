@@ -153,8 +153,12 @@ func doctorNegotiatedAPI(maximum, minimum string) (string, error) {
 }
 
 func (r *doctorReal) read(path string, value any, status int) error {
+	return r.readContext(context.Background(), path, value, status)
+}
+
+func (r *doctorReal) readContext(parent context.Context, path string, value any, status int) error {
 	// Fixed local transport; no proxy, environment lookup, redirect or acquisition.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://engine"+path, nil)
 	if err != nil {

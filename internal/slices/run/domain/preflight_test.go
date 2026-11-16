@@ -150,6 +150,27 @@ func TestPreflightPreservesCancellationAfterSelection(t *testing.T) {
 	}
 }
 
+func TestChangedSelectionKeepsRefusalWithoutInventingPaths(t *testing.T) {
+	a := &porttest.Approval{View: approval.View{Status: "matching", Inspection: af.Ready()}, Failure: "changed"}
+	snapshots := &af.Snapshots{}
+	_, err := Preflight(a, snapshots)
+	if err == nil || err.Error() != "run approval changed; use itos container approve" || len(snapshots.Values) != 0 {
+		t.Fatal(err, snapshots)
+	}
+}
+
+func TestChangedInspectionCarriesOnlyPointerDiagnostics(t *testing.T) {
+	a := &porttest.Approval{View: approval.View{Status: "changed", Inspection: af.Ready(), ChangedPaths: []string{"/manifest/containerEnv", "/policy/network/allow"}}}
+	snapshots := &af.Snapshots{}
+	_, err := Preflight(a, snapshots)
+	if err == nil || err.Error() != "run approval changed at /manifest/containerEnv, /policy/network/allow; use itos container approve" || a.Selections != 0 || len(snapshots.Values) != 0 {
+		t.Fatal(err, a.Selections)
+	}
+	if got := (ApprovalRefusal{Reason: "missing", Paths: []string{"/ignored"}}).Error(); got != "run approval missing; use itos container approve" {
+		t.Fatal(got)
+	}
+}
+
 func TestPreflightPresentsStateThatApprovalCannotFixAsPrerequisite(t *testing.T) {
 	for _, stage := range []string{"inspection", "selection"} {
 		for _, failure := range []approval.Failure{"state.exposed", "state.path", "state.unsafe"} {
@@ -179,5 +200,16 @@ func TestPreflightPresentsStateThatApprovalCannotFixAsPrerequisite(t *testing.T)
 				}
 			})
 		}
+	}
+}
+
+func TestPreflightCarriesFreshProxyObservationWithoutChangingFrozenApproval(t *testing.T) {
+	a := &porttest.Approval{View: approval.View{Status: "matching", Inspection: af.Ready(), Candidate: approval.Candidate{Project: "p", Fingerprint: "hash", Canonical: "selected"}, Record: approval.Record{Generation: "7"}}}
+	a.View.Inspection.ProxyImage = &readiness.ImageIdentity{ID: "fresh proxy config"}
+	snapshots := &af.Snapshots{}
+	h, err := Preflight(a, snapshots)
+	a.View.Inspection.ProxyImage.ID = "replacement"
+	if err != nil || h.ProxyImageID != "fresh proxy config" || snapshots.Values["p/7"] != h.Frozen || h.Frozen.Settings != "selected" {
+		t.Fatal(h, err)
 	}
 }

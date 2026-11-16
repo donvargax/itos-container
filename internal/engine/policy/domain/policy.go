@@ -30,6 +30,8 @@ func Inspect(source port.Source, names port.Names) port.Result {
 		return inspectFields(root, 1, names)
 	case port.Decimal{Coefficient: "2", Exponent: "0"}:
 		return inspectFields(root, 2, names)
+	case port.Decimal{Coefficient: "3", Exponent: "0"}:
+		return inspectFields(root, 3, names)
 	}
 	return refused(port.Version, "version")
 }
@@ -38,7 +40,11 @@ func Inspect(source port.Source, names port.Names) port.Result {
 // issue records that version, so its fix names the schema the file was judged by.
 func inspectFields(root port.Value, version int, names port.Names) port.Result {
 	policy := port.Policy{Version: version, Network: port.Network{Mode: "offline"}}
-	issues := unknown(root, nil, version, "version", "manifest", "network")
+	keys := []string{"version", "manifest", "network"}
+	if version == 3 {
+		keys = append(keys, "credentials")
+	}
+	issues := unknown(root, nil, version, keys...)
 	manifest, exists := root.Fields["manifest"]
 	switch {
 	case !exists:
@@ -56,7 +62,15 @@ func inspectFields(root port.Value, version int, names port.Names) port.Result {
 			found = inspectOfflineNetwork(network)
 		} else {
 			policy.Network, found = inspectNetwork(network, names)
+			for i := range found {
+				found[i].Version = version
+			}
 		}
+		issues = append(issues, found...)
+	}
+	if credentials, exists := root.Fields["credentials"]; version == 3 && exists {
+		var found []port.Issue
+		policy.Credentials, found = inspectCredentials(credentials)
 		issues = append(issues, found...)
 	}
 	if len(issues) != 0 {

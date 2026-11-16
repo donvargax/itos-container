@@ -131,7 +131,7 @@ func (s *session) Version() (port.Version, port.Failure) {
 	if err != nil {
 		return port.Version{}, s.failure(err, port.EngineInspect)
 	}
-	return port.Version{Product: v.Platform.Name, OS: v.Os, Architecture: v.Arch, Minimum: v.MinAPIVersion, Maximum: v.APIVersion, Negotiated: s.api.ClientVersion(), SDKMinimum: client.MinAPIVersion, SDKMaximum: client.MaxAPIVersion}, port.None
+	return port.Version{Release: v.Version, Product: v.Platform.Name, OS: v.Os, Architecture: v.Arch, Minimum: v.MinAPIVersion, Maximum: v.APIVersion, Negotiated: s.api.ClientVersion(), SDKMinimum: client.MinAPIVersion, SDKMaximum: client.MaxAPIVersion}, port.None
 }
 
 func (s *session) Info() (port.Info, port.Failure) {
@@ -154,6 +154,7 @@ func (s *session) Image(reference string) (port.Image, port.Failure) {
 	image := port.Image{ID: i.ID, OS: i.Os, Architecture: i.Architecture, RepoDigests: i.RepoDigests, ConfigPresent: i.Config != nil}
 	if i.Config != nil {
 		image.User = i.Config.User
+		image.Volumes = len(i.Config.Volumes) != 0
 		image.Label.Text, image.Label.Present = i.Config.Labels["devcontainer.metadata"]
 	}
 	return image, port.None

@@ -35,9 +35,13 @@ type SessionFiles struct {
 	Data            []byte
 	Controller      bool
 	Unsafe, Changed bool
-	readers         int
-	writer          bool
-	changed         chan struct{}
+	// Log is the published egress-refusals.jsonl, nil until one is published.
+	// Staged counts the handles staged and not yet released by Publish or Close.
+	Log     []byte
+	Staged  int
+	readers int
+	writer  bool
+	changed chan struct{}
 }
 
 func registryID(id string) bool { return len(id) == 64 && strings.Trim(id, "0123456789abcdef") == "" }

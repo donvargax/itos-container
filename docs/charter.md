@@ -68,9 +68,12 @@ findings are inputs, not evidence.
    may come later; if it does, the proxy first moves to a repository and project of its own.
 2. **Credentials passed in, never injected, never in the checkout:** per command, so they
    never appear in the container's configuration or `docker inspect`. Claude's long-lived
-   token from a host file the person keeps. Codex shares the host's own login: `auth.json`
-   bind-mounted read-write as a single file (Codex rewrites it in place), plus its lock file
-   when the host has one. A GitHub token for `gh` and pushes, passed the same way.
+   token from a host file the person keeps. Codex shares the host's own login. Codex replaces
+   `auth.json` by rename since 0.167.0 (decision 0025), so a single-file mount cannot carry it:
+   `auth.json` lives in a dedicated host directory holding nothing else, mounted read-write as a
+   directory, which the host's Codex reaches through a symlink the person sets up; its lock
+   file is shared too when the host has one (q-72). A GitHub token for `gh` and pushes, passed
+   as Claude's is.
 3. **A home for the harness:** a writable volume or tmpfs, never the host home; harness
    state seeded where its first run would otherwise stop or call home (Claude's onboarding
    flags; Codex with update checks, analytics and plugins off, and its own sandbox off because

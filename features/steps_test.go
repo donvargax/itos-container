@@ -38,6 +38,7 @@ type world struct {
 	timedOut       bool
 
 	stdin               string // the text the run reads from its standard input, "" for none
+	credentials         *credentialWorld
 	policy              *policyWorld
 	manifest            *manifestWorld
 	doctor              *doctorWorld
@@ -56,6 +57,7 @@ type world struct {
 	overlap             *overlapFixture
 	hardlinks           *hardlinkWorld
 	control             *controlFixture
+	egress              *egressWorld
 	duringQuiet         func() // Selected independent cases inside a stable quiet-worker lifetime.
 }
 
@@ -68,13 +70,20 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		return ctx, w.setUp()
 	})
 	sc.StepContext().After(w.reportMountDiagnosticFailure)
+	// No Then judges an open create: after every step, wait for each one a native
+	// recorder of this scenario forwarded and has not heard the engine answer.
+	sc.StepContext().After(func(ctx context.Context, _ *godog.Step, _ godog.StepResultStatus, _ error) (context.Context, error) {
+		w.awaitCreateOutcomes()
+		return ctx, nil
+	})
 	// The scenario's error is godog's already: returned here, it would be
 	// reported twice, as the hook's and as the step's.
 	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
 		// Before the world is reset, whatever the row's outcome: a failing row is the
 		// one whose offsets matter, and godog skips the steps after a failure.
 		ctx = withSignalOffsets(ctx, w.lifecycle.signalOffsets())
-		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession())
+		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative())
+		w.closeCredentials()
 		w.closeDoctor()
 		w.closePolicy()
 		_ = os.RemoveAll(w.dir)
@@ -170,6 +179,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	})
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
 	w.policySteps(sc)
+	w.credentialSteps(sc)
 	w.manifestSteps(sc)
 	w.doctorSteps(sc)
 	w.runSteps(sc)
@@ -189,6 +199,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w.hardlinkSteps(sc)
 	w.controlStateSteps(sc)
 	w.runExitSteps(sc)
+	w.egressSteps(sc)
 	return w
 }
 
@@ -385,6 +396,9 @@ func (w *world) runWith(env []string, args string) error {
 	}
 	if w.manifest != nil {
 		dir = w.manifest.checkout
+	}
+	if w.credentials != nil && w.credentials.cwd != "" {
+		dir = w.credentials.cwd
 	}
 	return w.runEnv(dir, env, w.bin, fields...)
 }

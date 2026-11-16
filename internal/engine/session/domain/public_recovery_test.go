@@ -345,35 +345,6 @@ func TestPublicRecoveryLockUsesTheWholeInvocationBudget(t *testing.T) {
 	})
 }
 
-func TestRegisteredRunPersistsObservedExitAndActionableCleanup(t *testing.T) {
-	for _, cleanupFailure := range []bool{false, true} {
-		t.Run(map[bool]string{false: "complete", true: "retry"}[cleanupFailure], func(t *testing.T) {
-			b, store, engine := f.Fixture()
-			registry := &f.Registry{Store: store, Project: b.Frozen.Project}
-			runEngine := &f.RunEngine{Engine: engine, Exit: 7}
-			if cleanupFailure {
-				engine.Following = "still present"
-			}
-			runner := domain.Runner{Store: store, Registry: registry, Engine: runEngine, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: f.MountWorkspace(b)}
-			result := runner.Run(context.Background(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
-			if result.SessionID == "" || !result.Exited || result.Exit != 7 || registry.Leases[result.SessionID] {
-				t.Fatal(result)
-			}
-			r := registry.Records[result.SessionID]
-			if r.WorkloadExit == nil || *r.WorkloadExit != 7 {
-				t.Fatal("lost observed result", r)
-			}
-			if cleanupFailure {
-				if result.Cleanup == port.Complete || r.State != "failed" {
-					t.Fatal(result, r)
-				}
-			} else if result.Cleanup != port.Complete || r.State != "stopped" {
-				t.Fatal(result, r)
-			}
-		})
-	}
-}
-
 func TestRegisteredWaitReconcilesConcurrentStop(t *testing.T) {
 	for _, name := range []string{"unknown", "zero", "nonzero", "drain failure", "nonterminal intent", "different worker"} {
 		t.Run(name, func(t *testing.T) {

@@ -93,6 +93,48 @@ func testFixtureImageStores(t *testing.T, built, other, manifest string) {
 
 }
 
+// GNU sha256sum escapes filename output with a leading backslash when the path
+// contains a backslash (including Windows paths). Digest identity must depend
+// only on the captured bytes, for both the manifest and the exported config.
+func TestEngineFixtureHashesIgnoreCapturedPaths(t *testing.T) {
+	config := `{"architecture":"amd64","os":"linux","config":{"User":"1001:1002"}}` + "\r\n"
+	configDigest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(config)))
+	manifest := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"` + configDigest + `"}}` + "\r\n"
+	manifestDigest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(manifest)))
+	for _, name := range []string{"plain", "with spaces", `captured\response`} {
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), name)
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			for _, tc := range []struct {
+				function, filename, body, digest, diagnostic string
+				args                                         []string
+			}{
+				{"validate_manifest", "manifest.json", manifest, manifestDigest, "manifest bytes", []string{fixtureResponseFile(t, "headers", "Docker-Content-Digest: "+manifestDigest+"\r\n"), configDigest, configDigest}},
+				{"daemon_config_digest", "config.json", config, configDigest, "daemon config bytes", []string{"blobs/sha256/" + strings.TrimPrefix(configDigest, "sha256:")}},
+			} {
+				t.Run(tc.function, func(t *testing.T) {
+					path := filepath.Join(dir, tc.filename)
+					if err := os.WriteFile(path, []byte(tc.body), 0600); err != nil {
+						t.Fatal(err)
+					}
+					args := append([]string{path}, tc.args...)
+					stdout, stderr, err := runFixtureValidator(t, tc.function, args...)
+					requireFixture(t, err == nil && strings.TrimSpace(stdout) == tc.digest, "path changed measured digest: %v stdout=%s stderr=%s", err, stdout, stderr)
+					// Whitespace changes the byte identity even though JSON parsing
+					// would produce the same value. Keep each mismatch check strict.
+					if err := os.WriteFile(path, []byte(tc.body+" "), 0600); err != nil {
+						t.Fatal(err)
+					}
+					stdout, stderr, err = runFixtureValidator(t, tc.function, args...)
+					requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: "+tc.diagnostic), "changed bytes accepted or wrong diagnostic: %v stdout=%s stderr=%s", err, stdout, stderr)
+				})
+			}
+		})
+	}
+}
+
 func runFixtureValidator(t *testing.T, function string, args ...string) (string, string, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

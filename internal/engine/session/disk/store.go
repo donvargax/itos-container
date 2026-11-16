@@ -124,6 +124,9 @@ func (s Store) newIntent(ctx context.Context, durable approval.Durable, token, s
 	if old != nil {
 		return nil, port.Refused
 	}
+	if failure = t.publishExecution(durable.ProxyImageID); failure != "" {
+		return nil, failure
+	}
 	if failure = t.validateRecord(); failure != "" {
 		return nil, failure
 	}
@@ -216,7 +219,11 @@ func (t *intent) snapshot() (port.Binding, port.Outcome) {
 	if data == nil {
 		return port.Binding{}, port.Invalid
 	}
-	return t.store.Codec.Snapshot(data)
+	b, failure := t.store.Codec.Snapshot(data)
+	if failure != "" {
+		return port.Binding{}, failure
+	}
+	return t.execution(b)
 }
 func (t *intent) validateBinding() port.Outcome {
 	if failure := t.validateRecord(); failure != "" {
@@ -240,8 +247,8 @@ func (t *intent) validateRecord() port.Outcome {
 	}
 	expected := b.Intent(t.record.NameToken())
 	expected.Stage, expected.ContainerID = t.record.Stage, t.record.ContainerID
-	expected.Schema, expected.Anchor = t.record.Schema, t.record.Anchor
-	if t.record != expected || !t.record.ValidAnchor(b) {
+	expected.Schema, expected.Anchor, expected.Egress = t.record.Schema, t.record.Anchor, t.record.Egress
+	if t.record != expected || !t.record.ValidAnchor(b) || !t.record.ValidEgress(b) {
 		return port.Invalid
 	}
 	uid, gid, failure := t.store.identity()
@@ -283,7 +290,7 @@ func (t *intent) Save(next port.Record) port.Outcome {
 	if failure := t.Validate(); failure != "" {
 		return failure
 	}
-	if !t.record.ValidTransition(next) {
+	if !t.record.ValidTransition(next) || !next.ValidEgress(t.binding) {
 		return port.Invalid
 	}
 	data := t.store.Codec.Encode(next)

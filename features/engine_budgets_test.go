@@ -13,6 +13,8 @@ const (
 	engineStartupBudget = 3 * time.Second
 	engineGraceBudget   = time.Second
 	engineQuietInterval = max(engineCallBudget, engineStartupBudget) + time.Second
+	// One observation allowance from controller start, including stream propagation.
+	engineReadinessAllowance = 35 * time.Second
 	// SIGKILL may leave this long after the grace expires. Absolute, as the 30 s
 	// teardown assertion's 2 s is: scheduling on a hosted runner under -cover does
 	// not shrink with the fixture's grace. It is no license for a timer that the
@@ -22,6 +24,12 @@ const (
 	// through). A timer the first repeat restarted passes: a known gap, held by
 	// p2-grace-origin-fake-clock-row.
 	engineEscalationTolerance = 2 * time.Second
+	// How long the native recorder keeps the engine side of a create it forwarded,
+	// counted from forwarding, once nothing on the controller side can end it: the
+	// production call limit, so the engine gets as long as a production controller
+	// would have waited. Harness bookkeeping, not a product or scenario bound: the
+	// fixture's product still gives up at engineCallBudget.
+	engineCreateOutcomeAllowance = 10 * time.Second
 )
 
 // engineTreeName is the fixture's folder, beside the engine tier's product.

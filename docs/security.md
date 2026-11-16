@@ -40,6 +40,36 @@ Continuous enforcement is deferred to milestone 2 under
 [decision](decisions/0019-checkout-socket-milestone-limit.md) and
 [Landlock/gVisor research](plans/checkout-socket-enforcement.md).
 
+## Allowlist egress and its limits
+
+An approved allowlist run uses an isolated internal IPv4 bridge with no gateway.
+The worker joins only that network; the proxy joins it and an owned egress bridge.
+Its HTTP proxy variables are conveniences, while network isolation must prevent
+direct routes independently of client cooperation. The controller verifies each
+created resource before starting the worker and never falls back to another route.
+Doctor and approve inspect both cached images and the installed static Linux amd64
+controller outside the checkout. They never pull an image or execute a helper.
+
+Status derives the grant from each session's validated original snapshot, even
+when current requests or approval change or disappear. It names allowlist-v1 and
+its original canonical names, for completed sessions too. Offline entries omit
+the egress object. Approval, status and this document disclose the same limits:
+
+- No TLS interception: the proxy verifies the CONNECT name and the first ClientHello's SNI.
+- It cannot see the HTTP Host inside TLS or anything after that hello, a second hello after a HelloRetryRequest included, so fronting remains a limit, as does a hello the upstream reads differently, and it cannot stop data sent to an allowed service.
+- Clients that omit SNI or send ECH, and SSH over 443, are refused.
+- The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one.
+
+The proxy config ID observed at launch is execution evidence stored beside the
+protected intent, independently of the approved proxy manifest digest. Recovery
+requires that original observation and never derives it from current policy,
+approval or a replacement cached image. The snapshot and fingerprint do not change.
+Cleanup stops the worker and proxy, streams the refusal log into the protected
+session directory, then removes the proxy, networks and anchor. A failed copy
+retains the stopped proxy and its log for recovery. Slice-28 owns the additional
+native proxy-failure and log-gap reporting proof. None of this closes the late
+checkout Unix-socket gap described above.
+
 ## Approval boundary
 
 [Slice-4's approval scenarios](../features/approval.feature) exercise the implemented
@@ -51,8 +81,15 @@ Bare `itos container approve` at a terminal displays the effective settings and,
 on re-approval, changes since the last approval, then asks y/N. A yes records those
 settings; unchanged approved settings need no further prompt. A person never types
 a hash. Without a terminal, bare approve refuses and names the optional
-`--fingerprint <value>` route. `doctor` prints the fingerprint; the option approves
-only those exact settings and refuses a mismatch.
+`--fingerprint <value>` route only for offline grants without credentials. `doctor`
+prints the fingerprint; for those grants the option approves only matching settings.
+Under q-52 an egress allowlist or credential grant requires the person at a real
+terminal. Allowlist approval refuses every `--fingerprint`, even a matching value or
+an already-approved request, with `approve.terminal-required` and a fix naming bare
+`itos container approve` at a terminal. Bare nonterminal or JSON requests retain
+`approve.confirmation-required` and name only that interactive form. Credential grant
+support will extend the same rule when it lands. Unchanged terminal approvals do not
+prompt again; approval is asked again only when the settings fingerprint changes.
 
 Approval's plain review, differences and status, including the effective settings
 printed by ordinary `doctor`, render non-printing Unicode as visible JSON escapes.
@@ -60,10 +97,18 @@ This includes C1 and bidirectional controls in environment values and manifest
 names. Printable Unicode stays readable. This display escaping does not change
 the canonical settings, stored approval, fingerprint or structured JSON values.
 
-An agent on the host can approve its own sandbox through `--fingerprint` or a
-faked terminal. Approval records **what was approved, not who**. Neither route
-proves human presence or authenticates a separate approver. Revisit this limitation
-before adding egress or credentials, as q-2 requires.
+An agent running unsandboxed on the host could fake a terminal. Terminal detection
+therefore does not authenticate a person or a separate approver. Approval records
+**what was approved, not who**; no keys or signatures are introduced. The fingerprint
+route remains available for offline grants without credentials. This is the remaining
+host-agent limitation after q-52, rather than permission to automate network consent.
+
+Allowlist approval binds the canonical names, `allowlist-v1` profile and pinned proxy
+image, and reviews the handshake and refusal-log limits. A matching version-2 grant
+now starts the owned proxy and its networks before the worker. Existing matching
+allowlist-v1 records remain valid without a new prompt. Local fixture tests cover
+the wiring; the real-engine scenarios in CI must pass at the pushed head before
+claiming runtime enforcement.
 
 The fingerprint is SHA-256 of canonical effective JSON. Approval records
 live under `$XDG_STATE_HOME/itos-container` (default `$HOME/.local/state/itos-container`),

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	manifest "github.com/donvargax/itos-container/internal/engine/manifest/port"
@@ -39,9 +40,16 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 		if len(value.Fields) != 14 {
 			return bad()
 		}
-	case "2":
+	case "2", "3":
 		a := value.Fields["anchor"]
-		if len(value.Fields) != 15 || a.Kind != manifest.Object || len(a.Fields) != 7 {
+		count := 15
+		if value.Fields["schema"].Text == "3" {
+			count = 16
+			if !egressFields(value.Fields["egress"]) {
+				return bad()
+			}
+		}
+		if len(value.Fields) != count || a.Kind != manifest.Object || len(a.Fields) != 7 {
 			return bad()
 		}
 		for _, k := range []string{"session", "name", "source", "device", "inode", "created", "stage"} {
@@ -59,10 +67,10 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 	if !port.HexID(record.Project) || !port.HexID(record.NameToken()) {
 		return bad()
 	}
-	if record.Schema == 2 {
+	if record.Schema >= 2 {
 		b := port.Binding{}
 		b.Checkout.Device, b.Checkout.Inode = record.Anchor.Device, record.Anchor.Inode
-		if !record.ValidAnchor(b) {
+		if !record.ValidAnchor(b) || !record.ValidEgressShape() {
 			return bad()
 		}
 		if (record.Stage == "intent" || record.Stage == "owned") && record.Anchor.Stage != "owned" {
@@ -122,11 +130,16 @@ func binding(r approval.Record, f approval.Frozen) port.Binding {
 			WorkspaceFolder string          `json:"workspaceFolder"`
 			ContainerEnv    json.RawMessage `json:"containerEnv"`
 		}
+		Profile string
+		Policy  struct{ Network struct{ Allow []string } }
 	}
 	_ = json.Unmarshal([]byte(r.Canonical), &settings)
 	b := port.Binding{Frozen: f, UID: r.UID, GID: r.GID, Endpoint: settings.Engine.Endpoint, EngineID: settings.Engine.ID, ImageReference: settings.Image.Reference, ImageID: settings.Image.ID}
 	b.Checkout.Root, b.Checkout.Device, b.Checkout.Inode = settings.Checkout.Root, settings.Checkout.Device, settings.Checkout.Inode
 	b.Checkout.GitDevice, b.Checkout.GitInode = settings.Checkout.GitDevice, settings.Checkout.GitInode
 	b.Workspace, b.Environment = settings.Manifest.WorkspaceFolder, string(settings.Manifest.ContainerEnv)
+	if settings.Profile == "allowlist-v1" {
+		b.Egress.Names = strings.Join(settings.Policy.Network.Allow, "\n")
+	}
 	return b
 }

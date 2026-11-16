@@ -11,7 +11,7 @@ import (
 // CLI offers terminal review or exact optional fingerprint consent.
 type CLI struct {
 	JSON         bool                  `name:"json" negatable:"" env:"ITOS_JSON" help:"Print one JSON object; never prompt."`
-	Fingerprint  *string               `help:"Approve only these exact current settings without a terminal."`
+	Fingerprint  *string               `help:"Approve these exact current settings without a terminal, only for offline grants without credentials."`
 	Service      port.Service          `kong:"-"`
 	Presentation approval.Presentation `kong:"-"`
 }
@@ -23,5 +23,5 @@ func (c CLI) Run(_ *cli.UI) int {
 
 // Help states both the human flow and its deliberate host-agent limitation.
 func (CLI) Help() string {
-	return "\nBare approve at a terminal shows effective settings and changes since the last approval, then asks y/N.\nApproval is remembered until settings change; an unchanged approval does not ask again.\nUse doctor to inspect the fingerprint. Optional --fingerprint <value> approves only those exact settings without a terminal.\nBare approve without terminal stdin and stdout, or with JSON, refuses.\nan agent on the host can approve through --fingerprint or a faked terminal. Approval records what was approved, not who.\n"
+	return "\nBare approve at a terminal shows effective settings and changes since the last approval, then asks y/N.\nApproval is remembered until settings change; an unchanged approval does not ask again.\nUse doctor to inspect the fingerprint. Optional --fingerprint <value> approves only a matching offline grant without credentials and without a terminal.\nNetwork or credential grants require the person at a real terminal; --fingerprint refuses. Bare approve without terminal stdin and stdout, or with JSON, refuses.\n\nan agent on the host can approve offline settings through --fingerprint, or any settings through a faked terminal while unsandboxed.\n\nApproval records what was approved, not who.\n"
 }

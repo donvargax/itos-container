@@ -316,8 +316,10 @@ func TestLifecycleReceiptsRejectWrongObservations(t *testing.T) {
 		t.Run(fault, func(t *testing.T) {
 			root := t.TempDir()
 			now := time.Now()
+			done := make(chan struct{})
+			close(done)
 			w := &world{doctor: &doctorWorld{checkout: root}, lifecycle: &lifecycleNative{
-				run: &recoveryProcess{exit: 17}, ready: now, signalled: now.Add(time.Millisecond),
+				run: &recoveryProcess{exit: 17, done: done, started: now, finished: now.Add(2 * time.Millisecond)}, ready: now, signalled: now.Add(time.Millisecond),
 				journalAtReturn: []offlineRequest{{Path: "/containers/id/wait", Status: 200, Replied: now, Observation: map[string]any{"StatusCode": float64(17)}}},
 			}}
 			receipt := "SIGTERM\n"

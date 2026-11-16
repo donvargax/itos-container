@@ -73,8 +73,8 @@ func (s *Store) open(ctx context.Context, ref string, fresh bool) (*memoryIntent
 	}
 	expected := b.Intent(token)
 	expected.Stage, expected.ContainerID = r.Stage, r.ContainerID
-	expected.Schema, expected.Anchor = r.Schema, r.Anchor
-	if expected != r || !r.ValidAnchor(b) {
+	expected.Schema, expected.Anchor, expected.Egress = r.Schema, r.Anchor, r.Egress
+	if expected != r || !r.ValidAnchor(b) || !r.ValidEgress(b) {
 		return nil, port.Invalid
 	}
 	if b.UID != s.UID || b.GID != s.GID || (fresh && b.Checkout.Root != s.Root) || s.UID == "0" {
@@ -169,7 +169,7 @@ func (i *memoryIntent) Validate() port.Outcome {
 	if f != "" {
 		return f
 	}
-	if b != i.binding {
+	if b != i.binding || !i.record.ValidAnchor(b) || !i.record.ValidEgress(b) {
 		return port.Invalid
 	}
 	if b.UID != i.store.UID || b.GID != i.store.GID || (i.fresh && b.Checkout.Root != i.store.Root) {
@@ -181,7 +181,7 @@ func (i *memoryIntent) Save(next port.Record) port.Outcome {
 	if f := i.Validate(); f != "" {
 		return f
 	}
-	if !i.record.ValidTransition(next) {
+	if !i.record.ValidTransition(next) || !next.ValidEgress(i.binding) {
 		return port.Invalid
 	}
 	if next == i.record {

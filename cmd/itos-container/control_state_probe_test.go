@@ -20,8 +20,6 @@ import (
 	manifestdisk "github.com/donvargax/itos-container/internal/engine/manifest/disk"
 	"github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
 	"github.com/donvargax/itos-container/internal/engine/manifest/reference"
-	policydisk "github.com/donvargax/itos-container/internal/engine/policy/disk"
-	policyyaml "github.com/donvargax/itos-container/internal/engine/policy/yaml"
 	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	"github.com/donvargax/itos-container/internal/engine/session/presentation"
@@ -34,6 +32,12 @@ import (
 // Its host port supplies a disposable account home, independently of HOME/XDG.
 // Normal binaries have neither this environment switch nor this assembly.
 func TestMain(m *testing.M) {
+	// A proxy container starts this assembly as the product's hidden command,
+	// with the inert image's environment alone. It must reach the product's
+	// entry point and never the test runner.
+	if len(os.Args) > 1 && os.Args[1] == "__egress-proxy" {
+		os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	if os.Getenv("SLICE_21_ACCOUNT_PROBE") == "1" {
 		home, failure := (approvalhost.Process{}).AccountHome()
 		if json.NewEncoder(os.Stdout).Encode(struct {
@@ -96,7 +100,8 @@ func controlStateCommand(args []string, in io.Reader, out, errout io.Writer, hom
 	if err != nil {
 		return 96
 	}
-	service, view := approvalServices(in, out, errout)
+	name, _, _ := strings.Cut(parsed.Command(), " ")
+	service, view := approvalServices(name, in, out, errout)
 	host := controlAccountHost{Host: service.Host, home: home}
 	service.Host = host
 	service = coordinatedApproval(service, host)
@@ -106,10 +111,9 @@ func controlStateCommand(args []string, in io.Reader, out, errout io.Writer, hom
 		service.Store = store
 	}
 	ui := &cli.UI{In: in, Stdout: out, Stderr: errout, Classify: runcommand.Classify}
-	name, _, _ := strings.Cut(parsed.Command(), " ")
 	switch name {
 	case "doctor":
-		command.Doctor.Policies = inspection.Policies{Source: policyyaml.Source{Files: policydisk.Files{}}}
+		command.Doctor.Policies = doctorPolicies()
 		command.Doctor.Manifests = inspection.Manifests{Files: manifestdisk.Files{}, Parser: jsonc.Parser{}, References: reference.References{}}
 		command.Doctor.Readiness, command.Doctor.Approval, command.Doctor.Presentation = service.Readiness, service, view
 		return command.Doctor.Run(ui)

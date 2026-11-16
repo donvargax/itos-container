@@ -417,7 +417,8 @@ Feature: Strict offline sandbox policy
       | {version: 1, manifest: a.json, network: {mode: [offline]}}                         | /network/mode |
 
   # Slice-25 added policy version 2, which made this table's example 2 untrue. Its feat
-  # commit changed that example to 3 and said so; the rule checked here did not change.
+  # commit changed that example to 3. Slice-29 now accepts 3 and moves it to 4;
+  # the unsupported-version rule remains unchanged.
   @slice-1 @ID-POLICY-15
   Scenario Outline: unsupported policy versions are not guessed or downgraded
     Given the policy file contains:
@@ -435,7 +436,7 @@ Feature: Strict offline sandbox policy
       | version |
       | 0       |
       | -1      |
-      | 3       |
+      | 4       |
 
   # Empty collections and false do not make unsupported permissions permissible.
   @slice-1 @ID-POLICY-16
@@ -628,23 +629,13 @@ Feature: Strict offline sandbox policy
   # A problem's fix depends on the version read. For a version 2 file under doctor
   # --policy-only, no fix names version 1, and policy.network_mode's says "use offline or
   # allowlist mode". Version 1 keeps its words exactly (ID-POLICY-29, 75 and 77) and never
-  # offers a mode it refuses. Where no supported version was read, the fix names both: "use
-  # policy version 1 or 2" for an unsupported number, and "use the field type defined by
-  # policy version 1 or 2" for a wrongly typed version or a root that is not an object.
-  # Ordinary doctor says the same (ID-POLICY-77), though it refuses version 2 for now: these
-  # words describe the format, and version 2's own refusal then says what to do next.
-  #
-  # Only doctor --policy-only and --manifest-only read version 2 for now. Ordinary doctor,
-  # approve and run refuse a valid version 2 file with the existing policy.version at /version,
-  # exit 2, whatever its mode, before the manifest, the engine or host state. Canonical settings
-  # v1 (features/approval.feature) hardcode profile offline-v1 and network offline, so without
-  # this refusal approve would record offline settings for a request that asks for network,
-  # and an offline approval would appear to match it. On all three commands the refusal's
-  # fix names doctor --policy-only, so a person can still see what the file asks for. A version
-  # 2 file that fails validation is refused there for its own problems instead, as any invalid
-  # policy is (ID-POLICY-78): the person mends the file, then learns where it can be read.
-  # Slice-26 lifts the refusal for doctor and approve once approval can bind version 2, and
-  # must keep run from starting a version 2 policy until slice-27 can.
+  # offers a mode it refuses. Where no supported version was read, the fix names supported versions: "use
+  # policy version 1, 2 or 3" for an unsupported number, and "use the field type defined by
+  # policy version 1, 2 or 3" for a wrongly typed version or a root that is not an object.
+  # Ordinary doctor uses the same validation words (ID-POLICY-77).
+  # Doctor, approve and run accept valid version 2 settings; allowlist runs
+  # require the inspected proxy prerequisites and matching protected approval.
+  # Invalid version 2 files keep their own validation problems (ID-POLICY-78).
   #
   # Library decision, checked 2026-11-09: golang.org/x/net/idna, pinned at golang.org/x/net
   # v0.60.0, BSD-3-Clause, maintained by the Go team; net/http uses the same Lookup profile
@@ -1104,11 +1095,11 @@ Feature: Strict offline sandbox policy
     And its error output says "use offline mode"
     And its error output does not say "allowlist"
 
-  # The words are literal on purpose: a correct "version 1 or 2" has no separate "version 2"
+  # The words are literal on purpose: a correct "version 1, 2 or 3" has no separate "version 2"
   # for a looser step to find. The exact step holds version 1's policy.type words, which no
-  # other scenario pins: "says" would pass a build that wrote "version 1 or 2" there as well.
+  # other scenario pins: "says" would pass a build that wrote "version 1, 2 or 3" there as well.
   @slice-25 @ID-POLICY-77
-  Scenario Outline: a fix names both versions only where no supported version was read
+  Scenario Outline: a fix names supported versions only where no supported version was read
     Given the policy file contains:
       """
       <document>
@@ -1133,12 +1124,12 @@ Feature: Strict offline sandbox policy
     And the engine recorder has no connections
 
     Examples:
-      | document                         | fix                                                 |
-      | {version: 3, manifest: a.json}   | use policy version 1 or 2                           |
-      | {version: 0, manifest: a.json}   | use policy version 1 or 2                           |
-      | {version: '2', manifest: a.json} | use the field type defined by policy version 1 or 2 |
-      | {version: 2.5, manifest: a.json} | use the field type defined by policy version 1 or 2 |
-      | []                               | use the field type defined by policy version 1 or 2 |
+      | document                         | fix                                                    |
+      | {version: 4, manifest: a.json}   | use policy version 1, 2 or 3                           |
+      | {version: 0, manifest: a.json}   | use policy version 1, 2 or 3                           |
+      | {version: '2', manifest: a.json} | use the field type defined by policy version 1, 2 or 3 |
+      | {version: 2.5, manifest: a.json} | use the field type defined by policy version 1, 2 or 3 |
+      | []                               | use the field type defined by policy version 1, 2 or 3 |
 
   # The last entry repeats the first exactly. A refused entry has no canonical name to
   # repeat, so it is one more policy.host_name and never a policy.host_duplicate.
@@ -1296,96 +1287,9 @@ Feature: Strict offline sandbox policy
     And it exits with code 2
     And the engine recorder has no connections
 
-  # The next three scenarios keep a version 2 request away from canonical settings v1. Each
-  # file edit is the only difference from an approved or approvable offline checkout, so
-  # refusing later than the policy stage would reach the engine or the approval record. The
-  # rows naming an absent manifest catch a refusal between the manifest stage and the engine:
-  # such a build reports that manifest instead of policy.version. Each scenario's fix step
-  # reads the words a person acts on: JSON stdout for doctor and approve, stderr for run.
-  @slice-25 @ID-POLICY-60 @local-engine-fixture
-  Scenario Outline: ordinary doctor refuses version 2 even beside a matching offline approval
-    Given an approval checkout and isolated host state
-    And a seeded matching approval at generation "1"
-    And the checkout policy contains:
-      """
-      <policy>
-      """
-    When itos-container runs with "doctor --policy-only --json"
-    Then it exits with code 0
-    When itos-container runs with "doctor --json"
-    Then its doctor JSON reports exactly these policy problems:
-      | rule           | path     | exit |
-      | policy.version | /version | 2    |
-    And it exits with code 2
-    And its standard output says "doctor --policy-only"
-    And the Engine API journal is empty
-    And the active approval bytes and generation are unchanged
-    And the checkout and host control state are unchanged
-
-    Examples:
-      | policy                                                                                                        |
-      | {version: 2, manifest: .devcontainer/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}} |
-      | {version: 2, manifest: .devcontainer/devcontainer.json}                                                       |
-      | {version: 2, manifest: absent/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}}        |
-      | {version: 2, manifest: absent/devcontainer.json}                                                              |
-
-  # In the good-manifest rows the fingerprint is the one the offline settings would have, the
-  # exact approval a build that ignored the list would accept. The tree step does the looking
-  # for frozen input: the record step beside it stops once the record is absent.
-  @slice-25 @ID-POLICY-61 @local-engine-fixture
-  Scenario Outline: approve cannot record offline settings for a version 2 request
-    Given an approval checkout and isolated host state
-    And the checkout policy contains:
-      """
-      <policy>
-      """
-    When itos-container runs with "doctor --policy-only --json"
-    Then it exits with code 0
-    When approve runs without a terminal with a well-formed candidate fingerprint as JSON
-    Then it reports prerequisite problem "policy.version" with exit 2 before requesting consent
-    And its standard output says "doctor --policy-only"
-    And no approval record or frozen input is produced
-    And the approval checkout and host state are unchanged
-    And the Engine API journal is empty
-
-    Examples:
-      | policy                                                                                                        |
-      | {version: 2, manifest: .devcontainer/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}} |
-      | {version: 2, manifest: .devcontainer/devcontainer.json}                                                       |
-      | {version: 2, manifest: absent/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}}        |
-      | {version: 2, manifest: absent/devcontainer.json}                                                              |
-
-  # Contract AC-02: a change to network permissions refuses startup, with no self-approval.
-  @slice-25 @ID-POLICY-62 @local-engine-fixture @linux
-  Scenario Outline: run refuses version 2 even beside a matching offline approval
-    Given an approval checkout and isolated host state
-    And a seeded matching approval at generation "1"
-    And the checkout policy contains:
-      """
-      <policy>
-      """
-    And the run preflight files are snapshotted
-    When itos-container runs with "doctor --policy-only --json"
-    Then it exits with code 0
-    When itos-container runs with "run -- fixture-workload"
-    Then run reports preflight problem "policy.version" with exit 2 and subject "/version"
-    And its error output says "doctor --policy-only"
-    And the Engine API journal is empty
-    And no endpoint connection was attempted
-    And the active approval bytes and generation are unchanged
-    And run preflight has changed no checkout or host state
-
-    Examples:
-      | policy                                                                                                        |
-      | {version: 2, manifest: .devcontainer/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}} |
-      | {version: 2, manifest: .devcontainer/devcontainer.json}                                                       |
-      | {version: 2, manifest: absent/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}}        |
-      | {version: 2, manifest: absent/devcontainer.json}                                                              |
-
-  # The refusal above follows validation, so an invalid file reports what is wrong with it. A
-  # build that refused every version 2 file first would report policy.version instead. Either
-  # order exits 2 before the manifest, so this settles which answer a person gets, not a safety
-  # property. Each row's first run fails today, when every version 2 file gets policy.version.
+  # EGRESS-01/02/03 supersede the temporary ID-POLICY-62 run gate.
+  # Invalid files retain their own validation errors before manifest inspection.
+  # The former blanket version-2 refusal would instead print policy.version.
   @slice-25 @ID-POLICY-78 @local-engine-fixture @linux
   Scenario Outline: ordinary commands report an invalid version 2 file's own problem
     Given an approval checkout and isolated host state

@@ -2,10 +2,7 @@
 phases:
   1: null
 queue:
-  - p1-lifecycle-shard-flakes-on-main
-  - p1-anchor-recovery-flake
-  - p1-harness-home
-  - p1-interactive-tty
+  - T-57
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -176,6 +173,18 @@ items:
       Already covers hook registration and verification instructions. Include the reported unset
       core.hooksPath and missing pre-commit/commit-msg hooks in that verification, confirming how
       subsequent commits enforce configured gates.
+
+      Belongs inside p1-refresh-remaining-template-guidance, which already takes in
+      features/README.md; this is a foundation docs leftover that blocks no charter step, so it
+      waits with that item. Note for it: features/README.md is 79,818 bytes on main and 83,280 on
+      the slice-27 branch, with no entry in tools/bin/doc-caps, which today caps only AGENTS.md and
+      docs/ORCHESTRATING.md, and every implementer is told to read it. Measured by section on main:
+      'The CI engine tier' 30.8 KB, 'Manual red-first evidence' 15.2 KB, 'Cached fixture protocol'
+      11.1 KB. Per-slice evidence paragraphs sit under '## Tags' ahead of the tag table: slice-17's
+      anchor note on main, and slice-27 adds another 3.4 KB there. When refreshing the file, move
+      per-slice red-evidence and history notes out of it (the commits and run numbers already record
+      them), keep only the standing harness rules, and add a doc-caps entry with headroom over the
+      shortened size so later slices cannot grow it back.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -896,25 +905,16 @@ items:
     title: A home of the harness's own inside the container, seeded so a first run neither stops nor calls home
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Milestone two, step 3 (docs/charter.md). A writable volume or tmpfs, never the host home and
-      never the checkout; Claude's onboarding flags and Codex's update checks, analytics and plugins
-      off (its own sandbox off, the container being the sandbox); executable /tmp. Open for the
-      spec: a named volume per checkout (keeps sessions, so resume works across runs) or a tmpfs
-      (keeps nothing); the coordinator recommends the volume.
   - id: p1-interactive-tty
     title: "run and exec with a TTY: raw mode, resizes, Ctrl-C as input, no harness left running after a disconnect"
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Milestone two, step 4 (docs/charter.md), built on slice-12's cancellation rules. A terminal or
-      multiplexer outside the sandbox is the window onto an agent inside it.
   - id: T-38
     title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
     phase: 1
@@ -933,21 +933,9 @@ items:
     title: Approval binds the egress allowlist, and any change to it needs a new approval
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-25]
     kind: slice
-    why: >
-      Was p1-egress-allowlist-approval.
-      Charter step 1: the allowlist is part of the approved settings, and the contract's AC-02
-      requires a change to network permissions to refuse startup with no self-approval. The
-      canonical approved-settings record (engine/approval/canonical, profile offline-v1) and the
-      approve presentation extend to the allowlist. Scenarios first: approve shows the exact host
-      names the worker will be able to reach and the profile that grants network. Adding, removing
-      or changing a name invalidates an existing approval, and run refuses with the change
-      explained. Reordering the same names does not, since the canonical form is a set. Offline
-      approvals keep their existing profile and identity. This slice covers records, presentation
-      and refusal only. Nothing starts a proxy yet. It follows the policy slice, which supplies the
-      validated list. Broken down from p1-egress-allowlist-proxy.
   - id: T-39
     title: A CONNECT proxy engine package that allows only listed names on port 443 and logs every refusal
     phase: 1
@@ -959,27 +947,16 @@ items:
     title: The session engine port creates, owns and tears down an internal network and a proxy container beside the worker
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-38]
     kind: task
   - id: slice-27
     title: run reaches only the approved names through the proxy; every other route out is closed
     phase: 1
-    owner: null
-    status: todo
-    depends_on: [slice-26, T-39, T-40]
+    owner: donvargax
+    status: done
+    depends_on: [slice-26, T-39, T-40, T-51, T-52]
     kind: slice
-    why: >
-      Was p1-egress-run-through-proxy.
-      The first user-visible egress behaviour, charter step 1 (contract AC-09, AC-10, AC-13).
-      Scenarios first, with the real-engine ones in CI only, run against a fake endpoint the proxy
-      allows and never a real model or credential. With an approved allowlist, itos container run
-      reaches an allowed host name over CONNECT on 443. A direct route out (ignoring proxy
-      variables, a literal IP, the default gateway, UDP, another port) fails independent of client
-      cooperation. A name outside the list, or a spelling variant, is refused. Offline runs are
-      unchanged. It wires the approved allowlist from the approval slice, the proxy package and the
-      lifecycle port into the run slice, and doctor says what a run will use. Each property is
-      proven by a scenario that fails without it. Broken down from p1-egress-allowlist-proxy.
   - id: slice-28
     title: Refusals are logged, a proxy failure stops the run, and cleanup removes the proxy and network
     phase: 1
@@ -1043,28 +1020,13 @@ items:
       the network... remain outside this milestone' is also replaced by the charter's steps 2 to 4
       in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
       otherwise meet two disagreeing authorities, as T-38's did.
-  - id: p1-acceptance-static-binary
+  - id: T-52
     title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy), through
-      slice-27. features/features_test.go buildProduct runs go build with no CGO_ENABLED setting,
-      and the binary it builds measured dynamically linked here. .goreleaser.yaml ships
-      CGO_ENABLED=0. Scenarios therefore exercise cgo paths for DNS and user lookup that no released
-      binary uses, so a pass does not prove the shipped binary, which matters beyond egress.
-      slice-27 needs a static binary for the proxy container and its real-engine scenarios. Landing
-      the fix first lets the existing suite show any static-versus-dynamic difference before the
-      egress work is mixed in. Set CGO_ENABLED=0 for the build, including the -cover variant used by
-      the code proof. Add a check that the built binary is static or matches the release setting.
-      The existing scenarios must still pass, with no gate weakened. slice-27 should depend on it.
-
-      The existing item already requires CGO_ENABLED=0 for normal and coverage builds before
-      slice-27. Schedule it first and make slice-27 depend on it; that dependency is not yet
-      recorded.
+    kind: task
   - id: p2-approval-no-record-step-checks-frozen-input
     title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
     phase: 1
@@ -1114,6 +1076,15 @@ items:
       p2-architecture-fixtures-load). It is p2: it blocks no step of charter milestone two. The
       itos-side warning, from `itos config check` or `itos work promote --check`, is a gap in itos
       itself; the coordinator files it after searching existing issues.
+
+      Same gap this item holds: itos runs each check with sh -c, which is bash here and dash in CI,
+      and pinning the shell makes the local run the one CI judges, which is the way asked for. New
+      fact for this item: the loop machine has no dash at all (command -v dash finds none; sh
+      resolves to /usr/bin/bash), so a drafter cannot try a check under CI's shell even by hand, and
+      this item's own step of confirming what CI's dash refuses cannot be done here. T-51's three
+      done_when scripts are multi-line shell with functions and were tried only under bash, so a
+      bashism in them would show first in CI. The itos-side part (a warning, or a way to choose the
+      shell for a check run) stays as this item already says: the coordinator files it on itos.
   - id: p3-session-state-retention
     title: Decide how long completed sessions' host state is kept, egress-refusals.jsonl included
     phase: 1
@@ -1134,6 +1105,22 @@ items:
       explicit act by the person, never silent automatic pruning. It also has to keep the
       exact-ownership guarantee: it may touch only this project's own session state, never foreign
       resources. Decide the rule, then specify it by scenarios.
+
+      This is part of the retention decision that item already holds, and T-51's spec defers to it
+      by name. A controller killed in the middle of a copy leaves .refusals-<32 hex>.tmp in
+      sessions/<lookup>/<id>/, up to about 40 MiB each, and T-51 sweeps nothing because deleting
+      from protected state is a retention decision. A killed Publish leaves its .intent- temporary
+      the same way. The retention rule must say what removes these, by exact shape and only inside
+      this project's own session state, as an explicit act of the person. Until then every reader of
+      a session folder ignores them, slice-28's status reader included; T-51's "What T-51 settled"
+      section in decision 0022 tells the sibling drafters about the unswept temporary.
+
+      Widens this item's note on unswept temporaries, which names only a controller killed in the
+      middle of a copy. T-51's reviewed spec adds the ordinary cause: a controller that merely exits
+      while a timed-out Begin, Write or Commit is still running also leaves .refusals-<32 hex>.tmp
+      behind, because budget closes a late Begin's copy only once it returns and Close never waits
+      for a Write or a Commit. Each is up to about 40 MiB, and every retry of stop on a slow disk
+      can add another. The retention rule must cover both causes.
   - id: T-42
     title: LIFECYCLE-09's SIGKILL window survives runner jitter at the shortened 1 s engine grace
     phase: 1
@@ -1628,6 +1615,55 @@ items:
       title=Engine step over its time limit` with measured and limit seconds and nothing else. Cover
       it in TestEngineSuiteBudget's over-budget cases. Public data only. It edits the same workflow
       region and pins, so it is one change with the notice step, not a separate item.
+
+      This belongs inside p1-engine-timing-notice-every-run, the item that makes each row's timing
+      readable on green runs. Checked on main: engineTiming.complete
+      (features/engine_timing_test.go) writes one `engine scenario timing:` record for every row,
+      with ID-LIFECYCLE-09's signal offsets as a per-row extra, and ci.yml prints those records only
+      in the failure-only diagnostics step. Fold this in when the item is specified: the record of a
+      row that launches a worker also carries its create call's intervals, namely the image
+      inspection's round trip and the create's arrival, forwarding, engine answer and reply, and the
+      notice shows them at least for each shard leg's first row. The three slow creates on record
+      (ID-OFFLINE-29, ID-LIFECYCLE-08, ID-ANCHORS-09) were each the first engine row of its shard's
+      first file, and T-50 prints these intervals only when a row fails, so without this the remedy
+      for the slow first create has no baseline from passing rows. It needs the forwarding and
+      answer times T-50 adds to the journal, so this part waits for T-50 to land. Durations only: no
+      name, ID or engine text. It changes the item's line that a notice carries scenario name,
+      duration and outcome only, and the record's shape is pinned by TestEngineScenarioTiming, which
+      the item's check already extends. T-50's failure-time print stays as specified.
+
+      The same need as this item's note on the create call's intervals, seen from a failed run, so
+      it is one more line for this item's spec, not an item. In T-50's run 43543693012 at 73cbd13
+      three first rows stopped at run.call-timeout. T-50's diagnostics print the create's forwarding
+      and answer times in the launch journal, below the cause, the launch line and the status and
+      stop reports. itos ci watch keeps 10 lines of a failed scenario and T-43's annotation 4096
+      bytes, so the intervals reached a reader for the lifecycle row only: 39 and 110 lines were
+      left out for the other two. T-50's third rule fixes what the launch line holds (the
+      controller's exit, elapsed time, rule and operation), so an implementer cannot add this there,
+      and T-50 is at its landing decision (q-63). This item already changes the timing record to
+      carry these intervals and waits for T-50 to land. When it is specified, weigh one more spec
+      line: when the launch controller stopped at a call limit, the launch line of both formatters,
+      anchorRecoveryDiagnostics and T-49's lifecycle one, also carries that call's intervals: the
+      image inspection's round trip, and the create from arrival to forwarding, from forwarding to
+      the engine's answer and from the answer to the reply. Durations only, pinned in
+      TestAnchorRecoveryBarrierDiagnostics. The notice covers each shard's first row. The launch
+      line covers any row, in the two channels an agent can read today.
+
+      Belongs with this item's runner evidence. It is a per-run reading that must print on green
+      runs too, so cold and warm runs can be compared, and the preflight's exact allowlist
+      (validEnginePreflight) cannot carry it. It is a hypothesis, not a finding: the cold compile
+      before a shard's first row leaves the runner writing back a large build cache, and the
+      engine's create waits on disk. T-51's run 43538972827 logged 'Cache is not found' and 19 to 24
+      s of compilation before each failed first row, and T-50's run 43543693012 measured 2.33 s of
+      engine time for the lifecycle row's create. Fold in: just before the first engine row, record
+      /proc/pressure/io and the Dirty and Writeback lines of /proc/meminfo, and publish them in the
+      notice beside the first row's create intervals. Two cold builds precede that row: go test -c
+      in the step (ci.yml:135) and the product's -cover build at the start of TestFeatures
+      (features/features_test.go:85). So read after the second, in the harness, not between the
+      step's compile and its test run. Numbers only, and an absent /proc/pressure/io is said, not a
+      failure. The reading confirms or refutes the hypothesis on the next cold run. The remedy is
+      not this item's: it belongs to p2-first-engine-row-slow-create, added by the same triage, and
+      the warm cache to p2-ci-go-build-cache-rolling-key.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
@@ -1646,26 +1682,14 @@ items:
     title: The policy file accepts named credential sources and doctor validates them without reading their contents
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-47]
     kind: slice
-    why: >
-      Was p1-credentials-policy-sources.
-      Charter step 2: the credential grants are part of the approved settings, so they start in
-      itos-container.yaml, as the egress allowlist did in slice-25. Scenarios first: a closed
-      credentials section naming each source by kind (Claude token file, Codex auth file, GitHub
-      token file) with an absolute host path. Unknown kinds, duplicates, relative or empty paths,
-      and paths inside the checkout or any mount are refused with a located diagnostic. Doctor
-      reports a missing, non-regular, group- or world-accessible, or foreign-owned source, and shows
-      the effective grants. It never prints, hashes or logs contents. It does not execute checkout
-      code and starts no engine. Offline policies without the section are unchanged. docs/CONFIG.md
-      and docs/CLI.md are updated, and the published policy schema moves with it. It takes the keys
-      and checks from the decision record. Broken down from p1-credentials-passed-in.
   - id: slice-30
     title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-29, slice-26]
     kind: slice
     why: >
@@ -1739,39 +1763,13 @@ items:
       scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
       Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
       approved grant. Broken down from p1-credentials-passed-in.
-  - id: p1-egress-refusal-log-writer
+  - id: T-51
     title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
     phase: 1
-    owner: null
-    status: todo
-    depends_on: []
-    kind: idea
-    why: >
-      Blocks charter milestone two, step 1 (egress through an allowlisting proxy), at slice-27.
-      T-40's spec has the controller copy the stopped proxy's stdout through port.RefusalLog before
-      removing it. It refuses an egress run with no log bound (nil is port.Internal), and a failed
-      copy keeps the stopped proxy, both networks, the anchor and the intent. So slice-27 can
-      neither run nor tear down an egress session until a real writer exists. cmd binds none in
-      T-40. The record (docs/decisions/0022-egress-proxy.md, 'Where the log lands') and arc42's
-      slice-28 row give the writer to slice-28, which depends on slice-27. No item schedules it
-      earlier. Approval's Publish refuses more than 1 MiB, so it cannot be reused. Build the adapter
-      as a task before slice-27: the streaming writer for
-      sessions/<lookup>/<id>/egress-refusals.jsonl, with Publish's private-file, fsync, rename and
-      parent-fsync rules, passing T-40's RefusalLogContract unchanged. It adds no command behaviour,
-      so it is a ledger task with a check, not part of slice-27's scenarios. It depends on T-40, and
-      slice-27 should depend on it. Slice-28 keeps the seq check and its typed gap error, status's
-      record count, display escaping of hostile names, and the proxy-failure scenarios. Update the
-      record and arc42 rows that now give the writer to slice-28. The writer does not wait for
-      p2-proxy-log-lost-tail-sink, since T-40 says either candidate is one more stdout line the
-      reader and copy carry unchanged. Retention stays with p3-session-state-retention.
-
-      The existing item already identifies the dependency cycle and moves the writer ahead of
-      slice-27. Schedule T-40 → writer → slice-27 → slice-28, record those dependencies, and update
-      the decision record and architecture ownership as specified.
-
-      Already covers the dependency cycle and architecture ownership. Schedule T-40 → writer →
-      slice-27 → slice-28, record those dependencies, and update ADR 0022 and arc42 to move writer
-      ownership ahead of slice-27.
+    owner: donvargax
+    status: done
+    depends_on: [T-40]
+    kind: task
   - id: p1-offline-11-ipv6-route-flake
     title: "ID-OFFLINE-11 flakes: a positive IPv6 route control times out on the CI runner"
     phase: 1
@@ -1786,40 +1784,421 @@ items:
       re-run of the same head passed. A positive control that times out makes the boundary check red
       with nothing wrong; give it a retry or a readiness wait before the dial, or say why one try is
       the contract.
-  - id: p1-lifecycle-shard-flakes-on-main
+
+      Belongs inside this item, which is still todo. slice-27's route and DNS scenarios,
+      ID-EGRESS-15 and ID-EGRESS-16 (@engine, still @wip on the slice-27 branch), reuse slice-14's
+      dual-stack control and its IPv6 positive controls: the route rows include gateway6-tcp, the
+      very control that timed out here (features/egress_native_isolation_test.go:43 on slice-27). So
+      the same runner flake will fail two more engine rows once egress.feature is live, in the
+      'other' engine shard that is already near its 180 s budget. Per the slice-27 implementer, each
+      of the two adds one control container, one or two endpoints, six execs and one product run to
+      that shard. This raises the item's priority for milestone two, step 1: whatever fix is chosen
+      (a retry, a readiness wait before the dial, or a stated one-try contract) must cover the
+      egress rows as well as ID-OFFLINE-11.
+  - id: T-49
     title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      2026-11-09, main push runs: 42713010342 at 1b310df (a registry-only commit) failed Engine
-      transport loss reports an unknown workload outcome and retains recovery (worker readiness did
-      not reach the controller's foreground stream); 42716948746 at 1ca4e45 (slice-25's merge)
-      failed both rows of The primary receives the first signal and its observed exit wins
-      (lifecycle.feature:420; product did not reach the handle lifecycle barrier; lifecycle changed
-      unrelated native resources or image references). Both are waits on a barrier with a fixed
-      bound, like LIFECYCLE-09 before T-42. A red main run blocks itos work done on every item
-      merged onto it, so each flake stops a worker. Find which bound the hosted runner misses and
-      give it room through the harness budget seam, as T-42 did.
-
-      Belongs in the existing investigation of lifecycle barrier failures. Include controller exit
-      code, stderr and the request journal in failure messages to distinguish early controller exits
-      from missed timing bounds; T-43 already exposes those step errors in CI annotations.
-  - id: p1-anchor-recovery-flake
+    kind: task
+  - id: T-50
     title: "Fresh recovery after controller loss and path replacement flakes: anchor recovery exits 75 and cleanup gets HTTP 409"
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p1-platform-log-redaction
+    title: The controller scrubs the credentials it staged from every log it persists
     phase: 1
     owner: null
     status: todo
     depends_on: []
     kind: idea
     why: >
-      2026-11-09/10, Engine shard (other): Fresh recovery preserves the anchored checkout after
-      controller loss and path replacement failed on three branches whose changes do not touch it
-      (T-47 run 42708074071, T-40 run 42731353707, slice-26 run 42731520745): step error anchor
-      recovery exit 75, expected 0; then the after-scenario hook failed with native anchor harness
-      cleanup HTTP 409. Exit 75 reads as a transient (the engine still busy with the replaced path),
-      and 409 as a container or volume still in use at cleanup. A red shard blocks each pull request
-      it lands on and sends its implementer after code it never changed. Find which wait the hosted
-      runner outruns and bound it through the harness budget seam, as T-42 did.
+      q-55, the person 2026-11-10: log redaction belongs to the platform, not to each program. The
+      controller stages each credential itself, so it knows the exact bytes; scrub them and their
+      common encodings (base64, URL, hex) from everything it persists: the egress refusal log copy,
+      proxy and worker output it keeps, status and diagnostics. dockerd's own json-file log of the
+      proxy is outside the controller's writes, so either route the proxy's output through the
+      controller (a log driver of none and the controller capturing stdout) or scrub that file at
+      teardown. AC-36's hostname-marker probe moves here. Until this lands the leak is disclosed.
+
+      T-51's refusal-log writer takes no lock, and its late publication is safe only while two
+      complete reads of one stopped proxy store the same bytes (decision 0022, 'What T-51 settled').
+      Scrubbing bytes that only the staging controller knows breaks that premise: a run's copy and a
+      later stop's copy would differ, and which rename lands last would matter. Whoever drafts this
+      item must revisit that argument, either by scrubbing identically from every controller or by
+      running the copy's Commit through the session's gate.
+  - id: T-53
+    title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
+    phase: 1
+    owner: donvargax
+    status: todo
+    depends_on: []
+    kind: task
+    deferred: >
+      Not reproducible, and its only evidence lacks the failing child's output (q-68): the first
+      attempt of run 42738076694 logged the parent's exit status 2 alone, and ten covered
+      repetitions and the whole covered feature suite pass. 195b834 reports the child's transcript
+      since, so a recurrence will name the failing operation: resume then, with that run.
+  - id: p1-main-go-toolchain-1-27-4
+    title: main's Go toolchain pin is go1.27.4, so every branch's govulncheck step passes again
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Blocks the charter's second milestone, step 1 (egress through an allowlisting proxy):
+      slice-27's pull request cannot go green, nor can slice-28 and T-51 after it, and the same
+      holds for step 2's T-48 and for slice-22 and T-50. go.mod on main pins toolchain go1.27.3, and
+      CI's `go tool govulncheck -test ./...` exits 3 there on GO-2026-6859 (net/http, fixed in
+      go1.27.4), because code already on main reaches net/http. Only slice-29 carries the one-line
+      move (commit c583023), and it is a large slice still in review. Checked on 2026-11-13: main,
+      origin/main, slice-27, slice-28, slice-30, T-48, slice-22, T-50 and T-51 all pin go1.27.3. A
+      foundation chore with a ledger task: move the toolchain line to go1.27.4 on main, checked by
+      the pin's value and by the unchanged govulncheck step passing in CI. The gate is not weakened.
+      The identical line merges cleanly with slice-29's. The scan passes locally under the
+      distribution Go even when CI fails, so each worker would otherwise spend a CI cycle finding
+      the same failure. If slice-29 merges first, close this as done by it.
+
+      Checked 2026-11-14 (UTC): T-51 now carries the go1.27.4 toolchain line too (d0fa77a, local and
+      origin), as slice-29 does (c583023). So the item's closing clause widens: whichever of T-51 or
+      slice-29 merges first settles it, and it closes as done by that merge. Its why is stale where
+      it lists T-51 among the go1.27.3 branches. Still pinning go1.27.3, local and origin alike:
+      main, slice-22, slice-27, slice-28, slice-30, T-48 and T-50. Each of those fails govulncheck
+      on GO-2026-6859 in CI until main has the line, so after the merge they need main merged in;
+      until then the one-line move on main first is still the cheaper route, and the identical line
+      merges cleanly with both carriers.
+  - id: p2-engine-row-leftover-audit
+    title: Each engine row ends with an audit that nothing carrying its own labels is left on the runner, so a leak fails the row that made it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 1: T-50 closes the one known leak path, so this waits behind
+      it and is specified after it lands, in the same harness files. Confirmed on main: the after
+      hook (features/steps_test.go) runs each fixture's cleanup and then looks at nothing, and
+      tools/bin/engine-fixture cleanup removes only its own smoke and registry containers and
+      derived image references. Each fixture compares the engine inventory before and after its own
+      steps, so a worker or volume left by an earlier row is invisible while it stays still and
+      fails a later, unrelated row when it changes, with 'changed unrelated native resources'. Main
+      run 42716948746 has that shape, and T-49 and T-50 each spent a round on rows that were not the
+      cause. T-50's cleanup accounts only for creates the recorder forwarded. Milestone two's egress
+      rows (slice-27, slice-28) add a proxy container and two networks per row, and the credential
+      rows add mounts, so there is more to leave behind and more rows to blame wrongly. After the
+      hook's cleanup, make one read-only listing of containers (stopped included), volumes and
+      networks that carry the row's own io.itos-container project and session labels. Any hit fails
+      that row's hook with kinds and counts only: no name, ID or engine text, nothing removed by the
+      audit, no retry. Filtering by the row's own labels keeps a concurrent row's live resources and
+      the fixture's pinned images and registry out of it. It needs an engine-free regression against
+      a disposable engine, covering a leftover of each kind, a foreign-labelled resource that is
+      ignored, a failed listing reported as unavailable and never as clean, and a clean row.
+      Real-engine evidence comes only from CI. It is harness work, a ledger task with a check,
+      adding no product behaviour, scenario or ID.
+
+      This belongs inside p2-engine-row-leftover-audit, which is specified after T-50 in the same
+      harness files and already lists volumes. It corrects that item's statement that T-50 closes
+      the one known leak path: a second path is known from reading the code, though no log shows it.
+      Checked on main: the recorder forwards POST /volumes/create through the same reverse proxy
+      under the controller's request context (features/offline_runtime_engine_test.go, serve), and
+      cleanupAnchorVolumes skips a volume whose inspection answers 404
+      (features/offline_anchor_engine_test.go:183). T-50's first rule detaches only POST
+      /containers/create and says nothing else is detached. So when a controller abandons a volume
+      create, the engine can finish it after cleanup, and after the audit's one listing too. The
+      audit would then call the row clean and the next row's inventory would differ, which is the
+      shape of main run 42716948746. When this item is specified, settle one of two things: the
+      recorder hears out every forwarded volume create before cleanup and the audit, as T-50 does
+      for container creates, or the audit states that it cannot see a create still open and reports
+      that row as unaccounted, never as clean. Add a regression for a volume create abandoned before
+      the engine answers.
+  - id: p2-ci-proof-verdict-despite-red-engine
+    title: The ci job runs itos verify and the code proof even when an engine shard is red, and requires engine success as its last step
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 1 (egress through an allowlisting proxy): no pull request is
+      stopped by it, but each one loses a CI round whenever an engine flake and a proof failure
+      meet. Confirmed on main: the ci job's first step is Require engine success
+      (.github/workflows/ci.yml:33), so a red shard skips itos verify and itos ci run. slice-29 at
+      8e5088e has three commits with no proof verdict for that reason. A work step read 9 failed
+      shard jobs in 129 from the loop's log, and a run has three shards. Engine flakes have recurred
+      through T-31, T-42, T-49 and T-50, and slice-27, slice-28 and the credential slices add engine
+      rows. The proof is where most rework starts, so hiding its verdict costs a re-run and then
+      another attempt. No item covers it, and T-50 keeps the workflow unchanged. The position is
+      this project's own choice: T-16 (89e5389) put the gate first, T-21's spec says only that the
+      ci job must still require engine success, and features/engine_workflow_test.go:295 pins the
+      gate at ci.Steps[0]. Move the gate to the job's last step, after verify and the proof, with
+      the same env and command. The job keeps needs: [engine] and its always() guard, and release
+      keeps needing ci, engine and platform. Neither gate is weakened: the job is red whenever the
+      engine is not success, and whenever verify or the proof fails. The spec settles whether the
+      last step runs under always(), so the ci job shows both failures in one log. It is a
+      foundation task with a check, adding no product behaviour, scenario or ID. Commit the contract
+      regression red first: the gate is last, follows both commands, has no continue-on-error and no
+      false condition. The existing controls for an ignored result, a skipped guard and a lost
+      always guard stay, with new ones for a gate placed before the proof and a missing gate.
+      Explain the order in features/README.md. The cost is the proof's runner minutes on a head
+      whose engine is red for a real reason. Not for go-template-itos: the workflow the template
+      rendered here had no engine dependency before T-16, so there is nothing to backport.
+  - id: p2-harness-lists-undefined-wip-steps
+    title: A harness check lists every step no definition matches, per scenario, @wip and @engine scenarios included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      No item covers this. godog reports an undefined step only for scenarios it selects. Ordinary
+      runs exclude @wip, and @engine scenarios never run locally, so a step checkpoint can be
+      committed with steps missing and nothing says so until the coordinator's CI red dispatch comes
+      back 'undefined'. AGENTS.md does not accept that as red evidence, so each miss costs a push, a
+      dispatch and a wait. slice-27 showed it: egress.feature has twenty @wip scenarios, eight of
+      them @engine, and 171 step lines. Its checkpoint 9d06523 left ID-EGRESS-15 and 16 without
+      steps, and the implementer wrote a throwaway script to see which steps were defined. Six
+      hand-written checks already do this for one slice each, with their own tag filter and
+      hard-coded counts: TestAnchorRecoveryStepsDefined, TestLifecycleLossStepsDefined,
+      TestLifecycleNativeStepsDefined, TestDoctorStepDefinitions, TestOfflineRuntimeStepDefinitions
+      and TestSessionStepDefinitions. They share the collector at
+      features/lifecycle_harness_test.go:68. Egress has none. Wanted: one check over every feature
+      file and every tag, with no engine and no product build, that prints for each scenario ID the
+      steps matching no definition or more than one. It fails for the scenarios a selector names, so
+      an implementer and the coordinator can tell a complete checkpoint from a partial one before
+      dispatching, and it only reports the rest, since a @wip scenario may still owe steps before
+      its test commit. The spec settles whether godog's dry run or the existing collector does it,
+      and whether the six per-slice checks fold into it. It is harness work, so a ledger task with
+      checks: negative controls for an undefined and an ambiguous @wip step, committed red. Phase
+      p2: it blocks no charter step, but slice-28 and slice-30 to slice-33 each bring real-engine
+      scenarios whose red evidence is CI-only. The harness came from go-template-itos, so once it
+      lands it is a backport candidate.
+
+      Belongs inside this item, which is still todo. Its text says 'Egress has none'; that is no
+      longer true on slice-27. TestEgressNativeStepsDefined
+      (features/egress_native_isolation_harness_test.go:51) is a seventh hand-written per-slice
+      check, with its own tag filter ('@slice-27 && @engine') and a hard-coded count of 8. It needed
+      its own collector, egressDefinitions, because the shared lifecycleDefinitions.Step
+      (features/lifecycle_harness_test.go:73) requires the function's argument count to equal the
+      pattern's capture count, so it fails any definition that takes a *godog.Table after its
+      captured arguments; four egress When steps have that shape. The general check must accept a
+      trailing table (and doc string) argument, or it will misreport every table step in slice-28
+      and slice-30 to 33, and it should fold this seventh check in with the other six.
+
+      Belongs inside this item, which is still todo and already gives the harness a local selector
+      that names scenarios, @wip ones included; the same selector can serve the local red run.
+      Checked on main: AGENTS.md requires failing-then-passing evidence with @wip removed, locally
+      for non-engine scenarios, but readFeatureEnvironment (features/features_test.go:119) reads
+      ITOS_CONTAINER_RED_SCENARIOS only under CI=true, GITHUB_ACTIONS=true and a workflow_dispatch
+      event, and ordinary selection and -scenarios both exclude @wip. So the implementer takes the
+      tag out by hand, runs, and puts it back before the test commit; the work step counts that at
+      twice per round. When this item is specified, decide whether named non-engine @wip scenarios
+      can also be run locally, with @wip lifted in memory as the dispatch does, so no feature file
+      is edited. Three things constrain it. Decision 0002 and features/README.md say on purpose that
+      local contexts never read the variable and that agents never spoof the dispatch context, so
+      this needs an amendment to that decision or a local form of its own (a flag, say), not a quiet
+      widening. It must never enable the engine: @engine IDs stay skipped locally, as they are on
+      the manual platform jobs. And product children keep having the variable stripped. The work
+      step's risk, a tag left out by mistake, is partly held already: decision 0002 records that the
+      scenario-moves gate refuses a test commit that removes @wip from an existing scenario; a
+      scenario first committed without the tag is the case left. The red selector is this project's
+      own (T-21), on top of the template's harness, so if this lands it goes to go-template-itos
+      with the rest of the item.
+  - id: p2-code-proof-draw-stable-across-main-merges
+    title: The code proof's draw stays put when main is merged into an item's branch, so a repair is judged on the sites that failed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Milestone two, not blocking step 2 (credentials): items still land, but each large one pays a
+      CI round and an attempt per redraw. itos.yaml:125 seeds the proof with {base}, and itos-cc
+      ranks sites by SHA-256 over the seed and each site's identity, taking the first ten. {base} is
+      the judged range's start (ci.yml:47-55, from the pull request's base), and itos push merges
+      main into the branch on every push, so the seed moves with main. slice-29 has 18 merges of
+      main in 57 commits: nearly every pushed head drew ten fresh sites from the whole branch (20
+      production files, about 1,450 added lines), and attempts 14, 17 and 18 each began with a CI
+      survivor, the last two in different files. T-13 chose this seed to be deterministic per range
+      and to end "each push draws anew"; AGENTS.md's "the same base and eligible sites give the same
+      draw" seldom applies in practice. slice-27, slice-28 and slice-30 to slice-33 are ahead. The
+      person chooses, since it changes a gate's input: a seed that does not move with main (a
+      constant, or the item's id), so a repair head re-judges the same sites plus those of functions
+      it changed; or a manually dispatched full-range run that lists every survivor before review,
+      as T-21 did for @wip scenarios; or both. Neither is a redraw to escape a failure. The same
+      item settles one sentence in AGENTS.md: whether `itos-cc mutation list`, which runs no test,
+      may be used locally to see the sites, given that local mutation runs are forbidden.
+  - id: T-54
+    title: Each engine shard warms the engine with one create and remove before its first engine row
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p2-native-mount-evidence-credential-inspection
+    title: A CI-only tier runs credential source inspection against real bind mounts made in a private user and mount namespace
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Decisions 0025 and 0027 call native bind-mount proof "downstream CI work", and no item owns
+      it. Every alias, stacking and filesystem row of slice-29 is simulated through observation
+      seams. That gap already let one defect through: the 4096-byte row passed the disk contract
+      only because its fixture replaced readlink, while a real kernel refuses that length (fixed in
+      8f081a7). A private namespace (unshare -Urm) makes real mounts without root or Docker; the
+      implementer confirmed with it that mountinfo prints roots longer than PATH_MAX, and the
+      reviewer used it for 23 layouts. A CI tier built this way would run the disk adapter against
+      real bind aliases of checkout and protected-state descendants, file and directory mount
+      crossings, and an overlong mount root, for slice-29's rows and slice-30's reuse of the same
+      observation. It does not block charter step 2, because decision 0025 requires only synthetic
+      evidence before admission; it is the runtime evidence behind the source-exclusion claim that
+      slice-31 to slice-33 rely on. Not checked: whether the hosted ubuntu-latest runner permits
+      unprivileged user namespaces (Ubuntu 24.04 restricts them through AppArmor by default); the
+      runner has sudo if it does not.
+  - id: slice-34
+    title: Run provides an isolated, writable harness home
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: []
+    kind: slice
+    why: >
+      Was p1-harness-owned-home.
+      Specify the storage lifetime first: the registry recommends a per-checkout volume, but volume
+      versus tmpfs remains unsettled. Cover approved settings, non-root access, project isolation,
+      ownership, bounded creation and cleanup/recovery consistent with the chosen lifetime. Never
+      mount the host home or place harness state in the checkout. Keep shared storage behavior under
+      an engine package and command integration in existing slices. Record the architecture change.
+      Add black-box scenarios, including executable /tmp proof; its current configuration already
+      omits noexec. Real-engine red/green evidence runs only in CI. Broken down from null.
+  - id: slice-35
+    title: Codex starts with isolated state and unwanted startup services disabled
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Was p1-harness-codex-home-seeding.
+      Seed the container-owned home with Codex update checks, analytics, plugins and its own sandbox
+      disabled, as the charter requires. Specify initialization and repeat-run behavior without
+      changing literal workload argv or executing checkout code on the host. Keep authentication
+      delivery in slice-32 and follow the charter's dedicated-directory decision rather than that
+      item's stale single-file wording. Prove settings and startup behavior with black-box scenarios
+      and controlled endpoints, without real accounts or credentials. Broken down from null.
+  - id: slice-36
+    title: Claude starts with isolated state and onboarding already completed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Was p1-harness-claude-home-seeding.
+      Seed Claude's onboarding state so first startup needs no onboarding interaction or incidental
+      startup network access. Specify repeat-run behavior and preserve project isolation. Keep token
+      delivery in slice-31; this item owns nonsecret harness initialization. Use shared engine ports
+      and named adapters, without importing another slice. Prove behavior through black-box
+      scenarios with synthetic inputs and controlled endpoints; real-engine evidence belongs only in
+      CI. Broken down from null.
+  - id: T-55
+    title: Each engine shard's warm-up sends the product's own create, timed beside the plain one
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [T-54]
+    kind: task
+  - id: T-56
+    title: Add shared terminal ports, adapters and contract tests
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: []
+    kind: task
+  - id: slice-37
+    title: Run an owned foreground workload with a TTY
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-56]
+    kind: slice
+    why: >
+      Was p1-run-interactive-terminal.
+      Extend the run slice and shared session engine with terminal attachment, initial dimensions,
+      resizes and Ctrl-C as input. Specify terminal selection and JSON refusal before
+      implementation. Restore the terminal and stop the workload after client disconnect using
+      slice-12's bounded cancellation and ownership rules; preserve noninteractive behavior and exit
+      precedence. Require black-box red/green scenarios, with real-engine evidence only in CI.
+      Broken down from p1-interactive-tty.
+  - id: slice-38
+    title: Execute literal argv within a running owned session
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      Was p1-exec-owned-session.
+      Implement internal/slices/exec with thin command handling and shared session-engine
+      operations. Validate ownership and the live foreground workload; inherit frozen policy,
+      identity and mounts without extending session lifetime. Cover exit status, cancellation,
+      disconnect, concurrent stop and foreground exit. Specify how an exec process is terminated
+      despite the absence of an exec-signal endpoint before implementing. Require black-box
+      scenarios and CI-only real-engine evidence. Broken down from p1-interactive-tty.
+  - id: slice-39
+    title: Attach an interactive TTY to an owned exec command
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-56, slice-38]
+    kind: slice
+    why: >
+      Was p1-exec-interactive-terminal.
+      Combine the exec slice with shared terminal support for raw input, initial dimensions, resizes
+      and Ctrl-C as input. Specify terminal selection and JSON refusal. Prove terminal restoration,
+      bounded disconnect termination and removal of active exec workloads when the foreground
+      session ends. Keep shared behavior in engine packages without importing the run slice. Require
+      black-box red/green scenarios and CI-only real-engine evidence. Broken down from
+      p1-interactive-tty.
+  - id: T-57
+    title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: []
+    kind: task
+  - id: p2-overlap-06-nondeterministic
+    title: ID-OVERLAP-06 failed once on main on a tree that had just passed it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      main's run 43802914436 at a36768a, slice-27's merge commit, failed ID-OVERLAP-06 (Native
+      nested refusal preserves the running worker and releases after cleanup) with 'admitted
+      workload is not independently active with its original full ID', beside the known
+      ID-ANCHORS-09 first-row failure. The pull request's head e73a1bd, which differs from a36768a
+      by one line of tasks/asks.yaml, had passed the same shard 25 minutes earlier, and the re-run
+      of the failed jobs passed. The other shard took 144 s of its 180 s gate in that run, with
+      slice-27's egress rows now live, so a timing dependence under a fuller shard is the first
+      thing to check. One occurrence; record the next with its run before repairing anything.
+  - id: p2-repair-platform-ci-fixtures
+    title: Repair shell and Windows assumptions in portability fixtures
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Preserve the inherited checks and T-12's manual macOS/Windows validation by repairing
+      Bash-4-only fixture tooling and Windows executable/error assumptions. This is deferred
+      foundation maintenance: no supplied evidence shows it blocks the charter's current
+      harness-home step. Require focused regressions and platform CI evidence without weakening
+      assertions or claiming additional container-host support.
