@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -99,8 +100,12 @@ func (w *world) approvalOracle() error {
 		a.settings["policy"].(map[string]any)["version"] = a.policyVersion
 	}
 	if a.allow != nil {
+		// Canonical approval bytes sort names independently of the request's
+		// order. Keep the input intact for the scenario's later comparisons.
+		allow := slices.Clone(a.allow)
+		slices.Sort(allow)
 		a.settings["profile"] = "allowlist-v1"
-		a.settings["policy"].(map[string]any)["network"] = map[string]any{"mode": "allowlist", "allow": a.allow}
+		a.settings["policy"].(map[string]any)["network"] = map[string]any{"mode": "allowlist", "allow": allow}
 		a.settings["proxy"] = map[string]any{"image": busyboxFixturePin}
 	}
 	a.fingerprint = "sha256:" + approvalHash(a.settings)

@@ -27,8 +27,8 @@ type Proxy struct {
 	names   []string
 }
 
-// NewProxy returns a fake that fails with fixture.Failure when it is a list
-// failure, and otherwise writes the ready record to fixture.Log.
+// NewProxy returns a fake that returns a scripted failure before ready, or
+// writes the ready record to fixture.Log and serves until cancellation.
 func NewProxy(fixture ProxyFixture) *Proxy { return &Proxy{fixture: fixture} }
 
 // Names returns the names the last Serve was given.
@@ -43,8 +43,8 @@ func (p *Proxy) Serve(ctx context.Context, names []string) error {
 	p.mu.Lock()
 	p.names = slices.Clone(names)
 	p.mu.Unlock()
-	if p.fixture.Failure == port.ListInvalid {
-		return port.ListInvalid
+	if p.fixture.Failure != "" {
+		return p.fixture.Failure
 	}
 	ready := port.Record{Schema: 1, Seq: 1, Time: time.Now().UTC().Format(time.RFC3339), Event: port.Ready}
 	line, _ := json.Marshal(ready)

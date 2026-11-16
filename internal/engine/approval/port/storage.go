@@ -1,6 +1,15 @@
 package port
 
-import "context"
+import (
+	"context"
+	"strings"
+)
+
+// ExecutionName admits only the per-intent runtime observation sidecar.
+func ExecutionName(name string) bool {
+	token, ok := strings.CutSuffix(name, ".egress.json")
+	return ok && len(token) == 64 && strings.Trim(token, "0123456789abcdef") == ""
+}
 
 // Storage shares the approval root's pinned, no-follow protections with its
 // snapshots and ownership intents. It does not resolve current approval.
