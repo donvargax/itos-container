@@ -298,3 +298,6 @@ questions:
   - id: q-74
     item: "slice-27"
     question: "slice-27: the implementer (attempt 6) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-27-implementer-6.result.json"
+  - id: q-75
+    item: "T-54"
+    question: "T-54: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-54-implementer-2.result.json"
