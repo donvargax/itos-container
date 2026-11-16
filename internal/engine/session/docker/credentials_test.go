@@ -229,7 +229,11 @@ func TestCredentialMountContract(t *testing.T) {
 }
 
 func TestCredentialMountInspectionHardening(t *testing.T) {
-	for _, fault := range []string{"tty", "closed stdin", "reusable stdin", "extra tmpfs", "tmpfs permissions", "missing tmpfs", "misplaced tmpfs"} {
+	for _, fault := range []string{
+		"tty", "closed stdin", "reusable stdin",
+		"extra tmpfs", "tmpfs permissions", "missing tmpfs", "misplaced tmpfs",
+		"logging driver", "started pid", "started time", "running", "exited",
+	} {
 		t.Run(fault, func(t *testing.T) {
 			fixture := credentialSDKFixture(t)
 			c, fail := fixture.Engine.OpenRun(t.Context(), fixture.Binding)
@@ -375,6 +379,21 @@ func credentialDefect(r *container.InspectResponse, fault string) {
 		return
 	case "misplaced tmpfs":
 		r.HostConfig.Tmpfs = map[string]string{"/other": "rw,nosuid,nodev,mode=1777"}
+		return
+	case "logging driver":
+		r.HostConfig.LogConfig.Type = "json-file"
+		return
+	case "started pid":
+		r.State.Pid = 1234
+		return
+	case "started time":
+		r.State.StartedAt = "2026-11-15T00:00:00Z"
+		return
+	case "running":
+		r.State.Running = true
+		return
+	case "exited":
+		r.State.Status = "exited"
 		return
 	}
 	if strings.HasPrefix(fault, "host ") {
