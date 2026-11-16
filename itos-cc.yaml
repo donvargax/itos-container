@@ -114,3 +114,12 @@ mutation:
       replacement: "||"
       reason: The earlier length guard requires 1+n mounts for n credential arguments. Every accepted loop iteration consumes either the single anchor (guarded by !anchor) or one previously unseen credential kind. There are at most n such kinds; duplicates only reduce that bound and force rejection. Reaching this return therefore proves anchor is true and len(seen) equals n for every input. Both operands are true, so replacing && with || changes no result or effect. No behavioral test can distinguish it.
       line_text: return anchor && len(seen) == len(credentials)
+    - file: internal/engine/session/port/egress_transition.go
+      function: github.com/donvargax/itos-container/internal/engine/session/port.Record#egressTransition
+      hash: 0576ee156823f24b
+      line_in_function: 27
+      column: 19
+      original: "||"
+      replacement: "&&"
+      reason: After schema 4 normalization, the earlier branches already handle two non-3 schemas and every schema-2 origin, and the next record has passed ValidEgressShape. Replacing this first || with && can proceed further only when exactly one remaining schema is 3 and the original record also has valid egress shape. The non-3 record must then have an empty EgressRecord, whereas the schema-3 record must have all three nonempty resource names. The first differing resource therefore fails the unchanged name-equality check below. Both versions return false with no effects. When both schemas are 3 the unchanged original-shape guard decides identically. No input changes the transition result.
+      line_text: if r.Schema != 3 || n.Schema != 3 || !r.ValidEgressShape() {
