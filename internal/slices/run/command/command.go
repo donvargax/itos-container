@@ -34,7 +34,7 @@ func (CLI) Help() string {
 	return "\nUse itos container run -- <command> [arguments...].\n\n" +
 		"    Wrapper --json or ITOS_JSON=1 returns one schema-1 refusal object.\n" +
 		"    Arguments after -- belong only to the workload.\n" +
-		"    Run the literal command in one approved offline worker; streams remain separate.\n" +
+		"    Run the literal command in one approved offline or allowlist worker; streams remain separate.\n" +
 		"    The worker uses the frozen workspace, host UID:GID and temporary HOME/TMPDIR.\n" +
 		"    A Unix socket anywhere in the checkout, including .git, refuses startup before worker creation.\n" +
 		"    Host sockets created or swapped into the checkout after inspection remain reachable during a run.\n" +
@@ -233,6 +233,8 @@ func Classify(err error) (int, []cli.Problem) {
 			code, cause = 70, "internal"
 		case session.Environment, session.EnvironmentMissing, session.MountUnavailable:
 			code, cause = 3, "environment"
+		case session.ProxyFailed, session.ProxyExited:
+			code = 1
 		case session.IsolationUnverified:
 			code = 1
 		case session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,

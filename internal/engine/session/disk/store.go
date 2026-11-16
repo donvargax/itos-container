@@ -124,6 +124,9 @@ func (s Store) newIntent(ctx context.Context, durable approval.Durable, token, s
 	if old != nil {
 		return nil, port.Refused
 	}
+	if failure = t.publishExecution(durable.ProxyImageID); failure != "" {
+		return nil, failure
+	}
 	if failure = t.validateRecord(); failure != "" {
 		return nil, failure
 	}
@@ -216,7 +219,11 @@ func (t *intent) snapshot() (port.Binding, port.Outcome) {
 	if data == nil {
 		return port.Binding{}, port.Invalid
 	}
-	return t.store.Codec.Snapshot(data)
+	b, failure := t.store.Codec.Snapshot(data)
+	if failure != "" {
+		return port.Binding{}, failure
+	}
+	return t.execution(b)
 }
 func (t *intent) validateBinding() port.Outcome {
 	if failure := t.validateRecord(); failure != "" {

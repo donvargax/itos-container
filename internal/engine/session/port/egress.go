@@ -13,6 +13,24 @@ const (
 
 type EgressGrant struct{ Names, ImageID string }
 
+type EgressDisclosure struct {
+	Profile     string   `json:"profile"`
+	Allow       []string `json:"allow"`
+	Limitations []string `json:"limitations"`
+}
+
+func (g EgressGrant) Disclosure() *EgressDisclosure {
+	if g == (EgressGrant{}) {
+		return nil
+	}
+	return &EgressDisclosure{Profile: "allowlist-v1", Allow: g.List(), Limitations: []string{
+		"No TLS interception: the proxy verifies the CONNECT name and the first ClientHello's SNI.",
+		"It cannot see the HTTP Host inside TLS or anything after that hello, a second hello after a HelloRetryRequest included, so fronting remains a limit, as does a hello the upstream reads differently, and it cannot stop data sent to an allowed service.",
+		"Clients that omit SNI or send ECH, and SSH over 443, are refused.",
+		"The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one.",
+	}}
+}
+
 func (g EgressGrant) List() []string {
 	if g.Names == "" {
 		return nil

@@ -346,15 +346,15 @@ Feature: Review and record approval of exact settings
   # image digest, and put the handshake guarantee and the refusal log's limit in approve's
   # presentation. If the person overturns that record, the profile's text and the proxy member
   # change with it. This slice covers records, presentation and refusal only. Nothing starts a
-  # proxy, and while run refuses version 2 nothing here opens a route. Every decision below
-  # belongs to this spec.
+  # proxy in slice-26. Slice-27 now wires these approvals into run; egress.feature
+  # owns the runtime scenarios and the supersession of the temporary gates.
   #
   # No new slice: this adds to what exists. internal/engine/approval takes the profile, valid(),
   # the changed-field comparison and the review and status lines. internal/engine/policy exports
   # the host-name shape check that valid() calls, and internal/engine/readiness takes the gate's
   # field. internal/slices/run/domain takes only ApprovalRefusal's wording, from what the view
-  # carries. The approve domain enforces q-52; cmd/itos-container opts doctor and approve
-  # into version 2 and holds the command summary. The approve command holds detailed help.
+  # carries. The approve domain enforces q-52; all command assemblies now share
+  # version-2 readiness. The approve command holds detailed help.
   #
   # Canonical settings v1 gain a second profile:
   # {schema:1, profile:"allowlist-v1", host:{uid,gid},
@@ -384,9 +384,9 @@ Feature: Review and record approval of exact settings
   # proxy.image is T-38's inert root filesystem, T-20's pinned reference. It is a product
   # constant with one definition, in the approval codec or its port: no policy, manifest, flag
   # or environment changes it, and ID-POLICY-53 already refuses a proxy key. Approval binds the
-  # literal reference and inspects nothing. No command here uses the image, so doctor and approve
-  # add no Engine API request, which ID-APPROVAL-36's journal step holds. Slice-27 owns checking
-  # that it is cached and naming the exact pull. A record that bound another digest is valid and
+  # literal reference. Slice-27 adds read-only inspection of the cached proxy
+  # image and its exact pull guidance; the journal assertion permits only that pin.
+  # A record that bound another digest is valid and
   # reads as changed at /proxy/image, so a later release that moves the constant needs a new
   # approval.
   #
@@ -416,22 +416,11 @@ Feature: Review and record approval of exact settings
   # under 530 KB and a 64 KiB manifest escapes to under 400 KB, so no list the policy admits
   # produces a record over the store's 1 MiB limit.
   #
-  # Run keeps refusing every valid version 2 file until slice-27, whatever its mode: with
-  # policy.version at /version, before the manifest, the engine and host state, and in the same
-  # words, as ID-POLICY-62 holds. It has no proxy to start. The branch that refuses, which slice-25
-  # put in InspectBeforeEngine in internal/engine/readiness/domain/inspect.go, also stops doctor
-  # and approve, which share that call. It moves behind an Inspector field whose zero value
-  # refuses. cmd sets the field in the doctor and approve assemblies and in no other, never for
-  # run, so a forgotten wiring refuses instead of opening, and
-  # TestValidVersion2PolicyIsRefusedBeforeAnyLaterStage keeps holding the zero value. An offline
-  # approval can no longer match an allowlist request, since profile and fingerprint differ, and
-  # even a mis-wired gate opens no route: session's adapters keep NetworkMode none and VerifyRun
-  # enforces it.
+  # Slice-27 removes the temporary version-2 gate and ID-APPROVAL-51/ID-POLICY-62.
+  # EGRESS-01 proves that run explains a changed list before opening the engine;
+  # EGRESS-02/03 prove matching allowlist and version-2 offline runs. No new profile
+  # or consent is required when the fingerprint has not changed.
   #
-  # "Run refuses with the change explained" (the registry's why, contract AC-02) meets
-  # ID-POLICY-62: a version 2 file never reaches run's approval comparison, so run cannot explain
-  # a changed list until slice-27 lifts that refusal. Doctor and approve explain it now, and
-  # slice-27's spec must prove run does. What run explains here is every comparison it can reach:
   # run.approval-changed names the changed canonical fields, sorted and comma separated, as "run
   # approval changed at <pointers>; use itos container approve". Pointers only, never values:
   # ApprovalRefusal carries no request contents, containerEnv can hold anything, and doctor and
@@ -452,7 +441,7 @@ Feature: Review and record approval of exact settings
   #
   # The implementing commit also adds tests for what no scenario here can hold, each at the tier
   # that can see it, since a domain test may not import the codec. An allowlist candidate and a
-  # record with another list, which the black box cannot reach while run refuses version 2:
+  # record with another list is now also covered by black-box EGRESS-01:
   # canonical's own test gets /policy/network/allow from the local comparison, and approval's
   # domain test, over the fake codec, has Preflight carry the codec's paths onto the view without
   # opening the engine. A selection that answers changed, which ID-RUN-12's race step could reach by
@@ -471,13 +460,11 @@ Feature: Review and record approval of exact settings
   #   It cannot see the HTTP Host inside TLS or anything after that hello, a second hello after a HelloRetryRequest included, so fronting remains a limit, as does a hello the upstream reads differently, and it cannot stop data sent to an allowed service.
   #   Clients that omit SNI or send ECH, and SSH over 443, are refused.
   #   The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one.
-  #   Run cannot start this profile yet: it refuses every version 2 policy for now.
   # The handshake and log lines are T-38's disclosure, and slice-27 repeats them in status and
   # docs/security.md. Plain approve status prints the same lines from allowlist-v1: down, after
-  # the canonical settings, so an unchanged approval is told too. Slice-27's feat commit removes
-  # the last line and the rows that read it, in the commit that makes the lines above it true of a
-  # run: they speak of the proxy in the present tense, which only that last line keeps honest until
-  # then. An offline-v1 candidate keeps its review and status exactly at either version, including
+  # the canonical settings, so an unchanged approval is told too. Slice-27 removes
+  # the temporary run-refusal line and its scenario rows as runtime support lands.
+  # An offline-v1 candidate keeps its review and status exactly at either version, including
   # "Effective offline settings:" and "network none", which ID-APPROVAL-44 and ID-APPROVAL-57 hold.
   # JSON gains nothing: effective already carries the profile, the list and the proxy image, and
   # approve's JSON stays one object with no prose. Ordinary doctor prints the same canonical
@@ -496,35 +483,12 @@ Feature: Review and record approval of exact settings
   # neither prompts nor rewrites. No keys or signatures. docs/security.md records the
   # remaining gap: an unsandboxed host agent can fake a terminal.
   #
-  # What this makes untrue. ID-POLICY-60 and ID-POLICY-61 (ordinary doctor and approve refuse
-  # version 2) were written to last until this slice. The feat commit removes both and says so,
-  # as only a feat or a fix may. Their behaviour moves here: a matching offline approval beside an
-  # allowlist request is ID-APPROVAL-40's first row, the offline fingerprint ID-APPROVAL-47's first
-  # row and the absent manifest ID-APPROVAL-55's last row. ID-POLICY-62, ID-POLICY-77 and
-  # ID-POLICY-78 stay as they are. The same commit renames this feature, whose title says offline,
-  # and corrects the comments that still state the old rule: three in features/policy.feature
-  # ("Ordinary doctor says the same (ID-POLICY-77), though it refuses version 2 for now", the
-  # paragraph "Only doctor --policy-only and --manifest-only read version 2 for now", and "The next
-  # three scenarios" above ID-POLICY-60), the one at the refusal in
-  # internal/engine/readiness/domain/inspect.go, which moves with the gate, and the one above
-  # TestValidVersion2PolicyIsRefusedBeforeAnyLaterStage in inspect_policy_test.go beside it, which
-  # says canonical settings v1 describe an offline profile.
-  #
-  # The implementing pull request also updates docs/CLI.md and docs/CONFIG.md, which say that
-  # nothing approves a list and that ordinary doctor and approve refuse version 2, and the approve
-  # help line (ID-APPROVAL-56). It records a decision for the profile, the policy.version choice,
-  # the gate and run's wording, and brings three texts of arc42 up to date, as the charter's
-  # "Architecture is a hypothesis" asks: the internal/engine/approval row, T-38's slice-26 row, and
-  # Solution strategy's sentence that doctor, approve and run "must agree on accepted/rejected
-  # inputs and effective settings". The gate contradicts that sentence until slice-27, because
-  # doctor and approve accept a valid version 2 file that run refuses, so the decision names that
-  # section and says why. docs/security.md records q-52 here; runtime disclosure remains with slice-27.
-  #
-  # A nil names port panics on the first allowlist, in a file a hostile checkout controls. Both
-  # sites are assembled in cmd/itos-container/main.go, and the gate above re-wires one of them, so
-  # the feat commit adds a test in cmd/itos-container over that assembly: every Inspector and
-  # inspection.Policies it builds has Names set, and only doctor's and approve's read version 2.
-  # The scenarios reach each site through the binary; this test fails where the wiring is.
+  # Supersessions are recorded in decisions 0026 and 0028. Slice-26 removed
+  # ID-POLICY-60/61 and the three old policy comments. Slice-27 removes the remaining
+  # version-2 run gate, ID-POLICY-62 and ID-APPROVAL-51; all invalid-policy checks stay.
+  # CLI/CONFIG/security and arc42 reflect the now-shared doctor/approve/run settings.
+  # Cmd tests require Names on every inspector, including file-only Policies, and
+  # the executable/image observers on ordinary readiness. Version 3 remains gated.
   #
   # Scenarios below reuse existing steps except these, which only write fixtures or read output:
   # - "the checkout requests the allowlist "<names>"" writes version 2, the fixture's manifest
@@ -827,7 +791,6 @@ Feature: Review and record approval of exact settings
       | It cannot see the HTTP Host inside TLS or anything after that hello, a second hello after a HelloRetryRequest included, so fronting remains a limit, as does a hello the upstream reads differently, and it cannot stop data sent to an allowed service. |
       | Clients that omit SNI or send ECH, and SSH over 443, are refused. |
       | The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one. |
-      | Run cannot start this profile yet: it refuses every version 2 policy for now. |
     And the review before its prompt lists exactly the requested host names
     And the review before its prompt does not say "network none"
     And the review before its prompt does not say "Effective offline settings"
@@ -854,7 +817,6 @@ Feature: Review and record approval of exact settings
       | allowlist-v1:                     |
       | This profile grants network       |
       | No TLS interception               |
-      | Run cannot start this profile yet |
     And the review before its prompt lists exactly the requested host names
     And the review before its prompt does not say "network none"
     And the sole active approval is the exact candidate at generation "8" in protected host state
@@ -956,7 +918,6 @@ Feature: Review and record approval of exact settings
       | It cannot see the HTTP Host inside TLS or anything after that hello, a second hello after a HelloRetryRequest included, so fronting remains a limit, as does a hello the upstream reads differently, and it cannot stop data sent to an allowed service. |
       | Clients that omit SNI or send ECH, and SSH over 443, are refused. |
       | The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one. |
-      | Run cannot start this profile yet: it refuses every version 2 policy for now. |
     And its standard output lists exactly the requested host names
     And its standard output does not say "network none"
     And its standard output does not say "Effective offline settings"
@@ -1250,31 +1211,7 @@ Feature: Review and record approval of exact settings
     And the protected run snapshot is exactly the independently calculated approval at generation "1"
     And only protected snapshot intent and public session records were added without chown or checkout changes
 
-  # The first half passes today: ID-POLICY-62 holds it beside an offline approval, and here the
-  # approval is for this very request. The doctor half is what fails before the work.
-  @slice-26 @ID-APPROVAL-51 @local-engine-fixture @linux
-  Scenario Outline: An approved version 2 request still cannot start a run
-    Given an approval checkout and isolated host state
-    And the checkout requests <request>
-    And a seeded matching approval at generation "1"
-    And the run preflight files are snapshotted
-    When itos-container runs with "run -- fixture-workload"
-    Then run reports preflight problem "policy.version" with exit 2 and subject "/version"
-    And its error output says "doctor --policy-only"
-    And the Engine API journal is empty
-    And no endpoint connection was attempted
-    And the active approval bytes and generation are unchanged
-    And run preflight has changed no checkout or host state
-    When itos-container runs with "doctor --json"
-    Then doctor reports the independently calculated fingerprint and complete effective settings
-    And its approval status is "matching"
-    And it exits with code 0
-
-    Examples:
-      | request                                              |
-      | the allowlist "api.example.com registry.example.org" |
-      | offline at policy version "2"                        |
-
+  # EGRESS-02/03 supersede the temporary ID-APPROVAL-51 version-2 run gate.
   # A version 1 file is the one request run can compare with an allowlist approval today. The
   # local comparison settles it, so no engine is needed.
   @slice-26 @ID-APPROVAL-52 @local-engine-fixture @linux

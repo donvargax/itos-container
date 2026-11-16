@@ -7513,35 +7513,307 @@
   type: ci
   title: Each engine shard warms the engine with one create and remove before its first engine row
   why: >
-    No item owns this once T-50 lands. T-50 stops the leak and names the failure. Its fourth rule
-    leaves the slow first create to a remedy read from measured intervals, and its attempt 3
-    returned that the one limit it may move is not enough (q-63). In run 43543693012 at 73cbd13 all
-    three shards failed at their first engine row (ID-OFFLINE-29, ID-ANCHORS-09, ID-LIFECYCLE-08),
-    each controller stopping with run.call-timeout, operation create response. The lifecycle row's
-    intervals: image inspection 10 ms, the recorder's checks 0.7 ms, the engine's HTTP 201 2.329 s
-    after forwarding and 3.729 s after controller start, 1.39 s of which had passed before the call
-    began. That outlives the fixture's 1-second call and also its 3-second startup budget, which
-    starts before preflight (internal/slices/run/command/command.go:80), so a longer call alone
-    turns the failure into a startup timeout. The same first rows failed in 5 of 6 shard jobs on
-    slice-29's and T-51's first go1.27.4 runs, and 9 in 129 are on record with a warm cache. Each
-    costs a re-run, and three have cost an implementer attempt and a question (q-59, q-61, q-63).
-    Choose the remedy in the spec, from more than this one cold-cache sample: the two create lines
-    itos cut from that run, and the passing-row intervals and I/O pressure readings that
-    p1-engine-timing-notice-every-run is to publish. If limits are the remedy, move call and startup
-    together, only through engineBudgetTree, each with a delayed-success and an expiry control,
-    T-42's cut and restart-refusal controls still valid, and the cost measured in CI against the
-    180-second shard gate, since engineQuietInterval follows the larger limit. A warm cache is
-    p2-ci-go-build-cache-rolling-key's and does not explain the warm-cache failures. No retry,
-    skipped row, relaxed assertion or production default change. Phase p2: a re-run clears each
-    failure, so it blocks no step of milestone two, but it taxes every pull request of steps 1 and
-    2. A warm cache does not prevent it. main's run 43546719957 at bcb9be2 (a docs commit, go1.27.3)
-    restored the setup-go cache, compiled the engine suite in 4.9 s, and still failed the lifecycle
-    shard's first engine row (ID-LIFECYCLE-08) with run.call-timeout on operation create, then
-    cleanup HTTP 409. So the slow first create of a job is the engine's, not the compile's:
-    p2-ci-go-build-cache-rolling-key alone is not the remedy. The existing todo item already owns
-    the measured remedy for legitimate first-create latency exceeding shortened fixture budgets.
-    T-50 is merged but explicitly leaves this remedy open. Settle it within this item using measured
-    intervals; any budget changes must address call and startup together, preserve timeout controls,
-    and satisfy the CI shard time gate.
+    The coordinator's 2026-11-16 01:20 UTC decision settles the remedy and supersedes this entry's
+    earlier request to choose one from further measurements. q-65 left that choice until a run
+    showed where the time went; T-50 now supplies those intervals, and the person's instruction of
+    2026-11-16 is to keep the loop moving. ID-ANCHORS-09, the other shard's first engine row, failed
+    with run.call-timeout on operation create in T-48 runs 43773770191 and 43782675588 and main's
+    docs-only run 43782315175. Arrival-to-forward was under 1 ms; forward-to-answer was 1.08 s,
+    0.99 s and 1.08 s against the fixture's 1-second call. The coordinator identifies the engine's
+    first create of the job as the whole cost. main's docs-only run 43782588962
+    failed ID-LIFECYCLE-08, the lifecycle shard's first engine row, with the controller gone before
+    the handle barrier at 3.9 s. Earlier warm-cache failures and T-50's cleanup repair did not
+    remove this first-row latency. This task maintains the milestone's CI evidence; it adds no
+    product behaviour, Gherkin scenario or ID.
+
+    Each engine shard job must warm the engine exactly once before its first engine row by
+    creating and removing one container from the prepared fixture image through the engine,
+    within a fixed bound, and printing its duration as a timing line. A failed or timed-out
+    warm-up fails preparation with a diagnostic of its own. No product default, fixture call or
+    startup limit, assertion, retry or skipped row changes. In particular engineCallBudget stays
+    1 second, engineStartupBudget stays 3 seconds, and engineBudgetTree, engineQuietInterval,
+    T-42's timeout and restart-refusal controls and T-50's recorder/cleanup allowances stay intact.
+    Do not reopen the remedy, tune limits, alter the Go cache or rearrange scenario order here.
+    If a first row still exceeds the call limit after warm-up, report the warm-up duration and
+    that row's arrival-to-forward, forward-to-answer and controller-start intervals, then stop.
+    Moving call and startup limits together is the next remedy for the coordinator to choose,
+    not an option this item authorizes.
+
+    Put the warm-up at the end of tools/bin/engine-fixture prepare, after smoke and registry
+    removal and the final cached_fixture check, before the sole GITHUB_OUTPUT append. The
+    existing engine-shard matrix already calls prepare unconditionally before Engine scenarios
+    in each of offline, lifecycle and other; keep that workflow and its failure propagation.
+    The existing registry and smoke creates remain unchanged and do not replace the additional
+    measured create/remove. Add no per-row warm-up, separate job, retry, sleep or start/exec of
+    the warm-up container. Retain the cold digest pull, smoke execution and all their assertions.
+
+    The warm-up uses the exact validated repository@sha256 reference, with --pull never, network
+    none, read-only root, all capabilities dropped, no-new-privileges and the prepared numeric
+    non-root UID/GID, with no host mount, published port, declared volume or new image. Reuse d
+    for every engine call, preserving its local Unix endpoint, cleared overrides and disposable
+    empty Docker configuration. Give the container its own warmup name containing the run and
+    attempt, distinct from smoke and registry, with the existing io.itos.engine-fixture owner
+    label. Record warmup.intent before create and warmup.cid through --cidfile. Extend the
+    existing remove_container and cleanup paths for that kind, checking the recorded name,
+    immutable built image ID, owner label and allowed mounts exactly as for smoke. Require removal
+    and the existing exact-absence inspection before reporting success; an inspection transport
+    failure is not absence. A create interrupted before its CID is recorded remains recoverable
+    by the existing recorded-name/image/label checks. Never prune, remove an unowned object or
+    remove shared pinned images. The failure trap and final always() cleanup must also attempt
+    the warm-up resource, while preserving the original preparation failure and trying the other
+    recorded resources. Those existing cleanup attempts are not retries of warm-up or a row.
+
+    Bound the complete warm-up create, ownership inspection, removal and absence verification
+    together to ten seconds, using the existing coreutils timeout convention of TERM at 9s and
+    KILL after 1s. This is a new preparation-only bound, inside the unchanged 180-second prepare
+    allowance; keep the separate 30-second failure cleanup and all workflow timeouts unchanged.
+    Time the bounded operation from outside its timeout child, using a monotonic source as the
+    workflow's engine_now does, so timeout termination still yields a result. Print exactly one
+    line for each attempted warm-up, on success or failure, in the form
+    engine warm-up timing: duration_ms=<nonnegative integer> outcome=<passed|failed>.
+    Measure through removal verification, excluding subsequent failure cleanup. An unavailable or
+    backwards clock reports duration_ms=unknown and fails with a warm-up timing diagnostic.
+    A nonzero command, timeout, invalid identity, failed removal verification or timing-output
+    failure must fail preparation, not be hidden by a later successful command or cleanup.
+    Diagnostics begin engine-fixture: warm-up and identify the failing stage and status or
+    expected/observed value; timeout explicitly names its ten-second bound. Do not dump complete
+    image configurations, environments, credentials or shell traces. Publish no fixture outputs
+    on a warm-up failure, and never print outcome=passed unless the whole operation succeeded.
+
+    Use the already required Bash, coreutils timeout, Docker CLI and jq, plus Linux's existing
+    monotonic uptime source; no new third-party dependency, service, Go package or product code is
+    needed. Put the reusable timing/timeout functions in a definitions-only shell library
+    tools/lib/engine-fixture-warmup.sh, sourced by the driver, so ordinary tests can exercise that
+    exact code with harmless child commands without accessing an engine. Sourcing it performs
+    no engine operation. Keep the guarded prepare/cleanup entry point and its CI/native-host
+    checks; do not introduce a driver test mode, fake Docker transcript or spoofed CI variables.
+    Update features/README.md's Cached fixture protocol to describe the added phase, its bound,
+    timing, failure and cleanup obligations, without claiming that a local test proves runtime
+    warm-up or that one green run eliminates every latency failure.
+
+    Add TestEngineFixtureWarmup in features/engine_fixture_warmup_test.go, following the fixture
+    tool tests already under features/, not the placeholder go test ./tools/... command. Its first
+    assertion checks the actual prepare path for the additional bounded warm-up before output
+    publication, so the current helper fails at that assertion before loading any new library.
+    Commit the regression first in test --item T-54, report that assertion-level red result, then
+    implement. Source integration checks must cover the executable call, exactly-once ordering,
+    exact prepared-image and d wiring, hardening, timeout and failure propagation, intent/CID and
+    cleanup integration. Negative source fixtures must reject a missing, duplicated or late call,
+    an unbounded call, a swallowed failure, early outputs, omitted cleanup and wrong image or
+    ownership checks. Comments or unused strings containing the expected words must not pass.
+    Retain TestEngineFixtureWorkflow's checks that every shard prepares before scenarios and that
+    neither preparation nor cleanup failures are ignored; do not weaken existing negative controls.
+
+    Exercise the shared timing/timeout wrapper itself with harmless successful, nonzero and
+    hanging child commands, never Docker or the prepare/cleanup driver. Verify one timing line,
+    nonnegative measured elapsed time, truthful outcome, distinct warm-up failure/timeout messages
+    and nonzero status on failure, including timing-read/output failures. The timeout control
+    includes a child ignoring TERM so the KILL bound is checked. A shared helper may accept short
+    durations for these controls; the source integration check pins the real call to 9s plus 1s.
+    Use deterministic supplied clock readings for formatting and backwards/unavailable-clock
+    controls, and a generous outer process deadline so a missing timeout fails instead of hanging
+    the test runner. These are tool regressions, not engine or isolation evidence. Preserve the
+    existing manifest/config identity, cached-image, smoke and post-push diagnostic regressions.
+
+    The done_when command lists the required new regression and explicitly fails if it is absent,
+    then runs it and the existing TestEngineFixture tests without a race detector or engine access.
+    At specification baseline 176f2ad164712dc2f387c461cdb5dc394b22d373 the discovery guard exits 1
+    because TestEngineFixtureWarmup does not exist; this is missing-work evidence, not assertion-level
+    red. The current helper has no additional warm-up phase, timing line or warm-up-specific failure
+    handling, so the implementer's first source assertion must expose that before repair. The
+    existing TestEngineFixture selection passed locally in 1.118 s; that is preservation, not
+    proof of this change. Keep
+    this focused check in the existing task/ordinary-test CI tier, with no new workflow or nightly
+    gate. Let configured hooks and CI run wider checks; never run the full features race detector.
+
+    Completion also requires the coordinator's actual pushed-head CI to show, in all three native
+    Linux amd64 engine shards, one successful warm-up timing line before any engine row, successful
+    first rows and the complete unchanged live selection, and successful final fixture cleanup.
+    Retain each shard's tested SHA, warm-up duration and existing compilation/step/row timings;
+    the Engine scenarios step must still satisfy its 180-second gate. Preparation remains outside
+    that step as it is today, with its own unchanged total bound. Runtime evidence comes only
+    from those existing CI jobs; a second prepare in a task check would collide with the ownership
+    record and is forbidden. The coordinator handles the prescribed report-and-stop if first-row
+    timeouts persist. No agent invokes an engine or approves real state to obtain this evidence.
+
+    The drafter edits only this ledger entry in docs --item T-54. Implementation belongs to
+    tools/bin/engine-fixture and tools/lib/engine-fixture-warmup.sh, with any shared validator
+    adjustment confined to tools/lib/engine-fixture-checks.sh, in ci --task T-54; tests belong to
+    features/engine_fixture_warmup_test.go and the existing fixture test files in test --item T-54;
+    protocol documentation belongs to features/README.md in docs --item T-54. No workflow, product
+    budget, ownership registry or sibling ledger entry changes. Commit no generated logs, coverage
+    or mutation evidence. Agents commit and stop; push, CI watching and closure belong to the loop.
+- id: T-55
+  type: ci
+  title: Each engine shard's warm-up sends the product's own create, timed beside the plain one
+  why: >
+    The coordinator's 2026-11-16 02:25 UTC decision settles q-75 and supersedes earlier wording
+    that assigned both warm-ups to T-54. T-54 lands the plain warm-up and its timing line;
+    T-55 adds the product's own create beside it, in tools/bin/engine-fixture and the same
+    tools/lib/engine-fixture-warmup.sh library, under the same bounds. Do not reopen the remedy.
+    In run 43788741012 at 7c1a6ab, plain create/remove took 70 ms (lifecycle), 430 ms (offline)
+    and 80 ms (other), but ID-OFFLINE-29 still failed with run.call-timeout on create and
+    forward-to-answer 0.989 s against the fixture's 1-second call. The coordinator identifies
+    the first product-shaped create as the remaining cost. These supplied observations motivate
+    this CI task; they do not prove that the additional warm-up will remove that cost.
+
+    The settled alternatives are one throwaway run of the built product against the prepared
+    image under production limits, or one create carrying the request shape the product's first
+    engine row sends, followed by removal. This specification chooses the latter, so preparation
+    needs no product build, approval or started workload. Keep the plain create/remove unchanged,
+    then perform exactly one product-shaped create/remove per shard, after the final cached-image
+    check and before the sole GITHUB_OUTPUT append. The existing offline, lifecycle and other
+    jobs already prepare unconditionally before their first engine row; preserve that workflow.
+    Registry and smoke creates do not count as either measured warm-up. Add no per-row warm-up,
+    retry, sleep, start or exec, and do not change scenario order or selection.
+
+    The product shape is the offline CreateRun request in internal/engine/session/docker/run.go,
+    together with AllocateAnchor in internal/engine/session/docker/anchor.go and the recorder's
+    first worker create body. Reproduce that request, not merely T-54's hardening flags. Use the
+    validated prepared image's immutable build.iid, numeric non-root fixture UID/GID, empty
+    entrypoint, explicit benign argv, workspace working directory, image environment with HOME
+    and TMPDIR set to /tmp, attach stdin/stdout/stderr, OpenStdin and StdinOnce true, TTY false
+    and healthcheck NONE. Preserve the request's intent/project/fingerprint label structure with
+    synthetic attempt-owned values. The HostConfig has network none, read-only root, cap-drop
+    ALL, no-new-privileges, PID limit 4096, restart no, private IPC and cgroup namespaces, init
+    false, logging none, one read-write local volume at /workspace with NoCopy true, and /tmp
+    tmpfs rw,nosuid,nodev,mode=1777. Preserve all other fields present in the product request;
+    do not substitute an anonymous volume, a direct bind mount or an empty mount list. Dynamic
+    container/volume names, owner labels, source descriptor, working subdirectory and benign argv
+    may refer to this disposable fixture; they must not reuse a scenario's resources. The image
+    is the same prepared image the plain warm-up uses by digest, never the base image or a tag.
+
+    Allocate the named volume with the product's local-driver options type=none, o=bind and
+    device pointing through a held /proc/<pid>/fd/<fd> directory descriptor at a fresh empty
+    attempt-owned checkout under RUNNER_TEMP, outside the repository and fixture control state.
+    Keep that descriptor alive through removal. Preserve the anchor label structure with
+    synthetic identities and add the fixture owner label to both resources. This is the sole
+    additional host source, not a mount of the real checkout, home, control records or socket.
+    T-54's no-volume restriction still holds for the plain warm-up; it does not describe this
+    additional product-shaped operation. No new image, dependency, service or Go package is
+    needed. Reuse Bash, jq, curl, coreutils timeout and the existing Docker CLI. Construct the
+    create JSON in a definitions-only helper in the existing warm-up library, usable by ordinary
+    tests without an engine, and send it to the same local Unix Engine API endpoint as d. Keep
+    d for other engine operations. The create transport must disable curl configuration/proxies,
+    use no remote endpoint or credentials, check HTTP success and validate the returned full ID;
+    an HTTP error is not success merely because curl exited zero. Do not dump full bodies or
+    environments. Keep the driver's CI/native-host guards; add no test-mode entry point.
+
+    Record distinct product container and volume intents before acquisition, with names bound
+    to the run/attempt, and record the returned container ID. Before removal, require the exact
+    name, immutable image ID, fixture owner and expected workspace volume/tmpfs mounts; require
+    the volume's exact name, labels, driver and recorded source/options. Remove the container
+    before the volume and require exact absence for each. A transport or permission error is
+    never absence; a name collision or foreign identity is never authority to remove. Recover
+    a create interrupted before ID recording only through the recorded name/image/owner checks.
+    Preserve the existing tmpfs-only mount checks for registry, smoke and plain warm-up; add
+    a separate exact product mount check, not a general allowance for volumes or host mounts.
+    Extend both failure-trap and final always() cleanup to the new resources, attempt all other
+    recorded resources after a failure, and preserve the original preparation exit status.
+    Retain ownership records when cleanup is incomplete; never prune or delete shared images.
+
+    Each measured operation uses T-54's existing ten-second bound, TERM at 9s and KILL after 1s,
+    through its ownership inspection, removal and absence verification. Include the product
+    operation's anchor allocation and teardown in its bound and timing. Keep the enclosing
+    180-second prepare bound and separate 30-second failure cleanup unchanged, as well as every
+    workflow timeout and the Engine scenarios step's 180-second gate. No product default,
+    fixture limit, assertion, retry or skipped row moves: engineCallBudget remains 1 second,
+    engineStartupBudget 3 seconds, and engineBudgetTree, engineQuietInterval, T-42's timeout and
+    restart-refusal controls and T-50's recorder/cleanup allowances remain intact.
+
+    Preserve the plain line engine warm-up timing: duration_ms=<integer> outcome=<passed|failed>.
+    Add engine product warm-up timing: duration_ms=<integer> outcome=<passed|failed>, in that
+    order, so a successful preparation prints exactly two identifiable timing lines per shard.
+    Use the same monotonic clock outside each timeout child and measure through verified teardown,
+    excluding later failure cleanup. Each attempted phase emits its own truthful result even
+    on failure; stop preparation at the first failure without inventing a timing for an unrun
+    phase. Unavailable, invalid or backwards clocks use duration_ms=unknown and fail. Nonzero
+    child status, TERM/KILL timeout, invalid response/identity, cleanup failure or timing-output
+    failure fails preparation with a stage-specific engine-fixture: warm-up diagnostic that
+    identifies plain or product; a timeout names the ten-second bound. Publish no fixture
+    outputs until both phases pass. Update features/README.md's Cached fixture protocol with
+    these phases, timings, shape, bounds and ownership obligations.
+
+    Add TestEngineFixtureWarmupProduct in features/engine_fixture_warmup_test.go. Its first
+    assertion must inspect the executable prepare path and fail because no bounded product
+    phase follows the plain phase before publication, before trying to call any new function.
+    Commit that regression in test --item T-55 and record its assertion-level red result before
+    implementation. Keep TestEngineFixtureWarmup and TestEngineFixtureWorkflow's coverage of
+    the plain phase and existing workflow. Extend source checks and negative controls for a
+    missing, duplicate, commented, unused-string, unbounded or late product call; wrong image,
+    omitted anchor/mount/tmpfs or hardening; swallowed failures; early publication; missing
+    container or volume intent/cleanup; broadened ownership checks; and transport error treated
+    as absence. A second plain create must fail the product-shape check. Assertions must cover
+    called code, not words in comments or dead strings.
+
+    Exercise the shared request constructor and timing/timeout code with synthetic identities,
+    data-only inspection/response fixtures and harmless child commands, never Docker or the
+    guarded prepare/cleanup driver. Check the decoded request fields above, including mounts
+    and volume options, against the product shape; negative fixtures independently remove or
+    alter those fields. Check both timing labels, exactly one line per attempt, nonnegative
+    elapsed time, successful and nonzero children, TERM and TERM-ignoring KILL controls,
+    clock-read/backwards/output failures and truthful outcomes. Check that a failed plain phase
+    prevents product execution and either failure prevents publication. Use short bounds only
+    in harmless controls and an outer deadline; source checks pin both real calls to 9s plus 1s.
+    Data-only ownership checks must reject a foreign container or volume and extra/wrong mounts
+    without weakening the existing kinds. These tests prove wiring and error handling, not
+    engine latency or isolation. Preserve manifest/config identity, cached-image, smoke and
+    post-push diagnostic regressions; let configured hooks and CI run wider checks.
+
+    The done_when command replaces the placeholder with a discovery guard for the named new
+    regression, then runs it with the existing warm-up and workflow tests, without a race
+    detector or engine access. At specification baseline d95856b2e594a2fc80625ff3b976a8ebebaa3378
+    the guard exits 1 with TestEngineFixtureWarmupProduct missing. This is missing-work evidence,
+    not assertion-level red; the implementer's first assertion supplies that before repair.
+    The existing TestEngineFixtureWarmup and TestEngineFixtureWorkflow selection passes in
+    0.726 s, demonstrating why the placeholder alone cannot judge T-55. Keep this check in the
+    existing task/ordinary-test tier, with no new workflow gate or duplicate fixture preparation.
+
+    Completion requires the coordinator's actual pushed-head CI on all three native Linux amd64
+    engine shards to show both successful timing lines before any row, successful first rows,
+    the complete unchanged live selection within its existing bound, and successful final
+    cleanup including the product container and anchor volume. Retain each shard's tested SHA,
+    both durations and existing compilation/step/row timings. If the product-shaped create is
+    not the slow operation either, or a first row still times out, report both timing lines with
+    that row's arrival-to-forward, forward-to-answer and controller-start intervals and stop.
+    Limits are then the coordinator's to choose; a green local regression or one green engine
+    run does not prove the latency problem is gone. ID-LIFECYCLE-12's transport-loss race in
+    the cited run is separate from this warm-up task. No agent invokes an engine or approves
+    real state to obtain runtime evidence.
+
+    The drafter changes only this ledger entry in docs --item T-55. Implementation belongs to
+    tools/bin/engine-fixture and tools/lib/engine-fixture-warmup.sh in ci --task T-55; regressions
+    belong to features/engine_fixture_warmup_test.go and necessary existing fixture-test helpers
+    in test --item T-55; protocol documentation belongs to features/README.md in docs --item T-55.
+    Do not change the work registry, sibling ledger entries, product code or workflow. Commit no
+    generated logs, coverage or mutation evidence. Agents commit and stop; the loop owns push,
+    CI watching and closure.
+- id: T-56
+  type: refactor
+  title: Add shared terminal ports, adapters and contract tests
+  why: >
+    Provide raw-mode acquisition/restoration, terminal dimensions, resize events and disconnect
+    reporting under internal/engine/terminal. Reuse pinned x/term and PTY test support; keep I/O
+    behind ports and run shared contracts against an in-memory fake and native adapter. Cover
+    restoration after failures and bounded cancellation. Expose no command yet. Broken down from
+    p1-interactive-tty.
   done_when:
-    - run: go test ./tools/... -count=1
+    - run: go test ./internal/engine/terminal/...
+- id: T-57
+  type: test
+  title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
+  why: >
+    T-54's plain warm-up and T-55's product-shaped one are both on main and neither removes the slow
+    first create. In run 43798922441 they took 100 to 120 ms and 200 to 280 ms on the three shards,
+    and ID-LIFECYCLE-08, the lifecycle shard's first engine row, still failed with run.call-timeout
+    on operation create response: its engine journal has the create arriving at 1.391 s, forwarded
+    at 1.392 s and answered HTTP 201 at 2.408 s, 1.016 s after forwarding. Creates made outside the
+    suite are fast, and the first one made inside it is slow, so what is cold is on the suite's own
+    path: the recorder that forwards engine calls, the built product's first launch, or what only
+    that path asks of the engine. On 2026-11-16 the first row failed on main's run of slice-27's
+    merge commit (ID-ANCHORS-09, 1.026 s) and held its release for forty minutes. Remedy to prove:
+    before the first engine row, the suite itself launches the built product once through the same
+    recorder and fixture the rows use, under production limits, removes what it made, and prints
+    that launch's create interval. No fixture limit, assertion, retry or skipped row moves.
+  done_when:
+    - run: go test ./features -count=1 -run 'EngineSuiteWarmup'

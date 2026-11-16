@@ -8,11 +8,15 @@ source "${BASH_SOURCE[0]%/*}/../lib/engine-fixture-checks.sh" || {
   printf 'engine-fixture: validator loading failed\n' >&2
   exit 1
 }
+source "${BASH_SOURCE[0]%/*}/../lib/engine-fixture-warmup.sh" || {
+  printf 'engine-fixture: warm-up library loading failed\n' >&2
+  exit 1
+}
 
 [[ $# == 1 && ( $1 == prepare || $1 == cleanup ) ]] || fail 'usage: engine-fixture prepare|cleanup'
 [[ ${CI:-} == true && ${GITHUB_ACTIONS:-} == true ]] || fail 'requires GitHub Actions'
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || fail 'requires an actual Linux amd64 host'
-for tool in timeout docker curl jq sha256sum readlink id mkdir cat tar; do
+for tool in timeout docker curl jq sha256sum readlink id mkdir cat tar stat; do
   command -v "$tool" >/dev/null || fail "missing tool: $tool"
 done
 [[ ${GITHUB_RUN_ID:-} =~ ^[0-9]+$ && ${GITHUB_RUN_ATTEMPT:-} =~ ^[0-9]+$ ]] || fail 'missing run/attempt identity'
@@ -28,7 +32,13 @@ state="$runner_temp/$owner-engine-fixture"
 recipe="$workspace/features/testdata/engine-fixture/Dockerfile"
 registry_name="itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-registry"
 smoke_name="itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-smoke"
-export registry_image base_image workspace state owner recipe registry_name smoke_name
+warmup_name="itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-warmup"
+export registry_image base_image workspace state owner recipe registry_name smoke_name warmup_name
+product_name="itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-product"
+product_volume="itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-anchor"
+product_checkout="$runner_temp/$owner-product-checkout"
+[[ $product_checkout != "$workspace" && $product_checkout != "$workspace/"* ]] || fail 'warm-up product checkout must be outside the repository'
+export product_name product_volume product_checkout
 
 # Every engine call has the same local endpoint and override clearing as the
 # unchanged preflight. A private empty config avoids host logins/helpers/proxies.
@@ -86,29 +96,32 @@ remove_image_ref() {
 }
 
 remove_container() {
-  local kind=$1 name expected cid observed message summary
+  local kind=$1 name expected cid observed message summary diagnostic=''
+  [[ $kind != warmup ]] || diagnostic='warm-up '
   [[ -f $state/$kind.intent ]] || return 0
-  name=$(cat "$state/$kind.intent") || fail "container intent read: expected $kind.intent; observed status=$?"
+  name=$(cat "$state/$kind.intent") || fail "${diagnostic}container intent read: expected $kind.intent; observed status=$?"
   case "$kind" in
-    registry) [[ $name == "$registry_name" ]] || fail "container name: expected=$registry_name; observed=$(fixture_value "$name")"
-      expected=$(cat "$state/registry.iid") || fail "container image read: expected registry.iid; observed status=$?" ;;
-    smoke) [[ $name == "$smoke_name" ]] || fail "container name: expected=$smoke_name; observed=$(fixture_value "$name")"
-      expected=$(cat "$state/build.iid") || fail "container image read: expected build.iid; observed status=$?" ;;
-    *) fail "container kind: expected smoke/registry; observed=$(fixture_value "$kind")" ;;
+    registry) [[ $name == "$registry_name" ]] || fail "${diagnostic}container name: expected=$registry_name; observed=$(fixture_value "$name")"
+      expected=$(cat "$state/registry.iid") || fail "${diagnostic}container image read: expected registry.iid; observed status=$?" ;;
+    smoke) [[ $name == "$smoke_name" ]] || fail "${diagnostic}container name: expected=$smoke_name; observed=$(fixture_value "$name")"
+      expected=$(cat "$state/build.iid") || fail "${diagnostic}container image read: expected build.iid; observed status=$?" ;;
+    warmup) [[ $name == "$warmup_name" ]] || fail "${diagnostic}container name: expected=$warmup_name; observed=$(fixture_value "$name")"
+      expected=$(cat "$state/build.iid") || fail "${diagnostic}container image read: expected build.iid; observed status=$?" ;;
+    *) fail "container kind: expected smoke/registry/warmup; observed=$(fixture_value "$kind")" ;;
   esac
-  digest_valid "$expected" || fail "container image identity: expected sha256; observed=$(fixture_value "$expected")"
+  digest_valid "$expected" || fail "${diagnostic}container image identity: expected sha256; observed=$(fixture_value "$expected")"
   # A create interrupted before --cidfile was written is recovered only through
   # the recorded unique name, immutable image ID and attempt label together.
   cid=$name
   if [[ -s $state/$kind.cid ]]; then
-    cid=$(cat "$state/$kind.cid") || fail "container ID read: expected $kind.cid; observed status=$?"
-    [[ $cid =~ ^[0-9a-f]{64}$ ]] || fail "container ID: expected 64 hex digits; observed=$(fixture_value "$cid")"
+    cid=$(cat "$state/$kind.cid") || fail "${diagnostic}container ID read: expected $kind.cid; observed status=$?"
+    [[ $cid =~ ^[0-9a-f]{64}$ ]] || fail "${diagnostic}container ID: expected 64 hex digits; observed=$(fixture_value "$cid")"
   fi
   if ! d container inspect "$cid" >"$state/removing-container.json" 2>"$state/container.err"; then
-    message=$(cat "$state/container.err") || fail "container inspection error read: expected captured error; observed status=$?"
+    message=$(cat "$state/container.err") || fail "${diagnostic}container inspection error read: expected captured error; observed status=$?"
     case "$message" in
       "Error: No such container: $cid"|"Error response from daemon: No such container: $cid"|"Error: No such object: $cid") return 0 ;;
-      *) fail "container inspection: expected exact container/absence; observed=$(fixture_value "$message")" ;;
+      *) fail "${diagnostic}container inspection: expected exact container/absence; observed=$(fixture_value "$message")" ;;
     esac
   fi
   if ! summary=$(jq -ac '.[0] | {name:(.Name|tostring|.[0:160]), image:(.Image|tostring|.[0:160]), owner:(.Config.Labels["io.itos.engine-fixture"]|tostring|.[0:160]), allTmpfs:all(.Mounts[]?; .Type == "tmpfs")}' "$state/removing-container.json" 2>/dev/null); then
@@ -117,19 +130,81 @@ remove_container() {
   jq -e --arg name "/$name" --arg image "$expected" --arg owner "$owner" \
     'length == 1 and .[0].Name == $name and .[0].Image == $image and
      .[0].Config.Labels["io.itos.engine-fixture"] == $owner and
-     all(.[0].Mounts[]?; .Type == "tmpfs")' "$state/removing-container.json" >/dev/null 2>&1 || fail "container ownership: expected name=$name image=$expected owner=$owner allTmpfs=true; observed=$summary"
-  observed=$(jq -er '.[0].Id' "$state/removing-container.json") || fail "container identity read: expected Id; observed invalid inspection (status=$?)"
-  [[ $observed =~ ^[0-9a-f]{64}$ && ( $cid == "$name" || $cid == "$observed" ) ]] || fail "container identity: expected recorded name/ID=$(fixture_value "$cid"); observed=$(fixture_value "$observed")"
-  printf '%s\n' "$observed" >"$state/$kind.cid" || fail "container ID record: expected writable $kind.cid; observed status=$?"
-  d container rm --force --volumes "$observed" || fail "container removal: expected removed $observed; observed status=$?"
+     all(.[0].Mounts[]?; .Type == "tmpfs")' "$state/removing-container.json" >/dev/null 2>&1 || fail "${diagnostic}container ownership: expected name=$name image=$expected owner=$owner allTmpfs=true; observed=$summary"
+  observed=$(jq -er '.[0].Id' "$state/removing-container.json") || fail "${diagnostic}container identity read: expected Id; observed invalid inspection (status=$?)"
+  [[ $observed =~ ^[0-9a-f]{64}$ && ( $cid == "$name" || $cid == "$observed" ) ]] || fail "${diagnostic}container identity: expected recorded name/ID=$(fixture_value "$cid"); observed=$(fixture_value "$observed")"
+  printf '%s\n' "$observed" >"$state/$kind.cid" || fail "${diagnostic}container ID record: expected writable $kind.cid; observed status=$?"
+  d container rm --force --volumes "$observed" || fail "${diagnostic}container removal: expected removed $observed; observed status=$?"
   if d container inspect "$observed" >"$state/removed-container.json" 2>"$state/container.err"; then
-    fail "container removal verification: expected absent; observed present $observed"
+    fail "${diagnostic}container removal verification: expected absent; observed present $observed"
   fi
-  message=$(cat "$state/container.err") || fail "container removal error read: expected captured error; observed status=$?"
+  message=$(cat "$state/container.err") || fail "${diagnostic}container removal error read: expected captured error; observed status=$?"
   case "$message" in
     "Error: No such container: $observed"|"Error response from daemon: No such container: $observed"|"Error: No such object: $observed") return 0 ;;
-    *) fail "container removal verification: expected exact absence; observed=$(fixture_value "$message")" ;;
+    *) fail "${diagnostic}container removal verification: expected exact absence; observed=$(fixture_value "$message")" ;;
   esac
+}
+
+# Return 1 only on an exact daemon absence. All other failures stop cleanup.
+product_inspect() {
+  local kind=$1 name=$2 output=$3
+  if d "$kind" inspect "$name" >"$output" 2>"$state/product.err"; then return 0; fi
+  if engine_warmup_absence "$kind" "$name" "$state/product.err"; then return 1; fi
+  fail "warm-up product $kind inspection: expected exact identity/absence; observed transport or permission failure"
+}
+
+remove_product_container() {
+  [[ -f $state/product.intent ]] || return 0
+  local name image cid observed status
+  name=$(cat "$state/product.intent") || fail 'warm-up product container intent read failed'
+  [[ $name == "$product_name" ]] || fail 'warm-up product container intent name mismatch'
+  image=$(cat "$state/build.iid") || fail 'warm-up product image read failed'
+  digest_valid "$image" || fail 'warm-up product immutable image invalid'
+  cid=$name
+  if [[ -s $state/product.cid ]]; then
+    cid=$(cat "$state/product.cid") || fail 'warm-up product CID read failed'
+    [[ $cid =~ ^[0-9a-f]{64}$ ]] || fail 'warm-up product CID invalid'
+  fi
+  if product_inspect container "$cid" "$state/product-container.json"; then
+    engine_warmup_container_owned "$state/product-container.json" "$name" "$image" "$owner" "$product_volume" || fail 'warm-up product container ownership or mounts mismatch'
+    observed=$(jq -er '.[0].Id' "$state/product-container.json") || fail 'warm-up product inspected ID missing'
+    [[ $observed =~ ^[0-9a-f]{64}$ && ( $cid == "$name" || $cid == "$observed" ) ]] || fail 'warm-up product inspected ID mismatch'
+    printf '%s\n' "$observed" >"$state/product.cid" || fail 'warm-up product CID recording failed'
+    d container rm --force "$observed" || fail 'warm-up product container removal failed'
+    if product_inspect container "$observed" "$state/product-container-removed.json"; then
+      fail 'warm-up product container remains after removal'
+    else
+      status=$?
+      [[ $status == 1 ]] || fail 'warm-up product container absence unverified'
+    fi
+  else
+    status=$?
+    [[ $status == 1 ]] || fail 'warm-up product container absence unverified'
+  fi
+}
+
+remove_product_volume() {
+  [[ -f $state/product-volume.intent ]] || return 0
+  local name source device inode status
+  name=$(cat "$state/product-volume.intent") || fail 'warm-up product volume intent read failed'
+  [[ $name == "$product_volume" ]] || fail 'warm-up product volume intent name mismatch'
+  source=$(cat "$state/product.source") || fail 'warm-up product source read failed'
+  device=$(cat "$state/product.device") || fail 'warm-up product device read failed'
+  inode=$(cat "$state/product.inode") || fail 'warm-up product inode read failed'
+  [[ $source =~ ^/proc/[1-9][0-9]*/fd/[0-9]+$ && $device =~ ^[0-9]+$ && $inode =~ ^[1-9][0-9]*$ ]] || fail 'warm-up product source identity invalid'
+  if product_inspect volume "$name" "$state/product-volume.json"; then
+    engine_warmup_volume_owned "$state/product-volume.json" "$name" "$owner" "$source" "$device" "$inode" || fail 'warm-up product volume ownership or source/options mismatch'
+    d volume rm "$name" || fail 'warm-up product volume removal failed'
+    if product_inspect volume "$name" "$state/product-volume-removed.json"; then
+      fail 'warm-up product volume remains after removal'
+    else
+      status=$?
+      [[ $status == 1 ]] || fail 'warm-up product volume absence unverified'
+    fi
+  else
+    status=$?
+    [[ $status == 1 ]] || fail 'warm-up product volume absence unverified'
+  fi
 }
 
 cleanup() {
@@ -139,6 +214,9 @@ cleanup() {
   [[ ! -L $state/owner && $recorded == "$owner" ]] || fail "cleanup ownership: expected=$owner; observed=$(fixture_value "$recorded")"
   # Each removal diagnoses its own failure. Subshells let cleanup try all owned
   # resources even when fail exits; every operation inside is explicitly guarded.
+  (remove_product_container) || failed=1
+  (remove_product_volume) || failed=1
+  (remove_container warmup) || failed=1
   (remove_container smoke) || failed=1
   (remove_container registry) || failed=1
   (remove_image_ref tag) || failed=1
@@ -146,7 +224,7 @@ cleanup() {
   if (( failed )); then
     fail "cleanup: expected all owned resources absent; observed removal failures; retained record $state"
   fi
-  printf 'engine-fixture cleanup: PASS; containers, tmpfs storage and derived references absent\n' || fail 'cleanup verdict write failed'
+  printf 'engine-fixture cleanup: PASS; containers, product anchor, tmpfs storage and derived references absent\n' || fail 'cleanup verdict write failed'
   # Retain the record for idempotent cleanup and runner diagnostics. Never
   # delete checkout files, prune the engine or remove the shared pinned inputs.
 }
@@ -164,6 +242,55 @@ registry_ready() {
   done
 }
 
+warmup_fixture() {
+  local reference=$1 fixture_uid=$2 fixture_gid=$3
+  printf '%s\n' "$warmup_name" >"$state/warmup.intent" || fail "warm-up intent record: expected writable record; observed status=$?"
+  d container create --name "$warmup_name" --cidfile "$state/warmup.cid" \
+    --label "io.itos.engine-fixture=$owner" --pull never --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --user "$fixture_uid:$fixture_gid" "$reference" || fail "warm-up create: expected hardened container; observed status=$?"
+  remove_container warmup || fail "warm-up removal: expected owned container absent; observed status=$?"
+}
+
+product_warmup_fixture() {
+  local image=$1 fixture_uid=$2 fixture_gid=$3 source device inode labels status http cid
+  digest_valid "$image" || fail 'warm-up product image: expected immutable build.iid'
+  source=$(cat "$state/product.source") || fail 'warm-up product source record missing'
+  device=$(cat "$state/product.device") || fail 'warm-up product device record missing'
+  inode=$(cat "$state/product.inode") || fail 'warm-up product inode record missing'
+  # Refuse collisions before writing acquisition intents: an existing resource
+  # cannot become ours merely because create would reuse its name.
+  if product_inspect container "$product_name" "$state/product-collision.json"; then
+    fail 'warm-up product container name collision'
+  else
+    status=$?
+    [[ $status == 1 ]] || fail 'warm-up product container initial absence unverified'
+  fi
+  if product_inspect volume "$product_volume" "$state/product-volume-collision.json"; then
+    fail 'warm-up product volume name collision'
+  else
+    status=$?
+    [[ $status == 1 ]] || fail 'warm-up product volume initial absence unverified'
+  fi
+  printf '%s\n' "$product_volume" >"$state/product-volume.intent" || fail 'warm-up product volume intent recording failed'
+  labels=$(engine_warmup_anchor_labels "$owner" "$device" "$inode") || fail 'warm-up product anchor labels failed'
+  # Pass the exact product anchor labels without shell evaluation of their data.
+  jq -er 'to_entries[] | "--label", (.key+"="+.value)' <<<"$labels" >"$state/product-labels.args" || fail 'warm-up product anchor label arguments failed'
+  local -a label_args
+  mapfile -t label_args <"$state/product-labels.args" || fail 'warm-up product anchor label argument read failed'
+  d volume create --driver local --opt type=none --opt o=bind --opt "device=$source" \
+    "${label_args[@]}" "$product_volume" >/dev/null || fail 'warm-up product anchor allocation failed'
+  printf '%s\n' "$product_name" >"$state/product.intent" || fail 'warm-up product container intent recording failed'
+  engine_warmup_request "$image" "$fixture_uid" "$fixture_gid" "$product_volume" "$owner" "$state/cached-image.json" >"$state/product-request.json" || fail 'warm-up product request construction failed'
+  http=$(curl -q --fail --silent --show-error --noproxy '*' --proxy '' --proto '=http' \
+    --unix-socket /var/run/docker.sock --header 'Content-Type: application/json' \
+    --data-binary "@$state/product-request.json" --output "$state/product-response.json" \
+    --write-out '%{http_code}' "http://localhost/containers/create?name=$product_name") || fail 'warm-up product create transport failed'
+  cid=$(engine_warmup_response "$http" "$state/product-response.json") || fail 'warm-up product create: expected HTTP 201 and full ID'
+  printf '%s\n' "$cid" >"$state/product.cid" || fail 'warm-up product CID recording failed'
+  remove_product_container || fail 'warm-up product container teardown failed'
+  remove_product_volume || fail 'warm-up product anchor teardown failed'
+}
+
 prepare() {
   [[ -S /var/run/docker.sock ]] || fail 'missing native Docker socket'
   [[ -n ${GITHUB_OUTPUT:-} && -f $GITHUB_OUTPUT ]] || fail 'missing step output file'
@@ -174,6 +301,9 @@ prepare() {
   # mkdir refuses reusing another preparation's record, including a retry.
   mkdir -- "$state"
   printf '%s\n' "$owner" >"$state/owner"
+  printf '%s\n' "$product_source" >"$state/product.source"
+  stat -Lc '%d' "$product_source" >"$state/product.device"
+  stat -Lc '%i' "$product_source" >"$state/product.inode"
   mkdir -- "$state/docker"
   printf '{}\n' >"$state/docker/config.json"
   d version --format '{{json .Server}}' >"$state/server.json"
@@ -260,6 +390,8 @@ prepare() {
   printf 'pre-scenario cleanup: PASS smoke/registry absent; registry tmpfs discarded\n' || fail 'cleanup verdict output: expected writable diagnostics; observed write failure'
   cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid" || fail "final cache check: expected inspectable without registry; observed status=$?"
   printf 'registry offline; cached fixture remains inspectable: PASS\n' || fail 'offline verdict output: expected writable diagnostics; observed write failure'
+  engine_warmup_run 9s 1s '10 seconds' bash -euo pipefail -c "$(declare -f); warmup_fixture \"\$1\" \"\$2\" \"\$3\"" _ "$reference" "$fixture_uid" "$fixture_gid" || fail "warm-up phase: expected completion; observed status=$?"
+  engine_warmup_product_run 9s 1s '10 seconds' bash -euo pipefail -c "$(declare -f); product_warmup_fixture \"\$1\" \"\$2\" \"\$3\"" _ "$built" "$fixture_uid" "$fixture_gid" || fail "warm-up product phase: expected completion; observed status=$?"
   # Publish as one append, only after the entire protocol succeeded.
   printf 'image=%s\nimage_id=%s\nuid=%s\ngid=%s\n' "$reference" "$built" "$fixture_uid" "$fixture_gid" >>"$GITHUB_OUTPUT" || fail "fixture output publication: expected four step outputs; observed status=$?"
 }
@@ -286,6 +418,12 @@ if [[ $1 == prepare ]]; then
   trap finish_preparation EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
+  # The supervisor holds this directory descriptor across the timeout child
+  # and failure cleanup. No scenario resource or real checkout is mounted.
+  mkdir -- "$product_checkout" || fail 'warm-up product empty checkout creation failed'
+  exec {product_fd}<"$product_checkout" || fail 'warm-up product checkout descriptor failed'
+  product_source="/proc/$$/fd/$product_fd"
+  export product_source
   timeout --signal=TERM --kill-after=1s 179s bash -euo pipefail -c "$(declare -f); prepare"
 else
   bounded_cleanup

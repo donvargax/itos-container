@@ -136,26 +136,6 @@ func (w *world) lifecycleHeartbeat() int {
 	return value
 }
 
-func (w *world) lifecycleLaterHeartbeat() {
-	// A failed controller may exit before the probe's next tick. Observe the
-	// independent worker for a bounded interval after that exit, just as the
-	// recovery fixture does, without restoring transport or touching the worker.
-	deadline, tick := time.NewTimer(3*time.Second), time.NewTicker(10*time.Millisecond)
-	defer deadline.Stop()
-	defer tick.Stop()
-	for {
-		if value := w.lifecycleHeartbeat(); value > w.lifecycle.heartbeat {
-			w.lifecycle.later = value
-			return
-		}
-		select {
-		case <-deadline.C:
-			return
-		case <-tick.C:
-		}
-	}
-}
-
 func (w *world) lifecycleDisconnect() {
 	l := w.lifecycle
 	if err := w.lifecycleControl(false); err != nil {
@@ -172,7 +152,7 @@ func (w *world) lifecycleDisconnect() {
 		return
 	}
 	w.lifecycleCollect()
-	w.lifecycleLaterHeartbeat()
+	w.lifecycleDisconnectProgress()
 	l.survivedLoss = w.recoveryNativePresent(true)
 	var err error
 	l.lostBoundary, err = w.offline.api.inspect(w.recovery.worker)
@@ -181,29 +161,51 @@ func (w *world) lifecycleDisconnect() {
 	w.lifecycleFreshRecovery(true)
 }
 
+func (w *world) lifecycleDisconnectProgress() {
+	l := w.lifecycle
+	// Controller return does not synchronize the worker's next file publication.
+	// Keep the loss in place until independent progress is visible, even though
+	// the controller is already gone. This observer guard cannot extend the
+	// controller's teardown deadline, judged from its recorded return time.
+	timer := time.NewTimer(time.Until(l.returned.Add(5 * time.Second)))
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer timer.Stop()
+	defer tick.Stop()
+	for {
+		l.later = w.lifecycleHeartbeat()
+		if l.later > l.heartbeat {
+			return
+		}
+		select {
+		case <-timer.C:
+			l.err = errors.Join(l.err, fmt.Errorf("post-disconnection worker progress unavailable: heartbeat=%d later=%d", l.heartbeat, l.later))
+			return
+		case <-tick.C:
+		}
+	}
+}
+
 func (w *world) lifecycleDisconnectReady() {
 	l := w.lifecycle
 	// An acknowledged, still-pending wait proves a healthy same-path transport
 	// before we remove observation. Closing only the proxy's upgraded handles
 	// also makes stream loss visible without touching the daemon or observer.
 	if !w.lifecycleAwait(5*time.Second, func() bool {
-		a := w.offline.api
-		a.mu.Lock()
-		acknowledged := false
-		for _, e := range a.requests {
-			if strings.HasSuffix(e.Path, "/wait") && e.Status == 200 {
-				acknowledged = true
-				break
-			}
-		}
-		a.mu.Unlock()
-		if !acknowledged {
+		// Readiness precedes the first heartbeat tick. Do not disconnect until
+		// there is a positive baseline against which to judge later progress.
+		l.heartbeat = w.lifecycleHeartbeat()
+		if l.heartbeat <= 0 {
 			return false
 		}
-		// Readiness output precedes the probe's first heartbeat. Keep a
-		// positive baseline before loss rather than racing that first tick.
-		l.heartbeat = w.lifecycleHeartbeat()
-		return l.heartbeat > 0
+		a := w.offline.api
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		for _, e := range a.requests {
+			if strings.HasSuffix(e.Path, "/wait") && e.Status == 200 {
+				return true
+			}
+		}
+		return false
 	}) {
 		return
 	}
