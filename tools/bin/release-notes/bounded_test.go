@@ -322,7 +322,7 @@ func TestBoundedReleaseNotes(t *testing.T) {
 // Build only this tool. All failure probes execute its real entry point, in a
 // disposable repository; no feature suite, engine or publication is involved.
 func TestBoundedReleaseNotesCommandFailures(t *testing.T) {
-	binary := filepath.Join(t.TempDir(), "release-notes")
+	binary := filepath.Join(t.TempDir(), "release-notes.exe")
 	build := exec.Command("go", "build", "-o", binary, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)

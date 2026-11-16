@@ -33,6 +33,7 @@ type egressWorld struct {
 	lifeStartup         *egressLifeStartup
 	lifeRuntime         *egressLifeRuntime
 	lifeRemoval         *egressLifeRemoval
+	lifeTraffic         *egressLifeTraffic
 }
 
 func (w *world) egressFixture() *egressWorld {

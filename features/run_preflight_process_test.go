@@ -231,20 +231,13 @@ func (w *world) runJournal(journal []doctorRequest, class string, image bool) er
 	return nil
 }
 
-type runProcess struct {
-	approval map[string]runEntry
-	cmd      *exec.Cmd
-	cancel   context.CancelFunc
-	done     chan struct{}
-	out, err strings.Builder
-	start    time.Time
-	count    int64
-	coverage string
-}
-
 func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 	originalArgs := append([]string{}, args...)
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	limit := 8 * time.Second
+	if w.egress != nil && w.egress.native != nil {
+		limit = 45 * time.Second // native recovery can consume the full 30 s teardown
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	bin := w.bin
 	if w.doctor.engine.offline != nil && len(args) > 0 && args[0] == "run" {
 		var err error
@@ -272,7 +265,7 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 		cancel()
 		return nil, err
 	}
-	p := &runProcess{approval: approvalBefore, cancel: cancel, done: make(chan struct{}), start: time.Now(), count: w.doctor.engine.listener.connections.Load()}
+	p := &runProcess{approval: approvalBefore, cancel: cancel, done: make(chan struct{}), start: time.Now(), count: w.runConnectionCount()}
 	if cover := w.coverageDir(); cover != "" && r.mask != "" {
 		dir, err := os.MkdirTemp(cover, "slice-8-mask-")
 		if err != nil {
@@ -313,7 +306,7 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 func (w *world) finishRun(p *runProcess) (runObservation, error) {
 	<-p.done
 	p.cancel()
-	r := runObservation{result: doctorResult{stdout: p.out.String(), stderr: p.err.String(), exit: p.cmd.ProcessState.ExitCode(), elapsed: time.Since(p.start)}, pid: p.cmd.Process.Pid, connections: w.doctor.engine.listener.connections.Load() - p.count}
+	r := runObservation{result: doctorResult{stdout: p.out.String(), stderr: p.err.String(), exit: p.cmd.ProcessState.ExitCode(), elapsed: time.Since(p.start)}, pid: p.cmd.Process.Pid, connections: w.runConnectionCount() - p.count}
 	for _, request := range w.doctor.engine.requests() {
 		if request.PID == r.pid {
 			r.journal = append(r.journal, request)

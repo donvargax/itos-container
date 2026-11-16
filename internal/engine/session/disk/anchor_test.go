@@ -120,7 +120,7 @@ func TestSourceRefusesDirectoryWithoutKernelIdentity(t *testing.T) {
 		t.Fatal("stat did not use the held source descriptor")
 	}
 	w.Close()
-	if _, err := source.Stat(); !errors.Is(err, os.ErrClosed) {
+	if err := source.Close(); !errors.Is(err, os.ErrClosed) {
 		t.Fatal("source descriptor was retained after close", err)
 	}
 }

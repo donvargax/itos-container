@@ -3,18 +3,10 @@ package features
 import "testing"
 
 func TestEgressInspectionJournalPermitsOnlyRequestedProxyPin(t *testing.T) {
-	root, err := moduleRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
-	w := &world{root: root, dir: t.TempDir()}
-	if err := w.approvalCheckout(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(w.closeDoctor)
-	if err := w.approvalNetworkRequest(2, []string{"api.example.com"}); err != nil {
-		t.Fatal(err)
-	}
+	w := &world{approval: &approvalWorld{allow: []string{"api.example.com"}}, doctor: &doctorWorld{engine: newDoctorAPI(doctorImage)}}
+	// This is the inspection predicate's input, not a listening engine or an
+	// approval operation; neither filesystem nor Unix socket setup is needed.
+	w.doctor.engine.egress = &localEgressAPI{}
 	request := doctorRequest{Method: "GET", Path: "/v1.48/images/" + busyboxFixturePin + "/json"}
 	if !w.egressProxyInspection(request, true) || w.egressProxyInspection(request, false) {
 		t.Fatal("proxy inspection permission ignored")
@@ -30,9 +22,7 @@ func TestEgressInspectionJournalPermitsOnlyRequestedProxyPin(t *testing.T) {
 			t.Fatalf("forbidden image request accepted: %+v", bad)
 		}
 	}
-	if err := w.approvalNetworkRequest(2, nil); err != nil {
-		t.Fatal(err)
-	}
+	w.approval.allow = nil
 	if w.egressProxyInspection(request, true) {
 		t.Fatal("offline inspection admitted a proxy image from an earlier allowlist fixture")
 	}

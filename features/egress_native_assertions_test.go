@@ -255,7 +255,9 @@ func (n *egressNative) exchanged(run *egressNativeRun, want int) error {
 			return err
 		}
 		for _, nonce := range nonces {
-			if !slices.ContainsFunc(receipts, func(r egressReceipt) bool { return r.Kind == "nonce" && r.Name == name && r.Nonce == nonce }) {
+			if !slices.ContainsFunc(receipts, func(r egressReceipt) bool {
+				return (r.Kind == "nonce" || r.Kind == "payload") && r.Name == name && r.Nonce == nonce
+			}) {
 				return fmt.Errorf("%s holds no receipt of the worker's nonce", name)
 			}
 		}

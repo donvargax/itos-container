@@ -23,7 +23,8 @@ import (
 func TestEgressLifecycleNativeStepsDefined(t *testing.T) {
 	definitions := &egressDefinitions{t: t}
 	(&world{}).egressNativeSteps(definitions)
-	suite := godog.TestSuite{Name: "slice-28-native-definitions", Options: &godog.Options{Paths: []string{"egress_lifecycle.feature"}, Tags: "@ID-EGRESSLIFE-08,@ID-EGRESSLIFE-09,@ID-EGRESSLIFE-10,@ID-EGRESSLIFE-12,@ID-EGRESSLIFE-13,@ID-EGRESSLIFE-14", Output: io.Discard}}
+	(&world{}).syntheticMarkerSteps(definitions)
+	suite := godog.TestSuite{Name: "slice-28-native-definitions", Options: &godog.Options{Paths: []string{"egress_lifecycle.feature"}, Tags: "@ID-EGRESSLIFE-06,@ID-EGRESSLIFE-07,@ID-EGRESSLIFE-11,@ID-EGRESSLIFE-08,@ID-EGRESSLIFE-09,@ID-EGRESSLIFE-10,@ID-EGRESSLIFE-12,@ID-EGRESSLIFE-13,@ID-EGRESSLIFE-14", Output: io.Discard}}
 	features, err := suite.RetrieveFeatures()
 	if err != nil {
 		t.Fatal(err)
@@ -45,14 +46,18 @@ func TestEgressLifecycleNativeStepsDefined(t *testing.T) {
 			}
 		}
 	}
-	if cases != 16 {
-		t.Fatalf("implemented native outlines have %d rows, want 16", cases)
+	if cases != 19 {
+		t.Fatalf("implemented native outlines have %d rows, want 19", cases)
 	}
 }
 
 func TestEgressLifecycleRecorderForwardsRealResponses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "egress-refusals.jsonl")
 	if err := os.WriteFile(path, []byte("published refusal\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
@@ -83,7 +88,7 @@ func TestEgressLifecycleRecorderForwardsRealResponses(t *testing.T) {
 		t.Fatalf("forwarder manufactured a response: %v", err)
 	}
 	journal := a.snapshot()
-	if len(journal) != 1 || journal[0].status != http.StatusConflict || string(journal[0].response) != string(data) || journal[0].finished.Before(journal[0].at) || string(journal[0].logBefore) != "published refusal\n" || journal[0].logMode.Perm() != 0600 {
+	if len(journal) != 1 || journal[0].status != http.StatusConflict || string(journal[0].response) != string(data) || journal[0].finished.Before(journal[0].at) || string(journal[0].logBefore) != "published refusal\n" || journal[0].logMode != info.Mode() {
 		t.Fatal("recorder lost response/publication evidence")
 	}
 	journal[0].response[0] = 0

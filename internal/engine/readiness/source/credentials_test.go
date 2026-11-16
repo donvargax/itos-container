@@ -57,12 +57,19 @@ func TestCredentialObservationRequiresThePolicyPin(t *testing.T) {
 			pin.Identity.Inode = "3"
 			want = "checkout.changed"
 		}
+		// This assembly resolves a native account path before applying Linux
+		// source rules. A Windows host cannot supply the Linux fixture's /account;
+		// the pure policy-pin contract still runs on every OS in porttest.
+		subject := "/checkout"
+		if !filepath.IsAbs("/account") && state != "missing capability" && state != "closed" {
+			want, subject = "state.unavailable", ""
+		}
 		got := c.Inspect(grants)
 		if want == "" {
 			if len(got.Issues) != 0 {
 				t.Fatalf("matching policy pin: %#v", got)
 			}
-		} else if len(got.Issues) != 1 || got.Issues[0] != (port.CredentialIssue{Rule: want, Index: -1, Subject: "/checkout"}) || fs.Calls["source metadata"] != 0 {
+		} else if len(got.Issues) != 1 || got.Issues[0] != (port.CredentialIssue{Rule: want, Index: -1, Subject: subject}) || fs.Calls["source metadata"] != 0 {
 			t.Fatalf("%s: %#v %v", state, got, fs.Calls)
 		}
 	}

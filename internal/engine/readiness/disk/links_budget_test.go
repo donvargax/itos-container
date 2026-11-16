@@ -23,15 +23,18 @@ func scanRoot(t *testing.T, path string) *os.Root {
 
 func TestCheckoutScanCountsAllEntriesAcrossDirectoriesAndBatches(t *testing.T) {
 	path := t.TempDir()
-	// 3 directory entries, 3 dangling symlinks and 390 regular files. Each
-	// directory needs multiple reads, and none may reset the total allowance.
+	// 3 parent directories, 3 dangling symlinks and 390 empty child directories.
+	// Count batches independently of native regular-file link metadata, which
+	// Windows does not expose through FileInfo.Sys. Link refusal has its own tests.
 	for i := 0; i < 3; i++ {
 		dir := filepath.Join(path, strconv.Itoa(i))
 		if err := os.Mkdir(dir, 0700); err != nil {
 			t.Fatal(err)
 		}
 		for j := 0; j < 130; j++ {
-			mustWrite(t, filepath.Join(dir, strconv.Itoa(j)))
+			if err := os.Mkdir(filepath.Join(dir, strconv.Itoa(j)), 0700); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if err := os.Symlink("missing", filepath.Join(dir, "link")); err != nil {
 			t.Fatal(err)
@@ -44,6 +47,7 @@ func TestCheckoutScanCountsAllEntriesAcrossDirectoriesAndBatches(t *testing.T) {
 	}{{395, port.CheckoutUnavailable}, {396, port.None}, {397, port.None}} {
 		s := newFileScan()
 		s.remaining = tc.entries
+		s.now = func() time.Time { return s.deadline.Add(-time.Second) }
 		reads := 0
 		s.readDir = func(f *os.File, n int) ([]os.DirEntry, error) {
 			reads++
