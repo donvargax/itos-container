@@ -11,10 +11,41 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	rp "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	st "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
+
+// Hiding the optional catalog capability must fail closed, not pass an empty
+// root to the ordinary checkout-aware opener.
+type checkoutOnlyReadiness struct{ rp.Engine }
+
+type catalogOnlyReadiness struct {
+	*st.Readiness
+	t *testing.T
+}
+
+func (r catalogOnlyReadiness) Open(string, string, time.Duration) (rp.Session, rp.Failure) {
+	r.t.Fatal("catalog attempted checkout-aware open")
+	return nil, rp.EngineSelection
+}
+
+func TestHomeCatalogRequiresExplicitOpeningCapability(t *testing.T) {
+	engine, b, pin := sdkFixture(t)
+	b.Checkout = rp.CheckoutIdentity{}
+	engine.Readiness = checkoutOnlyReadiness{pin}
+	if c, f := engine.OpenRun(t.Context(), b); c != nil || f != sp.Refused {
+		t.Fatal("catalog accepted an engine without the capability", c, f)
+	}
+	engine.Readiness = catalogOnlyReadiness{pin, t}
+	c, f := engine.OpenRun(t.Context(), b)
+	if f != "" || c == nil {
+		t.Fatal("explicit catalog opener failed", f)
+	}
+	c.Close()
+}
 
 func homeAdapterConnection(t *testing.T, handler http.HandlerFunc) (*runConnection, *st.Readiness) {
 	t.Helper()

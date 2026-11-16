@@ -57,7 +57,10 @@ func (c *runConnection) InitializeHome(ctx context.Context, id, uid, gid string)
 	w := tar.NewWriter(&data)
 	// The fixed directory header, bounded numeric IDs and bytes.Buffer have
 	// neither an invalid tar value nor an I/O failure path.
-	_ = w.WriteHeader(&tar.Header{Name: ".", Typeflag: tar.TypeDir, Mode: 0700, Uid: int(u), Gid: int(g)})
+	// Moby skips an existing directory's "." header. Its extractor joins "/"
+	// to the destination and applies metadata to that root, without touching
+	// the read-only parent or creating a child inside the volume.
+	_ = w.WriteHeader(&tar.Header{Name: "/", Typeflag: tar.TypeDir, Mode: 0700, Uid: int(u), Gid: int(g)})
 	_ = w.Close()
 	call, cancel := c.call(ctx)
 	defer cancel()

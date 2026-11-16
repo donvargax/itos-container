@@ -40,6 +40,10 @@ type homeSDKFixture struct {
 }
 type homeSDKReadiness struct{ a *homeSDKFixture }
 
+func (e homeSDKReadiness) OpenCatalog(selection string, budget time.Duration) (rp.Session, rp.Failure) {
+	return e.Open(selection, "", budget)
+}
+
 func (a *homeSDKFixture) workerEvents() []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"testing"
 
@@ -78,9 +77,6 @@ type homeDiskFixture struct {
 
 func homeDisk(t *testing.T, f *homeLocalFixture) *homeDiskFixture {
 	t.Helper()
-	if runtime.GOOS != "linux" {
-		t.Skip("protected home storage target is Linux")
-	}
 	root := t.TempDir()
 	account := filepath.Join(root, "account")
 	if err := os.Mkdir(account, 0700); err != nil {

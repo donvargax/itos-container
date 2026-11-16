@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -67,6 +68,9 @@ func (homeFixtureCodec) DecodeHome(data []byte) (sp.HomeScope, sp.Outcome) {
 
 func newHomeLocalFixture(t *testing.T, uid, gid string) *homeLocalFixture {
 	t.Helper()
+	if os.Getenv("SLICE_34_HOME_BACKEND") == "disk" && runtime.GOOS != "linux" {
+		t.Skip("protected home storage target is Linux")
+	}
 	m := publicMemoryFixture(t)
 	var settings map[string]any
 	if err := json.Unmarshal([]byte(m.c.Canonical), &settings); err != nil {

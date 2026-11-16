@@ -46,7 +46,17 @@ func (e Engine) open(ctx context.Context, b port.Binding, unavailable port.Outco
 		return nil, port.Incomplete
 	}
 	deadline, _ := call.Deadline()
-	pin, f := e.Readiness.Open(e.Selection, b.Checkout.Root, time.Until(deadline))
+	var pin rp.Session
+	var f rp.Failure
+	if b.Checkout.Root == "" {
+		catalog, ok := e.Readiness.(rp.CatalogEngine)
+		if !ok {
+			return nil, port.Refused
+		}
+		pin, f = catalog.OpenCatalog(e.Selection, time.Until(deadline))
+	} else {
+		pin, f = e.Readiness.Open(e.Selection, b.Checkout.Root, time.Until(deadline))
+	}
 	if f != rp.None {
 		if f == rp.EngineUnavailable {
 			return nil, unavailable
