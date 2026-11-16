@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -57,6 +58,102 @@ func TestTerminalChild(t *testing.T) {
 	t.Run("observer_os_failures", observerOSFailures)
 	t.Run("busy_during_acquisition", busyDuringAcquisition)
 	t.Run("poll_system_error", pollSystemError)
+	t.Run("cancel_before_raw", cancelBeforeRaw)
+	t.Run("interrupted_observation", interruptedObservation)
+}
+
+// Cancel at the second acquisition checkpoint, before MakeRaw, without a
+// scheduling window or a signal sent to any process.
+type cancelOnRecheck struct {
+	context.Context
+	cancel  context.CancelFunc
+	checked bool
+}
+
+func (c *cancelOnRecheck) Err() error {
+	if c.checked {
+		c.cancel()
+	}
+	c.checked = true
+	return c.Context.Err()
+}
+
+func cancelBeforeRaw(t *testing.T) {
+	p := openPair(t)
+	before := p.snapshot(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	provider := New(p.slave, "linux")
+	l, err := provider.Acquire(&cancelOnRecheck{Context: ctx, cancel: cancel})
+	if l != nil {
+		defer l.Close()
+	}
+	var failure *port.Failure
+	if l != nil || !errors.As(err, &failure) || failure.Kind != port.Cancelled || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancel before raw = %v, %v", l, err)
+	}
+	if !reflect.DeepEqual(before, p.snapshot(t)) {
+		t.Fatal("cancelled acquisition changed terminal state")
+	}
+	// Refusal must also release the provider for its next acquisition.
+	l, err = provider.Acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := l.Close(); r.Cause != port.Closed || r.RestoreErr != nil {
+		t.Fatalf("reacquire after cancellation: %+v", r)
+	}
+}
+
+// A stateful RawConn fixture starts interrupted, then uses the real PTY for
+// every subsequent control operation, including exact-state restoration.
+type interruptedConn struct {
+	syscall.RawConn
+	interrupted bool
+}
+
+func (c *interruptedConn) Control(call func(uintptr)) error {
+	if !c.interrupted {
+		c.interrupted = true
+		return syscall.EINTR
+	}
+	return c.RawConn.Control(call)
+}
+
+func interruptedObservation(t *testing.T) {
+	p := openPair(t)
+	before := p.snapshot(t)
+	conn, err := p.slave.SyscallConn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := term.MakeRaw(int(p.slave.Fd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := &lease{provider: New(p.slave, "linux"), conn: &interruptedConn{RawConn: conn},
+		original: original, initial: port.Dimensions{Columns: 93, Rows: 31},
+		resizes: make(chan port.Dimensions, 1), done: make(chan struct{}),
+		stop: make(chan struct{}), signals: make(chan os.Signal, 1)}
+	want := port.Dimensions{Columns: 107, Rows: 43}
+	p.size(t, want)
+	l.signals <- windowSignal
+	go l.run(context.Background())
+	defer l.Close()
+	select {
+	case got, ok := <-l.Resizes():
+		if !ok || got != want {
+			t.Fatalf("interrupted resize lost: %v, open=%v", got, ok)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("interrupted observation never retried the pending resize")
+	}
+	if r := l.Close(); r.Cause != port.Closed || r.Err != nil || r.RestoreErr != nil {
+		t.Fatalf("interruption ended the lease: %+v", r)
+	}
+	if !reflect.DeepEqual(before, p.snapshot(t)) {
+		t.Fatal("interrupted observation did not restore terminal state")
+	}
 }
 
 type terminalPair struct{ master, slave *os.File }
