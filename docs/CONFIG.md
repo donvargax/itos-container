@@ -5,16 +5,17 @@ sandbox policy. The [charter](charter.md) selects the milestone from the binding
 [pilot contract](plans/container-pilot.md); they take precedence over upstream
 examples. Strict policy validation is implemented through `doctor --policy-only`, and
 policy plus manifest validation through `doctor --manifest-only`. A policy can request an
-exact host-name egress allowlist (version 2 below); terminal approval binds it, but run
-still refuses it. The inherited count, version and completion commands remain. Ordinary doctor inspects host readiness and approval. Explicit approval is implemented;
-runtime isolation remains unimplemented.
+exact host-name egress allowlist (version 2 below); terminal approval binds it and run
+uses that frozen list through the owned proxy. The inherited count, version and
+completion commands remain. Ordinary doctor inspects host readiness and approval.
+Explicit approval is implemented;
+runtime support requires the corresponding CI engine evidence.
 
 The milestone is an offline owned run with no network, an approved hardened container,
 the checkout as its only host mount, a non-root identity and owned cleanup. Linux amd64
 with native Docker is a target requiring passing runtime evidence, not a supported-host
-claim. A policy may request network egress to an allowlist of host names, but no
-proxy enforces it and no run starts with it yet. Ordinary doctor and approve bind
-the requested list; run still refuses a valid version 2 file for now. Version 3 adds
+claim. A version-2 allowlist run starts an owned proxy and isolated internal network.
+Ordinary doctor, approve and run share readiness checks and effective settings. Version 3 adds
 named credential requests and metadata-only inspection, without approval or delivery.
 Credential delivery/accounts, network Git, LAN ingress, Compose and other platforms
 remain deferred. Describing the wider pilot does not authorize its later slices or settle an open security decision.
@@ -320,11 +321,30 @@ policy version, so changing 1 to 2 offline still needs one new approval. Reorder
 or equivalently respelling names keeps the same fingerprint; adding, removing or
 changing a name does not. Stored records must satisfy their profile's exact shape.
 
-Run alone still refuses every valid version 2 policy with `policy.version` at
-`/version`, exit 2, before the manifest, engine or host state. Its fix names
-`doctor --policy-only`. Invalid policies retain their own validation problems.
-No approval here starts a proxy or grants a route; slice-27 must prove enforcement
-before lifting run's gate. See the [approval decision](decisions/0026-egress-allowlist-approval.md).
+Run accepts valid version 2 policies, including offline requests. Allowlist readiness
+requires native Docker >=28.0 with negotiated API >=1.48, the installed regular static
+Linux amd64 controller outside the checkout, and this cached proxy image:
+
+`docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835`
+
+A missing image reports `doctor.image.missing` (exit 3) and this exact operator fix:
+
+```sh
+docker pull docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835
+```
+
+An unusable cached proxy reports `doctor.egress-image`, an inadequate or unknown daemon
+`doctor.egress-engine`, and an unsafe executable `doctor.egress-executable`, all exit 3.
+No command pulls, builds or substitutes an image. Offline requires none of these egress
+prerequisites. A changed list refuses before opening the engine, naming sorted JSON
+pointers without values. Existing matching allowlist-v1 records remain valid.
+
+`intents/<project>/<token>.egress.json` stores schema-1 execution evidence containing
+only the observed `proxy_image_id`. It is published durably before the intent and
+before any resource creation, under the same protected collection. Recovery requires
+it for an allowlist session; old offline records need no sidecar. It neither changes
+canonical approval nor participates in the fingerprint. See the
+[runtime decision](decisions/0028-egress-run-wiring.md).
 
 The canonicalising library is `golang.org/x/net v0.60.0` (BSD-3-Clause, maintained by the
 Go team; `net/http` uses the same Lookup profile for host names) with

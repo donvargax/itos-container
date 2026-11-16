@@ -153,6 +153,15 @@ func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *appro
 				_, _ = fmt.Fprintln(u.Stdout, line)
 			}
 		}
+		if p := result.Policy; p != nil && p.Policy != nil && p.Policy.Network.Mode == "allowlist" {
+			_, _ = fmt.Fprintln(u.Stdout, "allowlist-v1: CONNECT on port 443 without TLS interception; isolated internal network")
+			for _, name := range p.Policy.Network.Allow {
+				_, _ = fmt.Fprintln(u.Stdout, "network.allow:", name)
+			}
+			if result.ProxyImage != nil {
+				_, _ = fmt.Fprintln(u.Stdout, "proxy image:", printable(result.ProxyImage.Reference))
+			}
+		}
 		_, _ = fmt.Fprintln(u.Stdout, "runtime isolation is not established")
 		u.Line("for scripts, use --json")
 	}

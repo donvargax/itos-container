@@ -7,7 +7,7 @@ import (
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
 )
 
-func TestEveryPolicyInspectionHasNamesAndOnlyReviewCommandsAdmitVersion2(t *testing.T) {
+func TestEveryPolicyInspectionHasNamesAndEgressPrerequisites(t *testing.T) {
 	if doctorPolicies().Names == nil {
 		t.Fatal("file-only doctor has no names adapter")
 	}
@@ -18,8 +18,8 @@ func TestEveryPolicyInspectionHasNamesAndOnlyReviewCommandsAdmitVersion2(t *test
 			if !ok || source.Inspector.Names == nil {
 				t.Fatal("readiness has no names adapter")
 			}
-			if source.Inspector.AllowVersion2 != (command == "doctor" || command == "approve") {
-				t.Fatal("wrong version gate for", command)
+			if source.Inspector.Executables == nil || source.Inspector.ProxyImage == "" {
+				t.Fatal("missing egress prerequisite for", command)
 			}
 		})
 	}

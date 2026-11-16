@@ -2,11 +2,13 @@ package disk
 
 import (
 	"bytes"
+	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
 	af "github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
 	rp "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	rf "github.com/donvargax/itos-container/internal/engine/readiness/port/porttest"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
+	"strings"
 	"testing"
 )
 
@@ -52,6 +54,9 @@ func TestStoreEgressRecordRoundTrip(t *testing.T) {
 func egressStore(b sp.Binding, r sp.Record) (Store, *af.Directory) {
 	codec := &sf.Codec{Value: b}
 	directory := &af.Directory{Files: map[string][]byte{r.NameToken() + ".json": codec.Encode(r)}}
+	if b.Egress != (sp.EgressGrant{}) {
+		directory.Files[r.NameToken()+".egress.json"] = executionBytes(b.Egress.ImageID)
+	}
 	storage := &af.Storage{Directories: map[string]*af.Directory{
 		"intents/" + b.Frozen.Project:   directory,
 		"snapshots/" + b.Frozen.Project: {Files: map[string][]byte{"1.json": []byte("snapshot")}},
@@ -117,6 +122,159 @@ func TestStoreEgressRefusesWorkerIntentWithoutNetworks(t *testing.T) {
 			}
 		} else if i.Record() != next || i.Validate() != "" {
 			t.Fatal("offline worker intent lost authority")
+		}
+	}
+}
+
+func TestEgressExecutionEvidenceIsRequiredAndImmutable(t *testing.T) {
+	for _, defect := range []string{"missing", "schema", "bad id", "conflict", "extra", "duplicate", "oversized", "read failure"} {
+		t.Run(defect, func(t *testing.T) {
+			b, _, _ := sf.Fixture()
+			b = sf.EgressBinding(b)
+			record := sf.EgressRecords(b)[6]
+			store, directory := egressStore(b, record)
+			name := record.NameToken() + ".egress.json"
+			ref := sp.Reference(b.Frozen.Project, record.NameToken())
+			opened, failure := store.Open(t.Context(), ref)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			switch defect {
+			case "missing":
+				delete(directory.Files, name)
+			case "schema":
+				directory.Files[name] = []byte(`{"proxy_image_id":"` + b.Egress.ImageID + `","schema":2}`)
+			case "bad id":
+				directory.Files[name] = executionBytes("sha256:bad")
+			case "conflict":
+				directory.Files[name] = executionBytes("sha256:" + strings.Repeat("a", 64))
+			case "extra":
+				directory.Files[name] = []byte(`{"extra":1,"proxy_image_id":"` + b.Egress.ImageID + `","schema":1}`)
+			case "duplicate":
+				directory.Files[name] = []byte(`{"proxy_image_id":"` + b.Egress.ImageID + `","schema":1,"schema":1}`)
+			case "oversized":
+				directory.Files[name] = bytes.Repeat([]byte(" "), 1025)
+			case "read failure":
+				directory.ReadFailures = map[string]ap.Failure{name: "state.path"}
+			}
+			if opened.Validate() == "" {
+				t.Fatal("changed execution evidence accepted")
+			}
+			opened.Close()
+			if recovered, f := store.OpenCleanup(t.Context(), ref); recovered != nil || f == "" {
+				if recovered != nil {
+					recovered.Close()
+				}
+				t.Fatal("recovery inferred missing/conflicting original image", f)
+			}
+		})
+	}
+}
+
+func TestEgressExecutionPublicationPrecedesIntentAndRefusesMissingObservation(t *testing.T) {
+	for _, id := range []string{"", "sha256:bad", "sha256:" + strings.Repeat("a", 64), "sha256:" + strings.Repeat("e", 64)} {
+		b, _, _ := sf.Fixture()
+		b = sf.EgressBinding(b)
+		r := sf.EgressRecords(b)[0]
+		store, d := egressStore(b, r)
+		delete(d.Files, r.NameToken()+".json")
+		delete(d.Files, r.NameToken()+".egress.json")
+		opened, f := store.Prepare(t.Context(), ap.Durable{Frozen: b.Frozen, ProxyImageID: id}, r.NameToken())
+		if id == b.Egress.ImageID {
+			if f != "" || opened == nil || opened.Binding().Egress.ImageID != id || !bytes.Equal(d.Files[r.NameToken()+".egress.json"], executionBytes(id)) {
+				t.Fatal("original image not durable", f)
+			}
+			opened.Close()
+		} else if opened != nil || f != sp.Invalid || len(d.Files) != 0 {
+			if opened != nil {
+				opened.Close()
+			}
+			t.Fatal("unobserved/conflicting image granted intent", f)
+		}
+	}
+}
+
+func TestExecutionPublicationRefusesConflictsAndStorageFailures(t *testing.T) {
+	for _, defect := range []string{"read", "write", "existing", "offline observation", "incomplete grant"} {
+		t.Run(defect, func(t *testing.T) {
+			b, _, _ := sf.Fixture()
+			b = sf.EgressBinding(b)
+			r := sf.EgressRecords(b)[0]
+			store, d := egressStore(b, r)
+			name := r.NameToken() + ".egress.json"
+			delete(d.Files, r.NameToken()+".json")
+			id := b.Egress.ImageID
+			want := sp.Refused
+			switch defect {
+			case "read":
+				d.ReadFailures = map[string]ap.Failure{name: "state.path"}
+				want = sp.Unsafe
+			case "write":
+				delete(d.Files, name)
+				d.WriteFailure = "state.write"
+				want = sp.IntentWrite
+			case "offline observation":
+				b.Egress = sp.EgressGrant{}
+				store.Codec = &sf.Codec{Value: b}
+				want = sp.Invalid
+			case "incomplete grant":
+				b.Egress.Names = ""
+				store.Codec = &sf.Codec{Value: b}
+				want = sp.Invalid
+			}
+			opened, f := store.Prepare(t.Context(), ap.Durable{Frozen: b.Frozen, ProxyImageID: id}, r.NameToken())
+			if opened != nil || f != want {
+				if opened != nil {
+					opened.Close()
+				}
+				t.Fatalf("unusable evidence granted intent: %s, want %s", f, want)
+			}
+			if d.Files[r.NameToken()+".json"] != nil {
+				t.Fatal("published an intent after refused execution evidence")
+			}
+		})
+	}
+}
+
+func TestExecutionObservationFillsOnlyTheOriginalSnapshotGrant(t *testing.T) {
+	for _, id := range []string{"", "sha256:bad", "sha256:" + strings.Repeat("e", 64)} {
+		b, _, _ := sf.Fixture()
+		b = sf.EgressBinding(b)
+		b.Egress.ImageID = ""
+		r := sf.EgressRecords(b)[0]
+		store, d := egressStore(b, r)
+		name := r.NameToken() + ".egress.json"
+		d.Files[name] = executionBytes(id)
+		ref := sp.Reference(b.Frozen.Project, r.NameToken())
+		opened, f := store.OpenCleanup(t.Context(), ref)
+		if id == "" || id == "sha256:bad" {
+			if opened != nil || f != sp.Invalid {
+				if opened != nil {
+					opened.Close()
+				}
+				t.Fatal("unusable original image accepted", f)
+			}
+		} else {
+			if f != "" || opened == nil || opened.Binding().Egress.ImageID != id || opened.Binding().Egress.Names != b.Egress.Names {
+				t.Fatal("original evidence mapping lost", f)
+			}
+			opened.Close()
+		}
+		delete(d.Files, r.NameToken()+".json")
+		delete(d.Files, name)
+		created, f := store.Prepare(t.Context(), ap.Durable{Frozen: b.Frozen, ProxyImageID: id}, r.NameToken())
+		if id == "" || id == "sha256:bad" {
+			if created != nil || f != sp.Invalid {
+				if created != nil {
+					created.Close()
+				}
+				t.Fatal("unusable fresh image accepted", f)
+			}
+		} else {
+			if f != "" || created == nil || created.Binding().Egress.ImageID != id {
+				t.Fatal("fresh evidence mapping lost", f)
+			}
+			created.Close()
 		}
 	}
 }

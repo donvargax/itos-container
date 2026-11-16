@@ -91,6 +91,11 @@ func TestDiagnosticRefusals(t *testing.T) {
 			Message: "Image user does not match the manifest's numeric identity request",
 			Fix:     "prepare an image with a positive numeric UID matching each specified manifest user",
 		}},
+		{"proxy executable", port.Issue{Kind: port.EgressExecutable, Subject: "executable"}, port.Problem{
+			Rule: "doctor.egress-executable", Exit: 3, Field: "executable",
+			Message: "This program cannot be delivered to the egress proxy",
+			Fix:     "use the installed static Linux amd64 release of itos-container, from a path outside the checkout",
+		}},
 		{"unknown failure", port.Issue{Kind: port.Failure(255), Subject: "inspection"}, port.Problem{
 			Rule: "doctor.internal", Exit: 70, Field: "inspection",
 			Message: "Unknown inspection failure", Fix: "report this as a bug",

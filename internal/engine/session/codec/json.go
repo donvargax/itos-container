@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	manifest "github.com/donvargax/itos-container/internal/engine/manifest/port"
@@ -119,7 +120,6 @@ func (j JSON) Snapshot(data []byte) (port.Binding, port.Outcome) {
 func binding(r approval.Record, f approval.Frozen) port.Binding {
 	var settings struct {
 		Credentials []approval.CredentialGrant
-		Policy      struct{ Network struct{ Mode string } }
 		Checkout    struct {
 			Root, Device, Inode string
 			GitDevice           string `json:"git_device"`
@@ -131,6 +131,13 @@ func binding(r approval.Record, f approval.Frozen) port.Binding {
 			WorkspaceFolder string          `json:"workspaceFolder"`
 			ContainerEnv    json.RawMessage `json:"containerEnv"`
 		}
+		Profile string
+		Policy  struct {
+			Network struct {
+				Mode  string
+				Allow []string
+			}
+		}
 	}
 	_ = json.Unmarshal([]byte(r.Canonical), &settings)
 	b := port.Binding{Frozen: f, UID: r.UID, GID: r.GID, Endpoint: settings.Engine.Endpoint, EngineID: settings.Engine.ID, ImageReference: settings.Image.Reference, ImageID: settings.Image.ID}
@@ -139,5 +146,8 @@ func binding(r approval.Record, f approval.Frozen) port.Binding {
 	b.Checkout.Root, b.Checkout.Device, b.Checkout.Inode = settings.Checkout.Root, settings.Checkout.Device, settings.Checkout.Inode
 	b.Checkout.GitDevice, b.Checkout.GitInode = settings.Checkout.GitDevice, settings.Checkout.GitInode
 	b.Workspace, b.Environment = settings.Manifest.WorkspaceFolder, string(settings.Manifest.ContainerEnv)
+	if settings.Profile == "allowlist-v1" {
+		b.Egress.Names = strings.Join(settings.Policy.Network.Allow, "\n")
+	}
 	return b
 }

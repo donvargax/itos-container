@@ -34,6 +34,7 @@ import (
 	approvalhost "github.com/donvargax/itos-container/internal/engine/approval/host"
 	approvalport "github.com/donvargax/itos-container/internal/engine/approval/port"
 	approvalpresentation "github.com/donvargax/itos-container/internal/engine/approval/presentation"
+	egresstcp "github.com/donvargax/itos-container/internal/engine/egress/tcp"
 	manifestdisk "github.com/donvargax/itos-container/internal/engine/manifest/disk"
 	"github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
 	"github.com/donvargax/itos-container/internal/engine/manifest/reference"
@@ -43,6 +44,7 @@ import (
 	readinessdisk "github.com/donvargax/itos-container/internal/engine/readiness/disk"
 	"github.com/donvargax/itos-container/internal/engine/readiness/docker"
 	readiness "github.com/donvargax/itos-container/internal/engine/readiness/domain"
+	readinessexecutable "github.com/donvargax/itos-container/internal/engine/readiness/executable"
 	readinessport "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	readinessreference "github.com/donvargax/itos-container/internal/engine/readiness/reference"
 	readinesssource "github.com/donvargax/itos-container/internal/engine/readiness/source"
@@ -59,6 +61,7 @@ import (
 	"github.com/donvargax/itos-container/internal/slices/count/input"
 	doctor "github.com/donvargax/itos-container/internal/slices/doctor/command"
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
+	egressproxy "github.com/donvargax/itos-container/internal/slices/egressproxy/command"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
 	"github.com/donvargax/itos-container/internal/slices/run/signals"
 	statuscommand "github.com/donvargax/itos-container/internal/slices/status/command"
@@ -72,15 +75,16 @@ type commandLine struct {
 	// and no environment variable.
 	ShowVersion kong.VersionFlag `name:"version" help:"Print the version and the commit it was built from, and exit."`
 
-	Approve    approve.CLI       `cmd:"" help:"Review and remember exact settings."`
-	Count      command.CLI       `cmd:"" help:"Count the lines and words of a file, or of standard input."`
-	Doctor     doctor.CLI        `cmd:"" help:"Inspect the policy file and restricted worker manifest."`
-	Run        runcommand.CLI    `cmd:"" help:"Run a literal command in an approved offline worker."`
-	Status     statuscommand.CLI `cmd:"" help:"Inspect owned sessions in the effective project."`
-	Stop       stopcommand.CLI   `cmd:"" help:"Stop and clean one registered project session."`
-	Version    struct{}          `cmd:"" help:"Print the version and the commit it was built from."`
-	Completion cli.Completion    `cmd:"" help:"Print a shell completion script."`
-	Complete   struct{}          `cmd:"" name:"__complete" hidden:""`
+	Approve     approve.CLI       `cmd:"" help:"Review and remember exact settings."`
+	Count       command.CLI       `cmd:"" help:"Count the lines and words of a file, or of standard input."`
+	Doctor      doctor.CLI        `cmd:"" help:"Inspect the policy file and restricted worker manifest."`
+	Run         runcommand.CLI    `cmd:"" help:"Run a literal command in an approved offline or allowlist worker."`
+	Status      statuscommand.CLI `cmd:"" help:"Inspect owned sessions in the effective project."`
+	Stop        stopcommand.CLI   `cmd:"" help:"Stop and clean one registered project session."`
+	Version     struct{}          `cmd:"" help:"Print the version and the commit it was built from."`
+	Completion  cli.Completion    `cmd:"" help:"Print a shell completion script."`
+	EgressProxy egressproxy.CLI   `cmd:"" name:"__egress-proxy" hidden:""`
+	Complete    struct{}          `cmd:"" name:"__complete" hidden:""`
 }
 
 func main() {
@@ -133,6 +137,8 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	}
 	c.Count.Files = input.Files{Disk: countdisk.Files{}, In: in}
 	switch command, _, _ := strings.Cut(ctx.Command(), " "); command {
+	case "__egress-proxy":
+		return c.EgressProxy.Run(context.Background(), egresstcp.New(stdout), stderr)
 	case "count":
 		return c.Count.Run(ui)
 	case "doctor":
@@ -209,8 +215,11 @@ func sessionServices(service approvaldomain.Service) (sessiondomain.Runner, sess
 	protected := service.Store.(approvaldisk.Store)
 	store := sessiondisk.Store{Storage: approvaldisk.Storage{Store: protected}, Codec: codec, Host: service.Host, Checkout: &readinessdisk.Checkout{}, Input: source.Input}
 	registry := sessiondisk.Registry{Store: store, Storage: approvaldisk.Registry{Store: protected}, Codec: codec, Identity: approvalcanonical.JSON{}}
-	engine := sessiondocker.Engine{Readiness: docker.Engine{}, Selection: source.Input.Host}
-	return sessiondomain.Runner{Store: store, Registry: registry, Engine: engine, Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{}}, sessiondomain.Recovery{Registry: registry, Engine: engine}
+	proxyExecutable, _ := os.Executable()
+	proxyExecutable, _ = filepath.EvalSymlinks(proxyExecutable)
+	engine := sessiondocker.Engine{Readiness: docker.Engine{}, Selection: source.Input.Host, Executable: proxyExecutable}
+	refusals := sessiondisk.RefusalLog{Store: store, Storage: approvaldisk.Registry{Store: protected}}
+	return sessiondomain.Runner{Refusals: refusals, Store: store, Registry: registry, Engine: engine, Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{}}, sessiondomain.Recovery{Refusals: refusals, Registry: registry, Engine: engine}
 }
 
 // recoveryJSON serves parsed commands and usage refusals alike. Only literal 1
@@ -301,10 +310,10 @@ func approvalServices(command string, in io.Reader, out, errout io.Writer) (appr
 	}
 	credentialSources := readinesssource.Credentials{FS: &readinessdisk.CredentialFiles{}, Checkout: checkout, Account: accountLookup, Input: readinessport.CredentialInput{Root: root, State: readinesssource.SelectedState(os.Getenv("XDG_STATE_HOME"), os.Getenv("HOME")), UID: int64(os.Geteuid()), OS: runtime.GOOS, Architecture: runtime.GOARCH}}
 	source := inspection.Readiness{Inspector: readiness.Inspector{
-		AllowVersion2: command == "doctor" || command == "approve",
 		AllowVersion3: command == "doctor" || command == "approve",
 		Sources:       credentialSources,
-		Checkout:      checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}}, Names: policyidna.Names{},
+		Executables:   readinessexecutable.Program{}, ProxyImage: approvalcanonical.ProxyImage,
+		Checkout: checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}}, Names: policyidna.Names{},
 		Files: manifestdisk.Files{OpenRoot: checkout.OpenRoot}, Parser: jsonc.Parser{}, References: reference.References{}, Engine: docker.Engine{},
 		Digests: readinessreference.Digests{},
 	}, Input: readinessport.Input{Root: root, OS: runtime.GOOS, Architecture: runtime.GOARCH,

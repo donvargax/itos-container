@@ -130,6 +130,7 @@ func sessionEntry(s port.Session) (port.RecoveryEntry, port.Outcome) {
 	if s.Intent().Record().Schema >= 2 {
 		e.Anchor = "unknown"
 	}
+	e.Egress = s.Intent().Binding().Egress.Disclosure()
 	return e, failure
 }
 func finishEntry(e *port.RecoveryEntry) {

@@ -127,7 +127,7 @@ func credentialAdmissionCommand(t *testing.T, request credentialAdmissionRequest
 		session.AfterImage = change
 	}
 	input := rp.Input{Root: request.Root, Host: "unix:///engine.sock", OS: "linux", Architecture: "amd64"}
-	inspector := rd.Inspector{AllowVersion2: true, AllowVersion3: true, Sources: rsource.Credentials{Checkout: pin, FS: files, Input: rp.CredentialInput{Root: request.Root, State: request.State, UID: 1000, OS: "linux", Architecture: "amd64"}, Account: &af.Account{Home: "/account"}}, Checkout: pin, Policy: policies.Source, Names: idna.Names{}, Files: manifest, Parser: jsonc.Parser{}, References: reference.References{}, Digests: rref.Digests{}, Engine: engine}
+	inspector := rd.Inspector{AllowVersion3: true, Sources: rsource.Credentials{Checkout: pin, FS: files, Input: rp.CredentialInput{Root: request.Root, State: request.State, UID: 1000, OS: "linux", Architecture: "amd64"}, Account: &af.Account{Home: "/account"}}, Checkout: pin, Policy: policies.Source, Names: idna.Names{}, Files: manifest, Parser: jsonc.Parser{}, References: reference.References{}, Digests: rref.Digests{}, Engine: engine}
 	readiness := inspection.Readiness{Inspector: inspector, Input: input}
 	codec := ac.JSON{}
 	store := &af.Store{}

@@ -109,6 +109,15 @@ func (u UI) Print(r port.RecoveryResult, withJSON bool) int {
 			if e.MountDetector != "" {
 				_, _ = fmt.Fprintf(u.Out, "mount_detector %s\n", e.MountDetector)
 			}
+			if e.Egress != nil {
+				_, _ = fmt.Fprintln(u.Out, "profile", e.Egress.Profile)
+				for _, name := range e.Egress.Allow {
+					_, _ = fmt.Fprintln(u.Out, "network.allow:", name)
+				}
+				for _, limitation := range e.Egress.Limitations {
+					_, _ = fmt.Fprintln(u.Out, limitation)
+				}
+			}
 			if len(e.Retry) != 0 {
 				_, _ = fmt.Fprintf(u.Out, "Use the same effective project: itos container stop %s\n", e.ID)
 			}

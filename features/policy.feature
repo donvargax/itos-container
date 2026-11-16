@@ -633,10 +633,8 @@ Feature: Strict offline sandbox policy
   # policy version 1, 2 or 3" for an unsupported number, and "use the field type defined by
   # policy version 1, 2 or 3" for a wrongly typed version or a root that is not an object.
   # Ordinary doctor uses the same validation words (ID-POLICY-77).
-  # Doctor and approve admit a valid version 2 request and bind its effective
-  # network profile in approval. Run alone still refuses every valid version 2
-  # file with policy.version at /version, exit 2, before manifest, engine or host
-  # state, until slice-27 can honour it. Its fix names doctor --policy-only.
+  # Doctor, approve and run accept valid version 2 settings; allowlist runs
+  # require the inspected proxy prerequisites and matching protected approval.
   # Invalid version 2 files keep their own validation problems (ID-POLICY-78).
   #
   # Library decision, checked 2026-11-09: golang.org/x/net/idna, pinned at golang.org/x/net
@@ -1289,40 +1287,9 @@ Feature: Strict offline sandbox policy
     And it exits with code 2
     And the engine recorder has no connections
 
-  # Run still rejects version 2 before manifest, engine or approval inspection.
-  # Slice-26 replaces ID-POLICY-60/61 with approval's version-2 scenarios;
-  # the absent-manifest rows here continue to hold run's earlier refusal.
-  # Contract AC-02: a change to network permissions refuses startup, with no self-approval.
-  @slice-25 @ID-POLICY-62 @local-engine-fixture @linux
-  Scenario Outline: run refuses version 2 even beside a matching offline approval
-    Given an approval checkout and isolated host state
-    And a seeded matching approval at generation "1"
-    And the checkout policy contains:
-      """
-      <policy>
-      """
-    And the run preflight files are snapshotted
-    When itos-container runs with "doctor --policy-only --json"
-    Then it exits with code 0
-    When itos-container runs with "run -- fixture-workload"
-    Then run reports preflight problem "policy.version" with exit 2 and subject "/version"
-    And its error output says "doctor --policy-only"
-    And the Engine API journal is empty
-    And no endpoint connection was attempted
-    And the active approval bytes and generation are unchanged
-    And run preflight has changed no checkout or host state
-
-    Examples:
-      | policy                                                                                                        |
-      | {version: 2, manifest: .devcontainer/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}} |
-      | {version: 2, manifest: .devcontainer/devcontainer.json}                                                       |
-      | {version: 2, manifest: absent/devcontainer.json, network: {mode: allowlist, allow: [api.example.com]}}        |
-      | {version: 2, manifest: absent/devcontainer.json}                                                              |
-
-  # The refusal above follows validation, so an invalid file reports what is wrong with it. A
-  # build that refused every version 2 file first would report policy.version instead. Either
-  # order exits 2 before the manifest, so this settles which answer a person gets, not a safety
-  # property. Each row's first run fails today, when every version 2 file gets policy.version.
+  # EGRESS-01/02/03 supersede the temporary ID-POLICY-62 run gate.
+  # Invalid files retain their own validation errors before manifest inspection.
+  # The former blanket version-2 refusal would instead print policy.version.
   @slice-25 @ID-POLICY-78 @local-engine-fixture @linux
   Scenario Outline: ordinary commands report an invalid version 2 file's own problem
     Given an approval checkout and isolated host state

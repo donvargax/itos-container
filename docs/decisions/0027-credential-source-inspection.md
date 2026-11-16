@@ -404,7 +404,7 @@ root-only comparison. The policy pin and the source observation each walk the
 effective root's path without following links, and the pin stays held meanwhile;
 their identities are not compared, so a trusted host renaming another directory
 onto that path between the two walks is, like the changes above, not detected.
-Slice-30 supersedes that accepted read-only gap: [decision 0028](0028-credential-approval.md)
+Slice-30 supersedes that accepted read-only gap: [decision 0029](0029-credential-approval.md)
 requires the policy pin's device and inode to equal the observed checkout node at each
 source observation, including credentials-only. Mismatch is `doctor.checkout.changed`
 before consent and `approve.changed` after consent. Transient changes between observations
@@ -618,5 +618,5 @@ before the fix too, because the kernel refuses 4096 bytes itself. An overlong ro
 or state location kept its shared message, which named absoluteness and encoding
 but not length. Slice-30 supersedes that diagnostic note: both message and fix now name
 the boundary and 4095-byte limit, with ordinary doctor/approve lexical checks before
-source observation, including no-grant policies (decision 0028). `4620db6` pins the survivor the code proof at `1ee1e7a` left in the
+source observation, including no-grant policies (decision 0029). `4620db6` pins the survivor the code proof at `1ee1e7a` left in the
 identity comparison of protected roots. Fresh code proof remains CI-owned.

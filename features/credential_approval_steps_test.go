@@ -112,6 +112,11 @@ func (w *world) credentialApprovalRequest(request, network string) error {
 	w.approval.allow = nil
 	if network == "allowlist" {
 		w.approval.allow = []string{"api.example.com", "registry.example.org"}
+		if w.doctor.engine.egress == nil {
+			if err := w.localEgressFixture(); err != nil {
+				return err
+			}
+		}
 	} else if network != "offline" {
 		return fmt.Errorf("unknown network %q", network)
 	}
