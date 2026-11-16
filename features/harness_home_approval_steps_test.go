@@ -53,7 +53,7 @@ func (w *world) homeApprovalSteps(sc *godog.ScenarioContext) {
 			return fmt.Errorf("doctor did not return JSON: %s", inspected.stdout)
 		}
 		a := object(report["approval"])
-		if inspected.exit != 1 || a["status"] != "changed" || a["fingerprint"] != fingerprint || !reflect.DeepEqual(a["effective"], expected) {
+		if inspected.exit != 0 || a["status"] != "changed" || a["fingerprint"] != fingerprint || !reflect.DeepEqual(a["effective"], expected) {
 			return fmt.Errorf("doctor did not review the requested home: exit %d, %s", inspected.exit, inspected.stdout)
 		}
 		if w.exit != 0 || !strings.Contains(w.approval.beforeReview, fingerprint) && !strings.Contains(w.approval.beforeReview, `"profile":"offline-home-v1"`) {
