@@ -211,6 +211,63 @@ func TestCredentialLateOperationsRetainAuthority(t *testing.T) {
 		})
 	}
 }
+
+type delayedCredentialIntentStore struct {
+	port.Store
+	release <-chan struct{}
+}
+
+func (s delayedCredentialIntentStore) Prepare(ctx context.Context, frozen ap.Durable, token string) (port.Intent, port.Outcome) {
+	i, failure := s.Store.Prepare(ctx, frozen, token)
+	<-s.release
+	return i, failure
+}
+
+func TestCredentialLatePreparedIntentReleasesAuthority(t *testing.T) {
+	for _, fault := range []string{"", "reserved-record write"} {
+		name := "success"
+		if fault != "" {
+			name = "failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				runner, frozen, registry, engine, _ := registeredLifecycleFixture()
+				fixture := f.MemoryCredentialFixture(map[string][]byte{"claude-token": []byte("synthetic\n")})
+				registry.Store.Codec.(*f.Codec).Value.Credentials = fixture.Sources.Kinds()
+				registry.Store.Fault = fault
+				runner.Sources, runner.Credentials, runner.StagingEntropy = fixture.Sources, fixture.Stager, credentialEntropy{}
+				release := make(chan struct{})
+				runner.Store = delayedCredentialIntentStore{registry.Store, release}
+				start := time.Now()
+				result := runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{})
+				if result.Outcome != port.CallTimeout || result.Operation != "intent lock acquisition and intent publication" || result.Started || result.Exited || result.SessionID != "" || time.Since(start) != 10*time.Second {
+					t.Error("late intent publication changed the bounded startup result", result.Outcome, result.Operation)
+				}
+				synctest.Wait()
+				if registry.Store.Locked != (fault == "") {
+					t.Error("pending publication lost its acquired intent authority")
+				}
+				close(release)
+				synctest.Wait()
+				if registry.Store.Locked || len(registry.Records) != 0 || len(engine.Events) != 0 || len(fixture.Stager.(*f.CredentialStager).Events) != 0 || fixture.Sources.Closes != 1 {
+					t.Fatal("late intent retained authority or continued credential launch")
+				}
+				if fault == "" {
+					ref := port.Reference(frozen.Frozen.Project, strings.Repeat("2", 64))
+					i, failure := registry.Store.OpenCleanup(t.Context(), ref)
+					if failure != "" {
+						t.Fatal("late intent prevented fresh cleanup", failure)
+					}
+					defer i.Close()
+					if i.Record().Stage != "reserved" || i.Record().ContainerID != "" || i.Record().Credentials != (port.CredentialStaging{}) {
+						t.Fatal("late preparation changed original no-create evidence")
+					}
+				}
+			})
+		})
+	}
+}
+
 func TestCredentialRegisteredRunAndEgressCleanup(t *testing.T) {
 	for _, egress := range []bool{false, true} {
 		for _, lostAck := range []bool{false, true} {
