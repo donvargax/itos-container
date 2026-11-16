@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/cli"
+	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	manifest "github.com/donvargax/itos-container/internal/engine/manifest/port"
 	policy "github.com/donvargax/itos-container/internal/engine/policy/port"
 	"github.com/donvargax/itos-container/internal/engine/readiness/port"
@@ -80,5 +81,30 @@ func TestUnsupportedHostReadinessDiagnostic(t *testing.T) {
 	p := body.Problems[0]
 	if p.Rule != "doctor.host.unsupported" || p.Exit != 1 || p.Field != "host" || p.Path != nil || p.Image != "" || p.Message == "" || p.Fix == "" {
 		t.Fatalf("incomplete unsupported-host diagnostic: %+v", p)
+	}
+}
+
+func TestPlainReadinessRetainsRequestedCredentialsOnFailure(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	result := port.Result{
+		Credentials: &port.CredentialResult{Issues: []port.CredentialIssue{{Rule: "credential.missing", Index: 0}}},
+	}
+	report := approval.Report{Status: "unavailable", RequestedText: []string{
+		`credentials: claude-token source="/vault/claude" target="/run/itos-container/credentials/claude-token"`,
+		`credentials: github-token source="/vault/github" target="/run/itos-container/credentials/github-token"`,
+	}}
+	code := present(&cli.UI{Stdout: &stdout, Stderr: &stderr}, result, false, &report, nil)
+	if code != 3 {
+		t.Fatalf("missing credential returned exit %d, want 3", code)
+	}
+	want := "approval unavailable\nfingerprint: \n\n" +
+		"credentials: claude-token source=\"/vault/claude\" target=\"/run/itos-container/credentials/claude-token\"\n" +
+		"credentials: github-token source=\"/vault/github\" target=\"/run/itos-container/credentials/github-token\"\n" +
+		"runtime isolation is not established\n"
+	if stdout.String() != want {
+		t.Fatalf("requested grants disappeared or changed on refusal: %q, want %q", stdout.String(), want)
+	}
+	if !strings.Contains(stderr.String(), `credential.missing "itos-container.yaml/credentials/0/source": Credential source is absent;`) {
+		t.Fatalf("missing source lost its diagnostic: %s", stderr.String())
 	}
 }

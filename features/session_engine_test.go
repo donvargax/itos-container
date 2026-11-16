@@ -268,8 +268,14 @@ func (a *sessionAPI) respond(r *http.Request, body []byte) (int, http.Header, []
 
 func (a *sessionAPI) respondLocal(r *http.Request) (int, http.Header, []byte, error) {
 	path := doctorRequestPath(r.URL.Path)
-	header := http.Header{"Content-Type": []string{"application/json"}, "API-Version": []string{"1.56"}, "OSType": []string{"linux"}}
 	base := a.w.doctor.engine
+	// Egress fixtures select an older daemon. The ping must advertise the same
+	// maximum API as /version, or recovery correctly refuses inconsistent metadata.
+	api, _ := base.version["ApiVersion"].(string)
+	header := make(http.Header)
+	header.Set("Content-Type", "application/json")
+	header.Set("API-Version", api)
+	header.Set("OSType", "linux")
 	var value any
 	s := a.w.session
 	compound := false

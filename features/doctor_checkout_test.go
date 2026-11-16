@@ -411,6 +411,9 @@ func (w *world) runDoctor(env []string, args ...string) error {
 	if d.snapshot == nil {
 		var err error
 		d.snapshot, err = doctorTree(w.dir)
+		if w.credentialApproval != nil {
+			d.snapshot, err = w.credentialApprovalTree()
+		}
 		if err != nil {
 			return err
 		}

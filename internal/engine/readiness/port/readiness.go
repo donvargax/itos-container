@@ -121,14 +121,15 @@ type ImageIdentity struct{ Reference, ID, OS, Architecture string }
 
 // Result is a snapshot, not approval or runtime isolation evidence.
 type Result struct {
-	ProxyImage *ImageIdentity
-	Checkout   *CheckoutIdentity
-	Engine     *EngineIdentity
-	Image      *ImageIdentity
-	Policy     *policy.Result
-	Manifest   *manifest.Result
-	Issues     []Issue
-	Ready      bool
+	ProxyImage  *ImageIdentity
+	Checkout    *CheckoutIdentity
+	Engine      *EngineIdentity
+	Image       *ImageIdentity
+	Policy      *policy.Result
+	Manifest    *manifest.Result
+	Issues      []Issue
+	Ready       bool
+	Credentials *CredentialResult
 }
 
 // ContextEngine separates establishment from the retained inspection lifetime.
