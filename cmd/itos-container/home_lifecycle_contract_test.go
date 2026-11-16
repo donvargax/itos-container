@@ -22,7 +22,7 @@ func homeRequireRun(t *testing.T, f *homeLocalFixture, want int, rule string) {
 }
 func homePositive(t *testing.T) {
 	t.Helper()
-	homeRequireRun(t, newHomeLocalFixture(t, "1000", "1000"), 0, "")
+	homeReuseContract(t, "1000", "1000")
 }
 func (f *homeLocalFixture) scope() sp.HomeScope {
 	return f.homes.Scopes[homeFixtureCodec{}.Scope(f.m.b)]
@@ -45,7 +45,7 @@ func homeApprovalChanges(t *testing.T) {
 			f.omitHome(t)
 		}
 		f.approvalStatus = "changed"
-		homeRequireRun(t, f, 1, "approval.changed")
+		homeRequireRun(t, f, 1, "run.approval-changed")
 		if len(f.engine.HomeEvents) != 0 || len(f.engine.Events) != 0 {
 			t.Fatal("approval mismatch reached engine")
 		}
@@ -65,7 +65,7 @@ func (f *homeLocalFixture) omitHome(t *testing.T) {
 	var v map[string]any
 	_ = json.Unmarshal([]byte(f.m.c.Canonical), &v)
 	delete(v, "home")
-	v["profile"] = "offline"
+	v["profile"] = "offline-v1"
 	f.settings(t, v, false)
 }
 func (f *homeLocalFixture) enableHome(t *testing.T) {
