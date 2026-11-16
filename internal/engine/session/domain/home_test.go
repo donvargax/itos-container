@@ -57,6 +57,42 @@ func homeOutcome(r port.HomeResult) port.Outcome {
 	return r.Failures[0].Outcome
 }
 
+func TestHomeCancellationKeepsFullGraceAndRetainsState(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		x := domainHomeFixture()
+		g := x.seed()
+		ctx, cancel := context.WithCancelCause(context.Background())
+		defer cancel(nil)
+		x.engine.WaitUntilCancel, x.engine.IgnoreSignal = true, true
+		var term, kill time.Time
+		x.engine.After = func(event string) {
+			switch event {
+			case "wait":
+				if ctx.Err() == nil {
+					cancel(port.Interrupt{Signal: "SIGTERM"})
+				}
+			case "SIGTERM":
+				term = time.Now()
+			case "SIGKILL":
+				kill = time.Now()
+			}
+		}
+		result := x.runner.Run(ctx, x.frozen, []string{"probe"}, port.Streams{})
+		if term.IsZero() || kill.IsZero() || kill.Sub(term) != 10*time.Second {
+			t.Fatal("worker lost its cancellation grace", kill.Sub(term), x.engine.Events)
+		}
+		if result.Outcome != "" || result.Cleanup != port.Complete || !result.Exited || result.Exit != 17 || result.Signal != "SIGTERM" {
+			t.Fatal("cancellation lost observed exit or cleanup", result)
+		}
+		if len(x.engine.Resources) != 0 || len(x.engine.Anchors) != 0 || x.engine.Roots[g.Name].Marker != "retained" || slices.Contains(x.engine.HomeEvents, "remove") {
+			t.Fatal("cancellation cleanup lost the private home or retained session resources")
+		}
+		if s := x.store.Scopes[x.store.Scope(x.b)]; len(s.Generations[0].Claims) != 0 {
+			t.Fatal("confirmed worker absence did not release the home claim", s)
+		}
+	})
+}
+
 func TestHomeRunLifecycleAndFaults(t *testing.T) {
 	for _, fault := range []string{"fresh", "retained", "no service", "store unavailable", "store unsafe", "intent publication", "owned publication", "initialized publication", "create", "inspect", "initialize", "missing", "foreign", "mode", "claim", "pending", "deleted", "entropy"} {
 		t.Run(fault, func(t *testing.T) {
