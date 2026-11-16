@@ -186,7 +186,11 @@ Feature: Review and remember credential grants without delivering them
   # Any implementation finding that changes arc42 requires its accompanying ADR
   # and section update, per the charter. This spec follows its credential design.
   #
-  # Fixture/step handoff. All credential-approval-specific phrases below are NEW.
+  # Fixture/step handoff. credential_approval_steps_test.go already registers the
+  # private checkout/request, candidate, profile and read-only steps used by 01;
+  # credential_approval_help_test.go registers 24's existing consent/host-agent
+  # assertions. Reuse these definitions. The other credential-specific phrases,
+  # including 24's complete disclosure assertion, still need definitions.
   # Reuse approval_steps_test.go, approval_fixture_test.go, approval_terminal_test.go
   # and slice-26 approval_network_steps_test.go for generic invocation, independent
   # records, differences, transcript timing and engine journals. Extend their oracle
@@ -805,10 +809,18 @@ Feature: Review and remember credential grants without delivering them
     And the second status reports "recovery.invalid-state" with exit 2 and no session entry
     And neither status reads current grants or repairs protected records
 
+  # The consent/host-agent assertions already pass before slice-30. Keep them as
+  # regression checks; the missing exposure disclosure is this scenario's red.
+  # Help must preview all three credential disclosure lines, both allowlist-only
+  # lines and the version-3 delivery warning specified above. Label the allowlist
+  # limits as such and describe delivery as prospective, preserving the run gate.
+  # The new assertion checks each complete statement after joining whitespace,
+  # like credentialApprovalHelpContains; terminal wrapping must not cause red.
   @wip @slice-30 @ID-CREDAPPROVAL-24
-  Scenario: Approval help explains the credential consent rule and its host-agent limit
+  Scenario: Approval help explains credential exposure, consent and its host-agent limit
     When itos-container runs with "approve --help"
-    Then approval help says credential and network grants require terminal review and refuse every fingerprint option
+    Then approval help gives every specified credential disclosure and the version 3 delivery warning
+    And approval help says credential and network grants require terminal review and refuse every fingerprint option
     And approval help retains the offline no-credential fingerprint route and unchanged-settings no-prompt rule
     And approval help says an unsandboxed host agent can fake a terminal and approval records what not who
     And it exits with code 0
