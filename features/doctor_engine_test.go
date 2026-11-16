@@ -82,7 +82,7 @@ func (w *world) doctorLocalAPI(paused bool) error {
 
 func (w *world) startDoctorAPI(a *doctorAPI) error {
 	// Keep Unix paths short even under a long TMPDIR or Go test name.
-	dir, err := os.MkdirTemp("/tmp", "slice-3-api-")
+	dir, err := os.MkdirTemp(w.fixtureSocketRoot(), "slice-3-api-")
 	if err != nil {
 		return err
 	}
