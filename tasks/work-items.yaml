@@ -2146,3 +2146,17 @@ items:
       delivery in slice-32 and follow the charter's dedicated-directory decision rather than that
       item's stale single-file wording. Prove settings and startup behavior with black-box scenarios
       and controlled endpoints, without real accounts or credentials. Broken down from null.
+  - id: p1-harness-claude-home-seeding
+    title: Claude starts with isolated state and onboarding already completed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-harness-owned-home]
+    kind: idea
+    why: >
+      Seed Claude's onboarding state so first startup needs no onboarding interaction or incidental
+      startup network access. Specify repeat-run behavior and preserve project isolation. Keep token
+      delivery in slice-31; this item owns nonsecret harness initialization. Use shared engine ports
+      and named adapters, without importing another slice. Prove behavior through black-box
+      scenarios with synthetic inputs and controlled endpoints; real-engine evidence belongs only in
+      CI. Broken down from null.
