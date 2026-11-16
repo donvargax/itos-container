@@ -2079,8 +2079,8 @@ items:
   - id: slice-34
     title: Run provides an isolated, writable harness home
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
