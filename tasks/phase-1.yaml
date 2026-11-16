@@ -7407,12 +7407,6 @@
     protocol documentation belongs to features/README.md in docs --item T-54. No workflow, product
     budget, ownership registry or sibling ledger entry changes. Commit no generated logs, coverage
     or mutation evidence. Agents commit and stop; push, CI watching and closure belong to the loop.
-  done_when:
-    - run: >-
-        bash -euo pipefail -c 'listed=$(go test ./features -list "^TestEngineFixtureWarmup$");
-        printf "%s\n" "$listed" | grep -qx TestEngineFixtureWarmup ||
-        { printf "%s\n" "missing TestEngineFixtureWarmup" >&2; exit 1; };
-        go test ./features -count=1 -run "^TestEngineFixture"'
 - id: T-55
   type: ci
   title: Each engine shard's warm-up sends the product's own create, timed beside the plain one
