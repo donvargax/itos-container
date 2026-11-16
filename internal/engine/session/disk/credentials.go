@@ -17,6 +17,7 @@ import (
 // unit tests observe ordinary temporary files without claiming mount evidence.
 type Credentials struct {
 	OS     string
+	ops    *credentialOperations
 	root   string
 	tmpfs  func(string) bool
 	before func(string)
