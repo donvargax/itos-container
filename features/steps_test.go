@@ -43,6 +43,7 @@ type world struct {
 	manifest            *manifestWorld
 	doctor              *doctorWorld
 	approval            *approvalWorld
+	credentialApproval  *credentialApprovalWorld
 	run                 *runWorld
 	session             *sessionWorld
 	offline             *offlineRuntime
@@ -183,6 +184,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w.doctorSteps(sc)
 	w.runSteps(sc)
 	w.approvalSteps(sc)
+	w.credentialApprovalSteps(sc)
 	w.sessionSteps(sc)
 	w.offlineRuntimeSteps(sc)
 	w.recoveryNativeSteps(sc)
@@ -458,6 +460,11 @@ func setEnv(env []string, name, value string) []string {
 // runEnv runs program in the folder dir in the environment env, its exit
 // code and output what the Then steps read.
 func (w *world) runEnv(dir string, env []string, program string, args ...string) error {
+	finishObservation, observeErr := w.credentialApprovalWatch()
+	if observeErr != nil {
+		return observeErr
+	}
+	defer finishObservation()
 	ctx := context.Background()
 	if w.deadline > 0 {
 		var cancel context.CancelFunc

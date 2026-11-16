@@ -103,6 +103,9 @@ func (w *world) approvalOracle() error {
 		a.settings["policy"].(map[string]any)["network"] = map[string]any{"mode": "allowlist", "allow": a.allow}
 		a.settings["proxy"] = map[string]any{"image": busyboxFixturePin}
 	}
+	if w.credentialApproval != nil {
+		w.credentialApprovalSettings()
+	}
 	a.fingerprint = "sha256:" + approvalHash(a.settings)
 	a.project = approvalHash(map[string]any{"schema": 1, "uid": a.uid, "checkout": checkout})
 	state := d.env["XDG_STATE_HOME"]
