@@ -11,6 +11,8 @@ import (
 // Fake is a stateful, I/O-free terminal for tests of terminal consumers. Configure
 // exported fields before use; the methods synchronize subsequent external events.
 type Fake struct {
+	// OutputOnly owns settings and hangup observation without measuring size.
+	OutputOnly   bool
 	Size         port.Dimensions
 	Invalid      port.FailureKind
 	State        int
@@ -40,7 +42,7 @@ func (f *Fake) Acquire(ctx context.Context) (port.Lease, error) {
 	if f.broken || f.hungup {
 		return nil, &port.Failure{Kind: port.InvalidTerminal}
 	}
-	if !f.Size.Valid() {
+	if !f.OutputOnly && !f.Size.Valid() {
 		return nil, &port.Failure{Kind: port.InvalidDimensions}
 	}
 	l := &fakeLease{fake: f, initial: f.Size, original: f.State, resizes: make(chan port.Dimensions, 1),
@@ -149,10 +151,10 @@ func (l *fakeLease) observe(ctx context.Context) port.Result {
 		if hungup {
 			return port.Result{Cause: port.Hangup}
 		}
-		if !size.Valid() {
+		if !f.OutputOnly && !size.Valid() {
 			return port.Result{Cause: port.ObservationFailed, Err: errors.New("invalid terminal dimensions")}
 		}
-		if size != last {
+		if !f.OutputOnly && size != last {
 			last = size
 			select {
 			case <-l.resizes:

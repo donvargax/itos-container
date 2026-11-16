@@ -34,6 +34,7 @@ type terminalInvocation struct {
 	attempts          []terminalAttempt
 	action            func(*exec.Cmd)
 	payload           []byte
+	contract          *terminalContract
 }
 
 type terminalAttempt struct {
@@ -50,6 +51,7 @@ func (w *world) runTerminalSteps(sc *godog.ScenarioContext) {
 	var fixture *terminalInvocation
 	w.terminalLocalSteps(sc, &fixture)
 	w.terminalNativeSteps(sc, &fixture)
+	w.terminalContractSteps(sc, func(contract *terminalContract) { fixture = &terminalInvocation{w: w, contract: contract} })
 	sc.Step(`^a local terminal-run fixture with (terminal|pipe) stdin and (terminal|pipe) stdout$`, func(input, output string) error {
 		var err error
 		fixture, err = w.terminalInvocationFixture(input, output)

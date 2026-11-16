@@ -132,6 +132,9 @@ func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminal
 	})
 	sc.Step(`^the first terminal run reports "([^"]*)" with exit (\d+) before any engine connection or state write$`, func(rule string, code int) error {
 		f := *fixture
+		if f.contract != nil {
+			return f.contract.firstRefusal(rule, code)
+		}
 		if len(f.attempts) != 2 {
 			return fmt.Errorf("missing retry")
 		}
