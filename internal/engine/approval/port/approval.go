@@ -93,7 +93,8 @@ type Report struct {
 	Generation  *string  `json:"generation"`
 	Differences []Change `json:"differences"`
 	// EffectiveText is terminal-safe JSON for plain display only.
-	EffectiveText string `json:"-"`
+	EffectiveText string   `json:"-"`
+	RequestedText []string `json:"-"`
 }
 
 // Presentation owns terminal I/O and structured rendering behind a port.
@@ -113,5 +114,13 @@ type Presentation interface {
 // RequiresTerminal identifies grants whose consent cannot use the fingerprint route.
 // The policy has already passed readiness validation when consent is considered.
 func (v View) RequiresTerminal() bool {
-	return v.Inspection.Policy != nil && v.Inspection.Policy.Policy != nil && v.Inspection.Policy.Policy.Network.Mode == "allowlist"
+	return v.Inspection.Policy != nil && v.Inspection.Policy.Policy != nil &&
+		(v.Inspection.Policy.Policy.Network.Mode == "allowlist" || len(v.Inspection.Policy.Policy.Credentials) > 0)
+}
+
+// CredentialGrant records only the approved kind and literal paths, never data.
+type CredentialGrant struct {
+	Kind   string `json:"kind"`
+	Source string `json:"source"`
+	Target string `json:"target"`
 }

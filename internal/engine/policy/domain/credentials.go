@@ -72,3 +72,6 @@ func credentialPath(path string) bool {
 	}
 	return true
 }
+
+// ValidCredentialPath validates the literal grammar shared by approved grants.
+func ValidCredentialPath(path string) bool { return credentialPath(path) }

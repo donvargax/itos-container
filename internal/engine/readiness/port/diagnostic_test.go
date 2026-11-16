@@ -108,3 +108,31 @@ func TestDiagnosticRefusals(t *testing.T) {
 		})
 	}
 }
+
+func TestCredentialDiagnosticsPreserveSourceLocationAndFailure(t *testing.T) {
+	source := "/credentials/1/source"
+	for _, tc := range []struct {
+		name  string
+		issue port.CredentialIssue
+		want  port.Problem
+	}{
+		{"wrong owner", port.CredentialIssue{Rule: "credential.owner", Index: 1}, port.Problem{
+			Rule: "credential.owner", Exit: 1, File: "itos-container.yaml", Path: &source,
+			Message: "Credential source belongs to another user", Fix: "use a file owned by the effective host user",
+		}},
+		{"unknown source failure", port.CredentialIssue{Rule: "credential.unknown", Index: 1}, port.Problem{
+			Rule: "credential.unknown", Exit: 70, File: "itos-container.yaml", Path: &source,
+			Message: "Unknown credential inspection failure", Fix: "report this as a bug",
+		}},
+		{"unknown boundary failure", port.CredentialIssue{Rule: "unknown", Index: -1}, port.Problem{
+			Rule: "unknown", Exit: 70, File: "itos-container.yaml",
+			Message: "Unknown credential inspection failure", Fix: "report this as a bug",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := port.CredentialDiagnostic(tc.issue); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("credential diagnostic = %#v; want %#v", got, tc.want)
+			}
+		})
+	}
+}

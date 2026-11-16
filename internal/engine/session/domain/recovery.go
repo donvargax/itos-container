@@ -57,6 +57,13 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	}
 	defer entry.Close()
 	e, failure := sessionEntry(entry)
+	binding := entry.Intent().Binding()
+	for _, grant := range binding.Credentials {
+		if grant.Kind != "" {
+			e.Credentials = append(e.Credentials, grant)
+		}
+	}
+	e.CredentialNetwork = binding.CredentialNetwork
 	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
 	noCreate := uncreated(entry)
 	if failure == "" && noCreate {

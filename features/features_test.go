@@ -86,7 +86,7 @@ func TestFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runFeatureScenarios(selection, godog.Options{
+	if err := runPreparedFeatures(selection, root, godog.Options{
 		Format:      "pretty",
 		Output:      os.Stdout,
 		Paths:       []string{"."},
@@ -96,14 +96,26 @@ func TestFeatures(t *testing.T) {
 	}, func(sc *godog.ScenarioContext, duringQuiet func()) {
 		w := initializeScenario(sc, root, bin)
 		w.duringQuiet = duringQuiet
-	}) != 0 {
-		t.Fatal("a scenario failed")
+	}, &processEngineWarmup, nativeEngineWarmup()); err != nil {
+		t.Fatal(err)
 	}
 	if dir := os.Getenv("ITOS_CC_TEST_COVERDIR"); selection.engine && dir != "" {
 		// The CI engine invocation keeps its behavior assertions and also proves
 		// that every selected ID exported readable, executed product counters.
 		readScenarioCoverage(t, dir, selection.ids)
 	}
+}
+
+// This phase belongs to the suite entry point, before godog initializes a row
+// or the quiet-worker scheduler enters a nested suite.
+func runPreparedFeatures(selection scenarioSelection, root string, options godog.Options, initialize func(*godog.ScenarioContext, func()), warmup *engineSuiteWarmup, settings engineWarmupSettings) error {
+	if err := warmup.before(selection, root, options.Output, settings); err != nil {
+		return err
+	}
+	if runFeatureScenarios(selection, options, initialize) != 0 {
+		return fmt.Errorf("a scenario failed")
+	}
+	return nil
 }
 
 // Environment and platform values enter the policy as data. Harness entry points
@@ -496,7 +508,10 @@ func buildProduct(root, dir string, engine bool) (string, error) {
 	if productCoverageRequested() {
 		args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	}
-	cmd := exec.Command("go", append(args, "-o", bin, "./cmd/itos-container")...)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", append(args, "-o", bin, "./cmd/itos-container")...)
+	cmd.WaitDelay = time.Second
 	cmd.Dir = source
 	cmd.Env = setEnv(os.Environ(), "CGO_ENABLED", "0")
 	if out, err := cmd.CombinedOutput(); err != nil {

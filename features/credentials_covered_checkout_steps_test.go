@@ -41,7 +41,7 @@ func (w *world) credentialCoveredCheckout(kind, observation string) error {
 		if observation == "first" && i == 1 || observation == "final" && i == 0 {
 			root = "/independent"
 		}
-		o.Mounts[i] += fmt.Sprintf("2 1 0:1 %s %s rw - tmpfs tmpfs rw\n3 1 0:2 %s %s rw - tmpfs tmpfs rw\n", root, point, coverRoot, covered)
+		o.Mounts[i] += fmt.Sprintf("2 1 0:1 %s %s rw - ext4 ext4 rw\n3 1 0:2 %s %s rw - ext4 ext4 rw\n", root, point, coverRoot, covered)
 	}
 	return nil
 }

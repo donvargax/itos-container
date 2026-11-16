@@ -3,6 +3,9 @@ package command
 import (
 	"fmt"
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/donvargax/itos-container/internal/cli"
 	"github.com/donvargax/itos-container/internal/engine/readiness/port"
@@ -90,6 +93,25 @@ func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *appro
 		code = max(code, p.Exit)
 		u.Line(p.Message + "; " + p.Fix)
 	}
+	var requested []credentialGrant
+	if result.Credentials != nil && len(result.Credentials.Issues) > 0 {
+		for _, issue := range result.Credentials.Issues {
+			p := port.CredentialDiagnostic(issue)
+			problems = append(problems, p)
+			code = max(code, p.Exit)
+			location := p.Rule
+			if p.Path != nil {
+				location += " " + strconv.Quote(p.File+*p.Path)
+			}
+			u.Line(location + ": " + p.Message + "; " + p.Fix)
+		}
+		if result.Policy != nil && result.Policy.Policy != nil {
+			for _, g := range result.Policy.Policy.Credentials {
+				requested = append(requested, credentialGrant{g.Kind, g.Source, "/run/itos-container/credentials/" + g.Kind})
+			}
+			slices.SortFunc(requested, func(a, b credentialGrant) int { return strings.Compare(a.Kind, b.Kind) })
+		}
+	}
 	for _, p := range approvalProblems {
 		problems = append(problems, p)
 		code = max(code, p.Exit)
@@ -100,14 +122,15 @@ func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *appro
 	}
 	if withJSON {
 		u.JSON(struct {
-			Approval   *approval.Report `json:"approval,omitempty"`
-			Schema     int              `json:"schema"`
-			Scope      string           `json:"scope,omitempty"`
-			OK         bool             `json:"ok"`
-			Problems   []any            `json:"problems"`
-			Inspection inspectionReport `json:"inspection"`
-			Manifest   *manifestReport  `json:"manifest,omitempty"`
-		}{approvalReport, 1, scope, result.Ready && code == 0, problems, inspection, manifest})
+			Approval    *approval.Report  `json:"approval,omitempty"`
+			Schema      int               `json:"schema"`
+			Scope       string            `json:"scope,omitempty"`
+			OK          bool              `json:"ok"`
+			Problems    []any             `json:"problems"`
+			Inspection  inspectionReport  `json:"inspection"`
+			Manifest    *manifestReport   `json:"manifest,omitempty"`
+			Credentials []credentialGrant `json:"credentials,omitempty"`
+		}{approvalReport, 1, scope, result.Ready && code == 0, problems, inspection, manifest, requested})
 	} else {
 		if result.Ready {
 			_, _ = fmt.Fprintln(u.Stdout, "inspection ready")
@@ -124,6 +147,11 @@ func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *appro
 		if approvalReport != nil {
 			_, _ = fmt.Fprintf(u.Stdout, "approval %s\nfingerprint: %s\n", approvalReport.Status, approvalReport.Fingerprint)
 			_, _ = fmt.Fprintln(u.Stdout, approvalReport.EffectiveText)
+		}
+		if approvalReport != nil {
+			for _, line := range approvalReport.RequestedText {
+				_, _ = fmt.Fprintln(u.Stdout, line)
+			}
 		}
 		if p := result.Policy; p != nil && p.Policy != nil && p.Policy.Network.Mode == "allowlist" {
 			_, _ = fmt.Fprintln(u.Stdout, "allowlist-v1: CONNECT on port 443 without TLS interception; isolated internal network")
