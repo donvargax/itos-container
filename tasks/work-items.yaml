@@ -2129,3 +2129,16 @@ items:
     status: todo
     depends_on: [T-54]
     kind: task
+  - id: p1-terminal-session-support
+    title: Add shared terminal ports, adapters and contract tests
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Provide raw-mode acquisition/restoration, terminal dimensions, resize events and disconnect
+      reporting under internal/engine/terminal. Reuse pinned x/term and PTY test support; keep I/O
+      behind ports and run shared contracts against an in-memory fake and native adapter. Cover
+      restoration after failures and bounded cancellation. Expose no command yet. Broken down from
+      p1-interactive-tty.
