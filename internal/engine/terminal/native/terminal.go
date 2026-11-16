@@ -46,14 +46,14 @@ func (p *Provider) Acquire(ctx context.Context) (port.Lease, error) {
 	if p.file == nil || *p.file == (os.File{}) {
 		return nil, &port.Failure{Kind: port.InvalidTerminal}
 	}
-	conn, err := p.file.SyscallConn()
-	if err != nil {
-		return nil, &port.Failure{Kind: port.InvalidTerminal, Err: err}
-	}
+	// SyscallConn only rejects a nil File, already refused above. A closed
+	// file still yields a connection; Control below reports its failure.
+	conn, _ := p.file.SyscallConn()
 	l := &lease{provider: p, conn: conn, resizes: make(chan port.Dimensions, 1),
 		done: make(chan struct{}), stop: make(chan struct{}), signals: make(chan os.Signal, 1)}
 	signal.Notify(l.signals, windowSignal)
 	kind := port.InvalidTerminal
+	var err error
 	err = l.control(func(fd int) error {
 		if !term.IsTerminal(fd) {
 			return errors.New("not a terminal")
