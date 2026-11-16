@@ -10,10 +10,11 @@ import (
 // RefusalLogFixture lets a writer derive reports while the memory fake scripts them.
 // Fault changes only publication mechanics, never the expected bytes or report.
 type RefusalLogFixture struct {
-	Log    port.RefusalLog
-	Read   func(string) []byte
-	Fault  func(string)
-	Report func(port.RefusalReport)
+	SessionID string
+	Log       port.RefusalLog
+	Read      func(string) []byte
+	Fault     func(string)
+	Report    func(port.RefusalReport)
 }
 
 func RefusalLogContract(t Reporter, fixture RefusalLogFixture, input, stored, replacementInput, replacementStored []byte, report port.RefusalReport) {
@@ -23,7 +24,11 @@ func RefusalLogContract(t Reporter, fixture RefusalLogFixture, input, stored, re
 		return
 	}
 	ctx := context.Background()
-	const session = "session"
+	session := fixture.SessionID
+	if session == "" {
+		t.Errorf("refusal log fixture requires a session ID")
+		return
+	}
 	fixture.Report(report)
 	copy, f := fixture.Log.Begin(ctx, session)
 	if f != "" || copy == nil {

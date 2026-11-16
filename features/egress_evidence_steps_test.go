@@ -82,7 +82,7 @@ func (w *world) egressEvidenceEntries() (map[string]any, map[string]any, error) 
 		Sessions []map[string]any
 	}
 	if err := json.Unmarshal([]byte(structured.result.stdout), &report); err != nil || report.Schema != 1 || len(report.Sessions) != 2 {
-		return nil, nil, fmt.Errorf("status must return two schema-1 session entries: %v", err)
+		return nil, nil, fmt.Errorf("status must return two schema-1 session entries: %v (exit %d)\n%s%s", err, structured.result.exit, structured.result.stdout, structured.result.stderr)
 	}
 	var egress, offline map[string]any
 	for _, entry := range report.Sessions {

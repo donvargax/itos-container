@@ -17,20 +17,6 @@ import (
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
 
-// contractSession hands Begin a registered session in place of the name the
-// shared contract passes, which no registry holds.
-type contractSession struct {
-	log sp.RefusalLog
-	id  string
-}
-
-func (l contractSession) Begin(ctx context.Context, session string) (sp.RefusalCopy, sp.Outcome) {
-	if session == "session" {
-		session = l.id
-	}
-	return l.log.Begin(ctx, session)
-}
-
 // The two concrete adapters meet only here: session's RefusalLog over approval's
 // protected registry, on a real state root.
 func TestRefusalLogDiskContract(t *testing.T) {
@@ -82,8 +68,8 @@ func TestRefusalLogDiskContract(t *testing.T) {
 		t.Fatal("the log must land beside the session's record", err)
 	}
 	path := filepath.Join(directory, "egress-refusals.jsonl")
-	read := func(string) []byte {
-		data, err := os.ReadFile(path)
+	read := func(session string) []byte {
+		data, err := os.ReadFile(filepath.Join(filepath.Dir(directory), session, "egress-refusals.jsonl"))
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
@@ -95,10 +81,11 @@ func TestRefusalLogDiskContract(t *testing.T) {
 	lines := strings.SplitAfter(sf.ProxyStdout, "\n")
 	replacement := strings.Replace(lines[1], "not-listed", "port", 1)
 	sf.RefusalLogContract(t, sf.RefusalLogFixture{
-		Log:    contractSession{log, id},
-		Read:   read,
-		Fault:  func(name string) { fault = name },
-		Report: func(sp.RefusalReport) {},
+		SessionID: id,
+		Log:       log,
+		Read:      read,
+		Fault:     func(name string) { fault = name },
+		Report:    func(sp.RefusalReport) {},
 	}, []byte(sf.ProxyStdout), []byte(lines[1]), []byte(lines[0]+replacement), []byte(replacement), sp.RefusalReport{})
 
 	info, err := os.Lstat(path)

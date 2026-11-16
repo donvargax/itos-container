@@ -1,7 +1,6 @@
 package disk
 
 import (
-	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -82,20 +81,6 @@ func (f refusalFixture) copyAll(t *testing.T, parts ...string) {
 	}
 }
 
-// sessionNamed hands Begin a registered session in place of the name the
-// shared contract passes, which no registry holds.
-type sessionNamed struct {
-	log sp.RefusalLog
-	id  string
-}
-
-func (l sessionNamed) Begin(ctx context.Context, session string) (sp.RefusalCopy, sp.Outcome) {
-	if session == "session" {
-		session = l.id
-	}
-	return l.log.Begin(ctx, session)
-}
-
 func TestRefusalLogContract(t *testing.T) {
 	f := refusalLogFixture()
 	held, failure := f.files.Open(t.Context(), ap.Candidate{Project: f.key}, f.id, false)
@@ -110,10 +95,11 @@ func TestRefusalLogContract(t *testing.T) {
 	replacement := strings.Replace(lines[1], "not-listed", "port", 1)
 	fault := map[string]string{"write": "write", "commit": "file fsync", "": ""}
 	sf.RefusalLogContract(t, sf.RefusalLogFixture{
-		Log:    sessionNamed{f.log, f.id},
-		Read:   func(string) []byte { return f.stored() },
-		Fault:  func(name string) { f.files.Fault = fault[name] },
-		Report: func(sp.RefusalReport) {},
+		SessionID: f.id,
+		Log:       f.log,
+		Read:      func(id string) []byte { data, _ := f.files.SessionLog(f.key, id); return data },
+		Fault:     func(name string) { f.files.Fault = fault[name] },
+		Report:    func(sp.RefusalReport) {},
 	}, []byte(sf.ProxyStdout), []byte(lines[1]), []byte(lines[0]+replacement), []byte(replacement), sp.RefusalReport{})
 	if f.staged() != 0 {
 		t.Fatal("the contract left a staged handle", f.staged())
@@ -127,55 +113,23 @@ func TestRefusalLogDropsOnlyReady(t *testing.T) {
 	ready := strings.SplitAfter(sf.ProxyStdout, "\n")[0]
 	refusal := strings.SplitAfter(sf.ProxyStdout, "\n")[1]
 	body := strings.TrimSuffix(ready, "\n")
-	for _, tc := range []struct {
-		name, line string
-		dropped    bool
-	}{
-		{"ready", ready, true},
-		{"reordered keys", `{"event":"ready","time":"2026-11-09T12:00:00Z","seq":1,"schema":1}` + "\n", true},
-		{"fractional seconds", strings.Replace(ready, "12:00:00Z", "12:00:00.123456789Z", 1), true},
-		{"spaces inside", `{ "schema" : 1 , "seq" : 1 , "time" : "2026-11-09T12:00:00Z" , "event" : "ready" }` + "\n", true},
-		{"leading spaces to 2,048 bytes", strings.Repeat(" ", 2048-len(body)) + ready, true},
-		{"leading spaces to 2,049 bytes", strings.Repeat(" ", 2049-len(body)) + ready, false},
-		{"stderr looking stdout", "failure\n", false},
-		{"extra key", `{"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z","event":"ready","extra":0}` + "\n", false},
-		{"wrong seq", strings.Replace(ready, `"seq":1`, `"seq":2`, 1), false},
-		{"wrong event", strings.Replace(ready, "ready", "refused", 1), false},
-		{"wrong time", strings.Replace(ready, "Z", "+00:00", 1), false},
-		{"long", strings.Repeat(" ", 2049) + "\n", false},
-		{"trailing space", body + " \n", false},
-		{"trailing carriage return", body + "\r\n", false},
-		{"trailing object", body + "{}\n", false},
-		{"repeated key", `{"schema":1,"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z","event":"ready"}` + "\n", false},
-		{"repeated key in place of one", `{"schema":1,"schema":1,"time":"2026-11-09T12:00:00Z","event":"ready"}` + "\n", false},
-		{"schema 1.0", strings.Replace(ready, `"schema":1`, `"schema":1.0`, 1), false},
-		{"schema 2", strings.Replace(ready, `"schema":1`, `"schema":2`, 1), false},
-		{"schema as text", strings.Replace(ready, `"schema":1`, `"schema":"1"`, 1), false},
-		{"seq as text", strings.Replace(ready, `"seq":1`, `"seq":"1"`, 1), false},
-		{"event as number", strings.Replace(ready, `"ready"`, `1`, 1), false},
-		{"time as number", strings.Replace(ready, `"2026-11-09T12:00:00Z"`, `1`, 1), false},
-		{"time that is no date", strings.Replace(ready, "2026-11-09T12:00:00Z", "soon, Z", 1), false},
-		{"no event", `{"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z"}` + "\n", false},
-		{"another key in place of schema", `{"other":1,"seq":1,"time":"2026-11-09T12:00:00Z","event":"ready"}` + "\n", false},
-		{"array", `[1,1,"2026-11-09T12:00:00Z","ready"]` + "\n", false},
-		{"unclosed object", strings.TrimSuffix(body, "}") + "\n", false},
-		{"missing value", `{"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z","event":}` + "\n", false},
-		{"key without value", `{"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z","event"}` + "\n", false},
-		{"unquoted key", `{schema:1,"seq":1,"time":"2026-11-09T12:00:00Z","event":"ready"}` + "\n", false},
-		{"empty line", "\n", false},
-		{"empty object", "{}\n", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if strings.Count(tc.line, "\n") != 1 || !strings.HasSuffix(tc.line, "\n") {
-				t.Fatal("each row is one terminated line")
+	for _, tc := range sf.ReadyRecords() {
+		t.Run(tc.Name, func(t *testing.T) {
+			if !strings.HasSuffix(tc.Line, "\n") {
+				f := refusalLogFixture()
+				f.copyAll(t, refusal+tc.Line)
+				if got := string(f.stored()); got != refusal+tc.Line {
+					t.Fatalf("unterminated evidence changed: %q", got)
+				}
+				return
 			}
 			// Each row stands between two refusals, so a dropped line loses nothing beside it.
-			want := refusal + tc.line + refusal
-			if tc.dropped {
+			want := refusal + tc.Line + refusal
+			if tc.Accepted {
 				want = refusal + refusal
 			}
 			f := refusalLogFixture()
-			f.copyAll(t, refusal+tc.line+refusal)
+			f.copyAll(t, refusal+tc.Line+refusal)
 			if got := string(f.stored()); got != want {
 				t.Fatalf("stored %d bytes, want %d: %q", len(got), len(want), got)
 			}
