@@ -278,3 +278,15 @@ questions:
   - id: q-69
     item: "slice-30"
     question: "slice-30: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-30-implementer-2.result.json"
+    answer: "Answered by q-64 (the person, 2026-11-15): an allowlist for a credential source, ext4, btrfs and xfs accepted, every other type refused by not being on the list, NFS and 9p outright. The attempt that asked ran on a branch that had not yet merged that answer. Its two other findings (the policy pin against the observed root identity, and the 4096-byte boundary rows) are spec changes, raised as a spec defect in the usual way."
+  - id: q-70
+    item: "T-48"
+    question: "T-48: the implementer (attempt 5) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-48-implementer-5.result.json"
+    answer: "No remedy in T-48 (the coordinator, on the person's instruction, 2026-11-16, as q-63 and q-66). Run 43773770191 at 2acb220 is red only on ID-ANCHORS-09: the engine answered the create 1.08 s after forwarding against the 1 s fixture call, the signature p2-first-engine-row-slow-create owns. No budget, limit or assertion moves in T-48; a run red only on that signature has its failed jobs re-run. First T-48 fixes the local review's open finding: the open flags in internal/engine/session/disk/credentials.go are the linux/amd64 values, and linux/arm64, a release target, reads the same bits as O_DIRECT, so credential staging fails there. The new head's run judges it."
+  - id: q-71
+    item: "slice-27"
+    question: "slice-27: its implementer (attempt 3) stopped saying the T-51 refusal-log writer and the p1-acceptance-static-binary prerequisite are still unowned. Are they?"
+    answer: "No (the coordinator, on the person's instruction, 2026-11-16). Every dependency of slice-27 is done and on main: slice-26, T-39, T-40, T-51 (the disk adapter that streams the proxy's log into egress-refusals.jsonl) and T-52, which is p1-acceptance-static-binary promoted (merged b56572e). The branch merged main after both. slice-27 goes on with its runtime implementation; the red evidence of run 43531516406 for ID-EGRESS-12 to 19 stands."
+  - id: q-72
+    item: "slice-32"
+    question: "slice-32: the drafter (attempt 1) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-32-drafter-1.result.json"

@@ -2,8 +2,6 @@
 phases:
   1: null
 queue:
-  - T-50
-  - T-53
   - p1-harness-home
   - p1-interactive-tty
 items:
@@ -1829,7 +1827,7 @@ items:
     title: "Fresh recovery after controller loss and path replacement flakes: anchor recovery exits 75 and cleanup gets HTTP 409"
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-platform-log-redaction
@@ -1858,9 +1856,14 @@ items:
     title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: []
     kind: task
+    deferred: >
+      Not reproducible, and its only evidence lacks the failing child's output (q-68): the first
+      attempt of run 42738076694 logged the parent's exit status 2 alone, and ten covered
+      repetitions and the whole covered feature suite pass. 195b834 reports the child's transcript
+      since, so a recurrence will name the failing operation: resume then, with that run.
   - id: p1-main-go-toolchain-1-27-4
     title: main's Go toolchain pin is go1.27.4, so every branch's govulncheck step passes again
     phase: 1
@@ -2087,6 +2090,11 @@ items:
       lifecycle shard's first engine row (ID-LIFECYCLE-08) with run.call-timeout on operation
       create, then cleanup HTTP 409. So the slow first create of a job is the engine's, not the
       compile's: p2-ci-go-build-cache-rolling-key alone is not the remedy.
+
+      The existing todo item already owns the measured remedy for legitimate first-create latency
+      exceeding shortened fixture budgets. T-50 is merged but explicitly leaves this remedy open.
+      Settle it within this item using measured intervals; any budget changes must address call and
+      startup together, preserve timeout controls, and satisfy the CI shard time gate.
   - id: p2-native-mount-evidence-credential-inspection
     title: A CI-only tier runs credential source inspection against real bind mounts made in a private user and mount namespace
     phase: 1
