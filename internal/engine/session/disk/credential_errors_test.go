@@ -118,6 +118,34 @@ func TestCredentialObservationFilesystemErrors(t *testing.T) {
 	}
 }
 
+func TestCredentialObservationRejectsMetadataWithError(t *testing.T) {
+	fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
+	r, failure := stageCredentialFixture(t, fixture)
+	if failure != "" {
+		t.Fatal("observation positive control failed", failure)
+	}
+	s := fixture.Stager.(Credentials)
+	calls := s.operations()
+	stat := calls.stat
+	calls.stat = func(file *os.File) (fs.FileInfo, error) {
+		info, err := stat(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info, errors.New("synthetic incomplete metadata observation")
+	}
+	s.ops = &calls
+	if presence, failure := s.Observe(t.Context(), r); presence != "unknown" || failure != port.CredentialRefused {
+		t.Fatal("metadata accompanied by an error authorized observation", presence, failure)
+	}
+	if failure := s.Remove(t.Context(), r); failure != port.CredentialRefused || !fixture.Present(r.Credentials.Directory) {
+		t.Fatal("metadata accompanied by an error authorized removal", failure)
+	}
+	if failure := fixture.Stager.Remove(t.Context(), r); failure != "" {
+		t.Fatal("fresh metadata did not restore owned cleanup", failure)
+	}
+}
+
 type credentialSourceSelection struct {
 	port.CredentialSources
 	entries []port.CheckedCredential
@@ -192,6 +220,23 @@ func TestCredentialStagingRejectsDescriptorBeforeEffects(t *testing.T) {
 				t.Fatal("invalid descriptor was not refused", failure)
 			}
 		})
+	}
+}
+
+func TestCredentialStagingRejectsBareDescriptorBeforeEffects(t *testing.T) {
+	fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
+	selected := credentialSourceSelection{CredentialSources: fixture.Sources, entries: fixture.Sources.Checked()}
+	// A canonical descriptor number alone parses, but is a relative pathname,
+	// not the retained /proc/self/fd capability the adapter is allowed to read.
+	selected.entries[0].ReadPath = filepath.Base(selected.entries[0].ReadPath)
+	s := fixture.Stager.(Credentials)
+	s.before = func(string) { t.Fatal("relative source caused staging effects") }
+	failure := s.Stage(t.Context(), fixture.Intent(), selected, func(port.CredentialStaging) port.Outcome {
+		t.Fatal("relative source published staging authority")
+		return ""
+	})
+	if failure != port.CredentialRefused {
+		t.Fatal("bare descriptor pathname was not refused", failure)
 	}
 }
 

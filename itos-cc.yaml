@@ -15,6 +15,15 @@ mutation:
       - features/testdata/**
       - tools/bin/scenario-list
   exceptions:
+    - file: internal/engine/session/port/credentials.go
+      function: github.com/donvargax/itos-container/internal/engine/session/port.Record#credentialTransition
+      hash: 1434fcddac1597d1
+      line_in_function: 40
+      column: 71
+      original: "&&"
+      replacement: "||"
+      reason: Both staging values have already passed Valid, immutable directory and kinds match, and the origin is intent. Changing the final conjunction inside the parentheses only adds cases with an empty destination inode. Valid permits that only for intent or absent staging with empty device and files. The absent case already passes the original expression. The intent case is identical to the origin and returned true at the earlier a == b check. Owned staging has a nonempty inode and already passes both expressions. Thus no reachable transition result changes.
+      line_text: return (b.Stage == "owned" || b.Stage == "absent" && b.Device == "" && b.Inode == "") && r.Stage == n.Stage && r.ContainerID == n.ContainerID
     - file: internal/engine/session/docker/run.go
       function: github.com/donvargax/itos-container/internal/engine/session/docker#safeHost
       hash: 0d125654dcccfa55
