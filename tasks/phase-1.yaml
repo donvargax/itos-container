@@ -7556,13 +7556,130 @@
   type: refactor
   title: Add shared terminal ports, adapters and contract tests
   why: >
-    Provide raw-mode acquisition/restoration, terminal dimensions, resize events and disconnect
-    reporting under internal/engine/terminal. Reuse pinned x/term and PTY test support; keep I/O
-    behind ports and run shared contracts against an in-memory fake and native adapter. Cover
-    restoration after failures and bounded cancellation. Expose no command yet. Broken down from
-    p1-interactive-tty.
+    The charter's interactive milestone needs one host-terminal contract shared by run and exec.
+    Today terminal detection exists in approval presentation and cmd, and features use disposable
+    PTYs, but internal/engine/terminal does not exist. Add the reusable terminal capability before
+    slice-37 and slice-39 wire it into commands. This is an unbound foundation task broken down
+    from p1-interactive-tty, with task checks and no new public behaviour or Gherkin scenarios.
+    Preserve approval's consent rules, existing run behaviour and slice-12's cancellation and
+    exit precedence in docs/decisions/0016-cancellation-and-output-drain.md. Terminal selection,
+    interactive JSON refusal, engine TTY creation/attachment/resizing, stream forwarding and
+    stopping workloads on disconnect belong to those later slices, not this task. Do not add
+    command flags, cmd assembly, Docker operations, credential handling or host signal forwarding.
+
+    Follow docs/architecture.md, Slices. Put interfaces, dimensions and typed outcomes in
+    internal/engine/terminal/port, the in-memory fake and reusable contract in port/porttest, and
+    the host adapter in internal/engine/terminal/native. Any pure lifecycle policy belongs in
+    terminal/domain; do not add an empty package or put orchestration in a command. OS files,
+    descriptors, term.State, polling and signal subscriptions stay in native, behind the port;
+    port/domain imports retain the exact existing allowlist. The fake performs no filesystem,
+    process, signal or terminal I/O. Tests run the same contract against fake and native factories;
+    production imports no porttest. The new engine imports no slice and need not depend on the
+    session engine. Record its responsibility and still-unbound status in arc42's building-block
+    view when implementing; no existing architecture rule needs an exception.
+
+    A native provider is explicitly bound by its caller to one already-open terminal file and
+    an OS value. It does not discover stdin/stdout, open /dev/tty, consult environment variables
+    or choose interactive mode. The caller keeps the supplied file open and does not change its
+    terminal settings until the lease ends. Acquire takes a context and returns either a usable
+    raw-mode lease with initial dimensions or a typed failure, never a partially usable lease.
+    Refuse nil, closed and nonterminal files, an unsupported OS value, invalid initial dimensions,
+    and acquisition on an already-cancelled context without changing terminal settings. Permit
+    one active lease per provider; overlapping acquisition refuses as busy without blocking or
+    changing the first lease. After release, the same provider can acquire a new lease and must
+    capture that acquisition's starting settings, not reuse an older snapshot. Separate providers
+    for separate terminals remain independent; concurrent ownership of one terminal through
+    different providers is outside this contract and must be documented as a caller restriction.
+
+    Save the complete original terminal state and enter raw mode using the existing library.
+    A successful release restores that exact state, including pre-existing nondefault flags,
+    rather than setting a guessed cooked mode. All failures after raw mode was acquired attempt
+    restoration and release owned resources before returning, including partial acquisition if
+    the implementation has fallible work after MakeRaw. Explicit close, acquisition-context
+    cancellation, terminal hangup and observation failure all end the lease. Close is safe to
+    repeat and to race with cancellation or a terminal event; restoration and resource release
+    happen once. Retain the first termination cause and report a restoration failure separately
+    so neither is hidden by the other; repeated close returns the same final result. A vanished
+    terminal can make restoration impossible: report that failure, never claim it was restored.
+    Do not wait for a cancelled context to authorize restoration, and do not close caller-owned
+    files or change their descriptor flags as a lasting side effect. Close only adapter-owned
+    handles, stop only its own signal subscription, and wait for its own monitoring goroutines
+    to finish. Do not reset process-wide signal handling.
+
+    Dimensions are an explicit columns/rows value, each in 1..65535, taken from this terminal,
+    never from COLUMNS, LINES or a fallback such as 80x24. Initial dimensions accompany acquisition;
+    subsequent SIGWINCH notifications re-read them and publish changed dimensions. Expose a
+    bounded resize notification stream and a separate completion notification with a retained
+    typed result. Resize bursts may coalesce, but after a burst the consumer can observe the
+    latest dimensions. An unread resize stream cannot block cancellation, disconnect reporting,
+    restoration or close; no unbounded event queue or goroutine per notification. Failure to read
+    dimensions, including a zero dimension after acquisition, ends the lease with an observation
+    failure rather than publishing invented dimensions. Close event streams on termination and
+    make completion observable only after restoration was attempted and owned monitors ended.
+
+    Detect local terminal peer hangup even while no input or output operation is in progress.
+    Report it distinctly from deliberate close, context cancellation and observation failure;
+    this is a notification for the later session integration, not authority to stop a container.
+    Monitoring never reads, writes, echoes or logs terminal payload bytes. Raw Ctrl-C (0x03) and
+    Ctrl-D (0x04) remain bytes for the caller's eventual input forwarder, not host signals or a
+    disconnect event. An unread input byte must not mask a later peer hangup. Acquisition on a
+    cancelled context returns promptly; after cancellation, close or peer hangup, notification
+    and local cleanup complete within one second on the supported native Linux terminal path,
+    including when nobody reads resize events. This is a local adapter responsiveness bound,
+    not a replacement for slice-12's workload grace or teardown deadlines, and does not promise
+    recovery after SIGKILL or a kernel-stalled ioctl. Do not return on a timeout while leaving an
+    unbounded terminal reader, signal listener or restore goroutine running.
+
+    Reuse the existing pins, golang.org/x/term v0.46.0 for terminal detection, GetState/MakeRaw,
+    Restore and GetSize, and golang.org/x/sys v0.48.0 for native hangup observation where needed.
+    Use github.com/creack/pty v1.1.24 only in native tests for disposable master/slave pairs and
+    controlled window sizes. These maintained libraries already solve the terminal primitives;
+    add no dependency or handwritten termios implementation and change no pin. Native support
+    here is Linux only; unsupported OS values return a typed failure before I/O. Keep portable
+    packages buildable for the inherited targets without claiming runtime support there. Pass
+    OS as data, never branch on runtime.GOOS inside logic, and keep build-tagged files to thin
+    unavailable-call wrappers with no mutation site, as AGENTS.md requires.
+
+    The check below must execute the shared contract in both port/porttest and native, with no
+    success from an empty suite. Its rows cover initial non-square size, raw acquisition, exact
+    restoration after normal completion and caller failure, pre-cancelled acquisition, invalid
+    terminal refusal, busy acquisition, repeated close, reacquisition with a new starting state,
+    independent terminals, changed/latest resize delivery, unread-event backpressure, cancellation
+    without terminal activity, peer hangup with and without unread input, and sticky termination
+    and restoration-failure results. Use stateful fixtures, not mocks. Controlled failure states
+    belong in the fake; native tests must also exercise actual OS failure paths, including closed
+    descriptors and master hangup. Cover any reachable partial-acquisition rollback and monitor
+    error paths with deterministic tests. No adapter-specific row may replace the common contract.
+
+    Additional native assertions inspect saved versus restored term.State, verify canonical input,
+    echo and signal generation are disabled while acquired, and read exact synthetic 0x03/0x04
+    bytes from the slave after writing them to the master. This read is test code, not a second
+    production input reader. Verify caller-owned handles remain usable after close, size changes
+    name the correct terminal, and repeated acquire/cancel/close cycles leave no owned watcher,
+    descriptor or signal-subscription growth. Isolate process-directed SIGWINCH tests in a bounded
+    child of the test binary, never signal the developer's terminal or another test process.
+    Use readiness handshakes and bounded waits, not sleeps to guess that a monitor has started.
+    Native Linux PTY allocation failure fails the check; it is not a reason to skip evidence.
+    Unsupported-platform tests may select their explicit refusal path. These tests require no
+    container engine, real state folder, network endpoint, model, account or credential.
+
+    Keep the check in the existing task and ordinary Go-test tier, uncached and bounded, without
+    adding a workflow, race detector, full feature-suite run or architecture-policy exception.
+    Configured hooks and CI retain the wider preservation checks, and CI alone judges changed-code
+    proof. Before implementation the check fails at package discovery because the terminal tree
+    is absent; that is absence evidence, not a failing contract assertion. The implementer first
+    commits defined contract tests and the minimal compiling stub needed to exercise them in a
+    test commit, records their assertion failures, then implements until the same rows pass.
+    Report each row's red/green evidence; do not substitute compilation errors, undefined helpers
+    or skipped PTY rows for it. Commit no generated coverage, mutation output or test transcripts.
+
+    The drafter changes only this T-56 ledger entry in docs --item T-56. The implementation's test
+    and refactor commits use the terminal paths above with --item T-56 and --task T-56 respectively;
+    the small arc42 inventory update is a docs --item T-56 commit. Leave sibling ledger entries,
+    ownership/status, existing command and feature files, dependency pins and enforcement inputs
+    alone. Agents commit and stop; the loop owns push, CI watching and closure.
   done_when:
-    - run: go test ./internal/engine/terminal/...
+    - run: go test -count=1 -timeout=30s ./internal/engine/terminal/...
 - id: T-57
   type: test
   title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
