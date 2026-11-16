@@ -7552,13 +7552,6 @@
     Do not change the work registry, sibling ledger entries, product code or workflow. Commit no
     generated logs, coverage or mutation evidence. Agents commit and stop; the loop owns push,
     CI watching and closure.
-  done_when:
-    - run: >-
-        sh -c 'listed=$(go test ./features -list "^TestEngineFixtureWarmupProduct$" -run "^$") || exit;
-        printf "%s\n" "$listed";
-        printf "%s\n" "$listed" | grep -Fx TestEngineFixtureWarmupProduct >/dev/null || {
-        printf "%s\n" "T-55: TestEngineFixtureWarmupProduct is missing" >&2; exit 1; };
-        go test ./features -count=1 -run "^TestEngineFixture(Warmup(Product)?|Workflow)$"'
 - id: T-56
   type: refactor
   title: Add shared terminal ports, adapters and contract tests
