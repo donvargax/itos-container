@@ -16,6 +16,7 @@ type Checkout struct {
 	Changed, Opened bool
 	Roots           []string
 	Inspections     int
+	PinnedReads     int
 	Revalidations   int
 	LinkCounts      map[string]uint64
 	Unreadable      bool
@@ -57,6 +58,7 @@ func (c *Checkout) Unchanged() bool {
 func (c *Checkout) Close() { c.Opened = false }
 
 func (c *Checkout) PinnedIdentity() (port.CheckoutIdentity, port.Failure) {
+	c.PinnedReads++
 	if !c.Opened {
 		return port.CheckoutIdentity{}, port.CheckoutUnavailable
 	}

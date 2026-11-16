@@ -29,6 +29,7 @@ type credentialObservation struct {
 	HandleLimit                  int
 	Deadline                     bool
 	Policy, Manifest, Argv, Root string
+	OS, Architecture             string
 	StatSequence                 map[string][]struct {
 		Node    credentialNode
 		OK      bool
@@ -49,6 +50,13 @@ type credentialNode struct {
 func (w *world) credentialObservationSteps(sc *godog.ScenarioContext) {
 	w.credentialCoveredCheckoutSteps(sc)
 	sc.Step(`^a credential observation fixture for "([^"]*)" with "([^"]*)"$`, w.credentialObservationFixture)
+	sc.Step(`^the credential observation host is "([^"]*)" with architecture "([^"]*)"$`, func(hostOS, architecture string) {
+		w.credentials.observation.OS = hostOS
+		w.credentials.observation.Architecture = architecture
+	})
+	sc.Step(`^the credential observation recorded no pinned checkout identity reads$`, func() error {
+		return w.credentialNoCalls("pinned checkout identity")
+	})
 	sc.Step(`^credential descriptors report subvolume devices distinct from mountinfo$`, func() {
 		for path, node := range w.credentials.observation.Nodes {
 			node.Device += 100

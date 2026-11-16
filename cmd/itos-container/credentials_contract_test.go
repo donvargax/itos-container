@@ -31,6 +31,7 @@ func TestCredentialContractProcess(t *testing.T) {
 	}
 	var request struct {
 		Policy, Manifest, Argv, Root string
+		OS, Architecture             string
 		readinessfake.CredentialFiles
 	}
 	if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
@@ -38,7 +39,7 @@ func TestCredentialContractProcess(t *testing.T) {
 	}
 	request.Parser = readinessdisk.ParseCredentialMounts
 	request.Calls = map[string]int{}
-	code := credentialContractCommand(request.Policy, request.Manifest, request.Argv, request.Root, &request.CredentialFiles)
+	code := credentialContractCommand(request.Policy, request.Manifest, request.Argv, request.Root, request.OS, request.Architecture, &request.CredentialFiles)
 	log, err := json.Marshal(struct {
 		Calls     map[string]int
 		Completed string
@@ -52,7 +53,7 @@ func TestCredentialContractProcess(t *testing.T) {
 	os.Exit(code)
 }
 
-func credentialContractCommand(policy, manifest, argv, root string, files *readinessfake.CredentialFiles) int {
+func credentialContractCommand(policy, manifest, argv, root, hostOS, architecture string, files *readinessfake.CredentialFiles) int {
 	ui := &cli.UI{Stdout: os.Stdout, Stderr: os.Stderr}
 	var c commandLine
 	parser, err := kong.New(&c, append(cli.Flags(), kong.Writers(os.Stdout, os.Stderr))...)
@@ -74,7 +75,15 @@ func credentialContractCommand(policy, manifest, argv, root string, files *readi
 	c.Doctor.RootPolicies = c.Doctor.Policies
 	node := files.Nodes[root]
 	pin := &readinessfake.Checkout{Identity: readinessport.CheckoutIdentity{Root: root, Device: strconv.FormatUint(node.Device, 10), Inode: strconv.FormatUint(node.Inode, 10)}}
-	input := readinessport.CredentialInput{Root: root, State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}
+	if hostOS == "" {
+		hostOS = "linux"
+	}
+	if architecture == "" {
+		architecture = "amd64"
+	}
+	input := readinessport.CredentialInput{Root: root, State: "/state", OS: hostOS, Architecture: architecture, UID: 1000}
 	c.Doctor.Credentials = inspection.Credentials{Input: input, Checkout: pin, Observer: readinesssource.Credentials{FS: files, Input: input, Account: &approvalfake.Account{Home: "/account"}, Checkout: pin}}
-	return c.Doctor.Run(ui)
+	code := c.Doctor.Run(ui)
+	files.Calls["pinned checkout identity"] = pin.PinnedReads
+	return code
 }

@@ -824,3 +824,19 @@ Feature: Review and remember credential grants without delivering them
     And approval help retains the offline no-credential fingerprint route and unchanged-settings no-prompt rule
     And approval help says an unsandboxed host agent can fake a terminal and approval records what not who
     And it exits with code 0
+
+  @slice-30 @ID-CREDAPPROVAL-30 @wip
+  Scenario Outline: Unsupported credential inspection hosts refuse before reading the policy pin identity
+    Given a credential observation fixture for "checkout" with "distinct outside file"
+    And the credential observation host is "<os>" with architecture "<architecture>"
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 3
+    And the credential boundary problem is "host.unsupported" at ""
+    And the credential observation recorded no pinned checkout identity reads
+    And the credential observation recorded no source metadata checkout traversal or state mount-table calls
+
+    Examples:
+      | os      | architecture |
+      | windows | amd64        |
+      | darwin  | amd64        |
+      | linux   | arm64        |
