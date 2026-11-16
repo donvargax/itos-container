@@ -42,7 +42,7 @@ type sessionAPI struct {
 }
 
 func (w *world) startSessionAPI() error {
-	dir, err := os.MkdirTemp("/tmp", "slice-9-api-")
+	dir, err := os.MkdirTemp(w.fixtureSocketRoot(), "slice-9-api-")
 	if err != nil {
 		return err
 	}
