@@ -19,9 +19,11 @@ type homePolicyObservation struct {
 type homeWorld struct {
 	version int
 	policy  []homePolicyObservation
+	native  *homeNative
 }
 
 func (w *world) homeSteps(sc *godog.ScenarioContext) {
+	w.homeNativeSteps(sc)
 	sc.Step(`^a home policy fixture using version (\d+) and no credential grants$`, func(version int) error {
 		w.home = &homeWorld{version: version}
 		return w.isolatePolicy()
