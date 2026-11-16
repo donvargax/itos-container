@@ -360,6 +360,12 @@ func homeRetirementFault(t *testing.T, fault string) {
 				close(release)
 				if f.disk == nil {
 					synctest.Wait()
+				} else {
+					// The canceled HTTP reply can still be leaving the recorder.
+					// Join it before changing the next request's fixture state.
+					if slices.Contains(f.sdk.workerEvents(), "start") {
+						t.Fatal("expired retirement started a worker")
+					}
 				}
 			}
 			f.ctx = nil

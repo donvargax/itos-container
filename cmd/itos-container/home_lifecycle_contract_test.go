@@ -377,10 +377,14 @@ func homeOperationBudget(t *testing.T, operation string) {
 		if code != 75 || time.Since(start) > 31*time.Second {
 			t.Fatal("home budget restarted", code, time.Since(start))
 		}
+		var events []string
 		if f.disk == nil {
 			synctest.Wait()
+			events = f.engine.Events
+		} else {
+			events = f.sdk.workerEvents()
 		}
-		for _, event := range f.engine.Events {
+		for _, event := range events {
 			if event == "start" {
 				t.Fatal("late home observation started worker")
 			}

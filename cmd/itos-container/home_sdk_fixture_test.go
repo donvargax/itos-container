@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +39,12 @@ type homeSDKFixture struct {
 	created  []container.InspectResponse
 }
 type homeSDKReadiness struct{ a *homeSDKFixture }
+
+func (a *homeSDKFixture) workerEvents() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.f.engine.Events)
+}
 
 func (e homeSDKReadiness) Open(_, _ string, _ time.Duration) (rp.Session, rp.Failure) {
 	f := e.a.f
