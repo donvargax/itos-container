@@ -2111,8 +2111,8 @@ items:
   - id: slice-37
     title: Run an owned foreground workload with a TTY
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-56]
     kind: slice
     why: >
