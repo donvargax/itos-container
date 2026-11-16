@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io/fs"
@@ -189,6 +190,66 @@ func TestCredentialStagingRejectsDescriptorBeforeEffects(t *testing.T) {
 			})
 			if failure != port.CredentialRefused {
 				t.Fatal("invalid descriptor was not refused", failure)
+			}
+		})
+	}
+}
+
+func TestCredentialCopyValidatesSourceBeforeReading(t *testing.T) {
+	for _, fault := range []string{"healthy", "empty", "oversized", "file type", "permissions", "owner", "multiple links", "no links"} {
+		t.Run(fault, func(t *testing.T) {
+			data := []byte("synthetic\n")
+			switch fault {
+			case "empty":
+				data = nil
+			case "oversized":
+				data = bytes.Repeat([]byte("s"), 65537)
+			}
+			fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": data})
+			s := fixture.Stager.(Credentials)
+			selected := credentialSourceSelection{CredentialSources: fixture.Sources, entries: fixture.Sources.Checked()}
+			node := &selected.entries[0].Node
+			switch fault {
+			case "file type":
+				node.Mode = 0040600
+			case "permissions":
+				node.Mode |= 0040
+			case "owner":
+				node.UID++
+			case "multiple links":
+				node.Links = 2
+			case "no links":
+				node.Links = 0
+			}
+			calls := s.operations()
+			stat := calls.stat
+			calls.stat = func(file *os.File) (fs.FileInfo, error) {
+				info, err := stat(file)
+				if err != nil || file.Name() != selected.entries[0].ReadPath {
+					return info, err
+				}
+				// Match the supplied identity so the independent safety checks,
+				// rather than an unrelated metadata mismatch, must refuse it.
+				raw := struct{ Dev, Ino, Nlink, Uid, Mode uint64 }{node.Device, node.Inode, node.Links, uint64(node.UID), uint64(node.Mode)}
+				return credentialStatInfo{info, raw}, nil
+			}
+			s.ops = &calls
+			reads := 0
+			s.read = func(file *os.File, buffer []byte) (int, error) {
+				reads++
+				return file.Read(buffer)
+			}
+			r := fixture.Intent()
+			failure := s.Stage(t.Context(), r, selected, func(next port.CredentialStaging) port.Outcome { r.Credentials = next; return "" })
+			if fault == "healthy" {
+				if failure != "" || reads != 1 {
+					t.Fatal("safe source positive control failed", failure, reads)
+				}
+			} else if failure != port.CredentialRefused || reads != 0 {
+				t.Fatal("unsafe source was not refused before reading", failure, reads)
+			}
+			if failure := fixture.Stager.Remove(t.Context(), r); failure != "" {
+				t.Fatal("source validation lost partial staging cleanup", failure)
 			}
 		})
 	}

@@ -2,11 +2,36 @@ package port_test
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
+
+func TestCredentialStagingDirectoryAndKinds(t *testing.T) {
+	staging := f.CredentialIntent(port.CredentialKinds{Claude: true}).Credentials
+	if !staging.Valid() {
+		t.Fatal("valid staging intent refused")
+	}
+	for _, directory := range []string{
+		strings.Repeat("a", 32),
+		"/dev/shm/itos-container-" + strings.Repeat("a", 31),
+		"/dev/shm/itos-container-" + strings.Repeat("a", 33),
+		"/dev/shm/itos-container-" + strings.Repeat("a", 31) + "g",
+		"/dev/shm/itos-container-" + strings.Repeat("A", 32),
+	} {
+		bad := staging
+		bad.Directory = directory
+		if bad.Valid() {
+			t.Error("staging accepted a noncanonical directory", directory)
+		}
+	}
+	staging.Kinds = port.CredentialKinds{}
+	if staging.Valid() {
+		t.Fatal("staging without any selected credential kind accepted")
+	}
+}
 
 func TestCredentialStagingValidation(t *testing.T) {
 	for _, kinds := range []port.CredentialKinds{{Claude: true}, {GitHub: true}, {Claude: true, GitHub: true}} {
