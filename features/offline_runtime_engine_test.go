@@ -12,8 +12,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -41,6 +39,10 @@ type offlineAPI struct {
 	mu          sync.Mutex
 	w           *world
 	server      *http.Server
+	serveDone   chan error
+	stopped     chan struct{}
+	handlers    sync.WaitGroup
+	stopping    bool
 	requests    []offlineRequest
 	created     []string
 	creates     []*offlineCreate // every create forwarded, answered or not
@@ -59,36 +61,6 @@ type offlineAPI struct {
 	removeReady chan struct{}
 	removeHeld  bool
 	lifecycle   *lifecycleFaults
-}
-
-func (w *world) startOfflineAPI() error {
-	dir, err := os.MkdirTemp("/tmp", "slice-10-api-")
-	if err != nil {
-		return err
-	}
-	w.doctor.cleanup = append(w.doctor.cleanup, func() { _ = os.RemoveAll(dir) })
-	path := filepath.Join(dir, "engine.sock")
-	listener, err := net.Listen("unix", path)
-	if err != nil {
-		return err
-	}
-	a := &offlineAPI{w: w, absent: map[string]bool{}, connections: map[net.Conn]bool{}, identities: map[string]map[string]any{}}
-	a.server = &http.Server{ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-		return context.WithValue(ctx, runPeerKey{}, runPeerPID(c))
-	}, Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second, ConnState: func(c net.Conn, state http.ConnState) {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		switch state {
-		case http.StateHijacked:
-			a.connections[c] = true
-		case http.StateClosed:
-			delete(a.connections, c)
-		}
-	}}
-	w.offline.api = a
-	w.doctor.env["DOCKER_HOST"] = "unix://" + path
-	go func() { _ = a.server.Serve(listener) }()
-	return nil
 }
 
 func offlineHex(value string) bool {

@@ -36,6 +36,7 @@ type world struct {
 	stdout, stderr string
 	deadline       time.Duration
 	timedOut       bool
+	socketRoot     string // Optional short owned directory for suite preparation.
 
 	stdin               string // the text the run reads from its standard input, "" for none
 	credentials         *credentialWorld
@@ -59,6 +60,13 @@ type world struct {
 	control             *controlFixture
 	egress              *egressWorld
 	duringQuiet         func() // Selected independent cases inside a stable quiet-worker lifetime.
+}
+
+func (w *world) fixtureSocketRoot() string {
+	if w.socketRoot != "" {
+		return w.socketRoot
+	}
+	return "/tmp"
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
