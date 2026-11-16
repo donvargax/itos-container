@@ -162,7 +162,26 @@ func (w *world) lifecycleDisconnect() {
 }
 
 func (w *world) lifecycleProgressAfterLoss() {
-	w.lifecycle.later = w.lifecycleHeartbeat()
+	l := w.lifecycle
+	// Controller completion can precede the probe's next 50 ms heartbeat.
+	// Require a fresh publication after this independent observation starts,
+	// keeping the disconnect in place even though the controller has exited.
+	previous := max(l.heartbeat, w.lifecycleHeartbeat())
+	timer, tick := time.NewTimer(5*time.Second), time.NewTicker(10*time.Millisecond)
+	defer timer.Stop()
+	defer tick.Stop()
+	for {
+		select {
+		case <-tick.C:
+			l.later = w.lifecycleHeartbeat()
+			if l.later > previous {
+				return
+			}
+		case <-timer.C:
+			l.err = errors.Join(l.err, fmt.Errorf("post-disconnection heartbeat did not advance beyond %d within 5s; last=%d", previous, l.later))
+			return
+		}
+	}
 }
 
 func (w *world) lifecycleDisconnectReady() {
@@ -176,14 +195,16 @@ func (w *world) lifecycleDisconnectReady() {
 		defer a.mu.Unlock()
 		for _, e := range a.requests {
 			if strings.HasSuffix(e.Path, "/wait") && e.Status == 200 {
-				return true
+				// The probe announces readiness before publishing any heartbeat.
+				// Do not disconnect with an absent baseline from that interval.
+				l.heartbeat = w.lifecycleHeartbeat()
+				return l.heartbeat > 0
 			}
 		}
 		return false
 	}) {
 		return
 	}
-	l.heartbeat = w.lifecycleHeartbeat()
 	l.signalled = time.Now() // transport-failure origin, not a synthetic signal
 	l.fault.disconnect()
 	w.offline.api.closeConnections()
