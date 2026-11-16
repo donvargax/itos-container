@@ -158,9 +158,17 @@ func TestEngineFixtureWarmup(t *testing.T) {
 		{"invalid start clock", `engine_warmup_now() { printf 'invalid\n'; }; engine_warmup_run 1s 1s '2 seconds' true`, "unknown", "failed", "timing:"},
 		{"unavailable end clock", fixtureWarmupClock("1234", "") + `engine_warmup_run 1s 1s '2 seconds' true`, "unknown", "failed", "timing:"},
 		{"invalid end clock", fixtureWarmupClock("1234", "invalid") + `engine_warmup_run 1s 1s '2 seconds' true`, "unknown", "failed", "timing:"},
-		{"timing output failure", `engine_warmup_timing() { return 23; }; engine_warmup_run 1s 1s '2 seconds' true`, "", "failed", "timing output:"},
+		{"timing output failure", fixtureWarmupClock("1234", "4567") + `engine_warmup_timing() { return 23; }; engine_warmup_run 1s 1s '2 seconds' true`, "", "failed", "timing output:"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.duration == "measured" {
+				if _, err := os.ReadFile("/proc/uptime"); err != nil {
+					t.Skip("requires the Linux monotonic uptime source")
+				}
+				if _, err := exec.LookPath("timeout"); err != nil {
+					t.Skip("requires coreutils timeout")
+				}
+			}
 			started := time.Now()
 			stdout, stderr, err := runFixtureWarmupShell(t, "source \"$1\"\n"+tc.script)
 			elapsed := time.Since(started)
@@ -193,13 +201,16 @@ func TestEngineFixtureWarmup(t *testing.T) {
 		if _, err := os.Stat("/dev/full"); err != nil {
 			t.Skip("requires the always-full device")
 		}
-		stdout, stderr, err := runFixtureWarmupShell(t, `source "$1"; engine_warmup_run 1s 1s '2 seconds' true >/dev/full`)
+		stdout, stderr, err := runFixtureWarmupShell(t, "source \"$1\"\n"+fixtureWarmupClock("1234", "4567")+`engine_warmup_run 1s 1s '2 seconds' true >/dev/full`)
 		requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: warm-up timing output:"), "timing write failure was hidden: %v %s %s", err, stdout, stderr)
 	})
 }
 
 func fixtureWarmupClock(first, second string) string {
-	return `engine_warmup_now() {
+	// Clock/output controls run only the harmless true builtin. Real child
+	// termination is checked separately by the measured cases with coreutils.
+	return `timeout() { shift 3; "$@"; }
+engine_warmup_now() {
   if [[ ! -e clock-read ]]; then
     : > clock-read
     printf '%s\n' '` + first + `'
