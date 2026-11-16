@@ -25,9 +25,6 @@ type Credentials struct {
 	unlink func(*os.Root, string) error
 }
 
-const credentialNoFollow = 0x20000
-const credentialDirectory = 0x10000
-
 func (s Credentials) base() (string, bool) {
 	root := s.root
 	if root == "" {
