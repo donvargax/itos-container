@@ -9,14 +9,17 @@ Feature: An approved persistent home for one checkout's harness
   # Deployment and A2; approval.feature, offline.feature, anchors.feature and
   # recovery.feature. This is slice-34's spec, not implementation or runtime proof.
   #
-  # Storage decision made here: opt-in named local volume, persistent per approved
+  # Proposed storage decision made here, not a settled coordinator decision:
+  # opt-in named local volume, persistent per approved
   # checkout identity, host UID/GID and local daemon. This follows the registry's
   # recommendation so a later harness can resume across runs. A tmpfs home would
   # lose those sessions. No shared cache, host-home mount, checkout state directory,
-  # automatic migration, reset, prune or deletion command is introduced. Ordinary
-  # stop and every failure path retain even an empty or partly initialized home.
+  # automatic migration or prune is introduced. Ordinary session stop and launch
+  # failure paths retain even an empty or partly initialized home.
   # The person remains able to remove engine resources outside this CLI; a missing
   # recorded volume is reported, never silently replaced with an empty home.
+  # Explicit person-controlled reset/deletion below supplies recovery and reclaims
+  # obsolete homes; disabling/re-enabling policy is never consent to discard data.
   #
   # Request and approval decisions:
   # - Add optional home: {storage: volume} to supported policy versions 1/2/3.
@@ -91,11 +94,15 @@ Feature: An approved persistent home for one checkout's harness
   #   checkout identity, not its basename or Git remote. Engine/GID/checkout
   #   identity changes select another home; image, generation and XDG state-root
   #   changes do not. Never transplant data or adopt a similarly labelled volume.
-  # - Keep one protected home record and persistent allocation lock per key under
+  #   The random token is also the public home ID for one storage generation;
+  #   the scope key stays stable across an explicitly consented reset.
+  # - Keep one protected current-generation binding, retained generation records
+  #   and a persistent allocation lock per key under
   #   the existing fixed account-home coordination boundary, independent of chosen
   #   XDG_STATE_HOME. This is host control metadata, never the harness home itself.
   #   Apply existing no-follow, owner, mode, single-link, strict-codec and atomic
-  #   durable-publication rules; no scanning other projects or trusting labels alone.
+  #   durable-publication rules; run never scans other projects or trusts labels
+  #   alone. Only explicit status --homes enumerates this UID's home catalog.
   # - Allocate a random 32-byte token and name itos-container-home-<64 lower hex>.
   #   Publish intent before VolumeCreate. Refuse an occupied random name, with no
   #   adoption, deletion or redraw. Inspect and durably record the concrete tuple
@@ -119,7 +126,8 @@ Feature: An approved persistent home for one checkout's harness
   # - Normal exit, nonzero exit, cancellation, failed startup and stop remove only
   #   owned session resources, confirming worker and checkout-anchor absence as
   #   before. Never issue a home VolumeRemove or remove-volumes/prune operation.
-  #   Home presence is expected after successful cleanup, not a cleanup leak.
+  #   This prohibition is for session cleanup; only explicit home management below
+  #   can remove a retained home. Presence after cleanup is not a cleanup leak.
   #   Missing or substituted retained storage is never automatically repaired.
   # - Status stays read-only and adds home:{storage:"volume",state,name} only for
   #   home-bearing sessions. state is present, absent or unknown from independently
@@ -140,10 +148,110 @@ Feature: An approved persistent home for one checkout's harness
   #   status budgets include all home locks, calls and publications. Reconnects
   #   cannot reset them; expiry fences further start/mutation. No workload timeout.
   #
-  # Architecture handoff (implementation must record an ADR and update arc42):
+  # Person-controlled home management (proposed, part of this slice):
+  # - status --homes lists only this effective host UID's protected home catalog,
+  #   across its checkouts and XDG state roots, including obsolete generations and
+  #   deleted tombstones. This explicit mode is separate from project session
+  #   status; no daemon-wide discovery or label adoption. It works outside the old
+  #   checkout even after its Git identity/path or the person's GID changes. Read
+  #   original protected bindings, not current YAML, manifest, approval or Git.
+  #   Missing catalog is an empty read-only result, never bootstrap or repair.
+  # - Its schema-1 JSON is {schema:1,ok,problems:[],homes:[]}, sorted by home ID.
+  #   Each validated entry has id, scope, project, uid, gid, engine:{endpoint,id},
+  #   name, state (present/absent/unknown), disposition
+  #   (retained/reset-pending/delete-pending/reset/deleted/awaiting-allocation),
+  #   successor (home ID or null), and references (sorted session IDs).
+  #   Plain output gives the same safe metadata, never contents. Missing/unsafe
+  #   records produce typed problems, not trusted entries or partial success.
+  #   Inspect only the selected pinned local daemon when it matches the original;
+  #   another daemon's entry stays unknown with recovery.environment (3) and
+  #   guidance to select that original local engine, never an automatic reconnect.
+  # - Add mutually exclusive stop --home <home-id> --reset and
+  #   stop --home <home-id> --delete, without a session positional argument.
+  #   A full 64-lower-hex ID selects exactly one protected generation; no name,
+  #   prefix, --all, --force, --yes, fingerprint or policy-derived consent.
+  #   Invalid combinations/IDs return recovery.usage (2) before state/engine I/O.
+  #   Session stop retains its old interface and never offers home destruction.
+  # - Review the action, exact ID, original checkout/UID/GID/daemon, volume name,
+  #   observed presence, references and permanent loss of ALL harness contents.
+  #   Require the person at a terminal to answer y/N after this review; no/empty/
+  #   EOF/cancellation returns recovery.consent-required (1) without mutation.
+  #   Redirected input cannot consent even if it contains y. JSON does not bypass
+  #   consent: terminal review/prompt goes to stderr; stdout is one schema-1 home
+  #   result. Terminal presence is not proof of humanity; unsandboxed agents can
+  #   fake a terminal, as with approve. Agents must not manage real retained homes.
+  # - Hold no lock across consent. Reacquire the scope lock and revalidate the
+  #   reviewed generation/binding, selected socket/daemon and full volume tuple
+  #   before persisting the action and again immediately before VolumeRemove.
+  #   A changed review refuses, never retargets consent. Current UID must own the
+  #   original protected record; old GID/checkout identity need not still be current.
+  #   Their original values remain binding. Never trust labels/name alone, read
+  #   home contents or follow its root symlinks. Owned bad root metadata may be
+  #   discarded by consent; it may not be repaired for reuse without that consent.
+  # - Under that same scope lock, publish a durable per-generation session claim
+  #   before any home allocation/mount can be issued. Claims include protected
+  #   original state-root/session references across XDG selections. Release only
+  #   after full worker absence or fenced proof no worker create was issued.
+  #   Controller death, an exited worker, a missing volume or an unavailable state
+  #   root never releases a claim. Incomplete, unsafe or uncertain references block
+  #   management; return recovery.home-in-use (1) for known claims and the existing
+  #   typed unsafe/invalid/temporary failure otherwise. Name the exact session stop
+  #   retry and original state-root selection, without stopping it automatically.
+  # - No home reset/delete signals/removes a worker. The person first uses ordinary
+  #   session stop, then requests fresh home management consent. New run claims,
+  #   generation checks before mount/start and management use the same scope lock;
+  #   a durable pending action fences new claims through controller death.
+  #   Lock contention or a pending action yields run.home-unavailable (75), never
+  #   reuse. Order stays session operation, scope, short state transaction. Management
+  #   takes no session operation lock and no transaction spans an Engine call.
+  # - Persist consented action and original ownership durably before deletion.
+  #   Remove only the freshly matching owned volume with force=false, never prune,
+  #   remove-volumes, a backing host path, image, anchor or another generation.
+  #   In-use responses remain temporary. Confirm absence independently, then
+  #   publish completion durably; a DELETE reply or old tombstone alone is not proof.
+  #   A fully recorded home already confirmed absent needs no delete call, but
+  #   still needs consent, zero claims and durable retirement. A pending allocation
+  #   with no concrete tuple cannot be retired from name-only absence: reconcile
+  #   its original session first, never fence an uncertain late create by guessing.
+  # - Reset retires this exact generation and publishes one fresh unallocated
+  #   successor token under the same scope. It creates no volume or worker. Only
+  #   a later run with matching current approval may allocate and initialize it;
+  #   the old marker must be gone. Retain original records and session outcomes.
+  #   Repeating reset on the retired ID reports that same successor with no new
+  #   mutation, even after the successor acquired data. It never resets the latest
+  #   generation by implication. A different action on that retired ID refuses.
+  #   Reserve the successor token in the durable reset intent; recover publication
+  #   of that same token/current binding after a crash, never draw another token.
+  # - Delete retires the selected generation without a successor and disables that
+  #   scope. Even reapproval or toggling home cannot recreate it: run.home-refused
+  #   names the deleted home ID and consented reset route. A fresh consented reset
+  #   of that deleted ID may publish its sole successor. Thus obsolete checkout,
+  #   GID or daemon scopes can be reclaimed without affecting the current scope.
+  #   Explicit deletion of a missing recorded home also disables its scope.
+  # - Pending/failed deletion keeps the original tuple/action and launch fence.
+  #   Fresh status reports uncertainty and exactly [itos,container,stop,--home,id,
+  #   --reset|--delete] as retry for that action; each unfinished retry requires
+  #   renewed terminal review/consent and original daemon/tuple revalidation.
+  #   Lost removal reply may complete after confirmed absence; a same-named
+  #   replacement is refused, never deleted. Completion fsync failure stays pending
+  #   until durability is re-established. Completed retries make no engine mutation
+  #   or new successor, and cannot touch a newer generation. Never erase tombstones.
+  # - Management uses recovery.not-owned/unsafe-state/invalid-state/environment/
+  #   temporary/internal as in recovery.feature. Successful results use the home
+  #   envelope with exactly the selected entry, plus retry (argv or null) per entry;
+  #   status --homes uses the same field. Exit 0 means durable requested retirement,
+  #   not workload success. New consent/home-in-use failures are exit 1. Status has
+  #   10 s total; review inspection has 10 s, and a fresh 30 s mutation total starts
+  #   only after consent. Human input waiting holds no engine handle or state lock.
+  #   Calls remain at most 10 s within totals; expiry forbids later mutation or
+  #   completion publication. No reset/deletion changes sandbox approval or grants.
+  #
+  # Architecture decision accompanies this specification, not later implementation:
+  # docs/decisions/0028-persistent-harness-home.md updates the named arc42 sections
+  # now, with all home behavior explicitly proposed and unproven.
   # Extend shared internal/engine/session domain/port/disk/docker responsibilities
-  # for home allocation, binding and recovery; policy and approval keep their own
-  # shared validation/canonicalization responsibilities. Integrate through existing
+  # for home allocation, binding, claims and consented retirement; policy and
+  # approval keep shared validation/canonicalization. Integrate through existing
   # run/doctor/approve/status/stop slices, never slice-to-slice imports. Only cmd
   # assembles. Use I/O-free porttest fakes and identical fake/adapter contracts.
   # Override arc42's Goals/Context A2 deferral only for this opt-in second-milestone
@@ -154,7 +262,8 @@ Feature: An approved persistent home for one checkout's harness
   # an arbitrary-extra-volume allowance. Keep ordinary engine cases credential-free.
   # Reuse pinned Moby client v0.6.2/api v1.56.1, Go 1.27.4 archive/tar and existing
   # x/sys v0.48.0 adapters; no new library/service, engine CLI or dependency pin.
-  # This draft touches only its feature file; ADR and docs accompany implementation.
+  # This draft changes this feature and its architecture decision only; no bindings
+  # or product implementation, and no runtime, red/green or mutation evidence.
   #
   # Step handoff: EVERY phrase below is NEW, deliberately home-specific. Read
   # offline_launch_steps_test.go, offline_local_steps_test.go and
@@ -253,13 +362,13 @@ Feature: An approved persistent home for one checkout's harness
     And owned session resources are cleaned or retained with exact recovery guidance and no home is deleted or allocated twice
 
     Examples:
-      | fault                                |
-      | intent publication fails             |
-      | volume create reply is lost          |
-      | owned home publication fails         |
-      | root initialization fails            |
-      | initialized home publication fails   |
-      | home inspection is unavailable       |
+      | fault                              |
+      | intent publication fails           |
+      | volume create reply is lost        |
+      | owned home publication fails       |
+      | root initialization fails          |
+      | initialized home publication fails |
+      | home inspection is unavailable     |
 
   # Refusal rows include a positive home control, so an old generic refusal
   # cannot pass. Fixtures independently seed each described record/object defect.
@@ -271,17 +380,17 @@ Feature: An approved persistent home for one checkout's harness
     And no foreign or missing home is adopted repaired replaced removed or read for contents
 
     Examples:
-      | defect                                      |
-      | occupied freshly allocated random name       |
-      | recorded volume is absent                    |
-      | same name with different creation time       |
-      | another checkout scope in labels             |
-      | another daemon in protected ownership        |
-      | nonlocal driver                             |
-      | nonempty driver options                     |
-      | root owner differs from approved UID GID     |
-      | root mode is not 0700                        |
-      | home reference belongs to another project   |
+      | defect                                    |
+      | occupied freshly allocated random name    |
+      | recorded volume is absent                 |
+      | same name with different creation time    |
+      | another checkout scope in labels          |
+      | another daemon in protected ownership     |
+      | nonlocal driver                           |
+      | nonempty driver options                   |
+      | root owner differs from approved UID GID  |
+      | root mode is not 0700                     |
+      | home reference belongs to another project |
 
   @wip @slice-34 @ID-HOME-08 @local-engine-fixture
   Scenario Outline: Home boundary inspection precedes every worker start
@@ -291,16 +400,16 @@ Feature: An approved persistent home for one checkout's harness
     And the owned unstarted worker is removed and the retained home and unrelated resources remain intact
 
     Examples:
-      | defect                                 |
-      | wrong home volume                      |
-      | host bind in place of home volume      |
-      | read-only home mount                   |
-      | image copy enabled on home mount       |
-      | home target inside checkout            |
-      | HOME inherited from image              |
-      | XDG_STATE_HOME inherited from image    |
-      | TMPDIR points into persistent home     |
-      | another unapproved mount               |
+      | defect                              |
+      | wrong home volume                   |
+      | host bind in place of home volume   |
+      | read-only home mount                |
+      | image copy enabled on home mount    |
+      | home target inside checkout         |
+      | HOME inherited from image           |
+      | XDG_STATE_HOME inherited from image |
+      | TMPDIR points into persistent home  |
+      | another unapproved mount            |
 
   # Recovery and bounded operations. Independently seeded home-aware records
   # are not accepted by the old codec: first Then is red, never a setup assertion.
@@ -350,6 +459,147 @@ Feature: An approved persistent home for one checkout's harness
     Then only one home is allocated and only one worker is admitted at a time and the later run reuses that home
     And no state-root change resets ownership or initializes existing home contents
 
+  # Home management. Every binding is new. Givens independently encode retained
+  # and retired generations, claims and engine objects, never run setup through
+  # the product. When collects every early return; the first Then must assert the
+  # specified home result, never merely a nonzero exit or absence of deletion.
+  @wip @slice-34 @ID-HOME-16 @local-engine-fixture
+  Scenario: Retained and obsolete homes remain discoverable outside their checkouts
+    Given a home catalog fixture with current obsolete deleted and other-user homes across state roots and an independent empty catalog
+    When fresh plain and JSON status --homes inspect both catalogs outside the recorded checkouts through both local backends
+    Then the owned catalog reports the exact sorted home metadata and the empty catalog succeeds without creating state
+    And obsolete GID checkout and daemon bindings remain discoverable while other-user entries and all home contents stay private
+    And another daemon is unknown with recovery.environment and neither catalog is changed or used to discover engine resources by labels
+
+  @wip @slice-34 @ID-HOME-17 @local-engine-fixture
+  Scenario Outline: Discarding home state requires consent to one reviewed action
+    Given independent owned home management fixtures with response "<response>" and a terminal consenting control for each action
+    When reset and delete are requested in plain and JSON modes through both local backends
+    Then each unconsented request reports recovery.consent-required with exit 1 and changes no home record claim or engine resource while its consenting control completes
+    And each consenting review names the exact action home and original binding and warns of permanent loss before accepting consent
+    And JSON stdout contains only the home result and no prompt and no approval record or checkout data changes
+
+    Examples:
+      | response           |
+      | terminal no        |
+      | terminal empty     |
+      | terminal EOF       |
+      | terminal cancelled |
+      | redirected yes     |
+
+  # A valid consenting control prevents generic legacy argument rejection from
+  # satisfying these refusal rows. Publication faults precede any engine mutation.
+  @wip @slice-34 @ID-HOME-24 @local-engine-fixture
+  Scenario Outline: Invalid or unproven home actions cannot discard storage
+    Given an independently recorded home with management request condition "<condition>" and an independent valid consenting control
+    When home management is attempted through both local backends
+    Then the request reports <rule> with exit <exit> without volume removal or successor publication while the control completes
+    And usage errors perform no state or engine access and failed publication or lock expiry preserves original ownership within the mutation budget
+
+    Examples:
+      | condition                             | rule                  | exit |
+      | truncated home ID                     | recovery.usage        | 2    |
+      | both reset and delete                 | recovery.usage        | 2    |
+      | home ID and session ID                | recovery.usage        | 2    |
+      | home ID without action                | recovery.usage        | 2    |
+      | unattended yes override               | recovery.usage        | 2    |
+      | action intent fsync fails             | recovery.temporary    | 75   |
+      | scope lock exhausts the budget        | recovery.temporary    | 75   |
+      | pending allocation with name-only 404 | recovery.temporary    | 75   |
+      | claim state root unavailable          | recovery.temporary    | 75   |
+      | unsafe session claim                  | recovery.unsafe-state | 1    |
+
+  @wip @slice-34 @ID-HOME-18 @local-engine-fixture
+  Scenario Outline: Consented reset recovers an unusable home without automatic replacement
+    Given an independently recorded unreferenced home that is "<condition>" and an independently approved matching run
+    When run is attempted before consent then terminal reset completes and fresh run and repeated reset of the old ID follow through both local backends
+    Then the first run reports "<before>" without replacement and reset durably retires exactly that generation before any new allocation
+    And only the later approved run initializes one fresh successor with no old marker and repeated reset leaves the successor marker unchanged
+    And original records remain as tombstones and the reset command creates no volume worker or approval and changes no unrelated state
+
+    Examples:
+      | condition                          | before                       |
+      | present with a retained marker     | retained marker with exit 0  |
+      | missing after external removal     | run.home-refused with exit 1 |
+      | deleted by prior consent           | run.home-refused with exit 1 |
+      | owned with unsafe worker root mode | run.home-refused with exit 1 |
+
+  @wip @slice-34 @ID-HOME-19 @local-engine-fixture
+  Scenario Outline: Explicit deletion reclaims obsolete homes without disabling another scope
+    Given independent old and current home generations differing by "<identity>" with no claims and missing-volume and current-scope deletion controls
+    When the person selects each original daemon deletes only the chosen home with consent and retries through both local backends
+    Then exactly the selected owned storage is absent and its scope is durably disabled while the other home retains its marker and remains reusable
+    And repeated deletion and deletion of confirmed missing storage issue no volume removal and preserve the original ownership tombstone
+    And an approved run for a deleted scope is refused despite policy toggling until a separate consented reset permits one fresh home
+
+    Examples:
+      | identity          |
+      | host GID          |
+      | checkout identity |
+      | local daemon      |
+
+  @wip @slice-34 @ID-HOME-20 @local-engine-fixture
+  Scenario Outline: Home destruction requires exact ownership at the mutation boundary
+    Given a home management fixture with substitution "<defect>" and an independent valid owned control
+    When reset and delete receive terminal consent and the substitution is exercised after review and immediately before removal through both local backends
+    Then the defective request reports <rule> with exit <exit> before removal or retirement while the valid control completes
+    And no substituted resource or protected binding is adopted repaired deleted or read for contents
+
+    Examples:
+      | defect                             | rule                   | exit |
+      | another host UID in the record     | recovery.not-owned     | 1    |
+      | replaced protected generation      | recovery.not-owned     | 1    |
+      | symlinked home record              | recovery.unsafe-state  | 1    |
+      | missing original ownership tuple   | recovery.invalid-state | 2    |
+      | same name different creation time  | recovery.not-owned     | 1    |
+      | wrong scope or token labels        | recovery.not-owned     | 1    |
+      | changed driver or options          | recovery.not-owned     | 1    |
+      | replaced selected socket or daemon | recovery.not-owned     | 1    |
+      | unavailable original daemon        | recovery.temporary     | 75   |
+
+  # Test both race orders with deterministic barriers: a launch claims while the
+  # prompt waits, and a launch attempts a claim after pending deletion is durable.
+  # Each invocation's own operation budget applies; never sleep to order events.
+  # The uncertain-create row releases its delayed matching resource before session
+  # stop; neither controller death nor name-only absence supplies that evidence.
+  @wip @slice-34 @ID-HOME-21 @local-engine-fixture
+  Scenario Outline: Home management fences launches and protects every retained session claim
+    Given a home shared across state roots with reference "<reference>" and barriers at consent and durable retirement intent
+    When reset and delete contend with launch then ordinary stop recovers the referenced session and fresh consented management is retried through both local backends
+    Then the referenced home is refused with recovery.home-in-use before any home mutation and no management attempt stops a worker
+    And a launch claiming during consent prevents retirement while a durable pending action prevents a later mount or start
+    And only confirmed session cleanup releases the claim so fresh consent can retire the exact home without changing workload knowledge
+
+    Examples:
+      | reference                          |
+      | running with live controller       |
+      | running after controller death     |
+      | exited worker not yet removed      |
+      | unstarted owned worker             |
+      | uncertain worker create            |
+      | paused launch before worker create |
+
+  # The replacement control substitutes a foreign same-named volume after the
+  # first confirmed removal and before retry. Hold absence inspection after lost
+  # replies so that the first attempt must actually retain uncertainty.
+  @wip @slice-34 @ID-HOME-22 @local-engine-fixture
+  Scenario Outline: Interrupted home retirement remains bounded and recoverable by exact ID
+    Given an unreferenced owned home with management fault "<fault>" and independent timely and replacement-volume controls
+    When consented reset and delete encounter the fault and fresh status and consented retries follow through both local backends
+    Then the first action reports recovery.temporary within its original budget or loses its controller without claiming completion and the timely control completes
+    And fresh status retains the original action ownership and exact home retry and pending retirement refuses new run claims
+    And after the fault clears retry confirms absence and durable completion without repeated successful removal or more than one successor
+    And the replacement-volume control is refused before deletion and no expiry permits a late mutation or completion publication
+
+    Examples:
+      | fault                                                 |
+      | removal reply lost and absence inspection unavailable |
+      | completion publication fsync fails                    |
+      | controller dies after durable action intent           |
+      | controller dies after removal                         |
+      | engine removal consumes remaining budget              |
+      | engine reports volume in use                          |
+
   # Native evidence. First assertions require the absent persistent-home behavior;
   # /tmp execution, denied host access and teardown are explicit regression controls.
   @wip @slice-34 @ID-HOME-13 @engine
@@ -369,10 +619,12 @@ Feature: An approved persistent home for one checkout's harness
     And neither worker can read the other home or the synthetic host-home sentinel and a same-home read control succeeds
     And cleanup preserves both checkout edits and both homes while removing both sessions
 
+  # Controller death cannot supply retry output: use the independently captured
+  # protected registration, then explicitly invoke fresh status and stop.
   @wip @slice-34 @ID-HOME-15 @engine
   Scenario Outline: Home state survives every session ending without preserving a worker
     Given a CI home checkout with a cached image and a probe that writes a home marker before "<ending>"
-    When the product session ends that way and any reported cleanup retry is executed by fresh product stop
+    When the product session ends that way and fresh product status discovers the independently recorded session ID then fresh product stop recovers it and status inspects it again
     Then fresh status identifies the original retained home and confirms worker and anchor absence without inventing a workload exit
     When a later independently approved product run reads the home and temporary markers
     Then the later worker reads the original home marker and cannot read the old temporary marker
@@ -384,3 +636,24 @@ Feature: An approved persistent home for one checkout's harness
       | observed exit seven       |
       | controller cancellation   |
       | controller death and stop |
+
+  # Management runs only on independently tracked disposable CI homes. Observe
+  # active-worker refusal and a successful control before harness teardown.
+  # For external absence, the fixture removes its tracked original volume only
+  # after product stop confirmed worker absence, before management's new review.
+  # The obsolete case selects the original scope explicitly after an identity
+  # change; the other checkout's home is never a reclamation candidate.
+  @wip @slice-34 @ID-HOME-23 @engine
+  Scenario Outline: A person can retire native home storage after its session is gone
+    Given two CI home checkouts with retained markers one live worker and a disposable terminal for action "<action>"
+    When home management is attempted while the worker lives then ordinary stop completes and the chosen action receives fresh consent
+    Then the live attempt reports recovery.home-in-use with its worker and home intact and the consented attempt durably retires only the selected home
+    And native inspection confirms the original volume absent and the other checkout still reads its retained marker before harness teardown
+    When a later independently approved run and repeated management of the old ID are attempted
+    Then reset permits one fresh empty home while delete refuses allocation until a separate consented reset and old-ID retries never remove successor data
+
+    Examples:
+      | action                        |
+      | reset present home            |
+      | reset externally missing home |
+      | delete obsolete home          |
