@@ -954,20 +954,9 @@ items:
     title: run reaches only the approved names through the proxy; every other route out is closed
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-26, T-39, T-40, T-51, T-52]
     kind: slice
-    why: >
-      Was p1-egress-run-through-proxy.
-      The first user-visible egress behaviour, charter step 1 (contract AC-09, AC-10, AC-13).
-      Scenarios first, with the real-engine ones in CI only, run against a fake endpoint the proxy
-      allows and never a real model or credential. With an approved allowlist, itos container run
-      reaches an allowed host name over CONNECT on 443. A direct route out (ignoring proxy
-      variables, a literal IP, the default gateway, UDP, another port) fails independent of client
-      cooperation. A name outside the list, or a spelling variant, is refused. Offline runs are
-      unchanged. It wires the approved allowlist from the approval slice, the proxy package and the
-      lifecycle port into the run slice, and doctor says what a run will use. Each property is
-      proven by a scenario that fails without it. Broken down from p1-egress-allowlist-proxy.
   - id: slice-28
     title: Refusals are logged, a proxy failure stops the run, and cleanup removes the proxy and network
     phase: 1
