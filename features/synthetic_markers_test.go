@@ -103,7 +103,12 @@ func syntheticTreeAbsent(surface, root string, markers []string) error {
 	if err != nil || !info.IsDir() {
 		return fmt.Errorf("surface %q is not a readable tree", surface)
 	}
-	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+	directory, err := os.OpenRoot(root)
+	if err != nil {
+		return fmt.Errorf("surface %q is not a readable tree", surface)
+	}
+	defer func() { _ = directory.Close() }()
+	err = fs.WalkDir(directory.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return fmt.Errorf("surface %q could not be completely walked", surface)
 		}
@@ -113,7 +118,7 @@ func syntheticTreeAbsent(surface, root string, markers []string) error {
 		if !entry.Type().IsRegular() {
 			return fmt.Errorf("surface %q contains an unexpected nonregular entry", surface)
 		}
-		file, err := os.Open(path)
+		file, err := directory.Open(path)
 		if err != nil {
 			return fmt.Errorf("surface %q has an unreadable file", surface)
 		}

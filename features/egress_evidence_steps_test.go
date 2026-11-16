@@ -38,12 +38,16 @@ func (w *world) egressEvidenceSeed(fixture string) error {
 	default:
 		return fmt.Errorf("unknown refusal evidence fixture %q", fixture)
 	}
+	return w.egressEvidenceWrite(data, []any{})
+}
+
+func (w *world) egressEvidenceWrite(data []byte, missing []any) error {
 	path := w.egressEvidencePath()
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		return err
 	}
 	digest := sha256.Sum256(data)
-	metadata := map[string]any{"schema": 1, "sha256": hex.EncodeToString(digest[:]), "records": strings.Count(string(data), "\n"), "missing": []any{}}
+	metadata := map[string]any{"schema": 1, "sha256": hex.EncodeToString(digest[:]), "records": strings.Count(string(data), "\n"), "missing": missing}
 	return os.WriteFile(filepath.Join(filepath.Dir(path), "egress-refusals.json"), approvalJSON(metadata), 0600)
 }
 

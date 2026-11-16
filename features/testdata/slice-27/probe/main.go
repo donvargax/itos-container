@@ -20,8 +20,10 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -512,6 +514,14 @@ func main() {
 		roots.AppendCertsFromPEM(authority)
 	}
 	out := report{Env: map[string]string{}}
+	termination := make(chan os.Signal, 1)
+	for _, s := range p.Steps {
+		if s.Op == "wait-signal" {
+			signal.Notify(termination, os.Interrupt, syscall.SIGTERM)
+			defer signal.Stop(termination)
+			break
+		}
+	}
 	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"} {
 		if value, ok := os.LookupEnv(key); ok {
 			out.Env[key] = value
@@ -521,6 +531,22 @@ func main() {
 		r := result{Op: s.Op, Name: s.Name, Mode: s.Mode, Method: s.Method, Target: s.Target, Input: s.Input}
 		var err error
 		switch s.Op {
+		case "edit":
+			err = os.WriteFile(filepath.Join(dir, "slice-28-edit"), []byte(s.Nonce), 0600)
+		case "wait-signal":
+			err = os.WriteFile(filepath.Join(dir, "slice-27-barrier-"+s.Name), nil, 0600)
+			if err == nil {
+				select {
+				case received := <-termination:
+					r.Reply = "SIGTERM"
+					if received == os.Interrupt {
+						r.Reply = "SIGINT"
+					}
+					err = os.WriteFile(filepath.Join(dir, "slice-28-signal"), []byte(r.Reply), 0600)
+				case <-time.After(3 * time.Minute):
+					err = errors.New("no termination signal received")
+				}
+			}
 		case "barrier":
 			err = barrier(dir, s)
 		case "tls":

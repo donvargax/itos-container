@@ -16,6 +16,7 @@ type egressLife struct {
 	operation, id, source, stored, missing string
 	sequences                              []int
 	beforeRepeat                           map[string]string
+	firstRecord                            map[string]any
 }
 
 func (w *world) egressGapSteps(sc *godog.ScenarioContext) {
@@ -44,6 +45,13 @@ func (w *world) egressGapFixture(operation, workload string) error {
 		s := w.egress.status.egress
 		life.id = s.id
 		if err := w.approvalNetworkRequest(2, s.allow); err != nil {
+			return err
+		}
+		if err := w.approvalSeed("3", false); err != nil {
+			return err
+		}
+		claim := map[string]any{"schema": 1, "root": w.doctor.checkout, "id": s.id, "intent": "intents/" + w.approval.project + "/" + s.token + ".json", "complete": false}
+		if err := writeManifestFixture(w.admissionPath(s.id), approvalJSON(claim), 0600); err != nil {
 			return err
 		}
 		a := w.doctor.engine.egress
@@ -76,7 +84,7 @@ func (w *world) egressGapFixture(operation, workload string) error {
 		}
 		w.doctor.engine.egress.workerExit = code
 	}
-	w.egress.life = life
+	w.egressFixture().life = life
 	return w.seedControlLocations()
 }
 
@@ -128,6 +136,8 @@ func (w *world) egressGapRun() error {
 	if life.id == "" {
 		return nil
 	}
+	data, _ := os.ReadFile(w.egressStatePath("sessions", w.recoveryIndexKey(), life.id, "record.json"))
+	_ = json.Unmarshal(data, &life.firstRecord)
 	var err error
 	life.beforeRepeat, err = doctorTree(w.egressStatePath())
 	if err != nil {
@@ -149,7 +159,11 @@ func (w *world) egressGapResult(rule, missing string, exit int) error {
 	}
 	r := results[0]
 	if r.result.exit != exit || !strings.Contains(r.result.stderr, rule) {
-		return fmt.Errorf("operation exit %d, want %d with %s\n%s%s", r.result.exit, exit, rule, r.result.stdout, r.result.stderr)
+		a := w.doctor.engine.egress
+		a.mu.Lock()
+		fixtureProblem, removals := a.problem, slices.Clone(a.removed)
+		a.mu.Unlock()
+		return fmt.Errorf("operation exit %d, want %d with %s (fixture %v, removals %v, last problem %v)\n%s%s", r.result.exit, exit, rule, fixtureProblem, removals, life.firstRecord["last_problem"], r.result.stdout, r.result.stderr)
 	}
 	for _, part := range append([]string{life.id, w.egressGapPath()}, strings.Split(missing, ",")...) {
 		if part == "" || !strings.Contains(r.result.stderr, part) {
