@@ -132,3 +132,12 @@ mutation:
       replacement: "1"
       reason: The production openFile operation is os.Root.OpenFile with O_RDONLY, O_DIRECTORY and O_NOFOLLOW and no creation flag. Its permission argument applies only to file creation; both 0 and 1 pass the Root.OpenFile permission-bit validation. Both versions therefore open the same existing directory, or return the same missing-path or unsafe-path error, without creating anything or changing permissions. All descriptor identity, ownership, entry and cleanup checks receive the same file. An injected test that only checks the unused argument would not establish changed behavior.
       line_text: file, err := calls.openFile(base, name, os.O_RDONLY|credentialDirectory|credentialNoFollow, 0)
+    - file: internal/engine/session/port/egress.go
+      function: github.com/donvargax/itos-container/internal/engine/session/port.Record#ValidEgressShape
+      hash: 89cc4bcbf53452eb
+      line_in_function: 31
+      column: 35
+      original: "1"
+      replacement: "0"
+      reason: This loop runs only when the current resource v.Stage is absent. Replacing values[i+1:] with values[i+0:] adds exactly that current resource before the same later resources. For the added iteration, later.Stage is absent, so the unchanged condition later.Stage != empty && later.Stage != absent is false. The iteration has no side effects; every later resource and every subsequent check is identical. Thus all record-validation results are unchanged for every input, including partially removed egress resources.
+      line_text: for _, later := range values[i+1:] {
