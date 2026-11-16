@@ -2169,8 +2169,8 @@ items:
   - id: T-57
     title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-overlap-06-nondeterministic
@@ -2189,3 +2189,16 @@ items:
       of the failed jobs passed. The other shard took 144 s of its 180 s gate in that run, with
       slice-27's egress rows now live, so a timing dependence under a fuller shard is the first
       thing to check. One occurrence; record the next with its run before repairing anything.
+  - id: p2-repair-platform-ci-fixtures
+    title: Repair shell and Windows assumptions in portability fixtures
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Preserve the inherited checks and T-12's manual macOS/Windows validation by repairing
+      Bash-4-only fixture tooling and Windows executable/error assumptions. This is deferred
+      foundation maintenance: no supplied evidence shows it blocks the charter's current
+      harness-home step. Require focused regressions and platform CI evidence without weakening
+      assertions or claiming additional container-host support.
