@@ -20,6 +20,9 @@ func (i Inspector) InspectBeforeEngineContext(ctx context.Context, input port.In
 	i.Policy = boundedPolicy{i.Policy, ctx, gate}
 	i.Files = boundedFiles{i.Files, ctx, gate}
 	i.Engine = boundedEngine{i.Engine, ctx}
+	if i.Executables != nil {
+		i.Executables = boundedExecutables{i.Executables, ctx}
+	}
 	return i.InspectBeforeEngine(input, check)
 }
 
@@ -45,6 +48,19 @@ type boundedEngine struct {
 type boundedSession struct {
 	port.Session
 	ctx context.Context
+}
+
+type boundedExecutables struct {
+	port.Executables
+	ctx context.Context
+}
+
+func (b boundedExecutables) Observe() (port.Executable, port.Failure) {
+	o, f, err := budget.Call2(b.ctx, "proxy executable inspection", func(context.Context) (port.Executable, port.Failure) { return b.Executables.Observe() })
+	if err != nil {
+		return port.Executable{}, port.EgressExecutable
+	}
+	return o, f
 }
 
 func (b boundedCheckout) Pin(root string) port.Failure {

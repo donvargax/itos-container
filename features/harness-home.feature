@@ -248,7 +248,7 @@ Feature: An approved persistent home for one checkout's harness
   #   completion publication. No reset/deletion changes sandbox approval or grants.
   #
   # Architecture decision accompanies this specification, not later implementation:
-  # docs/decisions/0028-persistent-harness-home.md updates the named arc42 sections
+  # docs/decisions/0029-persistent-harness-home.md updates the named arc42 sections
   # now, with all home behavior explicitly proposed and unproven.
   # Extend shared internal/engine/session domain/port/disk/docker responsibilities
   # for home allocation, binding, claims and consented retirement; policy and

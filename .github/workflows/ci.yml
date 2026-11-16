@@ -72,7 +72,7 @@ jobs:
           - shard: lifecycle
             features: lifecycle.feature
           - shard: other
-            features: anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature
+            features: anchors.feature checkout-overlap.feature doctor.feature egress.feature hardlinks.feature recovery.feature session.feature sockets.feature
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

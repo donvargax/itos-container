@@ -78,7 +78,7 @@ func (s Storage) Open(ctx context.Context, c port.Candidate, collection string, 
 		exclusive = (*os.Root).Link
 	}
 	success = true
-	return &directoryStore{pin: p, ctx: budget.Lifetime(ctx), exclusive: exclusive, control: transaction, releaseControl: create}, ""
+	return &directoryStore{pin: p, ctx: budget.Lifetime(ctx), exclusive: exclusive, control: transaction, releaseControl: create, execution: collection == "intents"}, ""
 }
 func lockBusy(err error) bool { return errors.Is(err, syscall.EWOULDBLOCK) }
 func lockContext(ctx context.Context, file *os.File) error {
@@ -86,6 +86,7 @@ func lockContext(ctx context.Context, file *os.File) error {
 }
 
 type directoryStore struct {
+	execution      bool
 	pin            *pin
 	ctx            context.Context
 	exclusive      func(*os.Root, string, string) error
@@ -108,7 +109,7 @@ func recordName(name string) bool {
 }
 func (d *directoryStore) Read(name string) ([]byte, port.Failure) {
 	p := d.pin
-	if !recordName(name) && (!d.public || name != "record.json") {
+	if !recordName(name) && (!d.public || name != "record.json") && (!d.execution || !port.ExecutionName(name)) {
 		return nil, "state.invalid"
 	}
 	if !d.Unchanged() {

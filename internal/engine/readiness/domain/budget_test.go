@@ -22,6 +22,10 @@ func testExpiredReadinessCallsNeverEnterPorts(t *testing.T) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+	executable := &porttest.Executables{}
+	if _, f := (boundedExecutables{executable, ctx}).Observe(); f != port.EgressExecutable || executable.Calls != 0 {
+		t.Fatal("expired executable observation entered its port", f)
+	}
 	// Ports and the checkout gate are initialized just as in a real assembly.
 	// Cancellation forbids operations, but interrupted Pin may still Close.
 	gate := make(chan struct{}, 1)

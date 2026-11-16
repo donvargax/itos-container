@@ -1,5 +1,8 @@
 # Retain an approved harness home with consented retirement
 
+This was decision 0028 when q-73 was answered; it became 0029 when main added
+decision 0028 for egress runtime wiring. The selected design is unchanged.
+
 **Selected by the coordinator in q-73, 2026-11-16 01:50 UTC, for the person to
 ratify; unimplemented and unproven.** The charter's second milestone, step 3,
 permits a volume or tmpfs for the harness. The coordinator selected this
