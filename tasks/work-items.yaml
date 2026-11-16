@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - T-55
-  - T-54
   - p1-interactive-tty
 items:
   - id: T-1
@@ -2052,7 +2051,7 @@ items:
     title: Each engine shard warms the engine with one create and remove before its first engine row
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-native-mount-evidence-credential-inspection
