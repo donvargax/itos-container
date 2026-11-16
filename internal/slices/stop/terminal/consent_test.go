@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -72,6 +73,55 @@ func TestHomeConsentRequiresReviewedTerminal(t *testing.T) {
 				}
 			case <-time.After(3 * time.Second):
 				t.Fatal("terminal answer did not complete")
+			}
+		})
+	}
+}
+
+func TestHomeConsentRejectsRedirectedFiles(t *testing.T) {
+	master, slave, err := pty.Open()
+	if errors.Is(err, pty.ErrUnsupported) {
+		t.Skip("terminal unavailable")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = master.Close() }()
+	defer func() { _ = slave.Close() }()
+	for _, redirected := range []string{"input", "review", "both"} {
+		t.Run(redirected, func(t *testing.T) {
+			input, err := os.CreateTemp(t.TempDir(), "answer-")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = input.Close() }()
+			if _, err = io.WriteString(input, "y\n"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = input.Seek(0, io.SeekStart); err != nil {
+				t.Fatal(err)
+			}
+			output, err := os.CreateTemp(t.TempDir(), "review-")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = output.Close() }()
+			in, out := input, output
+			if redirected == "input" {
+				out = slave
+			}
+			if redirected == "review" {
+				in = slave
+				if _, err = io.WriteString(master, "y\n"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if (Consent{In: in, Err: out}).Review(t.Context(), port.HomeEntry{}, "delete") {
+				t.Fatal("redirected file consented", redirected)
+			}
+			info, err := output.Stat()
+			if err != nil || info.Size() != 0 {
+				t.Fatal("review wrote to redirected output", info, err)
 			}
 		})
 	}
