@@ -327,3 +327,7 @@ questions:
     item: "slice-34"
     question: "slice-34: its implementer (attempt 5) stopped on Windows and macOS test failures in the red-evidence dispatch (errno 13 against Windows's EACCES; a Unix executable bit), as a wrong gate. Do they gate slice-34?"
     answer: "No (the coordinator, 2026-11-16). Those jobs ran because a red-evidence dispatch runs every platform; a pull request's run tests on ubuntu-latest only, and that run judges slice-34. The Windows and macOS failures predate the branch and belong to p2-repair-platform-ci-fixtures, which records that nothing shows they block the harness-home step. slice-34 leaves those tests alone and implements its runtime."
+  - id: q-82
+    item: "slice-34"
+    question: "slice-34: its implementer (attempt 6) returned blocked with the runtime unfinished and said no decision or red evidence is owed. Is anything owed before it goes on?"
+    answer: "Nothing (the coordinator, 2026-11-16). The attempt stopped unfinished, not blocked: its bindings and documentation commits are on the branch and its runtime draft is kept for the next attempt. slice-34 goes on with the runtime, the remaining local bindings and the code proof."
