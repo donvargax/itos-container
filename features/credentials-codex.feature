@@ -182,12 +182,17 @@ Feature: Share the approved Codex login through one dedicated writable directory
   # missing help; observed red/green comes later. Preserve neighbours in credentials-policy/approval, lifecycle, anchor,
   # control-state, offline and token-delivery features. This spec runs no engine.
 
+  # Keep the invalid version-3 result separate from every valid-policy result,
+  # including the valid version-3 control. Its only credential entry contains
+  # kind: codex-auth and the synthetic source path, with no version-4 lock field,
+  # so the rejection tests the unsupported kind rather than an unknown key.
   @wip @slice-32 @ID-CODEXAUTH-01
   Scenario: Version four describes directory sharing without changing older policies
     Given a Codex policy fixture with synthetic absolute directory and lock paths
     When file-only doctor inspects version four with Codex and both token kinds then versions one two and three with their existing forms
+    And file-only doctor inspects a separate version three request containing codex-auth and retains its result apart from the valid policies
     Then all valid policies retain their declared version and exactly their requested grants without observing sources
-    And version three still refuses the Codex kind with "policy.credential_kind" and exit 2
+    And the separately retained version three request refuses the Codex kind with "policy.credential_kind" at "/credentials/0/kind" and exit 2 without observing sources
 
   @wip @slice-32 @ID-CODEXAUTH-02
   Scenario Outline: The Codex policy entry has no implicit or extensible fields
