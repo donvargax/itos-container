@@ -334,3 +334,6 @@ questions:
   - id: q-83
     item: "slice-37"
     question: "slice-37: its implementer (attempt 1) stopped for engine red evidence of @ID-RUNTTY-06, 07, 08, 09, 12 and 13. Does the dispatched run supply it?"
+  - id: q-84
+    item: "slice-28"
+    question: "slice-28: its implementer (attempt 3) stopped for engine red evidence of @ID-EGRESSLIFE-10, 12 and 13. Does the dispatched run supply it?"
