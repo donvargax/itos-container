@@ -2169,8 +2169,8 @@ items:
   - id: T-57
     title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-overlap-06-nondeterministic
