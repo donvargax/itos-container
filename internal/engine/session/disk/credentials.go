@@ -106,7 +106,8 @@ func (s Credentials) Stage(ctx context.Context, r port.Record, sources port.Cred
 	if ctx.Err() != nil {
 		return port.CredentialUnavailable
 	}
-	base, err := os.OpenRoot(root)
+	calls := s.operations()
+	base, err := calls.openRoot(root)
 	if err != nil {
 		return port.CredentialUnavailable
 	}
@@ -116,12 +117,12 @@ func (s Credentials) Stage(ctx context.Context, r port.Record, sources port.Cred
 	if err = base.Mkdir(name, 0700); err != nil {
 		return port.CredentialRefused
 	}
-	file, err := base.OpenFile(name, os.O_RDONLY|credentialDirectory|credentialNoFollow, 0)
+	file, err := calls.openFile(base, name, os.O_RDONLY|credentialDirectory|credentialNoFollow, 0)
 	if err != nil {
 		return port.CredentialRefused
 	}
 	defer func() { _ = file.Close() }()
-	info, err := file.Stat()
+	info, err := calls.stat(file)
 	n, ok := credentialNode(info)
 	if err != nil || !ok || !credentialOwner(n, r.UID, 0040700) {
 		return port.CredentialRefused
@@ -149,7 +150,7 @@ func (s Credentials) Stage(ctx context.Context, r port.Record, sources port.Cred
 		_ = s.Remove(context.WithoutCancel(ctx), unpublished)
 		return f
 	}
-	dir, err := os.OpenRoot("/proc/self/fd/" + strconv.FormatUint(uint64(file.Fd()), 10))
+	dir, err := calls.openRoot("/proc/self/fd/" + strconv.FormatUint(uint64(file.Fd()), 10))
 	if err != nil {
 		return port.CredentialUnavailable
 	}
@@ -173,7 +174,8 @@ func (s Credentials) copy(ctx context.Context, dir *os.Root, uid string, source 
 		return port.CredentialRefused
 	}
 	defer func() { _ = input.Close() }()
-	info, err := input.Stat()
+	calls := s.operations()
+	info, err := calls.stat(input)
 	node, ok := credentialNode(info)
 	if err != nil || !ok || node != source.Node || node.Size < 1 || node.Size > 65536 || node.Mode&0170000 != 0100000 || node.Mode&0077 != 0 || node.Links != 1 || strconv.FormatUint(uint64(node.UID), 10) != uid {
 		return port.CredentialRefused
@@ -186,18 +188,18 @@ func (s Credentials) copy(ctx context.Context, dir *os.Root, uid string, source 
 	if err != nil || int64(count) != node.Size {
 		return port.CredentialRefused
 	}
-	after, err := input.Stat()
+	after, err := calls.stat(input)
 	final, ok := credentialNode(after)
 	if err != nil || !ok || final != node || ctx.Err() != nil {
 		return port.CredentialRefused
 	}
 	s.event("file")
-	output, err := dir.OpenFile(source.Kind, os.O_WRONLY|os.O_CREATE|os.O_EXCL|credentialNoFollow, 0400)
+	output, err := calls.openFile(dir, source.Kind, os.O_WRONLY|os.O_CREATE|os.O_EXCL|credentialNoFollow, 0400)
 	if err != nil {
 		return port.CredentialRefused
 	}
 	defer func() { _ = output.Close() }()
-	info, err = output.Stat()
+	info, err = calls.stat(output)
 	created, ok := credentialNode(info)
 	if err != nil || !ok || !credentialOwner(created, uid, 0100400) || created.Links != 1 {
 		return port.CredentialRefused
@@ -243,12 +245,13 @@ func (s Credentials) heldDirectory(ctx context.Context, r port.Record) (*os.Root
 	if !ok || ctx.Err() != nil {
 		return nil, nil, nil, "unknown", port.CredentialUnavailable
 	}
-	base, err := os.OpenRoot(root)
+	calls := s.operations()
+	base, err := calls.openRoot(root)
 	if err != nil {
 		return nil, nil, nil, "unknown", port.CredentialUnavailable
 	}
 	name := strings.TrimPrefix(r.Credentials.Directory, "/dev/shm/")
-	file, err := base.OpenFile(name, os.O_RDONLY|credentialDirectory|credentialNoFollow, 0)
+	file, err := calls.openFile(base, name, os.O_RDONLY|credentialDirectory|credentialNoFollow, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		_ = base.Close()
 		return nil, nil, nil, "absent", ""
@@ -263,16 +266,16 @@ func (s Credentials) heldDirectory(ctx context.Context, r port.Record) (*os.Root
 	if err != nil {
 		return fail()
 	}
-	info, err := file.Stat()
+	info, err := calls.stat(file)
 	node, ok := credentialNode(info)
 	if err != nil || !ok || !credentialOwner(node, r.UID, 0040700) || strconv.FormatUint(node.Device, 10) != r.Credentials.Device || strconv.FormatUint(node.Inode, 10) != r.Credentials.Inode || r.Credentials.Stage == "absent" {
 		return fail()
 	}
-	dir, err := os.OpenRoot("/proc/self/fd/" + strconv.FormatUint(uint64(file.Fd()), 10))
+	dir, err := calls.openRoot("/proc/self/fd/" + strconv.FormatUint(uint64(file.Fd()), 10))
 	if err != nil {
 		return fail()
 	}
-	names, err := file.Readdirnames(3)
+	names, err := calls.names(file, 3)
 	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			_ = dir.Close()

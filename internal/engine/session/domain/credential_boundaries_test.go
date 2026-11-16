@@ -257,10 +257,14 @@ func TestCredentialUnregisteredRunRefusesBeforeEngine(t *testing.T) {
 	b.Credentials = port.CredentialKinds{Claude: true}
 	store.Codec.(*f.Codec).Value = b
 	engine := &f.RunEngine{Engine: e}
-	runner := Runner{Store: store, Engine: engine, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: f.MountWorkspace(b)}
+	sources := &f.CredentialSourceFixture{}
+	runner := Runner{Store: store, Engine: engine, Entropy: f.Entropy{Value: strings.Repeat("1", 64)}, Workspace: f.MountWorkspace(b), Sources: sources}
 	result := runner.Run(t.Context(), ap.Durable{Frozen: b.Frozen}, []string{"probe"}, port.Streams{})
 	if result.Outcome != port.Refused || len(engine.Events) != 0 {
 		t.Fatal("unregistered credential run reached engine")
+	}
+	if sources.Closes != 1 {
+		t.Fatal("refused run retained its checked source capability")
 	}
 }
 func TestCredentialControllerOutputAbsence(t *testing.T) {

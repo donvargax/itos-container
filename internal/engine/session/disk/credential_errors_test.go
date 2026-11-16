@@ -257,3 +257,15 @@ func TestCredentialMetadataUnavailable(t *testing.T) {
 		}
 	}
 }
+
+func TestCredentialObservationRefusesInvalidAuthority(t *testing.T) {
+	fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
+	if presence, failure := fixture.Stager.Observe(t.Context(), port.Record{}); presence != "unknown" || failure != port.CredentialRefused {
+		t.Fatal("observation accepted missing staging authority")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if presence, failure := fixture.Stager.Observe(ctx, fixture.Intent()); presence != "unknown" || failure != port.CredentialUnavailable {
+		t.Fatal("cancelled observation invented staging presence or absence")
+	}
+}

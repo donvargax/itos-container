@@ -34,7 +34,9 @@ func (c *sourceCapture) Open(parent rp.CredentialHandle, name string) (rp.Creden
 			path = strings.TrimSuffix(c.paths[parent], "/") + "/" + name
 		}
 		c.paths[h] = path
-		if c.wanted[path] {
+		// Readiness rewalks each source. Retain its first descriptor so later
+		// opens are closed normally instead of replacing and leaking the pin.
+		if c.wanted[path] && c.selected[path] == 0 {
 			c.selected[path] = h
 		}
 	}

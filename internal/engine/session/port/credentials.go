@@ -161,11 +161,8 @@ func (r Record) HasEgress() bool {
 func (r Record) OwnsCredentialMounts(o Observation) bool {
 	expected := [2]CredentialMount{}
 	for _, m := range r.Credentials.Mounts() {
-		index := CredentialIndex(m.Kind)
-		if index < 0 {
-			return false
-		}
-		expected[index] = m
+		// Mounts emits only the two kinds selected by CredentialKinds.List.
+		expected[CredentialIndex(m.Kind)] = m
 	}
 	return o.CredentialMounts == expected && (r.Schema != 4 || o.CredentialExact)
 }

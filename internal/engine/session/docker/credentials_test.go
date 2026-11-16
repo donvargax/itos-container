@@ -255,6 +255,29 @@ func TestCredentialMountInspectionStdin(t *testing.T) {
 		})
 	}
 }
+
+func TestCredentialRecoveryRefusesMalformedMounts(t *testing.T) {
+	fixture := credentialSDKFixture(t)
+	c, failure := fixture.Engine.OpenRun(t.Context(), fixture.Binding)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer c.Close()
+	id, failure := c.CreateRun(t.Context(), fixture.Record, []string{"probe"})
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	if observed, status := c.Inspect(t.Context(), id); status != port.Observed || !observed.CredentialExact || !observed.AnchorExact {
+		t.Fatal("healthy recovery mount observation refused")
+	}
+	fixture.Defect("host source")
+	if observed, _ := c.Inspect(t.Context(), id); observed.CredentialExact || observed.AnchorExact {
+		t.Fatal("malformed credential source acquired recovery mount authority")
+	}
+	if creates, starts := fixture.Counts(); creates != 1 || starts != 0 {
+		t.Fatal("recovery observation created or started work")
+	}
+}
 func TestCredentialUncertainStartContract(t *testing.T) {
 	t.Run("memory", func(t *testing.T) { f.CredentialUncertainStartContract(t, credentialMemoryFixture) })
 	t.Run("sdk", func(t *testing.T) {
