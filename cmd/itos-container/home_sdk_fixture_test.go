@@ -255,6 +255,10 @@ func (a *homeSDKFixture) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			a.event("root")
+			if f.engine.HomeFault == "root unavailable" {
+				w.WriteHeader(500)
+				return
+			}
 			mode := os.FileMode(root.Mode)
 			kind := byte(tar.TypeReg)
 			if root.Directory {
@@ -263,6 +267,10 @@ func (a *homeSDKFixture) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			stat, _ := json.Marshal(container.PathStat{Name: "itos", Mode: mode})
 			w.Header().Set("X-Docker-Container-Path-Stat", base64.StdEncoding.EncodeToString(stat))
+			if f.engine.HomeFault == "root archive" {
+				_, _ = w.Write([]byte("incomplete archive"))
+				return
+			}
 			var data bytes.Buffer
 			tw := tar.NewWriter(&data)
 			uid, _ := strconv.Atoi(root.UID)

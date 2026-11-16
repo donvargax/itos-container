@@ -273,3 +273,51 @@ func TestHomeRetirementDoesNotOutliveScopeLockBudget(t *testing.T) {
 		}
 	})
 }
+
+func TestHomeRecoveryCannotClaimCompletionWithoutHomeService(t *testing.T) {
+	x := domainHomeFixture()
+	result := x.run(t)
+	if result.Outcome != "" {
+		t.Fatal(result)
+	}
+	recovery := Recovery{Registry: x.registry, Engine: x.engine}
+	for _, got := range []port.RecoveryResult{recovery.Status(t.Context()), recovery.Stop(t.Context(), result.SessionID)} {
+		if len(got.Failures) != 1 || got.Failures[0].Outcome != port.Incomplete {
+			t.Fatal(got)
+		}
+	}
+}
+func TestHomeChangedRootBeforeFinalStartRefuses(t *testing.T) {
+	x := domainHomeFixture()
+	g := x.seed()
+	roots := 0
+	x.engine.HomeBefore = func(event string) {
+		if event == "root" {
+			roots++
+			if roots == 2 {
+				r := x.engine.Roots[g.Name]
+				r.Mode = 0777
+				x.engine.Roots[g.Name] = r
+			}
+		}
+	}
+	r := x.run(t)
+	if r.Outcome != port.HomeRefused || r.Started || roots != 2 {
+		t.Fatal(r, roots)
+	}
+}
+
+func TestHomeUnallocatedSuccessorCannotBeRetired(t *testing.T) {
+	x := domainHomeFixture()
+	g := x.seed()
+	s := x.store.Scopes[x.store.Scope(x.b)]
+	s.Generations[0].Stage = "awaiting-allocation"
+	s.Generations[0].Created = ""
+	s.Generations[0].Initialized = false
+	x.store.Scopes[s.Scope] = s
+	delete(x.engine.Homes, g.Name)
+	result := x.h.Retire(t.Context(), g.ID, "delete", homeConsent{yes: true})
+	if homeOutcome(result) != port.Incomplete {
+		t.Fatal(result)
+	}
+}

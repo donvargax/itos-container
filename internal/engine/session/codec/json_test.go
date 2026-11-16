@@ -243,7 +243,7 @@ func recordValue(t *testing.T, data []byte) mp.Value {
 		switch name {
 		case "schema":
 			result.Fields[name] = mp.Value{Kind: mp.Number, Text: string(raw)}
-		case "anchor":
+		case "anchor", "home":
 			result.Fields[name] = recordValue(t, raw)
 		default:
 			var text string
@@ -254,4 +254,45 @@ func recordValue(t *testing.T, data []byte) mp.Value {
 		}
 	}
 	return result
+}
+
+func TestRecordHomeRequiresExactTypedOwnership(t *testing.T) {
+	b, _, _ := sf.Fixture()
+	b.Home = true
+	r := b.Intent(strings.Repeat("1", 64))
+	r.Stage = "reserved"
+	r.Home = sp.HomeReference{Scope: strings.Repeat("a", 64), ID: strings.Repeat("b", 64), Name: "itos-container-home-" + strings.Repeat("b", 64)}
+	parser := &mf.Parser{}
+	codec := JSON{Parser: parser}
+	data := codec.Encode(r)
+	parser.Value = recordValue(t, data)
+	if got, f := codec.Decode(data); f != "" || got != r {
+		t.Fatal(got, f)
+	}
+	for _, field := range []string{"id", "name", "scope", "created"} {
+		parser.Value = recordValue(t, data)
+		home := parser.Value.Fields["home"]
+		home.Fields[field] = mp.Value{Kind: mp.Number, Text: "1"}
+		if _, f := codec.Decode(data); f != sp.Invalid {
+			t.Fatal("untyped home accepted", field, f)
+		}
+	}
+	for _, kind := range []mp.Kind{mp.Null, mp.Array, mp.String} {
+		parser.Value = recordValue(t, data)
+		parser.Value.Fields["home"] = mp.Value{Kind: kind}
+		if _, f := codec.Decode(data); f != sp.Invalid {
+			t.Fatal(f)
+		}
+	}
+	parser.Value = recordValue(t, data)
+	delete(parser.Value.Fields["home"].Fields, "created")
+	if _, f := codec.Decode(data); f != sp.Invalid {
+		t.Fatal(f)
+	}
+	r.Home.Scope = "invalid"
+	data = codec.Encode(r)
+	parser.Value = recordValue(t, data)
+	if _, f := codec.Decode(data); f != sp.Invalid {
+		t.Fatal(f)
+	}
 }

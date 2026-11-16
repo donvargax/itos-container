@@ -21,7 +21,7 @@ func TestHomeCatalogContract(t *testing.T) {
 }
 
 func TestHomeCatalogRefusesUnsafeAccountAndEntries(t *testing.T) {
-	for _, fault := range []string{"lookup", "relative", "root", "encoding", "absent", "symlink", "writable", "stat", "invalid entry", "unsafe catalog", "read directory", "invalid uid"} {
+	for _, fault := range []string{"lookup", "relative", "root", "encoding", "absent", "symlink", "writable", "stat", "invalid entry", "unsafe catalog", "read directory", "lost directory handle", "invalid uid"} {
 		t.Run(fault, func(t *testing.T) {
 			control, c, _, home, _ := controlFixture(t)
 			account := control.Account.(*f.Account)
@@ -82,12 +82,31 @@ func TestHomeCatalogRefusesUnsafeAccountAndEntries(t *testing.T) {
 						return os.Open(filepath.Join(r.Name(), n))
 					}
 					catalog.Store.ops = &ops
+				case "lost directory handle":
+					ops := catalog.Store.operations()
+					var handle *os.File
+					open, stat := ops.openDir, ops.statRoot
+					ops.openDir = func(r *os.Root, name string) (*os.File, error) {
+						file, err := open(r, name)
+						if r.Name() == root {
+							handle = file
+						}
+						return file, err
+					}
+					ops.statRoot = func(r *os.Root, name string) (os.FileInfo, error) {
+						info, err := stat(r, name)
+						if r.Name() == root && handle != nil {
+							_ = handle.Close()
+						}
+						return info, err
+					}
+					catalog.Store.ops = &ops
 				}
 			}
 			if _, failure := catalog.List(t.Context(), c.UID); failure != want {
 				t.Fatalf("list %s want %s", failure, want)
 			}
-			if fault != "invalid entry" && fault != "read directory" {
+			if fault != "invalid entry" && fault != "read directory" && fault != "lost directory handle" {
 				if d, failure := catalog.Open(t.Context(), c.UID, strings.Repeat("a", 64), false); failure != want || d != nil {
 					t.Fatalf("open %v %s want %s", d, failure, want)
 				}

@@ -232,6 +232,9 @@ func (c *homeConnection) AllocateHome(ctx context.Context, h port.HomeReference)
 }
 func (c *homeConnection) InspectHome(ctx context.Context, name string) (port.HomeObservation, port.Inspection) {
 	c.event("inspect")
+	if c.home.Replaced {
+		return port.HomeObservation{}, port.Changed
+	}
 	if ctx.Err() != nil || c.home.HomeFault == "inspect" {
 		return port.HomeObservation{}, port.Unavailable
 	}
