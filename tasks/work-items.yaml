@@ -2117,3 +2117,49 @@ items:
       slice-31 to slice-33 rely on. Not checked: whether the hosted ubuntu-latest runner permits
       unprivileged user namespaces (Ubuntu 24.04 restricts them through AppArmor by default); the
       runner has sudo if it does not.
+  - id: slice-34
+    title: Run provides an isolated, writable harness home
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      Was p1-harness-owned-home.
+      Specify the storage lifetime first: the registry recommends a per-checkout volume, but volume
+      versus tmpfs remains unsettled. Cover approved settings, non-root access, project isolation,
+      ownership, bounded creation and cleanup/recovery consistent with the chosen lifetime. Never
+      mount the host home or place harness state in the checkout. Keep shared storage behavior under
+      an engine package and command integration in existing slices. Record the architecture change.
+      Add black-box scenarios, including executable /tmp proof; its current configuration already
+      omits noexec. Real-engine red/green evidence runs only in CI. Broken down from null.
+  - id: slice-35
+    title: Codex starts with isolated state and unwanted startup services disabled
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Was p1-harness-codex-home-seeding.
+      Seed the container-owned home with Codex update checks, analytics, plugins and its own sandbox
+      disabled, as the charter requires. Specify initialization and repeat-run behavior without
+      changing literal workload argv or executing checkout code on the host. Keep authentication
+      delivery in slice-32 and follow the charter's dedicated-directory decision rather than that
+      item's stale single-file wording. Prove settings and startup behavior with black-box scenarios
+      and controlled endpoints, without real accounts or credentials. Broken down from null.
+  - id: slice-36
+    title: Claude starts with isolated state and onboarding already completed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Was p1-harness-claude-home-seeding.
+      Seed Claude's onboarding state so first startup needs no onboarding interaction or incidental
+      startup network access. Specify repeat-run behavior and preserve project isolation. Keep token
+      delivery in slice-31; this item owns nonsecret harness initialization. Use shared engine ports
+      and named adapters, without importing another slice. Prove behavior through black-box
+      scenarios with synthetic inputs and controlled endpoints; real-engine evidence belongs only in
+      CI. Broken down from null.
