@@ -117,8 +117,15 @@ func (s Credentials) Stage(ctx context.Context, r port.Record, sources port.Cred
 	if err = base.Mkdir(name, 0700); err != nil {
 		return port.CredentialRefused
 	}
+	// Opening can fail before a descriptor exists (for example, at the FD
+	// limit). Capture the new entry first so that failure can remove only
+	// the same empty directory, never a replacement installed during open.
+	created, _ := base.Lstat(name)
 	file, err := calls.openFile(base, name, os.O_RDONLY|credentialDirectory|credentialNoFollow, 0)
 	if err != nil {
+		if named, err := base.Lstat(name); err == nil && os.SameFile(created, named) && named.IsDir() {
+			_ = base.Remove(name)
+		}
 		return port.CredentialRefused
 	}
 	identified := false
