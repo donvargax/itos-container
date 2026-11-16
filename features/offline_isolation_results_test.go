@@ -156,7 +156,16 @@ func (s *isolationWorld) safeDiagnostic() error {
 	if len(retries) != 1 || string(retries[0][1]) != r.sessionID || !bytes.Contains(r.stderr, []byte("same effective project")) {
 		return errors.New("cleanup diagnostic lacks its exact registered same-project stop retry")
 	}
-	for _, v := range []string{"SLICE_14_SYNTHETIC_REMOVE_BODY", "SLICE_14_SYNTHETIC_ARGV", "SLICE_14_SYNTHETIC_ENV", r.config.Nonce, "stopped successfully", "cleanup complete"} {
+	markers := []string{"SLICE_14_SYNTHETIC_REMOVE_BODY", "SLICE_14_SYNTHETIC_ARGV", "SLICE_14_SYNTHETIC_ENV", r.config.Nonce}
+	if err := syntheticPositiveControl(markers); err != nil {
+		return err
+	}
+	for name, data := range map[string][]byte{"cleanup diagnostics": r.stderr, "intent record": []byte(r.record.Bytes), "registration record": []byte(r.registration.Bytes)} {
+		if err := syntheticAbsent(name, bytes.NewReader(data), markers); err != nil {
+			return err
+		}
+	}
+	for _, v := range []string{"stopped successfully", "cleanup complete"} {
 		if bytes.Contains(r.stderr, []byte(v)) || strings.Contains(r.record.Bytes, v) || strings.Contains(r.registration.Bytes, v) {
 			return errors.New("cleanup diagnostic/ownership leaks payload or claims completed cleanup")
 		}

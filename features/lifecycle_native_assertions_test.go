@@ -408,6 +408,13 @@ func (w *world) lifecycleRetained() error {
 
 func (w *world) lifecycleSafeState() error {
 	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
+	markers := []string{"SLICE_12_SYNTHETIC_WORKLOAD_OUTPUT", "SLICE_12_SYNTHETIC_DISCONNECT", "SLICE_12_SYNTHETIC_REMOVE"}
+	if err := syntheticPositiveControl(markers); err != nil {
+		return err
+	}
+	if err := syntheticTreeAbsent("lifecycle protected state", state, markers); err != nil {
+		return err
+	}
 	return filepath.WalkDir(state, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
@@ -416,7 +423,7 @@ func (w *world) lifecycleSafeState() error {
 		if err != nil {
 			return err
 		}
-		for _, marker := range []string{"SLICE_12_SYNTHETIC_", "/workspace/slice-12-probe", "slice-12:final"} {
+		for _, marker := range []string{"/workspace/slice-12-probe", "slice-12:final"} {
 			if bytes.Contains(data, []byte(marker)) {
 				return errors.New("protected state retained raw workload argv/output or transport payload")
 			}

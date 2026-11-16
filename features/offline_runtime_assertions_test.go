@@ -243,8 +243,19 @@ func (w *world) offlineSuccess() error {
 	if json.Unmarshal(data, &frozen) != nil || !reflect.DeepEqual(frozen, approvalClone(map[string]any{"schema": 1, "project": w.approval.project, "generation": "1", "fingerprint": w.approval.fingerprint, "settings": w.approval.settings})) {
 		return fmt.Errorf("run lost or changed its frozen settings snapshot")
 	}
-	if strings.Contains(string(w.offline.stderr), "SLICE_10_SYNTHETIC_") {
-		return fmt.Errorf("controller copied a synthetic host-only marker into diagnostics")
+	markers := []string{}
+	for _, key := range []string{"HOST_ONLY", "GITHUB_TOKEN", "AWS_SECRET_ACCESS_KEY", "ITOS_ROOT_MARKER"} {
+		marker := w.doctor.env[key]
+		if !strings.HasPrefix(marker, "SLICE_10_SYNTHETIC_") {
+			marker = "SLICE_10_SYNTHETIC_" + key
+		}
+		markers = append(markers, marker)
+	}
+	if err := syntheticPositiveControl(markers); err != nil {
+		return err
+	}
+	if err := syntheticAbsent("offline controller diagnostics", bytes.NewReader(w.offline.stderr), markers); err != nil {
+		return err
 	}
 	return w.offlineUnrelated()
 }
