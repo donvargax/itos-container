@@ -304,6 +304,48 @@ func TestHomeCatalogNeverReturnsPartialTrustedState(t *testing.T) {
 	}
 }
 
+func TestHomeRecoveryMountMismatchRequiresAnUnstartedWorker(t *testing.T) {
+	for _, state := range []string{"unstarted", "started", "pid", "running", "exited", "foreign"} {
+		t.Run(state, func(t *testing.T) {
+			x := domainHomeFixture()
+			g := x.seed()
+			entry := x.session(t, &g, "owned")
+			r := entry.Intent().Record()
+			o := port.Observation{ID: r.ContainerID, Name: r.Name, ImageID: r.ImageID,
+				Token: r.NameToken(), Project: r.Project, Fingerprint: r.Fingerprint,
+				StatePresent: true, Status: "created"}
+			// Both mount observations are deliberately untrusted. Only an exact
+			// worker which never started can be removed without trusting them.
+			switch state {
+			case "started":
+				o.Started = true
+			case "pid":
+				o.PID = 123
+			case "running":
+				o.Running = true
+			case "exited":
+				o.Status = "exited"
+			case "foreign":
+				o.Token = strings.Repeat("f", 64)
+			}
+			x.engine.Resources[o.ID] = o
+			c, f := x.engine.OpenRun(t.Context(), x.b)
+			if f != "" {
+				t.Fatal(f)
+			}
+			defer c.Close()
+			_, resource, failure := inspectSession(t.Context(), entry, c)
+			if state == "unstarted" {
+				if failure != "" || resource != "created" {
+					t.Fatal("unstarted owned worker is not reclaimable", resource, failure)
+				}
+			} else if failure != port.Refused || resource != "unknown" {
+				t.Fatal("untrusted mount observation authorized recovery", resource, failure)
+			}
+		})
+	}
+}
+
 type lateHomeStore struct {
 	port.HomeStore
 	release <-chan struct{}
