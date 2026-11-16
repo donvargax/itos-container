@@ -178,8 +178,7 @@ func Contract(t *testing.T, factory Factory) {
 				result(t, l.Result(), port.ContextCancelled, false)
 			case "hangup":
 				f.Hangup(false)
-				finished(t, l)
-				result(t, l.Result(), port.Hangup, true)
+				hangupResult(t, l)
 			}
 		})
 	}
@@ -208,12 +207,7 @@ func Contract(t *testing.T, factory Factory) {
 			f := factory(t, "")
 			l := acquire(t, f.Provider, context.Background())
 			f.Hangup(unread)
-			finished(t, l)
-			first := l.Result()
-			result(t, first, port.Hangup, true)
-			if !reflect.DeepEqual(first, l.Close()) {
-				t.Fatal("close hid hangup/restoration failure")
-			}
+			hangupResult(t, l)
 		})
 	}
 	t.Run("invalid_resize", func(t *testing.T) {
@@ -329,6 +323,22 @@ func result(t *testing.T, r port.Result, cause port.Cause, restoreFailure bool) 
 	t.Helper()
 	if r.Cause != cause || (r.RestoreErr != nil) != restoreFailure {
 		t.Fatalf("result = %+v; want cause %s, restoration failure %v", r, cause, restoreFailure)
+	}
+}
+
+func hangupResult(t *testing.T, l port.Lease) {
+	t.Helper()
+	finished(t, l)
+	first := l.Result()
+	if first.Cause != port.Hangup {
+		t.Fatalf("result = %+v; want cause %s", first, port.Hangup)
+	}
+	// Hangup does not imply restoration failure: the OS may still accept the
+	// saved settings. Either outcome must remain unchanged after completion.
+	for range 2 {
+		if !reflect.DeepEqual(first, boundedClose(t, l)) || !reflect.DeepEqual(first, l.Result()) {
+			t.Fatal("close changed the hangup/restoration result")
+		}
 	}
 }
 
