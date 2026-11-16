@@ -10,8 +10,11 @@ The credentials design added by T-47 is also **proposed**, not accepted; the per
 confirms or overturns [the credentials record](../decisions/0025-credentials-passed-in.md).
 It defines two token kinds, no Codex delivery, and no permission to use real credentials.
 The harness-home design in [decision 0028](../decisions/0028-persistent-harness-home.md)
-is **proposed and unproven** by slice-34, not a settled coordinator decision or
-implemented behavior. It includes consented reset, deletion and missing-storage recovery.
+was **selected by the coordinator in q-73 (2026-11-16 01:50 UTC)** on the person's
+standing instruction, for the person to ratify. It remains unimplemented and
+unproven, including consented reset, deletion and missing-storage recovery. The
+home responsibilities marked proposed below need implementation, not another
+storage-lifetime decision.
 
 The [charter](../charter.md) selects the milestone from the binding
 [pilot contract](../plans/container-pilot.md); the [plan](../../PLAN.md) records that

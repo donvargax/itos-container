@@ -1,10 +1,12 @@
 # Retain an approved harness home with consented retirement
 
-**Proposed by slice-34; unimplemented and unproven.** Volume storage and the
-management interface are this specification's choices, not settled coordinator
-decisions. The charter's second milestone, step 3, permits a volume or tmpfs for
-the harness. This record chooses a volume for review; it claims no engine
-feasibility, assertion-level red/green evidence or supported host combination.
+**Selected by the coordinator in q-73, 2026-11-16 01:50 UTC, for the person to
+ratify; unimplemented and unproven.** The charter's second milestone, step 3,
+permits a volume or tmpfs for the harness. The coordinator selected this
+per-checkout persistent named volume and terminal-consented reset/deletion on
+the person's standing instruction. No further storage-lifetime answer is owed
+before implementation. This record claims no engine feasibility, assertion-level
+red/green evidence or supported host combination.
 
 ## Context and architecture exception
 

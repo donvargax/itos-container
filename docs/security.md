@@ -42,6 +42,14 @@ Continuous enforcement is deferred to milestone 2 under
 
 ## Approval boundary
 
+Slice-34's selected harness-home design retains a named volume for one checkout
+until a person consents at a terminal to its reset or deletion. What a run leaves
+there, including harness settings, hooks and session files, is hostile worker
+data that the next run of the same checkout starts with. Its scope is bounded to
+that checkout; the consented reset removes it. Persistence does not confer host
+approval or recovery authority. This design remains unimplemented and unproven;
+see [decision 0028](decisions/0028-persistent-harness-home.md).
+
 [Slice-4's approval scenarios](../features/approval.feature) exercise the implemented
 approval flow with temporary host state and a synthetic Engine API. The host identity is
 the effective UID, root is refused, and the worker uses the effective host UID/GID.
