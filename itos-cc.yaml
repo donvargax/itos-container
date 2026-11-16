@@ -15,6 +15,15 @@ mutation:
       - features/testdata/**
       - tools/bin/scenario-list
   exceptions:
+    - file: internal/engine/session/docker/run.go
+      function: github.com/donvargax/itos-container/internal/engine/session/docker#safeHost
+      hash: 0d125654dcccfa55
+      line_in_function: 22
+      column: 14
+      original: "false"
+      replacement: "true"
+      reason: The earlier guard requires exactly 1+n mounts for n credential arguments. Each matched iteration consumes either the one anchor or one previously unseen credential kind. Initializing matched to true can only bypass the immediate refusal for an unmatched mount; that mount consumes a slot without adding an anchor or seen kind. The final anchor && len(seen) == len(credentials) then necessarily returns false, because the remaining slots cannot supply the missing 1+n distinct matches. Thus both versions reject every unmatched mount and accept exactly the same fully matched inputs, with no observable side effects.
+      line_text: matched := false
     - file: internal/release/release.go
       function: github.com/donvargax/itos-container/internal/release#Newest
       hash: 169323ab8c351ad2
