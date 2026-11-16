@@ -283,3 +283,39 @@ func TestHomeSessionScopeCannotBeSubstitutedOrInferred(t *testing.T) {
 		})
 	}
 }
+
+func TestHomeSessionRevalidatesEachHostIdentityField(t *testing.T) {
+	for _, field := range []string{"unchanged", "uid", "gid", "unavailable"} {
+		t.Run(field, func(t *testing.T) {
+			h, s, _, codec := homeDiskState()
+			b := codec.Value
+			token := strings.Repeat("b", 64)
+			r := b.Intent(token)
+			r.Home = s.Generations[0].Reference(s.Scope)
+			encoded := codec.Encode(r)
+			intents := &af.Directory{Files: map[string][]byte{token + ".json": encoded}}
+			storage := &af.Storage{Directories: map[string]*af.Directory{"intents/" + r.Project: intents, "snapshots/" + r.Project: {Files: map[string][]byte{"1.json": []byte("snapshot")}}}}
+			store := Store{Storage: storage, Codec: codec, Host: h.Host, Checkout: &rf.Checkout{Identity: b.Checkout}, Input: rp.Input{Root: b.Checkout.Root, OS: "linux", Architecture: "amd64"}}
+			entry, failure := store.Open(t.Context(), sp.Reference(r.Project, token))
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer entry.Close()
+			host := h.Host.(*af.Host)
+			want := sp.Refused
+			switch field {
+			case "unchanged":
+				want = ""
+			case "uid":
+				host.UID = "2001"
+			case "gid":
+				host.GID = "3001"
+			case "unavailable":
+				host.UID = ""
+			}
+			if failure = entry.Validate(); failure != want || !bytes.Equal(intents.Files[token+".json"], encoded) {
+				t.Fatal("host revalidation adopted or changed original ownership", failure, want)
+			}
+		})
+	}
+}
