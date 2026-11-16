@@ -93,6 +93,34 @@ func testFixtureImageStores(t *testing.T, built, other, manifest string) {
 
 }
 
+func TestEngineFixtureHashFilenames(t *testing.T) {
+	config := `{"architecture":"amd64","os":"linux","config":{"User":"1001:1002"}}` + "\n"
+	configHash := fmt.Sprintf("%x", sha256.Sum256([]byte(config)))
+	configID := "sha256:" + configHash
+	manifest := `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"` + configID + `"}}`
+	manifestID := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(manifest)))
+	for _, name := range []string{"captured response.json", `captured\response.json`} {
+		t.Run(name, func(t *testing.T) {
+			for _, tc := range []struct {
+				function, body, want string
+				args                 []string
+			}{
+				{"validate_manifest", manifest, manifestID, []string{fixtureResponseFile(t, "headers", "Docker-Content-Digest: "+manifestID+"\r\n"), configID, configID}},
+				{"daemon_config_digest", config, configID, []string{"blobs/sha256/" + configHash}},
+			} {
+				t.Run(tc.function, func(t *testing.T) {
+					// A backslash is a filename byte on Unix and a separator on Windows.
+					path := filepath.Join(t.TempDir(), name)
+					requireFixture(t, os.MkdirAll(filepath.Dir(path), 0o700) == nil, "cannot create response directory")
+					requireFixture(t, os.WriteFile(path, []byte(tc.body), 0o600) == nil, "cannot write response")
+					stdout, stderr, err := runFixtureValidator(t, tc.function, append([]string{path}, tc.args...)...)
+					requireFixture(t, err == nil && strings.TrimSpace(stdout) == tc.want, "filename changed raw byte digest: %v stdout=%s stderr=%s", err, stdout, stderr)
+				})
+			}
+		})
+	}
+}
+
 func runFixtureValidator(t *testing.T, function string, args ...string) (string, string, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
