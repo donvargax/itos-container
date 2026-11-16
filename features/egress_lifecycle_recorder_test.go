@@ -26,6 +26,10 @@ type egressLifeRecorder struct {
 	server    *http.Server
 	requests  []*egressLifeRequest
 	logPath   string
+	// Hooks observe or withhold real replies. They are installed before a run;
+	// independent harness requests use the native client, outside this proxy.
+	before func(*egressLifeRequest)
+	after  func(*http.Request, *egressLifeRequest, *http.Response) error
 }
 
 type egressLifeRequest struct {
@@ -36,6 +40,8 @@ type egressLifeRequest struct {
 	logBefore           []byte
 	logMode             os.FileMode
 	logErr              error
+	intent              map[string]any
+	intentErr           error
 }
 
 type egressLifeBody struct {
@@ -86,8 +92,12 @@ func (a *egressLifeRecorder) RoundTrip(r *http.Request) (*http.Response, error) 
 	}
 	a.mu.Lock()
 	path := a.logPath
+	before, after := a.before, a.after
 	a.requests = append(a.requests, e)
 	a.mu.Unlock()
+	if before != nil {
+		before(e)
+	}
 	if r.Method == http.MethodDelete && strings.HasPrefix(e.path, "/containers/") && path != "" {
 		data, readErr := os.ReadFile(path)
 		var mode os.FileMode
@@ -109,6 +119,12 @@ func (a *egressLifeRecorder) RoundTrip(r *http.Request) (*http.Response, error) 
 	a.mu.Unlock()
 	if response != nil {
 		response.Body = &egressLifeBody{response.Body, a, e}
+		if after != nil {
+			if err := after(r, e, response); err != nil {
+				_ = response.Body.Close()
+				return nil, err
+			}
+		}
 	}
 	return response, err
 }
@@ -120,6 +136,9 @@ func (a *egressLifeRecorder) snapshot() []egressLifeRequest {
 	for _, request := range a.requests {
 		r := *request
 		r.body, r.response, r.logBefore = bytes.Clone(r.body), bytes.Clone(r.response), bytes.Clone(r.logBefore)
+		if r.intent != nil {
+			r.intent = object(approvalClone(r.intent))
+		}
 		result = append(result, r)
 	}
 	return result

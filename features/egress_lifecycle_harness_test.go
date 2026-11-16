@@ -20,10 +20,10 @@ import (
 	"github.com/cucumber/godog"
 )
 
-func TestEgressLifecycleEndingStepsDefined(t *testing.T) {
+func TestEgressLifecycleNativeStepsDefined(t *testing.T) {
 	definitions := &egressDefinitions{t: t}
 	(&world{}).egressNativeSteps(definitions)
-	suite := godog.TestSuite{Name: "slice-28-ending-definitions", Options: &godog.Options{Paths: []string{"egress_lifecycle.feature"}, Tags: "@ID-EGRESSLIFE-08", Output: io.Discard}}
+	suite := godog.TestSuite{Name: "slice-28-native-definitions", Options: &godog.Options{Paths: []string{"egress_lifecycle.feature"}, Tags: "@ID-EGRESSLIFE-08,@ID-EGRESSLIFE-09,@ID-EGRESSLIFE-14", Output: io.Discard}}
 	features, err := suite.RetrieveFeatures()
 	if err != nil {
 		t.Fatal(err)
@@ -45,8 +45,8 @@ func TestEgressLifecycleEndingStepsDefined(t *testing.T) {
 			}
 		}
 	}
-	if cases != 4 {
-		t.Fatalf("ending outline has %d rows, want 4", cases)
+	if cases != 9 {
+		t.Fatalf("implemented native outlines have %d rows, want 9", cases)
 	}
 }
 
