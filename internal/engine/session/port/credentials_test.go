@@ -227,3 +227,28 @@ func ownedCredentialEgress(r port.Record) port.EgressRecord {
 		Proxy:    port.EgressResource{Name: "itos-container-proxy-" + r.NameToken(), ID: strings.Repeat("c", 64), Stage: "owned"},
 	}
 }
+
+func TestCredentialProgressRefusesMalformedEgressOrigin(t *testing.T) {
+	for _, schema := range []int{3, 4} {
+		r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+		r.Schema = schema
+		if schema == 3 {
+			r.Credentials = port.CredentialStaging{}
+		}
+		r.Egress = ownedCredentialEgress(r)
+		r.Egress.Internal.Stage, r.Egress.Internal.ID = "intent", ""
+		r.Egress.Network.Stage, r.Egress.Network.ID = "", ""
+		r.Egress.Proxy.Stage, r.Egress.Proxy.ID = "", ""
+		n := r
+		n.Egress.Internal.Stage, n.Egress.Internal.ID = "owned", strings.Repeat("a", 64)
+		if !r.ValidTransition(n) {
+			t.Fatal("valid egress ownership publication refused", schema)
+		}
+		// An intent cannot already claim an engine ID. A later well-formed
+		// observation must not legitimize corrupt original recovery evidence.
+		r.Egress.Internal.ID = strings.Repeat("b", 64)
+		if r.ValidTransition(n) {
+			t.Fatal("malformed original egress authority was accepted", schema)
+		}
+	}
+}
