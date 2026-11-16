@@ -4,13 +4,19 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
 
 func TestFakeContract(t *testing.T) {
+	t.Run("immediate", func(t *testing.T) { fakeContract(t, 0) })
+	t.Run("delayed observation", func(t *testing.T) { fakeContract(t, time.Millisecond) })
+}
+
+func fakeContract(t *testing.T, delay time.Duration) {
 	Contract(t, func(_ *testing.T, invalid port.FailureKind) Fixture {
-		f := &Fake{Size: port.Dimensions{Columns: 93, Rows: 31}, Invalid: invalid, State: 17}
+		f := &Fake{Size: port.Dimensions{Columns: 93, Rows: 31}, Invalid: invalid, State: 17, ObservationDelay: delay}
 		return Fixture{Provider: f, Raw: f.Raw, Snapshot: f.Snapshot, ChangeState: f.ChangeState,
 			Resize: f.Resize, Hangup: f.Hangup, Break: f.Break}
 	})

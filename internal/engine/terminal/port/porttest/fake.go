@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
@@ -11,6 +12,9 @@ import (
 // Fake is a stateful, I/O-free terminal for tests of terminal consumers. Configure
 // exported fields before use; the methods synchronize subsequent external events.
 type Fake struct {
+	// ObservationDelay models the interval before an observer publishes a live
+	// change. Check still reads the current state; close and cancellation do not wait.
+	ObservationDelay time.Duration
 	// OutputOnly owns settings and hangup observation without measuring size.
 	OutputOnly   bool
 	Size         port.Dimensions
@@ -158,6 +162,18 @@ func (l *fakeLease) observe(ctx context.Context) port.Result {
 		case <-l.stop:
 			return port.Result{Cause: port.Closed}
 		case <-l.changed:
+		}
+		if l.fake.ObservationDelay > 0 {
+			timer := time.NewTimer(l.fake.ObservationDelay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return port.Result{Cause: port.ContextCancelled, Err: ctx.Err()}
+			case <-l.stop:
+				timer.Stop()
+				return port.Result{Cause: port.Closed}
+			case <-timer.C:
+			}
 		}
 		f := l.fake
 		f.mu.Lock()

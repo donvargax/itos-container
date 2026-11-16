@@ -6,6 +6,8 @@ import (
 	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 	tf "github.com/donvargax/itos-container/internal/engine/terminal/port/porttest"
 	"testing"
+	"testing/synctest"
+	"time"
 )
 
 type noTerminalConnection struct{ port.RunConnection }
@@ -54,6 +56,58 @@ func TestMissingTerminalCapabilityRefuses(t *testing.T) {
 	}
 	if f := c.Resize(t.Context(), "worker", terminal.Dimensions{Columns: 113, Rows: 37}); f != port.TerminalResize {
 		t.Fatal(f)
+	}
+}
+
+func TestStreamFailureRechecksTerminalBeforeDelayedNotification(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		broken, exited bool
+		exit           int
+		want           port.Outcome
+	}{
+		{"hangup", false, false, 0, port.TerminalDisconnected},
+		{"observation fails", true, false, 0, port.TerminalUnavailable},
+		{"observed zero exit", false, true, 0, ""},
+		{"observed nonzero exit", false, true, 17, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				runner, _, engine, _, id := registeredSessionFixture(t)
+				provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}, ObservationDelay: time.Hour}
+				lease, err := provider.Acquire(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer lease.Close()
+				c, a, worker, failure := runner.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{Terminal: lease})
+				if failure != "" {
+					t.Fatal(failure)
+				}
+				defer c.Close()
+				defer a.Close()
+				engine.Exit = tc.exit
+				if !tc.exited {
+					engine.WaitFailure = port.ExecutionFailed
+				}
+				engine.AfterWait = func() {
+					if tc.broken {
+						provider.Break()
+					} else {
+						provider.Hangup(false)
+					}
+				}
+				exit, exited, got, _ := runner.waitForeground(t.Context(), c, a, lease, port.Binding{}, port.Record{}, id, worker)
+				if got != tc.want || exited != tc.exited || exit != tc.exit {
+					t.Fatalf("terminal race: exit=%d observed=%v outcome=%s", exit, exited, got)
+				}
+				select {
+				case <-lease.Done():
+					t.Fatal("test failed to delay terminal notification")
+				default:
+				}
+			})
+		})
 	}
 }
 
