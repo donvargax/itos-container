@@ -232,6 +232,49 @@ func TestFrozenAndSnapshotRequireValidatedApprovalEnvelope(t *testing.T) {
 	}
 }
 
+func TestFrozenHomeDoesNotInventCredentialNetworkAuthority(t *testing.T) {
+	for _, home := range []bool{false, true} {
+		for _, mode := range []string{"none", "allowlist"} {
+			for _, credential := range []bool{false, true} {
+				b, _, _ := sf.Fixture()
+				grants := []ap.CredentialGrant{}
+				if credential {
+					grants = append(grants, ap.CredentialGrant{Kind: "git", Source: "/synthetic/credential", Target: "/run/credentials/git"})
+				}
+				profile := "offline-v1"
+				if mode == "allowlist" {
+					profile = "allowlist-v1"
+				}
+				settings := map[string]any{"profile": profile, "credentials": grants, "policy": map[string]any{"network": map[string]any{"mode": mode, "allow": []string{"example.test"}}}}
+				if home {
+					settings["profile"] = strings.Replace(profile, "-v1", "-home-v1", 1)
+					settings["home"] = map[string]string{"storage": "volume"}
+				}
+				data, err := json.Marshal(settings)
+				if err != nil {
+					t.Fatal(err)
+				}
+				b.Frozen.Settings = string(data)
+				r := ap.Record{Candidate: ap.Candidate{Project: b.Frozen.Project, Fingerprint: b.Frozen.Fingerprint, Canonical: string(data), UID: b.UID, GID: b.GID}, Generation: b.Frozen.Generation}
+				codec := JSON{Approval: af.FrozenRecords{Values: map[ap.Frozen]ap.Record{b.Frozen: r}}}
+				got, failure := codec.Frozen(b.Frozen)
+				if failure != "" || got.Home != home || got.CredentialNetwork != (mode == "allowlist" && credential) {
+					t.Fatalf("home %v, network %s, credential %v: %+v / %s", home, mode, credential, got, failure)
+				}
+				for i, grant := range got.Credentials {
+					want := ap.CredentialGrant{}
+					if i == 0 && credential {
+						want = grants[0]
+					}
+					if grant != want {
+						t.Fatal("frozen binding changed an approved grant", grant, want)
+					}
+				}
+			}
+		}
+	}
+}
+
 func recordValue(t *testing.T, data []byte) mp.Value {
 	t.Helper()
 	var values map[string]json.RawMessage
