@@ -376,7 +376,7 @@ func (w *world) doctorAllowedJournal(allowImage bool) error {
 // reference, only where image inspection is permitted at all. Every other image
 // path, any query, and every mutation or acquisition stays forbidden.
 func (w *world) egressProxyInspection(r doctorRequest, allowImage bool) bool {
-	return allowImage && w.doctor.engine.egress != nil && r.Method == http.MethodGet && r.Query == "" && doctorRequestPath(r.Path) == "/images/"+busyboxFixturePin+"/json"
+	return allowImage && w.approval != nil && w.approval.allow != nil && w.doctor.engine.egress != nil && r.Method == http.MethodGet && r.Query == "" && doctorRequestPath(r.Path) == "/images/"+busyboxFixturePin+"/json"
 }
 func (w *world) doctorNoConnection() error {
 	a := w.doctor.engine

@@ -40,6 +40,9 @@ const (
 	// EgressExecutable refuses the controller's own program as the proxy's:
 	// unobserved, not a static Linux amd64 ELF, or inside the checkout.
 	EgressExecutable
+	EgressEngine
+	EgressImage
+	EgressImageMissing
 )
 
 // Issue contains only a typed failure and its safe subject, never source data.
@@ -89,6 +92,7 @@ type Session interface {
 
 // Version retains API ranges separately from the actually negotiated version.
 type Version struct {
+	Release                                              string
 	Product, OS, Architecture                            string
 	Minimum, Maximum, Negotiated, SDKMinimum, SDKMaximum string
 }
@@ -99,6 +103,7 @@ type Info struct{ ID, OS, Architecture, OperatingSystem string }
 // Image contains the inspected fields needed for readiness. ConfigPresent
 // distinguishes an absent Config from its valid empty fields. Label stays data.
 type Image struct {
+	Volumes                    bool
 	ID, OS, Architecture, User string
 	RepoDigests                []string
 	ConfigPresent              bool
@@ -116,13 +121,14 @@ type ImageIdentity struct{ Reference, ID, OS, Architecture string }
 
 // Result is a snapshot, not approval or runtime isolation evidence.
 type Result struct {
-	Checkout *CheckoutIdentity
-	Engine   *EngineIdentity
-	Image    *ImageIdentity
-	Policy   *policy.Result
-	Manifest *manifest.Result
-	Issues   []Issue
-	Ready    bool
+	ProxyImage *ImageIdentity
+	Checkout   *CheckoutIdentity
+	Engine     *EngineIdentity
+	Image      *ImageIdentity
+	Policy     *policy.Result
+	Manifest   *manifest.Result
+	Issues     []Issue
+	Ready      bool
 }
 
 // ContextEngine separates establishment from the retained inspection lifetime.

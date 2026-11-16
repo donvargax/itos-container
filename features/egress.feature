@@ -67,15 +67,11 @@ Feature: Run through the approved egress proxy
   # docs/security.md repeats the status limitations below, q-52 and the existing
   # late-checkout-socket gap. No claim that this closes that separate IPC route.
   #
-  # Dependencies beyond the registry's slice-26, T-39 and T-40: the coordinator
-  # must schedule p1-acceptance-static-binary and p1-egress-refusal-log-writer
-  # before implementation can complete. The former builds ordinary and coverage
-  # fixtures with CGO_ENABLED=0, as releases do. T-40 refuses a grant without a
-  # RefusalLog and retains resources on copy failure; bind the real streaming
-  # writer to both Runner and Recovery. No nil, discard writer or test fake in
-  # production. Slice-28 keeps log sequence/gap reporting, status counts, hostile
-  # display escaping, proxy-failure and recovery scenarios. This item binds the
-  # existing failure closure and normal cleanup; it does not waive them until 28.
+  # All prerequisites are merged: slice-26, T-39, T-40, T-51 (real RefusalLog)
+  # and T-52 (CGO_ENABLED=0 acceptance binaries). Bind the streaming writer to
+  # Runner and Recovery; no nil/discard/fake in production. A copy failure retains
+  # resources. Slice-28 adds native sequence/gap, proxy-failure and recovery proof;
+  # existing failure closure and cleanup remain mandatory here.
   #
   # Architecture and libraries: extend run/doctor/approve/status via their own
   # domain/port/adapter siblings and shared readiness/approval/session APIs.
@@ -84,7 +80,7 @@ Feature: Run through the approved egress proxy
   # Log. Cmd is the only place joining policy's concrete canonicalisation and
   # egress. Egress imports no policy or session engine; no slice imports another.
   # T-38/q-51 chooses our existing standard-library proxy, with no interception
-  # code and no new library/service. Reuse pinned Go 1.27.3 (debug/elf in an
+  # code and no new library/service. Reuse pinned Go 1.27.4 (debug/elf in an
   # adapter), moby client v0.6.2/api v1.56.1, x/term v0.46.0 and creack/pty v1.1.24.
   # Preserve notices; do not widen domain/port imports for executable inspection.
   #
@@ -256,7 +252,7 @@ Feature: Run through the approved egress proxy
   # reds use the guarded CI selector, then ordinary green after implementation.
 
   # Approval comparison and the gate's replacement.
-  @wip @slice-27 @ID-EGRESS-01 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-01 @local-engine-fixture @linux
   Scenario Outline: Run explains a changed approved list before opening the engine
     Given an approval checkout and isolated host state
     And the checkout requests the allowlist "api.example.com registry.example.org"
@@ -279,7 +275,7 @@ Feature: Run through the approved egress proxy
       | replace api.example.com with xn--pi-6kc.example.com | /policy/network/allow                                         |
       | version 2 offline                                   | /policy/network/allow, /policy/network/mode, /profile, /proxy |
 
-  @wip @slice-27 @ID-EGRESS-02 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-02 @local-engine-fixture @linux
   Scenario Outline: A remembered grant supplies the exact proxy list without new consent
     Given an approval checkout and isolated host state
     And an egress-capable local Engine API fixture
@@ -301,7 +297,7 @@ Feature: Run through the approved egress proxy
       | reversed list order and comments                       |
       | API.Example.COM. and BÜCHER.example                    |
 
-  @wip @slice-27 @ID-EGRESS-03 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-03 @local-engine-fixture @linux
   Scenario: Version two offline runs without any egress prerequisite
     Given an approval checkout and isolated host state
     And a local owned foreground Engine API fixture
@@ -316,7 +312,7 @@ Feature: Run through the approved egress proxy
     And the active approval bytes and generation are unchanged
 
   # Read-only readiness and delivery. All fault cases have 02/04 as controls.
-  @wip @slice-27 @ID-EGRESS-04 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-04 @local-engine-fixture @linux
   Scenario: Doctor describes the executable allowlist profile without granting it
     Given an approval checkout and isolated host state
     And an egress-capable local Engine API fixture
@@ -328,7 +324,7 @@ Feature: Run through the approved egress proxy
     And no engine mutation or image acquisition was attempted
     And the approval checkout and host state are unchanged
 
-  @wip @slice-27 @ID-EGRESS-05 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-05 @local-engine-fixture @linux
   Scenario Outline: An absent cached proxy image names its exact pull without acquiring it
     Given an approval checkout and isolated host state
     And an egress-capable local Engine API fixture
@@ -349,7 +345,7 @@ Feature: Run through the approved egress proxy
       | approve --json          |
       | run -- fixture-workload |
 
-  @wip @slice-27 @ID-EGRESS-06 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-06 @local-engine-fixture @linux
   Scenario Outline: Egress refuses a daemon that cannot supply the isolated bridge
     Given an approval checkout and isolated host state
     And an egress-capable local Engine API fixture
@@ -389,7 +385,7 @@ Feature: Run through the approved egress proxy
       | truncated ELF                         |
       | unavailable executable observation    |
 
-  @wip @slice-27 @ID-EGRESS-20 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-20 @local-engine-fixture @linux
   Scenario Outline: A checkout-writable controller cannot supply the trusted proxy executable
     Given an approval checkout and isolated host state
     And an egress-capable local Engine API fixture
@@ -407,7 +403,7 @@ Feature: Run through the approved egress proxy
       | approve --json          |
       | run -- fixture-workload |
 
-  @wip @slice-27 @ID-EGRESS-08 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-08 @local-engine-fixture @linux
   Scenario Outline: Unusable cached proxy content cannot substitute for the approved pin
     Given an approval checkout and isolated host state
     And an egress-capable local Engine API fixture
@@ -428,7 +424,7 @@ Feature: Run through the approved egress proxy
       | a declared image volume          |
 
   # Report the grant of this session even after the current request changes.
-  @wip @slice-27 @ID-EGRESS-09 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-09 @local-engine-fixture @linux
   Scenario Outline: Status discloses the frozen grant and its handshake and log limits
     Given original protected egress and offline sessions with phase "<phase>"
     And the current policy and approval no longer describe either original session
@@ -443,7 +439,7 @@ Feature: Run through the approved egress proxy
       | running with controller absent |
       | stopped with cleanup complete  |
 
-  @wip @slice-27 @ID-EGRESS-10 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-10 @local-engine-fixture @linux
   Scenario Outline: A daemon reporting weaker network controls never starts the worker
     Given an approval checkout and isolated host state
     And an egress-capable local Engine API fixture
@@ -467,7 +463,7 @@ Feature: Run through the approved egress proxy
 
   # q-52's refusal scenarios stay in approval.feature; this holds the presentation
   # change that becomes truthful only when slice-27 implements the runnable grant.
-  @wip @slice-27 @ID-EGRESS-11 @local-engine-fixture @linux
+  @slice-27 @ID-EGRESS-11 @local-engine-fixture @linux
   Scenario: Terminal consent describes a runnable grant and matching settings do not ask again
     Given an approval checkout and isolated host state
     And an egress-capable local Engine API fixture
@@ -483,7 +479,7 @@ Feature: Run through the approved egress proxy
     And the active approval bytes and generation are unchanged
 
   # Native boundary proof: every case uses the product, not the TCP adapter alone.
-  @wip @slice-27 @ID-EGRESS-12 @engine @linux
+  @slice-27 @ID-EGRESS-12 @engine @linux
   Scenario: An approved canonical name reaches the fake TLS endpoint through the owned proxy
     Given a CI egress checkout with policy spellings "API.Example.COM. BÜCHER.example" and matching protected approval
     And independent TLS endpoints for the canonical names with nonce receipts
@@ -494,7 +490,7 @@ Feature: Run through the approved egress proxy
     And the worker's loopback service works through the specified NO_PROXY values
     And the product returns the observed workload exit and confirms all its owned resources absent
 
-  @wip @slice-27 @ID-EGRESS-13 @engine @linux
+  @slice-27 @ID-EGRESS-13 @engine @linux
   Scenario: CONNECT uses exact names and port text instead of suffixes addresses or client cooperation
     Given a CI egress checkout allowing "api.example.com xn--bcher-kva.example" and matching protected approval
     And independent allowed and unlisted TLS aliases sharing a fixture address
@@ -516,7 +512,7 @@ Feature: Run through the approved egress proxy
     And every raw request receives 403 with an empty body and closure without an upstream dial for that request
     And the worker completes every table row and the product confirms owned cleanup
 
-  @wip @slice-27 @ID-EGRESS-14 @engine @linux
+  @slice-27 @ID-EGRESS-14 @engine @linux
   Scenario: The first ClientHello must match CONNECT before any tunnel byte passes
     Given a CI egress checkout allowing "api.example.com" and matching protected approval
     And an independent TLS endpoint recording every byte before handshake
@@ -534,7 +530,7 @@ Feature: Run through the approved egress proxy
     And every invalid input closes after 200 with zero upstream bytes and no proxy-generated TLS bytes returned
     And the worker completes every table row and the product confirms owned cleanup
 
-  @wip @slice-27 @ID-EGRESS-15 @engine @linux
+  @slice-27 @ID-EGRESS-15 @engine @linux
   Scenario: The worker cannot bypass the proxy from its first instruction or while running
     Given a CI egress checkout and matching protected approval with independent route controls
     When its first-instruction and running probes ignore proxy variables and attempt these routes:
@@ -554,7 +550,7 @@ Feature: Run through the approved egress proxy
     And native inspection shows no worker default route outside its isolated network and proxy IPv4 forwarding disabled
     And the product confirms owned cleanup without changing the unrelated control resources
 
-  @wip @slice-27 @ID-EGRESS-16 @engine @linux
+  @slice-27 @ID-EGRESS-16 @engine @linux
   Scenario: Docker DNS provides no unauthorized resolution path out of the internal network
     Given a CI egress checkout and matching protected approval with independent DNS controls
     When its first-instruction and running probes query unique outside names by these paths:
@@ -570,7 +566,7 @@ Feature: Run through the approved egress proxy
     And no worker probe obtains an outside answer or delivers its query to a controlled outside resolver
     And the product confirms owned cleanup without changing host DNS or unrelated controls
 
-  @wip @slice-27 @ID-EGRESS-17 @engine @linux
+  @slice-27 @ID-EGRESS-17 @engine @linux
   Scenario: A listed name that resolves privately cannot turn the proxy into a private route
     Given a CI egress checkout allowing "public.example private.example" and matching protected approval
     And proxy-visible public-range and private-range fixture aliases with independent TLS controls
@@ -580,7 +576,7 @@ Feature: Run through the approved egress proxy
     And private.example receives 403 with no connection to its private endpoint
     And the product confirms owned cleanup without changing the fixture endpoints
 
-  @wip @slice-27 @ID-EGRESS-18 @engine @linux
+  @slice-27 @ID-EGRESS-18 @engine @linux
   Scenario: Editing and approving a wider list cannot change the running proxy
     Given a CI egress checkout allowing "first.example" and matching protected approval
     And independent TLS endpoints for first.example and later.example
@@ -591,7 +587,7 @@ Feature: Run through the approved egress proxy
     Then the fresh worker reaches both names through a newly owned proxy using the new fingerprint
     And neither run requests consent and both confirm their owned cleanup
 
-  @wip @slice-27 @ID-EGRESS-19 @engine @linux
+  @slice-27 @ID-EGRESS-19 @engine @linux
   Scenario: An allowed redirect cannot grant its unlisted destination
     Given a CI egress checkout allowing "download.example" and matching protected approval
     And download.example returns a TLS redirect to an unlisted independently reachable fixture endpoint

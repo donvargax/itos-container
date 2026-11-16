@@ -4,16 +4,17 @@ These rules describe the planned `itos container` extension. The [charter](chart
 selects the milestone from the binding [pilot contract](plans/container-pilot.md); both
 take precedence over upstream examples. The current [entry point](../cmd/itos-container/main.go)
 exposes policy, manifest, host readiness and approval inspection through doctor,
-explicit approval through approve, and invocation/approval refusals through run, alongside the inherited count, version and completion commands. Runtime
-isolation is not implemented.
+explicit approval through approve, and approved offline or allowlist runs, alongside
+the inherited count, version and completion commands. Runtime support claims require
+the corresponding CI engine scenarios at the pushed head.
 
 The first milestone is an offline owned run: explicit argv in an approved, hardened
 container with no network, the checkout as its only host mount, a non-root identity
 and owned resources cleaned up on exit. Linux amd64 with native Docker is the target,
 requiring passing runtime evidence before any support claim. A policy can request an
-exact host-name egress allowlist, which the explicit policy-only, manifest-only and
-credentials-only doctor scopes read: nothing approves, enforces or runs it yet, and the
-other commands refuse it. Named credential requests and metadata inspection are implemented;
+exact host-name egress allowlist. Doctor and approve inspect its prerequisites; run
+uses the matching approved list through an owned CONNECT proxy on port 443. Named
+credential requests and metadata inspection are implemented;
 credential delivery/accounts, network Git, LAN ingress, Compose and other
 platforms are deferred. Describing later pilot commands here does not authorize their
 implementation or settle an open security decision. Real-engine scenarios run only in CI;
@@ -136,10 +137,15 @@ list: plain output has one `network.allow: <name>` line per canonical name in as
 byte order after `network.mode`, and JSON has `policy.network.allow` as the same sorted
 array. Offline has no list. Inspection reads and validates only: it runs no engine, proxy
 or helper. Ordinary doctor and approve bind a valid version 2 policy in the
-canonical approval. Run still refuses every version 2 policy with `policy.version`
-at `/version` and exit 2 before engine access, naming `doctor --policy-only`.
+canonical approval. Run accepts the same valid version-2 settings. An offline request
+keeps network none; an allowlist request requires native Docker 28.0 or newer and
+negotiated API 1.48 or newer, the exact cached proxy image and the installed static
+Linux amd64 controller outside the checkout. The proxy is owned beside the worker;
+there is no TLS interception or fallback route. Missing proxy images name the exact
+`docker pull` command; doctor, approve and run never acquire an image. The private
+proxy entry point is hidden from help and completion.
 
-## Implemented run refusals
+## Implemented run
 
 `itos container run -- <command> [arguments...]` requires a nonempty executable after
 the first separator. Missing or empty commands and commands supplied without `--`
@@ -166,16 +172,18 @@ host-state root as approval. An identical snapshot is reused without rewriting i
 unsafe or conflicting state refuses, and an uncertain write yields no startup input.
 Every invocation revalidates prerequisites and approval, even if the snapshot exists.
 Successful publication now creates one owned unstarted worker from the frozen
-image config ID. Run durably records its inspected full ID, verifies the offline
-boundary, attaches separate stdin/stdout/stderr, then starts the literal argv.
+image config ID. Run durably records its inspected full ID, verifies the approved
+offline or allowlist boundary, attaches separate stdin/stdout/stderr, then starts
+the literal argv.
 There is no implicit shell, image acquisition, helper execution or approval prompt.
 An explicit shell executes inside the worker. HOME and TMPDIR use `/tmp` tmpfs;
 the checkout is mounted at `/workspace` with the approved working subdirectory.
 
 Run observes the workload exit, drains output and removes only the revalidated
-owned worker. Zero requires confirmed removal and durable completion. An observed
-nonzero workload exit wins over a separate cleanup error. Failure retains a safe
-protected intent reference; public status/stop recovery remains pending.
+owned worker and any owned proxy and networks. Zero requires confirmed removal and
+durable completion. An observed nonzero workload exit wins over a separate cleanup
+error. Failure retains a safe protected intent reference and a session ID for
+status/stop recovery using the original grant.
 The implementation targets Linux amd64/native Docker. Runtime support and the
 remaining isolation properties require their CI engine scenarios; local fixtures
 are not isolation evidence.

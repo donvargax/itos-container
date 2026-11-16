@@ -1024,16 +1024,14 @@ writes and `TestEgressSyntheticELFCarriesExactlyItsProperty` reads back independ
 evidence at `intents/<project>/<token>.egress.json` (`{"proxy_image_id":…,"schema":1}`).
 
 With `@wip` removed for the run only, all 43 rows failed at their first Then on 2026-11-13;
-the failing assertions are in the checkpoint's hand-back. `ID-EGRESS-07` has since gone live
-with its readiness rule and ELF adapter; the other eleven stay work in progress. With a throwaway wiring of T-40's
-grant in the test assembly, never committed, all seven `ID-EGRESS-10` rows and every step
-of `ID-EGRESS-02` except the two that need the real inspection and durable evidence passed,
-so the fixture agrees with the session engine as built. `ID-EGRESS-04` also reads the
-built executable itself and stays red until the harness builds what the release ships
-(`p1-acceptance-static-binary`).
+the failing assertions are in the checkpoint's hand-back. `ID-EGRESS-07` subsequently went
+live with its readiness rule and ELF adapter. Slice-27 now removes the remaining work-in-progress
+tags and wires the inspector, runtime handoff, hidden proxy and real refusal-log writer.
+The local egress, approval, policy and run selection passes. Native green remains the
+coordinator's CI obligation; local fixtures cannot establish a network boundary.
 
-The eight real-engine scenarios, `ID-EGRESS-12` to `-19`, have step definitions that no
-engine has run yet; `TestEgressNativeStepsDefined` holds every one of their steps to exactly
+The eight real-engine scenarios, `ID-EGRESS-12` to `-19`, have accepted first-Then red at
+5478523 in CI run 43531516406. Every Given and When passed. `TestEgressNativeStepsDefined` holds every one of their steps to exactly
 one definition. Their Givens provision only trusted controls: a private checkout and state, a
 synthetic approval, the worker probe (`testdata/slice-27/probe`) and TLS endpoints
 (`testdata/slice-27/endpoint`) in fixture containers on `11.22.33.0/24`, `fd27:27::/64` and,
