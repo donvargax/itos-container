@@ -128,17 +128,25 @@ custom Engine client, engine CLI or network service is selected.
 ## Evidence and consequences
 
 HOME-01 through HOME-24 remain `@wip`. HOME-01 and all four native scenarios have
-step bindings; the remaining non-engine bindings are an implementation handoff.
+step bindings, as does HOME-02; the remaining non-engine bindings are an
+implementation handoff.
 The coordinator accepted HOME-13's assertion-level red in dispatch
 `43797097484`, offline engine job `133068276167`, at
 `68be535a07039b29ae294f7d72e4be00b6881e6f`: one selected row failed in 2.9 seconds
 at its first observation, "run 1 did not provide the approved persistent private
 home: exit 2", with `policy.unknown_key` for the home key. Setup succeeded.
 Commit `191a919e440839dd00d5d1d04140ed58c9f1c5ca` binds HOME-14, HOME-15 and
-HOME-23. Their assertion-level CI red evidence is still required before runtime
-implementation; local binding and oracle checks do not supply it. Givens must
-independently seed temporary inputs/records and isolated account-home state
-without invoking product approval/run/recovery. Both memory and real
+HOME-23. The coordinator accepted their assertion-level red in dispatch
+`43815326065`, offline engine job `133126139882`, at
+`5fe482e10dbfa42e20036e4b95064aa90077f146`: all eight selected rows completed
+and failed at the first product run with `policy.unknown_key` for
+`itos-container.yaml/home`. No step was undefined and no fixture failed. These
+observations satisfy the native red prerequisite for runtime implementation;
+no further red dispatch or storage decision is owed. Steps after those first
+observations have not executed yet and need inspection in the native green run.
+
+Givens must independently seed temporary inputs/records and isolated account-home
+state without invoking product approval/run/recovery. Both memory and real
 disk/SDK-with-recorder paths must exercise the same decisions, with positive
 home controls on refusal cases.
 
