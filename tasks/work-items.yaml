@@ -2205,21 +2205,10 @@ items:
       passed, so this is not the first-row failure T-54, T-55 and T-57 dealt with. The journal
       printed with the failure omits entries 2 to 18, which hold the launch itself. One occurrence;
       with the next, read the full journal for which call took the time before choosing anything.
-  - id: p1-feature-suite-names-its-timeout
+  - id: T-58
     title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      itos.yaml runs the feature suite as go test ./features -count=1, so Go's default ten-minute
-      test timeout is its limit, set by nobody. The suite has grown to it: T-48's code proof at
-      f83f235 (run 43826396800) failed in preparation, the listed-coverage run of ./features ending
-      in 'panic: test timed out after 10m0s' at 600 s, so no mutant was judged; on main at cffa73a
-      the same step took 353 s and the Tests job as a whole ran ten minutes fifteen. slice-27 and
-      slice-30 added their scenarios this week and slice-34, slice-28 and slice-31 add more, so
-      every item's proof is near that edge and a slow runner tips it. Name the timeout in both of
-      itos.yaml's whole-suite commands (and the select form), sized from measured CI durations with
-      headroom, inside the ci job's own time limit. It is a time budget nobody chose becoming one
-      somebody did; no scenario, assertion or engine shard gate changes.
+    kind: task
