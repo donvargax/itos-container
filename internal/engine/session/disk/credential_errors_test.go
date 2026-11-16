@@ -167,6 +167,33 @@ func TestCredentialStagingRejectsInvalidCapabilities(t *testing.T) {
 	}
 }
 
+func TestCredentialStagingRejectsDescriptorBeforeEffects(t *testing.T) {
+	control := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
+	r, failure := stageCredentialFixture(t, control)
+	if failure != "" {
+		t.Fatal("checked descriptor positive control failed", failure)
+	}
+	if failure := control.Stager.Remove(t.Context(), r); failure != "" {
+		t.Fatal("positive control cleanup failed", failure)
+	}
+	for _, number := range []string{"0", "00", "01", "+1", "-1", "x", "18446744073709551616"} {
+		t.Run(number, func(t *testing.T) {
+			fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
+			selected := credentialSourceSelection{CredentialSources: fixture.Sources, entries: fixture.Sources.Checked()}
+			selected.entries[0].ReadPath = "/proc/self/fd/" + number
+			s := fixture.Stager.(Credentials)
+			s.before = func(string) { t.Fatal("invalid descriptor reached staging effects") }
+			failure := s.Stage(t.Context(), fixture.Intent(), selected, func(port.CredentialStaging) port.Outcome {
+				t.Fatal("invalid descriptor published staging ownership")
+				return ""
+			})
+			if failure != port.CredentialRefused {
+				t.Fatal("invalid descriptor was not refused", failure)
+			}
+		})
+	}
+}
+
 func TestCredentialStagingCancellationBoundaries(t *testing.T) {
 	for _, boundary := range []string{"checked", "mkdir", "root", "read", "file", "copy", "write"} {
 		t.Run(boundary, func(t *testing.T) {

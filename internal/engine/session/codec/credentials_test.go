@@ -114,6 +114,30 @@ func TestCredentialRecordsWithEgress(t *testing.T) {
 	}
 }
 
+func TestCredentialRecordsRejectUnknownAnchorField(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+	parser := &mf.Parser{}
+	codec := JSON{Parser: parser}
+	data := codec.Encode(r)
+	parser.Value = credentialValue(t, data)
+	if got, failure := codec.Decode(data); failure != "" || got != r {
+		t.Fatal("valid credential anchor record refused", failure)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(data, &wire); err != nil {
+		t.Fatal("credential record fixture unreadable")
+	}
+	wire["anchor"].(map[string]any)["unrecognized"] = "extra"
+	data, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal("credential record fixture cannot be encoded")
+	}
+	parser.Value = credentialValue(t, data)
+	if got, failure := codec.Decode(data); failure != port.Invalid || got != (port.Record{}) {
+		t.Fatal("credential record accepted an unknown anchor field")
+	}
+}
+
 func credentialValue(t *testing.T, data []byte) mp.Value {
 	t.Helper()
 	if string(data) == "null" {

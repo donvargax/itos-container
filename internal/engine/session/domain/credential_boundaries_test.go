@@ -252,6 +252,38 @@ func TestCredentialRegisteredRunAndEgressCleanup(t *testing.T) {
 		}
 	}
 }
+
+func TestCredentialRegisteredRunTerminationGrace(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		runner, durable, registry, engine, _ := freshEgressRunner()
+		fixture := f.MemoryCredentialFixture(map[string][]byte{"claude-token": []byte("synthetic\n")})
+		codec := registry.Store.Codec.(*f.Codec)
+		codec.Value.Egress, codec.Value.Credentials = port.EgressGrant{}, fixture.Sources.Kinds()
+		runner.Sources, runner.Credentials, runner.StagingEntropy = fixture.Sources, fixture.Stager, credentialEntropy{}
+		engine.CredentialStaging = fixture.Stager.(*f.CredentialStager)
+		engine.WaitUntilCancel, engine.IgnoreSignal = true, true
+		ctx, cancel := context.WithCancelCause(t.Context())
+		defer cancel(nil)
+		var terminated, killed time.Time
+		engine.After = func(event string) {
+			switch event {
+			case "wait":
+				cancel(port.Interrupt{Signal: "SIGTERM"})
+			case "SIGTERM":
+				terminated = time.Now()
+			case "SIGKILL":
+				killed = time.Now()
+			}
+		}
+		result := runner.Run(ctx, durable, []string{"probe"}, port.Streams{})
+		if terminated.IsZero() || killed.IsZero() || killed.Sub(terminated) != 10*time.Second {
+			t.Fatal("credential run did not escalate at the original ten-second grace", killed.Sub(terminated))
+		}
+		if result.Cleanup != port.Complete || len(engine.Resources) != 0 || len(engine.CredentialAcquired) != 0 || len(engine.Anchors) != 0 {
+			t.Fatal("credential run did not remove all owned resources after escalation", result.Cleanup)
+		}
+	})
+}
 func TestCredentialUnregisteredRunRefusesBeforeEngine(t *testing.T) {
 	b, store, e := f.Fixture()
 	b.Credentials = port.CredentialKinds{Claude: true}

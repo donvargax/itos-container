@@ -139,3 +139,52 @@ func TestCredentialRecordWorkerShape(t *testing.T) {
 		}
 	}
 }
+
+func TestCredentialRecordAnchorBinding(t *testing.T) {
+	b, _, _ := f.Fixture()
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+	if !r.ValidAnchor(b) {
+		t.Fatal("credential record lost its original anchor binding")
+	}
+	for _, field := range []string{"session", "name", "source", "device", "inode", "created", "stage"} {
+		t.Run(field, func(t *testing.T) {
+			bad := r
+			switch field {
+			case "session":
+				bad.Anchor.Session = "foreign"
+			case "name":
+				bad.Anchor.Name += "foreign"
+			case "source":
+				bad.Anchor.Source = "/original/checkout"
+			case "device":
+				bad.Anchor.Device += "9"
+			case "inode":
+				bad.Anchor.Inode += "9"
+			case "created":
+				bad.Anchor.Created = ""
+			case "stage":
+				bad.Anchor.Stage = "unknown"
+			}
+			if bad.ValidAnchor(b) {
+				t.Fatal("credential record accepted changed or invalid anchor authority")
+			}
+		})
+	}
+}
+
+func TestCredentialCompletionRefusesUnknownSchemaProgress(t *testing.T) {
+	b, _, _ := f.Fixture()
+	r := f.RunIntent(b)
+	r.Stage = "cancelled"
+	n := r
+	n.Anchor.Stage = "absent"
+	if !r.ValidTransition(n) {
+		t.Fatal("known schema refused terminal anchor cleanup")
+	}
+	for _, schema := range []int{0, -1} {
+		r.Schema, n.Schema = schema, schema
+		if r.ValidTransition(n) {
+			t.Fatal("unknown legacy schema acquired terminal cleanup progress", schema)
+		}
+	}
+}
