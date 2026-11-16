@@ -1,10 +1,32 @@
 package porttest
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
+
+func TestPairAcquisitionRetainsRollbackFailure(t *testing.T) {
+	for _, seam := range []bool{false, true} {
+		t.Run(map[bool]string{false: "provider", true: "output state"}[seam], func(t *testing.T) {
+			restore := errors.New("restore failed")
+			p := &Pair{
+				Input:  &Fake{Size: port.Dimensions{Columns: 113, Rows: 37}, RestoreError: restore},
+				Output: &Fake{Invalid: port.AcquisitionFailed},
+			}
+			if seam {
+				p.OutputStateError = errors.New("state unavailable")
+			}
+			l, err := p.Acquire(context.Background())
+			var failure *port.Failure
+			if l != nil || !errors.As(err, &failure) || failure.Kind != port.AcquisitionFailed || !errors.Is(failure.RestoreErr, restore) {
+				t.Fatalf("rollback failure lost: %v %v", l, err)
+			}
+		})
+	}
+}
 
 func TestPairContract(t *testing.T) {
 	for _, tc := range []struct {

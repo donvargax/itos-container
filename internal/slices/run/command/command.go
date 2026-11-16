@@ -354,7 +354,7 @@ func Classify(err error) (int, []cli.Problem) {
 	case errors.Is(err, domain.ErrJSONUnsupported):
 		return cli.CodeUsage, []cli.Problem{{
 			Rule: "run.json-unsupported", Exit: cli.CodeUsage,
-			Message: "run does not support wrapper JSON mode",
+			Message: "run does not support wrapper JSON mode; remove the wrapper --json option and the inherited ITOS_JSON=1 request.",
 			Fix:     "Remove the wrapper --json option and the inherited ITOS_JSON=1 request.",
 		}}
 	case errors.Is(err, domain.ErrCommandRequired):

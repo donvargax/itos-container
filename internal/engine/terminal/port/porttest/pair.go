@@ -29,12 +29,12 @@ func (p *Pair) Acquire(ctx context.Context) (port.Lease, error) {
 	}
 	if err := errors.Join(p.OutputStateError, p.OutputRawError); err != nil {
 		r := in.Close()
-		return nil, &port.Failure{Kind: port.AcquisitionFailed, Err: errors.Join(err, r.RestoreErr)}
+		return nil, &port.Failure{Kind: port.AcquisitionFailed, Err: err, RestoreErr: r.RestoreErr}
 	}
 	out, err := p.Output.Acquire(ctx)
 	if err != nil {
 		r := in.Close()
-		return nil, &port.Failure{Kind: port.AcquisitionFailed, Err: errors.Join(err, r.RestoreErr)}
+		return nil, &port.Failure{Kind: port.AcquisitionFailed, Err: err, RestoreErr: r.RestoreErr}
 	}
 	l := &pairLease{in: in, out: out, done: make(chan struct{})}
 	go func() {

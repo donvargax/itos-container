@@ -324,7 +324,7 @@ func (c terminalContractConnection) Wait(ctx context.Context, id string) (int, s
 			case "owned removal fails":
 				f.l.m.e.Following = "still present"
 			case "engine becomes unreachable":
-				f.l.hidden = true
+				f.l.hidden, f.l.unknownExit = true, true
 			case "inspected ownership changes":
 				o := f.l.m.e.Resources[id]
 				o.Name = "foreign-replacement"

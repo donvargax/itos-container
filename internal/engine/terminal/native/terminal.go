@@ -38,8 +38,8 @@ func NewPair(input, output *os.File, osName string) *Provider {
 }
 
 // Acquire subscribes before measuring, so a resize between the initial measurement
-// and observation is retained. All fallible setup precedes successful MakeRaw;
-// there is no partially acquired lease or fallible post-raw setup to roll back.
+// and observation is retained. A distinct output terminal is acquired after
+// stdin; failure rolls back each saved state before returning.
 func (p *Provider) Acquire(ctx context.Context) (port.Lease, error) {
 	if p.osName != "linux" || !supported {
 		return nil, &port.Failure{Kind: port.Unsupported}

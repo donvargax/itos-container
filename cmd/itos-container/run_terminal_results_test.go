@@ -50,6 +50,9 @@ func TestTerminalDisconnectResults(t *testing.T) {
 				if r.Code != tc.code || !r.Ready || !r.Fired || !r.ObserversEnded || !strings.Contains(r.Diagnostic, "run.terminal-disconnected") || r.RecoveryRestarted {
 					t.Fatalf("disconnect: code=%d ready=%v fired=%v ended=%v restarted=%v diagnostic=%s", r.Code, r.Ready, r.Fired, r.ObserversEnded, r.RecoveryRestarted, r.Diagnostic)
 				}
+				if tc.condition == "engine becomes unreachable" && r.Result.Cleanup == "cleanup-complete" {
+					t.Fatal("unreachable engine was reported as confirmed absent")
+				}
 			})
 		})
 	}

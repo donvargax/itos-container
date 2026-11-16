@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/alecthomas/kong"
@@ -16,6 +17,7 @@ import (
 	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
+	terminalnative "github.com/donvargax/itos-container/internal/engine/terminal/native"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
 	"github.com/donvargax/itos-container/internal/slices/run/signals"
 )
@@ -75,6 +77,7 @@ func TestLocalRunCommand(t *testing.T) {
 	c.Run.Snapshots = disk.Snapshots{Store: service.Store.(disk.Store), Records: canonical.JSON{}}
 	c.Run.Runner, c.Run.Context = runner, ctx
 	c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
+	c.Run.Terminal = terminalnative.NewPair(os.Stdin, os.Stdout, runtime.GOOS)
 	code := c.Run.Run(ui)
 	release()
 	os.Exit(code)
