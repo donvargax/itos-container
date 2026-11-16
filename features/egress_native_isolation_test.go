@@ -158,9 +158,10 @@ func (iso *egressIsolation) extraRoutes() error {
 }
 
 // token is the nonce of one of the slice-27 probe's own attempts. The worker's
-// carry no suffix; a control's carries "b" or "a", as slice-14's do.
+// carry no marker; a control's phase carries "b" or "a" before its separator, so
+// searching a binary receipt for a worker nonce cannot match a control's.
 func (iso *egressIsolation) token(kind, phase, suffix string) string {
-	return kind + "-" + phase + "-" + iso.s.config.Nonce + suffix
+	return kind + "-" + phase + suffix + "-" + iso.s.config.Nonce
 }
 
 // alias is a name Docker's embedded resolver answers on the control's network

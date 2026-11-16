@@ -123,11 +123,6 @@ func (w *world) egressNativeSteps(sc lifecycleStepRegistrar) {
 		if err != nil {
 			return err
 		}
-		first, err := n.last()
-		if err != nil {
-			return err
-		}
-		first.finish(3 * time.Minute)
 		_, err = n.drive([]egressStep{
 			{Op: "tls", Mode: "connect", Name: "first.example", Nonce: "fresh-" + egressNonce()},
 			{Op: "tls", Mode: "connect", Name: "later.example", Nonce: "fresh-" + egressNonce()},
@@ -244,5 +239,12 @@ func (w *world) egressWidenDuringRun() error {
 		approveErr = errors.Join(approveErr, fmt.Errorf("terminal approval of the wider request exited %d\n%s", w.exit, w.report()))
 	}
 	run.observe("approve")
-	return errors.Join(approveErr, run.release("approve"))
+	if err = run.release("approve"); err != nil {
+		return errors.Join(approveErr, err)
+	}
+	// Then reads the completed plan, including the post-approval phase, and
+	// the independent controls repeated after the worker's attempts.
+	run.finish(3 * time.Minute)
+	n.controlAll()
+	return approveErr
 }
