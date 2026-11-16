@@ -30,6 +30,7 @@ type RunEngine struct {
 	Output, ErrorOutput                                              []byte
 	After                                                            func(string)
 	AfterStart, AfterWait                                            func()
+	AfterCancelledWait                                               func()
 	WaitUntilCancel, IgnoreSignal                                    bool
 	SignalFailure                                                    port.Outcome
 	StdinClosed, DrainUntilCancel                                    bool
@@ -175,6 +176,9 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 		<-ctx.Done()
 	}
 	if ctx.Err() != nil {
+		if c.run.AfterCancelledWait != nil {
+			c.run.AfterCancelledWait()
+		}
 		return 0, port.ExecutionFailed
 	}
 	c.engine.resourcesMu.Lock()

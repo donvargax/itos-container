@@ -99,6 +99,9 @@ func (s Runner) waitForeground(ctx context.Context, c port.RunConnection, a port
 				continue
 			}
 		}
+		// Record the parent state at the first failure. A later host signal
+		// while the wait unwinds cannot replace this terminal cause.
+		interrupted := ctx.Err() != nil
 		cancel()
 		v := <-finished
 		// A resize racing the authoritative wait must not turn normal exit into
@@ -106,7 +109,7 @@ func (s Runner) waitForeground(ctx context.Context, c port.RunConnection, a port
 		if resize && v.exited {
 			return v.exit, true, v.failure, ""
 		}
-		if ctx.Err() != nil {
+		if interrupted {
 			return v.exit, v.exited, v.failure, ""
 		}
 		return v.exit, v.exited, failure, operation

@@ -111,6 +111,37 @@ func TestStreamFailureRechecksTerminalBeforeDelayedNotification(t *testing.T) {
 	}
 }
 
+func TestLaterHostSignalCannotReplaceTerminalFailure(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		runner, _, engine, _, id := registeredSessionFixture(t)
+		provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+		lease, err := provider.Acquire(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer lease.Close()
+		c, a, worker, failure := runner.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{Terminal: lease})
+		if failure != "" {
+			t.Fatal(failure)
+		}
+		defer c.Close()
+		defer a.Close()
+		ctx, signal := context.WithCancelCause(t.Context())
+		defer signal(nil)
+		engine.WaitUntilCancel = true
+		engine.After = func(event string) {
+			if event == "wait" {
+				provider.Break()
+			}
+		}
+		engine.AfterCancelledWait = func() { signal(port.Interrupt{Signal: "SIGTERM"}) }
+		_, exited, got, _ := runner.waitForeground(ctx, c, a, lease, port.Binding{}, port.Record{}, id, worker)
+		if exited || got != port.TerminalUnavailable || context.Cause(ctx) == nil {
+			t.Fatalf("later host signal replaced first terminal cause: observed=%v outcome=%s cause=%v", exited, got, context.Cause(ctx))
+		}
+	})
+}
+
 func TestResizeRequiresFreshOwnedRunningSession(t *testing.T) {
 	for _, change := range []string{"healthy", "invalid size", "unavailable registry", "changed session", "stopped session", "unavailable engine", "nil engine", "foreign worker", "stopped worker"} {
 		t.Run(change, func(t *testing.T) {
