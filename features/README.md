@@ -765,13 +765,61 @@ jobs. They change no product, fixture-call, startup or workflow limit, assertion
 and add no retry. Ordinary `TestEngineFixtureWarmup`, `TestEngineFixtureWarmupProduct` and
 `TestEngineFixtureWorkflow` regressions check executable wiring, decoded request and data-only
 ownership fixtures, and the same timing/timeout functions with harmless commands; they supply
-no runtime engine evidence. The coordinator must retain each pushed shard's tested SHA, both
-warm-up durations and existing step/row timings, successful first rows and complete live selection,
-and final cleanup verdict. The Engine scenarios step still has its 180-second gate. One green run does not rule
-out future latency failures: if the product-shaped create is not the slow operation either, or
-if a first row still times out, report both timing lines with the row's arrival-to-forward,
-forward-to-answer and controller-start intervals and stop for the coordinator to choose limits.
+no runtime engine evidence. The coordinator retains each pushed shard's tested SHA, both
+warm-up durations, existing step/row timings, complete live selection and final cleanup verdict.
+The Engine scenarios step still has its 180-second gate. The T-57 decision below supersedes
+the earlier instruction to stop and choose limits when a first row still times out.
 No fixture budget, assertion, retry or skipped row changes as part of these warm-ups.
+
+T-57 adds one launch inside each suite process, after selection admits engine rows and before
+any row setup or resource snapshot. `TestFeatures` enters `runPreparedFeatures`, which retains
+the first warm-up attempt and its result, including failure. The nested quiet-worker schedule
+and repeated suite invocations cannot repeat it. Disabled, invalid and empty selections do not
+prepare a warm-up. The native factory remains behind the engine-tier and `doctorRealGuard`
+checks; ordinary regressions substitute a disposable protocol endpoint without enabling Docker.
+
+The suite builds the original checkout in a separate temporary directory, including the
+account-home test assembly, so both carry the production 10/120/10-second limits. There is no
+`T-33-engine-tree` sibling to redirect that assembly to the shortened fixture. It seeds synthetic
+approval and isolated account/control state, independently validates the same fixture image and
+numeric identity used by rows, and invokes `run -- /bin/true` through the actual `offlineAPI`
+recorder. Stdin remains open until the controller exits. Product/assembly compilation has a
+60-second bound; invocation uses the existing 45-second watchdog. Recorder draining retains the
+10-second create-outcome allowance, and owned cleanup uses the existing 30-second allowance.
+The actual rows retain their 1/3/1-second budgets and existing selection, assertions and outcomes.
+
+On every attempted launch, including partial failures, the suite joins the controller and
+recorder, accounts for late create replies, and uses the existing full-identity checks to remove
+and independently verify absence of its worker and anchor. Unrelated objects and the shared image
+remain untouched. Socket, checkout, state, build and private coverage directories are disposed
+after their owners finish. Setup, build, invocation, recorder, timing and cleanup failures stop
+the suite before any scenario runs, with an `engine suite warm-up:` stage diagnostic. Original
+failures survive alongside cleanup failures. The phase prints one physical line:
+
+```text
+engine suite warm-up timing: arrival_ns=<n|missing> forwarded_ns=<n|missing> answer_ns=<n|missing> forward_to_answer_ns=<n|missing> outcome=<passed|failed>
+```
+
+The three offsets come from the single create journal entry relative to the monotonic origin
+immediately before controller start. The interval is `Answered - Forwarded`, not subprocess
+duration or controller reply time. Success requires ordered nonnegative timestamps, HTTP 201,
+an uncancelled create, workload completion and verified cleanup. Missing or duplicate creates,
+unordered observations and output errors fail the phase. No request body, approval, environment
+or host path enters that line. T-54/T-55 and the existing scenario/suite timing lines stay;
+warm-up elapsed time contributes to the suite/step but adds no selected or completed scenario.
+
+Either coverage input still requests instrumentation. Warm-up counters go to a private disposable
+directory outside both collected destinations, with no scenario ID or per-ID entry. The caller's
+inputs and subsequent worlds' destinations are unchanged. `TestEngineSuiteWarmup` exercises the
+same build/preparation/launch path against a stateful local endpoint, including failure retention,
+nested scheduling, late answers, cleanup refusal, exact journal intervals, output failures,
+compiled production limits and plain/aggregate/per-ID coverage isolation. The neighbouring
+`TestEngineSuiteBudget` still proves the rows' compiled 1/3/1-second limits.
+
+This local evidence proves the mechanism. The coordinator reads all three warm-up timing lines
+and the subsequent first-row create intervals after landing. A still-slow first create is for
+the coordinator to act on; successful first rows are not required as T-57's local acceptance
+evidence, and do not authorize changing a limit, assertion, retry or selected row.
 
 T-34 makes failures from the push through output publication name their stage and expected
 and observed values. The shared [validation functions](../tools/lib/engine-fixture-checks.sh)
