@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - T-55
-  - T-54
   - p1-interactive-tty
 items:
   - id: T-1
