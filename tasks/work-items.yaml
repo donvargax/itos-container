@@ -2,7 +2,7 @@
 phases:
   1: null
 queue:
-  - T-54
+  - T-55
   - p1-interactive-tty
 items:
   - id: T-1
@@ -2051,7 +2051,7 @@ items:
     title: Each engine shard warms the engine with one create and remove before its first engine row
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-native-mount-evidence-credential-inspection
@@ -2122,3 +2122,10 @@ items:
       and named adapters, without importing another slice. Prove behavior through black-box
       scenarios with synthetic inputs and controlled endpoints; real-engine evidence belongs only in
       CI. Broken down from null.
+  - id: T-55
+    title: Each engine shard's warm-up sends the product's own create, timed beside the plain one
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-54]
+    kind: task

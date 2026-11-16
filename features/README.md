@@ -676,8 +676,8 @@ so no external builder or provenance index is introduced. An unavailable builder
 BusyBox is a fixture, not the pilot's full agent toolchain; additional contents need their
 own behaviour specification.
 
-The preparation protocol is bounded to 180 seconds, including pulls, build, push, pull and
-smoke, with a separate 30-second cleanup attempt on failure. It performs these checks:
+The preparation protocol is bounded to 180 seconds, including pulls, build, push, pull,
+smoke and warm-up, with a separate 30-second cleanup attempt on failure. It performs these checks:
 
 1. Create one uniquely named registry, recording its ID and attempt identity outside the
    checkout under `RUNNER_TEMP`. Publish container port 5000 on an allocated **127.0.0.1** port,
@@ -706,7 +706,39 @@ smoke, with a separate 30-second cleanup attempt on failure. It performs these c
    network none, read-only root, all capabilities dropped, no-new-privileges, the recorded
    UID/GID and no host mounts. Require the actual UID/GID, fixed marker and exit zero.
 5. Remove the smoke container and registry, discarding registry tmpfs, then inspect the cached
-   digest again. Only then publish `image`, `image_id`, `uid` and `gid` as step outputs.
+   digest again.
+6. Warm the engine once per shard by creating and removing one additional container from that
+   exact validated digest through the same local engine helper. Record its unique run/attempt
+   name in `warmup.intent` before create and its ID through `warmup.cid`. Use pull never,
+   network none, read-only root, all capabilities dropped, no-new-privileges and the prepared
+   numeric non-root UID/GID, with no host mount, published port or declared volume. Do not start
+   or exec this container. Before removal, check its recorded name, immutable built image ID,
+   owner label and allowed mounts as for smoke; after removal, require exact absence, never
+   an inspection transport failure. Only after this succeeds publish `image`, `image_id`,
+   `uid` and `gid` together as step outputs.
+
+T-54 bounds the entire extra create, ownership inspection, removal and absence verification
+to ten seconds: coreutils timeout sends TERM at nine seconds and KILL one second later.
+The shared [warm-up timing library](../tools/lib/engine-fixture-warmup.sh) measures monotonic
+Linux uptime outside that timeout child, through removal verification and before any failure
+cleanup. Each attempt emits one `engine warm-up timing: duration_ms=<integer> outcome=passed|failed`
+line. An unavailable or backwards clock uses `duration_ms=unknown` and fails preparation.
+Command, timeout, identity, removal-verification and timing-output failures also fail preparation
+with an `engine-fixture: warm-up` diagnostic and publish no fixture outputs. Timeout diagnostics
+name the ten-second bound. The existing failure trap and final `always()` cleanup both attempt
+the recorded warm-up resource as well as the other resources; an interrupted create without a
+CID is recovered only by the recorded name, image ID and owner label. Cleanup still tries the
+remaining resources and preserves the original preparation failure.
+
+This phase runs before the first engine row in each of the offline, lifecycle and other shard
+jobs. It changes no product, fixture-call, startup or workflow limit, assertion or row selection,
+and adds no retry. Ordinary `TestEngineFixtureWarmup` regressions check executable source wiring
+and the same timing/timeout functions with harmless commands; they supply no runtime engine
+evidence. The coordinator must retain each pushed shard's tested SHA, warm-up duration and
+existing step/row timings, successful first rows and complete live selection, and final cleanup
+verdict. The Engine scenarios step still has its 180-second gate. One green run does not rule
+out future latency failures: if a first row still times out, report its warm-up duration,
+arrival-to-forward, forward-to-answer and controller-start intervals and stop for the coordinator.
 
 T-34 makes failures from the push through output publication name their stage and expected
 and observed values. The shared [validation functions](../tools/lib/engine-fixture-checks.sh)

@@ -298,6 +298,12 @@ questions:
   - id: q-74
     item: "slice-27"
     question: "slice-27: the implementer (attempt 6) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-27-implementer-6.result.json"
+    answer: "No (the coordinator, on the person's standing instruction, 2026-11-16). The engine warm-up is T-54's, which is in progress on its own pull request; it is not unowned and stays out of slice-27. slice-27's runs at e2301b9 are red only on the slow first create (ID-OFFLINE-29 and ID-ANCHORS-09, every egress row passing), and those jobs are re-run. slice-27 changes nothing for it."
   - id: q-75
     item: "T-54"
     question: "T-54: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-54-implementer-2.result.json"
+    answer: "The warm-up exercises the product's own create; no limit moves (the coordinator, on the person's standing instruction, 2026-11-16). In run 43788741012 at 7c1a6ab the plain warm-up create took 70, 430 and 80 ms on the three shards, and ID-OFFLINE-29 still failed with create forward-to-answer 0.989 s: a plain create is fast, so the cost is the first create of the shape the product sends. T-54 warms with a throwaway product run under production limits, or a create carrying the product's request shape, and prints the plain and the product-shaped timings side by side. ID-LIFECYCLE-12's failure in that run is a separate transport-loss race, not T-54's."
+  - id: q-76
+    item: "slice-34"
+    question: "slice-34: its implementer (attempt 2) stopped for engine red evidence of @ID-HOME-13. Does the dispatched run supply it?"
+    answer: "Not yet (the coordinator, 2026-11-16). Run 43791198654 at 9f892b6, dispatched with red_scenarios=@ID-HOME-13, excluded the scenario in all three engine shards as belonging to another shard: features/harness-home.feature is in no shard's feature list, and TestEngineShards fails on every platform for the same reason. slice-34 first assigns the feature to an engine shard with the inventory pins, in its own ci commit, then stops again for the red run, which the coordinator dispatches."
