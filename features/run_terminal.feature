@@ -18,16 +18,20 @@ Feature: An explicitly selected terminal for an owned foreground run
   #   selection, short alias, detach escape sequence or implicit shell is added.
   #   After --, every word, including --tty, belongs to the workload unchanged.
   # - Terminal mode requires terminal stdin AND stdout; stderr may be redirected.
-  #   Bind the T-56 provider to stdin: its saved state, dimensions and hangup are
-  #   authoritative even if stdout names a different terminal. Do not discover
-  #   /dev/tty, use the parent's terminal or manufacture a terminal for a pipe.
+  #   Stdin is the sole initial-size and resize authority, even if stdout names
+  #   a different terminal. Acquire stdin's T-56 lease, then manage distinct
+  #   stdout's state through the shared terminal port before preflight. If both
+  #   descriptors name the SAME terminal, save/acquire/restore it once; separate
+  #   file descriptors do not imply separate terminals. Do not discover /dev/tty,
+  #   use the parent's terminal or manufacture a terminal for a pipe.
   # - Invocation order is existing JSON refusal, explicit nonempty argv, terminal
   #   eligibility/acquisition, then existing approved preflight/startup. JSON
   #   retains run.json-unsupported, exit 2 and one schema-1 refusal on stdout.
   #   ITOS_JSON=1 still refuses, including with --no-json as run does today;
   #   this item does not change that inherited-request rule. JSON, argv and
   #   eligibility refusals acquire no raw lease and make no engine connection,
-  #   consent or state write. Failed acquisition must roll back partial changes.
+  #   consent or state write. Failed acquisition must roll back every terminal
+  #   already changed, including stdin when acquiring distinct stdout fails.
   # - Missing terminal descriptors use run.terminal-required, exit 2, with guidance
   #   to use terminal stdin/stdout or omit --tty. Acquisition failures, including
   #   unsupported host terminal capability and zero/invalid initial dimensions,
@@ -42,8 +46,13 @@ Feature: An explicitly selected terminal for an owned foreground run
   #   approved manifest; do not inherit TERM, COLUMNS or LINES from the controller.
   #
   # Transport decisions:
-  # Save/restore the exact host input terminal state, including nondefault flags.
-  # While attached, host canonical input, echo and signal generation are disabled.
+  # Save/restore each host terminal's own exact state, including nondefault flags.
+  # While attached, stdin's canonical input, echo and signal generation are off.
+  # Before forwarding any attachment bytes, disable stdout's output processing
+  # (OPOST, including ONLCR's LF-to-CRLF conversion), even on a distinct terminal.
+  # The fixture must not pre-disable it on behalf of the controller. Stdout's
+  # dimensions, including zero, neither refuse acquisition nor resize the worker;
+  # only stdin's dimensions are measured and validated for the session.
   # Forward bytes without line buffering, filtering, echoing or interpreting
   # Ctrl-C (03), Ctrl-D (04) or an escape sequence as a controller command.
   # The worker's own terminal line discipline may turn a byte into its own signal
@@ -55,12 +64,14 @@ Feature: An explicitly selected terminal for an owned foreground run
   # the workload's first instruction. Changed sizes reach only this owned worker;
   # resize bursts may coalesce, but the last valid size must reach it. Never swap
   # columns/rows or use COLUMNS/LINES, 80x24 or a terminal from another invocation.
-  # The terminal lease and resize/input observers outlive successful startup;
+  # Both terminals' state ownership and resize/input observers outlive startup;
   # an expired startup context must not end a healthy, quiet running command.
   #
   # Lifecycle decisions:
-  # Restore on every return after acquisition, including preflight/start/stream
-  # failure and external cancellation. Finish the lease's owned observation;
+  # Restore every acquired terminal on every return, including partial acquisition,
+  # preflight/start/stream failure and external cancellation. Never apply stdin's
+  # saved settings to distinct stdout, or skip one restoration because the other
+  # failed. Finish all terminal-state ownership and its owned observation;
   # close only adapter-owned handles, not caller-owned files. A restoration
   # failure is separately reported as run.terminal-restore (75), never hidden
   # by the original failure or called a successful restoration. When a terminal
@@ -68,9 +79,10 @@ Feature: An explicitly selected terminal for an owned foreground run
   # honest result, not a platform-specific errno. A usable terminal must regain
   # its exact saved state. No terminal payload is logged to protected records.
   #
-  # Passive local hangup, including while input/output are idle or input is
-  # unread, is run.terminal-disconnected (75). A controlling-terminal SIGHUP
-  # must not terminate the controller before it can handle that disconnect.
+  # Passive local hangup of either terminal, including while input/output are idle
+  # or input is unread, is run.terminal-disconnected (75). Restore the other
+  # terminal if still usable. A controlling-terminal SIGHUP must not terminate
+  # the controller before it can handle that disconnect.
   # A failed live terminal observation is run.terminal-unavailable (75), and a
   # failed engine resize is run.terminal-resize (75). These are controller
   # failures, not synthetic child exits or host SIGINT/SIGTERM cancellations.
@@ -107,8 +119,13 @@ Feature: An explicitly selected terminal for an owned foreground run
   #
   # Implementation handoff:
   # Extend internal/slices/run and internal/engine/session under the Slices rules;
-  # reuse internal/engine/terminal's Provider/Lease from T-56. Domain decisions
-  # and terminal/session values stay behind ports; only cmd binds adapters.
+  # reuse and extend internal/engine/terminal's T-56 contract for stdout state
+  # ownership, rollback and hangup without making stdout a dimensions source.
+  # The current Provider couples raw mode to size validation/observation: do not
+  # bind it unchanged to stdout or bind two providers to one underlying terminal.
+  # Extend the shared fake/native contract for both descriptor layouts and failed
+  # acquisition/restoration; reuse the pinned raw-state primitives. Domain
+  # decisions and terminal/session values stay behind ports; only cmd binds adapters.
   # Extend shared session fake/adapter contracts for TTY create/verification,
   # raw attachment, bounded resize and terminal completion. Keep porttest fakes
   # I/O-free; native terminal/session adapters own file, signal and SDK work.
@@ -127,6 +144,22 @@ Feature: An explicitly selected terminal for an owned foreground run
   # initial size 113 columns by 37 rows and saved nondefault terminal settings.
   # Where both descriptors are terminals, bind them to the same PTY slave by
   # default; keep an open harness handle for the final exact-state comparison.
+  # "Distinct" explicitly allocates two PTY pairs, binds stdin to one slave and
+  # stdout to the other, and retains BOTH handles for separate state comparisons.
+  # Seed different nondefault termios states, with stdout OPOST and ONLCR enabled
+  # and no other output transformations. Do not set either terminal raw in setup.
+  # Stdin starts at 113 by 37; distinct stdout starts at 79 by 23 unless the
+  # scenario supplies another size.
+  # RUNTTY-15's When first writes a fixed LF to the stdout slave and captures the
+  # translated control at its master before launching the controller. Capture
+  # the later attachment payload there without CR/LF normalization or trimming.
+  # The recorder's raw payload includes lone LF, CRLF, lone CR and header-like
+  # binary bytes. It sends them only after attachment/start, withholds exit until
+  # the resize/input barriers finish, and retains the independently supplied bytes.
+  # Change stdout to 151 by 49 and notify only the child controller of SIGWINCH;
+  # collect a later input/progress exchange before changing stdin to 167 by 53
+  # and notifying it again. Missing progress/early exit is a Then failure, not
+  # a setup failure. No stdout-originated size may appear in the engine journal.
   # A pipe endpoint is a disposable pipe, never the operator's terminal. Stderr
   # is captured separately. Misleading COLUMNS=7, LINES=9 and TERM values live
   # only in the child controller environment; expected worker environment stays
@@ -270,25 +303,70 @@ Feature: An explicitly selected terminal for an owned foreground run
       | 113     | 0    |
       | 0       | 0    |
 
+  # The fault is an operation failure after stdin entered raw mode, not a
+  # preselected command result. Keep both handles usable and require a retry
+  # after clearing the fault. Native failure injection belongs at the test seam;
+  # the same rollback contract also runs against the I/O-free terminal fake.
+  @wip @slice-37 @ID-RUNTTY-16 @linux
+  Scenario Outline: Failure to acquire distinct stdout rolls back stdin before startup
+    Given a terminal-run contract fixture with distinct terminal stdin and stdout
+    And the fixture schedules "<fault>" after stdin enters raw mode
+    When terminal run attempts acquisition then retries after clearing the fault through the applicable local backends
+    Then the first terminal run reports "run.terminal-unavailable" with exit 3 before any engine connection or state write
+    And the first attempt restores each changed terminal to its own exact saved state and ends all terminal observers
+    And the retry starts with stdin size 113 by 37 delivers exact raw output and exits zero after owned cleanup
+    And both attempts leave both caller terminal handles usable with their exact original settings and approval intact
+
+    Examples:
+      | fault                                    |
+      | reading distinct stdout state fails      |
+      | acquiring distinct stdout raw mode fails |
+
   # Native transport. The trusted probe observes TTY/size before changing its
   # worker terminal settings, then uses raw output for an exact byte oracle.
   # Alternate writes to stdout/stderr, including bytes resembling an eight-byte
   # Docker framing header, catch accidental demultiplexing or CR/LF conversion.
+  # Distinct stdout retains OPOST/ONLCR until the controller acquires it; the
+  # probe changes only its worker PTY, never either host terminal.
   @wip @slice-37 @ID-RUNTTY-06 @engine @linux
   Scenario Outline: The foreground command receives a terminal and literal argv from its first instruction
     Given a CI terminal-run fixture with initial size 113 by 37 and a reporting probe that exits <exit>
+    And the CI fixture binds stdin and stdout to <terminals> terminals with saved nondefault settings
     When terminal run launches the probe with an empty argument spaces and literal wrapper-looking flags
     Then the probe observes all three worker descriptors as terminals and initial size 113 by 37
     And the probe observes exactly the supplied argv frozen workspace identity environment and isolation
     And both worker output streams reach terminal stdout as the exact ordered raw payload without framing or a controller banner
     And protected session records contain no terminal input or output payload
-    And terminal run returns the observed exit <exit> with exact host terminal restoration
+    And terminal run returns the observed exit <exit> with exact restoration of each host terminal's own saved state
     And independent inspection confirms owned worker and anchor removal while checkout edits approval and foreign resources survive
 
     Examples:
-      | exit |
-      | 0    |
-      | 17   |
+      | terminals | exit |
+      | shared    | 0    |
+      | shared    | 17   |
+      | distinct  | 0    |
+      | distinct  | 17   |
+
+  # A native two-PTY byte oracle needs only the local Engine API recorder. The
+  # pre-run LF control proves output translation was enabled; an stdin-only
+  # lease then fails exact output even if TTY startup otherwise works. Zero
+  # stdout dimensions also catch reusing an input-sized lease for output.
+  @wip @slice-37 @ID-RUNTTY-15 @linux @local-engine-fixture
+  Scenario Outline: Distinct output terminals preserve bytes and restore both saved states
+    Given a local terminal-run fixture with distinct terminal stdin and stdout
+    And the fixture stdin has size 113 by 37 and stdout has size <columns> by <rows>
+    When the fixture measures stdout newline translation then runs a raw terminal payload with exit <exit> while resizing stdout then stdin
+    Then the pre-run stdout control converts LF to CRLF and terminal stdout exactly matches the raw engine payload
+    And terminal run creates a TTY worker at stdin size 113 by 37 and resizes it only to stdin size 167 by 53
+    And the stdout-only size change to 151 by 49 leaves the run live for a later input and progress exchange
+    And terminal run returns the observed exit <exit> with exact restoration of each host terminal's own saved state
+    And both caller terminal handles remain usable and only owned resources are confirmed absent
+    And terminal run preserves approval checkout and outside sentinels
+
+    Examples:
+      | columns | rows | exit |
+      | 79      | 23   | 0    |
+      | 0       | 0    | 17   |
 
   # Keep the lease beyond successful startup; quiet time exceeds the configured
   # startup/call limits before resize. Observe the intermediate size before the
@@ -327,24 +405,29 @@ Feature: An explicitly selected terminal for an owned foreground run
   # Failure paths. The local recorder's barriers distinguish attach failure from
   # accepted start with a lost reply. Always retain/reconcile accepted effects.
   # Each expected typed failure is missing today because --tty never gets here.
+  # Both terminals have been acquired before these preflight/startup faults;
+  # distinct rows must compare each restored state against its own saved copy.
   @wip @slice-37 @ID-RUNTTY-10 @linux @local-engine-fixture
   Scenario Outline: Startup failure restores the host terminal without launching later phases
-    Given a local terminal-run fixture with terminal stdin and terminal stdout
+    Given a local terminal-run fixture with <terminals> terminal stdin and stdout
     And the terminal-run fixture schedules "<fault>"
     When the terminal fixture invokes "run --tty -- fixture-workload"
     Then terminal run reports "<rule>" with exit <exit> and no later startup phase
-    And terminal run restores the exact saved host terminal state and ends its terminal observers
+    And terminal run restores each host terminal's own exact saved state and ends all terminal observers
     And accepted resources are reconciled only under the original ownership with incomplete recovery retained when necessary
     And terminal run preserves approval checkout and outside sentinels
 
     Examples:
-      | fault                                         | rule                      | exit |
-      | missing approval                              | run.approval-missing       | 1    |
-      | created worker reports TTY disabled            | run.isolation-unverified  | 1    |
-      | created worker reports different initial size | run.isolation-unverified  | 1    |
-      | attach fails before start                     | run.execution-unavailable | 75   |
-      | start accepted but its reply times out        | run.call-timeout          | 75   |
-      | host SIGTERM during preflight                 | run.cancelled             | 143  |
+      | terminals | fault                                         | rule                      | exit |
+      | shared    | missing approval                              | run.approval-missing      | 1    |
+      | shared    | created worker reports TTY disabled           | run.isolation-unverified  | 1    |
+      | shared    | created worker reports different initial size | run.isolation-unverified  | 1    |
+      | shared    | attach fails before start                     | run.execution-unavailable | 75   |
+      | shared    | start accepted but its reply times out        | run.call-timeout          | 75   |
+      | shared    | host SIGTERM during preflight                 | run.cancelled             | 143  |
+      | distinct  | missing approval                              | run.approval-missing      | 1    |
+      | distinct  | attach fails before start                     | run.execution-unavailable | 75   |
+      | distinct  | host SIGTERM during preflight                 | run.cancelled             | 143  |
 
   # These faults are scheduled after a ready TTY run, except restore failure
   # which follows the stated authoritative exit. The controller receives facts,
@@ -354,25 +437,32 @@ Feature: An explicitly selected terminal for an owned foreground run
   # it cannot be dismissed as an operation attempted after an already known exit.
   # For output blockage/read error keep the existing stream diagnostic instead
   # of relabelling it as terminal loss. Engine resize timeout uses the call budget.
+  # Distinct-terminal restoration faults allocate two terminals; only the named
+  # terminal's restoration fails. The other must regain its exact saved state.
   @wip @slice-37 @ID-RUNTTY-11 @linux
   Scenario Outline: Terminal failures retain their cause exit precedence and bounded cleanup
     Given a terminal-run contract fixture with fault "<fault>" and authoritative exit "<child>"
     When terminal run reaches the fault and finishes through the applicable local backends alongside a healthy control
     Then terminal run reports "<rule>" separately from workload outcome "<child>" and returns <result>
     And terminal teardown restores or reports the failed restoration without waiting for input output or unread resize events
+    And a failed restoration of one distinct terminal does not prevent exact restoration of the other usable terminal
     And owned stop drain and cleanup share the original budgets without duplicate signals or late resizes
     And the healthy terminal control returns zero restores exact settings and confirms owned cleanup
 
     Examples:
-      | fault                              | child   | rule                       | result |
-      | terminal observation fails         | unknown | run.terminal-unavailable   | 75     |
-      | resized terminal has zero rows     | 17      | run.terminal-unavailable   | 17     |
-      | running worker resize fails        | 0       | run.terminal-resize        | 75     |
-      | running worker resize times out    | unknown | run.call-timeout           | 75     |
-      | terminal output blocks during exit | 17      | run.stream-timeout         | 17     |
-      | terminal input read fails          | unknown | run.execution-unavailable  | 75     |
-      | saved terminal restoration fails   | 0       | run.terminal-restore       | 75     |
-      | saved terminal restoration fails   | 17      | run.terminal-restore       | 17     |
+      | fault                              | child   | rule                      | result |
+      | terminal observation fails         | unknown | run.terminal-unavailable  | 75     |
+      | resized terminal has zero rows     | 17      | run.terminal-unavailable  | 17     |
+      | running worker resize fails        | 0       | run.terminal-resize       | 75     |
+      | running worker resize times out    | unknown | run.call-timeout          | 75     |
+      | terminal output blocks during exit | 17      | run.stream-timeout        | 17     |
+      | terminal input read fails          | unknown | run.execution-unavailable | 75     |
+      | saved terminal restoration fails   | 0       | run.terminal-restore      | 75     |
+      | saved terminal restoration fails   | 17      | run.terminal-restore      | 17     |
+      | distinct stdin restoration fails   | 0       | run.terminal-restore      | 75     |
+      | distinct stdin restoration fails   | 17      | run.terminal-restore      | 17     |
+      | distinct stdout restoration fails  | 0       | run.terminal-restore      | 75     |
+      | distinct stdout restoration fails  | 17      | run.terminal-restore      | 17     |
 
   # Host signals are deliberately different from typing a control byte. Deliver
   # only to this child controller after ready; an external SIGINT still cancels
@@ -397,20 +487,27 @@ Feature: An explicitly selected terminal for an owned foreground run
   # 137 must come from engine wait. The handled probe supplies its own exit 17.
   # The unread-byte variant queues a byte for a probe that never reads stdin;
   # whether forwarding has already consumed the local byte cannot hide hangup.
+  # In distinct-terminal rows close only the named master; leave the other pair
+  # usable to prove its exact restoration. Stdout loss while idle needs passive
+  # observation, even though only stdin supplies worker dimensions.
   @wip @slice-37 @ID-RUNTTY-13 @engine @linux
   Scenario Outline: Losing the terminal client stops its owned workload even without stream activity
     Given a CI terminal-run fixture with a "<probe>" probe and "<input>" terminal input
-    When terminal run reaches the ready frame and the harness closes the client terminal master while leaving the engine reachable
+    And the CI fixture binds stdin and stdout to <terminals> terminals with saved nondefault settings
+    When terminal run reaches the ready frame and the harness closes the <lost> terminal master while leaving the engine reachable
     Then terminal run reports "run.terminal-disconnected" and returns authoritative workload exit <exit> within bounded teardown
     And the worker receives one owned SIGTERM with escalation "<escalation>" at the original grace deadline only while still owned and running
     And terminal restoration is attempted and any failure is reported separately without blocking cleanup
+    And every still-usable host terminal regains its own exact saved state
     And independent inspection confirms owned worker and anchor removal while checkout edits approval and foreign resources survive
 
     Examples:
-      | probe            | input       | escalation    | exit |
-      | SIGTERM-handling | idle        | no SIGKILL    | 17   |
-      | signal-ignoring  | idle        | one SIGKILL   | 137  |
-      | signal-ignoring  | unread byte | one SIGKILL   | 137  |
+      | terminals | lost   | probe            | input       | escalation    | exit |
+      | shared    | shared | SIGTERM-handling | idle        | no SIGKILL    | 17   |
+      | shared    | shared | signal-ignoring  | idle        | one SIGKILL   | 137  |
+      | shared    | shared | signal-ignoring  | unread byte | one SIGKILL   | 137  |
+      | distinct  | stdin  | SIGTERM-handling | idle        | no SIGKILL    | 17   |
+      | distinct  | stdout | signal-ignoring  | idle        | one SIGKILL   | 137  |
 
   # Disconnect cannot manufacture an exit or ownership authority. The cleanup
   # failure row retains observed 17, then a fresh status/stop after the fixture
