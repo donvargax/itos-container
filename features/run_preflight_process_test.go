@@ -41,6 +41,7 @@ type runWorld struct {
 	contract            map[string]any
 	uid, gid, condition string
 	partial             error
+	controller          string // a scenario's own copy of the built executable (egressController)
 }
 
 func runTree(root string) (map[string]runEntry, error) {
@@ -256,6 +257,7 @@ func (w *world) startRun(env []string, args ...string) (*runProcess, error) {
 		env = append(env, "SLICE_17_LOCAL_RUN=1", "SLICE_17_LOCAL_MOUNT_ROOT="+w.doctor.checkout)
 	}
 	r := w.runFixture()
+	bin = w.egressController(bin)
 	if r.mask != "" {
 		helper, err := os.Executable()
 		if err != nil {

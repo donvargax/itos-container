@@ -98,6 +98,9 @@ type isolationWorld struct {
 	controlBeatsBefore, controlBeatsAfter int
 	mu                                    sync.Mutex
 	receipts                              []string
+	// extraRoutes adds to the planned inventory before the control starts
+	// serving it; only another fixture reusing this control sets it.
+	extraRoutes func() error
 }
 
 func isolationNonce() string {

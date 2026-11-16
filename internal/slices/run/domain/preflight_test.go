@@ -202,3 +202,14 @@ func TestPreflightPresentsStateThatApprovalCannotFixAsPrerequisite(t *testing.T)
 		}
 	}
 }
+
+func TestPreflightCarriesFreshProxyObservationWithoutChangingFrozenApproval(t *testing.T) {
+	a := &porttest.Approval{View: approval.View{Status: "matching", Inspection: af.Ready(), Candidate: approval.Candidate{Project: "p", Fingerprint: "hash", Canonical: "selected"}, Record: approval.Record{Generation: "7"}}}
+	a.View.Inspection.ProxyImage = &readiness.ImageIdentity{ID: "fresh proxy config"}
+	snapshots := &af.Snapshots{}
+	h, err := Preflight(a, snapshots)
+	a.View.Inspection.ProxyImage.ID = "replacement"
+	if err != nil || h.ProxyImageID != "fresh proxy config" || snapshots.Values["p/7"] != h.Frozen || h.Frozen.Settings != "selected" {
+		t.Fatal(h, err)
+	}
+}

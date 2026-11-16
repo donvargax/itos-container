@@ -54,6 +54,7 @@ type doctorAPI struct {
 	expectedImage            string
 	runBarrier               func(int)
 	offline                  *localOfflineAPI
+	egress                   *localEgressAPI
 }
 
 func newDoctorAPI(image string) *doctorAPI {
@@ -122,8 +123,12 @@ func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
 	record := doctorRequest{r.Method, r.URL.Path, r.URL.RawQuery, pid}
 	a.mu.Lock()
 	a.journal = append(a.journal, record)
-	offline := a.offline
+	offline, egress := a.offline, a.egress
 	a.mu.Unlock()
+	// An allowlist fixture owns its networks, proxy and both image responses.
+	if egress != nil && egress.serve(out, r) {
+		return
+	}
 	if offline != nil && offline.serve(out, r) {
 		return
 	}

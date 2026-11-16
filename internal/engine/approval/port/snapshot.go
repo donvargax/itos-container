@@ -12,8 +12,10 @@ type StagedReadiness interface {
 
 // Durable is the immutable selected input and its protected material reference.
 type Durable struct {
-	Frozen    Frozen
-	Reference string
+	// ProxyImageID is fresh execution evidence, never an approved setting.
+	ProxyImageID string
+	Frozen       Frozen
+	Reference    string
 }
 
 // Snapshots publishes only independent selected values, never checkout paths.
