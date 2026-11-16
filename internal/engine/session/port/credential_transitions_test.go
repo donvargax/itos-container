@@ -10,7 +10,14 @@ func TestCredentialTransitionRefusals(t *testing.T) {
 		Directory: "/dev/shm/itos-container-" + strings.Repeat("a", 32),
 		Stage:     "owned", Device: "1", Inode: "2", Kinds: CredentialKinds{Claude: true, GitHub: true},
 	}}
-	for _, fault := range []string{"schema", "invalid staging", "running file publication", "two files together"} {
+	if !r.credentialTransition(r) {
+		t.Fatal("unchanged valid credential authority refused")
+	}
+	for _, fault := range []string{
+		"schema", "invalid staging", "invalid original staging", "running file publication",
+		"two files together", "file before directory", "file during absence", "file while cancelling",
+		"file after cancellation", "file after absence", "invalid original intent identity", "invalid owned identity",
+	} {
 		t.Run(fault, func(t *testing.T) {
 			before, after := r, r
 			switch fault {
@@ -18,11 +25,33 @@ func TestCredentialTransitionRefusals(t *testing.T) {
 				after.Schema = 3
 			case "invalid staging":
 				after.Credentials.Directory = "/foreign"
+			case "invalid original staging":
+				before.Credentials.Directory = "/foreign"
+			case "invalid original intent identity":
+				before.Credentials.Stage = "intent"
+			case "invalid owned identity":
+				before.Credentials.Stage, before.Credentials.Device, before.Credentials.Inode = "intent", "", ""
+				after.Credentials.Device = ""
 			case "running file publication":
 				before.Stage, after.Stage = "owned", "owned"
 				after.Credentials.Files[0] = "1:3"
 			case "two files together":
 				after.Credentials.Files = [2]string{"1:3", "1:4"}
+			case "file before directory":
+				before.Credentials.Stage, before.Credentials.Device, before.Credentials.Inode = "intent", "", ""
+				after.Credentials.Files[0] = "1:3"
+			case "file during absence":
+				after.Credentials.Stage = "absent"
+				after.Credentials.Files[0] = "1:3"
+			case "file while cancelling":
+				after.Stage = "cancelled"
+				after.Credentials.Files[0] = "1:3"
+			case "file after cancellation":
+				before.Stage, after.Stage = "cancelled", "cancelled"
+				after.Credentials.Files[0] = "1:3"
+			case "file after absence":
+				before.Credentials.Stage, after.Credentials.Stage = "absent", "absent"
+				after.Credentials.Files[0] = "1:3"
 			}
 			if before.credentialTransition(after) {
 				t.Fatal("credential transition admitted a schema, authority or publication-order change")
