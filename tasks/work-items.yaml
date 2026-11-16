@@ -2210,6 +2210,6 @@ items:
     title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task

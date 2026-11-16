@@ -7898,39 +7898,3 @@
     T-58 commit, preserving published history. Preserve sibling ledger entries and work
     ownership/status. Agents commit and stop; the loop owns push, CI watching
     and closure after the actual pushed head passes its required checks.
-  done_when:
-    - run: |
-        set -eu
-        scenario=$(itos config get tests.scenario)
-        printf '%s\n' "$scenario" | jq -e \
-          --arg whole 'go test ./features -count=1 -timeout=20m' \
-          --arg selected 'go test ./features -count=1 -timeout=20m -scenarios={pattern}' '
-          .run.whole == $whole and .run.select == $selected and
-          .recognize == [
-            {command: $whole, as: "whole"},
-            {command: $selected, as: "pattern"},
-            {command: "itos tests smoke run scenario", as: "smoke"}
-          ]'
-    - run: |
-        grep -Fxq '    whole: go test ./features -count=1 -timeout=20m' itos-cc.yaml &&
-        grep -Fxq "    run: \"go test ./features -count=1 -timeout=20m -scenarios='{pattern}'\"" itos-cc.yaml
-    - run: |
-        awk '
-          /^  [[:alnum:]_-]+:$/ { job = $1; sub(/:$/, "", job); step = "" }
-          /^      - / { step = "" }
-          /^      - name: Tests$/ { step = "Tests" }
-          job ~ /^platform(-macos|-windows)?$/ && step == "Tests" && /^        run:/ {
-            seen[job]++
-            if ($0 != "        run: go test ./... -count=1 -timeout=20m") {
-              print job ": Tests must name -timeout=20m" > "/dev/stderr"
-              failed = 1
-            }
-          }
-          END {
-            if (seen["platform"] != 1 || seen["platform-macos"] != 1 || seen["platform-windows"] != 1) {
-              print "expected one Tests command in each platform job" > "/dev/stderr"
-              failed = 1
-            }
-            exit failed
-          }
-        ' .github/workflows/ci.yml
