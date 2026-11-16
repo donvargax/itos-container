@@ -102,7 +102,7 @@ func TestRunAssemblyAndHelp(t *testing.T) {
 					t.Fatalf("stdout = %q", stdout.String())
 				}
 			} else if tc.code == 0 {
-				if !strings.Contains(stdout.String(), "approved offline worker") || stderr.Len() != 0 {
+				if !strings.Contains(stdout.String(), "approved offline or allowlist worker") || stderr.Len() != 0 {
 					t.Fatalf("help stdout %q, stderr %q", stdout.String(), stderr.String())
 				}
 			} else if stdout.Len() != 0 {

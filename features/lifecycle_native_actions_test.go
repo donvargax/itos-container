@@ -152,7 +152,7 @@ func (w *world) lifecycleDisconnect() {
 		return
 	}
 	w.lifecycleCollect()
-	w.lifecycleProgressAfterLoss()
+	w.lifecycleDisconnectProgress()
 	l.survivedLoss = w.recoveryNativePresent(true)
 	var err error
 	l.lostBoundary, err = w.offline.api.inspect(w.recovery.worker)
@@ -161,25 +161,28 @@ func (w *world) lifecycleDisconnect() {
 	w.lifecycleFreshRecovery(true)
 }
 
-func (w *world) lifecycleProgressAfterLoss() {
+func (w *world) lifecycleDisconnectProgress() {
 	l := w.lifecycle
-	// Controller completion can precede the probe's next 50 ms heartbeat.
+	// Controller return does not synchronize the worker's next file publication.
 	// Require a fresh publication after this independent observation starts,
-	// keeping the disconnect in place even though the controller has exited.
+	// keeping the loss in place even though the controller is already gone.
+	// Bound observation from its recorded return time; this guard cannot extend
+	// the controller's teardown deadline.
 	previous := max(l.heartbeat, w.lifecycleHeartbeat())
-	timer, tick := time.NewTimer(5*time.Second), time.NewTicker(10*time.Millisecond)
+	timer := time.NewTimer(time.Until(l.returned.Add(5 * time.Second)))
+	tick := time.NewTicker(10 * time.Millisecond)
 	defer timer.Stop()
 	defer tick.Stop()
 	for {
-		select {
-		case <-tick.C:
-			l.later = w.lifecycleHeartbeat()
-			if l.later > previous {
-				return
-			}
-		case <-timer.C:
-			l.err = errors.Join(l.err, fmt.Errorf("post-disconnection heartbeat did not advance beyond %d within 5s; last=%d", previous, l.later))
+		l.later = w.lifecycleHeartbeat()
+		if l.later > previous {
 			return
+		}
+		select {
+		case <-timer.C:
+			l.err = errors.Join(l.err, fmt.Errorf("post-disconnection worker progress unavailable: heartbeat=%d later=%d", previous, l.later))
+			return
+		case <-tick.C:
 		}
 	}
 }
@@ -190,15 +193,18 @@ func (w *world) lifecycleDisconnectReady() {
 	// before we remove observation. Closing only the proxy's upgraded handles
 	// also makes stream loss visible without touching the daemon or observer.
 	if !w.lifecycleAwait(5*time.Second, func() bool {
+		// Readiness precedes the first heartbeat tick. Do not disconnect until
+		// there is a positive baseline against which to judge later progress.
+		l.heartbeat = w.lifecycleHeartbeat()
+		if l.heartbeat <= 0 {
+			return false
+		}
 		a := w.offline.api
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		for _, e := range a.requests {
 			if strings.HasSuffix(e.Path, "/wait") && e.Status == 200 {
-				// The probe announces readiness before publishing any heartbeat.
-				// Do not disconnect with an absent baseline from that interval.
-				l.heartbeat = w.lifecycleHeartbeat()
-				return l.heartbeat > 0
+				return true
 			}
 		}
 		return false

@@ -73,7 +73,7 @@ func TestLifecycleProgressWaitsAfterControllerExit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := lifecycleHeartbeatWorld(t)
 		l := w.lifecycle
-		l.heartbeat = 1
+		l.heartbeat, l.returned = 1, time.Now()
 		l.fault.disconnect()
 		close(l.run.done)                    // a fast controller return must not end worker observation
 		publishLifecycleHeartbeat(t, w, "2") // already present before observation
@@ -84,7 +84,7 @@ func TestLifecycleProgressWaitsAfterControllerExit(t *testing.T) {
 			time.Sleep(50 * time.Millisecond)
 			publishLifecycleHeartbeat(t, w, "3")
 		}()
-		w.lifecycleProgressAfterLoss()
+		w.lifecycleDisconnectProgress()
 		elapsed := time.Since(started)
 		<-published
 		if l.err != nil || l.later != 3 || elapsed < 50*time.Millisecond || !l.fault.lost {
@@ -99,14 +99,14 @@ func TestLifecycleProgressRefusesStalledWorker(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				w := lifecycleHeartbeatWorld(t)
 				l := w.lifecycle
-				l.heartbeat = 1
+				l.heartbeat, l.returned = 1, time.Now()
 				l.fault.disconnect()
 				close(l.run.done)
 				if value != "" {
 					publishLifecycleHeartbeat(t, w, value)
 				}
 				started := time.Now()
-				w.lifecycleProgressAfterLoss()
+				w.lifecycleDisconnectProgress()
 				if l.err == nil || time.Since(started) != 5*time.Second || !l.fault.lost {
 					t.Fatalf("stalled worker accepted or wait unbounded: later=%d, elapsed=%s, err=%v", l.later, time.Since(started), l.err)
 				}

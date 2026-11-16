@@ -60,6 +60,43 @@ func TestForegroundExitPrecedenceAndSeparateDiagnostics(t *testing.T) {
 		}
 	}
 }
+
+func TestForegroundProxyFailurePreservesWorkloadExitAndCleanup(t *testing.T) {
+	for _, outcome := range []session.Outcome{session.ProxyFailed, session.ProxyExited} {
+		for _, tc := range []struct {
+			name       string
+			exited     bool
+			exit, code int
+		}{
+			{"unobserved workload exit", false, 17, 1},
+			{"successful workload", true, 0, 1},
+			{"failed workload", true, 17, 17},
+		} {
+			t.Run(string(outcome)+"/"+tc.name, func(t *testing.T) {
+				a := &rf.Approval{View: approval.View{Status: "matching", Inspection: af.Ready(), Candidate: approval.Candidate{Project: "p", Canonical: "selected"}, Record: approval.Record{Generation: "1"}}}
+				r := &rf.Runner{Result: session.RunResult{
+					Result: session.Result{Outcome: outcome, Reference: "intents/safe.json", Cleanup: session.Incomplete},
+					Exited: tc.exited, Exit: tc.exit,
+				}}
+				var out, errout strings.Builder
+				c := command.CLI{Args: []string{"--", "probe"}, Approval: a, Snapshots: &af.Snapshots{}, Runner: r}
+				code := c.Run(&cli.UI{Stdout: &out, Stderr: &errout, Classify: command.Classify})
+				if code != tc.code || out.Len() != 0 {
+					t.Fatalf("exit = %d, want %d; stdout = %q; stderr = %q", code, tc.code, out.String(), errout.String())
+				}
+				for _, rule := range []string{"run." + string(outcome), "run.cleanup-temporary"} {
+					if !strings.Contains(errout.String(), rule) {
+						t.Fatalf("missing %s diagnostic: %s", rule, errout.String())
+					}
+				}
+				if strings.Contains(errout.String(), "run.workload-exit-unknown") {
+					t.Fatal("unknown-exit fallback obscured the proxy failure", errout.String())
+				}
+			})
+		}
+	}
+}
+
 func TestForegroundStartupFailureWinsOverCleanup(t *testing.T) {
 	a := &rf.Approval{View: approval.View{Status: "matching", Inspection: af.Ready(), Candidate: approval.Candidate{Project: "p", Canonical: "selected"}, Record: approval.Record{Generation: "1"}}}
 	r := &rf.Runner{Result: session.RunResult{Result: session.Result{Outcome: session.IsolationUnverified, Reference: "intents/safe.json", Cleanup: session.Incomplete}}}

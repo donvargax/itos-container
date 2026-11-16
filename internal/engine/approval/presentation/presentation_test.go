@@ -143,7 +143,7 @@ func TestAllowlistReviewKeepsUnusedNoticesAfterDisclosureBeforeDifferences(t *te
 		t.Fatal("declined")
 	}
 	text := stdout.String()
-	for _, part := range []string{"Effective settings:", "network.allow: a.example", "Run cannot start this profile yet", `Unused field: "editor"`, `Unused field: "label"`, `/manifest/name: "old" -> "new"`, "/policy/network/allow:", "y/N"} {
+	for _, part := range []string{"Effective settings:", "network.allow: a.example", "The proxy logs each refusal", `Unused field: "editor"`, `Unused field: "label"`, `/manifest/name: "old" -> "new"`, "/policy/network/allow:", "y/N"} {
 		_, rest, ok := strings.Cut(text, part)
 		if !ok {
 			t.Fatalf("missing ordered %q in %q", part, stdout.String())
