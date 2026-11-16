@@ -331,3 +331,6 @@ questions:
     item: "slice-34"
     question: "slice-34: its implementer (attempt 6) returned blocked with the runtime unfinished and said no decision or red evidence is owed. Is anything owed before it goes on?"
     answer: "Nothing (the coordinator, 2026-11-16). The attempt stopped unfinished, not blocked: its bindings and documentation commits are on the branch and its runtime draft is kept for the next attempt. slice-34 goes on with the runtime, the remaining local bindings and the code proof."
+  - id: q-83
+    item: "slice-37"
+    question: "slice-37: its implementer (attempt 1) stopped for engine red evidence of @ID-RUNTTY-06, 07, 08, 09, 12 and 13. Does the dispatched run supply it?"
