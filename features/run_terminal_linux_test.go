@@ -49,6 +49,7 @@ type terminalAttempt struct {
 func (w *world) runTerminalSteps(sc *godog.ScenarioContext) {
 	var fixture *terminalInvocation
 	w.terminalLocalSteps(sc, &fixture)
+	w.terminalNativeSteps(sc, &fixture)
 	sc.Step(`^a local terminal-run fixture with (terminal|pipe) stdin and (terminal|pipe) stdout$`, func(input, output string) error {
 		var err error
 		fixture, err = w.terminalInvocationFixture(input, output)
@@ -114,28 +115,36 @@ func (w *world) terminalInvocationFixture(input, output string) (*terminalInvoca
 		return nil, err
 	}
 	f := &terminalInvocation{w: w}
-	keep := func(file *os.File) { w.doctor.cleanup = append(w.doctor.cleanup, func() { _ = file.Close() }) }
+	if err := f.bindDescriptors(input, output); err != nil {
+		return nil, err
+	}
+	f.connections = w.doctor.engine.listener.connections.Load()
+	return f, w.runCheckpoint()
+}
+
+func (f *terminalInvocation) bindDescriptors(input, output string) error {
+	keep := func(file *os.File) { f.w.doctor.cleanup = append(f.w.doctor.cleanup, func() { _ = file.Close() }) }
 	if input == "terminal" || output == "terminal" {
 		var err error
 		f.master, f.slave, err = pty.Open()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		keep(f.master)
 		keep(f.slave)
 		if err := pty.Setsize(f.slave, &pty.Winsize{Cols: 113, Rows: 37}); err != nil {
-			return nil, err
+			return err
 		}
 		state, err := unix.IoctlGetTermios(int(f.slave.Fd()), unix.TCGETS)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		// Deliberately nondefault state, including output translation. The
 		// controller, not the fixture, must decide whether to acquire raw mode.
 		state.Cc[unix.VEOF] = 7
 		state.Oflag = unix.OPOST | unix.ONLCR
 		if err := unix.IoctlSetTermios(int(f.slave.Fd()), unix.TCSETS, state); err != nil {
-			return nil, err
+			return err
 		}
 		f.saved = state
 	}
@@ -144,7 +153,7 @@ func (w *world) terminalInvocationFixture(input, output string) (*terminalInvoca
 	} else {
 		read, write, err := os.Pipe()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		keep(read)
 		keep(write)
@@ -155,14 +164,13 @@ func (w *world) terminalInvocationFixture(input, output string) (*terminalInvoca
 	} else {
 		read, write, err := os.Pipe()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		keep(read)
 		keep(write)
 		f.output, f.outputRead = write, read
 	}
-	f.connections = w.doctor.engine.listener.connections.Load()
-	return f, w.runCheckpoint()
+	return nil
 }
 
 func (f *terminalInvocation) invoke(args, inherited string) error {
