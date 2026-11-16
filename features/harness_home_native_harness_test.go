@@ -99,7 +99,7 @@ func TestHomeNativeStepDefinitions(t *testing.T) {
 		for _, scenario := range feature.Pickles {
 			selected := false
 			for _, tag := range scenario.Tags {
-				selected = selected || tag.Name == "@ID-HOME-01" || tag.Name == "@ID-HOME-13"
+				selected = selected || tag.Name == "@ID-HOME-01" || tag.Name == "@ID-HOME-13" || tag.Name == "@ID-HOME-14" || tag.Name == "@ID-HOME-15" || tag.Name == "@ID-HOME-23"
 			}
 			if !selected {
 				continue
@@ -118,7 +118,7 @@ func TestHomeNativeStepDefinitions(t *testing.T) {
 			}
 		}
 	}
-	if count != 18 {
-		t.Fatalf("checked %d home steps, expected 12 policy and 6 native steps", count)
+	if count != 65 {
+		t.Fatalf("checked %d home steps, expected 12 policy and 53 native steps", count)
 	}
 }

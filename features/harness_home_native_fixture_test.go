@@ -21,6 +21,8 @@ type homeNativeReport struct {
 	Home, Tmp, Mode                                        string
 	Writable, HomeBefore, TmpBefore, TmpExec, HostReadable bool
 	Initial, Errors                                        []string
+	Marker                                                 string
+	OwnReadable, OtherReadable                             bool
 }
 
 type homeNativeRun struct {
@@ -38,6 +40,12 @@ type homeNative struct {
 	resourcesBefore            map[string]string
 	runs                       []homeNativeRun
 	workers, volumes, anchors  map[string]map[string]any
+	second                     *world
+	processes                  []*homeNativeProcess
+	ending                     string
+	ended                      *homeNativeProcess
+	status, stopped, after     homeNativeResult
+	management                 *homeNativeManagement
 }
 
 func (w *world) homeNativeFixture() error {
@@ -272,6 +280,14 @@ func (w *world) closeHomeNative() error {
 	// Only independently observed full IDs/tuples are eligible for harness
 	// teardown. Assertions run first; this contributes no product cleanup proof.
 	var result error
+	for _, process := range w.home.native.processes {
+		process.cancel()
+		process.finish()
+	}
+	if child := w.home.native.second; child != nil {
+		result = errors.Join(result, child.closeHomeNative(), child.closeSession())
+		child.closeDoctor()
+	}
 	for id, prior := range w.home.native.workers {
 		var current map[string]any
 		if err := w.doctor.real.read("/containers/"+id+"/json", &current, 200); err != nil {
@@ -289,7 +305,9 @@ func (w *world) closeHomeNative() error {
 	for name, prior := range w.home.native.volumes {
 		var current map[string]any
 		if err := w.doctor.real.read("/volumes/"+name, &current, 200); err != nil {
-			result = errors.Join(result, err)
+			if absent := w.doctor.real.read("/volumes/"+name, nil, 404); absent != nil {
+				result = errors.Join(result, err)
+			}
 			continue
 		}
 		if !homeNativeSameVolume(prior, current) {

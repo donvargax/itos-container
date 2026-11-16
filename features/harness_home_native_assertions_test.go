@@ -104,6 +104,10 @@ func (w *world) homeNativeMounts() error {
 }
 
 func (w *world) homeNativeResources() error {
+	return w.homeNativeResourcesWith(w.home.native.volumes)
+}
+
+func (w *world) homeNativeResourcesWith(homes map[string]map[string]any) error {
 	f := w.home.native
 	for id := range f.workers {
 		if err := w.doctor.real.read("/containers/"+id+"/json", nil, 404); err != nil {
@@ -139,7 +143,7 @@ func (w *world) homeNativeResources() error {
 		if err := json.Unmarshal([]byte(line), &volume); err != nil {
 			return err
 		}
-		if f.volumes[fmt.Sprint(volume["Name"])] == nil {
+		if homes[fmt.Sprint(volume["Name"])] == nil {
 			retained = append(retained, line)
 		}
 	}

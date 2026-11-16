@@ -8,6 +8,9 @@ import (
 )
 
 func (w *world) homeNativeSteps(sc *godog.ScenarioContext) {
+	w.homeNativeIsolationSteps(sc)
+	w.homeNativeEndingSteps(sc)
+	w.homeNativeManagementSteps(sc)
 	sc.Step(`^a CI home checkout with a cached approved image for the actual non-root controller UID GID and isolated host-home sentinels$`, w.homeNativeFixture)
 	sc.Step(`^two fresh product runs write then read a home marker and directly execute a copied ELF probe from /tmp$`, w.homeNativeRuns)
 	sc.Step(`^both probes report the approved IDs and a writable private /home/itos and the second reads the first home marker$`, w.homeNativePersistence)
