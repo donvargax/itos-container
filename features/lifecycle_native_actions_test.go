@@ -164,21 +164,23 @@ func (w *world) lifecycleDisconnect() {
 func (w *world) lifecycleDisconnectProgress() {
 	l := w.lifecycle
 	// Controller return does not synchronize the worker's next file publication.
-	// Keep the loss in place until independent progress is visible, even though
-	// the controller is already gone. This observer guard cannot extend the
-	// controller's teardown deadline, judged from its recorded return time.
+	// Require a fresh publication after this independent observation starts,
+	// keeping the loss in place even though the controller is already gone.
+	// Bound observation from its recorded return time; this guard cannot extend
+	// the controller's teardown deadline.
+	previous := max(l.heartbeat, w.lifecycleHeartbeat())
 	timer := time.NewTimer(time.Until(l.returned.Add(5 * time.Second)))
 	tick := time.NewTicker(10 * time.Millisecond)
 	defer timer.Stop()
 	defer tick.Stop()
 	for {
 		l.later = w.lifecycleHeartbeat()
-		if l.later > l.heartbeat {
+		if l.later > previous {
 			return
 		}
 		select {
 		case <-timer.C:
-			l.err = errors.Join(l.err, fmt.Errorf("post-disconnection worker progress unavailable: heartbeat=%d later=%d", l.heartbeat, l.later))
+			l.err = errors.Join(l.err, fmt.Errorf("post-disconnection worker progress unavailable: heartbeat=%d later=%d", previous, l.later))
 			return
 		case <-tick.C:
 		}
