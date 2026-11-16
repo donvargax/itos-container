@@ -6,6 +6,7 @@ import (
 	rp "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	rf "github.com/donvargax/itos-container/internal/engine/readiness/port/porttest"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -116,6 +117,77 @@ func TestCredentialCheckedSourcesRejectChangedGrantSet(t *testing.T) {
 	sources.Close()
 	if len(handles.live) != 0 || len(sources.Checked()) != 0 {
 		t.Fatal("closing the refused capability retained descriptor access")
+	}
+}
+
+type retainedSourceMetadata struct {
+	credentialSourceReadPaths
+	handle   rp.CredentialHandle
+	stat     rf.CredentialStat
+	observed bool
+}
+
+func (s *retainedSourceMetadata) Stat(h rp.CredentialHandle) (rp.CredentialNode, bool) {
+	if h == s.handle {
+		s.observed = true
+		return s.stat.Node, s.stat.OK
+	}
+	return s.CredentialFS.Stat(h)
+}
+
+func TestCredentialCheckedSourcesRecheckRetainedMetadata(t *testing.T) {
+	for _, fault := range []string{"healthy", "held metadata unavailable", "held metadata unavailable with value", "held metadata changed", "new source identity", "kind changed"} {
+		t.Run(fault, func(t *testing.T) {
+			sources, fs, handles := checkedSourceFixture()
+			defer sources.Close()
+			metadata := &retainedSourceMetadata{credentialSourceReadPaths: credentialSourceReadPaths{handles, true}}
+			sources.FS = metadata
+			if failure := sources.Revalidate(t.Context()); failure != "" {
+				t.Fatal("initial source observation failed", failure)
+			}
+			original, originalHandles := sources.Checked(), maps.Clone(handles.live)
+			if len(original) != 1 || len(originalHandles) != 1 {
+				t.Fatal("initial observation did not retain exactly one source")
+			}
+			for h := range originalHandles {
+				metadata.handle = h
+			}
+			// New descriptors complete the usual observation first. The retained
+			// descriptor's final stat can independently fail or observe a change
+			// after that observation; neither result may be replaced by it.
+			metadata.stat = rf.CredentialStat{Node: original[0].Node, OK: true}
+			switch fault {
+			case "held metadata unavailable":
+				metadata.stat = rf.CredentialStat{}
+			case "held metadata unavailable with value":
+				metadata.stat.OK = false
+			case "held metadata changed":
+				metadata.stat.Node.Size++
+			case "new source identity":
+				node := fs.Nodes[sources.Grants[0].Source]
+				node.Inode++
+				fs.Nodes[node.Path] = node
+			case "kind changed":
+				sources.Grants[0].Kind = "github-token"
+			}
+			want := port.CredentialRefused
+			if fault == "healthy" {
+				want = ""
+			}
+			if failure := sources.Revalidate(t.Context()); failure != want {
+				t.Fatal("revalidation did not require unchanged, available retained metadata and grants", failure)
+			}
+			if !metadata.observed {
+				t.Fatal("fixture did not reach the retained descriptor recheck")
+			}
+			if !slices.Equal(sources.Checked(), original) || !maps.Equal(handles.live, originalHandles) {
+				t.Fatal("revalidation leaked new handles or replaced the original capability")
+			}
+			sources.Close()
+			if len(sources.Checked()) != 0 || len(handles.live) != 0 {
+				t.Fatal("closing the capability retained descriptor access")
+			}
+		})
 	}
 }
 
