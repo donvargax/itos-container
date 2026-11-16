@@ -22,6 +22,12 @@ func (c *runConnection) Resize(ctx context.Context, id string, size terminal.Dim
 	if ctx.Err() != nil {
 		return port.TerminalResize
 	}
+	if c.run.BeforeResize != nil {
+		c.run.BeforeResize()
+	}
+	if c.run.ResizeFailure != "" {
+		return c.run.ResizeFailure
+	}
 	c.engine.resourcesMu.Lock()
 	defer c.engine.resourcesMu.Unlock()
 	if _, ok := c.engine.Resources[id]; !ok {

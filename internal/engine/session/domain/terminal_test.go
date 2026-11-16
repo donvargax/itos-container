@@ -142,6 +142,55 @@ func TestLaterHostSignalCannotReplaceTerminalFailure(t *testing.T) {
 	})
 }
 
+func TestResizeReconcilesObservedExitAndHostCancellation(t *testing.T) {
+	for _, fault := range []string{"successful resize races exit", "failed resize races exit", "host signal during resize"} {
+		t.Run(fault, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				runner, registry, engine, _, id := registeredSessionFixture(t)
+				provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+				lease, err := provider.Acquire(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer lease.Close()
+				c, a, worker, failure := runner.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{Terminal: lease})
+				if failure != "" {
+					t.Fatal(failure)
+				}
+				defer c.Close()
+				defer a.Close()
+				ctx, signal := context.WithCancelCause(t.Context())
+				defer signal(nil)
+				release := make(chan struct{})
+				engine.WaitRelease, engine.Exit = release, 17
+				engine.After = func(event string) {
+					if event == "wait" {
+						provider.Resize(terminal.Dimensions{Columns: 167, Rows: 53})
+					}
+				}
+				engine.BeforeResize = func() {
+					close(release)
+					synctest.Wait() // The authoritative wait completes during resize.
+				}
+				if fault == "failed resize races exit" {
+					engine.ResizeFailure = port.TerminalResize
+				}
+				if fault == "host signal during resize" {
+					registry.AfterOpen = func(string) { signal(port.Interrupt{Signal: "SIGINT"}) }
+				}
+				exit, exited, got, _ := runner.waitForeground(ctx, c, a, lease, port.Binding{}, port.Record{}, id, worker)
+				if fault == "host signal during resize" {
+					if exited || got != port.ExecutionFailed || context.Cause(ctx) == nil {
+						t.Fatalf("host cancellation replaced by resize failure: %v %s", exited, got)
+					}
+				} else if !exited || exit != 17 || got != "" {
+					t.Fatalf("resize replaced authoritative exit: %d %v %s", exit, exited, got)
+				}
+			})
+		})
+	}
+}
+
 func TestResizeRequiresFreshOwnedRunningSession(t *testing.T) {
 	for _, change := range []string{"healthy", "invalid size", "unavailable registry", "changed session", "stopped session", "unavailable engine", "nil engine", "foreign worker", "stopped worker"} {
 		t.Run(change, func(t *testing.T) {

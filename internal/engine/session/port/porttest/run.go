@@ -31,6 +31,8 @@ type RunEngine struct {
 	After                                                            func(string)
 	AfterStart, AfterWait                                            func()
 	AfterCancelledWait                                               func()
+	BeforeResize                                                     func()
+	ResizeFailure                                                    port.Outcome
 	WaitUntilCancel, IgnoreSignal                                    bool
 	SignalFailure                                                    port.Outcome
 	StdinClosed, DrainUntilCancel                                    bool
