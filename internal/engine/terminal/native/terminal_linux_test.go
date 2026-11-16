@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"io"
 	"os"
 	"os/exec"
@@ -27,7 +28,13 @@ import (
 func TestNativeContract(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestTerminalChild$", "-test.v")
+	args := []string{"-test.run=^TestTerminalChild$", "-test.v"}
+	// Go passes this destination as a flag, not necessarily GOCOVERDIR. Keep
+	// the child's executed counters in the parent's CI coverage collection.
+	if coverdir := flag.Lookup("test.gocoverdir").Value.String(); coverdir != "" {
+		args = append(args, "-test.gocoverdir="+coverdir)
+	}
+	command := exec.CommandContext(ctx, os.Args[0], args...)
 	command.Env = append(os.Environ(), "T56_TERMINAL_CHILD=1")
 	output, err := command.CombinedOutput()
 	if err != nil {
