@@ -5,7 +5,7 @@ Feature: Execute literal argv in a live owned foreground session
   foreground session ends every exec; exec never keeps a worker alive.
 
   # Slice-38 specification only. Authorities: charter milestone two step 4;
-  # container-pilot AC-03/06/21/22/24; CLI.md's separator contract; arc42's
+  # container-pilot AC-03/06/21/22/24/36; CLI.md's separator contract; arc42's
   # Building blocks, Recovery and Bounded operations; decisions 0010 and 0016.
   # Implement internal/slices/exec/{command,domain,port,...} with shared session
   # operations in internal/engine/session. No slice imports run or stop. Only
@@ -253,6 +253,36 @@ Feature: Execute literal argv in a live owned foreground session
       | SIGINT  | before session lookup          | 130  |
       | SIGTERM | after exec create before start | 143  |
 
+  # EXEC-08/09/10 use five harmless, distinct synthetic values:
+  # slice-38-argv-marker in a literal probe operand, slice-38-env-marker in the
+  # caller's environment ONLY, slice-38-api-body-marker in raw engine replies,
+  # and slice-38-stdout-marker / slice-38-stderr-marker in separate probe streams.
+  # The marker Given only prepares inputs, response bodies and stream schedules;
+  # it never invokes exec. Frozen inputs start marker-free and must stay intact.
+  # The HTTP fixture puts the API marker in an ignored inspection-response field
+  # and in the message field of each API error. Fake failures expose the same
+  # underlying fault, never a precomputed CLI result. The marked start-error row
+  # accepts start then returns HTTP 500 with that message; removal-unavailable
+  # rows return HTTP 503 with it. Record delivery of those marked error bodies
+  # and require it in Then, so an unconsumed fixture cannot prove exclusion.
+  #
+  # The EXEC-08 healthy control delivers both marked streams. EXEC-09/10 deliver
+  # exact marked stdout/stderr prefixes before the scheduled event, including
+  # before breaking an output sink; record missing receipts for Then to reject.
+  # Capture these deliberate prefixes separately by their observed byte offsets.
+  # All remaining CLI output is controller output: never strip marker strings
+  # globally or exempt the whole stderr stream, which could hide a copied marker.
+  # The exclusion assertion checks exec diagnostics plus all fresh status/stop
+  # stdout/stderr and every persisted control-state file, including registration,
+  # intent, locks and any new controller log/artifact. Keep fixture recordings
+  # outside that state root. Capture files before clearing faults and again after
+  # status/retry; a successful retry cannot erase evidence of an earlier leak.
+  # Check every captured version for all five markers and their raw source
+  # payloads. The unchanged frozen snapshot and deliberate workload prefixes
+  # remain available; neither is deleted/redacted to make these assertions pass.
+  # These marker setup, delivery and exclusion steps are NEW, as are the other
+  # exec-specific steps; RECOVERY-20 and OFFLINE-15 are neighbouring contracts.
+  #
   # No retry of either mutation. Lost exec-create acknowledgement cannot have
   # started work; lost start/attach acknowledgement CAN. The latter must stop
   # the session even if no exec bytes or running observation ever arrive. Each
@@ -260,10 +290,14 @@ Feature: Execute literal argv in a live owned foreground session
   @ID-EXEC-08 @wip @slice-38
   Scenario Outline: Exec bounds launch uncertainty without retrying a possible command
     Given a live exec fixture with launch fault "<fault>" and a healthy control
+    And the exec fixture stages distinct synthetic argv caller-environment API-body stdout and stderr markers
     When both exec attempts run through the local backends with deadline observations
     Then the faulty exec reports "<rule>" with exit 75 within its operation and startup budgets and the control exits 23
     And exec start was never retried and the faulty session is "<session>"
     And a late engine reply cannot start work or change the reported result
+    And every injected marked API error was delivered to the exec controller before it reported failure
+    And the healthy exec control delivers the exact marked stdout and stderr and both frozen snapshots remain unchanged
+    And exec controller and recovery diagnostics and all captured control-state files contain none of the synthetic markers or raw payloads
 
     Examples:
       | fault                                                   | rule                 | session                                          |
@@ -271,6 +305,7 @@ Feature: Execute literal argv in a live owned foreground session
       | create accepted but response lost                       | exec.start-uncertain | still running                                    |
       | create ignores cancellation past ten seconds            | exec.call-timeout    | still running                                    |
       | start accepted but attach response lost                 | exec.start-uncertain | durably cleaned within thirty seconds of failure |
+      | start accepted but marked API error returned            | exec.start-uncertain | durably cleaned within thirty seconds of failure |
       | start ignores cancellation past ten seconds             | exec.call-timeout    | durably cleaned within thirty seconds of failure |
       | original 120-second startup budget expires before start | exec.startup-timeout | still running                                    |
 
@@ -286,9 +321,12 @@ Feature: Execute literal argv in a live owned foreground session
   @ID-EXEC-09 @wip @slice-38
   Scenario Outline: Exec preserves observed exits and keeps unknown results honest
     Given a started exec fixture with event "<event>" and exit observation "<observed>"
+    And the exec fixture stages distinct synthetic argv caller-environment API-body stdout and stderr markers
     When the exec CLI settles the event through both local backends
     Then exec exits <exit> with separate diagnostic "<rule>" and primary and exec results remain distinct
     And the fixture session is "<session>" and no exec exit is invented
+    And exec delivered the exact marked stdout and stderr before the event and preserved the frozen snapshot
+    And exec controller and recovery diagnostics and all captured control-state files contain none of the synthetic markers or raw payloads
 
     Examples:
       | event                                           | observed | exit | rule                       | session         |
@@ -310,10 +348,15 @@ Feature: Execute literal argv in a live owned foreground session
   @ID-EXEC-10 @wip @slice-38
   Scenario Outline: Exec cleanup failure keeps original recovery authority
     Given a started exec fixture with observed exit <observed> and cancellation cleanup fault "<fault>"
+    And the exec fixture stages distinct synthetic argv caller-environment API-body stdout and stderr markers
     When exec cancellation completes and fresh status inspects the session through both local backends
     Then exec exits <exit> and reports "<rule>" separately with its original session ID and exact stop retry
     And incomplete cleanup is not reported as stopped and no foreign resource is changed
+    And every injected marked API error was delivered to the exec controller before it reported failure
+    And exec delivered the exact marked stdout and stderr before the event and preserved the frozen snapshot
+    And exec controller and recovery diagnostics and all captured control-state files contain none of the synthetic markers or raw payloads
     And after the fault is cleared the printed stop retry confirms cleanup without substituting the exec exit for the primary result or losing checkout edits
+    And exec controller and recovery diagnostics and all captured control-state files contain none of the synthetic markers or raw payloads
 
     Examples:
       | observed | fault                                        | exit | rule                    |
