@@ -121,12 +121,25 @@ func (s Credentials) Stage(ctx context.Context, r port.Record, sources port.Cred
 	if err != nil {
 		return port.CredentialRefused
 	}
-	defer func() { _ = file.Close() }()
+	identified := false
+	defer func() {
+		// Metadata validation can fail before recovery receives any identity.
+		// Retain the descriptor and remove only its still-matching empty entry.
+		if !identified {
+			if held, err := file.Stat(); err == nil {
+				if named, err := base.Lstat(name); err == nil && os.SameFile(held, named) {
+					_ = base.Remove(name)
+				}
+			}
+		}
+		_ = file.Close()
+	}()
 	info, err := calls.stat(file)
 	n, ok := credentialNode(info)
 	if err != nil || !ok || !credentialOwner(n, r.UID, 0040700) {
 		return port.CredentialRefused
 	}
+	identified = true
 	staging := r.Credentials
 	staging.Device, staging.Inode = strconv.FormatUint(n.Device, 10), strconv.FormatUint(n.Inode, 10)
 	staging.Stage = "owned"
