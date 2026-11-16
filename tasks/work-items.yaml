@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - T-55
   - T-54
   - p1-interactive-tty
 items:
@@ -2122,3 +2123,10 @@ items:
       and named adapters, without importing another slice. Prove behavior through black-box
       scenarios with synthetic inputs and controlled endpoints; real-engine evidence belongs only in
       CI. Broken down from null.
+  - id: T-55
+    title: Each engine shard's warm-up sends the product's own create, timed beside the plain one
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-54]
+    kind: task
