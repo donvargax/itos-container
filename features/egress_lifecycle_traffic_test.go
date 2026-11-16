@@ -123,9 +123,21 @@ func (w *world) egressLifeDNSInstall() error {
 		return errors.New("no running original proxy for DNS control")
 	}
 	pid := strconv.Itoa(l.original.proxy.State.Pid)
+	// Docker's resolver address is loopback. DNAT to a bridge endpoint also
+	// needs loopback routing and a routable return address, confined to this
+	// disposable proxy namespace. Neither setting touches the host or worker.
+	commands := [][]string{{"sysctl", "-w", "net.ipv4.conf.all.route_localnet=1"}}
+	address := n.endpoints["allowed"].address.String()
 	for _, protocol := range []string{"udp", "tcp"} {
+		commands = append(commands,
+			[]string{"iptables", "-t", "nat", "-I", "POSTROUTING", "1", "-d", address, "-p", protocol, "--dport", "53", "-j", "MASQUERADE"},
+			[]string{"iptables", "-t", "nat", "-I", "OUTPUT", "1", "-d", "127.0.0.11", "-p", protocol, "--dport", "53", "-j", "DNAT", "--to-destination", address + ":53"},
+		)
+	}
+	for _, command := range commands {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		cmd := exec.CommandContext(ctx, "sudo", "-n", "nsenter", "--target", pid, "--net", "--", "iptables", "-t", "nat", "-I", "OUTPUT", "1", "-d", "127.0.0.11", "-p", protocol, "--dport", "53", "-j", "DNAT", "--to-destination", n.endpoints["allowed"].address.String()+":53")
+		args := append([]string{"-n", "nsenter", "--target", pid, "--net", "--"}, command...)
+		cmd := exec.CommandContext(ctx, "sudo", args...)
 		out, err := cmd.CombinedOutput()
 		cancel()
 		if err != nil {
