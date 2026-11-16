@@ -62,7 +62,7 @@ func (CLI) Help() string {
 }
 
 // Run validates before preflight, then delegates the owned foreground lifecycle.
-func (c CLI) Run(ui *cli.UI) (code int) {
+func (c CLI) Run(ui *cli.UI) int {
 	args := c.Args
 	separated := len(args) > 0 && args[0] == "--"
 	if separated {
@@ -86,26 +86,30 @@ func (c CLI) Run(ui *cli.UI) (code int) {
 	startup, end := budget.Start(ctx, budget.StartupDuration, "startup")
 	defer end()
 	var lease terminal.Lease
-	var workloadNonzero bool
 	if c.TTY {
 		var err error
 		lease, err = acquireTerminal(startup, c.Terminal)
 		if err != nil {
-			return ui.Fail(err, false)
+			return reportRunError(ui, session.RunResult{}, err)
 		}
-		defer func() {
-			if lease.Close().RestoreErr != nil {
-				ui.Fail(runFailure{outcome: session.TerminalRestore}, false)
-				if !workloadNonzero {
-					code = 75
-				}
-			}
-		}()
 	}
+	result, err := c.run(ctx, startup, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr, Terminal: lease})
+	if result.Deadline.IsZero() {
+		result.Deadline = time.Now().Add(30 * time.Second)
+	}
+	// The runner restores after its bounded drain. The command also owns the
+	// lease on preflight returns; Close retains the same restoration result.
+	if lease != nil && lease.Close().RestoreErr != nil {
+		result.Restore = session.TerminalRestore
+	}
+	return reportRunError(ui, result, err)
+}
+
+func (c CLI) run(ctx, startup context.Context, args []string, streams session.Streams) (session.RunResult, error) {
 	frozen, err := domain.PreflightContext(startup, c.Approval, c.Snapshots)
 	if err != nil {
 		if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
-			return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+			return session.RunResult{Signal: interrupted.Signal}, nil
 		}
 		var timed budget.Failure
 		if errors.As(err, &timed) {
@@ -113,23 +117,25 @@ func (c CLI) Run(ui *cli.UI) (code int) {
 			if timed.Phase != "" {
 				outcome = session.StartupTimeout
 			}
-			return reportRun(ui, session.RunResult{Result: session.Result{Outcome: outcome}, Operation: timed.Operation, Deadline: time.Now().Add(30 * time.Second)})
+			return session.RunResult{Result: session.Result{Outcome: outcome}, Operation: timed.Operation}, nil
 		}
-		return ui.Fail(err, false)
+		return session.RunResult{}, err
 	}
 	if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
-		return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+		return session.RunResult{Signal: interrupted.Signal}, nil
 	}
-	result := c.Runner.Run(budget.WithStartup(ctx, startup), frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr, Terminal: lease})
-	workloadNonzero = result.Exited && result.Exit != 0
-	// The runner restores before teardown; the command also owns restoration on
-	// every preflight return. Report a failed restoration exactly once here.
-	result.Restore = ""
-	return reportRun(ui, result)
+	return c.Runner.Run(budget.WithStartup(ctx, startup), frozen, args, streams), nil
 }
 
 func reportRun(ui *cli.UI, result session.RunResult) int {
+	return reportRunError(ui, result, nil)
+}
+
+func reportRunError(ui *cli.UI, result session.RunResult, err error) int {
 	code := 0
+	if err != nil {
+		code = cli.Code(err, ui.Classify)
+	}
 	if result.Outcome != "" {
 		code, _ = Classify(runFailure{result.Outcome, result.Reference, result.SessionID, false})
 	}
@@ -148,6 +154,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 			code = 143
 		}
 	}
+	if result.Restore != "" {
+		code, _ = Classify(runFailure{result.Restore, result.Reference, result.SessionID, false})
+	}
 	if result.Exited && result.Exit != 0 {
 		code = result.Exit
 	}
@@ -165,6 +174,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		defer cancel()
 	}
 	_, _ = budget.Call(ctx, "diagnostic output", func(context.Context) struct{} {
+		if err != nil {
+			ui.Fail(err, false)
+		}
 		if result.Signal != "" {
 			ui.Fail(cancelFailure{result.Signal, workloadOutcome(result)}, false)
 		}
@@ -183,6 +195,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		}
 		if result.Teardown != "" {
 			ui.Fail(runFailure{result.Teardown, result.Reference, result.SessionID, false}, false)
+		}
+		if result.Restore != "" {
+			ui.Fail(runFailure{result.Restore, result.Reference, result.SessionID, false}, false)
 		}
 		if result.Reference != "" && result.Cleanup != session.Complete {
 			ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)

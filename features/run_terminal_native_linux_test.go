@@ -409,6 +409,12 @@ func (n *terminalNative) complete() error {
 	}
 	w := n.f.w
 	a := w.offline.api
+	// The product's removal journal is not independent absence evidence. Refresh
+	// the observer against the engine after the controller has finished, as the
+	// other native run fixtures do, before judging its recorded absence.
+	if err := a.observeAfter(); err != nil {
+		return err
+	}
 	a.mu.Lock()
 	created := append([]string{}, a.created...)
 	absent := len(created) == 1 && a.absent[created[0]]

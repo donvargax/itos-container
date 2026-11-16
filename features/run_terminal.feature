@@ -26,6 +26,8 @@ Feature: An explicitly selected terminal for an owned foreground run
   #   descriptors name the SAME terminal, save/acquire/restore it once; separate
   #   file descriptors do not imply separate terminals. Do not discover /dev/tty,
   #   use the parent's terminal or manufacture a terminal for a pipe.
+  #   Supplied /dev/tty aliases share the underlying terminal's state even when
+  #   their filesystem identities differ from the supplied /dev/pts descriptor.
   # - Invocation order is existing JSON refusal, explicit nonempty argv, terminal
   #   eligibility/acquisition, then existing approved preflight/startup. JSON
   #   retains run.json-unsupported, exit 2 and one schema-1 refusal on stdout.
@@ -80,6 +82,11 @@ Feature: An explicitly selected terminal for an owned foreground run
   # has vanished, restoration may succeed or fail: require the attempt and an
   # honest result, not a platform-specific errno. A usable terminal must regain
   # its exact saved state. No terminal payload is logged to protected records.
+  # On exit or host cancellation, retain raw output until the final bounded drain
+  # ends, including buffered output and shutdown diagnostics. Restore as soon as
+  # drain finishes or its original bound expires, independently of owned cleanup.
+  # Report restoration failures within the original teardown deadline and the
+  # existing finite diagnostic-call bound, even when stderr is an unread pipe.
   #
   # Passive local hangup of either terminal, including while input/output are idle
   # or input is unread, is run.terminal-disconnected (75). Restore the other
@@ -535,7 +542,7 @@ Feature: An explicitly selected terminal for an owned foreground run
       | inspected ownership changes     | unknown | 75     |
 
   # Regression probes use only disposable host PTYs and the local recorder.
-  @slice-37 @ID-RUNTTY-17 @wip @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-17 @linux @local-engine-fixture
   Scenario Outline: Controlling-terminal aliases restore one shared terminal exactly
     Given a local terminal-run fixture with shared terminal stdin and stdout
     When the fixture runs with <endpoint> addressed through the controlling-terminal alias
@@ -548,7 +555,7 @@ Feature: An explicitly selected terminal for an owned foreground run
       | stdin    |
       | stdout   |
 
-  @slice-37 @ID-RUNTTY-18 @wip @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-18 @linux @local-engine-fixture
   Scenario Outline: Final terminal output stays raw while owned cleanup proceeds
     Given a local terminal-run fixture with <terminals> terminal stdin and stdout
     When the fixture delivers a final raw output frame after workload exit during owned removal
@@ -561,7 +568,7 @@ Feature: An explicitly selected terminal for an owned foreground run
       | shared    |
       | distinct  |
 
-  @slice-37 @ID-RUNTTY-19 @wip @linux
+  @slice-37 @ID-RUNTTY-19 @linux
   Scenario Outline: Restoration diagnostics cannot extend the original teardown deadline
     Given a terminal-run contract fixture with blocked restoration diagnostics and authoritative exit "<child>"
     When terminal run reaches the fault and finishes through the applicable local backends alongside a healthy control

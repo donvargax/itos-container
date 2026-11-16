@@ -279,11 +279,8 @@ func (p *Provider) outputLease() (*lease, error) {
 	if p.Output == nil || *p.Output == (os.File{}) {
 		return nil, errors.New("missing output terminal")
 	}
-	in, err := p.file.Stat()
-	if err != nil {
-		return nil, err
-	}
-	out, err := p.Output.Stat()
+	input, _ := p.file.SyscallConn()
+	in, err := (&lease{conn: input}).device()
 	if err != nil {
 		return nil, err
 	}
@@ -291,18 +288,26 @@ func (p *Provider) outputLease() (*lease, error) {
 	// and validates its live descriptor even if the caller closes it later.
 	conn, _ := p.Output.SyscallConn()
 	l := &lease{conn: conn}
-	if err := l.control(func(fd int) error {
-		if !term.IsTerminal(fd) {
-			return errors.New("not an output terminal")
-		}
-		return nil
-	}); err != nil {
+	out, err := l.device()
+	if err != nil {
 		return nil, err
 	}
-	if os.SameFile(in, out) {
+	// TIOCGDEV resolves the actual terminal behind aliases such as /dev/tty.
+	// Filesystem identity would save an already-raw state for the second alias.
+	if in == out {
 		return nil, nil
 	}
 	return l, nil
+}
+
+func (l *lease) device() (int, error) {
+	var device int
+	err := l.control(func(fd int) error {
+		var err error
+		device, err = terminalDevice(fd)
+		return err
+	})
+	return device, err
 }
 
 func disconnected(fd int) (bool, error) {

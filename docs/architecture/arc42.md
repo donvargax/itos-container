@@ -468,7 +468,8 @@ terminal gap remains. Slice-30 carries the rule and disclosure into help/securit
    Slice-37's explicit `--tty` acquires terminal stdin and stdout after JSON/argv
    refusals and before preflight, within the same startup budget. Observation and
    saved-state ownership outlive startup. Distinct stdout is not a size authority;
-   acquisition failure rolls back every changed terminal.
+   acquisition failure rolls back every changed terminal. Supplied terminal
+   aliases share one saved state, resolved by the underlying terminal device.
 2. **Frozen settings, preparing.** Capture validated effective configuration in trusted
    session material beyond worker control. Startup uses that snapshot. Checkout
    edits or later approval cannot widen the session; new permissions require a new
@@ -532,8 +533,10 @@ terminal gap remains. Slice-30 carries the rule and disclosure into help/securit
    explicit TTY mode instead verifies TTY and initial dimensions before start and
    forwards one raw merged worker stream to stdout. Diagnostics remain on stderr.
    Resizes freshly validate the owned running worker. Terminal disconnect and
-   observation/resize failures use this same teardown path; exact terminal-state
-   restoration starts before output drain or cleanup can block it. The wait
+   observation/resize failures use this same teardown path. On exit or host
+   cancellation, raw output lasts through the bounded final drain; restoration
+   follows drain completion or expiry independently of pending cleanup. Its
+   diagnostics share the original teardown deadline and finite-call bound. The wait
    handshake is bounded; acknowledged workload wait has no lifetime limit.
    Forwarding failures cancel the pending workload wait and trigger bounded cleanup.
    Run captures SIGINT/SIGTERM before startup, forwards the first signal once after

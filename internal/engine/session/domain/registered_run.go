@@ -124,11 +124,6 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	if result.Outcome == "" && !result.Exited {
 		result.Exit, result.Exited, result.Outcome, result.Operation = s.waitForeground(ctx, c, attachment, streams.Terminal, state.binding, state.record, id, result.ID)
 	}
-	if streams.Terminal != nil {
-		if streams.Terminal.Close().RestoreErr != nil {
-			result.Restore = port.TerminalRestore
-		}
-	}
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer finish()
 	result.Deadline, _ = teardown.Deadline()
@@ -173,7 +168,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, immediate: result.Outcome == port.MountRefused && result.Started}
 	// The output subscription is independent of termination and removal. A blocked
 	// consumer must never hold the operation lock or prevent owned cleanup.
-	drain := startDrain(teardown, attachment)
+	drain := startDrain(teardown, attachment, streams.Terminal)
 	if !result.Exited && attachment != nil && !recovery.immediate {
 		prepared := recovery.stop(teardown, id, signal, nil, false)
 		if len(prepared.Entries) == 1 && prepared.Entries[0].WorkloadExit != nil {

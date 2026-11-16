@@ -96,11 +96,13 @@ func TestTerminalRestorationDiagnosticIsBoundedOnEveryReturn(t *testing.T) {
 				}
 				result := sp.RunResult{Exited: true, Exit: exit, Deadline: time.Now().Add(3 * time.Second)}
 				runner := &rf.Runner{Result: result}
-				writer := &terminalDiagnosticRecorder{release: time.Now().Add(41 * time.Second)}
+				release := make(chan struct{})
+				writer := &terminalDiagnosticRecorder{release: release, until: time.Now().Add(41 * time.Second)}
 				c := CLI{TTY: true, Terminal: fake, Approval: approval, Snapshots: &af.Snapshots{}, Runner: runner, Args: []string{"--", "probe"}}
 				start := time.Now()
 				code := c.Run(&cli.UI{Stderr: writer, Classify: Classify})
 				elapsed := time.Since(start)
+				close(release)
 				synctest.Wait()
 				bound := 3 * time.Second
 				if phase == "preflight" {
@@ -116,11 +118,20 @@ func TestTerminalRestorationDiagnosticIsBoundedOnEveryReturn(t *testing.T) {
 
 type terminalDiagnosticRecorder struct {
 	strings.Builder
-	release time.Time
+	release <-chan struct{}
+	until   time.Time
 }
 
 func (w *terminalDiagnosticRecorder) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
 	n, err := w.Builder.Write(p)
-	time.Sleep(time.Until(w.release))
+	timer := time.NewTimer(time.Until(w.until))
+	defer timer.Stop()
+	select {
+	case <-w.release:
+	case <-timer.C:
+	}
 	return n, err
 }

@@ -315,7 +315,7 @@ func TestTerminalRestoresWhenDrainFinishesWhileCleanupIsPending(t *testing.T) {
 			switch event {
 			case "drain":
 				time.Sleep(time.Second)
-			case "remove":
+			case "anchor remove":
 				time.Sleep(8 * time.Second)
 			}
 		}

@@ -150,8 +150,9 @@ func terminalContractCase(t *testing.T, backend, kind, fault, child string) term
 		t.Fatal(err)
 	}
 	ui := &cli.UI{Stdout: &out, Stderr: &diagnostic, Classify: runcommand.Classify}
+	diagnosticRelease := make(chan struct{})
 	if kind == "diagnostic" {
-		ui.Stderr = terminalHeldDiagnostic{&diagnostic, l.start.Add(41 * time.Second)}
+		ui.Stderr = terminalHeldDiagnostic{&diagnostic, diagnosticRelease, l.start.Add(41 * time.Second)}
 	}
 	if native != nil {
 		ui.Stdout = native.Output
@@ -180,6 +181,7 @@ func terminalContractCase(t *testing.T, backend, kind, fault, child string) term
 		}
 	}
 	report.Elapsed = time.Since(l.start)
+	close(diagnosticRelease)
 	wait()
 	report.Diagnostic, report.Output = diagnostic.String(), out.String()
 	report.Ready, report.Fired, report.Initial = f.ready, f.fired, f.size
@@ -270,12 +272,21 @@ func (r terminalContractRunner) Run(ctx context.Context, frozen ap.Durable, argv
 
 type terminalHeldDiagnostic struct {
 	output  *bytes.Buffer
-	release time.Time
+	release <-chan struct{}
+	until   time.Time
 }
 
 func (w terminalHeldDiagnostic) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
 	n, err := w.output.Write(p)
-	time.Sleep(time.Until(w.release))
+	timer := time.NewTimer(time.Until(w.until))
+	defer timer.Stop()
+	select {
+	case <-w.release:
+	case <-timer.C:
+	}
 	return n, err
 }
 

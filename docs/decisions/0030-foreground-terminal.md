@@ -4,6 +4,8 @@ Slice-37 updates arc42's **Building-block view** and **Runtime view — Foregrou
 run and its failure paths**. T-56's lease now binds both run descriptors. Distinct
 stdout owns its saved state and passive hangup observation, but stdin alone
 supplies dimensions. Two descriptors for one terminal acquire and restore once.
+Linux's terminal-device identity resolves supplied `/dev/tty` aliases before any
+raw-state snapshot; filesystem inode identity cannot identify those aliases.
 
 Only `run --tty -- <argv>` selects this attachment. JSON and argv refusals precede
 terminal acquisition, which shares startup's deadline. The observer outlives
@@ -17,8 +19,16 @@ before start, copies one raw output stream, and uses the pinned SDK resize API.
 Nonterminal output keeps Docker demultiplexing. Each resize reopens protected
 session authority and checks the exact owned running worker. Terminal loss or
 observation/resize failure ends foreground wait and enters slice-12's existing
-bounded stop/drain/removal path. Restoration precedes that cleanup so blocked
-output cannot retain raw host settings. An observed nonzero child exit still wins.
+bounded stop/drain/removal path. Raw output remains active through the final
+bounded drain so trailing LF bytes and shutdown diagnostics are unchanged. The
+drain restores the terminal on completion or expiry independently of cleanup;
+blocked output cannot retain raw settings past that original bound. Restoration
+failures use the same bounded diagnostic path and original teardown deadline as
+other failures. An observed nonzero child exit still wins.
+
+This corrects the earlier restoration-before-drain order in the same runtime
+view: restoring output processing before the stream finishes changed trailing
+bytes even on a successful run. No extra cleanup or diagnostic budget is added.
 
 No policy, approval fingerprint, recovery schema, environment inheritance,
 permission, dependency or architecture-policy exception is added. The existing
