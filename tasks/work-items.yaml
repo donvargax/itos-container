@@ -2142,3 +2142,17 @@ items:
       behind ports and run shared contracts against an in-memory fake and native adapter. Cover
       restoration after failures and bounded cancellation. Expose no command yet. Broken down from
       p1-interactive-tty.
+  - id: p1-run-interactive-terminal
+    title: Run an owned foreground workload with a TTY
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-terminal-session-support]
+    kind: idea
+    why: >
+      Extend the run slice and shared session engine with terminal attachment, initial dimensions,
+      resizes and Ctrl-C as input. Specify terminal selection and JSON refusal before
+      implementation. Restore the terminal and stop the workload after client disconnect using
+      slice-12's bounded cancellation and ownership rules; preserve noninteractive behavior and exit
+      precedence. Require black-box red/green scenarios, with real-engine evidence only in CI.
+      Broken down from p1-interactive-tty.
