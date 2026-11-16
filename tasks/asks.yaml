@@ -310,3 +310,4 @@ questions:
   - id: q-77
     item: "slice-30"
     question: "slice-30: its implementer (attempt 5) finished the implementation and stopped before committing it, on gosec G101 findings against the disclosure sentences in internal/engine/approval/port/credentials.go. May those lines carry a nolint?"
+    answer: "Yes (the coordinator, on the person's standing instruction, 2026-11-16). G101 flags the constants because their names hold the word credential; each is a sentence shown to the person at approval and holds no secret. They take the annotation the tree already uses for a justified gosec finding, //nolint:gosec with the reason, on those lines alone; the linter's configuration is unchanged. The attempt's test commits are pushed (80adc1e) and its staged implementation is kept for the next attempt to commit."
