@@ -77,6 +77,13 @@ type Service struct {
 func (s Service) Inspect() port.View {
 	v := port.View{Inspection: s.Readiness.Inspect(), Status: "missing"}
 	if !v.Inspection.Ready {
+		if v.Inspection.Credentials != nil {
+			for _, issue := range v.Inspection.Credentials.Issues {
+				if strings.HasPrefix(issue.Rule, "state.") {
+					v.Status = "invalid"
+				}
+			}
+		}
 		return v
 	}
 	uid, gid := s.Host.Identity()
@@ -110,6 +117,7 @@ func (s Service) Approve(review port.View) port.View {
 	fresh := s.Inspect()
 	if fresh.Candidate.Canonical != review.Candidate.Canonical || fresh.Socket != review.Socket || !fresh.Inspection.Ready {
 		review.Failure = "approve.changed"
+		review.Candidate = port.Candidate{}
 		return review
 	}
 	if fresh.Failure != "" {

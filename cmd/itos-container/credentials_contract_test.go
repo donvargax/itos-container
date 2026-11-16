@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -18,6 +19,7 @@ import (
 	readinessdisk "github.com/donvargax/itos-container/internal/engine/readiness/disk"
 	readinessport "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	readinessfake "github.com/donvargax/itos-container/internal/engine/readiness/port/porttest"
+	readinesssource "github.com/donvargax/itos-container/internal/engine/readiness/source"
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
 )
 
@@ -70,6 +72,9 @@ func credentialContractCommand(policy, manifest, argv, root string, files *readi
 	}
 	// The in-memory policy has no second location, so its root pin always holds.
 	c.Doctor.RootPolicies = c.Doctor.Policies
-	c.Doctor.Credentials = inspection.Credentials{FS: files, Input: readinessport.CredentialInput{Root: root, State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}, Account: &approvalfake.Account{Home: "/account"}, Checkout: &readinessfake.Checkout{}}
+	node := files.Nodes[root]
+	pin := &readinessfake.Checkout{Identity: readinessport.CheckoutIdentity{Root: root, Device: strconv.FormatUint(node.Device, 10), Inode: strconv.FormatUint(node.Inode, 10)}}
+	input := readinessport.CredentialInput{Root: root, State: "/state", OS: "linux", Architecture: "amd64", UID: 1000}
+	c.Doctor.Credentials = inspection.Credentials{Input: input, Checkout: pin, Observer: readinesssource.Credentials{FS: files, Input: input, Account: &approvalfake.Account{Home: "/account"}, Checkout: pin}}
 	return c.Doctor.Run(ui)
 }

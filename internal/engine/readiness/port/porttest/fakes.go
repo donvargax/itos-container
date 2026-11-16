@@ -56,6 +56,13 @@ func (c *Checkout) Unchanged() bool {
 }
 func (c *Checkout) Close() { c.Opened = false }
 
+func (c *Checkout) PinnedIdentity() (port.CheckoutIdentity, port.Failure) {
+	if !c.Opened {
+		return port.CheckoutIdentity{}, port.CheckoutUnavailable
+	}
+	return c.Identity, port.None
+}
+
 // Engine records selection and budget without dialing or measuring real time.
 type Engine struct {
 	Session         *Session

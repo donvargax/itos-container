@@ -562,7 +562,7 @@ func (w *world) emptyFolder(name string) error {
 // Then steps.
 
 func (w *world) report() string {
-	return fmt.Sprintf("exit %d\n--- stdout\n%s--- stderr\n%s", w.exit, w.stdout, w.stderr)
+	return w.credentialApprovalSafeText(fmt.Sprintf("exit %d\n--- stdout\n%s--- stderr\n%s", w.exit, w.stdout, w.stderr))
 }
 
 func outputLines(output string) []string {

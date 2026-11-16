@@ -26,7 +26,7 @@ func Diagnostic(issue Issue) Problem {
 	case HostUnsupported:
 		p.Rule, p.Message, p.Fix = "host.unsupported", "Host is outside the inspection target", "use Linux amd64 with native Docker"
 	case CheckoutRoot:
-		p.Rule, p.Exit, p.Message, p.Fix = "checkout.root", 2, "Checkout root is not absolute", "set ITOS_ROOT to the absolute checkout root"
+		p.Rule, p.Exit, p.Message, p.Fix = "checkout.root", 2, "Checkout root must be absolute and at most 4095 bytes", "set ITOS_ROOT to an absolute checkout root of at most 4095 bytes"
 	case CheckoutUnavailable:
 		p.Rule, p.Exit, p.Message, p.Fix = "checkout.unavailable", 3, "Checkout root is unavailable", "provide a readable checkout directory"
 	case CheckoutLayout:
@@ -101,6 +101,11 @@ func Problems(result Result) []Problem {
 	}
 	for _, issue := range result.Issues {
 		out = append(out, Diagnostic(issue))
+	}
+	if result.Credentials != nil {
+		for _, issue := range result.Credentials.Issues {
+			out = append(out, CredentialDiagnostic(issue))
+		}
 	}
 	return out
 }

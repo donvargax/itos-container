@@ -202,7 +202,7 @@ func (w *world) credentialApprovalNativeSteps(sc *godog.ScenarioContext) {
 			for _, raw := range approvalClone(settings)["credentials"].([]any) {
 				path := object(raw)["source"].(string)
 				if !strings.Contains(text, credentialApprovalEscape(string(approvalJSON(path)))) {
-					return fmt.Errorf("literal source path missing from review")
+					return fmt.Errorf("literal source path %s missing from review: %s", credentialApprovalEscape(string(approvalJSON(path))), text)
 				}
 				for _, r := range path {
 					if !unicode.IsPrint(r) && strings.ContainsRune(text, r) {

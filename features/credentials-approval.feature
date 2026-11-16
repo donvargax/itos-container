@@ -271,7 +271,7 @@ Feature: Review and remember credential grants without delivering them
   # shared codec/store/snapshot/source/recovery contracts and assembly checks.
 
   # Canonical requests, remembered identity and strict record decoding.
-  @wip @slice-30 @ID-CREDAPPROVAL-01 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-01 @local-engine-fixture
   Scenario Outline: Ordinary doctor exposes the complete credential candidate without consent
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "both" on "<network>"
@@ -287,7 +287,7 @@ Feature: Review and remember credential grants without delivering them
       | offline   | offline-credentials-v1   |
       | allowlist | allowlist-credentials-v1 |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-02 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-02 @local-engine-fixture
   Scenario Outline: Grant order and source rotation do not change what was approved
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "both" on "offline"
@@ -304,7 +304,7 @@ Feature: Review and remember credential grants without delivering them
       | rotate both source contents in place within the permitted size |
       | replace claude-a with a different valid private inode          |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-03 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-03 @local-engine-fixture
   Scenario Outline: Any change to a credential grant invalidates the active approval
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "<prior>" on "offline"
@@ -327,7 +327,7 @@ Feature: Review and remember credential grants without delivering them
       | both   | swapped sources   | /credentials          |
       | both   | none              | /credentials /profile |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-04 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-04 @local-engine-fixture
   Scenario Outline: Moving a no-grant policy to version 3 changes only the declared version
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "none" on "<network>"
@@ -351,7 +351,7 @@ Feature: Review and remember credential grants without delivering them
       | 2   | allowlist | allowlist-v1 |
 
   # Recompute hashes after each seeded semantic defect; a hash failure must not mask it.
-  @wip @slice-30 @ID-CREDAPPROVAL-15 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-15 @local-engine-fixture
   Scenario Outline: A canonical hash cannot legitimize an invalid stored grant
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "both" on "offline"
@@ -379,7 +379,7 @@ Feature: Review and remember credential grants without delivering them
       | extra value member containing synthetic fixture data |
       | allowlist credential profile without proxy         |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-16 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-16 @local-engine-fixture
   Scenario: A valid historical target is a permission change rather than corrupt history
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "claude" on "offline"
@@ -392,7 +392,7 @@ Feature: Review and remember credential grants without delivering them
 
   # Review content is checked as complete ordered lines before input, not substrings
   # such as "token scope" that would also pass a false claim of restricted scope.
-  @wip @slice-30 @ID-CREDAPPROVAL-05 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-05 @local-engine-fixture
   Scenario Outline: A yes follows a complete review of the files and their limits
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "both" on "<network>"
@@ -410,7 +410,7 @@ Feature: Review and remember credential grants without delivering them
       | offline   |
       | allowlist |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-06 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-06 @local-engine-fixture
   Scenario Outline: Re-approval reviews the current grants and full differences before replacement
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "<prior>" on "offline"
@@ -431,7 +431,7 @@ Feature: Review and remember credential grants without delivering them
       | claude | repointed claude | /credentials          |
       | both   | none             | /credentials /profile |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-09 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-09 @local-engine-fixture
   Scenario Outline: Remembered grants need no second prompt but remain visible
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "both" on "<network>"
@@ -447,7 +447,7 @@ Feature: Review and remember credential grants without delivering them
       | offline   |
       | allowlist |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-23 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-23 @local-engine-fixture
   Scenario Outline: Literal source paths cannot alter the terminal review
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "claude" on "offline"
@@ -466,7 +466,7 @@ Feature: Review and remember credential grants without delivering them
   # q-52 must be exercised with OFFLINE credentials: the network-only predicate in
   # slice-26 cannot accidentally satisfy these rows. Fingerprints come from fixture
   # data, even if ordinary doctor cannot yet produce a candidate.
-  @wip @slice-30 @ID-CREDAPPROVAL-07 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-07 @local-engine-fixture
   Scenario Outline: No fingerprint option consents to a credential grant
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "claude" on "offline"
@@ -487,7 +487,7 @@ Feature: Review and remember credential grants without delivering them
       | matching | empty       | redirected     | inherited ITOS_JSON=1     |
       | missing  | exact       | redirected     | ITOS_JSON=1 with --no-json |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-08 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-08 @local-engine-fixture
   Scenario Outline: Piped yes and JSON cannot replace terminal credential consent
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "github" on "offline"
@@ -507,7 +507,7 @@ Feature: Review and remember credential grants without delivering them
       | matching | inherited ITOS_JSON=1     | both terminals               |
       | missing  | ITOS_JSON=1 with --no-json | redirected stdout            |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-10 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-10 @local-engine-fixture
   Scenario Outline: Declining the reviewed credential grant writes nothing
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "claude" on "offline"
@@ -521,7 +521,7 @@ Feature: Review and remember credential grants without delivering them
       |        |
       | EOF    |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-11 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-11 @local-engine-fixture
   Scenario Outline: Consent cannot follow changed grants or newly unsafe sources
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "claude" on "offline"
@@ -539,7 +539,7 @@ Feature: Review and remember credential grants without delivering them
       | make claude-a group-readable         |
       | replace claude-a with a symlink      |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-25 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-25 @local-engine-fixture
   Scenario: A valid source rotation during review does not bind the old contents or inode
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "claude" on "offline"
@@ -548,7 +548,7 @@ Feature: Review and remember credential grants without delivering them
     And it exits with code 0
     And credential observations read no source data and leak no synthetic marker
 
-  @wip @slice-30 @ID-CREDAPPROVAL-26 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-26 @local-engine-fixture
   Scenario: Removing the last grant restores the offline fingerprint route for the current request
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "both" on "offline"
@@ -563,7 +563,7 @@ Feature: Review and remember credential grants without delivering them
 
   # Initial failures retain slice-29's rule/location and outrank consent. The first
   # written grant is github here, so claude's source pointer must remain index 1.
-  @wip @slice-30 @ID-CREDAPPROVAL-12 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-12 @local-engine-fixture
   Scenario Outline: Ordinary consumers revalidate sources even with a remembered grant
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "both" on "offline"
@@ -593,7 +593,7 @@ Feature: Review and remember credential grants without delivering them
   # q-57 case where descriptor devices differ from mountinfo's device field.
   # Before implementation the ordinary consumers hit policy.version and the
   # credentials-only mismatch succeeds; neither satisfies the first Then.
-  @wip @slice-30 @ID-CREDAPPROVAL-27
+  @slice-30 @ID-CREDAPPROVAL-27
   Scenario Outline: Credential admission binds the source walk to the checkout that supplied policy
     Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
     When the admission contract runs "<command>" with matching pins then with a "<component>" disagreement at "<checkpoint>"
@@ -629,7 +629,7 @@ Feature: Review and remember credential grants without delivering them
   # the valid policy read but no credential boundary/source filesystem calls.
   # Existing credentials-only length refusal still fails the new diagnostic
   # assertion; ordinary consumers either hit the version gate or lack this bound.
-  @wip @slice-30 @ID-CREDAPPROVAL-28
+  @slice-30 @ID-CREDAPPROVAL-28
   Scenario Outline: Admission names the 4095-byte limit before walking an overlong root or state path
     Given a credential admission observation fixture requesting "<request>" with independent matching policy and source-checkout pins
     When the admission contract runs "<command>" with the "<boundary>" path at 4095 bytes then at 4096 bytes
@@ -661,7 +661,7 @@ Feature: Review and remember credential grants without delivering them
   # Each case has ext4, btrfs and xfs positive controls and the named refusal.
   # Shared fake/disk contracts cross all placements with both observations and
   # add unrelated disallowed rows (accepted) plus mapping/location precedence.
-  @wip @slice-30 @ID-CREDAPPROVAL-29
+  @slice-30 @ID-CREDAPPROVAL-29
   Scenario Outline: Credential admission accepts only the three named filesystems
     Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
     When the admission contract runs "<command>" with ext4 btrfs xfs then "<filesystem>" at "<placement>" in the "<observation>" mount observation
@@ -690,7 +690,7 @@ Feature: Review and remember credential grants without delivering them
 
   # The API fixture pauses at image inspection after the first metadata check.
   # A premature policy gate must reach Then as a failed readiness assertion.
-  @wip @slice-30 @ID-CREDAPPROVAL-13 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-13 @local-engine-fixture
   Scenario Outline: A source becoming unsafe during engine inspection cannot become a candidate
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "claude" on "offline"
@@ -706,7 +706,7 @@ Feature: Review and remember credential grants without delivering them
       | doctor --json         |
       | bare terminal approve |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-14 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-14 @local-engine-fixture
   Scenario Outline: Approval observes metadata without opening or copying credential contents
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "both" on "offline"
@@ -725,7 +725,7 @@ Feature: Review and remember credential grants without delivering them
       | terminal approve with inherited JSON overridden by --no-json and yes |
 
   # Public run stays closed; shared comparison/freeze proof does not authorize it.
-  @wip @slice-30 @ID-CREDAPPROVAL-17 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-17 @local-engine-fixture
   Scenario Outline: An approved credential profile still cannot deliver anything in this increment
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "<request>" on "<network>"
@@ -742,7 +742,7 @@ Feature: Review and remember credential grants without delivering them
       | github  | offline   |
       | both    | allowlist |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-18 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-18 @local-engine-fixture
   Scenario: Removing all grants does not let run silently use an older credential approval
     Given a credential approval checkout with private synthetic sources
     And the credential approval request is "both" on "offline"
@@ -755,7 +755,7 @@ Feature: Review and remember credential grants without delivering them
     And run makes no engine connection and publishes no approval snapshot or session
     And the active approval bytes and generation are unchanged
 
-  @wip @slice-30 @ID-CREDAPPROVAL-19
+  @slice-30 @ID-CREDAPPROVAL-19
   Scenario Outline: Shared run preflight explains every grant change before engine inspection
     Given a credential preflight contract with independently approved "<prior>" and requested "<current>" grants
     When the real local preflight and run refusal presentation consume the fixture observations
@@ -771,7 +771,7 @@ Feature: Review and remember credential grants without delivering them
       | claude | github           | /credentials          |
       | both   | none             | /credentials /profile |
 
-  @wip @slice-30 @ID-CREDAPPROVAL-20
+  @slice-30 @ID-CREDAPPROVAL-20
   Scenario: Frozen grants survive later request and approval replacement unchanged
     Given a credential freeze contract with independently seeded matching grants at generation "4"
     When the real service selects and publishes frozen input then the fixture replaces the request and active approval
@@ -782,7 +782,7 @@ Feature: Review and remember credential grants without delivering them
 
   # Status reads protected historical authority. Seeded absence avoids depending
   # on a delivered worker or on T-40's network implementation.
-  @wip @slice-30 @ID-CREDAPPROVAL-21 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-21 @local-engine-fixture
   Scenario Outline: Status shows frozen grants even after requests approvals and sources disappear
     Given an independently seeded stopped credential session on "<network>" with both frozen grants
     And the current request is invalid the active approval is removed and both original sources are absent
@@ -800,7 +800,7 @@ Feature: Review and remember credential grants without delivering them
   # must not pass the refusal half before this work exists.
   # Rebuild the protected fingerprint references after the semantic edit, so an
   # unrelated intent/snapshot fingerprint mismatch cannot satisfy the second Then.
-  @wip @slice-30 @ID-CREDAPPROVAL-22 @local-engine-fixture
+  @slice-30 @ID-CREDAPPROVAL-22 @local-engine-fixture
   Scenario: A current grant cannot fill in an invalid frozen snapshot
     Given an independently seeded stopped credential session on "offline" with both frozen grants
     And the current request and active approval name different valid grants
@@ -816,7 +816,7 @@ Feature: Review and remember credential grants without delivering them
   # limits as such and describe delivery as prospective, preserving the run gate.
   # The new assertion checks each complete statement after joining whitespace,
   # like credentialApprovalHelpContains; terminal wrapping must not cause red.
-  @wip @slice-30 @ID-CREDAPPROVAL-24
+  @slice-30 @ID-CREDAPPROVAL-24
   Scenario: Approval help explains credential exposure, consent and its host-agent limit
     When itos-container runs with "approve --help"
     Then approval help gives every specified credential disclosure and the version 3 delivery warning

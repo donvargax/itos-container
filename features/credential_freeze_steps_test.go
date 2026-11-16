@@ -29,7 +29,7 @@ func (w *world) credentialFreezeSteps(sc *godog.ScenarioContext) {
 		}
 		extra := object(r["Extra"])
 		text := string(approvalJSON(extra["problems"]))
-		if !strings.Contains(text, "run.approval.changed") || !strings.Contains(text, "itos container approve") {
+		if !strings.Contains(text, "run.approval-changed") || !strings.Contains(text, "itos container approve") {
 			return fmt.Errorf("missing public changed-grant guidance")
 		}
 		paths := regexp.MustCompile(`/[a-zA-Z]+(?:/[a-zA-Z]+)*`).FindAllString(text, -1)
@@ -59,7 +59,7 @@ func (w *world) credentialFreezeSteps(sc *godog.ScenarioContext) {
 		for _, backend := range []string{"memory", "disk"} {
 			r := object(f.freeze[backend])
 			if r["failure"] != "" || r["publication"] != "" {
-				return fmt.Errorf("credential freeze %s refused valid canonical grants", backend)
+				return fmt.Errorf("credential freeze %s refused valid canonical grants: selection=%v publication=%v", backend, r["failure"], r["publication"])
 			}
 			if err := credentialFrozenValue(object(r["retained"]), settings); err != nil {
 				return err

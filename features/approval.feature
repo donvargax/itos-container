@@ -1072,6 +1072,7 @@ Feature: Review and record approval of exact settings
   # Each record is self-consistent, its fingerprint recomputed, so only the rules for what a
   # profile may hold can catch it. None can match a candidate, but a record no approval could have
   # written is invalid state, not a changed setting.
+  # Slice-30 accepts no-grant version-3 base profiles; CREDAPPROVAL-04/26 cover them.
   @slice-26 @ID-APPROVAL-50 @local-engine-fixture
   Scenario Outline: A self-consistent record that contradicts its profile fails closed
     Given an approval checkout and isolated host state
@@ -1097,7 +1098,6 @@ Feature: Review and record approval of exact settings
       | no allowlist under allowlist-v1         |
       | mode offline under allowlist-v1         |
       | policy version 1 under allowlist-v1     |
-      | policy version 3 under allowlist-v1     |
       | no proxy image under allowlist-v1       |
       | a proxy image without a digest          |
       | a proxy image with a short digest       |
@@ -1106,7 +1106,6 @@ Feature: Review and record approval of exact settings
       | profile offline-v1 with mode allowlist  |
       | an allowlist under offline-v1           |
       | a proxy image under offline-v1          |
-      | policy version 3 under offline-v1       |
       | an unknown network profile              |
 
   @slice-4 @ID-APPROVAL-19 @local-engine-fixture

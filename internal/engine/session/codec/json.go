@@ -118,7 +118,9 @@ func (j JSON) Snapshot(data []byte) (port.Binding, port.Outcome) {
 }
 func binding(r approval.Record, f approval.Frozen) port.Binding {
 	var settings struct {
-		Checkout struct {
+		Credentials []approval.CredentialGrant
+		Policy      struct{ Network struct{ Mode string } }
+		Checkout    struct {
 			Root, Device, Inode string
 			GitDevice           string `json:"git_device"`
 			GitInode            string `json:"git_inode"`
@@ -132,6 +134,8 @@ func binding(r approval.Record, f approval.Frozen) port.Binding {
 	}
 	_ = json.Unmarshal([]byte(r.Canonical), &settings)
 	b := port.Binding{Frozen: f, UID: r.UID, GID: r.GID, Endpoint: settings.Engine.Endpoint, EngineID: settings.Engine.ID, ImageReference: settings.Image.Reference, ImageID: settings.Image.ID}
+	copy(b.Credentials[:], settings.Credentials)
+	b.CredentialNetwork = settings.Policy.Network.Mode == "allowlist" && len(settings.Credentials) > 0
 	b.Checkout.Root, b.Checkout.Device, b.Checkout.Inode = settings.Checkout.Root, settings.Checkout.Device, settings.Checkout.Inode
 	b.Checkout.GitDevice, b.Checkout.GitInode = settings.Checkout.GitDevice, settings.Checkout.GitInode
 	b.Workspace, b.Environment = settings.Manifest.WorkspaceFolder, string(settings.Manifest.ContainerEnv)

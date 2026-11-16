@@ -247,7 +247,7 @@ func (w *world) credentialAdmissionControls(count int) error {
 	}
 	for i, r := range f.results[:count] {
 		if r["Exit"] != float64(0) {
-			return fmt.Errorf("admission positive control %d did not succeed", i)
+			return fmt.Errorf("admission positive control %d did not succeed: %s %s", i, r["Stdout"], r["Stderr"])
 		}
 		if strings.Contains(f.command, "--credentials-only") {
 			var obj map[string]any

@@ -272,7 +272,7 @@ func (w *world) approvalStored(generation string) error {
 	}
 	expected := map[string]any{"schema": 1, "project": a.project, "generation": generation, "fingerprint": a.fingerprint, "settings": a.settings}
 	if !bytes.Equal(data, approvalJSON(expected)) {
-		return fmt.Errorf("active record differs from exact expected canonical record\ngot %s\nwant %s", data, approvalJSON(expected))
+		return fmt.Errorf("active record differs from exact expected canonical record\ngot %s\nwant %s", w.credentialApprovalSafeText(string(data)), approvalJSON(expected))
 	}
 	return w.approvalPermissions()
 }
@@ -344,6 +344,9 @@ func (w *world) approvalNoRecord() error {
 }
 
 func (w *world) approvalOnlyState() error {
+	if w.credentialApproval != nil {
+		return w.credentialApprovalPublication()
+	}
 	control := map[string]bool{}
 	if w.exit == 0 {
 		var err error
@@ -353,9 +356,6 @@ func (w *world) approvalOnlyState() error {
 		}
 	}
 	actual, err := doctorTree(w.dir)
-	if w.credentialApproval != nil {
-		actual, err = w.credentialApprovalTree()
-	}
 	if err != nil {
 		return err
 	}
@@ -368,9 +368,6 @@ func (w *world) approvalOnlyState() error {
 		allowed = filepath.Join(w.doctor.env["HOME"], ".local")
 	}
 	for path, value := range actual {
-		if w.credentialApproval != nil && path == filepath.Dir(allowed) && strings.Split(value, "|mtime=")[0] == strings.Split(before[path], "|mtime=")[0] {
-			continue
-		}
 		if control[path] || path == allowed || strings.HasPrefix(path, allowed+string(os.PathSeparator)) {
 			continue
 		}

@@ -242,15 +242,15 @@ record schemas. Settled choices constrain them without proving their implementat
 | `internal/slices/count` | Implemented | Preserve counting behaviour and Files contract. | `command`, `domain`, `port`, `disk`, `input` siblings; `port/porttest` fake and shared contract are test support. Input's disk port is wired by `cmd`. |
 | `internal/release` and inherited release tooling | Implemented, separate | Existing release mechanics and tests. | No sandbox support claim; `releasetest` remains test-only. |
 | `internal/slices/init` | Deferred | Non-runnable example generation belongs to later scope. | No init implementation authorized this milestone. |
-| `internal/slices/doctor` | Implemented through slice-4; credentials-only scope implemented by slice-29 | File-only validation remains separate; ordinary doctor inspects checkout, engine, image and approval and prints the exact candidate fingerprint. The credentials-only mode inspects policy and source metadata without manifest, engine or approval checks. | Shared policy/readiness/approval ports as appropriate to the selected scope; no state writes or checkout execution. |
-| `internal/slices/approve` | Implemented by slice-4 | Show effective settings/differences and ask y/N at a terminal; offer optional exact-fingerprint approval only for offline grants without credentials. | Shared policy/manifest/readiness and approval contracts; no prompt again until settings change; never calls the doctor slice. |
+| `internal/slices/doctor` | Implemented through slice-4; credential observation/approval integration through slice-30 | File-only validation remains separate; ordinary doctor inspects checkout, engine, image and approval and prints the exact candidate fingerprint. The credentials-only mode inspects policy and source metadata without manifest, engine or approval checks. | Shared policy/readiness/approval ports as appropriate to the selected scope; no state writes or checkout execution. |
+| `internal/slices/approve` | Implemented through slice-30 | Show effective settings/differences and ask y/N at a terminal; offer optional exact-fingerprint approval only for offline grants without credentials. | Shared policy/manifest/readiness and approval contracts; no prompt again until settings change; never calls the doctor slice. |
 | `internal/slices/run` | Foreground execution through slice-10; public registration through slice-11 | Validate argv and approval, publish frozen settings and a public recovery identity, then run one owned worker with bounded cleanup. | Shared approval/readiness/session contracts; literal argv, observed-exit precedence and exact cleanup retry. Native runtime proof remains CI-only. |
 | `internal/slices/status` | Implemented by slice-11; native proof remains CI-only | Inspect project-owned sessions, original policy identity, controller presence and uncertainty. | Shared session contracts; read-only bounded inspection and safe schema-1 diagnostics. |
 | `internal/slices/stop` | Implemented by slice-11; native proof remains CI-only | Finish cleanup of one registered session, independently of workload success. | Shared session contracts; mutation-time identity checks, per-session locking and durable repeated removal. |
 | `internal/slices/exec` | Deferred | Additional argv only during a live owned foreground session. | Future session contract; cannot extend lifetime or alter frozen permissions. |
 | `internal/engine/policy` | Implemented by slice-1, slice-5 and slice-25; version 3 implemented by slice-29 | Closed schema/default/value validation for policy version 1 (offline) and version 2 (offline or an exact host-name allowlist), bounded parsing and typed failures. Version 3 adds named credential requests without observing host sources. | Own domain/port, disk, YAML and IDNA adapters; reusable policy contracts and I/O-free porttest fakes. See [decision 0023](../decisions/0023-policy-version-2-allowlist.md). |
 | `internal/engine/manifest` | Implemented by slice-2 | Restricted single-worker description and effective worker settings. | Policy domain/port contracts; own parsing ports/adapters. |
-| `internal/engine/readiness` | Implemented prerequisite, extended by slice-20; credential observation implemented by slice-29 | Read-only checkout, regular-file inode independence, local-engine and cached-image observations. The shared source check uses complete pinned checkout inventory and bounded state mount projections, including descendant/file bind aliases and extra-link refusal. It never enumerates shared state records. | Policy/manifest contracts; own inspection ports and metadata-only disk adapter. No dependency on approval; cmd supplies protected boundary selection and host identity. |
+| `internal/engine/readiness` | Implemented prerequisite, extended by slice-20; credential observation implemented by slice-29 | Read-only checkout, regular-file inode independence, local-engine and cached-image observations. The shared source check uses complete pinned checkout inventory and bounded state mount projections, including descendant/file bind aliases and extra-link refusal. It never enumerates shared state records. | Policy/manifest contracts; own inspection ports and metadata-only disk adapter. Domain and ports do not call approval; the source adapter reuses its Account port. Cmd supplies protected boundary selection and host identity. |
 | `internal/engine/approval` | Implemented through slice-26; T-51 adds the staged session log | Effective host identity, canonical offline/allowlist profiles, shared sorted differences, q-52 terminal consent for network grants, protected recording and frozen input, cross-root control-state separation and durable location enrollment. T-51's `SessionLogs` stages `egress-refusals.jsonl` beside a session's record: a private temporary in the pinned session directory, published by fsync, one rename and a directory fsync, taking no operation lock. | Policy, manifest and readiness; [canonical JSON SHA-256, protected storage and contracts](../../features/approval.feature). |
 | `internal/engine/budget` | Implemented by slice-12 | Shared phase and finite-operation deadlines, late-result handling and retained handle lifetimes. | Context/time only; typed values in ports, policy in domain. |
 | `internal/engine/session` | Owned creation, foreground execution and public recovery through slice-11 | Durable intent and registration, cross-project checkout admission, independently inspected ownership, uncertain-create reconciliation and confirmed removal. | Own domain/port, codec, disk, Docker SDK, entropy and presentation adapters; approval storage/frozen-codec and readiness identity contracts. Native signal and retained-isolation evidence remains CI-only. |
@@ -259,7 +259,7 @@ record schemas. Settled choices constrain them without proving their implementat
 | Session networks and proxy (in `internal/engine/session`) | Implemented by T-40, with T-51's refusal-log adapter; unbound until slice-27; the design remains proposed as described above, with no runtime evidence | Create, verify, own and tear down the internal network, the egress network and the proxy container beside the worker, with durable intent before each and no fallback network. T-51's `RefusalLog` adapter in `session/disk` copies the stopped proxy's stdout through approval's staged log, storing every record but `ready`. | Extends the session ports, fake and Docker adapter; ownership by durable intent, random name and inspected full ID, never labels alone. The adapter reaches protected storage only through approval's `SessionLogs` port. |
 | Credential requests (in `internal/engine/policy`) | Implemented by slice-29 after T-47 and slice-25 | Version 3 extends slice-25's version 2 with optional closed credentials entries, exactly `kind` and literal absolute `source`; two token kinds, no Codex kind. | Versions 1/2 retain their meaning; shared pure validation, schema and file-only doctor modes. [T-47](../decisions/0025-credentials-passed-in.md). |
 | Credential source observation (in `internal/engine/readiness`) | Implemented by slice-29; synthetic observation evidence | Shared descriptor-based metadata checks for doctor, approve and run: no symlinks, trusted ancestors, private owned regular single-link files outside checkout and control state, bounded size and distinct inodes. Exclude root, descendant and file aliases through checkout inventory and state filesystem-coordinate projections. | Reuse the bounded checkout metadata scan; incomplete required evidence refuses. Decision 0027 specifies two bounded mount observations, pin/mapping rechecks and state subtrees independent of other projects' writes/history. No state enumeration, content read, hash or log; own port and disk adapter beside checkout inspection. Only run later reads the checked inode. Evidence remains a dependency of slice-30, T-48 and slice-31/33. |
-| Credential approval (in `internal/engine/approval`) | **Proposed**, slice-30 | Bind sorted `{kind, source, target}` grants, never contents, with `offline-credentials-v1` or `allowlist-credentials-v1`; review scope and exposure; apply q-52's terminal rule. | Reuse slice-26 canonicalization, differences and presentation. No-grant profiles keep their identity; source-content changes do not change approval. |
+| Credential approval (in `internal/engine/approval`) | Implemented by slice-30 | Bind sorted `{kind, source, target}` grants, never contents, with `offline-credentials-v1` or `allowlist-credentials-v1`; review scope and exposure; apply q-52's terminal rule. | Reuse slice-26 canonicalization, differences and presentation. No-grant profiles keep their identity; source-content changes do not change approval. |
 | Credential staging (in `internal/engine/session`) | **Proposed**, T-48 | Intent before private `/dev/shm` staging, exact read-only file mounts, verification before start, unlink after the start attempt and owned recovery. | Session ports, I/O-free fake, disk/Docker adapters and shared contract; slice-31/33 consume it. Lost acknowledgement after mount acquisition must retain uncertainty; Codex file delivery waits on question 1. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
@@ -935,7 +935,7 @@ invalid or unsupported requests before any session creation. Representation guid
 for paths does not settle safe identity or discovery. Init and example generation are
 deferred; successful validation neither grants approval nor starts a worker.
 
-**Credential source location — implemented by slice-29.** Root-only ancestry comparison
+**Credential source location — implemented by slices 29 and 30.** Root-only ancestry comparison
 misses descendant and single-file bind aliases. Absolute checkout inputs are cleaned
 like the shared checkout pin. Checkout/state overlap in either direction, including
 pinned identity and filesystem-coordinate aliases, refuses before enumeration.
@@ -977,7 +977,7 @@ or state location on NFS is refused rather than judged from that row.
 It covers `9p` as well (decision 0027, amended after the local review of `2ac05a4`):
 every 9p mount has a device of its own and prints `/` as its root, so neither a
 coordinate nor an identity places a second mount of a protected subdirectory in its
-tree. The implementation remains a list of named types until slice-30.
+tree. Slice-30 replaces the earlier list of named refusals with the settled allowlist.
 The person's q-64 decision of 2026-11-15, confirmed by the coordinator on
 2026-11-16 00:10 UTC and recorded in decision 0027, settles its replacement:
 accept exactly `ext4`, `btrfs` and `xfs`, and refuse every other type with
@@ -986,8 +986,8 @@ allowlist under the same source/ancestor and checkout/state mount conditions,
 in both observations, preserving mapping and known-location precedence and
 allowing unrelated rows. Its fix names the three accepted filesystems. This
 applies to the shared observer, including credentials-only; ordinary doctor and
-approve consume it when slice-30 lifts their gate. The decision is settled;
-allowlist implementation and evidence remain slice-30's work.
+approve now consume it in slice-30. Synthetic shared fake/disk and admission scenarios
+prove the acceptance/refusal logic; these are not native bind-mount support claims.
 
 Two complete mount-table observations bracket inspection; descriptor pathname walks,
 pins, mappings and final source metadata are rechecked. Each table is bounded to
@@ -997,7 +997,18 @@ kernel calls. Known exposure is `credential.location`; incomplete or inconsisten
 required evidence is `credential.unavailable`. State-only extra hard links fail
 `credential.links`, so no record scan is needed. An absent root is not created;
 normal first creation at the reserved coordinate is validated on the final pass.
-Existing shared boundary diagnostics remain. No cache, global lock or index is added.
+Shared root/state diagnostics now name the inclusive 4095-byte limit. Ordinary
+root text is checked before policy pin/open and state text after valid policy but before
+source/boundary observation, even without grants. Credentials-only retains its no-grant
+no-scan result. No cache, global lock or index is added.
+
+At each source observation, compare both device and inode of the retained policy pin
+with the independent walk's checkout node. Mismatch refuses with `doctor.checkout.changed`
+(exit 1), or `approve.changed` after consent, before a usable candidate/publication.
+The shared `readiness/source` adapter supplies this comparison and account boundary;
+only cmd binds it, including through doctor's scoped port. Ordinary doctor/approve
+repeat the observation before engine access, after inspection and after consent,
+including remembered grants. Domains and ports gain no I/O or import exception.
 
 Normal state publication/removal stays inside reserved subtrees and changes neither
 the boundaries nor an independent source. Thus no disappearing record is an
@@ -1022,9 +1033,17 @@ matching/supersession and atomic snapshot details. q-52 has revisited A1: a netw
 credential grant needs terminal review and consent, and `--fingerprint` is refused with
 `approve.terminal-required` after inspection, even for an already-approved candidate.
 Bare non-terminal/JSON approval keeps `approve.confirmation-required`, with only the
-terminal fix for grants. A faked terminal remains possible; slice-30 updates help and
-`docs/security.md`. Proposed credential approvals bind kinds, source paths and fixed
-targets, never contents, and carry forward when delivery lands without changing grants.
+terminal fix for grants. A faked terminal remains possible; slice-30's help and
+`docs/security.md` state that limit and the complete prospective exposure disclosure.
+Credential approvals bind sorted kinds, source paths and fixed targets, never contents,
+with `offline-credentials-v1`/`allowlist-credentials-v1`. No-grant profiles retain their
+identity, and version-only edits remain `/policy/version`. A valid historical target is
+changed permission rather than corrupt history. Status projects only the validated frozen
+grants, with the exact array in JSON and session-labeled plain disclosure through a
+cmd-supplied display callback; no current policy, active approval or source read supplies
+a grant. Run still refuses all version-3 requests before manifest/engine/state access.
+[Decision 0028](../decisions/0028-credential-approval.md) records this integration and
+supersedes decision 0027's read-only cross-pin comparison gap and length-message note.
 [Slice-4's specification](../../features/approval.feature) now fixes the canonical
 field set, single active generation, safe host paths and atomic publication, and
 the independently owned frozen input consumed by slice-8. These are implemented;

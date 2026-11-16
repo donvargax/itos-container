@@ -88,8 +88,9 @@ location matches retain their precedence. Refuse with `credential.filesystem`,
 exit 3, and a fix naming ext4, btrfs and xfs for source, checkout and state paths.
 The shared observer supplies this rule to credentials-only and, when slice-30 lifts
 their gate, ordinary doctor and approve. This amendment records the required change;
-the existing exclusion-list implementation is not allowlist evidence. No credential
-admission or runtime support claim follows from recording the answer.
+the exclusion-list implementation at slice-29 was not allowlist evidence. Slice-30
+implements the allowlist with shared synthetic contracts and admission scenarios;
+that evidence supplies no native bind-mount or credential-delivery support claim.
 
 Amended after the local review of `1ee1e7a`: the path bound was 4096 bytes, and no
 real path of that length can be inspected. Linux counts the terminator in
@@ -403,6 +404,12 @@ root-only comparison. The policy pin and the source observation each walk the
 effective root's path without following links, and the pin stays held meanwhile;
 their identities are not compared, so a trusted host renaming another directory
 onto that path between the two walks is, like the changes above, not detected.
+Slice-30 supersedes that accepted read-only gap: [decision 0028](0028-credential-approval.md)
+requires the policy pin's device and inode to equal the observed checkout node at each
+source observation, including credentials-only. Mismatch is `doctor.checkout.changed`
+before consent and `approve.changed` after consent. Transient changes between observations
+and later run-mount binding remain outside that comparison.
+
 Approve/run must repeat this entire check at their specified
 validation points and run must read the retained checked descriptor. Ordinary
 credential admission and delivery remain gated until their own evidence exists.
@@ -608,6 +615,8 @@ against each implementation before the fix and pass after it. These fixtures are
 real files on the host's kernel, tmpfs here, with nothing mounted and no seam
 replaced in the scenario or in the disk adapter's native test; that test passed
 before the fix too, because the kernel refuses 4096 bytes itself. An overlong root
-or state location keeps its shared message, which names absoluteness and encoding
-but not length. `4620db6` pins the survivor the code proof at `1ee1e7a` left in the
+or state location kept its shared message, which named absoluteness and encoding
+but not length. Slice-30 supersedes that diagnostic note: both message and fix now name
+the boundary and 4095-byte limit, with ordinary doctor/approve lexical checks before
+source observation, including no-grant policies (decision 0028). `4620db6` pins the survivor the code proof at `1ee1e7a` left in the
 identity comparison of protected roots. Fresh code proof remains CI-owned.

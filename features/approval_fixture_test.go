@@ -133,6 +133,11 @@ func (w *world) approvalSeed(generation string, changed bool) error {
 	}
 	a.prior = settings
 	a.generation = generation
+	if w.credentialApproval != nil {
+		if err := w.seedControlLocations(); err != nil {
+			return err
+		}
+	}
 	return w.approvalCapture()
 }
 

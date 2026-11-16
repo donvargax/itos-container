@@ -3,6 +3,7 @@ package porttest
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ func CredentialFixture() *CredentialFiles {
 		}
 		f.Nodes[path] = n
 	}
-	f.MountsText = []string{"1 0 0:1 / / rw - tmpfs tmpfs rw\n", "1 0 0:1 / / rw - tmpfs tmpfs rw\n"}
+	f.MountsText = []string{"1 0 0:1 / / rw - ext4 ext4 rw\n", "1 0 0:1 / / rw - ext4 ext4 rw\n"}
 	return f
 }
 
@@ -33,6 +34,15 @@ func CredentialFixture() *CredentialFiles {
 // below it and has no I/O or dependency on a production domain or adapter.
 func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Credential, port.CredentialInput) port.CredentialResult) {
 	t.Helper()
+	inspect := observe
+	credentialPolicyPinContract(t, inspect)
+	observe = func(f *CredentialFiles, grants []policy.Credential, input port.CredentialInput) port.CredentialResult {
+		if input.PolicyDevice == "" && input.PolicyInode == "" {
+			node := f.Nodes[input.Root]
+			input.PolicyDevice, input.PolicyInode = strconv.FormatUint(node.Device, 10), strconv.FormatUint(node.Inode, 10)
+		}
+		return inspect(f, grants, input)
+	}
 	input := port.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000}
 	grants := []policy.Credential{{Kind: "claude-token", Source: "/vault/token"}}
 	type testCase struct {
@@ -57,7 +67,7 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 		}},
 		{"mount ID changed across table", "credential.unavailable", func(f *CredentialFiles) {
 			for i := range f.MountsText {
-				f.MountsText[i] += "2 1 0:1 / / rw - tmpfs tmpfs rw\n"
+				f.MountsText[i] += "2 1 0:1 / / rw - ext4 ext4 rw\n"
 			}
 			f.MountIDsAfterTable = map[string]int{"/vault/token": 2}
 		}},
@@ -159,8 +169,8 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 		{"missing first table", "credential.unavailable", func(f *CredentialFiles) { f.MountErrors[0] = true }},
 		{"missing final table", "credential.unavailable", func(f *CredentialFiles) { f.MountErrors[1] = true }},
 		{"missing descriptor", "credential.unavailable", func(f *CredentialFiles) { f.DescriptorErrors["/vault/token"] = true }},
-		{"changed mapping", "credential.unavailable", func(f *CredentialFiles) { f.MountsText[1] = "1 0 0:1 /changed / rw - tmpfs tmpfs rw\n" }},
-		{"unrelated mount churn", "", func(f *CredentialFiles) { f.MountsText[1] += "2 1 0:2 / /unrelated rw - tmpfs tmpfs rw\n" }},
+		{"changed mapping", "credential.unavailable", func(f *CredentialFiles) { f.MountsText[1] = "1 0 0:1 /changed / rw - ext4 ext4 rw\n" }},
+		{"unrelated mount churn", "", func(f *CredentialFiles) { f.MountsText[1] += "2 1 0:2 / /unrelated rw - ext4 ext4 rw\n" }},
 	}
 	for _, elapsed := range []time.Duration{10*time.Second - time.Nanosecond, 10 * time.Second, 10*time.Second + time.Nanosecond} {
 		rule := ""
@@ -181,7 +191,7 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 		}})
 		cases = append(cases, testCase{path + " changed mount ID", "credential.unavailable", func(f *CredentialFiles) {
 			for i := range f.MountsText {
-				f.MountsText[i] += "2 1 0:1 / / rw - tmpfs tmpfs rw\n"
+				f.MountsText[i] += "2 1 0:1 / / rw - ext4 ext4 rw\n"
 			}
 			f.MountIDsAfterTable = map[string]int{path: 2}
 		}})
@@ -259,6 +269,48 @@ func CredentialContract(t Reporter, observe func(*CredentialFiles, []policy.Cred
 	credentialPathBoundContract(t, observe, grants, input)
 }
 
+func credentialPolicyPinContract(t Reporter, observe func(*CredentialFiles, []policy.Credential, port.CredentialInput) port.CredentialResult) {
+	t.Helper()
+	for _, change := range []string{"matching subvolume", "device", "inode", "missing device", "missing inode", "missing pin"} {
+		f := CredentialFixture()
+		input := port.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000, PolicyDevice: "1", PolicyInode: "2"}
+		want := "checkout.changed"
+		switch change {
+		case "matching subvolume":
+			for path, n := range f.Nodes {
+				n.Device += 100
+				f.Nodes[path] = n
+			}
+			input.PolicyDevice = "101"
+			want = ""
+		case "device":
+			input.PolicyDevice = "2"
+		case "inode":
+			input.PolicyInode = "3"
+		case "missing device":
+			input.PolicyDevice = ""
+			want = "checkout.unavailable"
+		case "missing inode":
+			input.PolicyInode = ""
+			want = "checkout.unavailable"
+		case "missing pin":
+			input.PolicyDevice, input.PolicyInode = "", ""
+			want = "checkout.unavailable"
+		}
+		got := observe(f, []policy.Credential{{Kind: "claude-token", Source: "/vault/token"}}, input)
+		if want == "" {
+			if len(got.Issues) != 0 {
+				t.Errorf("matching descriptor pins: %#v", got)
+			}
+		} else if !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: want, Index: -1, Subject: "/checkout"}}) || f.Calls["source metadata"] != 0 || f.Calls["state mount-table"] != 0 {
+			t.Errorf("%s: %#v %v", change, got, f.Calls)
+		}
+		if len(f.handles) != 0 {
+			t.Errorf("policy comparison retained handles: %d", len(f.handles))
+		}
+	}
+}
+
 // The kernel names a descriptor in at most 4095 bytes: PATH_MAX counts the
 // terminator. That is the inclusive bound of a descriptor's pathname and of
 // each boundary path. A mount row's root keeps the parser's own 4096 bytes,
@@ -274,7 +326,7 @@ func credentialPathBoundContract(t Reporter, observe func(*CredentialFiles, []po
 		}
 		f.Nodes[n.Path] = n
 		mountRoot := "/" + strings.Repeat("r", 4095)
-		table := "1 0 0:1 " + mountRoot + " / rw - tmpfs tmpfs rw\n"
+		table := "1 0 0:1 " + mountRoot + " / rw - ext4 ext4 rw\n"
 		f.MountsText = []string{table, table}
 		got := observe(f, []policy.Credential{{Kind: "claude-token", Source: n.Path}}, input)
 		if !over && len(got.Issues) != 0 {
@@ -360,7 +412,7 @@ func credentialAlias(f *CredentialFiles, root, layout string) {
 	case "different device":
 		device = 2
 		mountRoot = "/private"
-		f.MountsText[0] += "3 1 0:2 /private " + base + " rw - tmpfs tmpfs rw\n"
+		f.MountsText[0] += "3 1 0:2 /private " + base + " rw - ext4 ext4 rw\n"
 		for path, n := range f.Nodes {
 			if path == base || strings.HasPrefix(path, base+"/") {
 				n.Device, n.MountID = 2, 3
@@ -371,7 +423,7 @@ func credentialAlias(f *CredentialFiles, root, layout string) {
 		base = root
 		fallthrough
 	case "covered":
-		f.MountsText[0] += "3 1 0:2 / " + base + " rw - tmpfs tmpfs rw\n"
+		f.MountsText[0] += "3 1 0:2 / " + base + " rw - ext4 ext4 rw\n"
 		for path, n := range f.Nodes {
 			if path == base || strings.HasPrefix(path, base+"/") {
 				n.Device, n.MountID, n.Inode = 2, 3, n.Inode+100
@@ -379,7 +431,7 @@ func credentialAlias(f *CredentialFiles, root, layout string) {
 			}
 		}
 	}
-	f.MountsText[0] += fmt.Sprintf("2 1 0:%d %s %s rw - tmpfs tmpfs rw\n", device, mountRoot, point)
+	f.MountsText[0] += fmt.Sprintf("2 1 0:%d %s %s rw - ext4 ext4 rw\n", device, mountRoot, point)
 	for path, n := range f.Nodes {
 		if path == point || strings.HasPrefix(path, point+"/") {
 			n.Device, n.MountID = uint64(device), 2
@@ -415,7 +467,7 @@ func credentialTopologyContract(t Reporter, observe func(*CredentialFiles, []pol
 					point = fmt.Sprintf("/unrelated/%d", i)
 				}
 				line := fmt.Sprintf("%d 0 0:1 / %s rw ", i, point)
-				end := "- tmpfs tmpfs rw"
+				end := "- ext4 ext4 rw"
 				if length > 0 {
 					line += "x:" + strings.Repeat("a", length-len(line)-len(end)-3) + " "
 				}

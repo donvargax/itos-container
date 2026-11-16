@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,6 +79,13 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 	checkout := s.walk(c.Input.Root, credentialCheckout)
 	if checkout.rule != "" {
 		return boundary(checkout.rule)
+	}
+	root := checkout.pins[len(checkout.pins)-1].node
+	if c.Input.PolicyDevice == "" || c.Input.PolicyInode == "" {
+		return boundary("checkout.unavailable")
+	}
+	if strconv.FormatUint(root.Device, 10) != c.Input.PolicyDevice || strconv.FormatUint(root.Inode, 10) != c.Input.PolicyInode {
+		return boundary("checkout.changed")
 	}
 	states := make([]credentialWalk, len(statePaths))
 	for i, path := range statePaths {

@@ -16,13 +16,14 @@ import (
 )
 
 type credentialApprovalWorld struct {
-	request     string
-	grants      []credentialGrant
-	accessError error
-	runResult   doctorResult
-	runBefore   map[string]string
-	frozen      map[string]any
-	admission   *credentialAdmissionFixture
+	observedInputs []string
+	request        string
+	grants         []credentialGrant
+	accessError    error
+	runResult      doctorResult
+	runBefore      map[string]string
+	frozen         map[string]any
+	admission      *credentialAdmissionFixture
 }
 
 func (w *world) credentialApprovalSteps(sc *godog.ScenarioContext) {
@@ -53,7 +54,14 @@ func (w *world) credentialApprovalCheckout() error {
 	if err := w.approvalCheckout(); err != nil {
 		return err
 	}
+	return w.credentialApprovalSources()
+}
+
+func (w *world) credentialApprovalSources() error {
 	w.credentialApproval = &credentialApprovalWorld{}
+	w.doctor.engine.mu.Lock()
+	w.doctor.engine.credentialBodies = true
+	w.doctor.engine.mu.Unlock()
 	c := &credentialWorld{paths: map[string]string{}, sources: filepath.Join(w.doctor.host, "sources"), state: filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")}
 	w.credentials = c
 	if err := os.WriteFile(filepath.Join(w.doctor.host, "slice-30-read-control"), []byte("independent observer control"), 0600); err != nil {
@@ -124,7 +132,7 @@ func (w *world) credentialApprovalPolicy() error {
 	if len(w.credentialApproval.grants) > 0 {
 		p["credentials"] = w.credentialApproval.grants
 	}
-	return os.WriteFile(filepath.Join(w.doctor.checkout, "itos-container.yaml"), approvalJSON(p), 0600)
+	return os.WriteFile(filepath.Join(w.doctor.checkout, "itos-container.yaml"), []byte(credentialApprovalEscape(string(approvalJSON(p)))), 0600)
 }
 
 func (w *world) credentialApprovalSettings() {
@@ -178,7 +186,11 @@ func (w *world) credentialApprovalWatch() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
+	paths := slices.Clone(w.credentialApproval.observedInputs)
 	for _, path := range w.credentials.paths {
+		paths = append(paths, path)
+	}
+	for _, path := range paths {
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) || err == nil && !info.Mode().IsRegular() {
 			continue

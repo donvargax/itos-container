@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -16,9 +17,9 @@ func credentialDomainFixture() (*porttest.CredentialFiles, domain.Credentials, [
 	// The domain consumes typed mount rows. Parser correctness is the disk
 	// adapter's shared contract, never duplicated in this in-memory provider.
 	f.Parser = func([]byte) ([]port.CredentialMount, bool) {
-		return []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/"}}, true
+		return []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"}}, true
 	}
-	c := domain.Credentials{FS: f, Input: port.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000}}
+	c := domain.Credentials{FS: f, Input: port.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000, PolicyDevice: "1", PolicyInode: "2"}}
 	return f, c, []policy.Credential{{Kind: "claude-token", Source: "/vault/token"}}
 }
 
@@ -71,7 +72,7 @@ func TestCredentialSourceOutcomes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f, c, grants := credentialDomainFixture()
 			tc.change(f)
-			got := c.Inspect(grants)
+			got := credentialInspect(c, grants)
 			var want []port.CredentialIssue
 			if tc.rule != "" {
 				want = []port.CredentialIssue{{Rule: tc.rule, Index: 0}}
@@ -86,7 +87,7 @@ func TestCredentialSourceOutcomes(t *testing.T) {
 func TestCredentialStateProjectionAndOrdering(t *testing.T) {
 	for _, inverse := range []bool{false, true} {
 		f, c, grants := credentialDomainFixture()
-		rows := []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/"}, {ID: 2, Device: 1, Root: "/state/private", Point: "/vault"}}
+		rows := []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"}, {ID: 2, Device: 1, Root: "/state/private", Point: "/vault", Filesystem: "ext4"}}
 		if inverse {
 			rows[1].Root, rows[1].Point = "/vault", "/state/private"
 		} else {
@@ -97,24 +98,24 @@ func TestCredentialStateProjectionAndOrdering(t *testing.T) {
 			}
 		}
 		f.Parser = func([]byte) ([]port.CredentialMount, bool) { return rows, true }
-		if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.location", Index: 0}}) {
+		if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.location", Index: 0}}) {
 			t.Fatal(got)
 		}
 	}
 	_, c, grants := credentialDomainFixture()
 	grants = append(grants, policy.Credential{Kind: "github-token", Source: "/vault/token"})
-	if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.duplicate", Index: 1}}) {
+	if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.duplicate", Index: 1}}) {
 		t.Fatal(got)
 	}
 	f, c, grants := credentialDomainFixture()
 	delete(f.Nodes, "/vault/token")
 	grants = append(grants, policy.Credential{Kind: "github-token", Source: "/state"})
-	if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.missing", Index: 0}, {Rule: "credential.location", Index: 1}}) {
+	if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.missing", Index: 0}, {Rule: "credential.location", Index: 1}}) {
 		t.Fatal(got)
 	}
 	_, c, _ = credentialDomainFixture()
 	c.FS = nil
-	if got := c.Inspect(nil); len(got.Issues) != 0 {
+	if got := credentialInspect(c, nil); len(got.Issues) != 0 {
 		t.Fatal(got)
 	}
 }
@@ -195,7 +196,7 @@ func TestCredentialBoundaryRefusals(t *testing.T) {
 			if tc.rule == "checkout.root" || tc.rule == "checkout.unavailable" || tc.rule == "checkout.path" {
 				want.Subject = c.Input.Root
 			}
-			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{want}) {
+			if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{want}) {
 				t.Fatal(got)
 			}
 		})
@@ -208,7 +209,7 @@ func TestCredentialMountIDMissingDuringRewalk(t *testing.T) {
 	// pathname-walk descriptor lacks statx evidence.
 	f.DescriptorMountIDs = map[string][]int{"/vault/token": {1, 1, 0}}
 	want := []port.CredentialIssue{{Rule: "credential.mount_id", Index: 0}}
-	if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+	if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 		t.Fatalf("rewalk without mount identity: %#v, want %#v", got.Issues, want)
 	}
 }
@@ -226,7 +227,7 @@ func TestCredentialBoundaryEvidenceBeforeInventory(t *testing.T) {
 				f.MountErrors[0] = true
 			}
 			want := []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}
-			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+			if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 				t.Fatalf("issues %#v, want %#v", got.Issues, want)
 			}
 			if f.Calls["checkout traversal"] != 0 {
@@ -255,7 +256,7 @@ func TestCredentialBoundaryAncestorIdentities(t *testing.T) {
 				c.Input.State, c.Input.AccountState = n.Path, n.Path
 			}
 			want := []port.CredentialIssue{{Rule: "state.path", Index: -1}}
-			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+			if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 				t.Fatalf("issues %#v, want %#v", got.Issues, want)
 			}
 			if f.Calls["checkout traversal"] != 0 || f.Calls["state enumeration"] != 0 {
@@ -270,14 +271,14 @@ func TestCredentialBoundaryOverlapInFinalTable(t *testing.T) {
 	reads := 0
 	f.Parser = func([]byte) ([]port.CredentialMount, bool) {
 		reads++
-		rows := []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/"}}
+		rows := []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"}}
 		if reads == 2 {
-			rows = append(rows, port.CredentialMount{ID: 2, Device: 1, Root: "/state/private", Point: "/checkout/records"})
+			rows = append(rows, port.CredentialMount{ID: 2, Device: 1, Root: "/state/private", Point: "/checkout/records", Filesystem: "ext4"})
 		}
 		return rows, true
 	}
 	want := []port.CredentialIssue{{Rule: "state.path", Index: -1}}
-	if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+	if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 		t.Fatalf("issues %#v, want %#v", got.Issues, want)
 	}
 }
@@ -288,8 +289,8 @@ func TestCredentialUnprojectableMountRelevance(t *testing.T) {
 			f, c, grants := credentialDomainFixture()
 			f.Parser = func([]byte) ([]port.CredentialMount, bool) {
 				return []port.CredentialMount{
-					{ID: 1, Device: 1, Root: "/", Point: "/"},
-					{ID: 2, Device: 4, Root: "net:[42]", Point: point, Unprojectable: true},
+					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"},
+					{ID: 2, Device: 4, Root: "net:[42]", Point: point, Unprojectable: true, Filesystem: "ext4"},
 				}, true
 			}
 			// Keep covering state rows hidden behind the original mount so the
@@ -303,7 +304,7 @@ func TestCredentialUnprojectableMountRelevance(t *testing.T) {
 			if point != "/unrelated" && point != "/state-sibling" {
 				want = []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}
 			}
-			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+			if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 				t.Fatalf("issues %#v, want %#v", got.Issues, want)
 			}
 		})
@@ -352,15 +353,15 @@ func TestCredentialStackingMountRelevance(t *testing.T) {
 		{"/unrelated", "9p", false},
 		{"/checkout-sibling", "9p", false},
 		// Neither control filesystem is a FUSE or an NFS mount.
-		{"/checkout", "nfsd", false},
-		{"/checkout", "fusectl", false},
+		{"/checkout", "nfsd", true},
+		{"/checkout", "fusectl", true},
 	} {
 		t.Run(tc.filesystem+tc.point, func(t *testing.T) {
 			f, c, grants := credentialDomainFixture()
 			c.Input.AccountState = "/fixed"
 			f.Parser = func([]byte) ([]port.CredentialMount, bool) {
 				return []port.CredentialMount{
-					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "tmpfs"},
+					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"},
 					{ID: 2, Device: 64, Root: "/", Point: tc.point, Filesystem: tc.filesystem},
 				}, true
 			}
@@ -372,7 +373,7 @@ func TestCredentialStackingMountRelevance(t *testing.T) {
 			if tc.refused {
 				want = []port.CredentialIssue{{Rule: "credential.filesystem", Index: 0}}
 			}
-			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+			if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 				t.Fatalf("issues %#v, want %#v", got.Issues, want)
 			}
 		})
@@ -397,7 +398,7 @@ func TestCredentialExportSubdirectoryMountedOverSource(t *testing.T) {
 					f.Nodes[path] = n
 				}
 				rows := []port.CredentialMount{
-					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "tmpfs"},
+					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"},
 					{ID: 2, Device: 50, Root: "/", Point: "/", Filesystem: filesystem},
 					{ID: 3, Device: 50, Root: "/", Point: "/vault", Filesystem: filesystem},
 				}
@@ -405,14 +406,14 @@ func TestCredentialExportSubdirectoryMountedOverSource(t *testing.T) {
 					cover := f.Nodes["/checkout"]
 					cover.Path, cover.Device, cover.Inode, cover.MountID = "/checkout/private", 2, 92, 4
 					f.Nodes[cover.Path] = cover
-					rows = append(rows, port.CredentialMount{ID: 4, Device: 2, Root: "/", Point: cover.Path, Filesystem: "tmpfs"})
+					rows = append(rows, port.CredentialMount{ID: 4, Device: 2, Root: "/", Point: cover.Path, Filesystem: "ext4"})
 				}
 				f.Parser = func([]byte) ([]port.CredentialMount, bool) { return rows, true }
 				var want []port.CredentialIssue
 				if filesystem != "ext4" {
 					want = []port.CredentialIssue{{Rule: "credential.filesystem", Index: 0}}
 				}
-				if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+				if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 					t.Fatalf("issues %#v, want %#v", got.Issues, want)
 				}
 				if f.Calls["state enumeration"] != 0 || f.Calls["state metadata"] != 0 {
@@ -458,7 +459,7 @@ func TestCredentialSecondMountOnItsOwnDevice(t *testing.T) {
 				token.Path, token.Device, token.MountID = "/vault/token", 51, 3
 				f.Nodes[token.Path] = token
 				rows := []port.CredentialMount{
-					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "tmpfs"},
+					{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"},
 					{ID: 2, Device: 50, Root: "/", Point: "/", Filesystem: filesystem},
 					{ID: 3, Device: 51, Root: "/", Point: "/vault", Filesystem: filesystem},
 				}
@@ -471,7 +472,7 @@ func TestCredentialSecondMountOnItsOwnDevice(t *testing.T) {
 				case filesystem != "ext4":
 					want = []port.CredentialIssue{{Rule: "credential.filesystem", Index: 0}}
 				}
-				if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+				if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 					t.Fatalf("issues %#v, want %#v", got.Issues, want)
 				}
 				if f.Calls["state enumeration"] != 0 || f.Calls["state metadata"] != 0 {
@@ -489,7 +490,7 @@ func TestCredentialStateLocationMustBeValidUTF8(t *testing.T) {
 		f, c, grants := credentialDomainFixture()
 		c.Input.State = state
 		want := []port.CredentialIssue{{Rule: "state.location", Index: -1}}
-		if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+		if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 			t.Fatalf("%q: issues %#v, want %#v", state, got.Issues, want)
 		}
 		if len(f.Calls) != 0 {
@@ -499,7 +500,7 @@ func TestCredentialStateLocationMustBeValidUTF8(t *testing.T) {
 	// A valid multi-byte selection, absent under a safe ancestor, stays accepted.
 	_, c, grants := credentialDomainFixture()
 	c.Input.State = "/\u00e9tat-\u65e5\u672c"
-	if got := c.Inspect(grants); len(got.Issues) != 0 {
+	if got := credentialInspect(c, grants); len(got.Issues) != 0 {
 		t.Fatalf("valid UTF-8 state location refused: %#v", got.Issues)
 	}
 }
@@ -530,7 +531,7 @@ func TestCredentialIncompleteEvidence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f, c, grants := credentialDomainFixture()
 			tc.change(f)
-			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}) {
+			if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}) {
 				t.Fatal(got)
 			}
 		})
@@ -548,7 +549,7 @@ func TestCredentialFailedStatIgnoresItsReportedIdentity(t *testing.T) {
 			// Only the first stat fails, so no later check can refuse instead.
 			f.StatSequence = map[string][]porttest.CredentialStat{path: {{Node: n, OK: false}, {Node: n, OK: true}}}
 			want := []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}
-			if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, want) {
+			if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, want) {
 				t.Fatalf("issues %#v, want %#v", got.Issues, want)
 			}
 		})
@@ -563,13 +564,13 @@ func TestCredentialStateMountIdentityCannotChangeAtSameCoordinate(t *testing.T) 
 	reads := 0
 	f.Parser = func([]byte) ([]port.CredentialMount, bool) {
 		reads++
-		rows := []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/"}}
+		rows := []port.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"}}
 		if reads == 2 {
-			rows = append(rows, port.CredentialMount{ID: 2, Device: 1, Root: "/state", Point: "/state"})
+			rows = append(rows, port.CredentialMount{ID: 2, Device: 1, Root: "/state", Point: "/state", Filesystem: "ext4"})
 		}
 		return rows, true
 	}
-	if got := c.Inspect(grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}) {
+	if got := credentialInspect(c, grants); !reflect.DeepEqual(got.Issues, []port.CredentialIssue{{Rule: "credential.unavailable", Index: 0}}) {
 		t.Fatal(got)
 	}
 }
@@ -580,7 +581,7 @@ func TestCredentialDeadlineCannotProduceSuccessAfterExpiry(t *testing.T) {
 		f, c, grants := credentialDomainFixture()
 		f.ClockTicks = make([]time.Duration, beforeExpiry+1)
 		f.ClockTicks[beforeExpiry] = 10 * time.Second
-		got := c.Inspect(grants)
+		got := credentialInspect(c, grants)
 		if f.ClockReads > beforeExpiry {
 			expired = true
 			if len(got.Issues) == 0 {
@@ -593,4 +594,14 @@ func TestCredentialDeadlineCannotProduceSuccessAfterExpiry(t *testing.T) {
 	if !expired || !complete {
 		t.Fatal("deadline fixtures did not bracket a complete observation")
 	}
+}
+
+// Older metadata cases vary the initial tree but do not substitute it between
+// policy and source observation. Supply that independently known initial pin.
+func credentialInspect(c domain.Credentials, grants []policy.Credential) port.CredentialResult {
+	if f, ok := c.FS.(*porttest.CredentialFiles); ok {
+		root := f.Nodes[c.Input.Root]
+		c.Input.PolicyDevice, c.Input.PolicyInode = strconv.FormatUint(root.Device, 10), strconv.FormatUint(root.Inode, 10)
+	}
+	return c.Inspect(grants)
 }

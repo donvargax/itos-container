@@ -65,18 +65,20 @@ type RunRegistry interface {
 }
 
 type RecoveryEntry struct {
-	MountDetector string   `json:"mount_detector,omitempty"`
-	Anchor        string   `json:"anchor,omitempty"`
-	ID            string   `json:"id"`
-	Project       string   `json:"project"`
-	Fingerprint   string   `json:"fingerprint"`
-	State         string   `json:"state"`
-	Resource      string   `json:"resource"`
-	Controller    string   `json:"controller"`
-	Cleanup       string   `json:"cleanup"`
-	WorkloadExit  *int     `json:"workload_exit"`
-	StopCandidate bool     `json:"stop_candidate"`
-	Retry         []string `json:"retry"`
+	Credentials       []approval.CredentialGrant `json:"credentials,omitempty"`
+	CredentialNetwork bool                       `json:"-"`
+	MountDetector     string                     `json:"mount_detector,omitempty"`
+	Anchor            string                     `json:"anchor,omitempty"`
+	ID                string                     `json:"id"`
+	Project           string                     `json:"project"`
+	Fingerprint       string                     `json:"fingerprint"`
+	State             string                     `json:"state"`
+	Resource          string                     `json:"resource"`
+	Controller        string                     `json:"controller"`
+	Cleanup           string                     `json:"cleanup"`
+	WorkloadExit      *int                       `json:"workload_exit"`
+	StopCandidate     bool                       `json:"stop_candidate"`
+	Retry             []string                   `json:"retry"`
 }
 type RecoveryFailure struct {
 	Gaps    []RefusalGap

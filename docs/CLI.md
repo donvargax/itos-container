@@ -11,9 +11,9 @@ The first milestone is an offline owned run: explicit argv in an approved, harde
 container with no network, the checkout as its only host mount, a non-root identity
 and owned resources cleaned up on exit. Linux amd64 with native Docker is the target,
 requiring passing runtime evidence before any support claim. A policy can request an
-exact host-name egress allowlist, which the explicit policy-only, manifest-only and
-credentials-only doctor scopes read: nothing approves, enforces or runs it yet, and the
-other commands refuse it. Named credential requests and metadata inspection are implemented;
+exact host-name egress allowlist and named credential grants. Doctor inspects them and
+approve records the reviewed grant; run retains its staged egress and credential gates.
+Named credential requests, metadata inspection and approval are implemented;
 credential delivery/accounts, network Git, LAN ingress, Compose and other
 platforms are deferred. Describing later pilot commands here does not authorize their
 implementation or settle an open security decision. Real-engine scenarios run only in CI;
@@ -283,10 +283,45 @@ Plain output names “Credentials only”, the same grants, and “Credential co
 engine and approval were not checked”. Paths use the existing terminal escaping.
 
 The [configuration contract](CONFIG.md#policy-version-3-credential-requests) defines the
-metadata rules, bounds and refusal precedence. Ordinary doctor, approve and run remain
-gated on version 3, including a version-3 policy with no credentials. File-only scopes
-accept its requests without inspecting the named host files. No token is delivered and
-no real credential use is authorized by these observations.
+metadata rules, bounds and refusal precedence. Ordinary doctor and approve accept version 3,
+including a no-grant policy. They reuse the metadata observer before engine inspection,
+after inspection and after terminal consent. Its root device and inode must equal the
+retained policy pin, including in credentials-only mode. An observed mismatch refuses
+with `doctor.checkout.changed` (exit 1), or `approve.changed` after consent.
+
+Ordinary doctor/approve reject an effective root or selected state root above 4095 UTF-8
+bytes with `doctor.checkout.root` or `approval.state.location` (exit 2). Both message and
+fix name the limit. Root text is checked before policy pinning; state text after valid
+policy and before boundary/source observation. The selected state's length includes
+`/itos-container`. These checks also apply without grants.
+
+Any credential grant requires plain output and terminal stdin and stdout. Every supplied
+`--fingerprint`, including empty, malformed or already matching, refuses after readiness
+with `approve.terminal-required`; bare redirected or JSON approval reports
+`approve.confirmation-required`. Both fixes name bare `itos container approve` at a
+terminal. An unchanged terminal approval shows its grants and disclosures without another
+prompt or record rewrite. An unsandboxed host agent can fake a terminal: approval records
+what was approved, not who.
+
+Review lists sorted kinds, JSON-escaped literal source paths and fixed targets. It explains
+that the worker will be able to read each listed file, that approval does not limit token
+provider permissions, and that delivery will copy the current source bytes into
+memory-backed staging retained for that worker until teardown. The original source is
+never written. Workload output and traffic are not redacted. With an allowlist, credential
+bytes can reach any allowed host; even a refused hostname can contain credential bytes
+and is kept in proxy and host refusal logs. Credential absence from those logs is not
+established. Help previews these prospective limits.
+
+`status` shows the protected session snapshot's exact frozen grants, even when current
+requests, approval or source files disappear. It reads none of those mutable inputs and
+never supplies grants missing from an invalid snapshot. No-grant JSON entries keep their
+previous shape. Plain status labels disclosures with the session ID and omits approval's
+temporary run warning.
+
+Credential delivery is not available in this increment; run still refuses version 3
+before manifest, engine or host state access, including with an approval or no grants.
+File-only scopes accept its requests without inspecting the named host files. No token
+is delivered and no real credential use is authorized by these observations.
 
 ## Names, help and arguments
 

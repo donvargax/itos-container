@@ -40,6 +40,10 @@
   scenarios:
     - id: "@ID-CREDENTIALS-16"
       why: metadata inspection reports both requests without reading or retaining synthetic token contents or contacting an engine
+- file: credentials-approval.feature
+  scenarios:
+    - id: "@ID-CREDAPPROVAL-05"
+      why: terminal review discloses the exact credential grants and exposure limits before consent publishes only approval state without reading source data
 - file: manifest.feature
   scenarios:
     - id: "@ID-MANIFEST-01"

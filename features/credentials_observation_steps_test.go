@@ -59,7 +59,7 @@ func (w *world) credentialObservationSteps(sc *godog.ScenarioContext) {
 		o := w.credentials.observation
 		source := w.credentials.paths["token"]
 		for i := range o.Mounts {
-			o.Mounts[i] += "2 1 0:1 / / rw - tmpfs tmpfs rw\n"
+			o.Mounts[i] += "2 1 0:1 / / rw - ext4 ext4 rw\n"
 		}
 		o.MountIDsAfterTable = map[string]int{source: 2}
 	})
@@ -179,7 +179,7 @@ func (w *world) credentialObservationFixture(boundary, layout string) error {
 	source := "/checkout-sources/token"
 	o.Nodes[source] = credentialNode{Device: 1, Inode: next, Links: 1, UID: 1000, Mode: 0100600, Size: 32, MountID: 1, Path: source}
 	next++
-	table := "1 0 0:1 / / rw - tmpfs tmpfs rw\n"
+	table := "1 0 0:1 / / rw - ext4 ext4 rw\n"
 	switch layout {
 	case "distinct outside file":
 	case "fixed account state file":
@@ -192,7 +192,7 @@ func (w *world) credentialObservationFixture(boundary, layout string) error {
 		n.Path = source
 		o.Nodes[source] = n
 	case "covered state root backing directory bound outside":
-		table += "2 1 0:1 /state/private /checkout-sources rw - tmpfs tmpfs rw\n3 1 0:2 / /state rw - tmpfs tmpfs rw\n"
+		table += "2 1 0:1 /state/private /checkout-sources rw - ext4 ext4 rw\n3 1 0:2 / /state rw - ext4 ext4 rw\n"
 		for path, node := range o.Nodes {
 			if path == "/checkout-sources" || path == source {
 				node.MountID = 2
@@ -247,7 +247,7 @@ func (w *world) credentialObservationFixture(boundary, layout string) error {
 		device := uint64(1)
 		if strings.Contains(layout, "another device") {
 			device = 2
-			table += "3 1 0:2 /private /state/private rw - tmpfs tmpfs rw\n"
+			table += "3 1 0:2 /private /state/private rw - ext4 ext4 rw\n"
 			mountroot = "/private"
 			for path, node := range o.Nodes {
 				if path == base || strings.HasPrefix(path, base+"/") {
@@ -256,7 +256,7 @@ func (w *world) credentialObservationFixture(boundary, layout string) error {
 				}
 			}
 		}
-		table += fmt.Sprintf("2 1 0:%d %s %s rw - tmpfs tmpfs rw\n", device, escape(mountroot), escape(mountpoint))
+		table += fmt.Sprintf("2 1 0:%d %s %s rw - ext4 ext4 rw\n", device, escape(mountroot), escape(mountpoint))
 		for path, node := range o.Nodes {
 			if path == mountpoint || strings.HasPrefix(path, mountpoint+"/") {
 				node.MountID, node.Device = 2, device
@@ -264,7 +264,7 @@ func (w *world) credentialObservationFixture(boundary, layout string) error {
 			}
 		}
 		if layout == "covered state backing directory bound outside" {
-			table += "3 1 0:2 / /state/private rw - tmpfs tmpfs rw\n"
+			table += "3 1 0:2 / /state/private rw - ext4 ext4 rw\n"
 			for path, node := range o.Nodes {
 				if path == base || strings.HasPrefix(path, base+"/") {
 					node.MountID, node.Device, node.Inode = 3, 2, node.Inode+100
@@ -313,11 +313,11 @@ func (w *world) credentialNamespaceFault(fault string) error {
 		n.Inode++
 		o.FinalNodes[source] = n
 	case "source mount mapping changed":
-		o.Mounts[1] = "1 0 0:1 /changed / rw - tmpfs tmpfs rw\n"
+		o.Mounts[1] = "1 0 0:1 /changed / rw - ext4 ext4 rw\n"
 	case "16385 mount rows":
 		var table strings.Builder
 		for i := 1; i <= 16385; i++ {
-			fmt.Fprintf(&table, "%d 0 0:1 / / rw - tmpfs tmpfs rw\n", i)
+			fmt.Fprintf(&table, "%d 0 0:1 / / rw - ext4 ext4 rw\n", i)
 		}
 		o.Mounts[0] = table.String()
 	case "mount table exceeds 8 MiB":

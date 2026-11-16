@@ -79,6 +79,7 @@ func (w *world) credentialApprovalHistorySteps(sc *godog.ScenarioContext) {
 				return err
 			}
 		}
+		w.credentialApproval.observedInputs = []string{filepath.Join(w.doctor.checkout, "itos-container.yaml")}
 		return w.recoveryCapture()
 	})
 	sc.Step(`^credential session status is invoked in plain and JSON modes$`, func() error {
@@ -119,6 +120,7 @@ func (w *world) credentialApprovalHistorySteps(sc *godog.ScenarioContext) {
 			return err
 		}
 		w.credentialApproval.frozen = frozen
+		w.credentialApproval.observedInputs = []string{filepath.Join(w.doctor.checkout, "itos-container.yaml"), w.approval.record}
 		return w.recoveryCapture()
 	})
 	sc.Step(`^status is invoked then the fixture removes the frozen credentials member recomputes its hash and invokes status again$`, func() error {
@@ -177,19 +179,7 @@ func (w *world) credentialApprovalSession(network string) error {
 	if err := w.recoverySeed("stopped", "durable absent", "0"); err != nil {
 		return err
 	}
-	w.credentialApproval = &credentialApprovalWorld{}
-	c := &credentialWorld{sources: filepath.Join(w.doctor.host, "sources"), paths: map[string]string{}}
-	w.credentials = c
-	if err := os.MkdirAll(c.sources, 0700); err != nil {
-		return err
-	}
-	for _, name := range []string{"claude-a", "github-a"} {
-		c.paths[name] = filepath.Join(c.sources, name)
-		if err := os.WriteFile(c.paths[name], []byte("itos-independent-historical-fixture"), 0600); err != nil {
-			return err
-		}
-	}
-	if err := os.WriteFile(filepath.Join(w.doctor.host, "slice-30-read-control"), []byte("observer control"), 0600); err != nil {
+	if err := w.credentialApprovalSources(); err != nil {
 		return err
 	}
 	if err := w.credentialApprovalRequest("both", network); err != nil {

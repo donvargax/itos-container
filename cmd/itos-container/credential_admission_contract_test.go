@@ -28,6 +28,7 @@ import (
 	rp "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	rf "github.com/donvargax/itos-container/internal/engine/readiness/port/porttest"
 	rref "github.com/donvargax/itos-container/internal/engine/readiness/reference"
+	rsource "github.com/donvargax/itos-container/internal/engine/readiness/source"
 	approve "github.com/donvargax/itos-container/internal/slices/approve/command"
 	doctor "github.com/donvargax/itos-container/internal/slices/doctor/command"
 	"github.com/donvargax/itos-container/internal/slices/doctor/inspection"
@@ -95,6 +96,10 @@ func TestCredentialAdmissionProcess(t *testing.T) {
 func credentialAdmissionCommand(t *testing.T, request credentialAdmissionRequest) credentialAdmissionOutput {
 	t.Helper()
 	files := &request.Files
+	pair := append([]string(nil), files.MountsText...)
+	for range 3 {
+		files.MountsText = append(files.MountsText, pair...)
+	}
 	files.Parser = rdisk.ParseCredentialMounts
 	files.Calls = map[string]int{}
 	pin := &rf.Checkout{Identity: request.Pin}
@@ -122,7 +127,7 @@ func credentialAdmissionCommand(t *testing.T, request credentialAdmissionRequest
 		session.AfterImage = change
 	}
 	input := rp.Input{Root: request.Root, Host: "unix:///engine.sock", OS: "linux", Architecture: "amd64"}
-	inspector := rd.Inspector{AllowVersion2: true, Checkout: pin, Policy: policies.Source, Names: idna.Names{}, Files: manifest, Parser: jsonc.Parser{}, References: reference.References{}, Digests: rref.Digests{}, Engine: engine}
+	inspector := rd.Inspector{AllowVersion2: true, AllowVersion3: true, Sources: rsource.Credentials{Checkout: pin, FS: files, Input: rp.CredentialInput{Root: request.Root, State: request.State, UID: 1000, OS: "linux", Architecture: "amd64"}, Account: &af.Account{Home: "/account"}}, Checkout: pin, Policy: policies.Source, Names: idna.Names{}, Files: manifest, Parser: jsonc.Parser{}, References: reference.References{}, Digests: rref.Digests{}, Engine: engine}
 	readiness := inspection.Readiness{Inspector: inspector, Input: input}
 	codec := ac.JSON{}
 	store := &af.Store{}
@@ -139,7 +144,7 @@ func credentialAdmissionCommand(t *testing.T, request credentialAdmissionRequest
 	presentation := &credentialAdmissionPresentation{UI: au.UI{Out: &stdout, Err: &stderr}}
 	ui := &cli.UI{Stdout: &stdout, Stderr: &stderr}
 	command := doctor.CLI{JSON: true, Approval: service, Presentation: presentation, Policies: policies, RootPolicies: policies,
-		Credentials: inspection.Credentials{Checkout: pin, FS: files, Input: rp.CredentialInput{Root: request.Root, State: request.State, UID: 1000, OS: "linux", Architecture: "amd64"}, Account: &af.Account{Home: "/account"}}}
+		Credentials: inspection.Credentials{Checkout: pin, Input: rp.CredentialInput{Root: request.Root, State: request.State, UID: 1000, OS: "linux", Architecture: "amd64"}, Observer: inspector.Sources}}
 	code := 0
 	if strings.Contains(request.Argv, "--credentials-only") {
 		command.CredentialsOnly = true
