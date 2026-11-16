@@ -7678,8 +7678,6 @@
     the small arc42 inventory update is a docs --item T-56 commit. Leave sibling ledger entries,
     ownership/status, existing command and feature files, dependency pins and enforcement inputs
     alone. Agents commit and stop; the loop owns push, CI watching and closure.
-  done_when:
-    - run: go test -count=1 -timeout=30s ./internal/engine/terminal/...
 - id: T-57
   type: test
   title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
