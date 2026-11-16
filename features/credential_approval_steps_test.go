@@ -19,11 +19,18 @@ type credentialApprovalWorld struct {
 	request     string
 	grants      []credentialGrant
 	accessError error
+	runResult   doctorResult
+	runBefore   map[string]string
+	frozen      map[string]any
+	admission   *credentialAdmissionFixture
 }
 
 func (w *world) credentialApprovalSteps(sc *godog.ScenarioContext) {
 	w.credentialApprovalHelpSteps(sc)
 	w.credentialApprovalNativeSteps(sc)
+	w.credentialApprovalHistorySteps(sc)
+	w.credentialAdmissionSteps(sc)
+	w.credentialFreezeSteps(sc)
 	sc.Step(`^a credential approval checkout with private synthetic sources$`, w.credentialApprovalCheckout)
 	sc.Step(`^the credential approval request is "([^"]*)" on "([^"]*)"$`, w.credentialApprovalRequest)
 	sc.Step(`^doctor reports the independently calculated credential fingerprint and complete effective settings$`, w.approvalCandidate)

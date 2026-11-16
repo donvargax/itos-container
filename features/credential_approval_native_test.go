@@ -26,7 +26,6 @@ func (w *world) credentialApprovalNativeSteps(sc *godog.ScenarioContext) {
 		return nil
 	})
 	sc.Step(`^its approval status is "([^"]*)"$`, w.approvalStatus)
-	sc.Step(`^its approval differences are exactly "([^"]*)" with the prior and current values$`, w.approvalExactDifferences)
 	sc.Step(`^the credential approval policy version is (\d+)$`, func(version int) error {
 		w.approval.policyVersion = version
 		if err := w.credentialApprovalPolicy(); err != nil {
@@ -120,8 +119,6 @@ func (w *world) credentialApprovalNativeSteps(sc *godog.ScenarioContext) {
 		}
 		return credentialApprovalDisclosure(text, network, true)
 	})
-	sc.Step(`^transcript shows differences "([^"]*)" with old and new values before exactly one y/N prompt$`, w.approvalReviewDifferences)
-	sc.Step(`^the transcript shows differences "([^"]*)" with old and new values before exactly one y/N prompt$`, w.approvalReviewDifferences)
 	sc.Step(`^the credential review describes exactly the current request including its applicable disclosure$`, func() error {
 		text, err := w.approvalBeforePrompt()
 		if err != nil {
@@ -138,7 +135,6 @@ func (w *world) credentialApprovalNativeSteps(sc *godog.ScenarioContext) {
 	})
 	sc.Step(`^credential observations read no source data and leak no synthetic marker$`, w.credentialApprovalNoAccess)
 	sc.Step(`^credential approve supplies fingerprint "([^"]*)" with "([^"]*)" in "([^"]*)"$`, w.credentialApprovalFingerprint)
-	sc.Step(`^approve runs at a terminal in "([^"]*)" with streams "([^"]*)"$`, func(mode, streams string) error { return w.credentialApprovalTerminal(mode, "y", "", streams) })
 	sc.Step(`^the credential refusal names terminal "itos container approve" without offering a fingerprint route$`, func() error {
 		text := w.stderr
 		if json.Valid([]byte(w.stdout)) {

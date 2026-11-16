@@ -88,6 +88,7 @@ type Session struct {
 	InfoReads                                 int
 	ImageReads                                []string
 	VersionReads, Revalidations               int
+	AfterImage                                func()
 }
 
 func (s *Session) Endpoint() string { return s.Address }
@@ -112,6 +113,9 @@ func (s *Session) Info() (port.Info, port.Failure) {
 	return s.InfoData, port.None
 }
 func (s *Session) Image(reference string) (port.Image, port.Failure) {
+	if s.AfterImage != nil {
+		defer s.AfterImage()
+	}
 	s.ImageReads = append(s.ImageReads, reference)
 	if s.ImageFailure != port.None {
 		return port.Image{}, s.ImageFailure
