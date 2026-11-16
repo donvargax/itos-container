@@ -23,6 +23,28 @@ func credentialDomainFixture() (*porttest.CredentialFiles, domain.Credentials, [
 	return f, c, []policy.Credential{{Kind: "claude-token", Source: "/vault/token"}}
 }
 
+func TestCredentialObservationRequiresCompletePolicyIdentity(t *testing.T) {
+	for _, tc := range []struct{ name, device, inode string }{
+		{"missing device", "", "2"},
+		{"missing inode", "1", ""},
+		{"missing identity", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fs, c, grants := credentialDomainFixture()
+			c.Input.PolicyDevice, c.Input.PolicyInode = tc.device, tc.inode
+			// Call directly: credentialInspect fills in the fixture's identity.
+			got := c.Inspect(grants)
+			want := []port.CredentialIssue{{Rule: "checkout.unavailable", Index: -1, Subject: "/checkout"}}
+			if !reflect.DeepEqual(got.Issues, want) {
+				t.Fatalf("incomplete policy identity: %#v, want %#v", got.Issues, want)
+			}
+			if fs.Calls["source metadata"] != 0 {
+				t.Fatalf("incomplete policy identity inspected sources: %v", fs.Calls)
+			}
+		})
+	}
+}
+
 func TestCredentialSourceOutcomes(t *testing.T) {
 	for _, tc := range []struct {
 		name, rule string

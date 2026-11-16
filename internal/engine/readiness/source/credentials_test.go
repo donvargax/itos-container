@@ -62,7 +62,7 @@ func TestCredentialObservationRequiresThePolicyPin(t *testing.T) {
 			if len(got.Issues) != 0 {
 				t.Fatalf("matching policy pin: %#v", got)
 			}
-		} else if len(got.Issues) != 1 || got.Issues[0].Rule != want || got.Issues[0].Subject != "/checkout" || fs.Calls["source metadata"] != 0 {
+		} else if len(got.Issues) != 1 || got.Issues[0] != (port.CredentialIssue{Rule: want, Index: -1, Subject: "/checkout"}) || fs.Calls["source metadata"] != 0 {
 			t.Fatalf("%s: %#v %v", state, got, fs.Calls)
 		}
 	}
