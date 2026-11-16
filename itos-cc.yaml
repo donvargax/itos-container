@@ -123,3 +123,12 @@ mutation:
       replacement: "&&"
       reason: After schema 4 normalization, the earlier branches already handle two non-3 schemas and every schema-2 origin, and the next record has passed ValidEgressShape. Replacing this first || with && can proceed further only when exactly one remaining schema is 3 and the original record also has valid egress shape. The non-3 record must then have an empty EgressRecord, whereas the schema-3 record must have all three nonempty resource names. The first differing resource therefore fails the unchanged name-equality check below. Both versions return false with no effects. When both schemas are 3 the unchanged original-shape guard decides identically. No input changes the transition result.
       line_text: if r.Schema != 3 || n.Schema != 3 || !r.ValidEgressShape() {
+    - file: internal/engine/session/disk/credentials.go
+      function: github.com/donvargax/itos-container/internal/engine/session/disk.Credentials#heldDirectory
+      hash: 4e005fac0b7efd48
+      line_in_function: 15
+      column: 94
+      original: "0"
+      replacement: "1"
+      reason: The production openFile operation is os.Root.OpenFile with O_RDONLY, O_DIRECTORY and O_NOFOLLOW and no creation flag. Its permission argument applies only to file creation; both 0 and 1 pass the Root.OpenFile permission-bit validation. Both versions therefore open the same existing directory, or return the same missing-path or unsafe-path error, without creating anything or changing permissions. All descriptor identity, ownership, entry and cleanup checks receive the same file. An injected test that only checks the unused argument would not establish changed behavior.
+      line_text: file, err := calls.openFile(base, name, os.O_RDONLY|credentialDirectory|credentialNoFollow, 0)
