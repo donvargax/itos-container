@@ -116,3 +116,38 @@ func TestFeatureBinaryFailedBuildIsNotCached(t *testing.T) {
 		t.Error("failed build poisoned cache", err, readErr, string(data))
 	}
 }
+
+func TestStandaloneSessionProbeSurvivesFixtureCleanup(t *testing.T) {
+	root, err := moduleRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first string
+	var original os.FileInfo
+	t.Run("first fixture", func(t *testing.T) {
+		w := &world{root: root, dir: t.TempDir()}
+		first, err = w.sessionProbeBinary()
+		if err != nil {
+			t.Fatal(err)
+		}
+		original, err = os.Stat(first)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	if t.Failed() {
+		return
+	}
+	if _, err := os.Stat(first); err != nil {
+		t.Fatal("fixture cleanup discarded the reusable test assembly", err)
+	}
+	w := &world{root: root, dir: t.TempDir()}
+	second, err := w.sessionProbeBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reused, err := os.Stat(second)
+	if err != nil || !os.SameFile(original, reused) {
+		t.Fatal("independent fixtures rebuilt the same test assembly", err)
+	}
+}
