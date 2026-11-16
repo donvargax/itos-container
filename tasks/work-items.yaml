@@ -1,8 +1,7 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue:
-  - T-58
+queue: []
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -2210,6 +2209,6 @@ items:
     title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
