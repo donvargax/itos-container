@@ -14,6 +14,48 @@ import (
 
 const fixtureWarmupCall = `engine_warmup_run 9s 1s '10 seconds' bash -euo pipefail -c "$(declare -f); warmup_fixture \"\$1\" \"\$2\" \"\$3\"" _ "$reference" "$fixture_uid" "$fixture_gid" || fail "warm-up phase: expected completion; observed status=$?"`
 
+const fixtureProductWarmupCall = `engine_warmup_product_run 9s 1s '10 seconds' bash -euo pipefail -c "$(declare -f); product_warmup_fixture \"\$1\" \"\$2\" \"\$3\"" _ "$built" "$fixture_uid" "$fixture_gid" || fail "warm-up product phase: expected completion; observed status=$?"`
+
+func fixtureProductPreparationIssues(driver string) []string {
+	prepare := fixtureWarmupLines(fixtureFunction(driver, "prepare"))
+	plain, product := fixtureWarmupLines(fixtureWarmupCall), fixtureWarmupLines(fixtureProductWarmupCall)
+	if strings.Count(prepare, product) != 1 || !strings.Contains("\n"+prepare, "\n"+product) {
+		return []string{"prepare must execute exactly one bounded product warm-up after plain warm-up and before publication"}
+	}
+	if !strings.Contains(prepare, plain) || strings.Index(prepare, product) < strings.Index(prepare, plain) ||
+		strings.Index(prepare, `>>"$GITHUB_OUTPUT"`) < strings.Index(prepare, product) || strings.Count(prepare, `>>"$GITHUB_OUTPUT"`) != 1 {
+		return []string{"both warm-ups must succeed in order before the sole fixture output publication"}
+	}
+	return nil
+}
+
+func TestEngineFixtureWarmupProduct(t *testing.T) {
+	driverBytes, err := os.ReadFile("../tools/bin/engine-fixture")
+	requireFixture(t, err == nil, "%v", err)
+	driver := string(driverBytes)
+	// The first assertion checks the executable path before calling any new helper.
+	requireFixture(t, len(fixtureProductPreparationIssues(driver)) == 0, "%s", strings.Join(fixtureProductPreparationIssues(driver), "\n"))
+	for _, tc := range []struct{ name, replacement string }{
+		{"missing", ""}, {"duplicate", fixtureProductWarmupCall + "\n" + fixtureProductWarmupCall},
+		{"commented", "# " + fixtureProductWarmupCall}, {"unused string", "unused='" + fixtureProductWarmupCall + "'"},
+		{"unbounded", strings.ReplaceAll(fixtureProductWarmupCall, "engine_warmup_product_run 9s 1s '10 seconds'", "bash")},
+		{"wrong bound", strings.ReplaceAll(fixtureProductWarmupCall, "9s 1s", "19s 2s")},
+		{"swallowed failure", strings.ReplaceAll(fixtureProductWarmupCall, `|| fail "warm-up product phase: expected completion; observed status=$?"`, "|| true")},
+		{"wrong image", strings.ReplaceAll(fixtureProductWarmupCall, `"$built"`, `"$base_image"`)},
+		{"early publication", `printf 'image=bad' >>"$GITHUB_OUTPUT"` + "\n" + fixtureProductWarmupCall},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			broken := strings.ReplaceAll(driver, fixtureProductWarmupCall, tc.replacement)
+			requireFixture(t, broken != driver && len(fixtureProductPreparationIssues(broken)) > 0, "accepted broken product preparation")
+		})
+	}
+	t.Run("late", func(t *testing.T) {
+		broken := strings.ReplaceAll(driver, fixtureProductWarmupCall, "")
+		broken = strings.ReplaceAll(broken, `>>"$GITHUB_OUTPUT"`, `>>"$GITHUB_OUTPUT"`+"\n"+fixtureProductWarmupCall)
+		requireFixture(t, len(fixtureProductPreparationIssues(broken)) > 0, "accepted late product phase")
+	})
+}
+
 const fixtureWarmupOperation = `local reference=$1 fixture_uid=$2 fixture_gid=$3
 printf '%s\n' "$warmup_name" >"$state/warmup.intent" || fail "warm-up intent record: expected writable record; observed status=$?"
 d container create --name "$warmup_name" --cidfile "$state/warmup.cid" \
