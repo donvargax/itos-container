@@ -339,3 +339,11 @@ questions:
     item: "slice-28"
     question: "slice-28: its implementer (attempt 3) stopped for engine red evidence of @ID-EGRESSLIFE-10, 12 and 13. Does the dispatched run supply it?"
     answer: "No (the coordinator, 2026-11-16). Run 43837841004 at bc42d2b ran seven cases and every one ended in a nil pointer dereference inside the step code (features/run_preflight_process_test.go:275, startRun), before any assertion: a fault of the harness on the native path, not the product's missing behaviour. slice-28 repairs that, defines the steps still missing for @ID-EGRESSLIFE-06, 07 and 11, and stops once more for one run of all six."
+  - id: q-85
+    item: "slice-38"
+    question: "slice-38: its implementer (attempt 1) returned blocked with a partial checkpoint (two test commits; EXEC-03 to 16, the runtime and CI evidence unfinished) and named nothing it waits on. Is anything owed before it goes on?"
+    answer: "Nothing (the coordinator, 2026-11-16, as q-82 for slice-34). The attempt stopped unfinished, not blocked: its two commits (9a477b1, bbac71b) are on the branch at 52fe0e5 with main merged in. slice-38 goes on with the remaining step definitions, the runtime and the code proof."
+  - id: q-86
+    item: "slice-28"
+    question: "slice-28: its implementer (attempt 4) stopped for engine red evidence on @ID-EGRESSLIFE-06, 07, 10, 11, 12 and 13 at 4b8cc34. Is the evidence accepted?"
+    answer: "Yes (the coordinator, 2026-11-16). Dispatch 43952255861 at 4b8cc34, Engine shard (other): ten cases, 86 steps, 54 passed, 10 failed, 22 skipped, none undefined, no panic; each case fails at an assertion after its product run. slice-28 goes on to the implementation; the run and each failure are in its steer file."
