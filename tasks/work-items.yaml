@@ -2132,3 +2132,17 @@ items:
       an engine package and command integration in existing slices. Record the architecture change.
       Add black-box scenarios, including executable /tmp proof; its current configuration already
       omits noexec. Real-engine red/green evidence runs only in CI. Broken down from null.
+  - id: p1-harness-codex-home-seeding
+    title: Codex starts with isolated state and unwanted startup services disabled
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-harness-owned-home]
+    kind: idea
+    why: >
+      Seed the container-owned home with Codex update checks, analytics, plugins and its own sandbox
+      disabled, as the charter requires. Specify initialization and repeat-run behavior without
+      changing literal workload argv or executing checkout code on the host. Keep authentication
+      delivery in slice-32 and follow the charter's dedicated-directory decision rather than that
+      item's stale single-file wording. Prove settings and startup behavior with black-box scenarios
+      and controlled endpoints, without real accounts or credentials. Broken down from null.
