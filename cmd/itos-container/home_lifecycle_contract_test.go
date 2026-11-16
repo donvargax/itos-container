@@ -251,7 +251,20 @@ func (f *homeLocalFixture) seedHomeSession(t *testing.T, state string) (string, 
 	case "running after controller loss", "running with live controller", "running after controller death":
 		o.Status, o.Running, o.Started, o.PID = "running", true, true, 123
 	}
-	f.engine.Resources[worker] = o
+	// These states have a durable home claim but no observed worker yet.
+	// An uncertain create retains its issued name; a paused launch has fenced
+	// no-create evidence and can be cancelled by ordinary session recovery.
+	if state == "uncertain worker create" || state == "paused launch before worker create" {
+		i.ContainerID = ""
+		i.Stage = "intent"
+		if state == "paused launch before worker create" {
+			i.Stage = "reserved"
+		}
+		f.m.storage.Directories["intents/"+f.m.c.Project].Files[token+".json"] = f.m.registry.Store.Codec.Encode(i)
+		delete(f.engine.Resources, worker)
+	} else {
+		f.engine.Resources[worker] = o
+	}
 	if f.disk != nil {
 		f.disk.seed()
 		f.sdk.seed()
@@ -390,24 +403,6 @@ func homeOperationBudget(t *testing.T, operation string) {
 			}
 		}
 	})
-}
-func homeSharedScope(t *testing.T) {
-	homePositive(t)
-	f := newHomeLocalFixture(t, "1000", "1000")
-	id, _, g := f.seedHomeSession(t, "unstarted")
-	homeRequireRun(t, f, 75, "run.home-unavailable")
-	if code, out, d := f.command(t, "stop", id, "--json"); code != 0 {
-		t.Fatal(code, out, d)
-	}
-	homeRequireRun(t, f, 0, "")
-	if len(f.engine.Homes) != 1 || f.engine.Roots[g.Name].Marker != "original" {
-		t.Fatal("shared scope recreated home")
-	}
-	for _, event := range f.engine.HomeEvents {
-		if event == "allocate" || event == "initialize" {
-			t.Fatal("shared scope lost ownership", event)
-		}
-	}
 }
 func homeObservation(g sp.HomeGeneration, key string) sp.HomeObservation {
 	return sp.HomeObservation{Name: g.Name, Created: g.Created, Driver: "local", Scope: "local", Token: g.ID, Key: key, ExactLabels: true, EmptyOptions: true}

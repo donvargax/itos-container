@@ -65,32 +65,35 @@ func homeCatalogDiscovery(t *testing.T) {
 }
 func homeConsentContract(t *testing.T, response string) {
 	for _, action := range []string{"reset", "delete"} {
-		homeManagementControl(t, action)
 		for _, jsonMode := range []bool{false, true} {
-			f := newHomeLocalFixture(t, "1000", "1000")
-			g := f.seedHome(t)
-			before := homeScopeBytes(f)
-			f.consent = homeLocalConsent{before: func(e sp.HomeEntry, a string) {
-				if e.ID != g.ID || e.Name != g.Name || e.Engine != f.scope().Engine || a != action {
-					t.Fatal("wrong consent review", e, a)
+			for _, answer := range []string{response, "terminal yes"} {
+				f := newHomeLocalFixture(t, "1000", "1000")
+				g := f.seedHome(t)
+				before := homeScopeBytes(f)
+				f.consent = homeConsentFor(t, f, g, answer)
+				args := []string{"stop", "--home", g.ID, "--" + action}
+				if jsonMode {
+					args = append(args, "--json")
 				}
-			}}
-			args := []string{"stop", "--home", g.ID, "--" + action}
-			if jsonMode {
-				args = append(args, "--json")
-			}
-			code, out, d := f.command(t, args...)
-			if code != 1 || !strings.Contains(d, "recovery.consent-required") {
-				t.Fatal(response, code, out, d)
-			}
-			if jsonMode {
-				var value map[string]any
-				if json.Unmarshal([]byte(out), &value) != nil || value["schema"] != float64(1) {
-					t.Fatal("prompt contaminated stdout", out)
+				code, out, d := f.command(t, args...)
+				if answer == "terminal yes" {
+					if code != 0 || len(f.engine.Homes) != 0 {
+						t.Fatal("terminal consent did not retire", code, out, d)
+					}
+				} else {
+					if code != 1 || !strings.Contains(d, "recovery.consent-required") {
+						t.Fatal(response, code, out, d)
+					}
+					homeUnchanged(t, f, before)
+					f.noHomeMutation(t, 0)
+				}
+				if jsonMode {
+					var value map[string]any
+					if json.Unmarshal([]byte(out), &value) != nil || value["schema"] != float64(1) {
+						t.Fatal("prompt contaminated stdout", out)
+					}
 				}
 			}
-			homeUnchanged(t, f, before)
-			f.noHomeMutation(t, 0)
 		}
 	}
 }
@@ -265,13 +268,18 @@ func homeClaimFence(t *testing.T, reference string) {
 		homeManagementControl(t, action)
 		f := newHomeLocalFixture(t, "1000", "1000")
 		id, worker, g := f.seedHomeSession(t, reference)
-		f.consent = homeLocalConsent{yes: true}
+		manager := homeOtherState(t, f)
+		manager.consent = homeLocalConsent{yes: true}
 		before := len(f.engine.Events)
-		e := f.retire(t, g.ID, action, 1)
-		if f.lastRule != "recovery.home-in-use" {
-			t.Fatal("known claim lost its diagnosis", f.lastRule)
+		e := manager.retire(t, g.ID, action, 1)
+		if manager.lastRule != "recovery.home-in-use" {
+			t.Fatal("known claim lost its diagnosis", manager.lastRule)
 		}
-		if !slices.Equal(e.References, []string{id}) || len(f.engine.Resources) != 1 {
+		wantWorkers := 1
+		if reference == "uncertain worker create" || reference == "paused launch before worker create" {
+			wantWorkers = 0
+		}
+		if !slices.Equal(e.References, []string{id}) || len(f.engine.Resources) != wantWorkers {
 			t.Fatal("home claim not retained", e)
 		}
 		for _, event := range f.engine.Events[before:] {
@@ -279,14 +287,21 @@ func homeClaimFence(t *testing.T, reference string) {
 				t.Fatal("management stopped worker")
 			}
 		}
-		if _, ok := f.engine.Resources[worker]; !ok {
+		if _, ok := f.engine.Resources[worker]; !ok && wantWorkers != 0 {
 			t.Fatal("worker removed")
+		}
+		if reference == "uncertain worker create" {
+			// The delayed engine create becomes observable before stop. Name-only
+			// absence above must not have been treated as release evidence.
+			token := strings.Repeat("b", 63) + "1"
+			i := f.m.b.Intent(token)
+			f.engine.Resources[worker] = sp.Observation{ID: worker, Name: i.Name, ImageID: i.ImageID, Token: token, Project: i.Project, Fingerprint: i.Fingerprint, StatePresent: true, Status: "created", HomeName: g.Name, HomeExact: true, AnchorName: "itos-container-anchor-" + token, AnchorExact: true}
 		}
 		code, out, d := f.command(t, "stop", id, "--json")
 		if code != 0 || len(f.scope().Generations[0].Claims) != 0 {
 			t.Fatal("session did not release claim", code, out, d)
 		}
-		f.retire(t, g.ID, action, 0)
+		manager.retire(t, g.ID, action, 0)
 		// A launch claiming while the terminal waits invalidates that review.
 		f = newHomeLocalFixture(t, "1000", "1000")
 		g = f.seedHome(t)

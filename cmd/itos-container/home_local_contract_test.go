@@ -31,6 +31,7 @@ type homeLocalFixture struct {
 	sdk            *homeSDKFixture
 	m              publicMemory
 	homes          *sf.Homes
+	homeStore      sp.HomeStore
 	engine         *sf.HomeEngine
 	next           uint64
 	consent        sp.HomeConsent
@@ -212,6 +213,9 @@ func (f *homeLocalFixture) service() domain.Homes {
 	var store sp.HomeStore = f.homes
 	if f.disk != nil {
 		store = f.disk
+	}
+	if f.homeStore != nil {
+		store = f.homeStore
 	}
 	return domain.Homes{Store: store, Engine: f.runEngine(), Entropy: homeLocalEntropy{f}}
 }

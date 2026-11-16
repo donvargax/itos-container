@@ -15,7 +15,11 @@ type Homes struct {
 	Codec         port.HomeCodec
 	Scopes        map[string]port.HomeScope
 	Failure       port.Outcome
+	ReadFailure   port.Outcome
+	ClaimFailure  port.Outcome
+	MissingOpen   bool
 	ClaimsFailure port.Outcome
+	Before        func(string)
 	BeforeSave    func(port.HomeScope) port.Outcome
 	mu            sync.Mutex
 	locks         map[string]chan struct{}
@@ -23,6 +27,9 @@ type Homes struct {
 
 func (s *Homes) Scope(b port.Binding) string { return s.Codec.Scope(b) }
 func (s *Homes) List(ctx context.Context) ([]string, port.Outcome) {
+	if s.Before != nil {
+		s.Before("list")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ctx.Err() != nil {
@@ -39,6 +46,9 @@ func (s *Homes) List(ctx context.Context) ([]string, port.Outcome) {
 	return result, ""
 }
 func (s *Homes) Open(ctx context.Context, key string, create bool) (port.HomeTransaction, port.Outcome) {
+	if s.Before != nil {
+		s.Before("open")
+	}
 	s.mu.Lock()
 	if s.locks == nil {
 		s.locks = map[string]chan struct{}{}
@@ -64,6 +74,10 @@ func (s *Homes) Open(ctx context.Context, key string, create bool) (port.HomeTra
 		lock <- struct{}{}
 		return nil, s.Failure
 	}
+	if s.MissingOpen {
+		lock <- struct{}{}
+		return nil, ""
+	}
 	if _, ok := s.Scopes[key]; !ok && !create {
 		lock <- struct{}{}
 		return nil, ""
@@ -87,10 +101,16 @@ func cloneHome(s port.HomeScope) port.HomeScope {
 	return s
 }
 func (t *homeTransaction) Read() (port.HomeScope, port.Outcome) {
+	if t.store.Before != nil {
+		t.store.Before("read")
+	}
 	t.store.mu.Lock()
 	defer t.store.mu.Unlock()
 	if t.ctx.Err() != nil {
 		return port.HomeScope{}, port.Incomplete
+	}
+	if t.store.ReadFailure != "" {
+		return port.HomeScope{}, t.store.ReadFailure
 	}
 	return cloneHome(t.store.Scopes[t.key]), t.store.Failure
 }
@@ -118,9 +138,15 @@ func (t *homeTransaction) Save(s port.HomeScope) port.Outcome {
 	return ""
 }
 func (s *Homes) Claim(r port.Record, id string) (port.HomeClaim, port.Outcome) {
+	if s.ClaimFailure != "" {
+		return port.HomeClaim{}, s.ClaimFailure
+	}
 	return port.HomeClaim{Session: id, StateRoot: "/fixture/state/itos-container", Intent: port.Reference(r.Project, r.NameToken())}, ""
 }
 func (s *Homes) CheckClaims(_ context.Context, _ port.HomeScope, g port.HomeGeneration) port.Outcome {
+	if s.Before != nil {
+		s.Before("claims")
+	}
 	if s.ClaimsFailure != "" {
 		return s.ClaimsFailure
 	}

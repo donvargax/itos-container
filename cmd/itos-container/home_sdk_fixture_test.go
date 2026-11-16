@@ -350,8 +350,15 @@ func (a *homeSDKFixture) seed() {
 	for _, dir := range f.m.storage.Directories {
 		for _, data := range dir.Files {
 			var r sp.Record
-			if json.Unmarshal(data, &r) != nil || r.Stage != "owned" || r.ContainerID == "" {
+			if json.Unmarshal(data, &r) != nil || r.Stage != "owned" && r.Stage != "intent" {
 				continue
+			}
+			if r.ContainerID == "" {
+				for id, observed := range f.engine.Resources {
+					if observed.Name == r.Name {
+						r.ContainerID = id
+					}
+				}
 			}
 			o, exists := f.engine.Resources[r.ContainerID]
 			if !exists {
