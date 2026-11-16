@@ -140,6 +140,9 @@ func (w *world) approvalCapture() error {
 	a := w.approval
 	var err error
 	a.before, err = doctorTree(w.dir)
+	if w.credentialApproval != nil {
+		a.before, err = w.credentialApprovalTree()
+	}
 	if err != nil {
 		return err
 	}
@@ -376,6 +379,9 @@ func (w *world) approvalUnsafe(layout string) error {
 
 func (w *world) approvalSameTree() error {
 	actual, err := doctorTree(w.dir)
+	if w.credentialApproval != nil {
+		actual, err = w.credentialApprovalTree()
+	}
 	if err != nil {
 		return err
 	}

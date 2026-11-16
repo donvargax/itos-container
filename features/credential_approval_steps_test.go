@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ type credentialApprovalWorld struct {
 
 func (w *world) credentialApprovalSteps(sc *godog.ScenarioContext) {
 	w.credentialApprovalHelpSteps(sc)
+	w.credentialApprovalNativeSteps(sc)
 	sc.Step(`^a credential approval checkout with private synthetic sources$`, w.credentialApprovalCheckout)
 	sc.Step(`^the credential approval request is "([^"]*)" on "([^"]*)"$`, w.credentialApprovalRequest)
 	sc.Step(`^doctor reports the independently calculated credential fingerprint and complete effective settings$`, w.approvalCandidate)
@@ -178,9 +180,20 @@ func (w *world) credentialApprovalWatch() (func(), error) {
 			credentialWatchClose(fd)
 			return nil, err
 		}
-		if _, err := credentialWatchAdd(fd, path); err != nil {
+		mode := info.Mode().Perm()
+		if mode&0400 == 0 {
+			if err := os.Chmod(path, mode|0400); err != nil {
+				credentialWatchClose(fd)
+				return nil, err
+			}
+		}
+		_, watchErr := credentialWatchAdd(fd, path)
+		if mode&0400 == 0 {
+			watchErr = errors.Join(watchErr, os.Chmod(path, mode))
+		}
+		if watchErr != nil {
 			credentialWatchClose(fd)
-			return nil, err
+			return nil, watchErr
 		}
 	}
 	control := filepath.Join(w.doctor.host, "slice-30-read-control")

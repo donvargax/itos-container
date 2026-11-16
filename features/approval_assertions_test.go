@@ -353,6 +353,9 @@ func (w *world) approvalOnlyState() error {
 		}
 	}
 	actual, err := doctorTree(w.dir)
+	if w.credentialApproval != nil {
+		actual, err = w.credentialApprovalTree()
+	}
 	if err != nil {
 		return err
 	}
@@ -365,6 +368,9 @@ func (w *world) approvalOnlyState() error {
 		allowed = filepath.Join(w.doctor.env["HOME"], ".local")
 	}
 	for path, value := range actual {
+		if w.credentialApproval != nil && path == filepath.Dir(allowed) && strings.Split(value, "|mtime=")[0] == strings.Split(before[path], "|mtime=")[0] {
+			continue
+		}
 		if control[path] || path == allowed || strings.HasPrefix(path, allowed+string(os.PathSeparator)) {
 			continue
 		}
