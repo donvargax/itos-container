@@ -244,6 +244,37 @@ func ownedCredentialEgress(r port.Record) port.EgressRecord {
 	}
 }
 
+func TestCredentialProgressEgressCleanupBeforeLaunch(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+	r.Credentials.Stage = "absent"
+	r.Egress = ownedCredentialEgress(r)
+	for _, resource := range []string{"proxy", "network", "internal"} {
+		n := r
+		switch resource {
+		case "proxy":
+			n.Egress.Proxy.Stage = "absent"
+		case "network":
+			n.Egress.Network.Stage = "absent"
+		case "internal":
+			n.Egress.Internal.Stage = "absent"
+		}
+		if !r.ValidTransition(n) || n.Completed() {
+			t.Fatal("pre-launch egress cleanup refused or prematurely completed the session", resource)
+		}
+		r = n
+	}
+	n := r
+	n.Anchor.Stage = "absent"
+	if !r.ValidTransition(n) || n.Completed() {
+		t.Fatal("pre-launch anchor cleanup lost the pending cancellation")
+	}
+	r = n
+	n.Stage = "cancelled"
+	if !r.ValidTransition(n) || !n.Completed() {
+		t.Fatal("confirmed pre-launch cleanup did not permit terminal cancellation")
+	}
+}
+
 func TestCredentialProgressRefusesMalformedEgressOrigin(t *testing.T) {
 	for _, schema := range []int{3, 4} {
 		r := f.CredentialIntent(port.CredentialKinds{Claude: true})

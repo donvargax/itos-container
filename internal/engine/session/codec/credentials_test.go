@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -64,6 +65,22 @@ func TestCredentialRecordsRejectEmptyAndSingleByteInputs(t *testing.T) {
 		if got, failure := codec.Decode(input); failure != port.Invalid || got != (port.Record{}) {
 			t.Fatal("empty or single-byte input produced a credential record")
 		}
+	}
+}
+
+func TestCredentialRecordsSizeBoundary(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+	parser := &mf.Parser{}
+	codec := JSON{Parser: parser}
+	data := codec.Encode(r)
+	parser.Value = credentialValue(t, data)
+	// JSON whitespace keeps a complete valid record at the wire-size limit.
+	data = append(data, bytes.Repeat([]byte(" "), 65536-len(data))...)
+	if got, failure := codec.Decode(data); failure != "" || got != r {
+		t.Fatal("credential record at the size limit was refused", failure)
+	}
+	if got, failure := codec.Decode(append(data, ' ')); failure != port.Invalid || got != (port.Record{}) {
+		t.Fatal("oversized credential record was accepted")
 	}
 }
 
