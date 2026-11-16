@@ -72,8 +72,11 @@ func fixtureWarmupSourceIssues(driver string) []string {
 		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `warmup) [[ $name == "$warmup_name" ]] || fail "${diagnostic}container name: expected=$warmup_name; observed=$(fixture_value "$name")"
 expected=$(cat "$state/build.iid") || fail "${diagnostic}container image read: expected build.iid; observed status=$?" ;;`},
 		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `[[ $kind != warmup ]] || diagnostic='warm-up '`},
-		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `jq -e --arg name "/$name" --arg image "$expected" --arg owner "$owner"`},
-		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `'length == 1 and .[0].Name == $name and .[0].Image == $image and`},
+		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `digest_valid "$expected" || fail`},
+		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `cid=$name
+if [[ -s $state/$kind.cid ]]; then
+cid=$(cat "$state/$kind.cid") || fail`},
+		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `jq -e --arg name "/$name" --arg image "$expected" --arg owner "$owner" 'length == 1 and .[0].Name == $name and .[0].Image == $image and`},
 		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `.[0].Config.Labels["io.itos.engine-fixture"] == $owner and`},
 		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `all(.[0].Mounts[]?; .Type == "tmpfs")' "$state/removing-container.json" >/dev/null 2>&1 || fail`},
 		{fixtureWarmupLines(fixtureFunction(driver, "remove_container")), `d container rm --force --volumes "$observed" || fail`},
@@ -113,6 +116,9 @@ func TestEngineFixtureWarmup(t *testing.T) {
 		{"no CID", `--cidfile "$state/warmup.cid"`, `--cidfile "$state/unused.cid"`},
 		{"no owner", `--label "io.itos.engine-fixture=$owner"`, `--label "unused=$owner"`},
 		{"wrong name check", `warmup) [[ $name == "$warmup_name" ]]`, `warmup) [[ $name == "$smoke_name" ]]`},
+		{"wrong immutable image", `expected=$(cat "$state/build.iid")`, `expected=$(cat "$state/base.iid")`},
+		{"missing image validation", `digest_valid "$expected" || fail`, `true || fail`},
+		{"no interrupted-create recovery", `cid=$name`, `cid=unknown`},
 		{"wrong image check", `.Image == $image and`, `.Image != $image and`},
 		{"wrong owner check", `.Config.Labels["io.itos.engine-fixture"] == $owner`, `.Config.Labels["unused"] == $owner`},
 		{"wrong mount check", `all(.[0].Mounts[]?; .Type == "tmpfs")`, `true`},
@@ -133,6 +139,10 @@ func TestEngineFixtureWarmup(t *testing.T) {
 	})
 
 	t.Run("definitions only", func(t *testing.T) {
+		library, err := os.ReadFile("../tools/lib/engine-fixture-warmup.sh")
+		requireFixture(t, err == nil, "%v", err)
+		remainder := regexp.MustCompile(`(?ms)^engine_warmup_[a-z_]+\(\) \{\n.*?^\}\n?`).ReplaceAllString(string(library), "")
+		requireFixture(t, fixtureWarmupLines(remainder) == "", "library contains executable top-level work")
 		stdout, stderr, err := runFixtureWarmupShell(t, `source "$1"`)
 		requireFixture(t, err == nil && stdout == "" && stderr == "", "sourcing performed work: %v %s %s", err, stdout, stderr)
 	})
@@ -147,6 +157,7 @@ func TestEngineFixtureWarmup(t *testing.T) {
 		{"unavailable start clock", `engine_warmup_now() { return 1; }; engine_warmup_run 1s 1s '2 seconds' true`, "unknown", "failed", "timing:"},
 		{"invalid start clock", `engine_warmup_now() { printf 'invalid\n'; }; engine_warmup_run 1s 1s '2 seconds' true`, "unknown", "failed", "timing:"},
 		{"unavailable end clock", fixtureWarmupClock("1234", "") + `engine_warmup_run 1s 1s '2 seconds' true`, "unknown", "failed", "timing:"},
+		{"invalid end clock", fixtureWarmupClock("1234", "invalid") + `engine_warmup_run 1s 1s '2 seconds' true`, "unknown", "failed", "timing:"},
 		{"timing output failure", `engine_warmup_timing() { return 23; }; engine_warmup_run 1s 1s '2 seconds' true`, "", "failed", "timing output:"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -178,6 +189,13 @@ func TestEngineFixtureWarmup(t *testing.T) {
 			}
 		})
 	}
+	t.Run("timing write failure", func(t *testing.T) {
+		if _, err := os.Stat("/dev/full"); err != nil {
+			t.Skip("requires the always-full device")
+		}
+		stdout, stderr, err := runFixtureWarmupShell(t, `source "$1"; engine_warmup_run 1s 1s '2 seconds' true >/dev/full`)
+		requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: warm-up timing output:"), "timing write failure was hidden: %v %s %s", err, stdout, stderr)
+	})
 }
 
 func fixtureWarmupClock(first, second string) string {
