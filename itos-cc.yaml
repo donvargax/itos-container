@@ -168,3 +168,12 @@ mutation:
       replacement: "1"
       reason: Only input lengths zero and one change the early branch. Neither can encode a JSON object containing the required session fields. An initialized codec still returns the empty Record and port.Invalid when the pure manifest parser refuses or reports a non-object; even a parser reporting every required field then reaches json.Unmarshal, which rejects every such input. Longer inputs take identical paths. No I/O or persisted state changes. TestCredentialRecordsRejectEmptyAndSingleByteInputs checks all 257 short inputs with a valid-record parser value, covering the independent decoding refusal. Thus the mutation changes only where invalid input is refused.
       line_text: if len(data) == 0 || len(data) > 65536 {
+    - file: internal/engine/session/disk/credential_sources.go
+      function: github.com/donvargax/itos-container/internal/engine/session/disk.CheckedSources#Revalidate
+      hash: 58f6cde84de7eba2
+      line_in_function: 46
+      column: 13
+      original: "true"
+      replacement: "false"
+      reason: "This assignment is reached only when a prior capability is held and every metadata comparison succeeded. The immediately preceding capture.release closes all newly captured handles and sets capture.selected to nil. Replacing true with false only runs the deferred capture.release again: its range over nil closes no handles, and assigning nil again changes no state. The original s.held and s.checked remain untouched, all return values and filesystem calls are identical, and earlier failure paths are unchanged. TestCredentialCheckedSourcesRecheckRetainedMetadata and the retained-inode controls verify original handle preservation and complete release with either value. No behavior can distinguish this second empty release."
+      line_text: success = true
