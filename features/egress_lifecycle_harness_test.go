@@ -23,7 +23,7 @@ import (
 func TestEgressLifecycleNativeStepsDefined(t *testing.T) {
 	definitions := &egressDefinitions{t: t}
 	(&world{}).egressNativeSteps(definitions)
-	suite := godog.TestSuite{Name: "slice-28-native-definitions", Options: &godog.Options{Paths: []string{"egress_lifecycle.feature"}, Tags: "@ID-EGRESSLIFE-08,@ID-EGRESSLIFE-09,@ID-EGRESSLIFE-14", Output: io.Discard}}
+	suite := godog.TestSuite{Name: "slice-28-native-definitions", Options: &godog.Options{Paths: []string{"egress_lifecycle.feature"}, Tags: "@ID-EGRESSLIFE-08,@ID-EGRESSLIFE-09,@ID-EGRESSLIFE-10,@ID-EGRESSLIFE-12,@ID-EGRESSLIFE-13,@ID-EGRESSLIFE-14", Output: io.Discard}}
 	features, err := suite.RetrieveFeatures()
 	if err != nil {
 		t.Fatal(err)
@@ -45,8 +45,8 @@ func TestEgressLifecycleNativeStepsDefined(t *testing.T) {
 			}
 		}
 	}
-	if cases != 9 {
-		t.Fatalf("implemented native outlines have %d rows, want 9", cases)
+	if cases != 16 {
+		t.Fatalf("implemented native outlines have %d rows, want 16", cases)
 	}
 }
 

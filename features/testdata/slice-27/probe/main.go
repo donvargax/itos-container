@@ -516,7 +516,7 @@ func main() {
 	out := report{Env: map[string]string{}}
 	termination := make(chan os.Signal, 1)
 	for _, s := range p.Steps {
-		if s.Op == "wait-signal" {
+		if s.Op == "wait-signal" || s.Op == "hold-after-signal" {
 			signal.Notify(termination, os.Interrupt, syscall.SIGTERM)
 			defer signal.Stop(termination)
 			break
@@ -547,6 +547,12 @@ func main() {
 					err = errors.New("no termination signal received")
 				}
 			}
+		case "hold-after-signal":
+			// The report of the completed grace probes is already durable. Keep
+			// running until the controller's real SIGKILL, without an exit that
+			// could be mistaken for successful forced termination.
+			<-time.After(3 * time.Minute)
+			err = errors.New("forced termination never arrived")
 		case "barrier":
 			err = barrier(dir, s)
 		case "tls":

@@ -31,6 +31,8 @@ type egressWorld struct {
 	lifeFault           *egressLifeFault
 	lifeRecovery        *egressLifeRecovery
 	lifeStartup         *egressLifeStartup
+	lifeRuntime         *egressLifeRuntime
+	lifeRemoval         *egressLifeRemoval
 }
 
 func (w *world) egressFixture() *egressWorld {

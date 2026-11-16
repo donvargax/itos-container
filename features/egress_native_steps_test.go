@@ -25,6 +25,8 @@ var egressUnlistedAliases = []string{"example.com", "api.example.com.other.examp
 func (w *world) egressNativeSteps(sc lifecycleStepRegistrar) {
 	w.egressLifeNativeSteps(sc)
 	w.egressLifeStartupSteps(sc)
+	w.egressLifeRuntimeSteps(sc)
+	w.egressLifeRemovalSteps(sc)
 	sc.Step(`^a CI egress checkout with policy spellings "([^"]*)" and matching protected approval$`, func(spellings string) error {
 		if spellings != "API.Example.COM. BÜCHER.example" {
 			return fmt.Errorf("no independent canonical form recorded for %q", spellings)

@@ -30,6 +30,8 @@ type egressLifeRecorder struct {
 	// independent harness requests use the native client, outside this proxy.
 	before func(*egressLifeRequest)
 	after  func(*http.Request, *egressLifeRequest, *http.Response) error
+	// A fault may refuse one named request, but may never synthesize success.
+	refuse func(*egressLifeRequest) *http.Response
 }
 
 type egressLifeRequest struct {
@@ -92,7 +94,7 @@ func (a *egressLifeRecorder) RoundTrip(r *http.Request) (*http.Response, error) 
 	}
 	a.mu.Lock()
 	path := a.logPath
-	before, after := a.before, a.after
+	before, after, refuse := a.before, a.after, a.refuse
 	a.requests = append(a.requests, e)
 	a.mu.Unlock()
 	if before != nil {
@@ -108,7 +110,18 @@ func (a *egressLifeRecorder) RoundTrip(r *http.Request) (*http.Response, error) 
 		e.logBefore, e.logErr, e.logMode = data, readErr, mode
 		a.mu.Unlock()
 	}
-	response, err := a.transport.RoundTrip(r)
+	var response *http.Response
+	var err error
+	if refuse != nil {
+		response = refuse(e)
+		if response != nil && response.StatusCode < 400 {
+			_ = response.Body.Close()
+			return nil, errors.New("native recorder cannot fabricate success")
+		}
+	}
+	if response == nil {
+		response, err = a.transport.RoundTrip(r)
+	}
 	a.mu.Lock()
 	if response != nil {
 		e.status = response.StatusCode
