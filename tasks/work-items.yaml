@@ -2165,24 +2165,10 @@ items:
       session ends. Keep shared behavior in engine packages without importing the run slice. Require
       black-box red/green scenarios and CI-only real-engine evidence. Broken down from
       p1-interactive-tty.
-  - id: p1-engine-suite-throwaway-launch
+  - id: T-57
     title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      T-54's plain warm-up and T-55's product-shaped one are both on main and neither removes the
-      slow first create. In run 43798922441 they took 100 to 120 ms and 200 to 280 ms on the three
-      shards, and ID-LIFECYCLE-08, the lifecycle shard's first engine row, still failed with
-      run.call-timeout on operation create response: its engine journal has the create arriving at
-      1.391 s, forwarded at 1.392 s and answered HTTP 201 at 2.408 s, 1.016 s after forwarding.
-      Creates made outside the suite are fast, and the first one made inside it is slow, so what is
-      cold is on the suite's own path: the recorder that forwards engine calls, the built product's
-      first launch, or what only that path asks of the engine. On 2026-11-16 the first row failed on
-      main's run of slice-27's merge commit (ID-ANCHORS-09, 1.026 s) and held its release for forty
-      minutes. Remedy to prove: before the first engine row, the suite itself launches the built
-      product once through the same recorder and fixture the rows use, under production limits,
-      removes what it made, and prints that launch's create interval. No fixture limit, assertion,
-      retry or skipped row moves.
+    kind: task
