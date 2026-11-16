@@ -42,6 +42,34 @@ func stageCredentialFixture(t *testing.T, fixture f.CredentialFixture) (port.Rec
 	fail := fixture.Stager.Stage(t.Context(), r, fixture.Sources, func(s port.CredentialStaging) port.Outcome { r.Credentials = s; return "" })
 	return r, fail
 }
+
+func TestCredentialStagingFilesystemSelection(t *testing.T) {
+	for _, location := range []string{"production root", "unavailable filesystem"} {
+		t.Run(location, func(t *testing.T) {
+			fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
+			s := fixture.Stager.(Credentials)
+			if location == "production root" {
+				s.root = ""
+				s.tmpfs = func(path string) bool {
+					if path != "/dev/shm" {
+						t.Fatal("staging selected a different production root")
+					}
+					return false
+				}
+			} else {
+				s.root = filepath.Join(t.TempDir(), "missing")
+				s.tmpfs = nil
+			}
+			s.before = func(string) { t.Fatal("unavailable staging filesystem caused effects") }
+			if failure := s.Stage(t.Context(), fixture.Intent(), fixture.Sources, func(port.CredentialStaging) port.Outcome {
+				t.Fatal("unavailable staging filesystem published ownership")
+				return ""
+			}); failure != port.CredentialUnavailable {
+				t.Fatal("unavailable staging filesystem was admitted", failure)
+			}
+		})
+	}
+}
 func TestCredentialStagingRefusals(t *testing.T) {
 	for _, fault := range []string{"non-tmpfs", "occupied", "directory symlink", "short read", "read error", "short write", "write error", "metadata", "publish", "unsupported"} {
 		t.Run(fault, func(t *testing.T) {

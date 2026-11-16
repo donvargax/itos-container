@@ -71,3 +71,47 @@ func TestCredentialProgressIntentAbsence(t *testing.T) {
 		t.Fatal("absence preserving the published directory identity refused")
 	}
 }
+
+func TestCredentialProgressFileIdentities(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true, GitHub: true})
+	r.Credentials.Stage, r.Credentials.Device, r.Credentials.Inode = "owned", "1", "2"
+	for index, identity := range [2]string{"1:3", "1:4"} {
+		n := r
+		n.Credentials.Files[index] = identity
+		if !r.ValidTransition(n) {
+			t.Fatal("staged file identity publication refused", index)
+		}
+		r = n
+		if !r.ValidTransition(r) {
+			t.Fatal("unchanged published file identity refused", index)
+		}
+		for _, replacement := range []string{"", "1:9"} {
+			bad := r
+			bad.Credentials.Files[index] = replacement
+			if r.ValidTransition(bad) {
+				t.Fatal("published file identity was removed or replaced", index)
+			}
+		}
+	}
+	n := r
+	n.Credentials.Stage = "absent"
+	if !r.ValidTransition(n) {
+		t.Fatal("staging absence preserving file identities refused")
+	}
+	if !n.ValidTransition(n) {
+		t.Fatal("confirmed staging absence is not idempotent")
+	}
+}
+
+func TestCredentialProgressAnchorPublication(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+	n := r
+	r.Anchor.Stage, r.Anchor.Created = "intent", ""
+	if !r.ValidTransition(n) {
+		t.Fatal("anchor ownership publication refused during credential preparation")
+	}
+	n.Stage = "cancelled"
+	if r.ValidTransition(n) {
+		t.Fatal("anchor ownership publication changed the worker stage")
+	}
+}

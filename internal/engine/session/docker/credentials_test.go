@@ -17,6 +17,43 @@ import (
 	"testing"
 )
 
+func TestCredentialCreateRefusesInvalidOrUnreadyStaging(t *testing.T) {
+	for _, state := range []string{"ready", "grant mismatch", "unready"} {
+		t.Run(state, func(t *testing.T) {
+			fixture := credentialSDKFixture(t)
+			connection, failure := fixture.Engine.OpenRun(t.Context(), fixture.Binding)
+			if failure != "" {
+				t.Fatal("credential connection setup failed", failure)
+			}
+			defer connection.Close()
+			r := fixture.Record
+			switch state {
+			case "grant mismatch":
+				r.Credentials.Kinds.GitHub = false
+				r.Credentials.Files[1] = ""
+				if !r.Credentials.Ready() || r.ValidCredentials(fixture.Binding) {
+					t.Fatal("grant mismatch fixture must retain ready staging")
+				}
+			case "unready":
+				r.Stage = "reserved"
+				r.Credentials.Files = [2]string{}
+				if !r.ValidCredentials(fixture.Binding) || r.Credentials.Ready() {
+					t.Fatal("unready fixture must retain valid credential metadata")
+				}
+			}
+			id, failure := connection.CreateRun(t.Context(), r, []string{"literal", "argument"})
+			creates, starts := fixture.Counts()
+			if state == "ready" {
+				if id == "" || failure != "" || creates != 1 || starts != 0 {
+					t.Fatal("ready staging create positive control failed", failure)
+				}
+			} else if id != "" || failure != port.CredentialRefused || creates != 0 || starts != 0 {
+				t.Fatal("invalid or unready credential staging reached create", failure)
+			}
+		})
+	}
+}
+
 func credentialSDKFixture(t *testing.T, tokens ...[]byte) f.CredentialEngineFixture {
 	t.Helper()
 	var mu sync.Mutex
