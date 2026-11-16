@@ -1,7 +1,8 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue: []
+queue:
+  - T-59
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -2126,8 +2127,8 @@ items:
   - id: slice-38
     title: Execute literal argv within a running owned session
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
@@ -2210,5 +2211,12 @@ items:
     phase: 1
     owner: donvargax
     status: done
+    depends_on: []
+    kind: task
+  - id: T-59
+    title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
+    phase: 1
+    owner: null
+    status: todo
     depends_on: []
     kind: task

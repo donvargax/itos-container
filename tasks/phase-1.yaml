@@ -7898,3 +7898,22 @@
     T-58 commit, preserving published history. Preserve sibling ledger entries and work
     ownership/status. Agents commit and stop; the loop owns push, CI watching
     and closure after the actual pushed head passes its required checks.
+- id: T-59
+  type: ci
+  title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
+  why: >
+    T-45's rule keeps every engine shard's step under 180 seconds and moves whole feature files
+    between shards on measured times. The other shard is over it: on main at 83e4bc1 (run
+    43837945423) all 40 of its scenarios passed, the suite took 171.2 s and the step 180.84 s, so
+    the job failed with nothing red ('the log holds no go-test failure line; its last line: PASS').
+    It ran 143.9 s at a36768a, the first run with slice-27's eight egress scenarios live, and 90 to
+    140 s before them; T-55's and T-57's warm-ups added a few seconds since. The run after it
+    (43837968367 at 2897e10) failed ID-EGRESS-14 with 'recorded completed 10 connections for 11
+    exchanges', which a shard this full may explain. slice-28 adds egress lifecycle scenarios and
+    slice-37 terminal ones, so the next engine slices land on a shard with no room. Move
+    egress.feature whole to a fourth shard on these measurements, with the shard inventory pins, as
+    slice-27's own notes said to do when the shard neared the gate; and place
+    egress_lifecycle.feature and the terminal feature by the same rule. The 180-second gate, the
+    scenarios and the fixture limits do not change.
+  done_when:
+    - run: go test ./features -count=1 -run 'TestEngineShards'
