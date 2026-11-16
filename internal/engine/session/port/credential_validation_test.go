@@ -197,6 +197,44 @@ func TestCredentialRecordAnchorBinding(t *testing.T) {
 	}
 }
 
+func TestCredentialRecordAnchorCompatibility(t *testing.T) {
+	b, _, _ := f.Fixture()
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+	legacy := r
+	legacy.Schema, legacy.Anchor, legacy.Credentials = 1, port.Anchor{}, port.CredentialStaging{}
+	if !legacy.ValidAnchor(b) {
+		t.Fatal("legacy no-anchor record lost its meaning")
+	}
+	legacy.Schema = 0
+	if legacy.ValidAnchor(b) {
+		t.Fatal("unknown schema was accepted as a legacy no-anchor record")
+	}
+	legacy.Schema, legacy.Anchor = 1, r.Anchor
+	if legacy.ValidAnchor(b) {
+		t.Fatal("legacy record adopted newer anchor authority")
+	}
+	for _, schema := range []int{2, 3, 4} {
+		t.Run(strconv.Itoa(schema), func(t *testing.T) {
+			candidate := r
+			candidate.Schema = schema
+			if schema != 4 {
+				candidate.Credentials = port.CredentialStaging{}
+			}
+			if schema == 3 {
+				candidate.Egress = ownedCredentialEgress(candidate)
+			}
+			candidate.Anchor.Stage, candidate.Anchor.Created = "intent", ""
+			if !candidate.ValidAnchor(b) {
+				t.Fatal("anchor intent before engine allocation was refused")
+			}
+			candidate.Anchor.Created = "2026-11-16T00:00:00Z"
+			if candidate.ValidAnchor(b) {
+				t.Fatal("unallocated anchor intent claimed an engine creation identity")
+			}
+		})
+	}
+}
+
 func TestCredentialCompletionRefusesUnknownSchemaProgress(t *testing.T) {
 	b, _, _ := f.Fixture()
 	r := f.RunIntent(b)
