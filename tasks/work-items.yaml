@@ -2189,3 +2189,19 @@ items:
       foundation maintenance: no supplied evidence shows it blocks the charter's current
       harness-home step. Require focused regressions and platform CI evidence without weakening
       assertions or claiming additional container-host support.
+  - id: p2-lifecycle-09-startup-timeout
+    title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      main's run 43822382408 at ab99c7f, a docs commit, failed ID-LIFECYCLE-09's third example
+      (Ignored and repeated cancellation escalates once after the fixed grace) with
+      run.startup-timeout: the controller exited 75 at 3.97 s without reaching the ignore lifecycle
+      barrier, under the fixture's 3-second startup budget. In the same job T-57's throwaway launch
+      had taken the slow first create (forward-to-answer 1.063 s) and all four ID-LIFECYCLE-08 rows
+      passed, so this is not the first-row failure T-54, T-55 and T-57 dealt with. The journal
+      printed with the failure omits entries 2 to 18, which hold the launch itself. One occurrence;
+      with the next, read the full journal for which call took the time before choosing anything.
