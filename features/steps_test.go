@@ -192,6 +192,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w.manifestSteps(sc)
 	w.doctorSteps(sc)
 	w.runSteps(sc)
+	w.execInvocationSteps(sc)
 	w.approvalSteps(sc)
 	w.credentialApprovalSteps(sc)
 	w.sessionSteps(sc)
