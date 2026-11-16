@@ -283,7 +283,8 @@ func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminal
 				select {
 				case <-w.doctor.engine.reached:
 					_ = cmd.Process.Signal(syscall.SIGTERM)
-					w.doctor.engine.unpause()
+					// Keep the image reply withheld until the controller returns;
+					// release cannot race signal delivery into a later startup phase.
 					f.action = nil
 				default:
 				}

@@ -367,6 +367,11 @@ running:
 	if f.master != nil || f.outputMaster != nil {
 		n.err = errors.Join(n.err, f.readAvailable())
 	}
+	// The reporting probe may finish between polling ticks. Its complete final
+	// output is authoritative for this noninteractive readiness observation.
+	if action == "argv" && bytes.Contains(f.payload, []byte("slice-37:ready\n")) {
+		n.ready = true
+	}
 	w.exit, w.stdout, w.stderr = cmd.ProcessState.ExitCode(), string(f.payload), diagnostic.String()
 	n.readReport()
 	w.offline.exit, w.offline.stdout, w.offline.stderr = w.exit, []byte(w.stdout), []byte(w.stderr)

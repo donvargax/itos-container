@@ -29,6 +29,8 @@ import (
 )
 
 type terminalContractReport struct {
+	Status                                                           sp.RecoveryResult
+	RecoveryRestarted                                                bool
 	Backend, Diagnostic, Output, Error                               string
 	Code                                                             int
 	Ready, Fired, TTY, InputRestored, OutputRestored, ObserversEnded bool
@@ -189,6 +191,7 @@ func terminalContractCase(t *testing.T, backend, kind, fault, child string) term
 			report.Output = output
 		}
 	}
+	report.AcquiredInput = acquiredInput
 	// Reacquisition proves ownership and observation ended without closing any
 	// caller resource. Ignore a retained simulated hangup, not a Busy refusal.
 	lease, acquireErr := provider.Acquire(context.Background())
@@ -198,7 +201,6 @@ func terminalContractCase(t *testing.T, backend, kind, fault, child string) term
 		lease.Close()
 	}
 	report.Result = f.result
-	report.AcquiredInput = acquiredInput
 	for _, e := range l.events {
 		report.Events = append(report.Events, terminalContractEvent{e.name, e.target, e.at.Sub(l.start), e.remaining})
 	}
@@ -216,7 +218,10 @@ func terminalContractCase(t *testing.T, backend, kind, fault, child string) term
 		f.kind = "recovery"
 		f.mu.Unlock()
 		recovery := sd.Recovery{Registry: l.registry, Engine: terminalContractEngine{f}}
+		creates, starts := l.count("create"), l.count("start")
+		report.Status = recovery.Status(context.Background())
 		report.Recovery = recovery.Stop(context.Background(), f.result.SessionID)
+		report.RecoveryRestarted = creates != l.count("create") || starts != l.count("start")
 	}
 	report.Remaining = len(l.m.e.Resources)
 	if kind == "acquisition" && report.Error == "" && report.Code != 2 {

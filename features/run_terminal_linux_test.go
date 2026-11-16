@@ -191,7 +191,13 @@ func (f *terminalInvocation) invoke(args, inherited string) error {
 		words = append([]string{"-test.run=^TestLocalRunCommand$", "-test.count=1", "--"}, words...)
 		env = append(env, "SLICE_17_LOCAL_RUN=1", "SLICE_17_LOCAL_MOUNT_ROOT="+w.doctor.checkout)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	guard := 5 * time.Second
+	if terminal := w.doctor.engine.offline.terminal; terminal != nil && terminal.fault == "start accepted but its reply times out" {
+		// The ordinary SDK keeps its real ten-second finite-call deadline.
+		// A harness kill must not replace that failure or the 30 s cleanup total.
+		guard = 45 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), guard)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, words...)
 	cmd.Dir, cmd.Env = w.doctor.cwd, env
@@ -241,6 +247,9 @@ waiting:
 		}
 	}
 	f.timedOut = ctx.Err() != nil
+	if terminal := a.terminal; terminal != nil && terminal.fault == "host SIGTERM during preflight" {
+		w.doctor.engine.unpause()
+	}
 	w.exit, w.stderr = cmd.ProcessState.ExitCode(), stderr.String()
 	if f.outputRead != nil {
 		_ = f.output.Close()

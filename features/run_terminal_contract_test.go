@@ -15,6 +15,8 @@ import (
 // Reports come from a test-only command assembly. Features never imports a
 // product package or supplies the exit code/diagnostic the command must return.
 type terminalContractObservation struct {
+	Status                                                                          map[string]any
+	RecoveryRestarted                                                               bool
 	Backend, Diagnostic, Output, Error                                              string
 	Code                                                                            int
 	Ready, Fired, TTY, InputRestored, OutputRestored, ObserversEnded, AcquiredInput bool
@@ -131,6 +133,10 @@ func (w *world) terminalContractSteps(sc *godog.ScenarioContext, bind func(*term
 	})
 	sc.Step(`^the later recovery reports actual ownership and absence without restarting work or rewriting unknown history as success$`, func() error {
 		return f.each(false, func(r terminalContractObservation) error {
+			entries, _ := r.Status["Entries"].([]any)
+			if r.RecoveryRestarted || len(entries) != 1 {
+				return fmt.Errorf("fresh status/stop lost or restarted the session: %+v", r)
+			}
 			failures, _ := r.Recovery["Failures"].([]any)
 			if f.fault == "inspected ownership changes" {
 				if r.Remaining != 2 || len(failures) == 0 {
