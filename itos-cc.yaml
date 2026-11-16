@@ -105,3 +105,12 @@ mutation:
       replacement: "false"
       reason: "This sibling of the CI-reported after-key insertion also writes an unread set value. keys is a local map: assigning false still inserts every before key, the second loop adds all after keys, and the final loop ranges over keys only. Shared keys may be overwritten and before-only values remain false, but neither value is read or escapes. The key union and every resulting Change are identical for all inputs. Exact-result tests cover removed, added, shared and nested keys; no behavioral test can distinguish this mutation."
       line_text: keys[key] = true
+    - file: internal/engine/session/docker/run.go
+      function: github.com/donvargax/itos-container/internal/engine/session/docker#safeHost
+      hash: 0d125654dcccfa55
+      line_in_function: 34
+      column: 16
+      original: "&&"
+      replacement: "||"
+      reason: The earlier length guard requires 1+n mounts for n credential arguments. Every accepted loop iteration consumes either the single anchor (guarded by !anchor) or one previously unseen credential kind. There are at most n such kinds; duplicates only reduce that bound and force rejection. Reaching this return therefore proves anchor is true and len(seen) equals n for every input. Both operands are true, so replacing && with || changes no result or effect. No behavioral test can distinguish it.
+      line_text: return anchor && len(seen) == len(credentials)
