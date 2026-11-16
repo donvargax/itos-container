@@ -37,6 +37,10 @@ func TestNativeContract(t *testing.T) {
 	}
 	command := exec.CommandContext(ctx, os.Args[0], args...)
 	command.Env = append(os.Environ(), "T56_TERMINAL_CHILD=1")
+	// Bind a disposable terminal to descriptor zero in the child without
+	// replacing or changing the parent process's standard input.
+	p := openPair(t)
+	command.Stdin = p.slave
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("terminal child: %v\n%s", err, output)
@@ -55,6 +59,7 @@ func TestTerminalChild(t *testing.T) {
 	t.Run("raw_control_bytes_and_handles", rawControlBytes)
 	t.Run("resource_cycles", resourceCycles)
 	t.Run("nonblocking_descriptor", nonblockingDescriptor)
+	t.Run("standard_input_terminal", standardInputTerminal)
 	t.Run("observer_os_failures", observerOSFailures)
 	t.Run("busy_during_acquisition", busyDuringAcquisition)
 	t.Run("poll_system_error", pollSystemError)
@@ -430,6 +435,35 @@ func nonblockingDescriptor(t *testing.T) {
 		t.Fatal(r.RestoreErr)
 	}
 	check()
+}
+
+func standardInputTerminal(t *testing.T) {
+	if fd := os.Stdin.Fd(); fd != 0 {
+		t.Fatalf("standard input descriptor = %d, want 0", fd)
+	}
+	l, err := New(os.Stdin, "linux").Acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	want := port.Dimensions{Columns: 107, Rows: 43}
+	p := terminalPair{slave: os.Stdin}
+	p.size(t, want)
+	winch(t)
+	select {
+	case got, ok := <-l.Resizes():
+		if !ok {
+			t.Fatalf("standard input observation ended: %+v", l.Result())
+		}
+		if got != want {
+			t.Fatalf("standard input resize = %v, want %v", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("standard input terminal resize was not observed")
+	}
+	if r := l.Close(); r.Cause != port.Closed || r.Err != nil || r.RestoreErr != nil {
+		t.Fatalf("standard input close: %+v", r)
+	}
 }
 
 func observerOSFailures(t *testing.T) {
