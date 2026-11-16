@@ -34,7 +34,9 @@ func TestLifecycleDisconnectWaitsForFirstHeartbeat(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := lifecycleHeartbeatWorld(t)
 		started := time.Now()
+		published := make(chan struct{})
 		go func() {
+			defer close(published)
 			time.Sleep(50 * time.Millisecond) // the probe publishes after readiness
 			w.lifecycle.fault.mu.Lock()
 			lost := w.lifecycle.fault.lost
@@ -45,6 +47,7 @@ func TestLifecycleDisconnectWaitsForFirstHeartbeat(t *testing.T) {
 			publishLifecycleHeartbeat(t, w, "1")
 		}()
 		w.lifecycleDisconnectReady()
+		<-published
 		l := w.lifecycle
 		if l.err != nil || l.heartbeat != 1 || l.signalled.Sub(started) < 50*time.Millisecond || !l.fault.lost {
 			t.Fatalf("missing positive pre-disconnection baseline: heartbeat=%d, origin=%s, lost=%v, err=%v",
@@ -75,13 +78,17 @@ func TestLifecycleProgressWaitsAfterControllerExit(t *testing.T) {
 		close(l.run.done)                    // a fast controller return must not end worker observation
 		publishLifecycleHeartbeat(t, w, "2") // already present before observation
 		started := time.Now()
+		published := make(chan struct{})
 		go func() {
+			defer close(published)
 			time.Sleep(50 * time.Millisecond)
 			publishLifecycleHeartbeat(t, w, "3")
 		}()
 		w.lifecycleProgressAfterLoss()
-		if l.err != nil || l.later != 3 || time.Since(started) < 50*time.Millisecond || !l.fault.lost {
-			t.Fatalf("no fresh progress while disconnected: later=%d, elapsed=%s, err=%v", l.later, time.Since(started), l.err)
+		elapsed := time.Since(started)
+		<-published
+		if l.err != nil || l.later != 3 || elapsed < 50*time.Millisecond || !l.fault.lost {
+			t.Fatalf("no fresh progress while disconnected: later=%d, elapsed=%s, err=%v", l.later, elapsed, l.err)
 		}
 	})
 }
