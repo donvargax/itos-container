@@ -56,8 +56,8 @@ func (w *world) runTerminalSteps(sc *godog.ScenarioContext) {
 		return nil
 	})
 	sc.Step(`^terminal run emits exactly one schema-1 JSON refusal for "([^"]*)" and exits (\d+)$`, func(rule string, exit int) error {
-		if err := fixture.refusal(rule, exit); err != nil {
-			return err
+		if fixture.timedOut || w.exit != exit {
+			return fmt.Errorf("expected JSON refusal exit %d, timed out=%t: %s", exit, fixture.timedOut, w.report())
 		}
 		return w.runJSONRefusal(rule, exit)
 	})
@@ -216,7 +216,13 @@ waiting:
 }
 
 func (f *terminalInvocation) refusal(rule string, exit int) error {
-	if f.timedOut || f.w.exit != exit || !strings.Contains(f.w.stderr, rule) {
+	message := rule
+	if rule == "run.command-required" {
+		// The existing plain refusal exposes its message, while its rule ID
+		// belongs to structured output (which run itself refuses).
+		message = "run requires a nonempty command after --; use itos container run -- <command>"
+	}
+	if f.timedOut || f.w.exit != exit || !strings.Contains(f.w.stderr, message) {
 		return fmt.Errorf("expected %s with exit %d, timed out=%t: %s", rule, exit, f.timedOut, f.w.report())
 	}
 	return nil
