@@ -171,6 +171,44 @@ func TestCredentialPreparationMissingAuthority(t *testing.T) {
 	}
 }
 
+func TestCredentialStagingIdentity(t *testing.T) {
+	valid := "0123456789abcdef0123456789abcdef"
+	for _, tc := range []struct {
+		name  string
+		reply credentialIdentityReply
+		want  port.Outcome
+	}{
+		{"valid", credentialIdentityReply{token: valid}, ""},
+		{"failure with valid token", credentialIdentityReply{token: valid, failure: port.IdentityFailed}, port.IdentityFailed},
+		{"empty", credentialIdentityReply{}, port.IdentityFailed},
+		{"short hexadecimal", credentialIdentityReply{token: valid[:31]}, port.IdentityFailed},
+		{"long hexadecimal", credentialIdentityReply{token: valid + "0"}, port.IdentityFailed},
+		{"uppercase", credentialIdentityReply{token: strings.ToUpper(valid)}, port.IdentityFailed},
+		{"non hexadecimal", credentialIdentityReply{token: valid[:31] + "g"}, port.IdentityFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner, _, engine, entry, fixture := credentialPreparationFixture(t)
+			runner.StagingEntropy = tc.reply
+			before := entry.Intent().Record()
+			if failure := runner.prepareCredentials(t.Context(), entry.Intent()); failure != tc.want {
+				t.Fatalf("staging identity result = %q, want %q", failure, tc.want)
+			}
+			stager := fixture.Stager.(*f.CredentialStager)
+			after := entry.Intent().Record()
+			if tc.want != "" {
+				if after.Schema != before.Schema || after.Credentials != before.Credentials || len(stager.Events) != 0 {
+					t.Fatal("refused staging identity published intent or reached the stager")
+				}
+			} else if after.Credentials.Stage != "owned" || after.Credentials.Directory != "/dev/shm/itos-container-"+valid || !fixture.Present(after.Credentials.Directory) {
+				t.Fatal("valid staging identity did not stage credentials at the intended path")
+			}
+			if slices.Contains(engine.Events, "create") || slices.Contains(engine.Events, "start") {
+				t.Fatal("credential preparation launched a worker")
+			}
+		})
+	}
+}
+
 type credentialObserved struct {
 	port.CredentialStager
 	after func()
