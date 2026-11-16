@@ -2129,25 +2129,19 @@ items:
     status: todo
     depends_on: [T-54]
     kind: task
-  - id: p1-terminal-session-support
+  - id: T-56
     title: Add shared terminal ports, adapters and contract tests
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Provide raw-mode acquisition/restoration, terminal dimensions, resize events and disconnect
-      reporting under internal/engine/terminal. Reuse pinned x/term and PTY test support; keep I/O
-      behind ports and run shared contracts against an in-memory fake and native adapter. Cover
-      restoration after failures and bounded cancellation. Expose no command yet. Broken down from
-      p1-interactive-tty.
+    kind: task
   - id: p1-run-interactive-terminal
     title: Run an owned foreground workload with a TTY
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-terminal-session-support]
+    depends_on: [T-56]
     kind: idea
     why: >
       Extend the run slice and shared session engine with terminal attachment, initial dimensions,
@@ -2175,7 +2169,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-terminal-session-support, p1-exec-owned-session]
+    depends_on: [T-56, p1-exec-owned-session]
     kind: idea
     why: >
       Combine the exec slice with shared terminal support for raw input, initial dimensions, resizes
