@@ -29,6 +29,7 @@ type egressStatus struct {
 
 func (w *world) egressStatusSteps(sc *godog.ScenarioContext) {
 	w.egressEvidenceSteps(sc)
+	w.egressGapSteps(sc)
 	sc.Step(`^original protected egress and offline sessions with phase "([^"]*)"$`, w.egressSeedSessions)
 	sc.Step(`^the current policy and approval no longer describe either original session$`, w.egressCurrentDiffers)
 	sc.Step(`^status inspects those sessions in plain and JSON modes$`, func() error {

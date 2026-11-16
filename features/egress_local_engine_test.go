@@ -52,6 +52,8 @@ type localEgressAPI struct {
 	problem     error
 	evidence    map[string]string // protected files naming the proxy config ID at the first create
 	observed    bool
+	copyStdout  *string // independent teardown source; startup retains its valid ready record
+	workerExit  int
 }
 
 func (w *world) localEgressFixture() error {
@@ -504,7 +506,9 @@ func (a *localEgressAPI) container(out http.ResponseWriter, r *http.Request, par
 	case action == "logs" && r.Method == "GET" && role == "proxy":
 		note("logs", role)
 		out.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
-		if a.starts["proxy"] != 0 {
+		if a.copyStdout != nil && !a.running("proxy") {
+			_, _ = out.Write(egressFrame(1, *a.copyStdout))
+		} else if a.starts["proxy"] != 0 {
 			_, _ = out.Write(egressFrame(1, egressProxyReady+"\n"))
 		}
 	case action == "wait" && r.Method == "POST":
@@ -515,7 +519,7 @@ func (a *localEgressAPI) container(out http.ResponseWriter, r *http.Request, par
 				return true
 			}
 			a.stop(id, container)
-			_ = json.NewEncoder(out).Encode(map[string]any{"StatusCode": 0})
+			_ = json.NewEncoder(out).Encode(map[string]any{"StatusCode": a.workerExit})
 			return true
 		}
 		// The proxy runs until the controller's own SIGKILL. A watcher that

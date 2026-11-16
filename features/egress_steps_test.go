@@ -26,6 +26,7 @@ type egressWorld struct {
 	contractDir         string
 	status              *egressStatus
 	native              *egressNative
+	life                *egressLife
 }
 
 func (w *world) egressFixture() *egressWorld {
