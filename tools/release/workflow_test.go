@@ -91,7 +91,7 @@ func TestReleaseWorkflow(t *testing.T) {
 			t.Errorf("ci lacks %s", command)
 		}
 	}
-	if !slices.ContainsFunc(ci.Jobs["platform"].Steps, func(s step) bool { return s.Run == "go test ./... -count=1" }) {
+	if !slices.ContainsFunc(ci.Jobs["platform"].Steps, func(s step) bool { return s.Run == "go test ./... -count=1 -timeout=20m" }) {
 		t.Error("automatic Linux test suite is missing")
 	}
 
