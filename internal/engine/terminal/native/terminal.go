@@ -155,15 +155,18 @@ func (l *lease) observe(ctx context.Context) port.Result {
 		var size port.Dimensions
 		var hungup bool
 		err := l.control(func(fd int) error {
+			// A peer may hang up during a size read. Check hangup afterwards
+			// so its EIO is reported as a disconnect, not an observation failure.
+			var sizeErr error
+			if resize {
+				size, sizeErr = dimensions(fd)
+			}
 			var err error
 			hungup, err = disconnected(fd)
 			if err != nil || hungup {
 				return err
 			}
-			if resize {
-				size, err = dimensions(fd)
-			}
-			return err
+			return sizeErr
 		})
 		if errors.Is(err, syscall.EINTR) {
 			continue
