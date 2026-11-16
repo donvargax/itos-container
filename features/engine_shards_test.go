@@ -184,6 +184,26 @@ func TestEngineShards(t *testing.T) {
 		}
 	})
 	t.Run("partition", func(t *testing.T) { testShardPartition(t, workflow.Jobs[shardJobID].Strategy.Matrix.Include) })
+	t.Run("home red inventory", func(t *testing.T) {
+		ids := []string{"@ID-HOME-13", "@ID-HOME-14", "@ID-HOME-15", "@ID-HOME-23"}
+		for _, entry := range workflow.Jobs[shardJobID].Strategy.Matrix.Include {
+			selection, err := selectScenarios("", ".", shardEnvironment(map[string]string{
+				shardFeaturesVariable: entry.Features,
+				"GITHUB_EVENT_NAME":   "workflow_dispatch",
+				redVariable:           strings.Join(ids, " "),
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if entry.Shard == "offline" {
+				if selection.count != 9 || selection.skip != "" || !slices.Equal(selection.ids, ids) {
+					t.Errorf("offline must select all nine home engine rows and four IDs: count=%d ids=%v skip=%q", selection.count, selection.ids, selection.skip)
+				}
+			} else if selection.count != 0 || !strings.Contains(selection.skip, "other engine shard") {
+				t.Errorf("shard %s must leave home rows to offline: count=%d skip=%q", entry.Shard, selection.count, selection.skip)
+			}
+		}
+	})
 	t.Run("selector", testShardSelector)
 	t.Run("broken workflows", func(t *testing.T) {
 		if issues := engineShardIssues(data); len(issues) != 0 {
@@ -285,7 +305,9 @@ func shardBaseline(t *testing.T) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other := slices.DeleteFunc(slices.Clone(engine), func(name string) bool { return name == "offline.feature" || name == "lifecycle.feature" })
+	other := slices.DeleteFunc(slices.Clone(engine), func(name string) bool {
+		return name == "offline.feature" || name == "harness-home.feature" || name == "lifecycle.feature"
+	})
 	text := fmt.Sprintf(`jobs:
   engine-shard:
     name: Engine shard (${{ matrix.shard }})
@@ -296,7 +318,7 @@ func shardBaseline(t *testing.T) []byte {
       fail-fast: false
       matrix:
         include:
-          - {shard: offline, features: offline.feature}
+          - {shard: offline, features: "offline.feature harness-home.feature"}
           - {shard: lifecycle, features: lifecycle.feature}
           - {shard: other, features: "%s"}
     steps:

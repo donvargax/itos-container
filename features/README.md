@@ -247,8 +247,9 @@ receive a Docker socket and never run the engine tier locally or spoof the CI co
 fixtures without executing Docker. The latter also checks the pinned recipe and helper guards.
 
 Since T-45 the engine tier runs in three engine shards, the matrix of the `engine-shard` job in
-`.github/workflows/ci.yml`: **offline** (`offline.feature`), **lifecycle** (`lifecycle.feature`,
-whose four `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row) and **other**
+`.github/workflows/ci.yml`: **offline** (`offline.feature` and `harness-home.feature`),
+**lifecycle** (`lifecycle.feature`, whose four `ID-LIFECYCLE-09` rows stay nested in
+`ID-LIFECYCLE-13`'s quiet row) and **other**
 (every other feature with an engine case). A shard is a job of whole feature files on its own
 native `ubuntu-latest` runner and daemon, with its own checkout of the exact `${{ env.TO }}`
 head, preflight, fixture preparation and cleanup. Nothing crosses runners, `fail-fast` is off
@@ -542,10 +543,17 @@ binary's four-minute timeout. T-41 lengthened nothing the engine step runs: befo
 14, at 164 to 196 and 212 to 245. Nothing measured points at one step; the spread reads as
 runner speed. T-33's rule applied: the
 measured unsharded step exceeded 240 seconds, so whole-feature shards on separate native
-runners with an exact parsed-example partition check. Offline holds 24 examples, lifecycle 19
-and other 32, of which 12 are `ID-SOCKETS-01` refusals before any worker exists. An estimate
-from those shares and a cold compile, not a measurement, puts the slowest shard between two
+runners with an exact parsed-example partition check. Offline holds 24 live examples and
+the nine `@wip` home engine rows (four IDs), lifecycle 19 live examples and other 32, of which
+12 are `ID-SOCKETS-01` refusals before any worker exists. T-45's estimate
+from the original live shares and a cold compile, not a measurement, puts the slowest shard between two
 and two and a half minutes on the slowest runner seen.
+
+For slice-34, the coordinator's 2026-11-16 observations put offline at 31 to 40 seconds,
+lifecycle at 43 to 110 and other at 90 to 140. Assign the whole home feature to offline,
+which has room under the unchanged 180-second gate. Its home rows have no runtime timing
+evidence yet. `TestEngineShards` pins all nine rows and all four IDs to offline for manual
+red selection without running them; normal selection still excludes their `@wip` tags.
 
 The loop records each shard's step time from the public job metadata and, from its log, the
 runner image (`/etc/os-release`) and the preflight's Docker version, so a later image change
@@ -554,7 +562,7 @@ times that show the need. In the prepared CI tier only, the coordinator measures
 with:
 
 ```sh
-for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
+for features in 'offline.feature harness-home.feature' lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
   env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
 done
 ```
