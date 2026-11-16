@@ -346,6 +346,70 @@ func TestCredentialStagingCancellationBoundaries(t *testing.T) {
 	}
 }
 
+func TestCredentialCopyRevalidatesBeforeFileCreation(t *testing.T) {
+	for _, fault := range []string{"healthy", "metadata error", "missing metadata", "changed mode", "cancelled"} {
+		t.Run(fault, func(t *testing.T) {
+			fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
+			s := fixture.Stager.(Credentials)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			read := false
+			s.read = func(file *os.File, buffer []byte) (int, error) {
+				read = true
+				n, err := file.Read(buffer)
+				if fault == "changed mode" {
+					if err := file.Chmod(0640); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if fault == "cancelled" {
+					cancel()
+				}
+				return n, err
+			}
+			calls := s.operations()
+			stat := calls.stat
+			calls.stat = func(file *os.File) (fs.FileInfo, error) {
+				info, err := stat(file)
+				if read && file.Name() == fixture.Sources.Checked()[0].ReadPath {
+					switch fault {
+					case "metadata error":
+						return info, errors.New("synthetic post-read metadata failure")
+					case "missing metadata":
+						return credentialStatInfo{info, nil}, nil
+					}
+				}
+				return info, err
+			}
+			s.ops = &calls
+			created := false
+			s.before = func(event string) {
+				if event == "file" {
+					created = true
+					if fault != "healthy" {
+						t.Fatal("failed source revalidation reached token file creation")
+					}
+				}
+			}
+			r := fixture.Intent()
+			failure := s.Stage(ctx, r, fixture.Sources, func(next port.CredentialStaging) port.Outcome { r.Credentials = next; return "" })
+			if !read {
+				t.Fatal("fixture did not read the source before revalidation")
+			}
+			if fault == "healthy" {
+				if failure != "" || !created {
+					t.Fatal("unchanged source positive control failed", failure)
+				}
+			} else if failure != port.CredentialRefused {
+				t.Fatal("failed source revalidation did not retain its refusal", failure)
+			}
+			if failure := fixture.Stager.Remove(t.Context(), r); failure != "" {
+				t.Fatal("source revalidation lost cleanup authority", failure)
+			}
+		})
+	}
+}
+
 func TestCredentialCleanupLateFilesystemChanges(t *testing.T) {
 	for _, change := range []string{"cancelled", "missing directory", "new entry"} {
 		t.Run(change, func(t *testing.T) {

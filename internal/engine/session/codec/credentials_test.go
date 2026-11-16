@@ -45,6 +45,28 @@ func TestCredentialRecords(t *testing.T) {
 	}
 }
 
+func TestCredentialRecordsRejectEmptyAndSingleByteInputs(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+	parser := &mf.Parser{}
+	codec := JSON{Parser: parser}
+	data := codec.Encode(r)
+	parser.Value = credentialValue(t, data)
+	if got, failure := codec.Decode(data); failure != "" || got != r {
+		t.Fatal("valid credential record control failed", failure)
+	}
+	// Even a parser reporting every required field cannot turn these bytes
+	// into a record. JSON decoding independently refuses them.
+	inputs := [][]byte{nil}
+	for value := range 256 {
+		inputs = append(inputs, []byte{byte(value)})
+	}
+	for _, input := range inputs {
+		if got, failure := codec.Decode(input); failure != port.Invalid || got != (port.Record{}) {
+			t.Fatal("empty or single-byte input produced a credential record")
+		}
+	}
+}
+
 func TestCredentialRecordsNestedTypes(t *testing.T) {
 	r := f.CredentialIntent(port.CredentialKinds{Claude: true, GitHub: true})
 	parser := &mf.Parser{}
