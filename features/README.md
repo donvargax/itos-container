@@ -669,7 +669,7 @@ BusyBox is a fixture, not the pilot's full agent toolchain; additional contents 
 own behaviour specification.
 
 The preparation protocol is bounded to 180 seconds, including pulls, build, push, pull,
-smoke and warm-up, with a separate 30-second cleanup attempt on failure. It performs these checks:
+smoke and both warm-ups, with a separate 30-second cleanup attempt on failure. It performs these checks:
 
 1. Create one uniquely named registry, recording its ID and attempt identity outside the
    checkout under `RUNNER_TEMP`. Publish container port 5000 on an allocated **127.0.0.1** port,
@@ -706,31 +706,72 @@ smoke and warm-up, with a separate 30-second cleanup attempt on failure. It perf
    numeric non-root UID/GID, with no host mount, published port or declared volume. Do not start
    or exec this container. Before removal, check its recorded name, immutable built image ID,
    owner label and allowed mounts as for smoke; after removal, require exact absence, never
-   an inspection transport failure. Only after this succeeds publish `image`, `image_id`,
-   `uid` and `gid` together as step outputs.
+   an inspection transport failure.
+7. Follow the plain warm-up with exactly one product-shaped create/remove from `build.iid`,
+   the same validated prepared image by immutable ID. The shared definitions-only warm-up
+   library constructs the offline `CreateRun` wire body: empty entrypoint, benign `/bin/true`
+   argv, `/workspace` working directory, image environment with `HOME` and `TMPDIR` overlaid
+   to `/tmp`, numeric fixture UID/GID, attached stdin/stdout/stderr, open stdin, stdin once,
+   no TTY and healthcheck `NONE`. Preserve the SDK's other serialized fields. HostConfig uses
+   network none, read-only root, cap-drop ALL, no-new-privileges, PID limit 4096, restart no,
+   private IPC/cgroup namespaces, init false, logging none, and `/tmp` tmpfs with
+   `rw,nosuid,nodev,mode=1777`. Its sole read-write workspace mount is a named local volume
+   with `NoCopy=true`, matching the product's checkout anchor rather than an anonymous
+   volume or direct bind. Allocate that volume with `type=none`, `o=bind` and a source through
+   a held `/proc/<pid>/fd/<fd>` directory descriptor at a fresh empty attempt-owned directory
+   under `RUNNER_TEMP`, outside both repository and fixture state. The supervisor holds the
+   descriptor through the bounded child and failure cleanup. Synthetic intent/project/
+   fingerprint and anchor session/device/inode/kind labels preserve the product's label
+   structure; both resources also carry the fixture owner. The create uses curl with config
+   and proxies disabled, only the local Unix Engine API socket, HTTP success checking and
+   full returned-ID validation. It never starts or execs the container.
 
-T-54 bounds the entire extra create, ownership inspection, removal and absence verification
-to ten seconds: coreutils timeout sends TERM at nine seconds and KILL one second later.
+   Refuse preexisting names before recording distinct `product.intent` and
+   `product-volume.intent` acquisition intents, and record the returned container ID in
+   `product.cid`. Record the held source and its device/inode before acquisition. Before
+   removal, require the container's exact name/image/labels and workspace volume/tmpfs
+   mounts, and the volume's exact name/labels/local driver/source/options. These checks are
+   separate from the unchanged tmpfs-only checks for registry, smoke and plain warm-up.
+   Remove and verify exact absence of the container before the volume. Transport and
+   permission failures never count as absence; foreign identity never authorizes removal.
+   Only after both warm-ups pass publish `image`, `image_id`, `uid` and `gid` together as
+   the sole step-output append.
+
+T-54 and T-55 bound each complete warm-up, including ownership inspection, removal and absence
+verification, to ten seconds: coreutils timeout sends TERM at nine seconds and KILL one second later.
 The shared [warm-up timing library](../tools/lib/engine-fixture-warmup.sh) measures monotonic
 Linux uptime outside that timeout child, through removal verification and before any failure
-cleanup. Each attempt emits one `engine warm-up timing: duration_ms=<integer> outcome=passed|failed`
-line. An unavailable or backwards clock uses `duration_ms=unknown` and fails preparation.
-Command, timeout, identity, removal-verification and timing-output failures also fail preparation
-with an `engine-fixture: warm-up` diagnostic and publish no fixture outputs. Timeout diagnostics
-name the ten-second bound. The existing failure trap and final `always()` cleanup both attempt
-the recorded warm-up resource as well as the other resources; an interrupted create without a
-CID is recovered only by the recorded name, image ID and owner label. Cleanup still tries the
-remaining resources and preserves the original preparation failure.
+cleanup. The product phase includes anchor allocation and teardown in its own bound and timing.
+Successful preparation prints exactly two lines in order:
 
-This phase runs before the first engine row in each of the offline, lifecycle and other shard
-jobs. It changes no product, fixture-call, startup or workflow limit, assertion or row selection,
-and adds no retry. Ordinary `TestEngineFixtureWarmup` regressions check executable source wiring
-and the same timing/timeout functions with harmless commands; they supply no runtime engine
-evidence. The coordinator must retain each pushed shard's tested SHA, warm-up duration and
-existing step/row timings, successful first rows and complete live selection, and final cleanup
-verdict. The Engine scenarios step still has its 180-second gate. One green run does not rule
-out future latency failures: if a first row still times out, report its warm-up duration,
-arrival-to-forward, forward-to-answer and controller-start intervals and stop for the coordinator.
+```text
+engine warm-up timing: duration_ms=<integer> outcome=passed
+engine product warm-up timing: duration_ms=<integer> outcome=passed
+```
+
+Each attempted phase prints exactly one truthful `passed` or `failed` outcome. Stop on the
+first failure, without inventing a timing for an unrun phase. An unavailable or backwards clock
+uses `duration_ms=unknown` and fails preparation.
+Command, timeout, identity, removal-verification and timing-output failures also fail preparation
+with an `engine-fixture: warm-up` diagnostic identifying plain or product and publish no fixture
+outputs. Timeout diagnostics name the ten-second bound. The existing failure trap and final
+`always()` cleanup both attempt the plain container, product container and anchor as well as the other resources; an interrupted
+create without a CID is recovered only by the recorded name, image ID, labels and permitted
+mounts. Cleanup still tries the remaining resources, preserves the original preparation failure
+and retains ownership records when incomplete. It never prunes or deletes shared images.
+
+Both phases run once before the first engine row in each of the offline, lifecycle and other shard
+jobs. They change no product, fixture-call, startup or workflow limit, assertion or row selection,
+and add no retry. Ordinary `TestEngineFixtureWarmup`, `TestEngineFixtureWarmupProduct` and
+`TestEngineFixtureWorkflow` regressions check executable wiring, decoded request and data-only
+ownership fixtures, and the same timing/timeout functions with harmless commands; they supply
+no runtime engine evidence. The coordinator must retain each pushed shard's tested SHA, both
+warm-up durations and existing step/row timings, successful first rows and complete live selection,
+and final cleanup verdict. The Engine scenarios step still has its 180-second gate. One green run does not rule
+out future latency failures: if the product-shaped create is not the slow operation either, or
+if a first row still times out, report both timing lines with the row's arrival-to-forward,
+forward-to-answer and controller-start intervals and stop for the coordinator to choose limits.
+No fixture budget, assertion, retry or skipped row changes as part of these warm-ups.
 
 T-34 makes failures from the push through output publication name their stage and expected
 and observed values. The shared [validation functions](../tools/lib/engine-fixture-checks.sh)
