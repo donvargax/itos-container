@@ -9,6 +9,11 @@ import "context"
 // Dimensions are measured from the selected terminal, never from the environment.
 type Dimensions struct{ Columns, Rows int }
 
+// Valid reports whether both dimensions fit the terminal's unsigned 16-bit size.
+func (d Dimensions) Valid() bool {
+	return d.Columns >= 1 && d.Columns <= 65535 && d.Rows >= 1 && d.Rows <= 65535
+}
+
 // FailureKind describes an acquisition refusal. No usable lease accompanies one.
 type FailureKind string
 

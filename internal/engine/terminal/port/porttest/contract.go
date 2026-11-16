@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -70,7 +71,11 @@ func Contract(t *testing.T, factory Factory) {
 	for _, kind := range []port.FailureKind{port.InvalidTerminal, port.Unsupported, port.InvalidDimensions} {
 		t.Run(string(kind), func(t *testing.T) {
 			f := factory(t, kind)
+			before := f.Snapshot()
 			refusal(t, f.Provider, context.Background(), kind)
+			if !reflect.DeepEqual(before, f.Snapshot()) {
+				t.Fatal("refusal changed terminal state")
+			}
 		})
 	}
 	t.Run("busy", func(t *testing.T) {
@@ -84,11 +89,17 @@ func Contract(t *testing.T, factory Factory) {
 		result(t, l.Close(), port.Closed, false)
 	})
 	t.Run("repeated_close_and_closed_streams", func(t *testing.T) {
-		l := acquire(t, factory(t, "").Provider, context.Background())
+		f := factory(t, "")
+		l := acquire(t, f.Provider, context.Background())
 		first := boundedClose(t, l)
 		result(t, first, port.Closed, false)
+		f.ChangeState()
+		after := f.Snapshot()
 		if !reflect.DeepEqual(first, l.Close()) || !reflect.DeepEqual(first, l.Result()) {
 			t.Fatal("close result changed")
+		}
+		if !reflect.DeepEqual(after, f.Snapshot()) {
+			t.Fatal("repeated close restored settings more than once")
 		}
 		finished(t, l)
 		for range l.Resizes() {
@@ -126,6 +137,14 @@ func Contract(t *testing.T, factory Factory) {
 	t.Run("changed_and_latest_resize", func(t *testing.T) {
 		f := factory(t, "")
 		l := acquire(t, f.Provider, context.Background())
+		f.Resize(l.Initial())
+		// Acquisition is the subscription readiness handshake. This bounded
+		// absence check verifies that an unchanged observation emits no event.
+		select {
+		case size := <-l.Resizes():
+			t.Fatalf("unchanged size published: %v", size)
+		case <-time.After(25 * time.Millisecond):
+		}
 		f.Resize(port.Dimensions{Columns: 110, Rows: 40})
 		latest(t, l, port.Dimensions{Columns: 110, Rows: 40})
 		for n := 111; n <= 150; n++ {
@@ -139,6 +158,14 @@ func Contract(t *testing.T, factory Factory) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			l := acquire(t, f.Provider, ctx)
+			f.Resize(port.Dimensions{Columns: 99, Rows: 50})
+			deadline := time.Now().Add(time.Second)
+			for len(l.Resizes()) == 0 && time.Now().Before(deadline) {
+				runtime.Gosched()
+			}
+			if len(l.Resizes()) == 0 {
+				t.Fatal("unread-event fixture never filled its stream")
+			}
 			for n := 100; n < 180; n++ {
 				f.Resize(port.Dimensions{Columns: n, Rows: 50})
 			}

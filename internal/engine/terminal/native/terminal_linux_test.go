@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"reflect"
 	"runtime"
 	"sync"
@@ -39,10 +40,16 @@ func TestTerminalChild(t *testing.T) {
 	if os.Getenv("T56_TERMINAL_CHILD") != "1" {
 		return
 	}
+	t.Setenv("COLUMNS", "500")
+	t.Setenv("LINES", "200")
 	t.Run("contract", func(t *testing.T) { porttest.Contract(t, terminalFixture) })
 	t.Run("invalid_files", invalidFiles)
 	t.Run("raw_control_bytes_and_handles", rawControlBytes)
 	t.Run("resource_cycles", resourceCycles)
+	t.Run("nonblocking_descriptor", nonblockingDescriptor)
+	t.Run("observer_os_failures", observerOSFailures)
+	t.Run("busy_during_acquisition", busyDuringAcquisition)
+	t.Run("poll_system_error", pollSystemError)
 }
 
 type terminalPair struct{ master, slave *os.File }
@@ -148,7 +155,7 @@ func invalidFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = nonterminal.Close() }()
-	for _, file := range []*os.File{nil, p.slave, nonterminal} {
+	for _, file := range []*os.File{nil, {}, p.slave, nonterminal} {
 		l, err := New(file, "linux").Acquire(context.Background())
 		var failure *port.Failure
 		if l != nil || !errors.As(err, &failure) || failure.Kind != port.InvalidTerminal {
@@ -226,6 +233,10 @@ func rawControlBytes(t *testing.T) {
 func resourceCycles(t *testing.T) {
 	p := openPair(t)
 	provider := New(p.slave, "linux")
+	otherSubscription := make(chan os.Signal, 1)
+	signal.Notify(otherSubscription, unix.SIGWINCH)
+	defer signal.Stop(otherSubscription)
+	var leases []*lease
 	cycle := func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -233,6 +244,7 @@ func resourceCycles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		leases = append(leases, l.(*lease))
 		cancel()
 		select {
 		case <-l.Done():
@@ -265,5 +277,125 @@ func resourceCycles(t *testing.T) {
 	}
 	if runtime.NumGoroutine() > baseline {
 		t.Fatalf("watcher growth: %d -> %d", baseline, runtime.NumGoroutine())
+	}
+	winch(t)
+	select {
+	case <-otherSubscription:
+	case <-time.After(time.Second):
+		t.Fatal("lease cleanup stopped an unrelated signal subscription")
+	}
+	// Stop synchronizes with signal dispatch, so every old lease would have
+	// received this signal if its subscription had leaked.
+	signal.Stop(otherSubscription)
+	for _, l := range leases {
+		select {
+		case <-l.signals:
+			t.Fatal("released lease retained its signal subscription")
+		default:
+		}
+	}
+}
+
+func nonblockingDescriptor(t *testing.T) {
+	p := openPair(t)
+	fd, err := unix.FcntlInt(p.slave.Fd(), unix.F_DUPFD_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.SetNonblock(fd, true); err != nil {
+		_ = unix.Close(fd)
+		t.Fatal(err)
+	}
+	// Wrap through os.NewFile after O_NONBLOCK is set, as a caller whose File
+	// is integrated with Go's poller. File.Fd would silently clear that flag.
+	file := os.NewFile(uintptr(fd), "nonblocking-terminal")
+	t.Cleanup(func() { _ = file.Close() })
+	l, err := New(file, "linux").Acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	check := func() {
+		flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFL, 0)
+		if err != nil || flags&unix.O_NONBLOCK == 0 {
+			t.Fatalf("caller O_NONBLOCK lost: %d, %v", flags, err)
+		}
+	}
+	check()
+	if r := l.Close(); r.RestoreErr != nil {
+		t.Fatal(r.RestoreErr)
+	}
+	check()
+}
+
+func observerOSFailures(t *testing.T) {
+	for _, fd := range []int{-1, 2147483648} {
+		if hungup, err := disconnected(fd); hungup || err == nil {
+			t.Fatalf("invalid descriptor = %v, %v", hungup, err)
+		}
+	}
+	p := openPair(t)
+	fd := int(p.slave.Fd())
+	if err := p.slave.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if hungup, err := disconnected(fd); hungup || err == nil {
+		t.Fatalf("closed descriptor poll = %v, %v", hungup, err)
+	}
+	if _, err := dimensions(fd); err == nil {
+		t.Fatal("closed descriptor size succeeded")
+	}
+}
+
+func busyDuringAcquisition(t *testing.T) {
+	p := openPair(t)
+	provider := New(p.slave, "linux")
+	before := p.snapshot(t)
+	provider.mu.Lock()
+	l, err := provider.Acquire(context.Background())
+	provider.mu.Unlock()
+	var failure *port.Failure
+	if l != nil || !errors.As(err, &failure) || failure.Kind != port.Busy {
+		t.Fatalf("busy acquisition: %v, %v", l, err)
+	}
+	if !reflect.DeepEqual(before, p.snapshot(t)) {
+		t.Fatal("busy acquisition changed settings")
+	}
+}
+
+func pollSystemError(t *testing.T) {
+	p := openPair(t)
+	before := p.snapshot(t)
+	l, err := New(p.slave, "linux").Acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	var limit unix.Rlimit
+	if err := unix.Getrlimit(unix.RLIMIT_NOFILE, &limit); err != nil {
+		t.Fatal(err)
+	}
+	// In this disposable child only, nfds=1 exceeds the zero soft limit and
+	// poll fails with EINVAL. Existing terminal ioctls still work, allowing
+	// deterministic proof of monitor-error cleanup without replacing syscalls.
+	if err := unix.Setrlimit(unix.RLIMIT_NOFILE, &unix.Rlimit{Cur: 0, Max: limit.Max}); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := unix.Setrlimit(unix.RLIMIT_NOFILE, &limit); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	select {
+	case <-l.Done():
+	case <-time.After(time.Second):
+		t.Fatal("poll error did not terminate observation")
+	}
+	r := l.Result()
+	if r.Cause != port.ObservationFailed || !errors.Is(r.Err, unix.EINVAL) || r.RestoreErr != nil {
+		t.Fatalf("poll error result: %+v", r)
+	}
+	if !reflect.DeepEqual(before, p.snapshot(t)) {
+		t.Fatal("poll failure did not restore original state")
 	}
 }
