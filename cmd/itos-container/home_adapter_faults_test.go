@@ -54,6 +54,12 @@ func TestHomeSDKRejectsUnprovenArgumentsAndLatePinChanges(t *testing.T) {
 		}
 	}
 	f.engine.HomeFault = ""
+	if got := h.InitializeHome(t.Context(), worker, "4294967295", "4294967295"); got != "" {
+		t.Fatal("maximum numeric archive IDs", got)
+	}
+	if got := h.VerifyHomeRoot(t.Context(), worker, "4294967295", "4294967295"); got != "" {
+		t.Fatal("numeric archive IDs did not round trip", got)
+	}
 	for _, event := range []string{"inspect", "remove"} {
 		f.engine.HomeBefore = func(seen string) {
 			if seen == event {
