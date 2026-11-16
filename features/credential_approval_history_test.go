@@ -96,7 +96,7 @@ func (w *world) credentialApprovalHistorySteps(sc *godog.ScenarioContext) {
 			return fmt.Errorf("missing two status results")
 		}
 		if w.approval.results[0].exit != 0 || !strings.Contains(w.approval.results[0].stdout, w.approval.fingerprint) {
-			return fmt.Errorf("plain status omitted frozen credential authority")
+			return fmt.Errorf("plain status omitted frozen credential authority: exit=%d stderr=%s", w.approval.results[0].exit, w.approval.results[0].stderr)
 		}
 		return w.credentialApprovalStatus(w.approval.results[1])
 	})

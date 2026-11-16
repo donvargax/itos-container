@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,7 +56,7 @@ func (w *world) credentialFreezeSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the real service selects and publishes frozen input then the fixture replaces the request and active approval$`, w.credentialFreezeInvoke)
 	sc.Step(`^the selected and persisted snapshot contain the exact original canonical settings bytes fingerprint project and generation$`, func() error {
 		f := w.credentialApproval.admission
-		settings := credentialAdmissionSettings("both", "/checkout")
+		settings := credentialFreezeSettings("both")
 		for _, backend := range []string{"memory", "disk"} {
 			r := object(f.freeze[backend])
 			if r["failure"] != "" || r["publication"] != "" {
@@ -83,7 +84,7 @@ func (w *world) credentialFreezeSteps(sc *godog.ScenarioContext) {
 			if r["second_failure"] != "" {
 				return fmt.Errorf("independent selection refused")
 			}
-			if err := credentialFrozenValue(object(r["independent"]), credentialAdmissionSettings("both", "/checkout")); err != nil {
+			if err := credentialFrozenValue(object(r["independent"]), credentialFreezeSettings("both")); err != nil {
 				return err
 			}
 		}
@@ -111,11 +112,21 @@ func (w *world) credentialFreezeSteps(sc *godog.ScenarioContext) {
 }
 
 func credentialFrozenValue(got, settings map[string]any) error {
-	project := approvalHash(map[string]any{"schema": 1, "uid": "1000", "checkout": settings["checkout"]})
+	project := approvalHash(map[string]any{"schema": 1, "uid": object(settings["host"])["uid"], "checkout": settings["checkout"]})
 	if got["Settings"] != string(approvalJSON(settings)) || got["Fingerprint"] != "sha256:"+approvalHash(settings) || got["Generation"] != "4" || got["Project"] != project {
 		return fmt.Errorf("frozen grant authority differs from independent inputs")
 	}
 	return nil
+}
+
+func credentialFreezeSettings(request string) map[string]any {
+	settings := credentialAdmissionSettings(request, "/checkout")
+	// Unlike admission's in-memory observations, the freeze contract also uses
+	// real protected files. Bind both backends to the identity that owns them.
+	uid, gid := strconv.Itoa(os.Geteuid()), strconv.Itoa(os.Getegid())
+	object(settings["host"])["uid"], object(settings["host"])["gid"] = uid, gid
+	object(settings["manifest"])["containerUser"], object(settings["manifest"])["remoteUser"] = uid, uid
+	return settings
 }
 
 func (w *world) credentialFreezeInvoke() error {
@@ -124,7 +135,7 @@ func (w *world) credentialFreezeInvoke() error {
 		return err
 	}
 	input, output := filepath.Join(w.dir, "slice-30-freeze-input.json"), filepath.Join(w.dir, "slice-30-freeze-output.json")
-	request := map[string]string{"Approved": string(approvalJSON(credentialAdmissionSettings("both", "/checkout"))), "Replacement": string(approvalJSON(credentialAdmissionSettings("github", "/checkout")))}
+	request := map[string]string{"Approved": string(approvalJSON(credentialFreezeSettings("both"))), "Replacement": string(approvalJSON(credentialFreezeSettings("github")))}
 	if err := os.WriteFile(input, approvalJSON(request), 0600); err != nil {
 		return err
 	}
