@@ -322,3 +322,4 @@ questions:
   - id: q-80
     item: "slice-34"
     question: "slice-34: its implementer (attempt 4) stopped for engine red evidence of @ID-HOME-14, 15 and 23. Does the dispatched run supply it?"
+    answer: "Yes (the coordinator, 2026-11-16). Run 43815326065 at 5fe482e, dispatched with the three tags, ran eight cases in the offline engine shard and all failed at their first product run, the product refusing the home key with policy.unknown_key and exit 2; no step was undefined and no fixture failed. With run 43797097484 for @ID-HOME-13, all four engine scenarios have red evidence. Since the key is refused outright, steps after the first run have not executed yet; the green run after the implementation is their first execution. slice-34 implements."
