@@ -3,6 +3,7 @@ package port_test
 import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
+	"strings"
 	"testing"
 )
 
@@ -113,5 +114,116 @@ func TestCredentialProgressAnchorPublication(t *testing.T) {
 	n.Stage = "cancelled"
 	if r.ValidTransition(n) {
 		t.Fatal("anchor ownership publication changed the worker stage")
+	}
+}
+
+func TestCredentialProgressAnchorCleanup(t *testing.T) {
+	for _, stage := range []string{"reserved", "cancelled", "absent"} {
+		t.Run(stage, func(t *testing.T) {
+			r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+			r.Stage, r.Credentials.Stage = stage, "absent"
+			if stage == "absent" {
+				r.ContainerID = strings.Repeat("c", 64)
+			}
+			n := r
+			n.Anchor.Stage = "absent"
+			if !r.ValidTransition(n) {
+				t.Fatal("confirmed anchor removal refused after staging absence")
+			}
+			if n.Completed() != (stage != "reserved") {
+				t.Fatal("completion did not retain the worker's preparation or termination state")
+			}
+			if !n.ValidTransition(n) || n.ValidTransition(r) {
+				t.Fatal("anchor absence is not terminal and idempotent")
+			}
+		})
+	}
+}
+
+func TestCredentialProgressSchemaUpgrade(t *testing.T) {
+	for _, egress := range []bool{false, true} {
+		r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+		staging := r.Credentials
+		r.Schema, r.Credentials = 2, port.CredentialStaging{}
+		if egress {
+			r.Schema = 3
+			r.Egress = ownedCredentialEgress(r)
+		}
+		n := r
+		n.Schema, n.Credentials = 4, staging
+		if !r.ValidTransition(n) {
+			t.Fatal("credential intent upgrade refused", egress)
+		}
+		for _, fault := range []string{"owned staging", "worker advanced", "anchor changed", "already cancelled"} {
+			t.Run(fault+"/"+r.Egress.Proxy.Stage, func(t *testing.T) {
+				before, after := r, n
+				switch fault {
+				case "owned staging":
+					after.Credentials.Stage, after.Credentials.Device, after.Credentials.Inode = "owned", "1", "2"
+				case "worker advanced":
+					after.Stage = "cancelled"
+				case "anchor changed":
+					after.Anchor.Stage = "absent"
+				case "already cancelled":
+					before.Stage, after.Stage = "cancelled", "cancelled"
+				}
+				if before.ValidTransition(after) {
+					t.Fatal("schema upgrade changed progress or bypassed staging intent")
+				}
+			})
+		}
+	}
+}
+
+func TestCredentialProgressWithEgress(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true, GitHub: true})
+	r.Egress = ownedCredentialEgress(r)
+	if !r.ValidTransition(r) {
+		t.Fatal("unchanged credential and egress authority refused")
+	}
+	n := r
+	n.Credentials.Stage, n.Credentials.Device, n.Credentials.Inode = "owned", "1", "2"
+	if !r.ValidTransition(n) {
+		t.Fatal("credential publication lost existing egress authority")
+	}
+	r = n
+	n.Credentials.Stage = "absent"
+	if !r.ValidTransition(n) {
+		t.Fatal("staging cleanup with owned egress refused")
+	}
+	r = n
+	r.Stage = "cancelled"
+	for _, resource := range []string{"proxy", "network", "internal"} {
+		n = r
+		n.Anchor.Stage = "absent"
+		if r.ValidTransition(n) || r.Completed() {
+			t.Fatal("live egress allowed anchor removal or session completion")
+		}
+		n = r
+		switch resource {
+		case "proxy":
+			n.Egress.Proxy.Stage = "absent"
+		case "network":
+			n.Egress.Network.Stage = "absent"
+		case "internal":
+			n.Egress.Internal.Stage = "absent"
+		}
+		if !r.ValidTransition(n) {
+			t.Fatal("confirmed egress cleanup refused with credential metadata", resource)
+		}
+		r = n
+	}
+	n = r
+	n.Anchor.Stage = "absent"
+	if !r.ValidTransition(n) || !n.Completed() {
+		t.Fatal("confirmed removal of every owned resource did not complete the session")
+	}
+}
+
+func ownedCredentialEgress(r port.Record) port.EgressRecord {
+	return port.EgressRecord{
+		Internal: port.EgressResource{Name: "itos-container-internal-" + r.NameToken(), ID: strings.Repeat("a", 64), Stage: "owned"},
+		Network:  port.EgressResource{Name: "itos-container-egress-" + r.NameToken(), ID: strings.Repeat("b", 64), Stage: "owned"},
+		Proxy:    port.EgressResource{Name: "itos-container-proxy-" + r.NameToken(), ID: strings.Repeat("c", 64), Stage: "owned"},
 	}
 }
