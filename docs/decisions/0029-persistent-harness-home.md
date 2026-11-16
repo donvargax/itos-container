@@ -8,8 +8,8 @@ ratify; unimplemented and unproven.** The charter's second milestone, step 3,
 permits a volume or tmpfs for the harness. The coordinator selected this
 per-checkout persistent named volume and terminal-consented reset/deletion on
 the person's standing instruction. No further storage-lifetime answer is owed
-before implementation. This record claims no engine feasibility, assertion-level
-red/green evidence or supported host combination.
+before implementation. This record claims no engine feasibility, passing runtime
+evidence or supported host combination.
 
 ## Context and architecture exception
 
@@ -127,12 +127,20 @@ custom Engine client, engine CLI or network service is selected.
 
 ## Evidence and consequences
 
-HOME-01 through HOME-24 remain `@wip`; all home-specific step bindings are an
-implementation handoff. Predicted first failing assertions are recorded in the
-specification commit, not observed red evidence. Givens must independently seed
-temporary inputs/records and isolated account-home state without invoking product
-approval/run/recovery. Both memory and real disk/SDK-with-recorder paths must
-exercise the same decisions, with positive home controls on refusal cases.
+HOME-01 through HOME-24 remain `@wip`. HOME-01 and all four native scenarios have
+step bindings; the remaining non-engine bindings are an implementation handoff.
+The coordinator accepted HOME-13's assertion-level red in dispatch
+`43797097484`, offline engine job `133068276167`, at
+`68be535a07039b29ae294f7d72e4be00b6881e6f`: one selected row failed in 2.9 seconds
+at its first observation, "run 1 did not provide the approved persistent private
+home: exit 2", with `policy.unknown_key` for the home key. Setup succeeded.
+Commit `191a919e440839dd00d5d1d04140ed58c9f1c5ca` binds HOME-14, HOME-15 and
+HOME-23. Their assertion-level CI red evidence is still required before runtime
+implementation; local binding and oracle checks do not supply it. Givens must
+independently seed temporary inputs/records and isolated account-home state
+without invoking product approval/run/recovery. Both memory and real
+disk/SDK-with-recorder paths must exercise the same decisions, with positive
+home controls on refusal cases.
 
 HOME-13/14/15/23 require CI-only real-engine red/green evidence, including non-root
 initialization, executable temporary binaries, cross-project separation, retained
