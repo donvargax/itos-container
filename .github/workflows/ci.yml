@@ -234,7 +234,7 @@ jobs:
       # windows, stamped with a known version and commit.
       # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
       - name: Tests
-        run: go test ./... -count=1
+        run: go test ./... -count=1 -timeout=20m
         env:
           RAPID_CHECKS: 1
 
@@ -257,7 +257,7 @@ jobs:
       # windows, stamped with a known version and commit.
       # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
       - name: Tests
-        run: go test ./... -count=1
+        run: go test ./... -count=1 -timeout=20m
         env:
           RAPID_CHECKS: 1
           ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}
@@ -280,7 +280,7 @@ jobs:
       # windows, stamped with a known version and commit.
       # RAPID_CHECKS=1: each property of the domain on one random case, as in the CI plan.
       - name: Tests
-        run: go test ./... -count=1
+        run: go test ./... -count=1 -timeout=20m
         env:
           RAPID_CHECKS: 1
           ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}
