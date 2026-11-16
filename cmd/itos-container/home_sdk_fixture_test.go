@@ -244,9 +244,15 @@ func (a *homeSDKFixture) serve(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				header, err := tar.NewReader(r.Body).Next()
-				if err != nil || header.Typeflag != tar.TypeDir || header.Name != "." || r.URL.Query().Get("path") != "/home/itos" || r.URL.Query().Get("copyUIDGID") != "true" {
+				if err != nil || header.Typeflag != tar.TypeDir || (header.Name != "." && header.Name != "/") || r.URL.Query().Get("path") != "/home/itos" || r.URL.Query().Get("copyUIDGID") != "true" {
 					a.t.Error("unsafe initialization archive", header, r.URL)
 					w.WriteHeader(400)
+					return
+				}
+				// Moby skips an existing directory's dot entry. A successful
+				// copy reply alone does not prove the metadata was applied.
+				if header.Name == "." {
+					w.WriteHeader(200)
 					return
 				}
 				root.UID, root.GID, root.Mode, root.Directory = strconv.Itoa(header.Uid), strconv.Itoa(header.Gid), int(header.Mode), true

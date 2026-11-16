@@ -203,7 +203,7 @@ func TestHomeMutationsRequireAcknowledgementAndUnchangedPin(t *testing.T) {
 					case "initialize":
 						archive := tar.NewReader(r.Body)
 						h, err := archive.Next()
-						if r.Method != "PUT" || path != "/containers/"+id+"/archive" || r.URL.Query().Get("path") != "/home/itos" || r.URL.Query().Get("copyUIDGID") != "true" || err != nil || h.Name != "." || h.Typeflag != tar.TypeDir || h.Mode != 0700 || h.Uid != 2001 || h.Gid != 3001 || h.Size != 0 {
+						if r.Method != "PUT" || path != "/containers/"+id+"/archive" || r.URL.Query().Get("path") != "/home/itos" || r.URL.Query().Get("copyUIDGID") != "true" || err != nil || h.Name != "/" || h.Typeflag != tar.TypeDir || h.Mode != 0700 || h.Uid != 2001 || h.Gid != 3001 || h.Size != 0 {
 							t.Error("initialization did not carry only the private-root metadata", h, err)
 						}
 						if _, err := archive.Next(); err != io.EOF {

@@ -61,7 +61,9 @@ func (w *world) homeNativeFixture() error {
 	}
 	f := &homeNative{workers: map[string]map[string]any{}, volumes: map[string]map[string]any{}, anchors: map[string]map[string]any{}}
 	w.home = &homeWorld{native: f}
-	w.doctor.env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
+	if err := w.homeNativeSelectEngine("/var/run/docker.sock"); err != nil {
+		return err
+	}
 	if err := w.installNativeProbe("slice-34-probe", func(path string) error {
 		return recoveryBuildHelper(w.root, path, homeNativeProbeSource)
 	}); err != nil {
@@ -107,6 +109,17 @@ func (w *world) homeNativeFixture() error {
 		f.resourcesBefore, err = w.doctor.real.snapshotResources()
 	}
 	return err
+}
+
+// Seed approval and the home scope with the same resolved endpoint the product
+// inspects. In particular, /var/run is commonly a symlink to /run in CI.
+func (w *world) homeNativeSelectEngine(path string) error {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	w.doctor.env["DOCKER_HOST"] = "unix://" + resolved
+	return nil
 }
 
 func (w *world) homeNativeRuns() error {

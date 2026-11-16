@@ -24,6 +24,30 @@ func TestHomeNativeFixtureGuard(t *testing.T) {
 	}
 }
 
+func TestHomeNativeEndpointResolvesSocketAlias(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, alias := filepath.Join(root, "engine.sock"), filepath.Join(root, "alias.sock")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(path, alias); err != nil {
+		t.Skip("socket alias fixture needs symlink support")
+	}
+	w := &world{doctor: &doctorWorld{env: map[string]string{"DOCKER_HOST": "old fixture endpoint"}}}
+	if err := w.homeNativeSelectEngine(alias); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.doctor.env["DOCKER_HOST"]; got != "unix://"+path {
+		t.Fatal("approval would bind an unresolved endpoint", got)
+	}
+	if err := w.homeNativeSelectEngine(path + "-missing"); err == nil {
+		t.Fatal("missing endpoint accepted")
+	}
+}
+
 func TestHomeNativeProbeCompiles(t *testing.T) {
 	root, err := moduleRoot()
 	if err != nil {
