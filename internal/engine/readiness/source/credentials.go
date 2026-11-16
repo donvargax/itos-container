@@ -2,6 +2,7 @@
 package source
 
 import (
+	"path"
 	"path/filepath"
 	"unicode/utf8"
 
@@ -63,8 +64,12 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 func AccountInput(input port.CredentialInput, account approval.Account) port.CredentialInput {
 	home, failure := account.AccountHome()
 	input.AccountState = ""
-	if failure == "" && filepath.IsAbs(home) && home != string(filepath.Separator) && utf8.ValidString(home) {
-		input.AccountState = filepath.Join(home, ".local", "state", "itos-container")
+	abs, join, separator := filepath.IsAbs, filepath.Join, string(filepath.Separator)
+	if input.OS == "linux" {
+		abs, join, separator = path.IsAbs, path.Join, "/"
+	}
+	if failure == "" && abs(home) && home != separator && utf8.ValidString(home) {
+		input.AccountState = join(home, ".local", "state", "itos-container")
 	}
 	return input
 }

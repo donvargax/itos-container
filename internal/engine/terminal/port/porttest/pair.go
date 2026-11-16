@@ -68,3 +68,21 @@ func (l *pairLease) Close() port.Result {
 	l.once.Do(func() { l.in.Close(); l.out.Close() })
 	return l.Result()
 }
+
+func (l *pairLease) Check() port.Cause {
+	select {
+	case <-l.done:
+		return l.result.Cause
+	default:
+	}
+	a, b := l.in.Check(), l.out.Check()
+	for _, cause := range []port.Cause{a, b} {
+		if cause == port.Hangup || cause == port.ObservationFailed {
+			return cause
+		}
+	}
+	if a != "" {
+		return a
+	}
+	return b
+}

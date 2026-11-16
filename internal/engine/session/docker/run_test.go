@@ -31,6 +31,7 @@ type runAPI struct {
 	input         []byte
 	signals       []string
 	signalTargets []string
+	resizes       []string
 }
 
 func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
@@ -100,8 +101,12 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 					t.Error(err)
 				}
 			}
-			writeFrame(a.attached, 1, []byte("stdout\x00\xff"))
-			writeFrame(a.attached, 2, []byte("stderr\x00\xfe"))
+			if a.resource.Config.Tty {
+				_, _ = a.attached.Write([]byte("stdout\x00\xffstderr\x00\xfe"))
+			} else {
+				writeFrame(a.attached, 1, []byte("stdout\x00\xff"))
+				writeFrame(a.attached, 2, []byte("stderr\x00\xfe"))
+			}
 			if a.closeInput {
 				_ = a.attached.(*net.UnixConn).CloseWrite()
 			} else {
@@ -110,6 +115,9 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 			w.WriteHeader(204)
 		case strings.HasSuffix(path, "/wait"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 7})
+		case strings.HasSuffix(path, "/resize"):
+			a.resizes = append(a.resizes, r.URL.RawQuery)
+			w.WriteHeader(200)
 		case strings.HasSuffix(path, "/kill"):
 			a.signals = append(a.signals, r.URL.Query().Get("signal"))
 			a.signalTargets = append(a.signalTargets, strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/kill"))

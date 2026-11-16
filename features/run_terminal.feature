@@ -8,9 +8,11 @@ Feature: An explicitly selected terminal for an owned foreground run
   # Authorities: docs/charter.md's interactive milestone, the pilot's foreground
   # command contract, docs/architecture.md (Slices), T-56's terminal contract,
   # and docs/decisions/0016-cancellation-and-output-drain.md (slice-12).
-  # This is slice-37's specification only. All cases remain @wip until defined
-  # steps have assertion-level red and green at their stated tier. No steps or
-  # implementation accompany this spec; the failures below are predictions.
+  # Slice-37 implements these cases. Local red evidence rejects --tty before
+  # implementation. The coordinator accepted the fourteen engine rows' launch
+  # assertions at 23270b6 (dispatch 43837837169, job 133198815706): exit 2,
+  # unknown flag --tty. Their later steps first execute in implementation CI;
+  # inspect that green run's complete step list for skipped assertions.
   #
   # Interface decisions:
   # - Only run --tty -- <argv> requests terminal mode. Without --tty, preserve
@@ -217,7 +219,7 @@ Feature: An explicitly selected terminal for an owned foreground run
 
   # Invocation selection. Baseline rejects the new wrapper flag; the first
   # positive TTY assertion distinguishes that from the unchanged plain control.
-  @wip @slice-37 @ID-RUNTTY-01 @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-01 @linux @local-engine-fixture
   Scenario Outline: TTY selection is explicit even when streams are terminals
     Given a local terminal-run fixture with terminal stdin and terminal stdout
     When the fixture invokes plain run and terminal run with workload arguments "<arguments>"
@@ -235,7 +237,7 @@ Feature: An explicitly selected terminal for an owned foreground run
 
   # Eligibility is a usage refusal before preflight, including when the opposite
   # stream is a terminal. Today there is no run.terminal-required diagnostic.
-  @wip @slice-37 @ID-RUNTTY-02 @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-02 @linux @local-engine-fixture
   Scenario Outline: Explicit terminal mode refuses redirected input or output
     Given a local terminal-run fixture with <input> stdin and <output> stdout
     When the terminal fixture invokes "run --tty -- fixture-workload"
@@ -251,7 +253,7 @@ Feature: An explicitly selected terminal for an owned foreground run
 
   # Required argv still precedes terminal eligibility. The old unknown --tty
   # usage failure is not the specific existing command-required behavior.
-  @wip @slice-37 @ID-RUNTTY-03 @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-03 @linux @local-engine-fixture
   Scenario Outline: Terminal mode still requires an explicit nonempty executable
     Given a local terminal-run fixture with pipe stdin and pipe stdout
     When the terminal fixture invokes "<arguments>"
@@ -268,7 +270,7 @@ Feature: An explicitly selected terminal for an owned foreground run
 
   # Keep RUN-03..05's full-document JSON oracle, including missing argv and
   # nonterminal combinations. A generic parser usage object must fail this Then.
-  @wip @slice-37 @ID-RUNTTY-04 @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-04 @linux @local-engine-fixture
   Scenario Outline: JSON refusal precedes terminal selection and command validation
     Given a local terminal-run fixture with <input> stdin and <output> stdout
     When the terminal fixture invokes "<arguments>" with inherited ITOS_JSON "<inherited>"
@@ -288,7 +290,7 @@ Feature: An explicitly selected terminal for an owned foreground run
 
   # Native PTY metadata is bad, not a fake failure result. Retrying with a valid
   # measured size is a positive control; COLUMNS/LINES cannot supply a fallback.
-  @wip @slice-37 @ID-RUNTTY-05 @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-05 @linux @local-engine-fixture
   Scenario Outline: Unusable initial terminal dimensions refuse before startup
     Given a local terminal-run fixture with terminal stdin and terminal stdout
     And the fixture terminal has <columns> columns and <rows> rows
@@ -307,7 +309,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # preselected command result. Keep both handles usable and require a retry
   # after clearing the fault. Native failure injection belongs at the test seam;
   # the same rollback contract also runs against the I/O-free terminal fake.
-  @wip @slice-37 @ID-RUNTTY-16 @linux
+  @slice-37 @ID-RUNTTY-16 @linux
   Scenario Outline: Failure to acquire distinct stdout rolls back stdin before startup
     Given a terminal-run contract fixture with distinct terminal stdin and stdout
     And the fixture schedules "<fault>" after stdin enters raw mode
@@ -328,7 +330,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # Docker framing header, catch accidental demultiplexing or CR/LF conversion.
   # Distinct stdout retains OPOST/ONLCR until the controller acquires it; the
   # probe changes only its worker PTY, never either host terminal.
-  @wip @slice-37 @ID-RUNTTY-06 @engine @linux
+  @slice-37 @ID-RUNTTY-06 @engine @linux
   Scenario Outline: The foreground command receives a terminal and literal argv from its first instruction
     Given a CI terminal-run fixture with initial size 113 by 37 and a reporting probe that exits <exit>
     And the CI fixture binds stdin and stdout to <terminals> terminals with saved nondefault settings
@@ -351,7 +353,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # pre-run LF control proves output translation was enabled; an stdin-only
   # lease then fails exact output even if TTY startup otherwise works. Zero
   # stdout dimensions also catch reusing an input-sized lease for output.
-  @wip @slice-37 @ID-RUNTTY-15 @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-15 @linux @local-engine-fixture
   Scenario Outline: Distinct output terminals preserve bytes and restore both saved states
     Given a local terminal-run fixture with distinct terminal stdin and stdout
     And the fixture stdin has size 113 by 37 and stdout has size <columns> by <rows>
@@ -371,7 +373,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # Keep the lease beyond successful startup; quiet time exceeds the configured
   # startup/call limits before resize. Observe the intermediate size before the
   # burst, then the burst's final size; do not demand every intermediate event.
-  @wip @slice-37 @ID-RUNTTY-07 @engine @linux
+  @slice-37 @ID-RUNTTY-07 @engine @linux
   Scenario: A quiet foreground terminal receives changed and latest dimensions
     Given a CI terminal-run fixture with initial size 113 by 37 and a quiet resize-reporting probe
     When terminal run remains quiet beyond startup and call budgets then the harness changes size to 151 by 49 and bursts through 79 by 23 to 167 by 53
@@ -383,7 +385,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # The probe sets its OWN worker terminal raw before its ready frame; the host
   # is already raw. Sending 03/04 without newline must not need canonical flush,
   # trigger host SIGINT, end input forwarding or echo a second copy locally.
-  @wip @slice-37 @ID-RUNTTY-08 @engine @linux
+  @slice-37 @ID-RUNTTY-08 @engine @linux
   Scenario: Raw control keys remain workload bytes and do not disconnect the client
     Given a CI terminal-run fixture with a raw input-reporting probe
     When terminal run reaches the raw probe ready frame and the harness writes bytes 03 04 41 without a newline then a final release frame
@@ -394,7 +396,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # A separate canonical/ISIG worker proves actual interactive Ctrl-C semantics.
   # It installs its own SIGINT handler, records once, continues and accepts a
   # later line. An engine kill request or host cancellation cannot supply proof.
-  @wip @slice-37 @ID-RUNTTY-09 @engine @linux
+  @slice-37 @ID-RUNTTY-09 @engine @linux
   Scenario: The worker terminal interprets Ctrl-C without cancelling the controller
     Given a CI terminal-run fixture with a canonical signal-handling probe
     When terminal run reaches the canonical probe ready frame and the harness writes byte 03 followed by a release line after the signal receipt
@@ -407,7 +409,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # Each expected typed failure is missing today because --tty never gets here.
   # Both terminals have been acquired before these preflight/startup faults;
   # distinct rows must compare each restored state against its own saved copy.
-  @wip @slice-37 @ID-RUNTTY-10 @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-10 @linux @local-engine-fixture
   Scenario Outline: Startup failure restores the host terminal without launching later phases
     Given a local terminal-run fixture with <terminals> terminal stdin and stdout
     And the terminal-run fixture schedules "<fault>"
@@ -439,7 +441,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # of relabelling it as terminal loss. Engine resize timeout uses the call budget.
   # Distinct-terminal restoration faults allocate two terminals; only the named
   # terminal's restoration fails. The other must regain its exact saved state.
-  @wip @slice-37 @ID-RUNTTY-11 @linux
+  @slice-37 @ID-RUNTTY-11 @linux
   Scenario Outline: Terminal failures retain their cause exit precedence and bounded cleanup
     Given a terminal-run contract fixture with fault "<fault>" and authoritative exit "<child>"
     When terminal run reaches the fault and finishes through the applicable local backends alongside a healthy control
@@ -467,7 +469,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # Host signals are deliberately different from typing a control byte. Deliver
   # only to this child controller after ready; an external SIGINT still cancels
   # while host ISIG is off. The worker's handler exit remains authoritative.
-  @wip @slice-37 @ID-RUNTTY-12 @engine @linux
+  @slice-37 @ID-RUNTTY-12 @engine @linux
   Scenario Outline: External host cancellation retains its signal and observed workload result in terminal mode
     Given a CI terminal-run fixture with a signal-handling probe that exits <exit>
     When terminal run reaches the ready frame and the harness sends host signal "<signal>" then repeats SIGINT and SIGTERM during cleanup
@@ -490,7 +492,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # In distinct-terminal rows close only the named master; leave the other pair
   # usable to prove its exact restoration. Stdout loss while idle needs passive
   # observation, even though only stdin supplies worker dimensions.
-  @wip @slice-37 @ID-RUNTTY-13 @engine @linux
+  @slice-37 @ID-RUNTTY-13 @engine @linux
   Scenario Outline: Losing the terminal client stops its owned workload even without stream activity
     Given a CI terminal-run fixture with a "<probe>" probe and "<input>" terminal input
     And the CI fixture binds stdin and stdout to <terminals> terminals with saved nondefault settings
@@ -515,7 +517,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # resource, even on retry; the engine-loss row recovers the original resource
   # only after connectivity returns. Each When must observe a ready TTY run
   # before inducing disconnect; Givens only schedule those future observations.
-  @wip @slice-37 @ID-RUNTTY-14 @linux
+  @slice-37 @ID-RUNTTY-14 @linux
   Scenario Outline: Terminal disconnect preserves uncertain outcomes and owned recovery
     Given a terminal-run contract fixture with disconnect condition "<condition>" and authoritative exit "<child>"
     When terminal run loses its client and later status and stop inspect the retained session after the fixture fault clears

@@ -30,6 +30,8 @@ const (
 type Failure struct {
 	Kind FailureKind
 	Err  error
+	// RestoreErr retains a failed rollback separately from acquisition.
+	RestoreErr error
 }
 
 func (f *Failure) Error() string { return "terminal: " + string(f.Kind) }
@@ -65,6 +67,10 @@ type Provider interface {
 // closes. Result waits for Done. Close requests termination, waits for cleanup,
 // and returns the same retained result on every call, including concurrent calls.
 type Lease interface {
+	// Check makes a fresh non-consuming observation to reconcile a stream error
+	// with terminal loss, without waiting for the periodic observer to run.
+	// Empty means usable; after completion it returns the retained cause.
+	Check() Cause
 	Initial() Dimensions
 	Resizes() <-chan Dimensions
 	Done() <-chan struct{}

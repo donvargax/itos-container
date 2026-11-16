@@ -35,6 +35,9 @@ func Contract(t *testing.T, factory Factory) {
 	t.Run("initial_size_and_raw", func(t *testing.T) {
 		f := factory(t, "")
 		l := acquire(t, f.Provider, context.Background())
+		if cause := l.Check(); cause != "" {
+			t.Fatalf("usable terminal check: %s", cause)
+		}
 		if l.Initial() != (port.Dimensions{Columns: 93, Rows: 31}) || !f.Raw() {
 			t.Fatalf("initial dimensions/raw = %v/%v", l.Initial(), f.Raw())
 		}
@@ -92,6 +95,9 @@ func Contract(t *testing.T, factory Factory) {
 		f := factory(t, "")
 		l := acquire(t, f.Provider, context.Background())
 		first := boundedClose(t, l)
+		if cause := l.Check(); cause != first.Cause {
+			t.Fatalf("closed terminal check: %s", cause)
+		}
 		result(t, first, port.Closed, false)
 		f.ChangeState()
 		after := f.Snapshot()
@@ -207,6 +213,9 @@ func Contract(t *testing.T, factory Factory) {
 			f := factory(t, "")
 			l := acquire(t, f.Provider, context.Background())
 			f.Hangup(unread)
+			if cause := l.Check(); cause != port.Hangup {
+				t.Fatalf("fresh hangup check: %s", cause)
+			}
 			hangupResult(t, l)
 		})
 	}
@@ -233,6 +242,9 @@ func Contract(t *testing.T, factory Factory) {
 		f := factory(t, "")
 		l := acquire(t, f.Provider, context.Background())
 		f.Break()
+		if cause := l.Check(); cause != port.ObservationFailed {
+			t.Fatalf("fresh failed observation: %s", cause)
+		}
 		finished(t, l)
 		first := l.Result()
 		result(t, first, port.ObservationFailed, true)

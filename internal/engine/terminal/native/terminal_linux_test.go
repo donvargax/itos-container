@@ -55,6 +55,9 @@ func TestTerminalChild(t *testing.T) {
 	t.Setenv("COLUMNS", "500")
 	t.Setenv("LINES", "200")
 	t.Run("contract", func(t *testing.T) { porttest.Contract(t, terminalFixture) })
+	for _, layout := range []string{"shared", "distinct input", "distinct output"} {
+		t.Run(layout, func(t *testing.T) { porttest.Contract(t, pairFixture(layout)) })
+	}
 	t.Run("invalid_files", invalidFiles)
 	t.Run("raw_control_bytes_and_handles", rawControlBytes)
 	t.Run("resource_cycles", resourceCycles)
@@ -65,6 +68,54 @@ func TestTerminalChild(t *testing.T) {
 	t.Run("poll_system_error", pollSystemError)
 	t.Run("cancel_before_raw", cancelBeforeRaw)
 	t.Run("interrupted_observation", interruptedObservation)
+}
+
+func pairFixture(layout string) porttest.Factory {
+	return func(t *testing.T, invalid port.FailureKind) porttest.Fixture {
+		input := terminalFixture(t, invalid)
+		provider := input.Provider.(*Provider)
+		if layout == "shared" {
+			// A second descriptor for the same device must restore only once.
+			p := provider.file
+			if p != nil {
+				out, err := os.OpenFile(p.Name(), os.O_RDWR, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = out.Close() })
+				provider.Output = out
+			}
+			return input
+		}
+		p := openPair(t)
+		p.size(t, port.Dimensions{}) // output dimensions never gate acquisition
+		provider.Output = p.slave
+		beforeSnapshot, beforeChange, beforeRaw := input.Snapshot, input.ChangeState, input.Raw
+		input.Snapshot = func() any { return [2]any{beforeSnapshot(), p.snapshot(t)} }
+		input.ChangeState = func() { beforeChange(); p.changeState(t) }
+		input.Raw = func() bool {
+			state, err := unix.IoctlGetTermios(int(p.slave.Fd()), unix.TCGETS)
+			return err == nil && state.Oflag&unix.OPOST == 0 && beforeRaw()
+		}
+		if layout == "distinct output" {
+			input.Hangup = func(unread bool) {
+				if unread {
+					if _, err := p.master.Write([]byte{'x'}); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := p.master.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			input.Break = func() {
+				if err := p.slave.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		return input
+	}
 }
 
 // Cancel at the second acquisition checkpoint, before MakeRaw, without a

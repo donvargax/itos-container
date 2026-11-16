@@ -7,6 +7,7 @@ import (
 	approvalport "github.com/donvargax/itos-container/internal/engine/approval/port"
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	session "github.com/donvargax/itos-container/internal/engine/session/port"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 	"github.com/donvargax/itos-container/internal/slices/run/port"
 	"strconv"
 	"strings"
@@ -20,6 +21,8 @@ var errWorkloadExitUnknown = errors.New("workload exit is unknown; cleanup is co
 
 // CLI lets Kong retain the first separator and every subsequent literal word.
 type CLI struct {
+	TTY           bool                   `name:"tty" help:"Attach terminal stdin and stdout to the workload."`
+	Terminal      terminal.Provider      `kong:"-"`
 	Context       context.Context        `kong:"-"`
 	Snapshots     approvalport.Snapshots `kong:"-"`
 	Approval      port.Approval          `kong:"-"`
@@ -34,7 +37,10 @@ func (CLI) Help() string {
 	return "\nUse itos container run -- <command> [arguments...].\n\n" +
 		"    Wrapper --json or ITOS_JSON=1 returns one schema-1 refusal object.\n" +
 		"    Arguments after -- belong only to the workload.\n" +
-		"    Run the literal command in one approved offline or allowlist worker; streams remain separate.\n" +
+		"    Run the literal command in one approved offline or allowlist worker.\n" +
+		"    Foreground streams remain separate unless --tty selects terminal stdin and stdout.\n" +
+		"    With --tty, stdout carries the raw merged worker terminal; diagnostics stay on stderr.\n" +
+		"    Stdin supplies window size; control keys are workload input. Disconnect stops owned work.\n" +
 		"    The worker uses the frozen workspace, host UID:GID and temporary HOME/TMPDIR.\n" +
 		"    A Unix socket anywhere in the checkout, including .git, refuses startup before worker creation.\n" +
 		"    Host sockets created or swapped into the checkout after inspection remain reachable during a run.\n" +
@@ -56,7 +62,7 @@ func (CLI) Help() string {
 }
 
 // Run validates before preflight, then delegates the owned foreground lifecycle.
-func (c CLI) Run(ui *cli.UI) int {
+func (c CLI) Run(ui *cli.UI) (code int) {
 	args := c.Args
 	separated := len(args) > 0 && args[0] == "--"
 	if separated {
@@ -79,6 +85,23 @@ func (c CLI) Run(ui *cli.UI) int {
 	}
 	startup, end := budget.Start(ctx, budget.StartupDuration, "startup")
 	defer end()
+	var lease terminal.Lease
+	var workloadNonzero bool
+	if c.TTY {
+		var err error
+		lease, err = acquireTerminal(startup, c.Terminal)
+		if err != nil {
+			return ui.Fail(err, false)
+		}
+		defer func() {
+			if lease.Close().RestoreErr != nil {
+				ui.Fail(runFailure{outcome: session.TerminalRestore}, false)
+				if !workloadNonzero {
+					code = 75
+				}
+			}
+		}()
+	}
 	frozen, err := domain.PreflightContext(startup, c.Approval, c.Snapshots)
 	if err != nil {
 		if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
@@ -97,7 +120,11 @@ func (c CLI) Run(ui *cli.UI) int {
 	if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
 		return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
 	}
-	result := c.Runner.Run(budget.WithStartup(ctx, startup), frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
+	result := c.Runner.Run(budget.WithStartup(ctx, startup), frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr, Terminal: lease})
+	workloadNonzero = result.Exited && result.Exit != 0
+	// The runner restores before teardown; the command also owns restoration on
+	// every preflight return. Report a failed restoration exactly once here.
+	result.Restore = ""
 	return reportRun(ui, result)
 }
 
@@ -200,6 +227,21 @@ func (runFailure) Error() string { return "owned run could not be completed" }
 
 // Classify supplies run's stable rules and human guidance to the generic UI.
 func Classify(err error) (int, []cli.Problem) {
+	var terminalFailure *terminal.Failure
+	if errors.As(err, &terminalFailure) {
+		code, rule := 3, "run.terminal-unavailable"
+		fix := "Repair the host terminal and retry."
+		if terminalFailure.Kind == terminal.InvalidTerminal {
+			code, rule = 2, "run.terminal-required"
+			fix = "Use terminal stdin and stdout, or omit --tty."
+		}
+		problems := []cli.Problem{{Rule: rule, Exit: code, Message: rule + ": " + fix, Fix: fix}}
+		if terminalFailure.RestoreErr != nil {
+			code = 75
+			problems = append(problems, cli.Problem{Rule: "run.terminal-restore", Exit: 75, Message: "run.terminal-restore: terminal rollback failed", Fix: fix})
+		}
+		return code, problems
+	}
 	var timed budget.Failure
 	if errors.As(err, &timed) {
 		rule := "run.call-timeout"

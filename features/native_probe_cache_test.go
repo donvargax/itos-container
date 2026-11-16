@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -55,7 +56,7 @@ func TestNativeProbeBuildReuse(t *testing.T) {
 				t.Fatal(err)
 			}
 			b, err := os.Stat(copied)
-			if err != nil || os.SameFile(a, b) || b.Mode().Perm()&0100 == 0 {
+			if err != nil || os.SameFile(a, b) || (runtime.GOOS != "windows" && b.Mode().Perm()&0100 == 0) {
 				t.Fatal("probe copy is shared or not executable", err)
 			}
 			// A different product build cannot reuse a previous suite's cache.

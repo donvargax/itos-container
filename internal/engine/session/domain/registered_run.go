@@ -122,10 +122,11 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		defer attachment.Close()
 	}
 	if result.Outcome == "" && !result.Exited {
-		if binding.Egress != (port.EgressGrant{}) {
-			result.Exit, result.Exited, result.Outcome = s.waitEgress(ctx, c, attachment, state.binding, state.record)
-		} else {
-			result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, c, attachment, id, result.ID)
+		result.Exit, result.Exited, result.Outcome, result.Operation = s.waitForeground(ctx, c, attachment, streams.Terminal, state.binding, state.record, id, result.ID)
+	}
+	if streams.Terminal != nil {
+		if streams.Terminal.Close().RestoreErr != nil {
+			result.Restore = port.TerminalRestore
 		}
 	}
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
@@ -152,8 +153,8 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		}
 	}
 	signal := "SIGTERM"
-	if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok {
-		signal = interrupted.Signal
+	if result.Signal != "" {
+		signal = result.Signal
 	}
 	if result.Outcome == launchSuperseded {
 		// Stop already won a transition. Observe its result without repeating or
@@ -242,6 +243,17 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 		return nil, nil, "", failure
 	}
 	defer closeAnchorWorkspace(c, s.Workspace)
+	if streams.Terminal != nil {
+		terminal, ok := c.(port.TerminalConnection)
+		if !ok {
+			entry.Close()
+			return c, nil, "", port.TerminalUnavailable
+		}
+		if failure := terminal.SetTerminal(streams.Terminal.Initial()); failure != "" {
+			entry.Close()
+			return c, nil, "", failure
+		}
+	}
 	if ctx.Err() != nil {
 		entry.Close()
 		return c, nil, "", startupFailure(ctx)

@@ -295,7 +295,10 @@ func runFixtureWarmupShell(t *testing.T, script string) (string, string, error) 
 	requireFixture(t, err == nil, "%v", err)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "bash", "-euo", "pipefail", "-c", script, "T-55", library)
+	cmd := exec.CommandContext(ctx, "bash", "-euo", "pipefail", "-c", "jq() { command jq --binary \"$@\"; }\n"+script, "T-55", library)
+	// Git Bash must preserve literal container paths passed to native jq, and
+	// native jq must retain LF output when Bash captures an ownership label/ID.
+	cmd.Env = append(os.Environ(), "MSYS_NO_PATHCONV=1", "MSYS2_ARG_CONV_EXCL=*")
 	cmd.Dir = t.TempDir()
 	cmd.WaitDelay = time.Second
 	var stdout, stderr strings.Builder

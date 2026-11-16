@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
 
 // RunEngine is an in-memory lifecycle fake, including explicit boundary faults.
@@ -40,7 +41,8 @@ type RunEngine struct {
 }
 type runConnection struct {
 	*memoryConnection
-	run *RunEngine
+	run      *RunEngine
+	terminal terminal.Dimensions
 }
 type runAttachment struct {
 	run      *RunEngine
@@ -68,7 +70,7 @@ func (e *RunEngine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnec
 		return nil, f
 	}
 	e.event("open")
-	return &runConnection{c.(*memoryConnection), e}, ""
+	return &runConnection{memoryConnection: c.(*memoryConnection), run: e}, ""
 }
 func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []string) (string, port.Outcome) {
 	c.run.Argv = slices.Clone(argv)
@@ -112,6 +114,9 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 		if _, err := io.Copy(io.Discard, streams.In); err != nil {
 			a.failure = port.ExecutionFailed
 		}
+	}
+	if c.terminal.Valid() {
+		streams.Err = streams.Out
 	}
 	for _, output := range []struct {
 		writer port.Writer

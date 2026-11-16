@@ -113,6 +113,24 @@ func (l *fakeLease) Close() port.Result {
 	return l.Result()
 }
 
+func (l *fakeLease) Check() port.Cause {
+	select {
+	case <-l.done:
+		return l.result.Cause
+	default:
+	}
+	f := l.fake
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.hungup {
+		return port.Hangup
+	}
+	if f.broken || (!f.OutputOnly && !f.Size.Valid()) {
+		return port.ObservationFailed
+	}
+	return ""
+}
+
 func (l *fakeLease) run(ctx context.Context) {
 	l.result = l.observe(ctx)
 	f := l.fake
