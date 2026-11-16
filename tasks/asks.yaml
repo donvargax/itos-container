@@ -278,6 +278,7 @@ questions:
   - id: q-69
     item: "slice-30"
     question: "slice-30: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-30-implementer-2.result.json"
+    answer: "Answered by q-64 (the person, 2026-11-15): an allowlist for a credential source, ext4, btrfs and xfs accepted, every other type refused by not being on the list, NFS and 9p outright. The attempt that asked ran on a branch that had not yet merged that answer. Its two other findings (the policy pin against the observed root identity, and the 4096-byte boundary rows) are spec changes, raised as a spec defect in the usual way."
   - id: q-70
     item: "T-48"
     question: "T-48: the implementer (attempt 5) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-48-implementer-5.result.json"
