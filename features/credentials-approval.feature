@@ -63,6 +63,32 @@ Feature: Review and remember credential grants without delivering them
   # A change observed after the review uses existing approve.changed, exit 1.
   # A safe replacement/rotation at the same source path is not a settings change.
   # File-only and credentials-only scopes keep slice-29's distinct contracts.
+  # At every source observation, compare the policy pin's checkout (device,inode)
+  # with the final checkout node of the independent no-symlink boundary walk.
+  # Both components must match; equal path text or a stable second walk is not
+  # enough. These are descriptor identities, not mountinfo device numbers (q-57).
+  # A mismatch is doctor.checkout.changed, exit 1, at the effective root, before
+  # a usable candidate or consent; after terminal consent it is approve.changed.
+  # Check before engine access, after engine inspection and after consent, also
+  # for remembered grants. The shared credentials-only observer checks it too.
+  # This closes decision 0027's explicitly accepted slice-29 read-only gap when
+  # slice-30 admits grants; it does not claim atomic host observations or bind a
+  # later run mount. Keep source inode rotation distinct from checkout substitution.
+  #
+  # Share slice-29's inclusive 4095-byte path bound with ordinary doctor/approve:
+  # an effective root of 4096 bytes is doctor.checkout.root, exit 2; a selected
+  # itos-container state root of 4096 bytes is approval.state.location, exit 2.
+  # Judge the effective path text before walking any boundary or source, not from
+  # a failed descriptor read. Root validation precedes opening policy; state
+  # validation follows valid policy and precedes source observation. Count UTF-8
+  # bytes, including the selected state's appended /itos-container component.
+  # Preserve absolute-then-clean root handling and state selection/fallback rules.
+  # Both the message and fix for an overlong path must name the 4095-byte limit
+  # and the offending boundary; retain absoluteness/encoding guidance as applicable.
+  # Ordinary doctor/approve apply this lexical bound even with no grants;
+  # credentials-only keeps its no-grant no-scan result, and file-only scopes still
+  # do not inspect host boundaries. Public run's version-3
+  # delivery gate stays first; carry these checks into run when its gate lifts.
   # The filesystem choice is settled by q-64 (the person, 2026-11-15), confirmed
   # by the coordinator on 2026-11-16 00:10 UTC. Replace the shared observer's named
   # refusal list with an allowlist: accept exactly ext4, btrfs and xfs; every other
@@ -213,6 +239,22 @@ Feature: Review and remember credential grants without delivering them
   # Contract-only cases invoke a test-only cmd assembly of the REAL preflight/freeze
   # services with raw observations and independently seeded data, no canned verdicts
   # or production gate override. Run the same store contract against fake and disk.
+  # New admission-contract steps below extend that assembly with real doctor and
+  # approve handlers, policy/manifest parsers, source validator, canonical codec
+  # and consent service. Porttest fakes supply raw pins, paths, mount rows, engine
+  # metadata and private store inputs; they never supply readiness or refusal
+  # verdicts. Use the same public options and terminal semantics as the CLI.
+  # Record calls and all command results even on early refusal. Each multi-run
+  # case starts from independent missing-approval state, so a successful control
+  # cannot supply authority or publication to a later refusal.
+  # All unvaried relevant mount rows use ext4. Extend the slice-29 raw-observation
+  # fixtures, whose default tmpfs is now refused; never relabel native tmpfs as
+  # ext4 evidence, skip an unsupported filesystem or add a production override.
+  # Native positive CLI fixtures need a named filesystem; test-only observation
+  # assemblies establish the logic on other hosts, not native filesystem support.
+  # Extend the shared fake/disk contracts for these cases. At implementation,
+  # reconcile decision 0027's old read-only root-comparison exception and length
+  # diagnostic note, and arc42's Credential source location, with this contract.
   #
   # Expected red is at each scenario's first Then, documented in the commit. The
   # implementation agent must commit missing/extended steps with @wip still present,
@@ -536,6 +578,111 @@ Feature: Review and remember credential grants without delivering them
       | missing        | bare terminal approve           | credential.missing     | 3    |
       | group-readable | approve --fingerprint=malformed --json | credential.permissions | 1 |
       | checkout alias | bare terminal approve           | credential.location    | 1    |
+
+  # A stable observer can inspect tree B while the policy pin still holds tree A.
+  # Keep both paths identical, each walk internally stable and all source checks
+  # otherwise safe. Change only the named descriptor-identity component at the
+  # named checkpoint; do not trigger a same-walk race or an unrelated layout fault.
+  # The pin and its later checks continue to describe A. Raw observer nodes and
+  # their rewalks describe B consistently, so only the cross-pin comparison catches
+  # the mismatch. The matching control retains both components, including the
+  # q-57 case where descriptor devices differ from mountinfo's device field.
+  # Before implementation the ordinary consumers hit policy.version and the
+  # credentials-only mismatch succeeds; neither satisfies the first Then.
+  @wip @slice-30 @ID-CREDAPPROVAL-27
+  Scenario Outline: Credential admission binds the source walk to the checkout that supplied policy
+    Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
+    When the admission contract runs "<command>" with matching pins then with a "<component>" disagreement at "<checkpoint>"
+    Then the mismatching admission reports "<rule>" with exit 1 and no usable approval candidate
+    And the matching control succeeds with exactly the independently calculated grants
+    And the disagreement journal identifies the policy pin and observed checkout node at the specified checkpoint
+    And the mismatching admission publishes neither approval nor frozen input and reads no source data
+    And the mismatching admission performs no engine access or consent after detecting the disagreement
+
+    Examples:
+      | command                          | component | checkpoint               | rule                    |
+      | doctor --json                    | device    | before engine inspection | doctor.checkout.changed |
+      | doctor --json                    | inode     | before engine inspection | doctor.checkout.changed |
+      | doctor --json                    | device    | after engine inspection  | doctor.checkout.changed |
+      | doctor --json                    | inode     | after engine inspection  | doctor.checkout.changed |
+      | terminal approve with yes        | device    | before engine inspection | doctor.checkout.changed |
+      | terminal approve with yes        | inode     | before engine inspection | doctor.checkout.changed |
+      | terminal approve with yes        | device    | after engine inspection  | doctor.checkout.changed |
+      | terminal approve with yes        | inode     | after engine inspection  | doctor.checkout.changed |
+      | terminal approve with yes        | device    | after terminal consent   | approve.changed         |
+      | terminal approve with yes        | inode     | after terminal consent   | approve.changed         |
+      | doctor --credentials-only --json | device    | before source inspection | doctor.checkout.changed |
+      | doctor --credentials-only --json | inode     | before source inspection | doctor.checkout.changed |
+
+  # These are raw path/metadata contract inputs, not fabricated kernel readlink
+  # results. Build clean absolute paths from components within NAME_MAX; count
+  # bytes, not characters. A selected-state length includes /itos-container.
+  # The 4095-byte control has all other valid readiness inputs; its child paths
+  # are served through pinned capabilities. Each 4096-byte case must refuse from
+  # the path text without needing that path to exist or a source to be accessible.
+  # Call journals distinguish policy pinning from boundary/source observation.
+  # For root refusal even policy pin/open must be absent; state refusal permits
+  # the valid policy read but no credential boundary/source filesystem calls.
+  # Existing credentials-only length refusal still fails the new diagnostic
+  # assertion; ordinary consumers either hit the version gate or lack this bound.
+  @wip @slice-30 @ID-CREDAPPROVAL-28
+  Scenario Outline: Admission names the 4095-byte limit before walking an overlong root or state path
+    Given a credential admission observation fixture requesting "<request>" with independent matching policy and source-checkout pins
+    When the admission contract runs "<command>" with the "<boundary>" path at 4095 bytes then at 4096 bytes
+    Then the 4096-byte admission reports "<rule>" with exit 2 and both its message and fix name the boundary and the 4095-byte limit
+    And the 4095-byte control succeeds with exactly the independently calculated grants
+    And the overlong path is refused from its text before any boundary or source observation and before engine access or consent
+    And the overlong-path call journal follows the specified root or state validation order
+    And the 4096-byte admission publishes neither approval nor frozen input and reads no source data
+
+    Examples:
+      | command                          | request | boundary       | rule                    |
+      | doctor --json                    | claude  | effective root | doctor.checkout.root    |
+      | terminal approve with yes        | claude  | effective root | doctor.checkout.root    |
+      | doctor --json                    | claude  | selected state | approval.state.location |
+      | terminal approve with yes        | claude  | selected state | approval.state.location |
+      | doctor --json                    | none    | effective root | doctor.checkout.root    |
+      | terminal approve with yes        | none    | effective root | doctor.checkout.root    |
+      | doctor --json                    | none    | selected state | approval.state.location |
+      | terminal approve with yes        | none    | selected state | approval.state.location |
+      | doctor --credentials-only --json | claude  | effective root | doctor.checkout.root    |
+      | doctor --credentials-only --json | claude  | selected state | approval.state.location |
+
+  # q-64 is settled, not a prompt to examine and extend another refusal list.
+  # For each invocation replace just the relevant row's filesystem field; keep
+  # descriptors, mount IDs, coordinates, ownership and source bytes unchanged.
+  # Both mount observations are complete. "first" and "final" change only that
+  # table, so a single disallowed observation must suffice; no mapping change is
+  # an alternative reason to refuse. Covered and absent-state rows remain relevant.
+  # Each case has ext4, btrfs and xfs positive controls and the named refusal.
+  # Shared fake/disk contracts cross all placements with both observations and
+  # add unrelated disallowed rows (accepted) plus mapping/location precedence.
+  @wip @slice-30 @ID-CREDAPPROVAL-29
+  Scenario Outline: Credential admission accepts only the three named filesystems
+    Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
+    When the admission contract runs "<command>" with ext4 btrfs xfs then "<filesystem>" at "<placement>" in the "<observation>" mount observation
+    Then only ext4 btrfs and xfs succeed and the other filesystem reports "credential.filesystem" at "/credentials/0/source" with exit 3
+    And the filesystem refusal fix names ext4 btrfs and xfs for source checkout and state paths
+    And each accepted control reports exactly the independently calculated grants
+    And the filesystem refusal retains the requested grants without a usable approval candidate
+    And the filesystem refusal publishes neither approval nor frozen input and reads no source data
+    And the filesystem refusal precedes engine access and consent without enumerating state records
+
+    Examples:
+      | command                          | filesystem | placement                    | observation |
+      | doctor --json                    | cifs       | source                       | first       |
+      | terminal approve with yes        | smb3       | source ancestor              | final       |
+      | doctor --json                    | ceph       | checkout root                | first       |
+      | terminal approve with yes        | virtiofs   | checkout descendant          | final       |
+      | doctor --json                    | ecryptfs   | covered checkout row         | first       |
+      | terminal approve with yes        | zfs        | selected state root          | final       |
+      | doctor --json                    | tmpfs      | fixed account state root     | first       |
+      | terminal approve with yes        | ext3       | absent selected state root   | final       |
+      | doctor --credentials-only --json | unlistedfs | covered fixed state row      | first       |
+      | doctor --credentials-only --json | EXT4       | source                       | final       |
+      | terminal approve with yes        | nfs        | source                       | first       |
+      | doctor --json                    | nfs4       | selected state descendant    | final       |
+      | terminal approve with yes        | 9p         | fixed state descendant       | first       |
 
   # The API fixture pauses at image inspection after the first metadata check.
   # A premature policy gate must reach Then as a failed readiness assertion.
