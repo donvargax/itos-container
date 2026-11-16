@@ -56,8 +56,10 @@ Feature: Deliver an independently approved GitHub token to one owned run
   # Source-copy failure keeps run.credential-refused exit 1; unavailable staging
   # keeps run.credential-unavailable exit 3. Preserve earlier located metadata
   # errors and existing isolation/budget/cleanup classifications. Never show raw
-  # OS/API errors or contents. A failure after partial staging cleans every owned
-  # file, or retains original protected authority and the exact stop retry.
+  # OS/API errors or contents. With healthy cleanup operations, a failure after
+  # partial staging must confirm removal of every owned file and resource. Only
+  # an unsafe or unavailable cleanup retains original protected authority and
+  # the exact stop retry; a preparation fault alone never excuses a staged leak.
   #
   # The GitHub interface is a FILE, not automatic GH_TOKEN/GITHUB_TOKEN injection.
   # The person's explicit argv may read it and export GH_TOKEN inside the worker.
@@ -129,8 +131,22 @@ Feature: Deliver an independently approved GitHub token to one owned run
   # to a safe single-link sibling AFTER final revalidation, BEFORE data reopen,
   # replacing its old name with different valid bytes. 06 schedules GitHub copy
   # faults after Claude's copy; its Claude write fault needs no earlier copy.
-  # Inspect faults change only the pre-start verification reply, leaving real
-  # ownership observations intact for cleanup.
+  # Write faults occur after creation and at least one byte written, leaving a
+  # partial file for product cleanup. In 06 all cleanup operations and ownership
+  # observations remain healthy; inspect faults change only the pre-start
+  # verification reply. Audit every created file, directory and owned resource
+  # independently before harness cleanup; a Remove call alone proves no absence.
+  # 13 adds a separate persistent unlink failure on the original staged Claude
+  # file, without changing its identity, owner, mode or observation availability.
+  # It lasts through run teardown and the first fresh status, until the fixture
+  # explicitly clears only that fault. The copy-failure row has a completed
+  # Claude copy but no worker create; the inspect-failure row has both copies and
+  # an owned unstarted worker. Require evidence of the scheduled removal failure,
+  # retained Claude file and directory, and the exact product-emitted retry.
+  # Recovery records must come from this run, never be seeded by the fixture.
+  # Fresh public stop must perform recovery; never call the staging port's Remove
+  # directly or let harness cleanup satisfy an assertion. Missing retry/status
+  # evidence is a failing Then, not a skipped stop or a setup failure.
   # When retains early refusal, missing barrier/report and every exit as data;
   # the Then assertion must expose red, never a setup check or missing-result panic.
   #
@@ -185,8 +201,11 @@ Feature: Deliver an independently approved GitHub token to one owned run
   # Commit steps red first with @wip retained, obtain assertion-level red with it
   # removed for the run, then build. Engine red/green is CI-only; no local mutation
   # or whole-features race run. The first Then of each case is expected to fail:
-  # 01..11 encounter today's v3 gate (slice-31 retains it for GitHub); 12 lacks
-  # GitHub delivery help. This is predicted failure, not executed red evidence.
+  # 01..11 and 13 encounter today's v3 gate (slice-31 retains it for GitHub);
+  # 12 lacks GitHub delivery help. 06 additionally fails if healthy cleanup leaves
+  # any staged file or resource; 13 fails if cleanup claims completion under its
+  # removal fault or the printed stop retry cannot remove the retained staging.
+  # These are predicted failures, not executed red evidence.
 
   # Admission and kind-to-source mapping, including canonical order independence.
   @wip @slice-33 @ID-GITHUBRUN-01 @local-engine-fixture @linux
@@ -285,10 +304,13 @@ Feature: Deliver an independently approved GitHub token to one owned run
   Scenario Outline: Partial copying or an unverified GitHub mount cannot launch a worker
     Given a local GitHub run fixture with matching approval and request "both"
     And credential preparation will encounter GitHub fixture fault "<fault>"
+    And all GitHub fixture cleanup operations and ownership observations remain healthy
     When the GitHub fixture invokes public run with its literal probe argv
     Then the GitHub run refuses with "<rule>" and exit <exit> at the scheduled preparation boundary
     And no worker start is attempted and every created staged file and owned resource enters cleanup
-    And cleanup confirms complete absence or retains original recovery and the exact stop retry without adopting replacements
+    And independent observations confirm removal of every created staged file including partial copies the staging directory and all owned engine resources
+    When fresh public processes inspect plain and JSON status for the original session
+    Then status reports complete cleanup and absent credential staging with no pending stop retry or invented workload exit
     And all source pins are released after pending operations finish and original sources and approval remain unchanged apart from fixture edits
     And all GitHub provisioning surfaces contain no synthetic marker or raw error text
 
@@ -304,6 +326,33 @@ Feature: Deliver an independently approved GitHub token to one owned run
       | inspected GitHub bind names the original source      | run.isolation-unverified   | 1    |
       | inspected GitHub bind targets the Claude path        | run.isolation-unverified   | 1    |
       | inspected GitHub bind uses the Claude staged source  | run.isolation-unverified   | 1    |
+
+  # Preparation failure alone must not retain staging. This separate removal
+  # fault proves public run preserves recoverable authority and stop consumes it.
+  @wip @slice-33 @ID-GITHUBRUN-13 @local-engine-fixture @linux
+  Scenario Outline: A preparation failure with unavailable staging removal retains a working stop retry
+    Given a local GitHub run fixture with matching approval and request "both"
+    And credential preparation will encounter GitHub fixture fault "<fault>"
+    And removal of the original staged Claude file will fail until the fixture explicitly restores it
+    When the GitHub fixture invokes public run with its literal probe argv
+    Then the GitHub run refuses with "<rule>" and exit 1 at the scheduled preparation boundary
+    And the recorder confirms a completed Claude copy followed by a failed product attempt to remove that original staged file
+    And run reports incomplete cleanup within the existing teardown budget with original protected recovery and the exact stop retry
+    And the original staged Claude file and directory remain present and no worker start is attempted
+    When fresh public processes inspect plain and JSON status for the original session while the removal fault remains
+    Then status reports both sorted frozen grants and credential staging "present" without claiming completed cleanup or a workload exit
+    When the fixture clears only the staging removal fault and fresh public stop processes execute the reported retry twice
+    Then both stop invocations return exit 0 and independent observations confirm absence of every created staged file the directory and all owned engine resources
+    When fresh public processes inspect plain and JSON status for the original session
+    Then status reports complete cleanup and absent credential staging with no pending stop retry or invented workload exit
+    And recovery uses only original protected authority without reading source data recreating staging or creating or starting a worker
+    And all source pins are released after pending operations finish and original sources and approval remain unchanged apart from fixture edits
+    And all GitHub provisioning surfaces contain no synthetic marker or raw error text
+
+    Examples:
+      | fault                                    | rule                     |
+      | GitHub data open denied after Claude copy | run.credential-refused   |
+      | inspected GitHub bind is writable         | run.isolation-unverified |
 
   # Delivery and GH_TOKEN compatibility are proven without any GitHub connection.
   @wip @slice-33 @ID-GITHUBRUN-07 @engine @linux
