@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"reflect"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/creack/pty"
@@ -26,10 +27,28 @@ type terminalInvocation struct {
 	saved             *unix.Termios
 	connections       int64
 	timedOut, changed bool
+	local             bool
+	outputMaster      *os.File
+	outputSlave       *os.File
+	outputSaved       *unix.Termios
+	attempts          []terminalAttempt
+	action            func(*exec.Cmd)
+	payload           []byte
+}
+
+type terminalAttempt struct {
+	exit            int
+	stdout, stderr  string
+	connections     int64
+	statesRestored  bool
+	stateError      error
+	settingsChanged bool
+	requests        []doctorRequest
 }
 
 func (w *world) runTerminalSteps(sc *godog.ScenarioContext) {
 	var fixture *terminalInvocation
+	w.terminalLocalSteps(sc, &fixture)
 	sc.Step(`^a local terminal-run fixture with (terminal|pipe) stdin and (terminal|pipe) stdout$`, func(input, output string) error {
 		var err error
 		fixture, err = w.terminalInvocationFixture(input, output)
@@ -152,19 +171,41 @@ func (f *terminalInvocation) invoke(args, inherited string) error {
 	if err != nil {
 		return err
 	}
+	bin := w.bin
+	env := setEnv(w.env(), "ITOS_JSON", inherited)
+	if f.local {
+		bin, err = w.sessionProbeBinary()
+		if err != nil {
+			return err
+		}
+		words = append([]string{"-test.run=^TestLocalRunCommand$", "-test.count=1", "--"}, words...)
+		env = append(env, "SLICE_17_LOCAL_RUN=1", "SLICE_17_LOCAL_MOUNT_ROOT="+w.doctor.checkout)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, w.bin, words...)
-	cmd.Dir, cmd.Env = w.doctor.cwd, setEnv(w.env(), "ITOS_JSON", inherited)
+	cmd := exec.CommandContext(ctx, bin, words...)
+	cmd.Dir, cmd.Env = w.doctor.cwd, env
 	for key, value := range map[string]string{"COLUMNS": "7", "LINES": "9", "TERM": "slice-37-misleading"} {
 		cmd.Env = setEnv(cmd.Env, key, value)
 	}
 	var stderr strings.Builder
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = f.input, f.output, &stderr
 	cmd.WaitDelay = time.Second
+	connections := w.doctor.engine.listener.connections.Load()
+	f.payload, f.changed = nil, false
+	a := w.doctor.engine.offline
+	a.mu.Lock()
 	if err := cmd.Start(); err != nil {
+		a.mu.Unlock()
 		return err
 	}
+	for i, arg := range words {
+		if arg == "--" && (!f.local || i > 2) {
+			a.expected[cmd.Process.Pid] = append([]string{}, words[i+1:]...)
+			break
+		}
+	}
+	a.mu.Unlock()
 	done := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(done) }()
 	ticker := time.NewTicker(time.Millisecond)
@@ -175,6 +216,14 @@ waiting:
 		case <-done:
 			break waiting
 		case <-ticker.C:
+			if err := f.readAvailable(); err != nil {
+				cancel()
+				<-done
+				return err
+			}
+			if f.action != nil {
+				f.action(cmd)
+			}
 			if f.slave != nil {
 				state, err := unix.IoctlGetTermios(int(f.slave.Fd()), unix.TCGETS)
 				f.changed = f.changed || err != nil || !reflect.DeepEqual(state, f.saved)
@@ -187,13 +236,37 @@ waiting:
 		_ = f.output.Close()
 		data, err := io.ReadAll(f.outputRead)
 		w.stdout = string(data)
-		return err
+		if err != nil {
+			return err
+		}
+	} else {
+		if err := f.readAvailable(); err != nil {
+			return err
+		}
+		w.stdout = string(f.payload)
+	}
+	observed := terminalAttempt{exit: w.exit, stdout: w.stdout, stderr: w.stderr, connections: w.doctor.engine.listener.connections.Load() - connections, statesRestored: f.restored() == nil, settingsChanged: f.changed, stateError: w.runSameTree(false)}
+	for _, request := range w.doctor.engine.requests() {
+		if request.PID == cmd.Process.Pid {
+			observed.requests = append(observed.requests, request)
+		}
+	}
+	f.attempts = append(f.attempts, observed)
+	return nil
+}
+
+func (f *terminalInvocation) readAvailable() error {
+	master := f.master
+	if f.outputMaster != nil {
+		master = f.outputMaster
+	}
+	if master == nil || f.outputRead != nil {
+		return nil
 	}
 	// Keep the slave open for exact-state inspection. After child exit, poll
 	// and read the remaining small refusal without waiting for slave EOF.
-	var data []byte
 	for {
-		poll := []unix.PollFd{{Fd: int32(f.master.Fd()), Events: unix.POLLIN}}
+		poll := []unix.PollFd{{Fd: int32(master.Fd()), Events: unix.POLLIN}}
 		_, err := unix.Poll(poll, 0)
 		if errors.Is(err, unix.EINTR) {
 			continue
@@ -205,14 +278,36 @@ waiting:
 			break
 		}
 		var chunk [4096]byte
-		n, err := f.master.Read(chunk[:])
+		n, err := master.Read(chunk[:])
 		if err != nil {
 			return err
 		}
-		data = append(data, chunk[:n]...)
+		f.payload = append(f.payload, chunk[:n]...)
 	}
-	w.stdout = string(data)
 	return nil
+}
+
+func (f *terminalInvocation) restored() error {
+	for file, want := range map[*os.File]*unix.Termios{f.slave: f.saved, f.outputSlave: f.outputSaved} {
+		if file == nil {
+			continue
+		}
+		state, err := unix.IoctlGetTermios(int(file.Fd()), unix.TCGETS)
+		if err != nil || !reflect.DeepEqual(state, want) {
+			return fmt.Errorf("terminal %s was not restored: %v", file.Name(), err)
+		}
+		if _, err := file.Stat(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func terminalResize(cmd *exec.Cmd, file *os.File, columns, rows uint16) error {
+	if err := pty.Setsize(file, &pty.Winsize{Cols: columns, Rows: rows}); err != nil {
+		return err
+	}
+	return cmd.Process.Signal(syscall.SIGWINCH)
 }
 
 func (f *terminalInvocation) refusal(rule string, exit int) error {

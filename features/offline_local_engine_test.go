@@ -30,6 +30,7 @@ type localOfflineAPI struct {
 	problem          error
 	recovery         *foregroundRecovery
 	attachBarrier    func(string, string)
+	terminal         *terminalEngine
 }
 
 func (w *world) localOfflineFixture() {
@@ -106,6 +107,9 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	token, _ := object(object(resource["Config"])["Labels"])["io.itos-container.intent"].(string)
+	if a.terminal != nil && a.terminal.serve(a, out, r, id, resource) {
+		return true
+	}
 	switch {
 	case len(parts) == 2 && parts[1] == "json" && r.Method == "GET":
 		_ = json.NewEncoder(out).Encode(resource)
