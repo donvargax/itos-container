@@ -343,3 +343,6 @@ questions:
     item: "slice-38"
     question: "slice-38: its implementer (attempt 1) returned blocked with a partial checkpoint (two test commits; EXEC-03 to 16, the runtime and CI evidence unfinished) and named nothing it waits on. Is anything owed before it goes on?"
     answer: "Nothing (the coordinator, 2026-11-16, as q-82 for slice-34). The attempt stopped unfinished, not blocked: its two commits (9a477b1, bbac71b) are on the branch at 52fe0e5 with main merged in. slice-38 goes on with the remaining step definitions, the runtime and the code proof."
+  - id: q-86
+    item: "slice-28"
+    question: "slice-28: its implementer (attempt 4) stopped for engine red evidence on @ID-EGRESSLIFE-06, 07, 10, 11, 12 and 13 at 4b8cc34. Is the evidence accepted?"
