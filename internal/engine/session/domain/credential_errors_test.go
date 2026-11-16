@@ -89,6 +89,38 @@ func TestCredentialCreateWithoutPreparationRefuses(t *testing.T) {
 	}
 }
 
+func TestCredentialCreateRequiresUncancelledIntent(t *testing.T) {
+	for _, stage := range []string{"intent", "cancelled"} {
+		t.Run(stage, func(t *testing.T) {
+			runner, _, engine, entry, _ := credentialPreparationFixture(t)
+			if failure := runner.prepareCredentials(t.Context(), entry.Intent()); failure != "" {
+				t.Fatal("credential preparation positive control failed", failure)
+			}
+			r := entry.Intent().Record()
+			r.Stage = stage
+			if failure := entry.Intent().Save(r); failure != "" {
+				t.Fatal("could not publish worker stage", failure)
+			}
+			c, failure := engine.OpenRun(t.Context(), entry.Intent().Binding())
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer c.Close()
+			id, failure := createRegistered(t.Context(), entry, c, runner.Workspace, []string{"probe"})
+			if stage == "cancelled" {
+				if failure != port.Refused || id != "" || slices.Contains(engine.Events, "create") || entry.Intent().Record() != r {
+					t.Fatal("cancelled credential intent reached worker creation", failure)
+				}
+			} else if failure != "" || id == "" || !slices.Contains(engine.Events, "create") {
+				t.Fatal("prepared credential intent could not create a worker", failure)
+			}
+			if slices.Contains(engine.Events, "start") {
+				t.Fatal("worker creation started the workload")
+			}
+		})
+	}
+}
+
 func TestCredentialStopFinalObservationFailure(t *testing.T) {
 	runner, registry, engine, id, fixture := credentialRunner(t)
 	if failure := launchEgress(t, runner, id); failure != "" {

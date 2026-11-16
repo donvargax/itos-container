@@ -73,6 +73,22 @@ func TestCredentialProgressIntentAbsence(t *testing.T) {
 	}
 }
 
+func TestCredentialProgressCancellation(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+	r.Credentials.Stage, r.Anchor.Stage = "absent", "absent"
+	if r.Completed() {
+		t.Fatal("reserved worker was completed before cancellation")
+	}
+	cancelled := r
+	cancelled.Stage = "cancelled"
+	if !r.ValidTransition(cancelled) || !cancelled.Completed() {
+		t.Fatal("cancellation after confirmed staging and anchor removal was refused")
+	}
+	if !cancelled.ValidTransition(cancelled) || cancelled.ValidTransition(r) {
+		t.Fatal("confirmed cancellation was not terminal and idempotent")
+	}
+}
+
 func TestCredentialProgressFileIdentities(t *testing.T) {
 	r := f.CredentialIntent(port.CredentialKinds{Claude: true, GitHub: true})
 	r.Credentials.Stage, r.Credentials.Device, r.Credentials.Inode = "owned", "1", "2"

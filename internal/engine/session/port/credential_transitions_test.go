@@ -81,9 +81,19 @@ func TestCredentialMountOwnershipClosedKinds(t *testing.T) {
 		if !r.OwnsCredentialMounts(observation) {
 			t.Fatal("exact mounts for the closed kind set lost ownership")
 		}
+		uncertain := observation
+		uncertain.CredentialExact = false
+		if r.OwnsCredentialMounts(uncertain) {
+			t.Fatal("matching credential paths without exact inspection acquired ownership")
+		}
 		observation.CredentialMounts[0].Source = "/foreign"
 		if r.OwnsCredentialMounts(observation) {
 			t.Fatal("foreign or unexpected credential mount acquired ownership")
+		}
+	}
+	for _, schema := range []int{1, 2, 3} {
+		if !(Record{Schema: schema}).OwnsCredentialMounts(Observation{}) {
+			t.Fatal("legacy no-credential observation lost ownership", schema)
 		}
 	}
 }
