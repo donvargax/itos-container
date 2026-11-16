@@ -41,6 +41,7 @@ func TestNativeContract(t *testing.T) {
 	// replacing or changing the parent process's standard input.
 	p := openPair(t)
 	command.Stdin = p.slave
+	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("terminal child: %v\n%s", err, output)
@@ -99,6 +100,7 @@ func TestTerminalChild(t *testing.T) {
 	t.Setenv("COLUMNS", "500")
 	t.Setenv("LINES", "200")
 	t.Run("contract", func(t *testing.T) { porttest.Contract(t, terminalFixture) })
+	t.Run("controlling_aliases", controllingAliases)
 	for _, layout := range []string{"shared", "distinct input", "distinct output"} {
 		t.Run(layout, func(t *testing.T) { porttest.Contract(t, pairFixture(layout)) })
 	}

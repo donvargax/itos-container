@@ -272,3 +272,59 @@ func TestResizeBoundsUnresponsiveSessionAcquisition(t *testing.T) {
 		}
 	})
 }
+
+func TestRegisteredTerminalStaysRawUntilBoundedDrainEnds(t *testing.T) {
+	for _, blocked := range []bool{false, true} {
+		synctest.Test(t, func(t *testing.T) {
+			runner, frozen, _, engine, _ := registeredLifecycleFixture()
+			provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+			lease, err := provider.Acquire(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer lease.Close()
+			rawDuringDrain := false
+			engine.DrainUntilCancel = blocked
+			engine.After = func(event string) {
+				if event == "drain" {
+					rawDuringDrain = provider.Raw()
+				}
+			}
+			start := time.Now()
+			result := runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{Terminal: lease})
+			if !rawDuringDrain || provider.Raw() || result.Restore != "" || !result.Exited || result.Exit != 17 {
+				t.Fatalf("terminal restored before final drain: raw=%v result=%+v", rawDuringDrain, result)
+			}
+			if blocked && (time.Since(start) != 10*time.Second || result.Stream != port.StreamTimeout) {
+				t.Fatalf("blocked output retained raw terminal beyond drain: elapsed=%v result=%+v", time.Since(start), result)
+			}
+		})
+	}
+}
+
+func TestTerminalRestoresWhenDrainFinishesWhileCleanupIsPending(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		runner, frozen, _, engine, _ := registeredLifecycleFixture()
+		provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+		lease, err := provider.Acquire(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer lease.Close()
+		engine.After = func(event string) {
+			switch event {
+			case "drain":
+				time.Sleep(time.Second)
+			case "remove":
+				time.Sleep(8 * time.Second)
+			}
+		}
+		restored := make(chan time.Time, 1)
+		go func() { <-lease.Done(); restored <- time.Now() }()
+		start := time.Now()
+		result := runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{Terminal: lease})
+		if at := <-restored; at.Sub(start) != time.Second || time.Since(start) != 8*time.Second || result.Cleanup != port.Complete {
+			t.Fatalf("restoration waited for cleanup or preceded drain: restored=%v returned=%v result=%+v", at.Sub(start), time.Since(start), result)
+		}
+	})
+}
