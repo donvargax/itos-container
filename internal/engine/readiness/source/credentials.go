@@ -44,6 +44,9 @@ func (c Credentials) Inspect(grants []policy.Credential) port.CredentialResult {
 		return port.CredentialResult{}
 	}
 	input := c.Input
+	if input.OS != "linux" || input.Architecture != "amd64" {
+		return port.CredentialResult{Issues: []port.CredentialIssue{{Rule: "host.unsupported", Index: -1}}}
+	}
 	if c.Checkout == nil {
 		return port.CredentialResult{Issues: []port.CredentialIssue{{Rule: "checkout.unavailable", Index: -1, Subject: input.Root}}}
 	}

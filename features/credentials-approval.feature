@@ -825,7 +825,7 @@ Feature: Review and remember credential grants without delivering them
     And approval help says an unsandboxed host agent can fake a terminal and approval records what not who
     And it exits with code 0
 
-  @slice-30 @ID-CREDAPPROVAL-30 @wip
+  @slice-30 @ID-CREDAPPROVAL-30
   Scenario Outline: Unsupported credential inspection hosts refuse before reading the policy pin identity
     Given a credential observation fixture for "checkout" with "distinct outside file"
     And the credential observation host is "<os>" with architecture "<architecture>"

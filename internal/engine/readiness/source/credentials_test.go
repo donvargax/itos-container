@@ -71,6 +71,31 @@ func TestCredentialObservationRequiresThePolicyPin(t *testing.T) {
 	}
 }
 
+func TestUnsupportedCredentialHostDoesNotReadThePolicyIdentity(t *testing.T) {
+	grants := []policy.Credential{{Kind: "claude-token", Source: "/vault/token"}}
+	for _, host := range []struct{ os, arch string }{{"windows", "amd64"}, {"darwin", "amd64"}, {"linux", "arm64"}} {
+		t.Run(host.os+"/"+host.arch, func(t *testing.T) {
+			for _, state := range []string{"missing", "closed", "open"} {
+				t.Run(state, func(t *testing.T) {
+					pin := &fake.Checkout{Opened: state == "open"}
+					c := Credentials{Input: port.CredentialInput{OS: host.os, Architecture: host.arch}, Account: &approvalfake.Account{Home: "/account"}}
+					if state != "missing" {
+						c.Checkout = pin
+					}
+					// No filesystem is needed to reject an unsupported host.
+					got := c.Inspect(grants)
+					if len(got.Issues) != 1 || got.Issues[0] != (port.CredentialIssue{Rule: "host.unsupported", Index: -1}) || pin.PinnedReads != 0 {
+						t.Fatalf("unsupported host: %#v, pinned reads %d", got, pin.PinnedReads)
+					}
+					if got := c.Inspect(nil); len(got.Issues) != 0 {
+						t.Fatalf("empty grants must need no host inspection: %#v", got)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestCredentialBoundaryCountsSelectedStateBytesBeforeObservation(t *testing.T) {
 	for _, state := range []string{"/" + strings.Repeat("a", 4095), "/" + strings.Repeat("é", 2048)} {
 		got := (Credentials{Input: port.CredentialInput{State: state}}).Boundary()
