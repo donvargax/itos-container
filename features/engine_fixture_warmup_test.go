@@ -274,7 +274,7 @@ func TestEngineFixtureWarmup(t *testing.T) {
 }
 
 func fixtureWarmupClock(first, second string) string {
-	// Clock/output controls run only the harmless true builtin. Real child
+	// Clock/output and ordering controls run only harmless commands. Real child
 	// termination is checked separately by the measured cases with coreutils.
 	return `timeout() { shift 3; "$@"; }
 engine_warmup_now() {
@@ -603,6 +603,7 @@ func testFixtureProductOwnership(t *testing.T) {
 func testFixtureProductOrdering(t *testing.T, driver string) {
 	// Execute only the two real prepare-path call statements, substituting their
 	// child commands with harmless exits. No driver, Docker or approval executes.
+	// The clock and timeout shim keep this sequencing check portable.
 	for _, tc := range []struct {
 		plain, product string
 		lines          int
@@ -614,7 +615,7 @@ func testFixtureProductOrdering(t *testing.T, driver string) {
 		calls = strings.ReplaceAll(calls, `"$(declare -f); warmup_fixture \"\$1\" \"\$2\" \"\$3\"" _ "$reference" "$fixture_uid" "$fixture_gid"`, `'exit `+tc.plain+`'`)
 		calls = strings.ReplaceAll(calls, `"$(declare -f); product_warmup_fixture \"\$1\" \"\$2\" \"\$3\"" _ "$built" "$fixture_uid" "$fixture_gid"`, `'exit `+tc.product+`'`)
 		requireFixture(t, strings.Contains(driver, fixtureWarmupCall) && strings.Contains(driver, fixtureProductWarmupCall), "not the real calls")
-		stdout, _, err := runFixtureWarmupShell(t, "source \"$1\"\nfail() { exit 1; }\n"+calls+"\nprintf 'published\\n'\n")
+		stdout, _, err := runFixtureWarmupShell(t, "source \"$1\"\nfail() { exit 1; }\n"+fixtureWarmupClock("1234", "1234")+calls+"\nprintf 'published\\n'\n")
 		requireFixture(t, (err == nil) == tc.published && strings.Contains(stdout, "published") == tc.published, "failure published outputs: %v %s", err, stdout)
 		requireFixture(t, strings.Count(stdout, "timing:") == tc.lines && strings.HasPrefix(stdout, "engine warm-up timing:"), "wrong attempted phases: %s", stdout)
 		if tc.lines == 2 {
