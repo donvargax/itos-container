@@ -40,6 +40,7 @@ type world struct {
 	stdin               string // the text the run reads from its standard input, "" for none
 	credentials         *credentialWorld
 	policy              *policyWorld
+	home                *homeWorld
 	manifest            *manifestWorld
 	doctor              *doctorWorld
 	approval            *approvalWorld
@@ -178,6 +179,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	})
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
 	w.policySteps(sc)
+	w.homeSteps(sc)
 	w.credentialSteps(sc)
 	w.manifestSteps(sc)
 	w.doctorSteps(sc)

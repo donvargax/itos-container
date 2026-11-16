@@ -9,7 +9,8 @@ Feature: An approved persistent home for one checkout's harness
   # Deployment and A2; approval.feature, offline.feature, anchors.feature and
   # recovery.feature. This is slice-34's spec, not implementation or runtime proof.
   #
-  # Proposed storage decision made here, not a settled coordinator decision:
+  # Storage selected by coordinator q-73, 2026-11-16 01:50 UTC, for the person
+  # to ratify on their standing instruction; no further answer blocks building:
   # opt-in named local volume, persistent per approved
   # checkout identity, host UID/GID and local daemon. This follows the registry's
   # recommendation so a later harness can resume across runs. A tmpfs home would
@@ -148,7 +149,7 @@ Feature: An approved persistent home for one checkout's harness
   #   status budgets include all home locks, calls and publications. Reconnects
   #   cannot reset them; expiry fences further start/mutation. No workload timeout.
   #
-  # Person-controlled home management (proposed, part of this slice):
+  # Person-controlled home management (selected, part of this slice):
   # - status --homes lists only this effective host UID's protected home catalog,
   #   across its checkouts and XDG state roots, including obsolete generations and
   #   deleted tombstones. This explicit mode is separate from project session
