@@ -8,7 +8,9 @@ The egress design added by T-38 is **proposed**, not accepted: the person confir
 overturns it, as [the egress proxy record](../decisions/0022-egress-proxy.md) says.
 The credentials design added by T-47 is also **proposed**, not accepted; the person
 confirms or overturns [the credentials record](../decisions/0025-credentials-passed-in.md).
-It defines two token kinds, no Codex delivery, and no permission to use real credentials.
+It defines two token kinds. The later q-72/charter amendment selects Codex directory
+sharing; [decision 0030](../decisions/0030-codex-shared-directory.md) specifies its
+version-4 grant and evidence. Neither record permits real credentials before question 5.
 
 The [charter](../charter.md) selects the milestone from the binding
 [pilot contract](../plans/container-pilot.md); the [plan](../../PLAN.md) records that
@@ -90,9 +92,11 @@ real engine.
 
 The second milestone's credential grants are separately **proposed** in
 [T-47](../decisions/0025-credentials-passed-in.md): per-command read-only binds of staged
-token copies, with the checkout still the only host directory. This exception does not
-change a run without grants. Codex sharing is blocked on the person's answer because
-atomic replacement invalidates the charter's single-file premise; no replacement is chosen.
+token copies, with the checkout still the only host directory for those token profiles.
+The answered q-72 and amended charter additionally select a dedicated read-write Codex
+auth directory and shared lock. [Decision 0030](../decisions/0030-codex-shared-directory.md)
+specifies identity-bound approval, pre-start/final checks and their unprotected interval;
+it supplies no runtime evidence. Runs without grants retain their boundaries.
 
 The second milestone's source-inspection increment, slice-29, implements
 [decision 0027](../decisions/0027-credential-source-inspection.md), with synthetic local evidence.
@@ -260,7 +264,8 @@ record schemas. Settled choices constrain them without proving their implementat
 | Credential requests (in `internal/engine/policy`) | Implemented by slice-29 after T-47 and slice-25 | Version 3 extends slice-25's version 2 with optional closed credentials entries, exactly `kind` and literal absolute `source`; two token kinds, no Codex kind. | Versions 1/2 retain their meaning; shared pure validation, schema and file-only doctor modes. [T-47](../decisions/0025-credentials-passed-in.md). |
 | Credential source observation (in `internal/engine/readiness`) | Implemented by slice-29; synthetic observation evidence | Shared descriptor-based metadata checks for doctor, approve and run: no symlinks, trusted ancestors, private owned regular single-link files outside checkout and control state, bounded size and distinct inodes. Exclude root, descendant and file aliases through checkout inventory and state filesystem-coordinate projections. | Reuse the bounded checkout metadata scan; incomplete required evidence refuses. Decision 0027 specifies two bounded mount observations, pin/mapping rechecks and state subtrees independent of other projects' writes/history. No state enumeration, content read, hash or log; own port and disk adapter beside checkout inspection. Only run later reads the checked inode. Evidence remains a dependency of slice-30, T-48 and slice-31/33. |
 | Credential approval (in `internal/engine/approval`) | **Proposed**, slice-30 | Bind sorted `{kind, source, target}` grants, never contents, with `offline-credentials-v1` or `allowlist-credentials-v1`; review scope and exposure; apply q-52's terminal rule. | Reuse slice-26 canonicalization, differences and presentation. No-grant profiles keep their identity; source-content changes do not change approval. |
-| Credential staging (in `internal/engine/session`) | **Proposed**, T-48 | Intent before private `/dev/shm` staging, exact read-only file mounts, verification before start, unlink after the start attempt and owned recovery. | Session ports, I/O-free fake, disk/Docker adapters and shared contract; slice-31/33 consume it. Lost acknowledgement after mount acquisition must retain uncertainty; Codex file delivery waits on question 1. |
+| Credential staging (in `internal/engine/session`) | **Proposed**, T-48 | Intent before private `/dev/shm` staging, exact read-only file mounts, verification before start, unlink after the start attempt and owned recovery. | Session ports, I/O-free fake, disk/Docker adapters and shared contract; slice-31/33 consume it. Lost acknowledgement after mount acquisition must retain uncertainty; Codex uses the separate shared-source capability specified by decision 0030, never token staging cleanup. |
+| Codex shared sources (specified across policy/readiness/approval/session) | Slice-32, after slice-30 and T-48 | Version 4; directory and lock identity-bound approval, metadata-only no-follow checks, exact writable mounts and external-source-preserving cleanup. | Existing engines own the shared behavior; command slices stay thin. Directory anchors are owned, auth/lock sources are not. [Decision 0030](../decisions/0030-codex-shared-directory.md); all scenarios `@wip`. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
 or runtime permission. Doctor composes readiness and approval inspection; readiness
@@ -365,11 +370,11 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | slice-27 — proposed run through the proxy | slice-26, T-39, T-40, T-51; the record also names `p1-acceptance-static-binary` | `internal/slices/egressproxy`, the hidden `__egress-proxy` command, the binding of T-51's writer to run and recovery, the static harness build, and the real-engine scenarios, in CI only, that prove the topology, DNS and address rules. It edits `docs/security.md`. |
 | slice-28 — proposed refusal log, failure stop and cleanup | slice-27 | The `seq` check over the copy T-51's writer stores, with its typed gap, what reads the stored `egress-refusals.jsonl`, status and cleanup of the proxy and networks, and the proxy-failure scenarios (AC-17, AC-23 and AC-36), in CI only. |
 | T-47 — proposed credentials decision | Charter step 2 of the second milestone and q-52 | [Record](../decisions/0025-credentials-passed-in.md) for sources, per-command staging, approval, uncertain starts, refusal-log conflict and six questions. Documentation only. |
-| slice-29 — credential requests and metadata inspection | T-47 and slice-25 (both landed; registry dependency edge remains coordinator-owned) | Version 3's closed source requests, policy/manifest parsing and the separate credentials-only doctor scope. Shared readiness uses bounded checkout inventory and state mount projections, with concurrent-write and retained-history controls alongside descendant/file-alias refusals. Synthetic CLI and fake/disk observation contracts exercise this increment; downstream admission remains gated. No Codex kind until T-47 question 1 is answered. Ordinary doctor, approve and run retain the version-3 gate; slice-30 owns approval integration. [Decision 0027](../decisions/0027-credential-source-inspection.md) reconciles T-47's source rule and increment table. |
+| slice-29 — credential requests and metadata inspection | T-47 and slice-25 (both landed; registry dependency edge remains coordinator-owned) | Version 3's closed source requests, policy/manifest parsing and the separate credentials-only doctor scope. Shared readiness uses bounded checkout inventory and state mount projections, with concurrent-write and retained-history controls alongside descendant/file-alias refusals. Synthetic CLI and fake/disk observation contracts exercise this increment; downstream admission remains gated. Version 3 retains no Codex kind; slice-32 specifies it in version 4 after q-72. Ordinary doctor, approve and run retain the version-3 gate; slice-30 owns approval integration. [Decision 0027](../decisions/0027-credential-source-inspection.md) reconciles T-47's source rule and increment table. |
 | slice-30 — proposed credential approval | slice-29 and slice-26 | Canonical grants, profiles, review, status and q-52's terminal rule; help and `docs/security.md`. Delivery remains gated. |
-| T-48 — proposed session credential seam | T-47 and slice-29's state-side exclusion decision | Staging and recovery port, fake, adapter and shared contract, including lost start acknowledgement after mount acquisition. Bind-mounted Codex file half waits on question 1. |
+| T-48 — proposed session credential seam | T-47 and slice-29's state-side exclusion decision | Staging and recovery port, fake, adapter and shared contract, including lost start acknowledgement after mount acquisition. Slice-32 extends this with separately recorded shared directory/lock sources under decision 0030; no source deletion. |
 | slice-31 — proposed Claude token delivery | slice-30 and T-48 | CI-only synthetic proof of approved read-only copies, project separation, absence checks and uncertain-start cleanup; refusal-log absence waits on question 6 and logging specs. |
-| slice-32 — blocked Codex sharing | slice-30 and T-48; T-47 question 1 | No Codex kind or delivery until the person answers the atomic-replacement incompatibility and amends the charter as needed. |
+| slice-32 — specified Codex sharing | slice-30 and T-48, still being built | q-72 and the amended charter settle question 1. [Decision 0030](../decisions/0030-codex-shared-directory.md) specifies version 4, directory/lock identity approval, two-way atomic replacement, source checks and cleanup without source repair. All scenarios remain `@wip`; real use waits on question 5. |
 | slice-33 — proposed GitHub token delivery | slice-31 | Reuse staging with a distinct grant; workload exports `GH_TOKEN` from its fixed file. CI-only synthetic proof includes uncertain start and, after question 6, the hostname-marker probe. |
 
 The coordinator accepted the slice-10/13/14 scenario split on 2026-11-06.
@@ -815,8 +820,9 @@ keep the rules above; slice-28 extends them to the proxy and the networks.
 
 **Proposed**, under [T-47](../decisions/0025-credentials-passed-in.md), not runtime
 evidence. Slice-31 owns `claude-token` and slice-33 `github-token`, using T-48's shared
-session seam. Codex has no kind or delivery pending question 1. The person's question 5
-must be answered before any real credential is used, including a smoke check.
+session seam. The following numbered flow is for token copies. Codex follows the
+separate directory flow below, specified after q-72. The person's question 5 must be
+answered before any real credential is used, including a smoke check.
 
 1. **Validate and freeze grants.** Slice-29 initially admits version 3 only in doctor's
    file-only modes; ordinary doctor, approve and run refuse it with `policy.version`.
@@ -874,6 +880,25 @@ fake/adapter contract and slice-31/33's CI cases must cover acquired mounts, mis
 acknowledgements and delayed completion after unlink. Refusal-log absence additionally
 waits on question 6 and its adversarial hostname-marker probe below.
 
+### Codex shared-directory run (specified)
+
+After q-72, [slice-32](../../features/credentials-codex.feature) validates and freezes
+version-4 directory/lock grants through shared readiness and approval. The directory
+is private and contains only a regular single-link host-owned auth.json. The lock is
+a separate safe file. Revalidate before create and start; use a descriptor-backed
+owned anchor for the approved directory and the exact shared lock mount. Neither
+source is copied into staging. Synthetic CI writers must prove replacement by rename
+in both directions and contention on the same lock.
+
+After confirmed worker removal, check source metadata again before releasing the
+anchor. Persist safe/unsafe/unknown observations separately from owned cleanup; report
+unsafe or unavailable results, never repair or delete a host source. Stop must still
+terminate the worker. Lost start acknowledgement retains the original full-ID recovery
+and unknown outcome, never a start retry or a claim that no workload ran. Status uses
+frozen grant metadata and the last completed check. The host-side symlink remains
+person-owned setup. The interval between checks is not protected. All evidence is
+synthetic, native engine cases CI-only, and real use remains barred by question 5.
+
 ## Deployment view
 
 The selected slice-17 anchor uses the already trusted native dockerd to perform
@@ -891,10 +916,11 @@ settings require independent runtime probes; inspecting a flag cannot prove enfo
 | --- | --- | --- |
 | Trusted host | Person, core itos dispatch and extension controller; local engine control available only to trusted orchestration. | Agents receive no socket. Slice-4 specifies effective host UID identity, root refusal and effective UID/GID worker resolution; runtime enforcement remains planned. |
 | Host-owned state outside checkout | Approval records, trusted frozen configuration and recovery records under `$XDG_STATE_HOME/itos-container`, directory mode `0700`. | Worker must not access them. Slice-4 specifies canonical JSON SHA-256, `0600` active records and independent frozen input; slice-8 publishes session snapshots, with recovery in slices 9/11. Slice-21 protects publication with a persistent account-home catalog across selected roots. This state is not a persistent worker volume; inaccessibility still needs runtime proof. |
-| Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host directory, mounted through the descriptor-backed owned volume; proposed credential grants add staged single-file binds only. Substitution protection requires native proof. |
+| Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host directory for offline and token-only profiles, mounted through the descriptor-backed owned volume. The specified Codex profile additionally grants one dedicated auth directory. Substitution protection requires native proof. |
 | Local engine image store | Approved cached manifest digest, checked for architecture, compatibility and metadata. | The person pulls the manifest's digest and approval binds that content. Control commands inspect, never pull/build/substitute, keeping acquisition a deliberate host operation. Slice-3 owns checks; T-20 owns fixture preparation. |
-| Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces or engine/SSH-agent sockets. **Proposed** grants expose only approved mode-`0400` read-only token files under `/run/itos-container/credentials`, never original sources; private IPC keeps host `/dev/shm` inaccessible. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Offline proof is separate from slice-31/33's still-unproven credential boundary. |
-| Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its sole nonrecursive directory bind source. Proposed credential profiles add read-only binds of staged files, not writable credential volumes. | No persistent worker volumes/caches/profiles, host `/tmp` or host-wide chown. A2's offline limits hold; T-47 names the credential proposal's contract exceptions. |
+| Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces or engine/SSH-agent sockets. **Proposed** token grants expose approved mode-`0400` copies under `/run/itos-container/credentials`, never original token sources. The **specified** Codex grant exposes its original auth directory and lock read-write. Private IPC keeps host `/dev/shm` inaccessible. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Offline proof is separate from slice-31/33's still-unproven credential boundary. |
+| Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its nonrecursive directory bind source. Token profiles add staged read-only file binds. The specified Codex profile adds a separately owned descriptor-backed anchor for the external auth directory; removing that anchor never deletes its source. | No persistent worker volumes/caches/profiles, host `/tmp` or host-wide chown. A2's offline limits hold; T-47 names the credential proposal's contract exceptions. |
+| Dedicated host Codex source (**specified**, slice-32) | Host-UID-owned mode-`0700` directory containing only mode-`0600` regular single-link auth.json, plus a separate shared mode-`0600` lock. Exact fixed worker targets are read-write; the host login symlink is prepared only by the person. | Approval binds directory/lock identity, not auth bytes or inode. Pre-start/final checks cannot prevent worker poisoning between them. Cleanup removes owned worker/anchor resources, never external sources. |
 | Host `/dev/shm` staging (**proposed**, T-48) | One random host-UID-owned `0700` directory per run; exclusive `0400` token copies, tmpfs verified. Durable intent names it before creation; each worker gets only its own file mounts. | Rootful dockerd in the host mount namespace is assumed. Host swap can persist bytes. Unlink after the start attempt does not revoke acquired mounts; completion needs worker and staging removal, with recovery on uncertainty. |
 | Worker network boundary, offline run | `NetworkMode` `none`, inspected before start; no external network path or published port from the first instruction. | Independent network/DNS probes must prove denial through controller loss. An offline run has no proxy, guard or session network; `NetworkMode` `none` is confined to offline runs. |
 | Session networks, egress run (created by T-40's session engine, unbound until slice-27) | Two owned per-session bridge networks. The internal one has Internal true, IPv6 off and `com.docker.network.bridge.gateway_mode_ipv4=isolated`, so its bridge has no address; the worker joins it alone. The egress one is a plain bridge with IPv6 off and only the proxy on it. | Docker 28.0 or newer, else an unavailable control. Docker's embedded resolver at 127.0.0.11 stays, with no route behind it; AC-11 is the result to prove (q-50, provisional). Nothing is proven until slice-27 runs on the real engine. |
@@ -1048,12 +1074,15 @@ absolute host paths. The two profiles `offline-credentials-v1` and
 `allowlist-credentials-v1` bind grants sorted by kind, with fixed in-worker paths and no
 contents; profiles without grants retain their identity. Readiness observes source
 metadata without reading bytes. Only run reads from the checked inode, staging a fresh
-copy for each command; sources are never written. Codex 0.167.0 replaces `auth.json` by
-rename after commit `582a8812e023b08cbf10b4603ac41644b8d99261`, conflicting with the charter's
-single-file bind: replacement hits `EBUSY`, and a host replacement leaves the worker on
-the old inode. `auth.lock` is opened and locked without replacement. These source-based
-findings are not runtime evidence. No Codex kind/delivery is defined pending question 1
-in [T-47](../decisions/0025-credentials-passed-in.md); real use waits on question 5.
+copy for each command; original token sources are never written. Codex 0.167.0 replaces
+`auth.json` by rename, making a single-file auth bind unsuitable. The answered q-72
+and charter select a dedicated shared read-write directory. [Decision 0030](../decisions/0030-codex-shared-directory.md)
+adds version 4 with directory and lock identities in approval, leaving auth contents
+and the replaceable auth inode out. A separate shared lock matches the source-reviewed
+pin. The controller checks source safety before start and at stop; a worker can plant
+a symlink/non-regular file between checks, and the host Codex follows symlinks. This
+accepted window is disclosed in [security.md](../security.md#codex-shared-login-specified-limit).
+There is no continuous host protection or runtime evidence; real use waits on question 5.
 
 **Bounded operations.** Calls have 10 s, startup 120 s and teardown 30 s. Retries and
 progress cannot reset totals, so a stalled daemon cannot hold a transition indefinitely.
@@ -1144,7 +1173,8 @@ runtime scenarios remain CI-only.
 | Effective UID and host UID/GID | Settled loop choice; specified in slice-4, consumed by slices 8/10 | Refuse root; resolve omissions to effective host UID, override image user and require manifest equality without chown. [Allocation decision](../decisions/0003-approval-identity-and-frozen-input.md) supersedes slices 3/8 as resolver owners. |
 | Image acquisition and offline boundary | Settled loop choice; T-20 and slices 3/4/10 | Person pulls manifest digest; commands inspect cached content and approval binds it. NetworkMode none is inspected before start and must be proven by network/DNS probes from first instruction through loss, without a guard/proxy/session network in an offline run. |
 | [Egress proxy record (T-38)](../decisions/0022-egress-proxy.md) | **Proposed**; rests on q-51 (the person: our own proxy on the standard library) and q-49 (taken up by q-51 and the charter), with q-50 still provisional for the person's review. Its topology, delivery and contract readings are its own decisions, for the person to confirm or overturn | Fixes the proxy's flow, parsing and address rule, the ClientHello check, the two networks, delivery as the host's own executable through `__egress-proxy`, failure closure, teardown and the refusal log. Supersedes the contract's mitmdump, inspection-per-destination, blocking-experiment and embedded-DNS wording, which the record lists. q-52 subsequently settles terminal-only consent for network grants; T-47 leaves the credential-bearing hostname conflict with AC-36 open. |
-| [Credentials record (T-47)](../decisions/0025-credentials-passed-in.md) | **Proposed**, for the person to confirm or overturn; q-52's approval rule is settled | Version 3 token grants, checked sources, per-command staged read-only binds, credential profiles, redaction and honest uncertain-start recovery. No Codex kind or replacement delivery is chosen. Questions 1–6 retain charter, lifecycle, scope, real-use and logging decisions; no real credentials or runtime support claim. |
+| [Credentials record (T-47)](../decisions/0025-credentials-passed-in.md) | **Proposed**, for the person to confirm or overturn; q-52's approval rule is settled | Version 3 token grants, checked sources, per-command staged read-only binds, credential profiles, redaction and honest uncertain-start recovery. Question 1 is superseded by q-72 and decision 0030. Questions 2–6 retain lifecycle, scope, real-use and logging decisions; no real credentials or runtime support claim. |
+| [Codex shared directory (slice-32)](../decisions/0030-codex-shared-directory.md) | Specified after settled q-72 and the amended charter; not implemented | Version 4, shared RW directory plus separate auth.lock, identity-bound terminal approval, two-way rename proof and unsafe-source reporting. The accepted symlink window is disclosed; real credentials remain barred by question 5. |
 | [Credential source inspection (slice-29)](../decisions/0027-credential-source-inspection.md) | Implemented with synthetic local evidence; reconciles T-47's source-observation rule and increment table | Adds `doctor --credentials-only`, bounded checkout inventory and state mount projections, with concurrency/history controls and refusal of incomplete required evidence. Ordinary doctor/approve/run gates remain. T-47 and slice-25 have landed. Codex, delivery and live-account decisions remain outside this amendment. |
 | Durable create intent | Settled loop choice; slice-9 | fsync before unstarted create; reconcile lost response by trusted record plus random name, then record concrete identity before execution. Close the untracked window; names/labels alone confer no authority. |
 | Budgets and signal escalation | Settled loop choice; slice-12 | Calls 10 s, startup 120 s, teardown 30 s without resetting totals; forward once, 10 s grace, SIGKILL, observed exit wins. Bound controller transitions without imposing workload lifetime. |
@@ -1170,6 +1200,7 @@ The table maps required evidence to the current gates and the work still absent.
 | Explicit matching approval and frozen settings | Slice-4 cases and shared contracts; T-11 missing/mismatched/superseded and frozen-settings cases; AC-02/03/41. | Implemented with local temporary-state scenarios and shared store contracts. Durable session publication and worker isolation remain later proof. |
 | Inspection executes no checkout code | Policy sentinel/snapshot/connection-recorder cases are live; broader doctor/approve need synthetic markers and positive controls; AC-04 and T-11 strict-input cases. | Doctor/approve marker and API-journal scenarios exercise inspection without checkout execution or image acquisition. Init and lifecycle hooks remain deferred. |
 | Credential metadata and protected-tree separation | Slice-29's [credential scenarios](../../features/credentials-policy.feature): test-only alias assembly (ID-CREDENTIALS-29), native incomplete-checkout refusal (30), no-grant observation control (31), concurrent writes (32), 100,001 retained entries (33), namespace evidence refusals (34), unreadable unrelated state accepted (35), data-access and marker controls; shared fake/disk contract. | **Implemented with synthetic fake/disk and CLI evidence.** Root, descendant and single-file bind aliases in both directions refuse alongside independent-source positive controls. Simulated topology is not native bind-mount or engine evidence. No source contents, approval or delivery are supplied by this increment. |
+| Codex atomic sharing and source safety | [ID-CODEXAUTH-01 through 20](../../features/credentials-codex.feature): local policy/approval/refusal contracts and CI-only bidirectional rename, lock contention, source isolation, poisoning and uncertain-start recovery. | **Specified, all `@wip`.** No runtime evidence. Source sharing is an explicit exception to original AC-29 cross-project mutation protection; checks cannot close the disclosed interval. No AC-30/36 closure or real-use permission. |
 | Safe checkout, local engine and approved cached image | Slice-3 contracts and CI observations; AC-05/38; T-11 identity, cached-image and hidden-metadata cases. | Readiness is implemented; absent images refuse without acquisition. Synthetic Engine API evidence does not establish runtime isolation. |
 | Host isolation, mount and non-root writable boundary | Independent CI probes for allowed writes and denied host/root/privilege access; AC-07/08/25 and T-11 non-root case. | No runtime proof. Protected online guard material from AC-08 remains deferred. |
 | Offline isolation from first instruction and through loss | Trusted controls plus worker IPv4/IPv6, gateway/private-route and DNS denial; AC-10/11/37 offline portions and T-11 loss cases. | NetworkMode none and T-16's tier are settled; slice-14/12 runtime proof remains absent. Flags and broken controls cannot pass it. |
@@ -1287,7 +1318,7 @@ mechanism. Deferred categories remain outside this milestone.
 | Egress topology, delivery and fail-closed handling | Proposed in [the egress proxy record](../decisions/0022-egress-proxy.md); the person confirms or overturns it, and slice-27 and slice-28 prove it on the real engine | The egress profile only; not a reason to add a proxy or session network to an offline run. Unproven until those slices pass in CI. |
 | Passthrough handshake guarantee: the record settles the proxy's ClientHello check; whether Codex and Claude Code send SNI without ECH is not yet known | The person's smoke check; slice-26 and slice-27 disclose the limit in approve, status and `docs/security.md` | Real-harness egress. TLS interception, inspection and SSH tunnel modes stay deferred, and if interception is ever wanted the proxy first moves to a repository of its own. |
 | Evidence for credential source exclusion from protected-state descendants | Slice-29 implements and proves decision 0027's bounded mount projections and race argument, preserving AC-28/29; the state-wide scan is withdrawn | Credential admission in ordinary doctor/approve/run and downstream handoff. Concurrent writes and unrelated retained history must not cause refusal; descendant aliases must still be refused. File-only parsing and the specified metadata scope grant no access. |
-| T-47 question 1: how Codex shares a login after atomic replacement of `auth.json` | Person through `itos decision`; only the person amends the charter | Slice-32, T-48's bind-mounted-file half and any Codex kind. Options remain unselected; `auth.lock` alone keeps the single-file shape. |
+| Codex shared-directory exposure between checks | q-72 and the amended charter select sharing; slice-32 specifies it in decision 0030 | Question 1 is answered. The worker can corrupt the login or plant a symlink the host Codex follows before a final check. Pre-start/final metadata checks are observations, not continuous protection. Implementation/native evidence remains outstanding; question 5 still bars real use. |
 | T-47 question 2: refresh and revocation ownership | Person through `itos decision` | Guarantees beyond fresh per-run token copies and provider revocation. A removed grant needs new approval for the next run; a live worker retains its copy. Neither token kind refreshes. |
 | T-47 question 3: deletion and account management | Person through `itos decision` | Source deletion/rotation and account/profile commands; no current command manages originals. Only staged copies are owned here. |
 | T-47 question 4: GitHub scope and expiry | Person through `itos decision` | Whether to require a fine-grained repository-limited token or expiry. Delivery checks no provider scope and makes no GitHub call. |

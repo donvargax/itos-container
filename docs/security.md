@@ -40,6 +40,43 @@ Continuous enforcement is deferred to milestone 2 under
 [decision](decisions/0019-checkout-socket-milestone-limit.md) and
 [Landlock/gVisor research](plans/checkout-socket-enforcement.md).
 
+## Codex shared login: specified limit
+
+[Slice-32](decisions/0030-codex-shared-directory.md) specifies, but has not yet
+implemented or proved, the person's choice to share the host's existing Codex login
+read-write. A dedicated host directory holding only `auth.json` is mounted as a
+directory so temporary-sibling-and-rename updates are visible on both sides. A
+separate `auth.lock` file is shared too. The host's Codex reaches the auth file through
+a symlink the person sets up; this tool never creates that link or moves the login.
+The worker receives neither the host home nor the host's complete Codex home.
+
+Approval shows and binds the directory and lock paths, identities, worker targets
+and read-write access. The worker can read, replace, delete or corrupt that shared
+login. Projects granted the same source share this exposure; approval does not narrow
+the account's provider permissions. The person accepted the exposure and corruption
+risk because separate copies diverge when refreshed.
+
+The specified controller checks before start and after worker removal at stop require
+a private host-UID-owned directory with only `auth.json`, a regular single-link
+host-UID-owned auth file, and a safe shared lock. Checks do not follow source symlinks
+or read credential bytes. An unsafe source refuses startup or is reported after
+teardown; stop still removes owned resources and never repairs the source.
+
+**The interval between checks remains unprotected.** A worker can replace `auth.json`
+with a symlink, non-regular file or other unsafe entry while running. The host's
+Codex follows symlinks, so it can follow a worker-planted target and read or replace
+files outside the shared directory with the host user's authority. A safe final check
+cannot prove that no transient replacement occurred. Advisory locking coordinates
+cooperative writers only; it does not constrain a hostile worker. These observations
+are not continuous isolation or protection of the host from the shared-login grant.
+
+Question 1 of decision 0025 is answered by q-72 and the amended charter. Question 5
+still bars all real credentials and real-account smoke checks. Every scenario uses
+synthetic files without a provider, model or account. Harness compatibility, real
+refresh and credential absence from refusal logs remain unproven. Workload output
+and traffic are not redacted. An allowed host can receive the credential bytes, and
+a refused hostname can put them into persisted proxy and host refusal logs.
+
 ## Approval boundary
 
 [Slice-4's approval scenarios](../features/approval.feature) exercise the implemented

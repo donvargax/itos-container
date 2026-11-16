@@ -1,5 +1,14 @@
 # T-47: credentials passed in per command, approval and the remaining decisions
 
+**Codex amendment, 2026-11-16:** q-72 and the person's amended charter settle
+question 1. [Decision 0030](0030-codex-shared-directory.md) and slice-32's scenarios
+supersede this record's Codex wait instructions and unselected alternatives: share
+the existing login through a dedicated read-write directory and the shared lock.
+The person prepares the host symlink. Policy version 4, directory/lock identity
+binding, pre-start/final checks and their disclosed limit are specified there.
+The historical source review below remains useful; token delivery is unchanged.
+Question 5 still bars real credentials. This amendment supplies no runtime evidence.
+
 Recorded on 2026-11-09 from [T-47's ledger](../../tasks/phase-1.yaml), for the
 [charter](../charter.md)'s second milestone, step 2. This is a **proposed** design
 under the architecture hypothesis, for the person to confirm or overturn. It adds
@@ -9,12 +18,12 @@ readings are not runtime evidence or a container-host support claim.
 The workload remains the worker's main process, invoked as literal argv. Credentials
 arrive per command, outside the checkout and without their values entering the create
 configuration or `docker inspect`. The two token kinds below have a proposed delivery;
-Codex does not. Real credentials remain barred pending question 5, including a person's
-smoke check. Synthetic scenarios need neither an account nor a real model.
+Codex's later delivery spec is in decision 0030. Real credentials remain barred pending
+question 5, including a person's smoke check. Synthetic scenarios need neither an account nor a real model.
 
 ## Codex: the charter's single-file premise no longer holds
 
-The charter says Codex rewrites `auth.json` in place. It did so with a truncating
+The charter formerly said Codex rewrites `auth.json` in place. It did so with a truncating
 `OpenOptions` write and mode `0600` before OpenAI Codex commit
 [`582a8812e023b08cbf10b4603ac41644b8d99261`](https://github.com/openai/codex/commit/582a8812e023b08cbf10b4603ac41644b8d99261)
 of 2026-10-30 (#58251). Release
@@ -36,10 +45,10 @@ single-file-mount shape. OpenAI's [authentication documentation](https://learn.c
 describes the file store and refresh, but does not make a bind-mounted file compatible
 with atomic replacement.
 
-Only the person can change the charter. Question 1 asks how to share the login now.
-This record defines **no Codex kind and no Codex delivery**. Slice-29 must not add one;
-slice-32 and the bind-mounted-file half of T-48 wait on the answer. The older registry
-wording and the charter's in-place statement are not permission to implement them.
+Only the person can change the charter; that amendment has now landed. The source
+finding stands, but question 1's wait is superseded by decision 0030. Version 3 and
+slice-29 still define no Codex kind; slice-32 specifies it in version 4. The older
+registry's single-file wording is not permission to restore the in-place premise.
 
 ## The two token kinds and the workload's interface
 
@@ -92,8 +101,8 @@ Entries retain their written order for diagnostics; everywhere else they are a s
 keyed by kind. Parsing a valid file reads no host source. Collect located problems
 at `/credentials/<index>/kind` or `/source` as in version 1, never echoing a rejected
 value. Slice-29 owns rule IDs, the version 3 schema beside version 2's, and the changes
-to `docs/CONFIG.md` and `docs/CLI.md`. A future Codex answer defines its own kind and
-whether it needs version 4; version 3 currently refuses it as unknown.
+to `docs/CONFIG.md` and `docs/CLI.md`. Decision 0030 now specifies the Codex kind in
+version 4; version 3 continues to refuse it as unknown.
 
 Doctor, approve and run share one source observation in readiness, beside slice-20's
 checkout scan. It reads metadata, never contents. For each grant, in this order:
@@ -343,7 +352,7 @@ revisit the limitation. T-47 edits neither that document nor slice-26's older sp
 | --- | --- | --- |
 | slice-29 | `doctor --policy-only` and `--manifest-only` parse valid version 3; `--credentials-only` uses the shared metadata observation without manifest/engine/approval checks | Ordinary doctor, approve and run refuse with `policy.version`. No Codex kind. [Decision 0027](0027-credential-source-inspection.md) fixes the scope and state projections. |
 | slice-30 | Ordinary doctor and approve inspect version 3 and its grants after slice-29 proves the specified state-side exclusion | Run refuses any kind whose delivery is absent and any allowlist until slice-27, before the manifest, engine and host state. |
-| T-48 and slice-31 | Shared staging seam, then `claude-token` delivery with synthetic proof | `github-token` until slice-33; Codex pending question 1; real credentials pending question 5. |
+| T-48 and slice-31 | Shared staging seam, then `claude-token` delivery with synthetic proof | `github-token` until slice-33; Codex until slice-32's decision-0030 implementation and proof; real credentials pending question 5. |
 | slice-33 | `github-token` through the same staging seam | No SSH identity, live-account trial or unproven credential-absence claim. |
 
 ## Provisioning redaction and the refusal-log conflict
@@ -444,15 +453,15 @@ here for the coordinating loop; no unanswered question is silently resolved by t
 
 | Question | What needs the person's answer | What waits |
 | --- | --- | --- |
-| 1. Codex login sharing | How should the worker share the host login now that Codex replaces `auth.json` by rename? Options, none selected: pin a still-in-place-writing Codex on host and worker; mount a dedicated host directory holding only `auth.json`, reached by both installs through symlinks Codex follows, read-write, with `auth.lock` as a single file (source reading only); use a worker login or API key delivered like a token; or copy in and back out, risking lost refreshes made on the other side. | A person-owned charter amendment, slice-32, T-48's file half, and any Codex kind in slice-29. The answer's spec decides if version 4 is needed. |
+| 1. Codex login sharing — answered | q-72 and the 2026-11-16 charter amendment select the dedicated read-write directory and shared lock, with the host symlink prepared by the person. Decision 0030 specifies version 4, identity-bound approval, pre-start/final checks and the interval they cannot protect. Old-writer pinning, worker login/API key and copy-in/back are rejected. | Slice-32 now has its spec; implementation still depends on slice-30 and T-48. Real use still waits on question 5. |
 | 2. Refresh and revocation | Neither token kind refreshes. Provider revocation is external. Removing a grant requires approval without it before the next run, while a live session keeps its copy. Is that sufficient, and who owns refresh for a future kind that supports it? | Refresh/revocation promises beyond this per-command copy contract and later credential kinds. |
 | 3. Deletion and account management | No command creates, rotates or deletes an original source; only staged copies are managed here. Should account-management commands exist, or is source-file deletion the person's act? | Account/profile management commands and deletion promises. |
 | 4. GitHub scope | No scope or expiry is required or checked; checking would require a GitHub call. Should approval require a fine-grained token restricted to the checkout's repository, or an expiry? | Any such GitHub scope/expiry guarantee; delivery alone supplies none. |
 | 5. Permission to use real credentials | Does this record satisfy, for these two token kinds, the contract's requirement that granting/revoking accounts, deleting profiles and rotating the sandbox SSH key and inspection CA be settled **before real credentials are used**? | Every real-credential run, including the person's smoke check, until answered. Synthetic scenarios remain possible. |
 | 6. Credential-bearing refusal hostnames | How should logs represent a hostile CONNECT hostname containing credential bytes given 0022's verbatim target and AC-36's marker exclusion? Changing representation or explicitly revising the guarantee belongs to the person. | The hostname-marker probe passing, affected T-39/slice-28 logging specs, and slice-31/slice-33 accepting credential-bearing egress under AC-36. Disclose the current leak until the chosen rule has proof. |
 
-No question authorizes quietly weakening the contract or its probes. Question 1 has
-no replacement implementation selected; question 6 has no selected log fix.
+No question authorizes quietly weakening the contract or its probes. Question 1 is
+answered as above; question 6 has no selected log fix in this record.
 
 ## Contract passages superseded by the proposal or deferred
 
@@ -466,7 +475,8 @@ T-47 does not edit it or the charter.
 - The Authentication row's "Do not mount the sources directly" and the prohibition
   on directly reading/writing host-side sources still hold for both token kinds.
   They, and the prohibition on sharing a writable credential store between projects,
-  would give way to the charter's Codex read-write mount. Question 1 leaves that open.
+  give way to the charter's Codex read-write directory exception, specified by
+  decision 0030 after q-72. This is shared exposure, not proof of the original AC-29.
 - Credentials and Git's unresolved safe provisioning, callback, refresh and
   account-source updates, the corresponding "Decisions still open" entry, and
   Experiments item 3: this proposal selects provisioning for two token kinds only.
@@ -479,7 +489,7 @@ T-47 does not edit it or the charter.
 ## Authority, sibling handoff and architecture changes
 
 q-52 is the person's settled approval decision. The charter supplies the credential
-shape, including the now-stale Codex premise that only the person may change. Grants
+shape, including the Codex directory amendment the person has now made. Grants
 in `itos-container.yaml` with absolute host paths, and approval binding kinds and paths
 rather than contents, come from the coordinator's slice-29/30 breakdown.
 
@@ -493,9 +503,9 @@ specs, not proof, charter amendments or authorization to use real credentials.
 | --- | --- |
 | slice-29 | Wait for both T-47 and slice-25's version 2; take the closed version 3 shape, metadata scope and refusal gates. Implement and prove decision 0027's bounded state mount projections with concurrent writers and accumulated unrelated history before downstream handoff; the host-wide scan is withdrawn. Omit the Codex kind its older why named. |
 | slice-30 | Wait for slice-29's source-exclusion evidence before admitting grants. Take canonical grants, profiles, review and q-52; update help and `docs/security.md`. |
-| T-48 | Take slice-29's state-side exclusion specification in decision 0027, retaining its shared validation and proof dependency. Stage and recover through session ports, fake and adapter; the file half also waits for question 1. Its older "failed delivery stops the workload before it starts" applies only before a start attempt. Add acquired-mount/lost-acknowledgement coverage. |
+| T-48 | Take slice-29's state-side exclusion specification in decision 0027, retaining its shared validation and proof dependency. Stage tokens and recover through session ports, fake and adapter. Slice-32 extends the seam for external directory/lock sources under decision 0030; question 1 is answered. Its older "failed delivery stops the workload before it starts" applies only before a start attempt. Add acquired-mount/lost-acknowledgement coverage. |
 | slice-31 and slice-33 | Wait for slice-29's source-exclusion design and evidence, then prove token delivery, isolation and uncertain-start cleanup in CI. For slice-33, "where gh expects it" means `GH_TOKEN` exported by workload argv from its file. Neither can claim refusal-log absence before question 6 and its proof. |
-| slice-32 | Wait for question 1; the old in-place-write premise is invalid. |
+| slice-32 | Question 1 is answered; implement decision 0030's version-4 shared-directory spec after slice-30 and T-48. The old in-place-write premise remains invalid. |
 | slice-26 and slice-27 | Apply q-52 wherever the first network-granting approval lands; slice-26's branch spec still calls the approver open. |
 | T-39 and slice-28 | Reconcile question 6's eventual answer in the logging contract before downstream credential claims. Decision 0022 is unchanged here. |
 
