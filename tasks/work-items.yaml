@@ -2173,3 +2173,19 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p2-overlap-06-nondeterministic
+    title: ID-OVERLAP-06 failed once on main on a tree that had just passed it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      main's run 43802914436 at a36768a, slice-27's merge commit, failed ID-OVERLAP-06 (Native
+      nested refusal preserves the running worker and releases after cleanup) with 'admitted
+      workload is not independently active with its original full ID', beside the known
+      ID-ANCHORS-09 first-row failure. The pull request's head e73a1bd, which differs from a36768a
+      by one line of tasks/asks.yaml, had passed the same shard 25 minutes earlier, and the re-run
+      of the failed jobs passed. The other shard took 144 s of its 180 s gate in that run, with
+      slice-27's egress rows now live, so a timing dependence under a fuller shard is the first
+      thing to check. One occurrence; record the next with its run before repairing anything.
