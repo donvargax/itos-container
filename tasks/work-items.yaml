@@ -2122,22 +2122,10 @@ items:
       and named adapters, without importing another slice. Prove behavior through black-box
       scenarios with synthetic inputs and controlled endpoints; real-engine evidence belongs only in
       CI. Broken down from null.
-  - id: p1-engine-warmup-product-create
+  - id: T-55
     title: Each engine shard's warm-up sends the product's own create, timed beside the plain one
     phase: 1
     owner: null
     status: todo
     depends_on: [T-54]
-    kind: idea
-    why: >
-      T-54's plain warm-up does not remove the slow first create. In run 43788741012 at 7c1a6ab the
-      warm-up create and remove took 70 ms (lifecycle), 430 ms (offline) and 80 ms (other), and the
-      offline shard's first engine row, ID-OFFLINE-29, still failed with run.call-timeout on
-      operation create, forward-to-answer 0.989 s against the fixture's 1 s call. A plain create is
-      fast on this engine, so the cost is the first create of the shape the product sends. Until it
-      is removed, the first engine row of a shard fails in roughly one shard job in four: on
-      2026-11-16 it refused T-48's and slice-27's landings four times and reddened two docs commits
-      on main. The warm-up should exercise the product's create (a throwaway product run under
-      production limits, or a create with the product's request shape) and print the plain and
-      product-shaped durations, so one run shows which is slow. No fixture limit, assertion, retry
-      or skipped row moves.
+    kind: task
