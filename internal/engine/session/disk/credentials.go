@@ -198,7 +198,20 @@ func (s Credentials) copy(ctx context.Context, dir *os.Root, uid string, source 
 	if err != nil {
 		return port.CredentialRefused
 	}
-	defer func() { _ = output.Close() }()
+	published := false
+	defer func() {
+		// Until publication, recovery cannot remove this entry. Retain the
+		// descriptor through metadata and save failures, and unlink only when
+		// a fresh descriptor stat still identifies the named entry.
+		if !published {
+			if held, err := output.Stat(); err == nil {
+				if named, err := dir.Lstat(source.Kind); err == nil && os.SameFile(held, named) {
+					_ = dir.Remove(source.Kind)
+				}
+			}
+		}
+		_ = output.Close()
+	}()
 	info, err = calls.stat(output)
 	created, ok := credentialNode(info)
 	if err != nil || !ok || !credentialOwner(created, uid, 0100400) || created.Links != 1 {
@@ -209,13 +222,9 @@ func (s Credentials) copy(ctx context.Context, dir *os.Root, uid string, source 
 		return port.CredentialUnavailable
 	}
 	if f := publish(*staging); f != "" {
-		// Recovery has no authority over this unpublished identity. Keep the
-		// descriptor open while checking its name, and never unlink a replacement.
-		if named, err := dir.Lstat(source.Kind); err == nil && os.SameFile(info, named) {
-			_ = dir.Remove(source.Kind)
-		}
 		return f
 	}
+	published = true
 	s.event("copy")
 	if ctx.Err() != nil {
 		return port.CredentialUnavailable

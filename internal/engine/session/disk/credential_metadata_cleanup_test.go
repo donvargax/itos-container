@@ -77,7 +77,7 @@ func TestCredentialFileMetadataFailureCleanup(t *testing.T) {
 }
 
 func TestCredentialFileMetadataFailurePreservesSubstitution(t *testing.T) {
-	for _, replacement := range []string{"file", "symlink", "missing"} {
+	for _, replacement := range []string{"file", "symlink", "missing", "unavailable descriptor"} {
 		t.Run(replacement, func(t *testing.T) {
 			fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
 			s := fixture.Stager.(Credentials)
@@ -92,6 +92,12 @@ func TestCredentialFileMetadataFailurePreservesSubstitution(t *testing.T) {
 					return stat(file)
 				}
 				reached = true
+				if replacement == "unavailable descriptor" {
+					if err := file.Close(); err != nil {
+						t.Fatal(err)
+					}
+					return nil, errors.New("synthetic descriptor failure")
+				}
 				if err := os.Rename(path, retained); err != nil {
 					t.Fatal(err)
 				}
@@ -112,8 +118,10 @@ func TestCredentialFileMetadataFailurePreservesSubstitution(t *testing.T) {
 			if !reached || failure != port.CredentialRefused {
 				t.Fatal("substitution changed the metadata refusal", failure)
 			}
-			if _, err := os.Stat(retained); err != nil {
-				t.Fatal("cleanup removed the descriptor's renamed file")
+			if replacement != "unavailable descriptor" {
+				if _, err := os.Stat(retained); err != nil {
+					t.Fatal("cleanup removed the descriptor's renamed file")
+				}
 			}
 			if replacement == "missing" {
 				if failure := fixture.Stager.Remove(t.Context(), r); failure != "" {
