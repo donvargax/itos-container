@@ -55,6 +55,17 @@ func homeDiskState() (Homes, sp.HomeScope, *af.Catalog, *homeTestCodecs) {
 	return Homes{Storage: catalog, Codec: codec, Host: &af.Host{UID: b.UID, GID: b.GID}, StateRoot: "/state/itos-container"}, s, catalog, codec
 }
 
+func TestHomeAbsentReadDoesNotCreateCatalogState(t *testing.T) {
+	h, s, catalog, _ := homeDiskState()
+	delete(catalog.Directories[s.UID], s.Scope)
+	if tx, failure := h.Open(t.Context(), s.Scope, false); tx != nil || failure != "" {
+		t.Fatal(tx, failure)
+	}
+	if len(catalog.Directories[s.UID]) != 0 {
+		t.Fatal("read created protected state")
+	}
+}
+
 func TestHomeStorageRefusesChangedAndInvalidRecords(t *testing.T) {
 	for _, fault := range []string{"list unavailable", "read unavailable", "wrong scope", "wrong uid", "malformed", "save binding", "save invalid", "read replacement", "resync"} {
 		t.Run(fault, func(t *testing.T) {

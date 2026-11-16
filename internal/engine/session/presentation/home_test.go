@@ -3,10 +3,19 @@ package presentation_test
 import (
 	"bytes"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	fake "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 	"github.com/donvargax/itos-container/internal/engine/session/presentation"
 	"strings"
 	"testing"
 )
+
+func TestHomePresentationContract(t *testing.T) {
+	t.Run("memory", func(t *testing.T) { fake.HomePresentationContract(t, &fake.HomePresentation{}) })
+	t.Run("adapter", func(t *testing.T) {
+		var out, diagnostic bytes.Buffer
+		fake.HomePresentationContract(t, presentation.UI{Out: &out, Err: &diagnostic})
+	})
+}
 
 func TestHomePlainDiscoveryAndSessionDisclosure(t *testing.T) {
 	var out, diagnostic bytes.Buffer
