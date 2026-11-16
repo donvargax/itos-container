@@ -287,10 +287,9 @@ func (p *Provider) outputLease() (*lease, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, err := p.Output.SyscallConn()
-	if err != nil {
-		return nil, err
-	}
+	// Like stdin, this nonnil File always yields a connection. Control pins
+	// and validates its live descriptor even if the caller closes it later.
+	conn, _ := p.Output.SyscallConn()
 	l := &lease{conn: conn}
 	if err := l.control(func(fd int) error {
 		if !term.IsTerminal(fd) {

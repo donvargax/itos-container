@@ -48,6 +48,50 @@ func TestNativeContract(t *testing.T) {
 	t.Logf("%s", output)
 }
 
+func TestPairRejectsInvalidOutputBeforeChangingInput(t *testing.T) {
+	for _, fault := range []string{"missing", "zero file", "closed input", "closed output", "pipe"} {
+		t.Run(fault, func(t *testing.T) {
+			in, out := openPair(t), openPair(t)
+			before, err := term.GetState(int(in.slave.Fd()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := NewPair(in.slave, out.slave, "linux")
+			switch fault {
+			case "missing":
+				p.Output = nil
+			case "zero file":
+				p.Output = &os.File{}
+			case "closed input":
+				p.file, err = os.OpenFile(in.slave.Name(), os.O_RDWR, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_ = p.file.Close()
+			case "closed output":
+				_ = p.Output.Close()
+			case "pipe":
+				r, w, err := os.Pipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = r.Close() }()
+				defer func() { _ = w.Close() }()
+				p.Output = w
+			}
+			lease, err := p.Acquire(t.Context())
+			var failure *port.Failure
+			if lease != nil || !errors.As(err, &failure) || failure.Kind != port.InvalidTerminal {
+				t.Fatalf("invalid terminal accepted: %v %v", lease, err)
+			}
+			after, err := term.GetState(int(in.slave.Fd()))
+			if err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatal("input changed during output refusal", err)
+			}
+		})
+	}
+}
+
 func TestTerminalChild(t *testing.T) {
 	if os.Getenv("T56_TERMINAL_CHILD") != "1" {
 		return

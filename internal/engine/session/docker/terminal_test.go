@@ -60,3 +60,21 @@ func TestTerminalInspectionRefusesChangedTTYAndSize(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminalResizeRefusesChangedDaemonPin(t *testing.T) {
+	e, b, a := runSDKFixture(t)
+	c, failure := e.OpenRun(t.Context(), b)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer c.Close()
+	e.Readiness.(*st.Readiness).Current = false
+	if got := c.(sp.TerminalConnection).Resize(t.Context(), "worker", tp.Dimensions{Columns: 113, Rows: 37}); got != sp.Refused {
+		t.Fatal("changed daemon pin admitted", got)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.resizes) != 0 {
+		t.Fatal("resize reached a replaced daemon")
+	}
+}

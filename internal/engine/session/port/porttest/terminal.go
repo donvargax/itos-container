@@ -52,6 +52,9 @@ func TerminalEngineContract(t Reporter, open func() (port.RunEngine, port.Bindin
 	if f := tc.SetTerminal(terminal.Dimensions{}); f != port.TerminalUnavailable {
 		t.Errorf("invalid size: %s", f)
 	}
+	if f := tc.Resize(ctx, "uncreated", terminal.Dimensions{}); f != port.TerminalUnavailable {
+		t.Errorf("invalid resize: %s", f)
+	}
 	if f := tc.SetTerminal(terminal.Dimensions{Columns: 113, Rows: 37}); f != "" {
 		t.Errorf("initial size: %s", f)
 	}
