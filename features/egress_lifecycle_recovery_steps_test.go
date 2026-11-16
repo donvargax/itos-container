@@ -86,9 +86,27 @@ func (w *world) egressOwnershipFixture(defect string) error {
 		}
 		r := object(object(record["egress"])["proxy"])
 		r["id"], r["stage"] = "", "intent"
+		record["stage"], record["container_id"] = "reserved", ""
 		if err := os.WriteFile(path, approvalJSON(record), 0600); err != nil {
 			return err
 		}
+		// This unresolved create predates worker authority. Preserve a valid
+		// public seed and leave only the candidate proxy for reconciliation.
+		publicPath := w.egressStatePath("sessions", w.recoveryIndexKey(), w.egress.life.id, "record.json")
+		publicData, err := os.ReadFile(publicPath)
+		if err != nil {
+			return err
+		}
+		var public map[string]any
+		if err := json.Unmarshal(publicData, &public); err != nil {
+			return err
+		}
+		public["state"] = "preparing"
+		if err := os.WriteFile(publicPath, approvalJSON(public), 0600); err != nil {
+			return err
+		}
+		delete(a.containers, a.ids["worker"])
+		a.detach(a.ids["worker"])
 		a.inspectIDMismatch = proxy
 	default:
 		return fmt.Errorf("unknown ownership defect %q", defect)
@@ -116,7 +134,7 @@ func (w *world) egressOwnershipResult() error {
 	for _, r := range w.egress.results {
 		e, problems, err := egressLifeEntry(r, w.egress.life.id)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w\n%s%s", err, r.result.stdout, r.result.stderr)
 		}
 		if r.result.exit != 1 || len(problems) != 1 || problems[0]["rule"] != "recovery.not-owned" {
 			return fmt.Errorf("%s did not refuse conflicting ownership as recovery.not-owned\n%s%s", r.command, r.result.stdout, r.result.stderr)

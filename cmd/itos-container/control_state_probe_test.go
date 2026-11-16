@@ -59,9 +59,6 @@ func TestMain(m *testing.M) {
 		cleanup = func() { _ = os.RemoveAll(home) }
 	}
 	accountLookup = controlAccountHost{Host: approvalhost.Process{}, home: filepath.Clean(home)}
-	if fault := os.Getenv("SLICE_28_STORAGE_FAULT"); fault != "" {
-		os.Exit(egressLifecycleFaultCommand(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, fault))
-	}
 	if home := os.Getenv("SLICE_21_ACCOUNT_HOME"); home != "" && (len(os.Args) < 2 || !strings.HasPrefix(os.Args[1], "-test.")) {
 		if os.Getenv("SLICE_21_BOUNDARY") != "" {
 			os.Exit(controlStateCommand(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, home))

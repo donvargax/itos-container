@@ -117,7 +117,8 @@ func (w *world) egressFaultResult(diagnoses string, exit int) error {
 	if f.storage != "" {
 		data, err := os.ReadFile(f.receipt)
 		if err != nil || string(data) != f.storage {
-			return errors.New("run did not reach the named real storage operation")
+			r := w.egress.results[0].result
+			return fmt.Errorf("run did not reach the named real storage operation (exit %d)\n%s%s", r.exit, r.stdout, r.stderr)
 		}
 	} else {
 		a := w.doctor.engine.egress
