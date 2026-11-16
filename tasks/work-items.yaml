@@ -2,6 +2,7 @@
 phases:
   1: null
 queue:
+  - T-54
   - p1-harness-home
   - p1-interactive-tty
 items:
