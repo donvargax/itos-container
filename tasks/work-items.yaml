@@ -2,9 +2,6 @@
 phases:
   1: null
 queue:
-  - p1-acceptance-static-binary
-  - T-50
-  - p1-session-contract-coverage-flake
   - p1-harness-home
   - p1-interactive-tty
 items:
@@ -968,7 +965,7 @@ items:
     phase: 1
     owner: donvargax
     status: doing
-    depends_on: [slice-26, T-39, T-40, T-51, p1-acceptance-static-binary]
+    depends_on: [slice-26, T-39, T-40, T-51, T-52]
     kind: slice
     why: >
       Was p1-egress-run-through-proxy.
@@ -1044,39 +1041,13 @@ items:
       the network... remain outside this milestone' is also replaced by the charter's steps 2 to 4
       in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
       otherwise meet two disagreeing authorities, as T-38's did.
-  - id: p1-acceptance-static-binary
+  - id: T-52
     title: "The acceptance harness builds the binary the release ships: CGO_ENABLED=0"
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy), through
-      slice-27. features/features_test.go buildProduct runs go build with no CGO_ENABLED setting,
-      and the binary it builds measured dynamically linked here. .goreleaser.yaml ships
-      CGO_ENABLED=0. Scenarios therefore exercise cgo paths for DNS and user lookup that no released
-      binary uses, so a pass does not prove the shipped binary, which matters beyond egress.
-      slice-27 needs a static binary for the proxy container and its real-engine scenarios. Landing
-      the fix first lets the existing suite show any static-versus-dynamic difference before the
-      egress work is mixed in. Set CGO_ENABLED=0 for the build, including the -cover variant used by
-      the code proof. Add a check that the built binary is static or matches the release setting.
-      The existing scenarios must still pass, with no gate weakened. slice-27 should depend on it.
-
-      The existing item already requires CGO_ENABLED=0 for normal and coverage builds before
-      slice-27. Schedule it first and make slice-27 depend on it; that dependency is not yet
-      recorded.
-
-      Belongs inside p1-acceptance-static-binary, which names only buildProduct and its -cover
-      variant. From slice-27's step work: the scenarios never run the plain product. Every checkout
-      fixture swaps in the `go test -c ./cmd/itos-container` assembly built by probeBuildArgs
-      (features/session_probe_test.go:229), run with sessionChildEnvironment(os.Environ()) and no
-      CGO_ENABLED setting. That assembly is the executable doctor inspects in ID-EGRESS-04 and the
-      file the proxy container runs in the engine tier. Set CGO_ENABLED=0 for both assemblies, plain
-      and covered, as well as for buildProduct, and have the item's static check read the assembly
-      too. With buildProduct alone fixed, the static-executable prerequisite still refuses every
-      allowlist scenario. slice-27 is in progress and this item is still unowned, so it has to land
-      before slice-27's implementation can go green.
+    kind: task
   - id: p2-approval-no-record-step-checks-frozen-input
     title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
     phase: 1
@@ -1856,7 +1827,7 @@ items:
     title: "Fresh recovery after controller loss and path replacement flakes: anchor recovery exits 75 and cleanup gets HTTP 409"
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p1-platform-log-redaction
@@ -1881,22 +1852,18 @@ items:
       later stop's copy would differ, and which rename lands last would matter. Whoever drafts this
       item must revisit that argument, either by scrubbing identically from every controller or by
       running the copy's Commit through the session's gate.
-  - id: p1-session-contract-coverage-flake
+  - id: T-53
     title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      slice-26, run 42738076694 (2026-11-10): the code proof failed before judging any mutant
-      (count.preparation-failed at listed-coverage: the listed test all command exited 1) because
-      Frozen image inspection must exclude implicit volumes before create (session.feature:722) row
-      #01 failed: disk: session contract subprocess failed: exit status 2, after 0.57 s. The same
-      scenario passed in that run's Tests (ubuntu-latest) job. Like T-41's overlap hook, a bound or
-      a subprocess the instrumented, slower coverage run outruns; find it and give it room through
-      the harness budget seam. A red code proof sends the item's implementer after code it never
-      changed.
+    kind: task
+    deferred: >
+      Not reproducible, and its only evidence lacks the failing child's output (q-68): the first
+      attempt of run 42738076694 logged the parent's exit status 2 alone, and ten covered
+      repetitions and the whole covered feature suite pass. 195b834 reports the child's transcript
+      since, so a recurrence will name the failing operation: resume then, with that run.
   - id: p1-main-go-toolchain-1-27-4
     title: main's Go toolchain pin is go1.27.4, so every branch's govulncheck step passes again
     phase: 1
@@ -2123,6 +2090,11 @@ items:
       lifecycle shard's first engine row (ID-LIFECYCLE-08) with run.call-timeout on operation
       create, then cleanup HTTP 409. So the slow first create of a job is the engine's, not the
       compile's: p2-ci-go-build-cache-rolling-key alone is not the remedy.
+
+      The existing todo item already owns the measured remedy for legitimate first-create latency
+      exceeding shortened fixture budgets. T-50 is merged but explicitly leaves this remedy open.
+      Settle it within this item using measured intervals; any budget changes must address call and
+      startup together, preserve timeout controls, and satisfy the CI shard time gate.
   - id: p2-native-mount-evidence-credential-inspection
     title: A CI-only tier runs credential source inspection against real bind mounts made in a private user and mount namespace
     phase: 1
