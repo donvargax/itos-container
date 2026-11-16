@@ -2117,3 +2117,18 @@ items:
       slice-31 to slice-33 rely on. Not checked: whether the hosted ubuntu-latest runner permits
       unprivileged user namespaces (Ubuntu 24.04 restricts them through AppArmor by default); the
       runner has sudo if it does not.
+  - id: p1-harness-owned-home
+    title: Run provides an isolated, writable harness home
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Specify the storage lifetime first: the registry recommends a per-checkout volume, but volume
+      versus tmpfs remains unsettled. Cover approved settings, non-root access, project isolation,
+      ownership, bounded creation and cleanup/recovery consistent with the chosen lifetime. Never
+      mount the host home or place harness state in the checkout. Keep shared storage behavior under
+      an engine package and command integration in existing slices. Record the architecture change.
+      Add black-box scenarios, including executable /tmp proof; its current configuration already
+      omits noexec. Real-engine red/green evidence runs only in CI. Broken down from null.
