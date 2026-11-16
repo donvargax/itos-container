@@ -286,3 +286,4 @@ questions:
   - id: q-71
     item: "slice-27"
     question: "slice-27: its implementer (attempt 3) stopped saying the T-51 refusal-log writer and the p1-acceptance-static-binary prerequisite are still unowned. Are they?"
+    answer: "No (the coordinator, on the person's instruction, 2026-11-16). Every dependency of slice-27 is done and on main: slice-26, T-39, T-40, T-51 (the disk adapter that streams the proxy's log into egress-refusals.jsonl) and T-52, which is p1-acceptance-static-binary promoted (merged b56572e). The branch merged main after both. slice-27 goes on with its runtime implementation; the red evidence of run 43531516406 for ID-EGRESS-12 to 19 stands."
