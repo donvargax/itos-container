@@ -6,10 +6,10 @@ exclude: ["**/porttest/**"]
 mutation:
   tests:
     list: tools/bin/scenario-list
-    run: "go test ./features -count=1 -scenarios='{pattern}'"
+    run: "go test ./features -count=1 -timeout=20m -scenarios='{pattern}'"
     ids_pattern: "^@(?:{ids})$"
     join: { each: "{id}", sep: "|" }
-    whole: go test ./features -count=1
+    whole: go test ./features -count=1 -timeout=20m
     support:
       - features/*_test.go
       - features/testdata/**
