@@ -343,7 +343,7 @@ func engineWorkflowIssues(data []byte) []string {
 		require(job.If == guard, "preserve ordinary event guard")
 		found := false
 		for _, step := range job.Steps {
-			if step.Run == "go test ./... -count=1" && step.Env["RAPID_CHECKS"] == "1" {
+			if step.Run == "go test ./... -count=1 -timeout=20m" && step.Env["RAPID_CHECKS"] == "1" {
 				found = true
 			}
 		}
@@ -587,7 +587,7 @@ func engineRedWorkflowIssues(data []byte) []string {
 			found++
 			allowed["jobs."+job+".steps."+strconv.Itoa(i)+".env."+redVariable] = true
 			require(step.Env[redVariable] == redDispatchExpression, "step-local red selection for "+job)
-			run := "go test ./... -count=1"
+			run := "go test ./... -count=1 -timeout=20m"
 			if job == "engine-shard" {
 				run = engineInvocation
 			}
