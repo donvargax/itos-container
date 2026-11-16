@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 	tf "github.com/donvargax/itos-container/internal/engine/terminal/port/porttest"
@@ -192,7 +193,7 @@ func TestResizeReconcilesObservedExitAndHostCancellation(t *testing.T) {
 }
 
 func TestResizeRequiresFreshOwnedRunningSession(t *testing.T) {
-	for _, change := range []string{"healthy", "invalid size", "unavailable registry", "changed session", "stopped session", "unavailable engine", "nil engine", "foreign worker", "stopped worker"} {
+	for _, change := range []string{"healthy", "already bounded", "invalid size", "unavailable registry", "changed session", "stopped session", "unavailable engine", "nil engine", "foreign worker", "stopped worker"} {
 		t.Run(change, func(t *testing.T) {
 			s, registry, engine, _, id := registeredSessionFixture(t)
 			c, a, worker, f := s.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{})
@@ -205,6 +206,10 @@ func TestResizeRequiresFreshOwnedRunningSession(t *testing.T) {
 			want := port.TerminalResize
 			switch change {
 			case "healthy":
+				want = ""
+			case "already bounded":
+				s.Registry = finiteRegistry{s.Registry}
+				s.Engine = finiteEngine{s.Engine}
 				want = ""
 			case "invalid size":
 				size.Rows = 0
@@ -239,4 +244,31 @@ func TestResizeRequiresFreshOwnedRunningSession(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResizeBoundsUnresponsiveSessionAcquisition(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s, registry, _, _, id := registeredSessionFixture(t)
+		c, a, worker, f := s.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{})
+		if f != "" {
+			t.Fatal(f)
+		}
+		defer c.Close()
+		defer a.Close()
+		release := make(chan struct{})
+		defer close(release)
+		registry.AfterOpen = func(string) { <-release }
+		result := make(chan port.Outcome, 1)
+		go func() { result <- s.resizeOwned(t.Context(), id, worker, terminal.Dimensions{Columns: 113, Rows: 37}) }()
+		time.Sleep(budget.CallDuration)
+		synctest.Wait()
+		select {
+		case got := <-result:
+			if got != port.CallTimeout {
+				t.Fatal("session acquisition lost finite timeout", got)
+			}
+		default:
+			t.Fatal("unresponsive session acquisition held resize past its deadline")
+		}
+	})
 }
