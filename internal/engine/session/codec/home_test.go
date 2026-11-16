@@ -17,6 +17,40 @@ func homeScopeFixture() port.HomeScope {
 		Generations: []port.HomeGeneration{{ID: id, Name: "itos-container-home-" + id, Created: "original", Stage: "retained", Initialized: true, Claims: []port.HomeClaim{}}}}
 }
 
+func TestHomeCodecValidatesIdentityEvenWhenScopeHashMatches(t *testing.T) {
+	j := JSON{}
+	for _, tc := range []struct {
+		name   string
+		change func(*port.HomeScope)
+		want   port.Outcome
+	}{
+		{"valid", func(*port.HomeScope) {}, ""},
+		{"numeric limits", func(s *port.HomeScope) { s.UID, s.GID = "4294967295", "4294967295" }, ""},
+		{"group zero", func(s *port.HomeScope) { s.GID = "0" }, ""},
+		{"invalid project", func(s *port.HomeScope) { s.Project = "invalid" }, port.Invalid},
+		{"root uid", func(s *port.HomeScope) { s.UID = "0" }, port.Invalid},
+		{"noncanonical uid", func(s *port.HomeScope) { s.UID = "01000" }, port.Invalid},
+		{"invalid uid", func(s *port.HomeScope) { s.UID = "invalid" }, port.Invalid},
+		{"uid overflow", func(s *port.HomeScope) { s.UID = "4294967296" }, port.Invalid},
+		{"noncanonical gid", func(s *port.HomeScope) { s.GID = "01000" }, port.Invalid},
+		{"invalid gid", func(s *port.HomeScope) { s.GID = "-1" }, port.Invalid},
+		{"gid overflow", func(s *port.HomeScope) { s.GID = "4294967296" }, port.Invalid},
+		{"absent endpoint", func(s *port.HomeScope) { s.Engine.Endpoint = "" }, port.Invalid},
+		{"absent daemon", func(s *port.HomeScope) { s.Engine.ID = "" }, port.Invalid},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := homeScopeFixture()
+			tc.change(&s)
+			b := s.Binding()
+			b.Frozen.Project = s.Project
+			s.Scope = j.Scope(b)
+			if _, failure := j.DecodeHome(j.EncodeHome(s)); failure != tc.want {
+				t.Fatalf("self-consistent identity returned %s, want %s", failure, tc.want)
+			}
+		})
+	}
+}
+
 func TestHomeCodecRejectsIncompleteAuthority(t *testing.T) {
 	j := JSON{}
 	for _, change := range []func(*port.HomeScope){

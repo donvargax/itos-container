@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -179,5 +180,78 @@ func TestHomeRemovalRechecksPinAfterReply(t *testing.T) {
 	replaceSocketOnReply(t, c.connection, pin, c.binding.Endpoint, "")
 	if got := c.RemoveHome(t.Context(), "owned"); got != sp.Refused {
 		t.Fatal("removal accepted changed engine identity", got)
+	}
+}
+
+func TestHomeMutationsRequireAcknowledgementAndUnchangedPin(t *testing.T) {
+	id := strings.Repeat("a", 64)
+	home := sp.HomeReference{ID: id, Scope: strings.Repeat("b", 64), Name: "itos-container-home-" + id}
+	for _, operation := range []string{"allocate", "initialize", "remove"} {
+		for _, reply := range []string{"success", "unavailable", "changed engine"} {
+			t.Run(operation+"/"+reply, func(t *testing.T) {
+				c, pin := homeAdapterConnection(t, func(w http.ResponseWriter, r *http.Request) {
+					path := strings.TrimPrefix(r.URL.Path, "/v1.56")
+					switch operation {
+					case "allocate":
+						var request struct {
+							Name, Driver       string
+							Labels, DriverOpts map[string]string
+						}
+						if r.Method != "POST" || path != "/volumes/create" || json.NewDecoder(r.Body).Decode(&request) != nil || request.Name != home.Name || request.Driver != "local" || len(request.DriverOpts) != 0 || len(request.Labels) != 3 || request.Labels["io.itos-container.kind"] != "harness-home" || request.Labels["io.itos-container.scope"] != home.Scope || request.Labels["io.itos-container.token"] != home.ID {
+							t.Error("allocation did not carry the exact volume identity")
+						}
+					case "initialize":
+						archive := tar.NewReader(r.Body)
+						h, err := archive.Next()
+						if r.Method != "PUT" || path != "/containers/"+id+"/archive" || r.URL.Query().Get("path") != "/home/itos" || r.URL.Query().Get("copyUIDGID") != "true" || err != nil || h.Name != "." || h.Typeflag != tar.TypeDir || h.Mode != 0700 || h.Uid != 2001 || h.Gid != 3001 || h.Size != 0 {
+							t.Error("initialization did not carry only the private-root metadata", h, err)
+						}
+						if _, err := archive.Next(); err != io.EOF {
+							t.Error("initialization archive contained more than root metadata", err)
+						}
+					case "remove":
+						if r.Method != "DELETE" || path != "/volumes/"+home.Name || r.URL.Query().Get("force") == "1" {
+							t.Error("unsafe home removal", r.Method, r.URL.String())
+						}
+					}
+					if reply == "unavailable" {
+						w.WriteHeader(503)
+						return
+					}
+					if operation == "allocate" {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(201)
+						_ = json.NewEncoder(w).Encode(map[string]string{"Name": home.Name})
+					} else {
+						w.WriteHeader(200)
+					}
+				})
+				if reply == "changed engine" {
+					replaceSocketOnReply(t, c.connection, pin, c.binding.Endpoint, "")
+				}
+				var got sp.Outcome
+				switch operation {
+				case "allocate":
+					got = c.AllocateHome(t.Context(), home)
+				case "initialize":
+					got = c.InitializeHome(t.Context(), id, "2001", "3001")
+				case "remove":
+					got = c.RemoveHome(t.Context(), home.Name)
+				}
+				want := sp.Outcome("")
+				if reply != "success" {
+					want = sp.HomeUnavailable
+					if operation == "remove" {
+						want = sp.Incomplete
+						if reply == "changed engine" {
+							want = sp.Refused
+						}
+					}
+				}
+				if got != want {
+					t.Fatalf("mutation acknowledgement = %s, want %s", got, want)
+				}
+			})
+		}
 	}
 }
