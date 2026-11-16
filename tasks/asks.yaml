@@ -323,3 +323,7 @@ questions:
     item: "slice-34"
     question: "slice-34: its implementer (attempt 4) stopped for engine red evidence of @ID-HOME-14, 15 and 23. Does the dispatched run supply it?"
     answer: "Yes (the coordinator, 2026-11-16). Run 43815326065 at 5fe482e, dispatched with the three tags, ran eight cases in the offline engine shard and all failed at their first product run, the product refusing the home key with policy.unknown_key and exit 2; no step was undefined and no fixture failed. With run 43797097484 for @ID-HOME-13, all four engine scenarios have red evidence. Since the key is refused outright, steps after the first run have not executed yet; the green run after the implementation is their first execution. slice-34 implements."
+  - id: q-81
+    item: "slice-34"
+    question: "slice-34: its implementer (attempt 5) stopped on Windows and macOS test failures in the red-evidence dispatch (errno 13 against Windows's EACCES; a Unix executable bit), as a wrong gate. Do they gate slice-34?"
+    answer: "No (the coordinator, 2026-11-16). Those jobs ran because a red-evidence dispatch runs every platform; a pull request's run tests on ubuntu-latest only, and that run judges slice-34. The Windows and macOS failures predate the branch and belong to p2-repair-platform-ci-fixtures, which records that nothing shows they block the harness-home step. slice-34 leaves those tests alone and implements its runtime."
