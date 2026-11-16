@@ -2050,8 +2050,8 @@ items:
   - id: T-54
     title: Each engine shard warms the engine with one create and remove before its first engine row
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-native-mount-evidence-credential-inspection
