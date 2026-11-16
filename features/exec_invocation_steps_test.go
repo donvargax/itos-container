@@ -23,7 +23,13 @@ func (w *world) execInvocationSteps(sc *godog.ScenarioContext) {
 	var accesses []string
 	var connections int64
 	sc.Step(`^an exec invocation fixture with isolated state and access recorders$`, func() error {
-		if err := w.sessionFixture(false, "0022"); err != nil {
+		if err := w.approvalCheckout(); err != nil {
+			return err
+		}
+		if err := w.approvalSeed("1", false); err != nil {
+			return err
+		}
+		if err := w.doctorSentinels(); err != nil {
 			return err
 		}
 		var err error
@@ -82,7 +88,7 @@ func (w *world) execInvocationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^exec reports exactly one JSON refusal "([^"]*)" with exit (\d+) and removal guidance$`, func(rule string, exit int) error {
 		var report struct {
 			Schema   int
-			OK       bool
+			OK       *bool
 			Problems []struct {
 				Rule, Message, Fix string
 				Exit               int
@@ -91,7 +97,7 @@ func (w *world) execInvocationSteps(sc *godog.ScenarioContext) {
 		if err := json.Unmarshal([]byte(w.stdout), &report); err != nil {
 			return fmt.Errorf("exec did not return one JSON refusal: %w\n%s", err, w.report())
 		}
-		if report.Schema != 1 || report.OK || len(report.Problems) != 1 || w.exit != exit {
+		if report.Schema != 1 || report.OK == nil || *report.OK || len(report.Problems) != 1 || w.exit != exit {
 			return fmt.Errorf("exec returned the wrong refusal envelope\n%s", w.report())
 		}
 		p := report.Problems[0]
