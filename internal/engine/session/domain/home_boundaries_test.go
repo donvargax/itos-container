@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
 
 func (x homeFixture) session(t *testing.T, g *port.HomeGeneration, stage string) port.Session {
@@ -297,7 +298,7 @@ func TestHomeCatalogNeverReturnsPartialTrustedState(t *testing.T) {
 				t.Fatal(r)
 			}
 			x.store.Failure = ""
-			if r := x.h.Retire(t.Context(), g.ID, "reset", homeConsent{yes: true}); homeOutcome(r) != want || len(r.Homes) != 0 {
+			if r := x.h.Retire(t.Context(), g.ID, "reset", f.HomeConsent{Yes: true}); homeOutcome(r) != want || len(r.Homes) != 0 {
 				t.Fatal(r)
 			}
 		})

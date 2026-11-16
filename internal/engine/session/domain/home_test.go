@@ -50,17 +50,6 @@ func (x homeFixture) run(t *testing.T) port.RunResult {
 	return x.runner.Run(t.Context(), x.frozen, []string{"probe"}, port.Streams{})
 }
 
-type homeConsent struct {
-	yes    bool
-	before func()
-}
-
-func (c homeConsent) Review(context.Context, port.HomeEntry, string) bool {
-	if c.before != nil {
-		c.before()
-	}
-	return c.yes
-}
 func homeOutcome(r port.HomeResult) port.Outcome {
 	if len(r.Failures) == 0 {
 		return ""
@@ -155,13 +144,13 @@ func TestHomeRetirementAndExactRetry(t *testing.T) {
 				x := domainHomeFixture()
 				g := x.seed()
 				key := x.store.Scope(x.b)
-				consent := homeConsent{yes: true}
+				consent := f.HomeConsent{Yes: true}
 				want := port.Outcome("")
 				switch fault {
 				case "absent":
 					delete(x.engine.Homes, g.Name)
 				case "refuse consent":
-					consent.yes = false
+					consent.Yes = false
 					want = port.ConsentRequired
 				case "claim":
 					s := x.store.Scopes[key]
@@ -169,7 +158,7 @@ func TestHomeRetirementAndExactRetry(t *testing.T) {
 					x.store.Scopes[key] = s
 					want = port.HomeInUse
 				case "changed review":
-					consent.before = func() { s := x.store.Scopes[key]; s.Project = strings.Repeat("b", 64); x.store.Scopes[key] = s }
+					consent.Before = func() { s := x.store.Scopes[key]; s.Project = strings.Repeat("b", 64); x.store.Scopes[key] = s }
 					want = port.Refused
 				case "foreign volume":
 					o := x.engine.Homes[g.Name]
@@ -262,7 +251,7 @@ func TestHomeRetirementDoesNotOutliveScopeLockBudget(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
 		start := time.Now()
-		result := x.h.Retire(ctx, g.ID, "reset", homeConsent{yes: true})
+		result := x.h.Retire(ctx, g.ID, "reset", f.HomeConsent{Yes: true})
 		if homeOutcome(result) != port.HomeUnavailable || time.Since(start) != time.Second {
 			t.Fatal(result, time.Since(start))
 		}
@@ -316,7 +305,7 @@ func TestHomeUnallocatedSuccessorCannotBeRetired(t *testing.T) {
 	s.Generations[0].Initialized = false
 	x.store.Scopes[s.Scope] = s
 	delete(x.engine.Homes, g.Name)
-	result := x.h.Retire(t.Context(), g.ID, "delete", homeConsent{yes: true})
+	result := x.h.Retire(t.Context(), g.ID, "delete", f.HomeConsent{Yes: true})
 	if homeOutcome(result) != port.Incomplete {
 		t.Fatal(result)
 	}

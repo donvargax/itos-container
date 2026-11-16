@@ -8,6 +8,10 @@ import (
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
 
+func TestHomeConsentFakeContract(t *testing.T) {
+	f.HomeConsentContract(t, func(answer bool) port.HomeConsent { return f.HomeConsent{Yes: answer} })
+}
+
 func TestHomeOwnershipRequiresTheFullOriginalTuple(t *testing.T) {
 	h := port.HomeReference{Scope: strings.Repeat("a", 64), ID: strings.Repeat("b", 64), Name: "itos-container-home-" + strings.Repeat("b", 64), Created: "original"}
 	o := port.HomeObservation{Name: h.Name, Created: h.Created, Driver: "local", Scope: "local", Token: h.ID, Key: h.Scope, ExactLabels: true, EmptyOptions: true}

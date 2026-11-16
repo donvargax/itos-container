@@ -12,7 +12,29 @@ import (
 
 	"github.com/creack/pty"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
+
+func TestHomeConsentAdapterContract(t *testing.T) {
+	f.HomeConsentContract(t, func(answer bool) port.HomeConsent {
+		master, slave, err := pty.Open()
+		if errors.Is(err, pty.ErrUnsupported) {
+			t.Skip("terminal unavailable")
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = master.Close(); _ = slave.Close() })
+		text := "no\n"
+		if answer {
+			text = "yes\n"
+		}
+		if _, err := io.WriteString(master, text); err != nil {
+			t.Fatal(err)
+		}
+		return Consent{In: slave, Err: slave}
+	})
+}
 
 func TestHomeConsentRequiresReviewedTerminal(t *testing.T) {
 	for _, tc := range []struct {
