@@ -2117,14 +2117,15 @@ items:
       slice-31 to slice-33 rely on. Not checked: whether the hosted ubuntu-latest runner permits
       unprivileged user namespaces (Ubuntu 24.04 restricts them through AppArmor by default); the
       runner has sudo if it does not.
-  - id: p1-harness-owned-home
+  - id: slice-34
     title: Run provides an isolated, writable harness home
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was p1-harness-owned-home.
       Specify the storage lifetime first: the registry recommends a per-checkout volume, but volume
       versus tmpfs remains unsettled. Cover approved settings, non-root access, project isolation,
       ownership, bounded creation and cleanup/recovery consistent with the chosen lifetime. Never
@@ -2137,7 +2138,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-harness-owned-home]
+    depends_on: [slice-34]
     kind: idea
     why: >
       Seed the container-owned home with Codex update checks, analytics, plugins and its own sandbox
@@ -2151,7 +2152,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-harness-owned-home]
+    depends_on: [slice-34]
     kind: idea
     why: >
       Seed Claude's onboarding state so first startup needs no onboarding interaction or incidental
