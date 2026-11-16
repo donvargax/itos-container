@@ -20,15 +20,21 @@ func TestTerminalFaultResults(t *testing.T) {
 		{"saved terminal restoration fails", "0", "run.terminal-restore", 75},
 		{"saved terminal restoration fails", "17", "run.terminal-restore", 17},
 		{"distinct stdin restoration fails", "0", "run.terminal-restore", 75},
+		{"distinct stdin restoration fails", "17", "run.terminal-restore", 17},
+		{"distinct stdout restoration fails", "0", "run.terminal-restore", 75},
 		{"distinct stdout restoration fails", "17", "run.terminal-restore", 17},
 	} {
 		t.Run(tc.fault+tc.child, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				r := terminalContractCase(t, "ports", "fault", tc.fault, tc.child)
-				if r.Code != tc.code || !r.Ready || !r.TTY || !r.ObserversEnded || r.Error != "" || !strings.Contains(r.Diagnostic, tc.rule) {
-					t.Fatalf("terminal failure: code=%d ready=%v tty=%v ended=%v error=%s diagnostic=%s", r.Code, r.Ready, r.TTY, r.ObserversEnded, r.Error, r.Diagnostic)
-				}
-			})
+			for _, backend := range []string{"ports", "protected records"} {
+				t.Run(backend, func(t *testing.T) {
+					synctest.Test(t, func(t *testing.T) {
+						r := terminalContractCase(t, backend, "fault", tc.fault, tc.child)
+						if r.Code != tc.code || !r.Ready || !r.TTY || !r.ObserversEnded || r.Error != "" || !strings.Contains(r.Diagnostic, tc.rule) {
+							t.Fatalf("terminal failure: code=%d ready=%v tty=%v ended=%v error=%s diagnostic=%s", r.Code, r.Ready, r.TTY, r.ObserversEnded, r.Error, r.Diagnostic)
+						}
+					})
+				})
+			}
 		})
 	}
 }
@@ -45,15 +51,19 @@ func TestTerminalDisconnectResults(t *testing.T) {
 		{"inspected ownership changes", "unknown", 75},
 	} {
 		t.Run(tc.condition, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				r := terminalContractCase(t, "ports", "disconnect", tc.condition, tc.child)
-				if r.Code != tc.code || !r.Ready || !r.Fired || !r.ObserversEnded || !strings.Contains(r.Diagnostic, "run.terminal-disconnected") || r.RecoveryRestarted {
-					t.Fatalf("disconnect: code=%d ready=%v fired=%v ended=%v restarted=%v diagnostic=%s", r.Code, r.Ready, r.Fired, r.ObserversEnded, r.RecoveryRestarted, r.Diagnostic)
-				}
-				if tc.condition == "engine becomes unreachable" && r.Result.Cleanup == "cleanup-complete" {
-					t.Fatal("unreachable engine was reported as confirmed absent")
-				}
-			})
+			for _, backend := range []string{"ports", "protected records"} {
+				t.Run(backend, func(t *testing.T) {
+					synctest.Test(t, func(t *testing.T) {
+						r := terminalContractCase(t, backend, "disconnect", tc.condition, tc.child)
+						if r.Code != tc.code || !r.Ready || !r.Fired || !r.ObserversEnded || !strings.Contains(r.Diagnostic, "run.terminal-disconnected") || r.RecoveryRestarted {
+							t.Fatalf("disconnect: code=%d ready=%v fired=%v ended=%v restarted=%v diagnostic=%s", r.Code, r.Ready, r.Fired, r.ObserversEnded, r.RecoveryRestarted, r.Diagnostic)
+						}
+						if tc.condition == "engine becomes unreachable" && r.Result.Cleanup == "cleanup-complete" {
+							t.Fatal("unreachable engine was reported as confirmed absent")
+						}
+					})
+				})
+			}
 		})
 	}
 }
