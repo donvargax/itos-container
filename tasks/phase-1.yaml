@@ -7559,3 +7559,14 @@
         printf "%s\n" "$listed" | grep -Fx TestEngineFixtureWarmupProduct >/dev/null || {
         printf "%s\n" "T-55: TestEngineFixtureWarmupProduct is missing" >&2; exit 1; };
         go test ./features -count=1 -run "^TestEngineFixture(Warmup(Product)?|Workflow)$"'
+- id: T-56
+  type: refactor
+  title: Add shared terminal ports, adapters and contract tests
+  why: >
+    Provide raw-mode acquisition/restoration, terminal dimensions, resize events and disconnect
+    reporting under internal/engine/terminal. Reuse pinned x/term and PTY test support; keep I/O
+    behind ports and run shared contracts against an in-memory fake and native adapter. Cover
+    restoration after failures and bounded cancellation. Expose no command yet. Broken down from
+    p1-interactive-tty.
+  done_when:
+    - run: go test ./internal/engine/terminal/...

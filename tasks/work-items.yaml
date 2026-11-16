@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - T-55
-  - p1-interactive-tty
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -913,12 +912,9 @@ items:
     title: "run and exec with a TTY: raw mode, resizes, Ctrl-C as input, no harness left running after a disconnect"
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Milestone two, step 4 (docs/charter.md), built on slice-12's cancellation rules. A terminal or
-      multiplexer outside the sandbox is the window onto an agent inside it.
   - id: T-38
     title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
     phase: 1
@@ -2125,7 +2121,59 @@ items:
   - id: T-55
     title: Each engine shard's warm-up sends the product's own create, timed beside the plain one
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-54]
     kind: task
+  - id: T-56
+    title: Add shared terminal ports, adapters and contract tests
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: []
+    kind: task
+  - id: slice-37
+    title: Run an owned foreground workload with a TTY
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-56]
+    kind: slice
+    why: >
+      Was p1-run-interactive-terminal.
+      Extend the run slice and shared session engine with terminal attachment, initial dimensions,
+      resizes and Ctrl-C as input. Specify terminal selection and JSON refusal before
+      implementation. Restore the terminal and stop the workload after client disconnect using
+      slice-12's bounded cancellation and ownership rules; preserve noninteractive behavior and exit
+      precedence. Require black-box red/green scenarios, with real-engine evidence only in CI.
+      Broken down from p1-interactive-tty.
+  - id: slice-38
+    title: Execute literal argv within a running owned session
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      Was p1-exec-owned-session.
+      Implement internal/slices/exec with thin command handling and shared session-engine
+      operations. Validate ownership and the live foreground workload; inherit frozen policy,
+      identity and mounts without extending session lifetime. Cover exit status, cancellation,
+      disconnect, concurrent stop and foreground exit. Specify how an exec process is terminated
+      despite the absence of an exec-signal endpoint before implementing. Require black-box
+      scenarios and CI-only real-engine evidence. Broken down from p1-interactive-tty.
+  - id: slice-39
+    title: Attach an interactive TTY to an owned exec command
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-56, slice-38]
+    kind: slice
+    why: >
+      Was p1-exec-interactive-terminal.
+      Combine the exec slice with shared terminal support for raw input, initial dimensions, resizes
+      and Ctrl-C as input. Specify terminal selection and JSON refusal. Prove terminal restoration,
+      bounded disconnect termination and removal of active exec workloads when the foreground
+      session ends. Keep shared behavior in engine packages without importing the run slice. Require
+      black-box red/green scenarios and CI-only real-engine evidence. Broken down from
+      p1-interactive-tty.
