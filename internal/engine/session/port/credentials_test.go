@@ -46,3 +46,28 @@ func TestCredentialProgress(t *testing.T) {
 		t.Fatal("live staging counted as complete")
 	}
 }
+
+func TestCredentialProgressIntentAbsence(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true, GitHub: true})
+	n := r
+	n.Credentials.Stage = "absent"
+	if !r.ValidTransition(n) {
+		t.Fatal("absence before directory publication refused")
+	}
+	n.Credentials.Device, n.Credentials.Inode = "1", "2"
+	if !n.Credentials.Valid() {
+		t.Fatal("known absent directory fixture invalid")
+	}
+	if r.ValidTransition(n) {
+		t.Fatal("absence introduced an unpublished directory identity")
+	}
+	n.Credentials.Stage = "owned"
+	if !r.ValidTransition(n) {
+		t.Fatal("directory identity publication refused")
+	}
+	absent := n
+	absent.Credentials.Stage = "absent"
+	if !n.ValidTransition(absent) {
+		t.Fatal("absence preserving the published directory identity refused")
+	}
+}

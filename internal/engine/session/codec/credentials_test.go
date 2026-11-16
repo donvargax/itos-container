@@ -45,8 +45,80 @@ func TestCredentialRecords(t *testing.T) {
 	}
 }
 
+func TestCredentialRecordsNestedTypes(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true, GitHub: true})
+	parser := &mf.Parser{}
+	codec := JSON{Parser: parser}
+	data := codec.Encode(r)
+	parser.Value = credentialValue(t, data)
+	if got, fail := codec.Decode(data); fail != "" || got != r {
+		t.Fatal("healthy credential record refused", fail)
+	}
+	for _, tc := range []struct {
+		name   string
+		change func(map[string]any)
+	}{
+		{"numeric file identity", func(c map[string]any) { c["files"] = []any{1, ""} }},
+		{"null file identity", func(c map[string]any) { c["files"] = []any{"", nil} }},
+		{"short files array", func(c map[string]any) { c["files"] = []any{""} }},
+		{"extra file identity", func(c map[string]any) { c["files"] = []any{"", "", ""} }},
+		{"string Claude kind", func(c map[string]any) { c["kinds"].(map[string]any)["Claude"] = "true" }},
+		{"numeric GitHub kind", func(c map[string]any) { c["kinds"].(map[string]any)["GitHub"] = 1 }},
+		{"unknown kind", func(c map[string]any) {
+			k := c["kinds"].(map[string]any)
+			delete(k, "GitHub")
+			k["Other"] = true
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var wire map[string]any
+			if json.Unmarshal(data, &wire) != nil {
+				t.Fatal("credential record fixture unreadable")
+			}
+			tc.change(wire["credentials"].(map[string]any))
+			bad, err := json.Marshal(wire)
+			if err != nil {
+				t.Fatal("credential record fixture cannot be encoded")
+			}
+			parser.Value = credentialValue(t, bad)
+			if got, fail := codec.Decode(bad); fail != port.Invalid || got != (port.Record{}) {
+				t.Fatal("malformed nested credential metadata accepted")
+			}
+		})
+	}
+}
+
+func TestCredentialRecordsWithEgress(t *testing.T) {
+	b, _, _ := f.Fixture()
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true, GitHub: true})
+	r.Egress = f.EgressRecords(f.EgressBinding(b))[6].Egress
+	parser := &mf.Parser{}
+	codec := JSON{Parser: parser}
+	data := codec.Encode(r)
+	parser.Value = credentialValue(t, data)
+	if got, fail := codec.Decode(data); fail != "" || got != r {
+		t.Fatal("credential record with egress authority refused", fail)
+	}
+	var wire map[string]any
+	if json.Unmarshal(data, &wire) != nil {
+		t.Fatal("credential record fixture unreadable")
+	}
+	wire["egress"].(map[string]any)["proxy"].(map[string]any)["stage"] = true
+	bad, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal("credential record fixture cannot be encoded")
+	}
+	parser.Value = credentialValue(t, bad)
+	if got, fail := codec.Decode(bad); fail != port.Invalid || got != (port.Record{}) {
+		t.Fatal("malformed egress metadata in credential record accepted")
+	}
+}
+
 func credentialValue(t *testing.T, data []byte) mp.Value {
 	t.Helper()
+	if string(data) == "null" {
+		return mp.Value{Kind: mp.Null}
+	}
 	var array []json.RawMessage
 	if json.Unmarshal(data, &array) == nil && array != nil {
 		v := mp.Value{Kind: mp.Array}

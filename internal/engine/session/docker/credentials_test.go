@@ -190,6 +190,34 @@ func TestCredentialMountContract(t *testing.T) {
 		f.CredentialMountRefusalContract(t, func() f.CredentialEngineFixture { return credentialSDKFixture(t) })
 	})
 }
+
+func TestCredentialMountInspectionStdin(t *testing.T) {
+	for _, fault := range []string{"tty", "closed stdin", "reusable stdin"} {
+		t.Run(fault, func(t *testing.T) {
+			fixture := credentialSDKFixture(t)
+			c, fail := fixture.Engine.OpenRun(t.Context(), fixture.Binding)
+			if fail != "" {
+				t.Fatal("engine setup refused", fail)
+			}
+			defer c.Close()
+			argv := []string{"probe"}
+			id, fail := c.CreateRun(t.Context(), fixture.Record, argv)
+			if fail != "" {
+				t.Fatal("credential create refused", fail)
+			}
+			if fail := c.VerifyRun(t.Context(), id, argv); fail != "" {
+				t.Fatal("healthy credential inspection refused", fail)
+			}
+			fixture.Defect(fault)
+			if fail := c.VerifyRun(t.Context(), id, argv); fail != port.IsolationUnverified {
+				t.Fatal("changed credential worker stdin configuration accepted", fail)
+			}
+			if creates, starts := fixture.Counts(); creates != 1 || starts != 0 {
+				t.Fatal("inspection refusal created or started another worker")
+			}
+		})
+	}
+}
 func TestCredentialUncertainStartContract(t *testing.T) {
 	t.Run("memory", func(t *testing.T) { f.CredentialUncertainStartContract(t, credentialMemoryFixture) })
 	t.Run("sdk", func(t *testing.T) {
@@ -264,6 +292,17 @@ func credentialDefect(r *container.InspectResponse, fault string) {
 	}
 	if fault == "anchor" {
 		r.HostConfig.Mounts[0].Source = "foreign"
+		return
+	}
+	switch fault {
+	case "tty":
+		r.Config.Tty = true
+		return
+	case "closed stdin":
+		r.Config.OpenStdin = false
+		return
+	case "reusable stdin":
+		r.Config.StdinOnce = false
 		return
 	}
 	if strings.HasPrefix(fault, "host ") {
