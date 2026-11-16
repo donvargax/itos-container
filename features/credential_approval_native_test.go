@@ -25,7 +25,6 @@ func (w *world) credentialApprovalNativeSteps(sc *godog.ScenarioContext) {
 		w.approval.results = append(w.approval.results, doctorResult{stdout: w.stdout, stderr: w.stderr, exit: w.exit})
 		return nil
 	})
-	sc.Step(`^its approval status is "([^"]*)"$`, w.approvalStatus)
 	sc.Step(`^the credential approval policy version is (\d+)$`, func(version int) error {
 		w.approval.policyVersion = version
 		if err := w.credentialApprovalPolicy(); err != nil {
