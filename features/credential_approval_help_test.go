@@ -8,6 +8,9 @@ import (
 )
 
 func (w *world) credentialApprovalHelpSteps(sc *godog.ScenarioContext) {
+	sc.Step(`^approval help gives every specified credential disclosure and the version 3 delivery warning$`, func() error {
+		return w.credentialApprovalHelpContains(credentialDisclosure...)
+	})
 	sc.Step(`^approval help says credential and network grants require terminal review and refuse every fingerprint option$`, func() error {
 		return w.credentialApprovalHelpContains(
 			"Network or credential grants require the person at a real terminal; --fingerprint refuses.",
@@ -26,6 +29,15 @@ func (w *world) credentialApprovalHelpSteps(sc *godog.ScenarioContext) {
 			"Approval records what was approved, not who.",
 		)
 	})
+}
+
+var credentialDisclosure = []string{
+	"This profile grants credentials. Each listed file will be readable by the worker; approval does not limit the token's provider permissions.",
+	"Each run copies the current source bytes to memory-backed staging, retains the copy for that worker, and drops it at teardown; the original source is never written.",
+	"Workload output and traffic are not redacted.",
+	"The worker can send credential bytes to any allowed host.",
+	"A refused hostname can contain credential bytes and is kept in proxy and host refusal logs; credential absence from those logs is not established.",
+	"Credential delivery is not available in this increment; run still refuses version 3 before manifest, engine or host state access.",
 }
 
 // Help wrapping is presentation, not a different consent rule. Check complete
