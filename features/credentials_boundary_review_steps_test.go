@@ -67,7 +67,7 @@ func (w *world) credentialCheckoutStateAlias(which, layout string) error {
 		return fmt.Errorf("unknown boundary alias %q", layout)
 	}
 	for i := range o.Mounts {
-		o.Mounts[i] += "2 1 0:1 " + root + " " + point + " rw - tmpfs tmpfs rw\n"
+		o.Mounts[i] += "2 1 0:1 " + root + " " + point + " rw - ext4 ext4 rw\n"
 	}
 	for path, n := range o.Nodes {
 		if path == point || strings.HasPrefix(path, point+"/") {

@@ -86,7 +86,7 @@ func (w *world) credentialExportAlias(filesystem, subdirectory, point string) er
 		cover := o.Nodes[subdirectory]
 		cover.Device, cover.Inode, cover.MountID = 2, cover.Inode+100, 7
 		o.Nodes[subdirectory] = cover
-		rows += "7 5 0:2 / " + subdirectory + " rw - tmpfs tmpfs rw\n"
+		rows += "7 5 0:2 / " + subdirectory + " rw - ext4 ext4 rw\n"
 	} else {
 		// The protected tree keeps the same file under its own name, on the
 		// first mount's device. Nothing may visit it in state, whose records

@@ -47,6 +47,7 @@ import (
 	readinessexecutable "github.com/donvargax/itos-container/internal/engine/readiness/executable"
 	readinessport "github.com/donvargax/itos-container/internal/engine/readiness/port"
 	readinessreference "github.com/donvargax/itos-container/internal/engine/readiness/reference"
+	readinesssource "github.com/donvargax/itos-container/internal/engine/readiness/source"
 	sessioncodec "github.com/donvargax/itos-container/internal/engine/session/codec"
 	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
 	sessiondocker "github.com/donvargax/itos-container/internal/engine/session/docker"
@@ -188,7 +189,7 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	case "status":
 		service, _ := approvalServices(command, in, stdout, stderr)
 		_, c.Status.Service = sessionServices(service)
-		c.Status.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr}
+		c.Status.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr, Credentials: approvalpresentation.CredentialLines}
 		c.Status.JSON = recoveryJSON(args)
 		return c.Status.Run()
 	case "stop":
@@ -298,14 +299,20 @@ func loggerFor(w io.Writer, isTerminal func(int) bool) *slog.Logger {
 
 // approvalServices assembles shared inspection and approval adapters. Construction
 // defers policy, engine and approval inspection until the command requests it.
-func approvalServices(_ string, in io.Reader, out, errout io.Writer) (approvaldomain.Service, approvalpresentation.UI) {
+func approvalServices(command string, in io.Reader, out, errout io.Writer) (approvaldomain.Service, approvalpresentation.UI) {
 	checkout := &readinessdisk.Checkout{}
 	root := os.Getenv("ITOS_ROOT")
 	if root == "" {
 		root, _ = os.Getwd()
 	}
+	if filepath.IsAbs(root) {
+		root = filepath.Clean(root)
+	}
+	credentialSources := readinesssource.Credentials{FS: &readinessdisk.CredentialFiles{}, Checkout: checkout, Account: accountLookup, Input: readinessport.CredentialInput{Root: root, State: readinesssource.SelectedState(os.Getenv("XDG_STATE_HOME"), os.Getenv("HOME")), UID: int64(os.Geteuid()), OS: runtime.GOOS, Architecture: runtime.GOARCH}}
 	source := inspection.Readiness{Inspector: readiness.Inspector{
-		Executables: readinessexecutable.Program{}, ProxyImage: approvalcanonical.ProxyImage,
+		AllowVersion3: command == "doctor" || command == "approve",
+		Sources:       credentialSources,
+		Executables:   readinessexecutable.Program{}, ProxyImage: approvalcanonical.ProxyImage,
 		Checkout: checkout, Policy: policyyaml.Source{Files: disk.Files{OpenRoot: checkout.OpenRoot}}, Names: policyidna.Names{},
 		Files: manifestdisk.Files{OpenRoot: checkout.OpenRoot}, Parser: jsonc.Parser{}, References: reference.References{}, Engine: docker.Engine{},
 		Digests: readinessreference.Digests{},
@@ -328,7 +335,8 @@ func doctorPolicies() inspection.Policies {
 func credentialInspection(input readinessport.CredentialInput) (inspection.Policies, inspection.Credentials) {
 	pin := &readinessdisk.Checkout{}
 	policies := inspection.Policies{Source: policyyaml.Source{Files: disk.Files{OpenRoot: pin.OpenRoot}}, Names: policyidna.Names{}}
-	return policies, inspection.Credentials{FS: &readinessdisk.CredentialFiles{}, Input: input, Account: &approvalhost.Process{}, Checkout: pin}
+	observer := readinesssource.Credentials{FS: &readinessdisk.CredentialFiles{}, Input: input, Account: accountLookup, Checkout: pin}
+	return policies, inspection.Credentials{Input: input, Checkout: pin, Observer: observer}
 }
 
 // Only cmd binds the session ownership validator to the approval engine's

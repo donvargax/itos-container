@@ -38,7 +38,7 @@ func credentialBoundaryReviewContract(t Reporter, observe func(*CredentialFiles,
 				// The visible state is on another device; its hidden backing
 				// subtree is still reserved and aliases the checkout.
 				for i := range f.MountsText {
-					f.MountsText[i] += "3 1 0:3 / " + state + " rw - tmpfs tmpfs rw\n"
+					f.MountsText[i] += "3 1 0:3 / " + state + " rw - ext4 ext4 rw\n"
 				}
 				n = f.Nodes[state]
 				n.MountID, n.Device = 3, 3
@@ -48,7 +48,7 @@ func credentialBoundaryReviewContract(t Reporter, observe func(*CredentialFiles,
 			}
 			if layout != "identity" {
 				for i := range f.MountsText {
-					f.MountsText[i] += "2 1 0:" + device + " " + root + " " + point + " rw - tmpfs tmpfs rw\n"
+					f.MountsText[i] += "2 1 0:" + device + " " + root + " " + point + " rw - ext4 ext4 rw\n"
 				}
 				for path, node := range f.Nodes {
 					if path == point || strings.HasPrefix(path, point+"/") {

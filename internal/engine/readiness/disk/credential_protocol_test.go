@@ -103,18 +103,18 @@ func TestCredentialMountEvidenceValidation(t *testing.T) {
 	// mountinfo is not held to PATH_MAX, unlike a descriptor's pathname.
 	for _, size := range []int{4096, 4097} {
 		path := "/" + strings.Repeat("a", size-1)
-		_, ok := ParseCredentialMounts([]byte("1 0 0:1 " + path + " / rw - tmpfs tmpfs rw\n"))
+		_, ok := ParseCredentialMounts([]byte("1 0 0:1 " + path + " / rw - ext4 ext4 rw\n"))
 		if ok != (size == 4096) {
 			t.Fatalf("mount path length %d accepted=%v", size, ok)
 		}
-		rows, ok := ParseCredentialMounts([]byte("1 0 0:1 / " + path + " rw - tmpfs tmpfs rw\n"))
+		rows, ok := ParseCredentialMounts([]byte("1 0 0:1 / " + path + " rw - ext4 ext4 rw\n"))
 		if ok != (size == 4096) || ok && (len(rows) != 1 || rows[0].Point != path || rows[0].Unprojectable) {
 			t.Fatalf("mountpoint length %d accepted=%v: %d rows", size, ok, len(rows))
 		}
 	}
 	// makedev(3): the low 8 minor bits, 12 major bits from bit 8, the remaining
 	// minor bits from bit 20 and the remaining major bits from bit 32.
-	rows, ok = ParseCredentialMounts([]byte("1 0 4097:258 / / rw - tmpfs tmpfs rw\n"))
+	rows, ok = ParseCredentialMounts([]byte("1 0 4097:258 / / rw - ext4 ext4 rw\n"))
 	if want := uint64(2 | 1<<8 | 1<<20 | 1<<44); !ok || len(rows) != 1 || rows[0].Device != want {
 		t.Fatalf("wide device number: %#v %v, want %d", rows, ok, want)
 	}
@@ -193,7 +193,7 @@ func TestCredentialNonPathMountRoots(t *testing.T) {
 		t.Skip("kernel-format parser is Linux-specific")
 	}
 	for _, root := range []string{"net:[4026537384]", "mnt:[4026537385]", "/replaced//deleted", "relative"} {
-		data := "1 0 0:1 / / rw - tmpfs tmpfs rw\n2 1 0:4 " + root + " /run/netns/test rw - nsfs nsfs rw\n"
+		data := "1 0 0:1 / / rw - ext4 ext4 rw\n2 1 0:4 " + root + " /run/netns/test rw - nsfs nsfs rw\n"
 		rows, ok := ParseCredentialMounts([]byte(data))
 		if !ok || len(rows) != 2 || rows[0].Unprojectable || !rows[1].Unprojectable || rows[1].Root != root || rows[1].Point != "/run/netns/test" || rows[1].ID != 2 {
 			t.Fatalf("lost unprojectable mount row for %q: %#v %v", root, rows, ok)
