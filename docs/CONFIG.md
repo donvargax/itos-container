@@ -659,3 +659,20 @@ Format policy is not loader compliance. Implement each required behaviour with
 black-box scenarios and red-first step definitions; use domain-owned ports and fakes,
 and run real-engine scenarios only in CI. The policy slice
 supplies no runtime isolation evidence.
+
+## Harness home request
+
+Policy versions 1, 2 and 3 accept optional `home: {storage: volume}`. The object
+is closed and `storage` is required; null, tmpfs, host paths, names and driver
+options are refused. Omitting `home` preserves the earlier policy and approval
+bytes. File-only doctor reports only the normalized request, without inspecting
+host state or contacting an engine.
+
+Doctor and approve bind a private volume at `/home/itos`, mode `0700`, owned by
+the approved host UID/GID, with project lifetime. The effective profile gains
+`-home` before `-v1`, including credential profiles. Adding or removing this
+request changes the fingerprint and requires a new approval. Review explains
+retention after exit/stop, checkout scope and terminal-consented reset/deletion;
+it never allocates storage. This request grants neither networking nor credentials
+and does not lift version-3 run restrictions. Runtime support is being implemented
+under [slice-34's decision](decisions/0030-persistent-harness-home.md).

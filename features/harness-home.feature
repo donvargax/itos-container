@@ -248,7 +248,7 @@ Feature: An approved persistent home for one checkout's harness
   #   completion publication. No reset/deletion changes sandbox approval or grants.
   #
   # Architecture decision accompanies this specification, not later implementation:
-  # docs/decisions/0029-persistent-harness-home.md updates the named arc42 sections
+  # docs/decisions/0030-persistent-harness-home.md updates the named arc42 sections
   # now, with all home behavior explicitly proposed and unproven.
   # Extend shared internal/engine/session domain/port/disk/docker responsibilities
   # for home allocation, binding, claims and consented retirement; policy and
@@ -295,7 +295,7 @@ Feature: An approved persistent home for one checkout's harness
   # baseline failures below are source-based predictions, not executed red evidence.
 
   # Policy and approval. All rows fail first because home is currently unknown.
-  @wip @slice-34 @ID-HOME-01
+  @slice-34 @ID-HOME-01
   Scenario Outline: Policy accepts only the explicit volume home request
     Given a home policy fixture using version <version> and no credential grants
     When file-only doctor inspects an omitted home, a volume home and the malformed home requests
@@ -315,7 +315,7 @@ Feature: An approved persistent home for one checkout's harness
   # /home/source. Duplicate home/storage keys keep the parser's existing rule.
 
   # Expected red is the requested-home review assertion, not a missing prompt.
-  @wip @slice-34 @ID-HOME-02 @local-engine-fixture
+  @slice-34 @ID-HOME-02 @local-engine-fixture
   Scenario: Review binds home persistence without creating storage
     Given a home approval fixture with an independently seeded legacy approval and a requested volume home
     When ordinary doctor and terminal approve with consent inspect the requested home
