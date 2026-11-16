@@ -108,9 +108,9 @@ type CredentialStager interface {
 
 func (r Record) ValidCredentials(b Binding) bool {
 	if r.Schema != 4 {
-		return r.Credentials == (CredentialStaging{}) && (b.Credentials == (CredentialKinds{}) || r.Stage == "reserved" || r.Stage == "cancelled")
+		return r.Credentials == (CredentialStaging{}) && (b.StagingKinds == (CredentialKinds{}) || r.Stage == "reserved" || r.Stage == "cancelled")
 	}
-	return r.CredentialShape() && r.Credentials.Kinds == b.Credentials
+	return r.CredentialShape() && r.Credentials.Kinds == b.StagingKinds
 }
 func (r Record) credentialTransition(n Record) bool {
 	a, b := r.Credentials, n.Credentials

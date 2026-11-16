@@ -5,12 +5,16 @@ import "github.com/donvargax/itos-container/internal/engine/policy/port"
 
 // Files supplies policy bytes or a configured read failure.
 type Files struct {
-	Data    []byte
-	Failure port.Failure
+	Data      []byte
+	Failure   port.Failure
+	ReadCount *int
 }
 
 // Read returns independent bytes, or only the configured failure.
 func (f Files) Read() ([]byte, port.Failure) {
+	if f.ReadCount != nil {
+		*f.ReadCount++
+	}
 	if f.Failure != port.None {
 		return nil, f.Failure
 	}

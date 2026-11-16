@@ -211,6 +211,7 @@ func (w *world) probeAssembly(source, suffix string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, "go", probeBuildArgs(target, covered)...)
+		cmd.WaitDelay = time.Second
 		cmd.Dir, cmd.Env = source, setEnv(sessionChildEnvironment(os.Environ()), "CGO_ENABLED", "0")
 		data, err := cmd.CombinedOutput()
 		if err != nil {

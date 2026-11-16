@@ -57,7 +57,7 @@ func credentialCall(ctx context.Context, i port.Intent, name string, fn func(con
 	return r.failure
 }
 func (s Runner) prepareCredentials(ctx context.Context, i port.Intent) port.Outcome {
-	kinds := i.Binding().Credentials
+	kinds := i.Binding().StagingKinds
 	if kinds == (port.CredentialKinds{}) {
 		if s.Sources != nil {
 			return port.CredentialRefused

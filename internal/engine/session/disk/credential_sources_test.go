@@ -47,12 +47,12 @@ func checkedSourceFixture() (*CheckedSources, *rf.CredentialFiles, *credentialSo
 	fs.MountsText = append(fs.MountsText, fs.MountsText...)
 	fs.MountsText = append(fs.MountsText, fs.MountsText...)
 	fs.Parser = func([]byte) ([]rp.CredentialMount, bool) {
-		return []rp.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/"}}, true
+		return []rp.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"}}, true
 	}
 	handles := &credentialSourceHandles{CredentialFS: fs, live: map[rp.CredentialHandle]bool{}}
 	sources := &CheckedSources{
 		FS:     credentialSourceReadPaths{handles, true},
-		Input:  rp.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000},
+		Input:  rp.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000, PolicyDevice: "1", PolicyInode: "2"},
 		Grants: []policy.Credential{{Kind: "claude-token", Source: "/vault/token"}},
 	}
 	return sources, fs, handles
@@ -141,7 +141,7 @@ func testCredentialCheckedSources(t *testing.T, kinds port.CredentialKinds) {
 	fs.MountsText = append(fs.MountsText, fs.MountsText...)
 	fs.MountsText = append(fs.MountsText, fs.MountsText...)
 	fs.Parser = func([]byte) ([]rp.CredentialMount, bool) {
-		return []rp.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/"}}, true
+		return []rp.CredentialMount{{ID: 1, Device: 1, Root: "/", Point: "/", Filesystem: "ext4"}}, true
 	}
 	var grants []policy.Credential
 	if kinds.Claude {
@@ -150,7 +150,7 @@ func testCredentialCheckedSources(t *testing.T, kinds port.CredentialKinds) {
 	if kinds.GitHub {
 		grants = append(grants, policy.Credential{Kind: "github-token", Source: "/vault/github"})
 	}
-	sources := &CheckedSources{FS: sourceMetadata{fs}, Input: rp.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000}, Grants: grants}
+	sources := &CheckedSources{FS: sourceMetadata{fs}, Input: rp.CredentialInput{Root: "/checkout", State: "/state", AccountState: "/state", OS: "linux", Architecture: "amd64", UID: 1000, PolicyDevice: "1", PolicyInode: "2"}, Grants: grants}
 	defer sources.Close()
 	if sources.Kinds() != kinds {
 		t.Fatal("checked sources changed the requested kinds")

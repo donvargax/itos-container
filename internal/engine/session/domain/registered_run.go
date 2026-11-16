@@ -362,7 +362,7 @@ func createRegistered(ctx context.Context, entry port.Session, c port.RunConnect
 			if failure := credentialPreparation[0](ctx, i); failure != "" {
 				return "", failure
 			}
-		} else if i.Binding().Credentials != (port.CredentialKinds{}) {
+		} else if i.Binding().StagingKinds != (port.CredentialKinds{}) {
 			return "", port.CredentialRefused
 		}
 		r = i.Record()

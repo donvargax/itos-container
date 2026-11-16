@@ -459,7 +459,7 @@ func TestCredentialRecoveryInterruptedPublication(t *testing.T) {
 	for _, disk := range []bool{false, true} {
 		t.Run(map[bool]string{false: "memory", true: "disk"}[disk], func(t *testing.T) {
 			b, memory, _ := f.Fixture()
-			b.Credentials = port.CredentialKinds{Claude: true}
+			b.StagingKinds = port.CredentialKinds{Claude: true}
 			memory.Codec.(*f.Codec).Value = b
 			before := f.RunIntent(b)
 			before.Stage = "reserved"
@@ -493,7 +493,7 @@ func TestCredentialRecoveryInterruptedPublication(t *testing.T) {
 			}
 			next := before
 			next.Schema = 4
-			next.Credentials = f.CredentialIntent(b.Credentials).Credentials
+			next.Credentials = f.CredentialIntent(b.StagingKinds).Credentials
 			fault(true)
 			fail = i.Save(next)
 			i.Close()

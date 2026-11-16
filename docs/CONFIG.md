@@ -571,8 +571,11 @@ A source, checkout or state location on NFS, an NFS home included, reports
 has a device of its own and reports `/` as its root, so a second mount of a
 protected subdirectory matches its tree in neither position nor identity. A source,
 checkout or state location on 9p, such as a virtual machine's shared host folder,
-reports `credential.filesystem`; unrelated 9p mounts do not. Other filesystem
-types are judged from their mount rows.
+reports `credential.filesystem`; unrelated 9p mounts do not. Under q-64 the shared observer
+accepts exactly `ext4`, `btrfs` and `xfs`; every other type is refused by absence from that
+allowlist. This includes source/ancestor descriptors and mount rows at, below or covering
+checkout or either state root, in both observations. The fix names all three accepted
+types. Unrelated rows remain harmless, and mapping and known-location precedence remain.
 
 Source problems are located at `/credentials/<written-index>/source`. Missing or
 unavailable metadata uses exit 3; symlink, ancestor, location, regular, owner, permissions,
@@ -594,10 +597,56 @@ These observations neither grant access nor establish continuous protection from
 host changes. [Decision 0027](decisions/0027-credential-source-inspection.md) defines the
 race argument and limits. The disk adapter uses `github.com/moby/sys/mountinfo` v0.7.2
 under Apache-2.0, with its upstream license retained in the module distribution.
-Ordinary doctor, approve and run still refuse valid version 3 with `policy.version`,
-exit 2, before manifest/source/engine inspection or state publication. Their fix points
-to policy-only and credentials-only inspection. Slice-30 owns approval integration;
-this mode grants no delivery and settles none of T-47's live-account questions.
+Ordinary doctor and approve now consume this same observer before and after engine
+inspection and after consent, including remembered approvals. Each observation compares
+the policy pin's root device and inode with the independent walk's checkout node. Both
+must match; descriptor devices are compared, not mountinfo devices. A mismatch is
+`doctor.checkout.changed` (1) before consent and `approve.changed` (1) after it.
+
+The effective root and selected state root have an inclusive 4095-byte UTF-8 bound in
+ordinary doctor/approve even without grants. The root is checked before policy pin/open;
+state after valid policy, before source or boundary observation. A 4096-byte root reports
+`doctor.checkout.root`, state reports `approval.state.location`, both exit 2 with message
+and fix naming the boundary and the 4095-byte limit. State length includes the appended
+`/itos-container`. Credentials-only retains its no-grant no-scan result. Short relative or invalid UTF-8
+state selections without grants retain the existing store/control refusal order.
+
+### Approved credential settings
+
+Schema 1 gains an optional top-level `credentials` array of closed `{kind,source,target}`
+objects, sorted by kind. Its targets are exactly
+`/run/itos-container/credentials/claude-token` and
+`/run/itos-container/credentials/github-token`. A nonempty set selects
+`offline-credentials-v1` or `allowlist-credentials-v1`, with policy version 3. Canonical
+settings bind paths and kinds, never source bytes, hashes, inode, size, permissions or
+timestamps. Reordering grants or rotating a still-valid source at the same path leaves
+the fingerprint unchanged; metadata is still revalidated.
+
+Adding, removing or repointing a grant changes approval. Differences treat the whole
+array as `/credentials`, with absence represented by null; first/last grant changes
+also affect `/profile`. Removing the last grant restores the current request's offline
+fingerprint route when its other settings permit it. No grants omits the member entirely,
+retaining `offline-v1`/`allowlist-v1` and existing version-1/2 bytes. A no-grant version-3
+policy uses those profiles but retains declared version 3, so a version-only edit changes
+exactly `/policy/version`.
+
+Stored records remain closed, canonical and independently hash-verified. Invalid grant
+kinds, paths, targets, ordering, duplicates and extra fields are `approval.state.invalid`.
+A valid historical target with one filename under `/run/itos-container/credentials/` is
+readable history but differs from the current target and requires fresh approval.
+Status projects grants only from the validated protected snapshot, never current policy
+or approval. No-grant session JSON omits `credentials`.
+
+Any current credential grant requires terminal stdin and stdout and plain output, and
+refuses every `--fingerprint` option. The review explains provider permissions, prospective
+memory-backed copying, lack of workload redaction, allowed-host exfiltration and possible
+credential bytes in hostname refusal logs. An unsandboxed host agent can fake a terminal;
+approval records what, not who. See [CLI](CLI.md) and [security](security.md).
+
+Run still refuses every valid version-3 request with `policy.version`, exit 2, before
+manifest/source/engine/state access, even with approval or no grants. Delivery and
+live-account questions remain with their owning increments; these records grant no
+implemented delivery.
 
 ## Remaining specification work
 

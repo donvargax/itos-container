@@ -249,7 +249,7 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 		return result, nil, nil
 	}
 	defer intent.Close()
-	if intent.Binding().Egress != (port.EgressGrant{}) || intent.Binding().Credentials != (port.CredentialKinds{}) {
+	if intent.Binding().Egress != (port.EgressGrant{}) || intent.Binding().StagingKinds != (port.CredentialKinds{}) {
 		result.Outcome = port.Refused
 		return result, nil, nil
 	}

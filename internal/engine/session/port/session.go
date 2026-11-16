@@ -56,7 +56,12 @@ type Record struct {
 }
 
 type Binding struct {
-	Credentials                                           CredentialKinds
+	// StagingKinds selects delivery independently of the approved grant metadata.
+	StagingKinds CredentialKinds
+	// Schema-1 credential grants have at most two known kinds. Fixed storage
+	// keeps bindings independently owned and comparable during revalidation.
+	Credentials                                           [2]approval.CredentialGrant
+	CredentialNetwork                                     bool
 	Egress                                                EgressGrant
 	Frozen                                                approval.Frozen
 	Checkout                                              readiness.CheckoutIdentity

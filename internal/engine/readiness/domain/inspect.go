@@ -15,16 +15,19 @@ import (
 // Inspector's file readers must use the checkout pin established by Pin.
 // Assembly binds that capability; file-only inspection does not depend on it.
 type Inspector struct {
-	Executables port.Executables
-	ProxyImage  string
-	Checkout    port.Checkout
-	Policy      policyport.Source
-	Names       policyport.Names
-	Files       manifestport.Files
-	Parser      manifestport.Parser
-	References  manifestport.References
-	Digests     port.Digests
-	Engine      port.Engine
+	// AllowVersion3 permits inspection/approval only; the zero value keeps run gated.
+	AllowVersion3 bool
+	Sources       port.CredentialObserver
+	Executables   port.Executables
+	ProxyImage    string
+	Checkout      port.Checkout
+	Policy        policyport.Source
+	Names         policyport.Names
+	Files         manifestport.Files
+	Parser        manifestport.Parser
+	References    manifestport.References
+	Digests       port.Digests
+	Engine        port.Engine
 }
 
 // Inspect stops at unsafe prerequisites and retains only facts actually read.
@@ -34,19 +37,38 @@ func (i Inspector) Inspect(input port.Input) port.Result { return i.InspectBefor
 // every subsequent engine observation. A refusal never opens an engine session.
 func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result) bool) port.Result {
 	result := port.Result{}
+	if i.AllowVersion3 && len(input.Root) > 4095 {
+		result.Issues = []port.Issue{{Kind: port.CheckoutRoot, Subject: input.Root}}
+		return result
+	}
 	if failure := i.Checkout.Pin(input.Root); failure != port.None {
 		result.Issues = []port.Issue{{Kind: failure, Subject: input.Root}}
 		return result
 	}
 	defer i.Checkout.Close()
 	p := policy.Inspect(i.Policy, i.Names)
-	if p.Policy != nil && p.Policy.Version != 1 && p.Policy.Version != 2 {
-		// Credential-bearing version 3 belongs to its later readiness increment.
+	if p.Policy != nil && p.Policy.Version != 1 && p.Policy.Version != 2 && (p.Policy.Version != 3 || !i.AllowVersion3) {
+		// Inspection and approval opt into version 3; run keeps its credential gate.
 		p = policyport.Result{Issues: []policyport.Issue{{Kind: policyport.Version, Path: []string{"version"}, Version: p.Policy.Version}}}
 	}
 	result.Policy = &p
 	if p.Policy == nil || len(p.Issues) != 0 {
 		return result
+	}
+	if i.AllowVersion3 {
+		observation := port.CredentialResult{Issues: []port.CredentialIssue{{Rule: "state.unavailable", Index: -1}}}
+		if i.Sources != nil {
+			observation = i.Sources.Boundary()
+		}
+		result.Credentials = &observation
+		if len(observation.Issues) > 0 {
+			return result
+		}
+		observation = i.Sources.Inspect(p.Policy.Credentials)
+		result.Credentials = &observation
+		if len(observation.Issues) > 0 {
+			return result
+		}
 	}
 	m := manifest.Inspect(p.Policy.Manifest, i.Files, i.Parser, i.References)
 	result.Manifest = &m
@@ -77,6 +99,13 @@ func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result)
 	}
 	defer session.Close()
 	i.inspectEngine(&result, session)
+	if i.AllowVersion3 {
+		observation := i.Sources.Inspect(p.Policy.Credentials)
+		result.Credentials = &observation
+		if len(observation.Issues) > 0 {
+			return result
+		}
+	}
 	if !i.Checkout.Unchanged() {
 		result.Issues = append(result.Issues, port.Issue{Kind: port.CheckoutChanged, Subject: checkout.Root})
 	}

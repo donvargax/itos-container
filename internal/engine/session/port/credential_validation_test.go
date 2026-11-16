@@ -108,12 +108,12 @@ func TestCredentialRecordBinding(t *testing.T) {
 	for _, selected := range kinds[1:] {
 		r := f.CredentialIntent(selected)
 		for _, granted := range kinds {
-			if got := r.ValidCredentials(port.Binding{Credentials: granted}); got != (selected == granted) {
+			if got := r.ValidCredentials(port.Binding{StagingKinds: granted}); got != (selected == granted) {
 				t.Fatal("credential record did not require the exact frozen grants")
 			}
 		}
 		r.Credentials.Directory = "/foreign"
-		if r.ValidCredentials(port.Binding{Credentials: selected}) {
+		if r.ValidCredentials(port.Binding{StagingKinds: selected}) {
 			t.Fatal("matching grants admitted malformed staging")
 		}
 	}
@@ -124,7 +124,7 @@ func TestCredentialRecordBinding(t *testing.T) {
 				t.Fatal("legacy no-grant record refused")
 			}
 			want := stage == "reserved" || stage == "cancelled"
-			if got := r.ValidCredentials(port.Binding{Credentials: kinds[1]}); got != want {
+			if got := r.ValidCredentials(port.Binding{StagingKinds: kinds[1]}); got != want {
 				t.Fatal("legacy record admitted grants beyond preparation or cancellation", schema, stage)
 			}
 			r.Credentials = f.CredentialIntent(kinds[1]).Credentials

@@ -8,7 +8,7 @@ import (
 func CredentialRecoveryStoreContract(t Reporter, create func(port.Binding, port.Record) port.Store) {
 	t.Helper()
 	b, _, _ := Fixture()
-	b.Credentials = port.CredentialKinds{Claude: true, GitHub: true}
+	b.StagingKinds = port.CredentialKinds{Claude: true, GitHub: true}
 	r := RunIntent(b)
 	r.Stage = "reserved"
 	store := create(b, r)
@@ -16,7 +16,7 @@ func CredentialRecoveryStoreContract(t Reporter, create func(port.Binding, port.
 	ref := port.Reference(r.Project, r.NameToken())
 	steps := []port.Record{}
 	r.Schema = 4
-	r.Credentials = CredentialIntent(b.Credentials).Credentials
+	r.Credentials = CredentialIntent(b.StagingKinds).Credentials
 	steps = append(steps, r)
 	r.Credentials.Device = "1"
 	r.Credentials.Inode = "2"

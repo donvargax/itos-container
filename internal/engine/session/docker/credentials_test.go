@@ -163,7 +163,7 @@ func credentialSDKFixture(t *testing.T, tokens ...[]byte) f.CredentialEngineFixt
 	r.Credentials.Device = "1"
 	r.Credentials.Inode = "2"
 	r.Credentials.Files = [2]string{"1:3", "1:4"}
-	b.Credentials = r.Credentials.Kinds
+	b.StagingKinds = r.Credentials.Kinds
 	return f.CredentialEngineFixture{Argv: func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), requestedArgv...) }, Defect: func(f string) { mu.Lock(); defer mu.Unlock(); defect = f }, FailRemoval: func(f bool) { mu.Lock(); defer mu.Unlock(); refuseRemoval = f }, Counts: func() (int, int) { mu.Lock(); defer mu.Unlock(); return creates, starts }, Engine: engine, Binding: b, Record: r, Mounts: func() []port.CredentialMount {
 		mu.Lock()
 		defer mu.Unlock()
@@ -184,7 +184,7 @@ func credentialMemoryFixture() f.CredentialEngineFixture {
 	r.Credentials.Device = "1"
 	r.Credentials.Inode = "2"
 	r.Credentials.Files = [2]string{"1:3", "1:4"}
-	b.Credentials = r.Credentials.Kinds
+	b.StagingKinds = r.Credentials.Kinds
 	engine := &f.RunEngine{Engine: e, StartFailure: port.ExecutionFailed, CredentialPaths: []byte("synthetic-credential\n")}
 	return f.CredentialEngineFixture{Argv: func() []string { return append([]string(nil), engine.Argv...) }, Defect: func(fault string) {
 		o := e.Resources[e.CreateID]
@@ -436,7 +436,7 @@ func credentialKindsContract(t *testing.T, create func() f.CredentialEngineFixtu
 	for _, kinds := range []port.CredentialKinds{{Claude: true}, {GitHub: true}, {Claude: true, GitHub: true}, {}} {
 		f.CredentialMountContract(t, func() f.CredentialEngineFixture {
 			fixture := create()
-			fixture.Binding.Credentials = kinds
+			fixture.Binding.StagingKinds = kinds
 			if kinds == (port.CredentialKinds{}) {
 				fixture.Record = f.RunIntent(fixture.Binding)
 			} else {

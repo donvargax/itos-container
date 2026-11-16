@@ -233,7 +233,7 @@ func TestCredentialLatePreparedIntentReleasesAuthority(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				runner, frozen, registry, engine, _ := registeredLifecycleFixture()
 				fixture := f.MemoryCredentialFixture(map[string][]byte{"claude-token": []byte("synthetic\n")})
-				registry.Store.Codec.(*f.Codec).Value.Credentials = fixture.Sources.Kinds()
+				registry.Store.Codec.(*f.Codec).Value.StagingKinds = fixture.Sources.Kinds()
 				registry.Store.Fault = fault
 				runner.Sources, runner.Credentials, runner.StagingEntropy = fixture.Sources, fixture.Stager, credentialEntropy{}
 				release := make(chan struct{})
@@ -278,7 +278,7 @@ func TestCredentialRegisteredRunAndEgressCleanup(t *testing.T) {
 					codec.Value.Egress = port.EgressGrant{}
 				}
 				fixture := f.MemoryCredentialFixture(map[string][]byte{"claude-token": []byte("synthetic\n"), "github-token": []byte("synthetic-github\n")})
-				codec.Value.Credentials = fixture.Sources.Kinds()
+				codec.Value.StagingKinds = fixture.Sources.Kinds()
 				runner.Sources, runner.Credentials, runner.StagingEntropy = fixture.Sources, fixture.Stager, credentialEntropy{}
 				engine.CredentialStaging = fixture.Stager.(*f.CredentialStager)
 				if lostAck {
@@ -315,7 +315,7 @@ func TestCredentialRegisteredRunTerminationGrace(t *testing.T) {
 		runner, durable, registry, engine, _ := freshEgressRunner()
 		fixture := f.MemoryCredentialFixture(map[string][]byte{"claude-token": []byte("synthetic\n")})
 		codec := registry.Store.Codec.(*f.Codec)
-		codec.Value.Egress, codec.Value.Credentials = port.EgressGrant{}, fixture.Sources.Kinds()
+		codec.Value.Egress, codec.Value.StagingKinds = port.EgressGrant{}, fixture.Sources.Kinds()
 		runner.Sources, runner.Credentials, runner.StagingEntropy = fixture.Sources, fixture.Stager, credentialEntropy{}
 		engine.CredentialStaging = fixture.Stager.(*f.CredentialStager)
 		engine.WaitUntilCancel, engine.IgnoreSignal = true, true
@@ -343,7 +343,7 @@ func TestCredentialRegisteredRunTerminationGrace(t *testing.T) {
 }
 func TestCredentialUnregisteredRunRefusesBeforeEngine(t *testing.T) {
 	b, store, e := f.Fixture()
-	b.Credentials = port.CredentialKinds{Claude: true}
+	b.StagingKinds = port.CredentialKinds{Claude: true}
 	store.Codec.(*f.Codec).Value = b
 	engine := &f.RunEngine{Engine: e}
 	sources := &f.CredentialSourceFixture{}
@@ -365,7 +365,7 @@ func TestCredentialControllerOutputAbsence(t *testing.T) {
 	runner, d, registry, engine, _ := freshEgressRunner()
 	registry.Store.Codec.(*f.Codec).Value.Egress = port.EgressGrant{}
 	fixture := f.MemoryCredentialFixture(map[string][]byte{"claude-token": marker})
-	registry.Store.Codec.(*f.Codec).Value.Credentials = fixture.Sources.Kinds()
+	registry.Store.Codec.(*f.Codec).Value.StagingKinds = fixture.Sources.Kinds()
 	runner.Sources, runner.Credentials, runner.StagingEntropy = fixture.Sources, fixture.Stager, credentialEntropy{}
 	engine.CredentialStaging = fixture.Stager.(*f.CredentialStager)
 	engine.AfterStart = func() {
@@ -388,7 +388,7 @@ func TestCredentialPrimaryFailureSurvivesCleanupFailure(t *testing.T) {
 	runner, d, registry, engine, _ := freshEgressRunner()
 	registry.Store.Codec.(*f.Codec).Value.Egress = port.EgressGrant{}
 	fixture := f.MemoryCredentialFixture(map[string][]byte{"claude-token": []byte("synthetic\n")})
-	registry.Store.Codec.(*f.Codec).Value.Credentials = fixture.Sources.Kinds()
+	registry.Store.Codec.(*f.Codec).Value.StagingKinds = fixture.Sources.Kinds()
 	stager := fixture.Stager.(*f.CredentialStager)
 	stager.Fault = "unlink"
 	runner.Credentials, runner.Sources, runner.StagingEntropy = stager, fixture.Sources, credentialEntropy{}
