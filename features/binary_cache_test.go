@@ -14,6 +14,10 @@ import (
 // successful builds are immutable and shared outside the scenario checkouts.
 var featureBinaryBuilds sync.Map
 
+// TestMain owns this private directory for the entire test process. Standalone
+// fixtures may share immutable executables but never state or coverage output.
+var standaloneProbeDir string
+
 func featureBinary(path string, build func(string) error) (string, error) {
 	for {
 		done := make(chan struct{})
