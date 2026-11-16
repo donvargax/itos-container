@@ -16,6 +16,33 @@ import (
 )
 
 func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminalInvocation) {
+	sc.Step(`^the fixture runs with (stdin|stdout) addressed through the controlling-terminal alias$`, func(endpoint string) error {
+		f := *fixture
+		f.local, f.alias = true, endpoint
+		w.doctor.engine.offline.terminal = newTerminalEngine()
+		return f.invoke("run --tty -- fixture-workload", "0")
+	})
+	sc.Step(`^the fixture delivers a final raw output frame after workload exit during owned removal$`, func() error {
+		f := *fixture
+		f.local = true
+		e := newTerminalEngine()
+		e.tailStart, e.tailRead = make(chan struct{}), make(chan struct{})
+		w.doctor.engine.offline.terminal = e
+		read := false
+		f.action = func(*exec.Cmd) {
+			if !read && strings.Contains(string(f.payload), "slice-37 tail") {
+				read = true
+				close(e.tailRead)
+			}
+		}
+		return f.invoke("run --tty -- fixture-workload", "0")
+	})
+	sc.Step(`^terminal stdout contains the exact initial and final raw frames$`, func() error {
+		if (*fixture).timedOut || w.stdout != terminalPayload+terminalErrPayload+terminalTailPayload {
+			return fmt.Errorf("final raw frame differs: %s", w.report())
+		}
+		return nil
+	})
 	sc.Step(`^a local terminal-run fixture with (shared|distinct) terminal stdin and stdout$`, func(layout string) error {
 		f, err := w.terminalInvocationFixture("terminal", "terminal")
 		*fixture = f

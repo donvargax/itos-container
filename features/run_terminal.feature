@@ -533,3 +533,42 @@ Feature: An explicitly selected terminal for an owned foreground run
       | owned removal fails             | 17      | 17     |
       | engine becomes unreachable      | unknown | 75     |
       | inspected ownership changes     | unknown | 75     |
+
+  # Regression probes use only disposable host PTYs and the local recorder.
+  @slice-37 @ID-RUNTTY-17 @wip @linux @local-engine-fixture
+  Scenario Outline: Controlling-terminal aliases restore one shared terminal exactly
+    Given a local terminal-run fixture with shared terminal stdin and stdout
+    When the fixture runs with <endpoint> addressed through the controlling-terminal alias
+    Then terminal run returns the observed exit 0 with exact restoration of each host terminal's own saved state
+    And the terminal invocation uses raw attachment output on stdout and separate controller diagnostics on stderr
+    And both caller terminal handles remain usable and only owned resources are confirmed absent
+
+    Examples:
+      | endpoint |
+      | stdin    |
+      | stdout   |
+
+  @slice-37 @ID-RUNTTY-18 @wip @linux @local-engine-fixture
+  Scenario Outline: Final terminal output stays raw while owned cleanup proceeds
+    Given a local terminal-run fixture with <terminals> terminal stdin and stdout
+    When the fixture delivers a final raw output frame after workload exit during owned removal
+    Then terminal stdout contains the exact initial and final raw frames
+    And terminal run returns the observed exit 0 with exact restoration of each host terminal's own saved state
+    And both caller terminal handles remain usable and only owned resources are confirmed absent
+
+    Examples:
+      | terminals |
+      | shared    |
+      | distinct  |
+
+  @slice-37 @ID-RUNTTY-19 @wip @linux
+  Scenario Outline: Restoration diagnostics cannot extend the original teardown deadline
+    Given a terminal-run contract fixture with blocked restoration diagnostics and authoritative exit "<child>"
+    When terminal run reaches the fault and finishes through the applicable local backends alongside a healthy control
+    Then terminal run returns <result> within the remaining original teardown budget despite blocked restoration diagnostics
+    And the healthy terminal control returns zero restores exact settings and confirms owned cleanup
+
+    Examples:
+      | child | result |
+      | 0     | 75     |
+      | 17    | 17     |

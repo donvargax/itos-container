@@ -35,6 +35,7 @@ type terminalInvocation struct {
 	action            func(*exec.Cmd)
 	payload           []byte
 	contract          *terminalContract
+	alias             string
 }
 
 type terminalAttempt struct {
@@ -201,6 +202,10 @@ func (f *terminalInvocation) invoke(args, inherited string) error {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, words...)
 	cmd.Dir, cmd.Env = w.doctor.cwd, env
+	if f.alias != "" {
+		cmd.Env = setEnv(cmd.Env, "SLICE_37_TERMINAL_ALIAS", f.alias)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
+	}
 	for key, value := range map[string]string{"COLUMNS": "7", "LINES": "9", "TERM": "slice-37-misleading"} {
 		cmd.Env = setEnv(cmd.Env, key, value)
 	}

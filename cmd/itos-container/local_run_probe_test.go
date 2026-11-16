@@ -61,7 +61,20 @@ func TestLocalRunCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ui := &cli.UI{In: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Classify: runcommand.Classify}
+	in, out := os.Stdin, os.Stdout
+	if alias := os.Getenv("SLICE_37_TERMINAL_ALIAS"); alias != "" {
+		file, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = file.Close() }()
+		if alias == "stdin" {
+			in = file
+		} else {
+			out = file
+		}
+	}
+	ui := &cli.UI{In: in, Stdout: out, Stderr: os.Stderr, Classify: runcommand.Classify}
 	_, err = parser.Parse(runOptions(args))
 	if stopped >= 0 {
 		os.Exit(stopped)
@@ -77,7 +90,7 @@ func TestLocalRunCommand(t *testing.T) {
 	c.Run.Snapshots = disk.Snapshots{Store: service.Store.(disk.Store), Records: canonical.JSON{}}
 	c.Run.Runner, c.Run.Context = runner, ctx
 	c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
-	c.Run.Terminal = terminalnative.NewPair(os.Stdin, os.Stdout, runtime.GOOS)
+	c.Run.Terminal = terminalnative.NewPair(in, out, runtime.GOOS)
 	code := c.Run.Run(ui)
 	release()
 	os.Exit(code)

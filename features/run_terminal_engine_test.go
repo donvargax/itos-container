@@ -13,19 +13,22 @@ import (
 
 const terminalPayload = "slice-37 stdout\n\r\n\r\x01\x00\x00\x00\x00\x00\x00\x03raw\xff"
 const terminalErrPayload = "slice-37 stderr"
+const terminalTailPayload = "slice-37 tail\n\r\n\r\x01\x00tail"
 
 // The local recorder never executes a workload. Framing follows the actual
 // create request, so absent TTY selection cannot masquerade as a terminal.
 type terminalEngine struct {
-	fault    string
-	exit     int
-	hold     bool
-	release  chan struct{}
-	ready    chan struct{}
-	started  sync.Once
-	finished sync.Once
-	input    string
-	resizes  []string
+	fault               string
+	exit                int
+	hold                bool
+	release             chan struct{}
+	ready               chan struct{}
+	started             sync.Once
+	finished            sync.Once
+	input               string
+	resizes             []string
+	tailStart, tailRead chan struct{}
+	tailOnce            sync.Once
 }
 
 func newTerminalEngine() *terminalEngine {
@@ -93,6 +96,10 @@ func (f *terminalEngine) serve(a *localOfflineAPI, out http.ResponseWriter, r *h
 				}
 				<-f.release
 			}
+			if f.tailStart != nil {
+				<-f.tailStart
+				_, _ = io.WriteString(conn, terminalTailPayload)
+			}
 			_ = conn.(*net.UnixConn).CloseWrite()
 		}()
 		if f.fault == "start accepted but its reply times out" {
@@ -128,6 +135,14 @@ func (f *terminalEngine) serve(a *localOfflineAPI, out http.ResponseWriter, r *h
 		f.finish()
 		out.WriteHeader(204)
 		return true
+	case path == "/containers/"+id && r.Method == "DELETE" && f.tailStart != nil:
+		f.tailOnce.Do(func() { close(f.tailStart) })
+		a.mu.Unlock()
+		select {
+		case <-f.tailRead:
+		case <-r.Context().Done():
+		}
+		a.mu.Lock()
 	}
 	return false
 }

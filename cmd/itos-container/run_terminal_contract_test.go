@@ -150,6 +150,9 @@ func terminalContractCase(t *testing.T, backend, kind, fault, child string) term
 		t.Fatal(err)
 	}
 	ui := &cli.UI{Stdout: &out, Stderr: &diagnostic, Classify: runcommand.Classify}
+	if kind == "diagnostic" {
+		ui.Stderr = terminalHeldDiagnostic{&diagnostic, l.start.Add(41 * time.Second)}
+	}
 	if native != nil {
 		ui.Stdout = native.Output
 	}
@@ -176,9 +179,9 @@ func terminalContractCase(t *testing.T, backend, kind, fault, child string) term
 			report.Code = c.Run.Run(ui)
 		}
 	}
+	report.Elapsed = time.Since(l.start)
 	wait()
 	report.Diagnostic, report.Output = diagnostic.String(), out.String()
-	report.Elapsed = time.Since(l.start)
 	report.Ready, report.Fired, report.Initial = f.ready, f.fired, f.size
 	report.TTY = f.size == (tp.Dimensions{Columns: 113, Rows: 37})
 	report.InputRestored, report.OutputRestored = reflect.DeepEqual(inBefore, f.in.Snapshot()), reflect.DeepEqual(outBefore, f.out.Snapshot())
@@ -258,7 +261,22 @@ type terminalContractRunner struct {
 
 func (r terminalContractRunner) Run(ctx context.Context, frozen ap.Durable, argv []string, streams sp.Streams) sp.RunResult {
 	r.f.result = r.runner.Run(ctx, frozen, argv, streams)
+	if r.f.kind == "diagnostic" {
+		// Consume teardown time without replacing the runner's original deadline.
+		time.Sleep(time.Until(r.f.result.Deadline.Add(-5 * time.Second)))
+	}
 	return r.f.result
+}
+
+type terminalHeldDiagnostic struct {
+	output  *bytes.Buffer
+	release time.Time
+}
+
+func (w terminalHeldDiagnostic) Write(p []byte) (int, error) {
+	n, err := w.output.Write(p)
+	time.Sleep(time.Until(w.release))
+	return n, err
 }
 
 type terminalContractEngine struct{ f *terminalContractFixture }

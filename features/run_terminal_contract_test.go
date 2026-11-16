@@ -45,6 +45,15 @@ func (w *world) terminalContractSteps(sc *godog.ScenarioContext, bind func(*term
 	sc.Step(`^a terminal-run contract fixture with distinct terminal stdin and stdout$`, func() { setup("acquisition", "", "0") })
 	sc.Step(`^the fixture schedules "([^"]*)" after stdin enters raw mode$`, func(fault string) { f.fault = fault })
 	sc.Step(`^a terminal-run contract fixture with fault "([^"]*)" and authoritative exit "([^"]*)"$`, func(fault, child string) { setup("fault", fault, child) })
+	sc.Step(`^a terminal-run contract fixture with blocked restoration diagnostics and authoritative exit "([^"]*)"$`, func(child string) { setup("diagnostic", "saved terminal restoration fails", child) })
+	sc.Step(`^terminal run returns (\d+) within the remaining original teardown budget despite blocked restoration diagnostics$`, func(code int) error {
+		return f.each(false, func(r terminalContractObservation) error {
+			if !r.Ready || r.Code != code || r.Elapsed != 30*time.Second || !strings.Contains(r.Diagnostic, "run.terminal-restore") || r.Result["Cleanup"] != "cleanup-complete" {
+				return fmt.Errorf("blocked restoration diagnostic exceeded original teardown or lost result: %+v", r)
+			}
+			return nil
+		})
+	})
 	sc.Step(`^a terminal-run contract fixture with disconnect condition "([^"]*)" and authoritative exit "([^"]*)"$`, func(fault, child string) { setup("disconnect", fault, child) })
 	sc.Step(`^terminal run attempts acquisition then retries after clearing the fault through the applicable local backends$`, func() error { return f.invoke() })
 	sc.Step(`^terminal run reaches the fault and finishes through the applicable local backends alongside a healthy control$`, func() error { return f.invoke() })
