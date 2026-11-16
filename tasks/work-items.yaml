@@ -2121,8 +2121,8 @@ items:
   - id: T-55
     title: Each engine shard's warm-up sends the product's own create, timed beside the plain one
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-54]
     kind: task
   - id: T-56
