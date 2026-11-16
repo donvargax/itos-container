@@ -8,7 +8,7 @@ Feature: Review and remember credential grants without delivering them
   # docs/architecture.md (Slices), docs/decisions/0025-credentials-passed-in.md
   # and q-52. Read the dependency specs, not their older registry summaries:
   # slice-29 at 5fff7908139202e2adc0c0bb6261e61907decf76 supplies
-  # features/credentials-policy.feature and decision 0026-credential-source-inspection;
+  # features/credentials-policy.feature and decision 0027-credential-source-inspection;
   # slice-26 at 5d302ac225b153dfa4822ed50d5f7d784928c3f5 supplies
   # features/approval.feature and decision 0026-egress-allowlist-approval.
   # These are drafting baselines, not a request to reset either dependency.
@@ -63,6 +63,17 @@ Feature: Review and remember credential grants without delivering them
   # A change observed after the review uses existing approve.changed, exit 1.
   # A safe replacement/rotation at the same source path is not a settings change.
   # File-only and credentials-only scopes keep slice-29's distinct contracts.
+  # The filesystem choice is settled by q-64 (the person, 2026-11-15), confirmed
+  # by the coordinator on 2026-11-16 00:10 UTC. Replace the shared observer's named
+  # refusal list with an allowlist: accept exactly ext4, btrfs and xfs; every other
+  # filesystem type refuses with credential.filesystem, exit 3. NFS (nfs, nfs4)
+  # and 9p remain refused outright. Apply this in both mount observations to source
+  # and ancestor descriptors and rows at, below or covering checkout or either
+  # protected state root, including covered rows and absent state. Unrelated rows
+  # do not refuse an independent source; retain mapping and known-location
+  # precedence. The diagnostic's fix names ext4, btrfs and xfs. This shared rule
+  # also applies to credentials-only; file-only modes still do not inspect sources.
+  # The filesystem decision is no longer an implementation prerequisite to ask.
   #
   # Run keeps slice-29's early policy.version gate for ALL version 3 requests in
   # this increment, even without credentials. Preserve any slice-27 version-2 gate

@@ -68,17 +68,28 @@ such as a virtual machine's shared host folder, is therefore refused outright, a
 on NFS. The message becomes "Overlay or FUSE backing paths cannot be excluded
 from credential exposure, nor can paths on NFS or 9p".
 
-That amendment adds a name and leaves the rule a list of named types. It does not
-settle whether the rule should be one. The list has grown one review at a time,
-and the loop's triage of 2026-11-14 names further types claimed to share one of
-its two faults, a backing tree under two superblocks or a row root that is not the
-backing path: `cifs` and `smb3`, `ceph`, `virtiofs` and `ecryptfs`. None of them
-was checked against the kernel, and none is refused. The alternative accepts only
-named filesystems whose rows do place a file and refuses every other type. It
-refuses a source, checkout or state location on any type not yet named, where the
-list accepts every type nobody has examined. Triage routes that choice to the
-person, with the outright NFS and 9p refusals to confirm. Nothing admits a
-credential before slice-30, whose specification takes the answer as a precondition.
+That amendment left the implementation as a list of named types. The loop's triage
+of 2026-11-14 raised whether to accept only named filesystems instead, because types
+such as `cifs`, `smb3`, `ceph`, `virtiofs` and `ecryptfs` had not been examined.
+
+Settled by **q-64**, the person, **2026-11-15**, and confirmed by the coordinator
+on **2026-11-16 00:10 UTC**: slice-30 replaces that refusal list with an allowlist.
+Accept exactly **ext4, btrfs and xfs**; refuse every other filesystem type by its
+absence from the list. The outright **NFS (`nfs`, `nfs4`) and 9p refusals remain**.
+This answer supersedes the open-choice paragraph of this record and the corresponding
+paragraph in arc42's **Credential source location** section. It is a settled
+implementation requirement, not another question for the person.
+
+Keep the existing scope and precedence: in both mount observations, apply the rule
+to source and ancestor descriptors and rows at, below or covering checkout or either
+protected state root, including hidden covering rows and absent state. Unrelated
+rows do not refuse an independent source. Missing mapping evidence and known
+location matches retain their precedence. Refuse with `credential.filesystem`,
+exit 3, and a fix naming ext4, btrfs and xfs for source, checkout and state paths.
+The shared observer supplies this rule to credentials-only and, when slice-30 lifts
+their gate, ordinary doctor and approve. This amendment records the required change;
+the existing exclusion-list implementation is not allowlist evidence. No credential
+admission or runtime support claim follows from recording the answer.
 
 Amended after the local review of `1ee1e7a`: the path bound was 4096 bytes, and no
 real path of that length can be inspected. Linux counts the terminator in
@@ -428,6 +439,8 @@ adapter. Alias rows apply to **both** protected trees; other rows name their sco
 
 | Observation fixture | Required result |
 | --- | --- |
+| ext4, btrfs or xfs source/ancestor and relevant checkout/state rows | Accepted when all other source checks succeed; slice-30's settled allowlist. |
+| Any other filesystem type on source/ancestor or at, below or covering checkout or either state root, in either observation | `credential.filesystem`, exit 3, with a fix naming ext4, btrfs and xfs; unrelated rows remain harmless. Required by slice-30, superseding the named refusal list. |
 | Protected root bound outside | Location refusal by shared root identity. |
 | Protected descendant directory bound outside | Location refusal although source ancestry contains neither protected root. |
 | Single protected file bound outside | Location refusal with one link and no matching protected root ancestor. |
@@ -451,7 +464,7 @@ adapter. Alias rows apply to **both** protected trees; other rows name their sco
 | Unrelated overlay/FUSE row | Accepted when the source is otherwise independent. |
 | NFS (`nfs`, `nfs4`) source or ancestor; row at, below or covering checkout or either state root | The same filesystem refusal, in either observation. |
 | Protected subdirectory of an NFS export mounted a second time over the source's parent, both rows with root `/`; for checkout, its entry hidden under a host submount | Filesystem refusal; the same rows on ext4 name an independent file and are accepted. |
-| Unrelated NFS row; `nfsd` row anywhere | Accepted when the source is otherwise independent. |
+| Unrelated NFS or `nfsd` row | Accepted when the source is otherwise independent; relevant `nfsd` rows are refused by slice-30's allowlist. |
 | 9p source or ancestor; row at, below or covering checkout or either state root | The same filesystem refusal, in either observation. |
 | Protected subdirectory of a 9p export mounted a second time over the source's parent, the rows differing in device and both with root `/`; the checkout's own entry visible to inventory under the first device | Filesystem refusal; the same rows on ext4 are two devices, name an independent file and are accepted. |
 | Unrelated 9p row | Accepted when the source is otherwise independent. |

@@ -977,8 +977,17 @@ or state location on NFS is refused rather than judged from that row.
 It covers `9p` as well (decision 0027, amended after the local review of `2ac05a4`):
 every 9p mount has a device of its own and prints `/` as its root, so neither a
 coordinate nor an identity places a second mount of a protected subdirectory in its
-tree. The refusal remains a list of named types. Whether to accept only named types
-instead is open for the person, and a precondition of slice-30's specification.
+tree. The implementation remains a list of named types until slice-30.
+The person's q-64 decision of 2026-11-15, confirmed by the coordinator on
+2026-11-16 00:10 UTC and recorded in decision 0027, settles its replacement:
+accept exactly `ext4`, `btrfs` and `xfs`, and refuse every other type with
+`credential.filesystem`, exit 3. NFS and 9p remain refused outright. Apply the
+allowlist under the same source/ancestor and checkout/state mount conditions,
+in both observations, preserving mapping and known-location precedence and
+allowing unrelated rows. Its fix names the three accepted filesystems. This
+applies to the shared observer, including credentials-only; ordinary doctor and
+approve consume it when slice-30 lifts their gate. The decision is settled;
+allowlist implementation and evidence remain slice-30's work.
 
 Two complete mount-table observations bracket inspection; descriptor pathname walks,
 pins, mappings and final source metadata are rechecked. Each table is bounded to
