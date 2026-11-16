@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - T-54
-  - p1-harness-home
   - p1-interactive-tty
 items:
   - id: T-1
@@ -907,15 +906,9 @@ items:
     title: A home of the harness's own inside the container, seeded so a first run neither stops nor calls home
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Milestone two, step 3 (docs/charter.md). A writable volume or tmpfs, never the host home and
-      never the checkout; Claude's onboarding flags and Codex's update checks, analytics and plugins
-      off (its own sandbox off, the container being the sandbox); executable /tmp. Open for the
-      spec: a named volume per checkout (keeps sessions, so resume works across runs) or a tmpfs
-      (keeps nothing); the coordinator recommends the volume.
   - id: p1-interactive-tty
     title: "run and exec with a TTY: raw mode, resizes, Ctrl-C as input, no harness left running after a disconnect"
     phase: 1
