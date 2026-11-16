@@ -228,8 +228,8 @@ func TestCredentialMountContract(t *testing.T) {
 	})
 }
 
-func TestCredentialMountInspectionStdin(t *testing.T) {
-	for _, fault := range []string{"tty", "closed stdin", "reusable stdin"} {
+func TestCredentialMountInspectionHardening(t *testing.T) {
+	for _, fault := range []string{"tty", "closed stdin", "reusable stdin", "extra tmpfs", "tmpfs permissions", "missing tmpfs", "misplaced tmpfs"} {
 		t.Run(fault, func(t *testing.T) {
 			fixture := credentialSDKFixture(t)
 			c, fail := fixture.Engine.OpenRun(t.Context(), fixture.Binding)
@@ -247,7 +247,7 @@ func TestCredentialMountInspectionStdin(t *testing.T) {
 			}
 			fixture.Defect(fault)
 			if fail := c.VerifyRun(t.Context(), id, argv); fail != port.IsolationUnverified {
-				t.Fatal("changed credential worker stdin configuration accepted", fail)
+				t.Fatal("changed credential worker hardening accepted", fail)
 			}
 			if creates, starts := fixture.Counts(); creates != 1 || starts != 0 {
 				t.Fatal("inspection refusal created or started another worker")
@@ -363,6 +363,18 @@ func credentialDefect(r *container.InspectResponse, fault string) {
 		return
 	case "reusable stdin":
 		r.Config.StdinOnce = false
+		return
+	case "extra tmpfs":
+		r.HostConfig.Tmpfs["/extra"] = "rw,nosuid,nodev,mode=1777"
+		return
+	case "tmpfs permissions":
+		r.HostConfig.Tmpfs["/tmp"] = "rw,mode=0777"
+		return
+	case "missing tmpfs":
+		r.HostConfig.Tmpfs = nil
+		return
+	case "misplaced tmpfs":
+		r.HostConfig.Tmpfs = map[string]string{"/other": "rw,nosuid,nodev,mode=1777"}
 		return
 	}
 	if strings.HasPrefix(fault, "host ") {
