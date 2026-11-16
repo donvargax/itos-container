@@ -315,3 +315,6 @@ questions:
     item: "slice-34"
     question: "slice-34: its implementer (attempt 3) stopped again for engine red evidence of @ID-HOME-13, with the feature now in the offline shard. Does the new run supply it?"
     answer: "Yes (the coordinator, 2026-11-16). Run 43797097484 at 68be535, dispatched with red_scenarios=@ID-HOME-13, ran the scenario in the offline engine shard and it failed at the run's first observation, the product refusing the home key with policy.unknown_key and exit 2; nothing failed in setup. That is accepted red evidence for @ID-HOME-13. @ID-HOME-14, 15 and 23 have no steps yet: slice-34 binds them, stops once more for one run of the three, and then implements."
+  - id: q-79
+    item: "T-55"
+    question: "T-55: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-55-implementer-2.result.json"
