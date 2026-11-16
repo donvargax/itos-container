@@ -1857,7 +1857,7 @@ items:
     title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: []
     kind: task
   - id: p1-main-go-toolchain-1-27-4
