@@ -2170,3 +2170,17 @@ items:
       disconnect, concurrent stop and foreground exit. Specify how an exec process is terminated
       despite the absence of an exec-signal endpoint before implementing. Require black-box
       scenarios and CI-only real-engine evidence. Broken down from p1-interactive-tty.
+  - id: p1-exec-interactive-terminal
+    title: Attach an interactive TTY to an owned exec command
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-terminal-session-support, p1-exec-owned-session]
+    kind: idea
+    why: >
+      Combine the exec slice with shared terminal support for raw input, initial dimensions, resizes
+      and Ctrl-C as input. Specify terminal selection and JSON refusal. Prove terminal restoration,
+      bounded disconnect termination and removal of active exec workloads when the foreground
+      session ends. Keep shared behavior in engine packages without importing the run slice. Require
+      black-box red/green scenarios and CI-only real-engine evidence. Broken down from
+      p1-interactive-tty.
