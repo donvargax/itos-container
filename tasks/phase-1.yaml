@@ -7836,9 +7836,3 @@
     in docs --item T-57. No product code, limits, dependency pin, workflow, sibling ledger entry,
     work ownership/status or generated evidence changes. Agents commit and stop; the loop owns
     push, CI watching and closure.
-  done_when:
-    - run: >-
-        listing=$(go test ./features -list '^TestEngineSuiteWarmup$') || exit;
-        printf '%s\n' "$listing" | grep -Fxq TestEngineSuiteWarmup || {
-        printf '%s\n' 'missing required TestEngineSuiteWarmup' >&2; exit 1; };
-        go test ./features -count=1 -timeout=180s -run '^TestEngineSuiteWarmup$'

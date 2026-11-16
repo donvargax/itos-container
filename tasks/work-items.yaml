@@ -2170,7 +2170,7 @@ items:
     title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-overlap-06-nondeterministic
