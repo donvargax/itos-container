@@ -830,8 +830,8 @@ Feature: Review and remember credential grants without delivering them
     Given a credential observation fixture for "checkout" with "distinct outside file"
     And the credential observation host is "<os>" with architecture "<architecture>"
     When the credential observation contract runs in JSON mode
-    Then it exits with code 3
-    And the credential boundary problem is "host.unsupported" at ""
+    Then it exits with code 1
+    And its JSON output names the problem "doctor.host.unsupported"
     And the credential observation recorded no pinned checkout identity reads
     And the credential observation recorded no source metadata checkout traversal or state mount-table calls
 
