@@ -1,6 +1,6 @@
 @phase-1
 Feature: Egress refusal evidence and owned failure recovery
-  The person can read safe refusal metadata after a run has ended.
+  The person can read permitted refusal metadata after a run has ended.
   A failed proxy never grants another route or leaves an unattended workload
   under a living controller. Cleanup and a later stop account for every owned
   resource without discarding the log or touching another session.
@@ -9,21 +9,22 @@ Feature: Egress refusal evidence and owned failure recovery
   # Authorities: charter milestone two step 1; contract AC-17/22/23/28/36;
   # decisions 0022 and 0025; architecture.md Slices; arc42's Egress run,
   # Recovery, Bounded operations and Diagnostics and streaming.
-  # Read against main be5b830, slice-26 497a41c, slice-27 02e7714 and T-40
-  # ae9b027. T-39's proxy exists on main. T-40's schema-3 lifecycle, watcher,
-  # stdout reader and RefusalLog protocol exist on its branch. Slice-27's
-  # egress.feature is a spec, not implemented runtime support. Its approval,
+  # Revised against this branch da7a782, slice-27 e73a1bd, T-40 1a04c4c and
+  # T-51 22a1609. The prerequisite heads now contain egress delivery, lifecycle
+  # and a real streaming writer. Integrate them before measuring this item's
+  # reds; this drafting branch predates that implementation. Slice-27's approval,
   # executable, image, topology and frozen-grant rules remain prerequisites.
-  # This item owns only this feature file; never edit sibling specs to fit it.
+  # Own only this feature among sibling specs. The coordinator also requires
+  # q-56's reconciliation in ADR 0025, contract AC-36 and arc42 in this draft.
   #
-  # Dependency handoff: p1-acceptance-static-binary and the already recorded
-  # p1-egress-refusal-log-writer must precede slice-27. T-40 refuses a nil writer
+  # Dependency handoff: T-52's static acceptance binary and T-51's real
+  # RefusalLog must precede slice-27. T-40 refuses a nil writer
   # and retains the stopped proxy on copy failure, so a discard writer cannot
   # stand in for that task. The writer task owns streaming private publication
   # beyond approval Publish's 1 MiB limit and its fake/adapter contract. Slice-27
   # binds it to Runner AND Recovery. This item adds sequence-gap interpretation,
   # the public report and integrated failure/recovery proof. The coordinator
-  # schedules T-40 -> writer -> slice-27 -> slice-28 and reconciles 0022/arc42's
+  # schedules T-40 -> T-51 -> slice-27 -> slice-28. T-51 supersedes 0022/arc42's
   # older assignment of the writer to slice-28; no registry edits in this spec.
   #
   # Settled log contract, from 0022: stdout only, one schema-1 JSON object per
@@ -104,21 +105,25 @@ Feature: Egress refusal evidence and owned failure recovery
   # Controller SIGINT/SIGTERM keeps slice-12's first-signal rules and observed
   # exit precedence. Teardown's own proxy kill is never run.proxy-exited.
   # Calls/startup/grace/teardown remain 10/120/10/30 seconds in product builds.
-  # Native fixtures may use ONLY the existing q-40 harness copy (1/3/1/30),
-  # and assertions use that copy's budgets; no product flag or environment seam.
+  # Native timing faults may use ONLY the existing q-40 harness copy (1/3/1/30),
+  # and assertions use that copy's budgets. The full-log measurement in 11 uses
+  # the unmodified product budgets; no product flag or environment seam.
   # Controller SIGKILL leaves the original frozen worker/proxy running (A3).
   # Fresh stop never starts or restarts either; it uses original ownership and
   # full IDs, not current approval. Reverse removal is worker, stopped/copied
   # proxy, egress network, internal network, anchor. Each absence is confirmed.
   #
-  # AC-36 scope must not hide ADR 0025's open question 6. Under 0022 a marker
-  # placed in a syntactically valid hostname is persisted verbatim. This spec
-  # proves exclusion from the listed payload/error fields, not universal secret
-  # absence or credential-bearing hostname redaction. Do not invent hashing,
-  # omission or a new log target grammar here. The person must settle that
-  # representation/guarantee conflict before slice-31/33 claim full log absence.
-  # Their adversarial hostname-marker probe remains required, including both
-  # persisted copies; it must not be dropped or called a passing absence check.
+  # q-56, the person, recorded by the coordinator 2026-11-10 01:57 UTC,
+  # replaces q-55: log redaction is the platform's job, not the proxy's. Keep
+  # the refusal hostname verbatim under 0022; hash nothing and change no target
+  # grammar. A marker in a valid hostname currently reaches proxy stdout,
+  # dockerd's json-file and the protected-state copy. Disclose that leak in
+  # ADR 0025 question 6, AC-36 and arc42's conflict note, citing q-56.
+  # AC-36 is now a platform guarantee. The hostname-marker absence probe moves
+  # to p1-platform-log-redaction, outside this item and slice-31/33's delivery
+  # proof; it is neither a slice-28 gate nor evidence that absence already holds.
+  # Scenario 07 still proves exclusion of the listed payload/error fields.
+  # Its success cannot close platform AC-36 or promise universal secret absence.
   #
   # Shared absence step belongs to this item (triage 2026-11-09), not a task:
   # `the synthetic markers are absent from tree "<name>"` and
@@ -152,19 +157,41 @@ Feature: Egress refusal evidence and owned failure recovery
   # uses named adapters behind ports; pure sequence decisions stay in domain.
   # Extend the existing RefusalLog/RefusalCopy/report and storage contracts,
   # with an I/O-free porttest fake and the same contract against the adapter.
+  # RefusalLogFixture gains SessionID: every Begin and Read in the shared
+  # contract uses it without rewriting. The memory fixture explicitly supplies
+  # "session"; session/disk and cmd supply their registered 64-lowercase-hex ID
+  # and the real RefusalLog directly. Remove sessionNamed and contractSession
+  # from those two fixtures. Keep adapter-specific invalid/unregistered ID
+  # refusals; an omitted fixture ID must fail setup, not silently use a default.
+  # Exercise the same clean, initial-gap and middle-gap report cases against
+  # fake, disk adapter and cmd's real protected-storage assembly. A gap is a
+  # successful publication with RefusalLogGap and ranges, never a copy failure.
+  #
+  # Put ONE ready-record vector table beside ProxyStdout in session/port/porttest.
+  # TestProxyReadyReadsStdoutOnly and TestRefusalLogDropsOnlyReady both consume
+  # it: startup accepts a row exactly when the writer drops that complete line.
+  # Preserve the union of both tables: reordered keys, fractional UTC seconds,
+  # internal/leading spaces, 2048/2049-byte bounds, wrong/missing/extra/duplicate
+  # fields and types, non-UTC/invalid times, trailing bytes/CR/objects, empty or
+  # malformed JSON, and EOF without a newline. Retain stderr-only and chunked
+  # stream tests and byte-for-byte preservation of rejected rows between refusals.
+  # Sequence validation precedes ready filtering; it must not loosen this
+  # judgement or discard malformed evidence. This test-data sharing needs no
+  # adapter-to-adapter import, production parser move or allowlist exception.
   # Egress imports no session or policy engine; no slice imports another.
   # Only cmd assembles adapters and supplies classifiers. No additional package
   # outside the vertical slices/engines and no domain/port I/O import exception.
-  # Reuse Go 1.27.3's JSON/base64/streaming APIs and the pinned Moby
+  # Reuse the prerequisite's pinned Go JSON/base64/streaming APIs and Moby
   # client v0.6.2/API v1.56.1; q-51 chose the existing standard-library proxy.
   # No new dependency, service, handwritten Docker protocol or engine CLI.
   # Update CLI/help/security and arc42 in the implementation with a decision
   # naming the public evidence report and any affected architecture sections.
   # Preserve existing offline record compatibility and every live scenario.
   #
-  # Step handoff: every phrase below is NEW, except slice-27's specified
+  # Step handoff: every phrase below is NEW, except slice-27's implemented
   # `a CI egress checkout allowing ... and matching protected approval`.
-  # Reuse its fixtures rather than defining duplicate regular expressions.
+  # Reuse egress_native_steps_test.go's registration and egressNativeCheckout
+  # in egress_native_fixture_test.go, not duplicate regular expressions.
   # The existing offline_runtime_*, lifecycle_*, recovery_* and approval helpers
   # supply process capture, protected seeds, independent inspection, barriers,
   # publication observation, retry parsing and fault forwarding, not new Givens
@@ -206,12 +233,21 @@ Feature: Egress refusal evidence and owned failure recovery
   # tests. Reuse existing engine shards, assigning this WHOLE file to the other
   # shard with its selection contract; no orphaned @engine case. Local features
   # run without whole-package race detection; focused helper tests may use race.
-  # Required gates run through hooks/CI. No local mutations or native runs.
+  # Required gates run through hooks/CI. Native runs remain CI-only.
+  # Coordinator 2026-11-16 05:44 UTC explicitly requires implementers to run
+  # wider local proof before handoff, overriding the general local-mutation ban:
+  # tools/bin/pinned itos-cc mutation run --count 40 --since origin/main --seed <seed> --fail-uncovered=lines --json cmd internal
+  # Use two or three distinct seeds. Kill every survivor with a test that fails
+  # on it; only truly equivalent mutants may carry a reason for person review.
+  # Cover every uncovered changed line or remove it if unreachable; no redraw
+  # to evade a failure and no generated proof evidence committed. This spec-only
+  # revision changes no proof.code path and claims no mutation or runtime result.
+  # A red run naming only ID-OFFLINE-29, ID-ANCHORS-09, ID-LIFECYCLE-08 or
+  # ID-LIFECYCLE-12 is a known flake: change nothing; the loop reruns it.
   #
-  # Expected reds are specification predictions, not measured runs. Main and
-  # slice-26 still refuse version-2 run before launch; seeded status fixtures
-  # have no refusal_log report. T-40 alone has no command/writer binding. After
-  # prerequisites land, status counts/gaps remain new and are asserted in every
+  # Expected reds are specification predictions, not measured runs. After the
+  # prerequisite implementation, status still has no refusal_log report and
+  # T-51's writer returns an empty RefusalReport. Counts/gaps remain new in every
   # native case; closure already built by T-40/27 is preserved as part of the
   # same case, not manufactured into a failure. The implementer records each
   # assertion-level red after its step-only commit: locally with @wip removed
@@ -236,22 +272,28 @@ Feature: Egress refusal evidence and owned failure recovery
       | completed copy with three refusal records | stored  | 3       |
 
   # Known loss is separate from resource cleanup and survives another process.
+  # "none" omits ready only from the teardown copy's source; a run fixture
+  # independently supplies valid startup readiness before that simulated loss.
   @wip @slice-28 @ID-EGRESSLIFE-02 @local-engine-fixture @linux
   Scenario Outline: A hole in the copied sequence is reported after owned resources are released
     Given a local egress lifecycle fixture for "<operation>" with observed workload exit "<workload>"
-    And its proxy stdout contains ready sequence 1 and request sequences 2 5 and 7
+    And its copied proxy stdout has ready sequence "<ready>" and request sequences "<requests>"
     When the product completes that egress operation and fresh status and stop follow
-    Then the operation reports "<rule>" with missing ranges "3-4,6-6" and process exit <exit>
-    And the committed log holds exactly request sequences 2 5 and 7 without ready or renumbering
+    Then the operation reports "<rule>" with missing ranges "<missing>" and process exit <exit>
+    And the committed log holds exactly request sequences "<requests>" without ready or renumbering
     And fresh status and repeated stop report recovery.refusal-log-gap with exit 1 and the same gapped three-record report
     And cleanup is complete with no retry and every owned resource is confirmed absent
     And repeated stop changes neither the committed log nor completed records or engine resources
 
     Examples:
-      | operation | workload | rule                     | exit |
-      | run       | 0        | run.refusal-log-gap       | 1    |
-      | run       | 17       | run.refusal-log-gap       | 17   |
-      | stop      | unknown  | recovery.refusal-log-gap  | 1    |
+      | operation | workload | ready | requests | missing       | rule                    | exit |
+      | run       | 0        | 1     | 2 5 7    | 3-4,6-6       | run.refusal-log-gap      | 1    |
+      | run       | 17       | 1     | 2 5 7    | 3-4,6-6       | run.refusal-log-gap      | 17   |
+      | stop      | unknown  | 1     | 2 5 7    | 3-4,6-6       | recovery.refusal-log-gap | 1    |
+      | run       | 0        | none  | 2 5 7    | 1-1,3-4,6-6   | run.refusal-log-gap      | 1    |
+      | stop      | unknown  | none  | 2 5 7    | 1-1,3-4,6-6   | recovery.refusal-log-gap | 1    |
+      | run       | 0        | none  | 5 6 7    | 1-4           | run.refusal-log-gap      | 1    |
+      | stop      | unknown  | none  | 5 6 7    | 1-4           | recovery.refusal-log-gap | 1    |
 
   # Copy faults keep the source; a committed gap plus removal fault keeps both
   # diagnoses. A fresh process, not the failed controller's memory, retries.
@@ -339,7 +381,9 @@ Feature: Egress refusal evidence and owned failure recovery
     And fresh plain and JSON status name that log with six stored records and the lost-tail limitation
     And run returns zero only after the product confirms owned cleanup without changing the fixture endpoints
 
-  # AC-36's payload fields; no marker is used as a valid CONNECT hostname.
+  # Payload-field exclusion only, under q-56's platform AC-36 revision; no
+  # marker is used as a valid CONNECT hostname. That separate absence probe
+  # belongs to p1-platform-log-redaction, with the current leak disclosed above.
   # Each row has a unique marker. Verify sent/received probe receipts by length
   # and digest, not by printing payloads. The allowed TLS request reaches the
   # in-memory endpoint; refused targets/hellos never send their payload upstream.
@@ -426,6 +470,19 @@ Feature: Egress refusal evidence and owned failure recovery
   # Sequential requests avoid treating an unacknowledged final refusal as a
   # client failure; 0022 permits the cap-triggering connection to close. Send
   # 20,000 distinct attempts with bounded concurrency/memory, not giant output.
+  # Use maximum-length permitted logged hostnames, with distinct attempt IDs,
+  # and measure the actual bytes. About 40 MiB is the 2 KiB-per-record upper
+  # bound, not a claim that today's schema fills it; never pad product records.
+  # Use the unmodified product's 10 s call/30 s teardown budgets. In CI record
+  # copy (daemon log read AND every staged write) and Commit (held bytes, file
+  # fsync, rename AND parent fsync) separately, plus total teardown and each
+  # remaining budget. A response-header time is not a complete copy time.
+  # Observe those phases from test-side API/storage tracing, report measurement
+  # bounds/overhead and runner identity, and emit the measurements on green and
+  # failed runs. No product flag, metrics API, added sleep or budget change.
+  # Missing measurements fail this assertion. A timeout still fails cleanup;
+  # a thin measured margin is a finding for the person, never permission to
+  # extend the budget, lower the cap or skip the full-log case.
   @wip @slice-28 @ID-EGRESSLIFE-11 @engine @linux
   Scenario: Exhausting the refusal budget stops the proxy and preserves its earliest attempts
     Given a CI egress cap probe with an allowed TLS control and a worker that exits zero on SIGTERM
@@ -433,6 +490,7 @@ Feature: Egress refusal evidence and owned failure recovery
     Then the actual proxy exits nonzero at the refusal cap and run reports run.proxy-exited with process exit 1
     And the published log contains 20000 request records followed by one log-full record with original consecutive sequences
     And the earliest and final request metadata remain without rotation truncation or ready in the published file
+    And CI records the full log byte count copy and commit durations and remaining call and teardown budgets
     And fresh status reports 20001 stored records and the lost-tail limitation after complete owned cleanup
 
   # Native removal failure uses the recording forwarder's named one-shot error;

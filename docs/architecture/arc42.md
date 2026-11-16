@@ -323,14 +323,14 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | T-39 — implemented egress engine | T-38 | `internal/engine/egress`: domain, port, adapter and fake, its three depguard rules and fixtures, and fuzz tests, all driven over loopback listeners without Docker. Nothing binds it until slice-27, and none of it is runtime evidence. |
 | T-40 — proposed session networks and proxy | T-38 | Session ports, fake and Docker adapter gain the two networks and the proxy container, with creation order, teardown and recovery as the record fixes them. |
 | slice-27 — proposed run through the proxy | slice-26, T-39, T-40; the record also names `p1-acceptance-static-binary` | `internal/slices/egressproxy`, the hidden `__egress-proxy` command, the static harness build, and the real-engine scenarios, in CI only, that prove the topology, DNS and address rules. It edits `docs/security.md`. |
-| slice-28 — proposed refusal log, failure stop and cleanup | slice-27 | The streaming writer for `egress-refusals.jsonl`, status and cleanup of the proxy and networks, and the proxy-failure scenarios (AC-17, AC-23 and AC-36), in CI only. |
+| slice-28 — proposed refusal log, failure stop and cleanup | slice-27 | Extend T-51's streaming writer with sequence-gap reports and status; prove proxy failure and owned cleanup (AC-17/23), with real-engine cases in CI only. Payload-field exclusions contribute to AC-36; q-56 assigns hostname redaction and its absence probe to the platform. |
 | T-47 — proposed credentials decision | Charter step 2 of the second milestone and q-52 | [Record](../decisions/0025-credentials-passed-in.md) for sources, per-command staging, approval, uncertain starts, refusal-log conflict and six questions. Documentation only. |
 | slice-29 — proposed credential policy and inspection | T-47 and slice-25 | Version 3 extends slice-25's version 2; source metadata observation, schema and CLI/config docs. Must settle and prove state-side exclusion independent of unrelated projects' writes/history before downstream handoff; no Codex kind until question 1 is answered. |
 | slice-30 — proposed credential approval | slice-29 and slice-26 | Canonical grants, profiles, review, status and q-52's terminal rule; help and `docs/security.md`. Delivery remains gated. |
 | T-48 — proposed session credential seam | T-47 and slice-29's state-side exclusion decision | Staging and recovery port, fake, adapter and shared contract, including lost start acknowledgement after mount acquisition. Bind-mounted Codex file half waits on question 1. |
-| slice-31 — proposed Claude token delivery | slice-30 and T-48 | CI-only synthetic proof of approved read-only copies, project separation, absence checks and uncertain-start cleanup; refusal-log absence waits on question 6 and logging specs. |
+| slice-31 — proposed Claude token delivery | slice-30 and T-48 | CI-only synthetic proof of approved read-only copies, project separation, provisioning absence checks and uncertain-start cleanup; q-56 assigns platform log-redaction proof to `p1-platform-log-redaction`. |
 | slice-32 — blocked Codex sharing | slice-30 and T-48; T-47 question 1 | No Codex kind or delivery until the person answers the atomic-replacement incompatibility and amends the charter as needed. |
-| slice-33 — proposed GitHub token delivery | slice-31 | Reuse staging with a distinct grant; workload exports `GH_TOKEN` from its fixed file. CI-only synthetic proof includes uncertain start and, after question 6, the hostname-marker probe. |
+| slice-33 — proposed GitHub token delivery | slice-31 | Reuse staging with a distinct grant; workload exports `GH_TOKEN` from its fixed file. CI-only synthetic proof includes uncertain start; q-56 moves the hostname-marker absence probe to `p1-platform-log-redaction`. |
 
 The coordinator accepted the slice-10/13/14 scenario split on 2026-11-06.
 [The offline feature](../../features/offline.feature) is the scenario ownership
@@ -821,8 +821,9 @@ mount is torn down. Status shows the frozen grants and present/absent/unknown st
 state during recovery. Workload argv may export the file contents to
 `CLAUDE_CODE_OAUTH_TOKEN` or `GH_TOKEN`; automatic harness setup is later scope. T-48's
 fake/adapter contract and slice-31/33's CI cases must cover acquired mounts, missing
-acknowledgements and delayed completion after unlink. Refusal-log absence additionally
-waits on question 6 and its adversarial hostname-marker probe below.
+acknowledgements and delayed completion after unlink. Under q-56, delivery proof does
+not claim platform log-redaction closure: `p1-platform-log-redaction` owns the
+adversarial hostname-marker absence probe below.
 
 ## Deployment view
 
@@ -965,8 +966,10 @@ even in a completed cleanup tombstone. This records delivery failure without
 changing resource absence or the authoritative workload exit. Open security
 choices follow the charter stop rule, not a blanket reopening of settled limits.
 
-**Refusal log.** T-39 implements the record format below; its delivery stays **proposed**,
-since slice-27 binds stdout and slice-28 copies the log. The egress proxy writes one JSON object per line on stdout, at
+**Refusal log.** T-39 implements the record format below; slice-27 binds stdout and
+T-51's streaming copy, and slice-28 adds sequence-gap reporting and integrated proof.
+This design description claims no runtime evidence. The egress proxy writes one JSON
+object per line on stdout, at
 most 2 KiB each: schema 1, a per-process `seq`, time, and an event of `ready`, `refused`,
 `upstream-failed` or `log-full`, with method, target, port and a reason only on the two
 failure events. Target and port appear only for a plain host and a one-to-five-digit port; nothing else of the
@@ -975,24 +978,31 @@ SNI or client addresses. An allowed tunnel writes nothing. A failed write to the
 stdout ends the proxy; a failure of dockerd's json-file store behind that write is not
 visible to it. During the run the log is the proxy's json-file log; at teardown the
 controller copies every record but `ready` to `egress-refusals.jsonl` under the protected
-session directory, with a streaming writer slice-28 adds, and a gap in `seq` is a reported
+session directory, with T-51's streaming writer, and a gap in `seq` is a reported
 failure. A lost tail is not detectable (a disk full to teardown, or the copier cut off at
 10 s), so the count status shows is the records stored, not a proof that every refusal is
 in it; approve, status and `docs/security.md` say so (slice-26 and slice-27), and closing
 that gap is an open decision for the person. The proxy stops after 20,000 records. Retention across sessions is open
 (`p3-session-state-retention`). See [the record](../decisions/0022-egress-proxy.md).
 
-T-47 identifies a separate **unresolved persisted-log conflict** with AC-36: an unlisted
-CONNECT hostname containing credential bytes as a valid label passes the target filter
+T-47 identified a **persisted-log conflict**, with responsibility now settled by q-56
+but the leak still present: an unlisted CONNECT hostname containing credential bytes
+as a valid label passes the target filter
 and is logged verbatim to proxy stdout, dockerd's json-file and the protected-state copy.
-Omitting userinfo, paths, queries and headers does not close it. The required adversarial
-hostname-marker probe uses a fresh `itos-synthetic-credential-` marker plus 32 random
-lowercase hex digits as that label and searches all three destinations, including both
-persisted copies, with positive controls. It must fail absence under decision 0022 as
-written. Question 6 asks the person about representation or an explicit guarantee revision;
-T-39 and slice-28 then reconcile logging specs, and slice-31/33 prove the integrated probe.
-Do not omit it or count the expected leak as absence evidence. No credential-absence
-promise for refusal logs or AC-36 closure exists before that answer and proof.
+Omitting userinfo, paths, queries and headers does not close it. **q-56 (the person;
+coordinator, 2026-11-10 01:57 UTC), replacing q-55**, makes log redaction the platform's
+job and revises AC-36 to a platform guarantee. Keep decision 0022's hostname verbatim;
+hash nothing. [ADR 0025 question 6](../decisions/0025-credentials-passed-in.md#questions-for-the-person)
+records that answer and the current leak.
+
+`p1-platform-log-redaction` owns the redaction design and adversarial hostname-marker
+absence probe. It uses a fresh `itos-synthetic-credential-` marker plus 32 random lowercase
+hex digits as an unlisted hostname label and searches all three destinations, including
+both persisted copies, with positive controls. Remove this absence probe from slice-28;
+it is also outside slice-31/33's delivery proof. It currently fails absence under 0022,
+and the expected leak must never count as passing evidence. Slice-28 still proves the
+permitted payload-field exclusions; platform AC-36 remains unproven until the platform
+item supplies redaction proof.
 
 **Dependencies and platforms.** Owning behaviour specs choose maintained libraries,
 record reasons and pin versions before adapters are implemented. Policy's v4 selection
@@ -1023,8 +1033,8 @@ runtime scenarios remain CI-only.
 | A4 | Person's settled resource choice | Pids limit 4096, no memory or CPU quota claim; distinct from parser and CI budgets. |
 | Effective UID and host UID/GID | Settled loop choice; specified in slice-4, consumed by slices 8/10 | Refuse root; resolve omissions to effective host UID, override image user and require manifest equality without chown. [Allocation decision](../decisions/0003-approval-identity-and-frozen-input.md) supersedes slices 3/8 as resolver owners. |
 | Image acquisition and offline boundary | Settled loop choice; T-20 and slices 3/4/10 | Person pulls manifest digest; commands inspect cached content and approval binds it. NetworkMode none is inspected before start and must be proven by network/DNS probes from first instruction through loss, without a guard/proxy/session network in an offline run. |
-| [Egress proxy record (T-38)](../decisions/0022-egress-proxy.md) | **Proposed**; rests on q-51 (the person: our own proxy on the standard library) and q-49 (taken up by q-51 and the charter), with q-50 still provisional for the person's review. Its topology, delivery and contract readings are its own decisions, for the person to confirm or overturn | Fixes the proxy's flow, parsing and address rule, the ClientHello check, the two networks, delivery as the host's own executable through `__egress-proxy`, failure closure, teardown and the refusal log. Supersedes the contract's mitmdump, inspection-per-destination, blocking-experiment and embedded-DNS wording, which the record lists. q-52 subsequently settles terminal-only consent for network grants; T-47 leaves the credential-bearing hostname conflict with AC-36 open. |
-| [Credentials record (T-47)](../decisions/0025-credentials-passed-in.md) | **Proposed**, for the person to confirm or overturn; q-52's approval rule is settled | Version 3 token grants, checked sources, per-command staged read-only binds, credential profiles, redaction and honest uncertain-start recovery. No Codex kind or replacement delivery is chosen. Questions 1–6 retain charter, lifecycle, scope, real-use and logging decisions; no real credentials or runtime support claim. |
+| [Egress proxy record (T-38)](../decisions/0022-egress-proxy.md) | **Proposed**; rests on q-51 (the person: our own proxy on the standard library) and q-49 (taken up by q-51 and the charter), with q-50 still provisional for the person's review. Its topology, delivery and contract readings are its own decisions, for the person to confirm or overturn | Fixes the proxy's flow, parsing and address rule, the ClientHello check, the two networks, delivery as the host's own executable through `__egress-proxy`, failure closure, teardown and the refusal log. Supersedes the contract's mitmdump, inspection-per-destination, blocking-experiment and embedded-DNS wording, which the record lists. q-52 settles terminal-only consent for network grants; q-56 keeps the hostname verbatim and assigns log redaction and revised AC-36 to the platform, with the current leak disclosed. |
+| [Credentials record (T-47)](../decisions/0025-credentials-passed-in.md) | **Proposed**, for the person to confirm or overturn; q-52's approval rule and q-56's platform log-redaction responsibility are settled | Version 3 token grants, checked sources, per-command staged read-only binds, credential profiles, provisioning redaction and honest uncertain-start recovery. No Codex kind or replacement delivery is chosen. Questions 1–5 retain charter, lifecycle, scope and real-use decisions; question 6 records q-56 and the unclosed hostname leak. No real credentials or runtime support claim. |
 | Durable create intent | Settled loop choice; slice-9 | fsync before unstarted create; reconcile lost response by trusted record plus random name, then record concrete identity before execution. Close the untracked window; names/labels alone confer no authority. |
 | Budgets and signal escalation | Settled loop choice; slice-12 | Calls 10 s, startup 120 s, teardown 30 s without resetting totals; forward once, 10 s grace, SIGKILL, observed exit wins. Bound controller transitions without imposing workload lifetime. |
 | Recovery placement and serialization | Settled loop choice, implemented by slice-11 | [Public session recovery](../decisions/0010-public-session-recovery.md) specifies 32-byte random IDs, strict referenced records, separate controller/operation descriptor locks, bounded observation and durable cleanup. Native support still requires CI evidence. |
@@ -1054,8 +1064,8 @@ The table maps required evidence to the current gates and the work still absent.
 | Literal argv and verified-before-launch ordering | T-11 argv and explicit-shell cases; AC-21. Slice-7 local refusals plus fake sequencing; actual execution in CI. | No run implementation. Unknown-command errors are not the specified refusal. AC-42 lifecycle hooks are deferred. |
 | Durable ownership, bounded cleanup and independent projects | T-11 write-failure, uncertain-create, cancellation, repeated/foreign stop and two-project cases; AC-06/22/23/28 offline portions. | Settled intent/recovery/budget/signal choices need slice-9/11/12 implementation and proof; remaining details stay with those specs. |
 | Safe diagnostics and honest outcomes | Synthetic marker exclusion and unknown/zero/nonzero outcome cases; AC-22/36 offline portions, with foreground streams captured separately. | No controller/recovery implementation; no credential-scan claim. |
-| Egress through the proxy (**proposed**) | AC-09 to AC-14, AC-16 to AC-18, AC-23 and AC-36, owned by slice-27 and slice-28 with the real-engine cases in CI only; T-39's loopback, contract and fuzz tests for the proxy itself. Fake endpoints and positive controls pair every denied probe. | **Unproven.** No scenario, engine run or support claim exists; AC-15, AC-19 and AC-20 (inspection and SSH tunnel) are deferred. AC-11 on the embedded resolver must pass on the real engine or the topology reopens. |
-| Approved per-command credentials (**proposed**) | AC-29 approved-material-only, source-modification probes and refusal of sources aliasing checkout or protected-state descendants through other mounts; AC-28/29 project independence with concurrent state publication/removal and more than 100,000 unrelated retained entries; AC-31's HTTPS/API half; AC-36 raw/base64 marker searches over inspect, API recorder, state, diagnostics, checkout and logs. Slice-29 owns source-observation cases; slice-31 and slice-33 own CI-only real-engine cases using synthetic sources and positive controls. | **Unproven.** State-side exclusion needs slice-29's design and evidence before grant admission or delivery handoff. AC-36's adversarial hostname-marker probe must fail with today's verbatim target log; it waits on question 6 and T-39/slice-28's logging specs before an absence claim. AC-30 and SSH remain deferred; real use waits on question 5. |
+| Egress through the proxy (**proposed**) | AC-09 to AC-14, AC-16 to AC-18, AC-23 and payload-field exclusions contributing to AC-36, owned by slice-27 and slice-28 with real-engine cases in CI only; T-39's loopback, contract and fuzz tests for the proxy itself. Fake endpoints and positive controls pair every denied probe. q-56 assigns platform log redaction to `p1-platform-log-redaction`. | **Unproven here.** This document supplies no runtime proof or support claim; AC-15, AC-19 and AC-20 (inspection and SSH tunnel) are deferred. AC-11 on the embedded resolver must pass on the real engine or the topology reopens. Payload-field exclusions cannot close platform AC-36. |
+| Approved per-command credentials (**proposed**) | AC-29 approved-material-only, source-modification probes and refusal of sources aliasing checkout or protected-state descendants through other mounts; AC-28/29 project independence with concurrent state publication/removal and more than 100,000 unrelated retained entries; AC-31's HTTPS/API half; AC-36 provisioning raw/base64 marker searches over inspect, API recorder, state, diagnostics, checkout and logs. Slice-29 owns source-observation cases; slice-31 and slice-33 own CI-only real-engine cases using synthetic sources and positive controls. | **Unproven.** State-side exclusion needs slice-29's design and evidence before grant admission or delivery handoff. q-56 moves AC-36's hostname-marker absence probe to `p1-platform-log-redaction`, outside delivery gates; today's verbatim target leaks into both persisted logs. Platform absence remains unproven. AC-30 and SSH remain deferred; real use waits on question 5. |
 | Credential mounts through uncertain start (**proposed**) | AC-22/23 and LIFECYCLE-03/07 extended by T-48's fake/adapter contract and slice-31/33's CI cases: acquired mount, lost start acknowledgement, delayed completion after unlink, original-ID reconciliation, no repeated start and bounded cleanup. | **Unproven.** Require observed outcome or explicit uncertainty; completion confirms worker and staging removal. Missing paths or acknowledgements cannot prove no workload ran. Failed cleanup retains recovery and exact stop retry. |
 | Package dependency boundaries | Depguard and structural `architecture-check`; compile-first [fixtures](../../tools/testdata/architecture) for enforcement-input changes. | Implemented T-14 gates, not isolation proof. Ordinary code takes the cheap structural check. |
 | Domain correctness and contract fidelity | I/O-free fakes and shared contracts against fakes/adapters; unit/property tests and [per-domain coverage](../../tools/bin/domain-coverage), 80% per domain including nested domains. | Count and policy/doctor evidence exists. Product adapters still need their own tests; porttest fakes never do I/O. |
@@ -1170,7 +1180,7 @@ mechanism. Deferred categories remain outside this milestone.
 | T-47 question 3: deletion and account management | Person through `itos decision` | Source deletion/rotation and account/profile commands; no current command manages originals. Only staged copies are owned here. |
 | T-47 question 4: GitHub scope and expiry | Person through `itos decision` | Whether to require a fine-grained repository-limited token or expiry. Delivery checks no provider scope and makes no GitHub call. |
 | T-47 question 5: does the record meet the contract's prerequisites before real credentials are used? | Person through `itos decision` | Every real-credential use, including a person's smoke check; synthetic scenarios need none. CA/SSH-key lifecycle remains deferred. |
-| T-47 question 6: credential-bearing refusal hostnames | Person through `itos decision`, then T-39/slice-28 logging specs and slice-31/33 integrated proof | AC-36 hostname-marker probe and credential-bearing egress acceptance. Current verbatim targets leak markers into both persisted logs; neither sanitization nor a weaker guarantee is selected. |
+| T-47 question 6: credential-bearing refusal hostnames | Settled by q-56 (the person; coordinator, 2026-11-10 01:57 UTC), replacing q-55; `p1-platform-log-redaction` owns follow-up | Platform AC-36 redaction and hostname-marker absence remain unproven. The proxy keeps 0022's hostname verbatim, with no hashing; it currently leaks markers through stdout and both persisted logs. This platform proof is outside slice-28 and slice-31/33 delivery gates. |
 | Pinned client/tool versions, download destinations, redirect chains and TLS compatibility | Person through later worker/download specs — deferred | Online dependency/tool workflows; installer metadata cannot grant destinations. |
 | Failed Actions-log redirects: narrow destination approval or reviewed run/artifact-specific retrieval | Person through later CI-log retrieval spec — deferred | Online failed-CI inspection; generic host fetching remains excluded. |
 | Streaming/client performance budgets and measurements | Person through later compatibility/performance experiments — deferred | Online performance claims; no presumed proxy language advantage or numerical target. Offline settled budgets are distinct. |
