@@ -21,6 +21,7 @@ type credentialApprovalWorld struct {
 }
 
 func (w *world) credentialApprovalSteps(sc *godog.ScenarioContext) {
+	w.credentialApprovalHelpSteps(sc)
 	sc.Step(`^a credential approval checkout with private synthetic sources$`, w.credentialApprovalCheckout)
 	sc.Step(`^the credential approval request is "([^"]*)" on "([^"]*)"$`, w.credentialApprovalRequest)
 	sc.Step(`^doctor reports the independently calculated credential fingerprint and complete effective settings$`, w.approvalCandidate)
