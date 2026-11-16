@@ -26,9 +26,12 @@ func (w *world) localRegistryPaths(tree map[string]runEntry) (map[string]bool, e
 	project := filepath.Join(root, w.recoveryIndexKey())
 	allowed[root], allowed[project] = true, true
 	intents := map[string]bool{}
-	for _, r := range a.created {
+	workers := map[string]string{}
+	for worker, r := range a.created {
 		token, _ := object(object(r["Config"])["Labels"])["io.itos-container.intent"].(string)
-		intents["intents/"+w.approval.project+"/"+token+".json"] = false
+		intent := "intents/" + w.approval.project + "/" + token + ".json"
+		intents[intent] = false
+		workers[intent] = worker
 	}
 	count := 0
 	for path, entry := range tree {
@@ -42,13 +45,26 @@ func (w *world) localRegistryPaths(tree map[string]runEntry) (map[string]bool, e
 		count++
 		recordPath := filepath.Join(path, "record.json")
 		var r map[string]any
-		if json.Unmarshal([]byte(tree[recordPath].Data), &r) != nil || !publicRecordShape(r) || r["schema"] != float64(1) || r["id"] != id || r["project"] != w.approval.project || r["state"] != "stopped" || r["workload_exit"] != float64(0) || r["last_problem"] != nil {
+		if json.Unmarshal([]byte(tree[recordPath].Data), &r) != nil || !publicRecordShape(r) || r["schema"] != float64(1) || r["id"] != id || r["project"] != w.approval.project || r["state"] != "stopped" || r["last_problem"] != nil {
 			return nil, fmt.Errorf("public registration lost exact completed facts")
 		}
 		intent, ok := r["intent"].(string)
 		seen, exists := intents[intent]
 		if !ok || !exists || seen {
 			return nil, fmt.Errorf("public registration did not uniquely bind an owned intent")
+		}
+		var expectedExit any = float64(0)
+		if a.terminal != nil {
+			// Terminal scenarios include nonzero exits and refusals before start.
+			// Derive the exact expectation from independent fixture facts, never
+			// from the controller's exit or the record being checked.
+			expectedExit = nil
+			if a.started[workers[intent]] {
+				expectedExit = float64(a.terminal.exit)
+			}
+		}
+		if r["workload_exit"] != expectedExit {
+			return nil, fmt.Errorf("public registration workload exit = %v, want %v", r["workload_exit"], expectedExit)
 		}
 		intents[intent] = true
 		complete := true
