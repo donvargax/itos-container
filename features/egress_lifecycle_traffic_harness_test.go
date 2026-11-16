@@ -49,6 +49,34 @@ func TestEgressLifecycleCaptureChild(t *testing.T) {
 	os.Exit(17)
 }
 
+func TestEgressLifecycleCapCleanupKeepsWorkerZeroExit(t *testing.T) {
+	run := &egressNativeRun{wantExit: 0, exit: 1, report: egressProbeReport{Done: true}}
+	if err := run.cleanedWithExit(1); err != nil {
+		t.Fatal(err)
+	}
+	if run.wantExit != 0 || run.cleaned() == nil {
+		t.Fatal("proxy failure changed the worker's zero-exit plan or ordinary cleanup expectation")
+	}
+	for _, tc := range []struct {
+		name string
+		edit func(*egressNativeRun)
+	}{
+		{"wrong exit", func(r *egressNativeRun) { r.exit = 0 }},
+		{"timeout", func(r *egressNativeRun) { r.timedOut = true }},
+		{"unfinished probe", func(r *egressNativeRun) { r.report.Done = false }},
+		{"remaining resource", func(r *egressNativeRun) { r.remaining = []string{"proxy"} }},
+		{"inspection failure", func(r *egressNativeRun) { r.err = errors.New("inspection failed") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bad := &egressNativeRun{wantExit: 0, exit: 1, report: egressProbeReport{Done: true}}
+			tc.edit(bad)
+			if err := bad.cleanedWithExit(1); err == nil {
+				t.Fatal("incomplete cap cleanup was accepted")
+			}
+		})
+	}
+}
+
 func TestEgressLifecycleCapOracleRejectsMissingAndChangedRows(t *testing.T) {
 	var data bytes.Buffer
 	for i := 1; i <= 20000; i++ {

@@ -66,7 +66,7 @@ func (w *world) egressLifeCapExit() error {
 	if err != nil || string(signal) != "SIGTERM" {
 		return errors.New("cap worker did not acknowledge SIGTERM")
 	}
-	return errors.Join(l.run.cleaned(), egressLifeReverseCreated(l.journal))
+	return errors.Join(l.run.cleanedWithExit(1), egressLifeReverseCreated(l.journal))
 }
 
 func egressLifeCapTarget(index int) string {
