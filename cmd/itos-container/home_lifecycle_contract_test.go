@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -20,14 +21,19 @@ func homeRequireRun(t *testing.T, f *homeLocalFixture, want int, rule string) {
 		t.Fatalf("home run: exit %d, %s; want %d %s", code, diagnostic, want, rule)
 	}
 }
-func homePositive(t *testing.T) {
-	t.Helper()
-	homeReuseContract(t, "1000", "1000")
-}
+func homePositive(t *testing.T) { t.Helper(); homeReuseContract(t, "1000", "1000") }
 func (f *homeLocalFixture) scope() sp.HomeScope {
+	if f.disk != nil {
+		return f.disk.scope(homeFixtureCodec{}.Scope(f.m.b))
+	}
 	return f.homes.Scopes[homeFixtureCodec{}.Scope(f.m.b)]
 }
-func (f *homeLocalFixture) putScope(s sp.HomeScope) { f.homes.Scopes[s.Scope] = s }
+func (f *homeLocalFixture) putScope(s sp.HomeScope) {
+	f.homes.Scopes[s.Scope] = s
+	if f.disk != nil {
+		f.disk.put(s)
+	}
+}
 func (f *homeLocalFixture) noHomeMutation(t *testing.T, from int) {
 	t.Helper()
 	for _, event := range f.engine.HomeEvents[from:] {
@@ -217,16 +223,28 @@ func (f *homeLocalFixture) seedHomeSession(t *testing.T, state string) (string, 
 	i := f.m.b.Intent(token)
 	i.Home = g.Reference(f.scope().Scope)
 	i.Stage, i.ContainerID = "owned", worker
+	i.Schema = 2
+	i.Anchor = sp.Anchor{Session: id, Name: "itos-container-anchor-" + token, Source: "/proc/42/fd/7", Device: f.m.b.Checkout.Device, Inode: f.m.b.Checkout.Inode, Created: "seed-anchor", Stage: "owned"}
+	if f.engine.Anchors == nil {
+		f.engine.Anchors = map[string]sp.AnchorObservation{}
+	}
+	f.engine.Anchors[i.Anchor.Name] = sp.AnchorObservation{Name: i.Anchor.Name, Created: i.Anchor.Created, Driver: "local", Scope: "local", Source: i.Anchor.Source, Type: "none", Options: "bind", Token: token, Project: i.Project, Fingerprint: i.Fingerprint, Session: id, Device: i.Anchor.Device, Inode: i.Anchor.Inode, ExactOptions: true, ExactLabels: true}
 	f.m.storage.Directories["intents/"+f.m.c.Project].Files[token+".json"] = f.m.registry.Store.Codec.Encode(i)
+	if f.m.files.Admissions == nil {
+		f.m.files.Admissions = map[string][]byte{}
+	}
+	name := publicIndexKey(f.m.index().Project+"/"+id, f.m.b.UID) + ".json"
+	f.m.files.Admissions[name] = f.m.registry.Codec.EncodeAdmission(sp.AdmissionRecord{Schema: 1, Root: f.m.b.Checkout.Root, ID: id, Intent: sp.Reference(i.Project, token)})
 	s := f.scope()
-	s.Generations[0].Claims = []sp.HomeClaim{{Session: id, StateRoot: "/fixture/state/itos-container", Intent: sp.Reference(i.Project, token)}}
+	s.Generations[0].Claims = []sp.HomeClaim{{Session: id, StateRoot: f.stateRoot(), Intent: sp.Reference(i.Project, token)}}
 	f.putScope(s)
 	o := f.engine.Resources[worker]
 	o.HomeName, o.HomeExact = g.Name, true
+	o.AnchorName, o.AnchorExact = i.Anchor.Name, true
 	switch state {
 	case "exited with observed code 7", "exited worker not yet removed":
 		o.Status, o.Started = "exited", true
-		r := sp.PublicRecord{Schema: 1, ID: id, Project: i.Project, Intent: sp.Reference(i.Project, token), State: "exited"}
+		r := sp.PublicRecord{Schema: 1, ID: id, Project: i.Project, Intent: sp.Reference(i.Project, token), State: "stopping"}
 		value := 7
 		r.WorkloadExit = &value
 		f.m.files.Sessions[f.m.index().Project+"/"+id].Data = f.m.registry.Codec.EncodePublic(r)
@@ -234,6 +252,10 @@ func (f *homeLocalFixture) seedHomeSession(t *testing.T, state string) (string, 
 		o.Status, o.Running, o.Started, o.PID = "running", true, true, 123
 	}
 	f.engine.Resources[worker] = o
+	if f.disk != nil {
+		f.disk.seed()
+		f.sdk.seed()
+	}
 	return id, worker, g
 }
 func homeSessionRecovery(t *testing.T, state string) {
@@ -304,17 +326,18 @@ func homeLateAllocation(t *testing.T) {
 }
 func homeOperationBudget(t *testing.T, operation string) {
 	homePositive(t)
-	synctest.Test(t, func(t *testing.T) {
+	homeContractClock(t, func(t *testing.T) {
 		f := newHomeLocalFixture(t, "1000", "1000")
 		var cancel context.CancelFunc
 		f.ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		release := make(chan struct{})
+		go func() { <-f.ctx.Done(); close(release) }()
 		var lock sp.HomeTransaction
 		switch operation {
 		case "allocation lock during startup":
 			var outcome sp.Outcome
-			lock, outcome = f.homes.Open(context.Background(), homeFixtureCodec{}.Scope(f.m.b), true)
+			lock, outcome = f.service().Store.Open(context.Background(), homeFixtureCodec{}.Scope(f.m.b), true)
 			if outcome != "" {
 				t.Fatal(outcome)
 			}
@@ -354,8 +377,9 @@ func homeOperationBudget(t *testing.T, operation string) {
 		if code != 75 || time.Since(start) > 31*time.Second {
 			t.Fatal("home budget restarted", code, time.Since(start))
 		}
-		close(release)
-		synctest.Wait()
+		if f.disk == nil {
+			synctest.Wait()
+		}
 		for _, event := range f.engine.Events {
 			if event == "start" {
 				t.Fatal("late home observation started worker")
@@ -367,7 +391,7 @@ func homeSharedScope(t *testing.T) {
 	homePositive(t)
 	f := newHomeLocalFixture(t, "1000", "1000")
 	id, _, g := f.seedHomeSession(t, "unstarted")
-	homeRequireRun(t, f, 1, "run.checkout-overlap")
+	homeRequireRun(t, f, 75, "run.home-unavailable")
 	if code, out, d := f.command(t, "stop", id, "--json"); code != 0 {
 		t.Fatal(code, out, d)
 	}
@@ -389,5 +413,20 @@ func homeUnchanged(t *testing.T, f *homeLocalFixture, before []byte) {
 	t.Helper()
 	if !bytes.Equal(before, homeScopeBytes(f)) {
 		t.Fatal("protected home record changed")
+	}
+}
+
+func (f *homeLocalFixture) stateRoot() string {
+	if f.disk != nil {
+		return f.disk.root
+	}
+	return "/fixture/state/itos-container"
+}
+
+func homeContractClock(t *testing.T, run func(*testing.T)) {
+	if os.Getenv("SLICE_34_HOME_BACKEND") == "disk" {
+		run(t)
+	} else {
+		synctest.Test(t, run)
 	}
 }

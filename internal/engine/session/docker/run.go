@@ -36,6 +36,9 @@ func (e Engine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection
 }
 
 func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []string) (string, port.Outcome) {
+	if !r.ValidHome(c.binding) {
+		return "", port.HomeRefused
+	}
 	if (r.Schema == 3) != (c.binding.Egress != (port.EgressGrant{})) {
 		return "", port.Refused
 	}
@@ -75,6 +78,9 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		env["NO_PROXY"], env["no_proxy"] = "localhost,127.0.0.1,::1", "localhost,127.0.0.1,::1"
 	}
 	environment := environment(image.Config.Env, env)
+	if c.binding.Home {
+		environment = homeEnvironment(environment)
+	}
 	pids, init := int64(4096), false
 	config := &container.Config{
 		Image: r.ImageID, User: r.UID + ":" + r.GID, WorkingDir: c.binding.Workspace,
@@ -92,6 +98,9 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 	}
 	if r.Schema == 3 {
 		host.NetworkMode = container.NetworkMode(r.Egress.Internal.Name)
+	}
+	if c.binding.Home {
+		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: r.Home.Name, Target: "/home/itos", VolumeOptions: &mount.VolumeOptions{NoCopy: true}})
 	}
 	result, err := c.api.ContainerCreate(call, client.ContainerCreateOptions{Name: r.Name, Config: config, HostConfig: host, NetworkingConfig: networking})
 	if err != nil || !c.pin.Unchanged() || !port.HexID(result.ID) {
@@ -139,7 +148,7 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 		!sameEnvironment(r.Config.Env, c.expected.Env) || r.Config.Tty || !r.Config.OpenStdin || !r.Config.StdinOnce ||
 		len(r.Config.Volumes) != 0 || r.Config.Healthcheck == nil || !slices.Equal(r.Config.Healthcheck.Test, []string{"NONE"}) ||
 		r.State.Status != "created" || r.State.Running || r.State.Pid != 0 || (r.State.StartedAt != "" && r.State.StartedAt != "0001-01-01T00:00:00Z") ||
-		!safeWorkerHost(r.HostConfig, c.record) || !safeMounts(r.Mounts, c.record.Anchor.Name) {
+		!safeHomeWorkerHost(r.HostConfig, c.record) || !safeHomeMounts(r.Mounts, c.record) {
 		return port.IsolationUnverified
 	}
 	if c.record.Schema == 3 {

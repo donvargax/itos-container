@@ -5,7 +5,7 @@ allocated 0028 and 0029 to egress runtime and credential approval. The selected
 design is unchanged.
 
 **Selected by the coordinator in q-73, 2026-11-16 01:50 UTC, for the person to
-ratify; unimplemented and unproven.** The charter's second milestone, step 3,
+ratify; implemented with native green evidence pending.** The charter's second milestone, step 3,
 permits a volume or tmpfs for the harness. The coordinator selected this
 per-checkout persistent named volume and terminal-consented reset/deletion on
 the person's standing instruction. No further storage-lifetime answer is owed
@@ -128,9 +128,11 @@ custom Engine client, engine CLI or network service is selected.
 
 ## Evidence and consequences
 
-HOME-01 through HOME-24 remain `@wip`. HOME-01 and all four native scenarios have
-step bindings, as does HOME-02; the remaining non-engine bindings are an
-implementation handoff.
+HOME-01 through HOME-24 have live bindings. Local lifecycle and retirement rows
+run through both memory ports and protected disk/recording SDK adapters. The
+committed pre-runtime baseline failed all 83 local runtime rows at behavior
+assertions; the implementation passes that same matrix. Native green remains
+for the coordinator's CI run; no local fixture proves the kernel boundary.
 The coordinator accepted HOME-13's assertion-level red in dispatch
 `43797097484`, offline engine job `133068276167`, at
 `68be535a07039b29ae294f7d72e4be00b6881e6f`: one selected row failed in 2.9 seconds

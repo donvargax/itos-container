@@ -26,6 +26,9 @@ import (
 )
 
 type homeLocalFixture struct {
+	lastRule       string
+	disk           *homeDiskFixture
+	sdk            *homeSDKFixture
 	m              publicMemory
 	homes          *sf.Homes
 	engine         *sf.HomeEngine
@@ -92,14 +95,32 @@ func newHomeLocalFixture(t *testing.T, uid, gid string) *homeLocalFixture {
 	m.storage.Directories["snapshots/"+m.c.Project].Files["1.json"] = canonical.JSON{}.Encode(ap.Record{Candidate: m.c, Generation: "1"})
 	f := &homeLocalFixture{m: m, homes: &sf.Homes{Codec: homeFixtureCodec{}}, engine: &sf.HomeEngine{RunEngine: m.e}}
 	f.engine.WaitFailure = ""
+	f.engine.Homes = map[string]sp.HomeObservation{}
+	f.engine.Roots = map[string]sf.HomeRoot{}
+	f.engine.Workers = map[string]string{}
+	if os.Getenv("SLICE_34_HOME_BACKEND") == "disk" {
+		f.sdk = homeSDK(t, f)
+		var settings map[string]any
+		_ = json.Unmarshal([]byte(f.m.c.Canonical), &settings)
+		settings["engine"].(map[string]any)["endpoint"] = f.sdk.endpoint
+		f.m.b.Endpoint = f.sdk.endpoint
+		f.engine.Endpoint = f.sdk.endpoint
+		f.settings(t, settings, true)
+		f.disk = homeDisk(t, f)
+	}
 	return f
 }
 
 func (f *homeLocalFixture) runner() domain.Runner {
-	return domain.Runner{Store: f.m.registry.Store, Registry: f.m.registry, Engine: f.engine, Entropy: homeLocalEntropy{f}, Workspace: sf.MountWorkspace(f.m.b)}
+	homes := f.service()
+	return domain.Runner{Homes: &homes, Store: f.m.registry.Store, Registry: f.m.registry, Engine: f.runEngine(), Entropy: homeLocalEntropy{f}, Workspace: sf.MountWorkspace(f.m.b)}
 }
 func (f *homeLocalFixture) command(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
+	if f.disk != nil {
+		f.disk.seed()
+		f.sdk.seed()
+	}
 	var c commandLine
 	var out, diagnostic bytes.Buffer
 	parser, err := kong.New(&c, append(cli.Flags(), kong.Writers(&out, &diagnostic), kong.Exit(func(int) {}), kong.Vars{"version": "test"})...)
@@ -108,7 +129,8 @@ func (f *homeLocalFixture) command(t *testing.T, args ...string) (int, string, s
 	}
 	ctx, err := parser.Parse(runOptions(args))
 	if err != nil {
-		return 2, "", err.Error()
+		code := run(args, nil, &out, &diagnostic)
+		return code, out.String(), diagnostic.String()
 	}
 	switch name, _, _ := strings.Cut(ctx.Command(), " "); name {
 	case "run":
@@ -128,14 +150,21 @@ func (f *homeLocalFixture) command(t *testing.T, args ...string) (int, string, s
 		code := c.Run.Run(&cli.UI{Stdout: &out, Stderr: &diagnostic, Classify: runcommand.Classify})
 		return code, out.String(), diagnostic.String()
 	case "status":
+		service := f.service()
 		c.Status.Context = f.ctx
-		c.Status.Service = domain.Recovery{Registry: f.m.registry, Engine: f.engine}
+		c.Status.HomeService = service
+		c.Status.HomePresentation = presentation.UI{Out: &out, Err: &diagnostic}
+		c.Status.Service = domain.Recovery{Registry: f.m.registry, Engine: f.runEngine(), Homes: &service}
 		c.Status.Presentation = presentation.UI{Out: &out, Err: &diagnostic}
 		code := c.Status.Run()
 		return code, out.String(), diagnostic.String()
 	case "stop":
+		service := f.service()
 		c.Stop.Context = f.ctx
-		c.Stop.Service = domain.Recovery{Registry: f.m.registry, Engine: f.engine}
+		c.Stop.Homes = service
+		c.Stop.HomePresentation = presentation.UI{Out: &out, Err: &diagnostic}
+		c.Stop.Consent = f.consent
+		c.Stop.Service = domain.Recovery{Registry: f.m.registry, Engine: f.runEngine(), Homes: &service}
 		c.Stop.Presentation = presentation.UI{Out: &out, Err: &diagnostic}
 		code := c.Stop.Run()
 		return code, out.String(), diagnostic.String()
@@ -150,8 +179,7 @@ func homeReuseContract(t *testing.T, uid, gid string) {
 	if code, _, diagnostic := f.command(t, "run", "--", "probe"); code != 0 {
 		t.Fatalf("approved home launch must reach its runtime boundary: exit %d; %s", code, diagnostic)
 	}
-	key := homeFixtureCodec{}.Scope(f.m.b)
-	scope := f.homes.Scopes[key]
+	scope := f.scope()
 	if len(scope.Generations) != 1 {
 		t.Fatal("one protected home generation must survive cleanup", scope)
 	}
@@ -180,6 +208,20 @@ func homeReuseContract(t *testing.T, uid, gid string) {
 	}
 }
 
+func (f *homeLocalFixture) service() domain.Homes {
+	var store sp.HomeStore = f.homes
+	if f.disk != nil {
+		store = f.disk
+	}
+	return domain.Homes{Store: store, Engine: f.runEngine(), Entropy: homeLocalEntropy{f}}
+}
+func (f *homeLocalFixture) runEngine() sp.RunEngine {
+	if f.sdk != nil {
+		return f.sdk.engine()
+	}
+	return f.engine
+}
+
 type homeLocalConsent struct {
 	yes    bool
 	before func(sp.HomeEntry, string)
@@ -199,6 +241,9 @@ func (f *homeLocalFixture) seedHome(t *testing.T) sp.HomeGeneration {
 	f.homes.Scopes = map[string]sp.HomeScope{key: {Schema: 1, Scope: key, Project: f.m.c.Project, UID: f.m.b.UID, GID: f.m.b.GID, Engine: sp.HomeEngineIdentity{Endpoint: f.m.b.Endpoint, ID: f.m.b.EngineID}, Current: id, Generations: []sp.HomeGeneration{g}}}
 	f.engine.Homes = map[string]sp.HomeObservation{g.Name: {Name: g.Name, Created: g.Created, Driver: "local", Scope: "local", Token: id, Key: key, ExactLabels: true, EmptyOptions: true}}
 	f.engine.Roots = map[string]sf.HomeRoot{g.Name: {UID: f.m.b.UID, GID: f.m.b.GID, Mode: 0700, Directory: true, Marker: "original"}}
+	if f.disk != nil {
+		f.disk.seed()
+	}
 	return g
 }
 func (f *homeLocalFixture) retire(t *testing.T, id, action string, want int) sp.HomeEntry {
@@ -213,12 +258,16 @@ func (f *homeLocalFixture) retire(t *testing.T, id, action string, want int) sp.
 	if json.Unmarshal([]byte(out), &result) != nil || result.Schema != 1 || result.OK != (want == 0) || code != want || len(result.Homes) != 1 {
 		t.Fatalf("retirement = %d %s %s; want %d", code, out, errout, want)
 	}
+	f.lastRule = ""
+	if want == 0 && len(result.Problems) != 0 || want != 0 && len(result.Problems) == 0 {
+		t.Fatal("wrong problem set", result.Problems)
+	}
+	if len(result.Problems) > 0 {
+		f.lastRule = result.Problems[0].Rule
+	}
 	return result.Homes[0]
 }
 func TestHomeRetirementCommands(t *testing.T) {
-	if os.Getenv("SLICE_34_HOME_CASE") == "" {
-		t.Skip("home runtime contract remains @wip")
-	}
 	for _, action := range []string{"reset", "delete"} {
 		t.Run(action, func(t *testing.T) {
 			f := newHomeLocalFixture(t, "1000", "1000")
@@ -265,9 +314,6 @@ func TestHomeRetirementCommands(t *testing.T) {
 	}
 }
 func TestHomeStatusRetainsInspectionFailure(t *testing.T) {
-	if os.Getenv("SLICE_34_HOME_CASE") == "" {
-		t.Skip("home runtime contract remains @wip")
-	}
 	f := newHomeLocalFixture(t, "1000", "1000")
 	if code, _, d := f.command(t, "run", "--", "probe"); code != 0 {
 		t.Fatal(code, d)
@@ -278,9 +324,6 @@ func TestHomeStatusRetainsInspectionFailure(t *testing.T) {
 	}
 }
 func TestHomeManagementChecksOwnershipAfterReview(t *testing.T) {
-	if os.Getenv("SLICE_34_HOME_CASE") == "" {
-		t.Skip("home runtime contract remains @wip")
-	}
 	for _, defect := range []string{"creation", "labels", "driver", "claim", "generation"} {
 		t.Run(defect, func(t *testing.T) {
 			f := newHomeLocalFixture(t, "1000", "1000")
@@ -321,14 +364,26 @@ func (f *homeLocalFixture) status() string {
 }
 func TestHomeLocalContract(t *testing.T) {
 	id := os.Getenv("SLICE_34_HOME_CASE")
-	if id == "" {
-		t.Skip("home scenario subprocess only")
-	}
 	given := os.Getenv("SLICE_34_HOME_GIVEN")
+	cases := homeLocalCases
+	if id != "" {
+		cases = []homeLocalCase{{id, given}}
+	}
+	for _, backend := range []string{"memory", "disk"} {
+		t.Run(backend, func(t *testing.T) {
+			t.Setenv("SLICE_34_HOME_BACKEND", backend)
+			for _, row := range cases {
+				t.Run(row.id+"/"+row.given, func(t *testing.T) { runHomeLocalCase(t, row.id, row.given) })
+			}
+		})
+	}
+}
+func runHomeLocalCase(t *testing.T, id, given string) {
 	parameter := ""
 	if _, rest, ok := strings.Cut(given, string(rune(34))); ok {
 		parameter, _, _ = strings.Cut(rest, string(rune(34)))
 	}
+
 	switch id {
 	case "HOME-03":
 		homeApprovalChanges(t)

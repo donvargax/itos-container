@@ -65,6 +65,7 @@ type RunRegistry interface {
 }
 
 type RecoveryEntry struct {
+	Home              *HomeDisclosure            `json:"home,omitempty"`
 	Egress            *EgressDisclosure          `json:"egress,omitempty"`
 	Credentials       []approval.CredentialGrant `json:"credentials,omitempty"`
 	CredentialNetwork bool                       `json:"-"`
@@ -82,9 +83,10 @@ type RecoveryEntry struct {
 	Retry             []string                   `json:"retry"`
 }
 type RecoveryFailure struct {
-	Gaps    []RefusalGap
-	Session string
-	Outcome Outcome
+	HomeClaims []HomeClaim
+	Gaps       []RefusalGap
+	Session    string
+	Outcome    Outcome
 }
 type RecoveryResult struct {
 	Entries  []RecoveryEntry

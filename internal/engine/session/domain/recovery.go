@@ -14,6 +14,7 @@ type Recovery struct {
 	Refusals  port.RefusalLog
 	Registry  port.Registry
 	Engine    port.RunEngine
+	Homes     *Homes
 	immediate bool
 }
 
@@ -74,13 +75,24 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	}
 	// Validated no-create evidence proves worker absence for either schema.
 	// An anchored session still needs an independent volume observation.
-	if failure == "" && (!noCreate || entry.Intent().Record().Schema >= 2) {
+	if failure == "" && (!noCreate || entry.Intent().Record().Schema >= 2 || e.Home != nil) {
 		connection, f := s.Engine.OpenRun(ctx, entry.Intent().Binding())
 		failure = f
 		if failure == "" {
 			defer connection.Close()
+			if entry.Intent().Record().Home != (port.HomeReference{}) {
+				if s.Homes == nil {
+					failure = port.Incomplete
+				} else {
+					e.Home.State, failure = s.Homes.reconcile(ctx, entry, connection, false)
+				}
+			}
 			if !noCreate {
-				_, e.Resource, failure = inspectSession(ctx, entry, connection)
+				var workerFailure port.Outcome
+				_, e.Resource, workerFailure = inspectSession(ctx, entry, connection)
+				if workerFailure != "" {
+					failure = workerFailure
+				}
 			}
 			if entry.Intent().Record().Schema >= 2 {
 				_, anchorFailure := inspectRecoveryAnchor(ctx, entry.Intent(), connection)
@@ -131,6 +143,9 @@ func sessionEntry(s port.Session) (port.RecoveryEntry, port.Outcome) {
 		e.Anchor = "unknown"
 	}
 	e.Egress = s.Intent().Binding().Egress.Disclosure()
+	if h := s.Intent().Record().Home; h != (port.HomeReference{}) {
+		e.Home = &port.HomeDisclosure{Storage: "volume", State: "unknown", Name: h.Name}
+	}
 	return e, failure
 }
 func finishEntry(e *port.RecoveryEntry) {
@@ -184,7 +199,13 @@ func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (
 	if status != port.Observed || !o.StatePresent {
 		return o, "unknown", port.Incomplete
 	}
-	if o.ID != id || !owns(r, o) || r.Stage == "absent" || (r.Schema >= 2 && (!o.AnchorExact || o.AnchorName != r.Anchor.Name)) {
+	// A durably owned worker rejected before its first start can be removed
+	// by immutable ID even when boundary inspection found the wrong mounts.
+	// Removal never requests deletion of mounted volumes. Name reconciliation
+	// and previously started workers still require the complete mount binding.
+	unstartedHome := r.Home != (port.HomeReference{}) && r.ContainerID == id && o.Status == "created" && !o.Running && !o.Started && o.PID == 0
+	wrongMounts := (r.Schema >= 2 && (!o.AnchorExact || o.AnchorName != r.Anchor.Name)) || (r.Home != (port.HomeReference{}) && (!o.HomeExact || o.HomeName != r.Home.Name))
+	if o.ID != id || !owns(r, o) || r.Stage == "absent" || wrongMounts && !unstartedHome {
 		return o, "unknown", port.Refused
 	}
 	switch {
@@ -221,7 +242,7 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	// is independently revalidated by stopSession before any mutation.
 	e, _ := sessionEntry(entry)
 	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
-	if uncreated(entry) && entry.Intent().Record().Schema == 1 {
+	if uncreated(entry) && entry.Intent().Record().Schema == 1 && entry.Intent().Record().Home == (port.HomeReference{}) {
 		failure = cancelUncreated(entry)
 	} else {
 		var connection port.RunConnection
@@ -230,8 +251,21 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 			defer connection.Close()
 			if entry.Intent().Record().Schema >= 2 {
 				failure = stopAnchoredSession(ctx, entry, connection, signal, exit, remove, s.immediate)
+			} else if uncreated(entry) {
+				failure = cancelUncreated(entry)
 			} else {
 				failure = stopSession(ctx, entry, connection, signal, exit, remove)
+			}
+			if h := entry.Intent().Record().Home; h != (port.HomeReference{}) {
+				if s.Homes == nil {
+					failure = port.Incomplete
+				} else {
+					state, f := s.Homes.reconcile(ctx, entry, connection, remove)
+					e.Home.State = state
+					if f != "" {
+						failure = f
+					}
+				}
 			}
 		}
 	}

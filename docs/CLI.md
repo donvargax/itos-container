@@ -422,6 +422,33 @@ the codes they promise. Existing counting behaviour is unchanged.
 
 ## Compatibility and completion
 
+### Retained harness homes
+
+An approved `home: {storage: volume}` gives repeated runs of one checkout a
+private persistent home. Ordinary session cleanup and `stop <session-id>` retain
+it. `status --homes [--json]` reads the current user's protected catalog, including
+obsolete bindings and tombstones, even outside the original checkout. It neither
+scans the daemon for unrecorded volumes nor reads home contents. Select the
+original local daemon to inspect an entry from another engine.
+
+`stop --home <full-home-id> --reset` retires that generation and reserves one
+empty successor for the next approved run. `--delete` retires the generation and
+disables its scope until a separate consented reset. Both review permanent data
+loss and require terminal y/N consent; there is no `--yes`, force or bulk route.
+JSON results stay on stdout and terminal review goes to stderr. Agents must not
+use these operations on real retained homes.
+
+A session claim blocks home retirement until ordinary session stop confirms
+cleanup. Its diagnostic names the exact session and original state-root selection.
+An interrupted action retains its exact home ID and action as a retry, requiring
+fresh consent. Repeating a completed action cannot affect its successor. Missing
+storage is never recreated implicitly, and toggling policy does not undo deletion.
+
+Local contracts cover these decisions. Native isolation and initialization remain
+subject to the CI engine scenarios at the pushed head.
+
+### Compatibility rules
+
 Renamed commands/flags, changed exit codes and incompatible structured/file data are
 breaking changes. Group ready breaking changes and document migration; use a major
 release from 1.0 and a minor release before 1.0, as the newer upstream guidance does.

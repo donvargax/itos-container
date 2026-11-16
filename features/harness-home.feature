@@ -325,7 +325,7 @@ Feature: An approved persistent home for one checkout's harness
 
   # Expected red is changed-approval refusal and the matching home control:
   # the baseline rejects the new request/record before either behavior.
-  @wip @slice-34 @ID-HOME-03 @local-engine-fixture
+  @slice-34 @ID-HOME-03 @local-engine-fixture
   Scenario: Adding and removing a home both require approval
     Given home approval mismatch fixtures for adding and removing the home request
     When run attempts each changed request then each independently approved matching request and finally an independently approved re-enabled home
@@ -334,14 +334,14 @@ Feature: An approved persistent home for one checkout's harness
 
   # Frozen-input and local lifetime. Red at each first Then: no home profile,
   # no home mount or no home ownership operation exists in the baseline.
-  @wip @slice-34 @ID-HOME-04 @local-engine-fixture
+  @slice-34 @ID-HOME-04 @local-engine-fixture
   Scenario: A selected run keeps its home grant after requests change
     Given a home launch fixture with approved home settings A and independently approved omitted-home settings B
     When run selects A and the fixture publishes B before create and then invokes a fresh run through both local backends
     Then the first worker uses A's exact home volume and environment and the fresh worker uses B's legacy tmpfs home
     And A's frozen snapshot and retained home remain unchanged with no post-selection request reads
 
-  @wip @slice-34 @ID-HOME-05 @local-engine-fixture
+  @slice-34 @ID-HOME-05 @local-engine-fixture
   Scenario Outline: Fresh controllers reuse one durably owned initialized home
     Given a home launch fixture with synthetic approved UID <uid> GID <gid> and no home record or volume and two sequential runs
     When fresh run controllers execute both runs through both local backends
@@ -355,7 +355,7 @@ Feature: An approved persistent home for one checkout's harness
       | 1000 | 1000 |
       | 2001 | 3001 |
 
-  @wip @slice-34 @ID-HOME-06 @local-engine-fixture
+  @slice-34 @ID-HOME-06 @local-engine-fixture
   Scenario Outline: Home startup failure never launches or silently falls back
     Given a home launch fixture with fault "<fault>" and an independent successful home control
     When both home launches finish through both local backends and explicit recovery follows after the fault is cleared
@@ -373,7 +373,7 @@ Feature: An approved persistent home for one checkout's harness
 
   # Refusal rows include a positive home control, so an old generic refusal
   # cannot pass. Fixtures independently seed each described record/object defect.
-  @wip @slice-34 @ID-HOME-07 @local-engine-fixture
+  @slice-34 @ID-HOME-07 @local-engine-fixture
   Scenario Outline: A home name or label alone confers no reuse authority
     Given a retained home fixture with defect "<defect>" and an independent matching home control
     When fresh run controllers attempt home reuse through both local backends
@@ -393,7 +393,7 @@ Feature: An approved persistent home for one checkout's harness
       | root mode is not 0700                     |
       | home reference belongs to another project |
 
-  @wip @slice-34 @ID-HOME-08 @local-engine-fixture
+  @slice-34 @ID-HOME-08 @local-engine-fixture
   Scenario Outline: Home boundary inspection precedes every worker start
     Given a home launch fixture whose worker inspection has "<defect>" and an independent correct home control
     When the home boundary launches are attempted through both local backends
@@ -414,7 +414,7 @@ Feature: An approved persistent home for one checkout's harness
 
   # Recovery and bounded operations. Independently seeded home-aware records
   # are not accepted by the old codec: first Then is red, never a setup assertion.
-  @wip @slice-34 @ID-HOME-09 @local-engine-fixture
+  @slice-34 @ID-HOME-09 @local-engine-fixture
   Scenario Outline: Stop removes session resources and retains the recorded home
     Given an independently seeded home-bearing session with state "<state>" and changed current requests and a legacy session control
     When fresh status and stop processes inspect and clean that session twice through both local backends
@@ -428,14 +428,14 @@ Feature: An approved persistent home for one checkout's harness
       | exited with observed code 7   |
       | running after controller loss |
 
-  @wip @slice-34 @ID-HOME-10 @local-engine-fixture
+  @slice-34 @ID-HOME-10 @local-engine-fixture
   Scenario: Recovery accounts for a delayed home allocation without deleting it
     Given a home-bearing session with a durable allocation intent and an independently delayed successful volume create and a separate replacement-volume control
     When stop observes name-only absence and later fresh stop observes the matching volume through both local backends
     Then the first stop reports temporary uncertainty with its exact retry and the later stop durably accounts for the retained home and completes session cleanup
     And neither stop allocates or starts anything or deletes the home and a same-named replacement is refused by a separate control
 
-  @wip @slice-34 @ID-HOME-11 @local-engine-fixture
+  @slice-34 @ID-HOME-11 @local-engine-fixture
   Scenario Outline: Home work shares the existing operation budgets
     Given a home lifecycle fixture delaying "<operation>" and an independent timely home control
     When the home operations exhaust their remaining aggregate budget through both local backends
@@ -453,7 +453,7 @@ Feature: An approved persistent home for one checkout's harness
   # Reuse the lifecycle assembly's caller deadlines and recorder barriers, never
   # long sleeps or production timeout switches. SDK contexts carry the lesser
   # call/phase deadline; adapters retain late handles under existing budget rules.
-  @wip @slice-34 @ID-HOME-12 @local-engine-fixture
+  @slice-34 @ID-HOME-12 @local-engine-fixture
   Scenario: Home allocation is shared across selected host state roots
     Given two home launch fixtures for the same checkout and daemon with different XDG state roots and an allocation barrier
     When concurrent run controllers contend and a later run follows after the first worker is gone through both local backends
@@ -464,7 +464,7 @@ Feature: An approved persistent home for one checkout's harness
   # and retired generations, claims and engine objects, never run setup through
   # the product. When collects every early return; the first Then must assert the
   # specified home result, never merely a nonzero exit or absence of deletion.
-  @wip @slice-34 @ID-HOME-16 @local-engine-fixture
+  @slice-34 @ID-HOME-16 @local-engine-fixture
   Scenario: Retained and obsolete homes remain discoverable outside their checkouts
     Given a home catalog fixture with current obsolete deleted and other-user homes across state roots and an independent empty catalog
     When fresh plain and JSON status --homes inspect both catalogs outside the recorded checkouts through both local backends
@@ -472,7 +472,7 @@ Feature: An approved persistent home for one checkout's harness
     And obsolete GID checkout and daemon bindings remain discoverable while other-user entries and all home contents stay private
     And another daemon is unknown with recovery.environment and neither catalog is changed or used to discover engine resources by labels
 
-  @wip @slice-34 @ID-HOME-17 @local-engine-fixture
+  @slice-34 @ID-HOME-17 @local-engine-fixture
   Scenario Outline: Discarding home state requires consent to one reviewed action
     Given independent owned home management fixtures with response "<response>" and a terminal consenting control for each action
     When reset and delete are requested in plain and JSON modes through both local backends
@@ -490,7 +490,7 @@ Feature: An approved persistent home for one checkout's harness
 
   # A valid consenting control prevents generic legacy argument rejection from
   # satisfying these refusal rows. Publication faults precede any engine mutation.
-  @wip @slice-34 @ID-HOME-24 @local-engine-fixture
+  @slice-34 @ID-HOME-24 @local-engine-fixture
   Scenario Outline: Invalid or unproven home actions cannot discard storage
     Given an independently recorded home with management request condition "<condition>" and an independent valid consenting control
     When home management is attempted through both local backends
@@ -510,7 +510,7 @@ Feature: An approved persistent home for one checkout's harness
       | claim state root unavailable          | recovery.temporary    | 75   |
       | unsafe session claim                  | recovery.unsafe-state | 1    |
 
-  @wip @slice-34 @ID-HOME-18 @local-engine-fixture
+  @slice-34 @ID-HOME-18 @local-engine-fixture
   Scenario Outline: Consented reset recovers an unusable home without automatic replacement
     Given an independently recorded unreferenced home that is "<condition>" and an independently approved matching run
     When run is attempted before consent then terminal reset completes and fresh run and repeated reset of the old ID follow through both local backends
@@ -525,7 +525,7 @@ Feature: An approved persistent home for one checkout's harness
       | deleted by prior consent           | run.home-refused with exit 1 |
       | owned with unsafe worker root mode | run.home-refused with exit 1 |
 
-  @wip @slice-34 @ID-HOME-19 @local-engine-fixture
+  @slice-34 @ID-HOME-19 @local-engine-fixture
   Scenario Outline: Explicit deletion reclaims obsolete homes without disabling another scope
     Given independent old and current home generations differing by "<identity>" with no claims and missing-volume and current-scope deletion controls
     When the person selects each original daemon deletes only the chosen home with consent and retries through both local backends
@@ -539,7 +539,7 @@ Feature: An approved persistent home for one checkout's harness
       | checkout identity |
       | local daemon      |
 
-  @wip @slice-34 @ID-HOME-20 @local-engine-fixture
+  @slice-34 @ID-HOME-20 @local-engine-fixture
   Scenario Outline: Home destruction requires exact ownership at the mutation boundary
     Given a home management fixture with substitution "<defect>" and an independent valid owned control
     When reset and delete receive terminal consent and the substitution is exercised after review and immediately before removal through both local backends
@@ -563,7 +563,7 @@ Feature: An approved persistent home for one checkout's harness
   # Each invocation's own operation budget applies; never sleep to order events.
   # The uncertain-create row releases its delayed matching resource before session
   # stop; neither controller death nor name-only absence supplies that evidence.
-  @wip @slice-34 @ID-HOME-21 @local-engine-fixture
+  @slice-34 @ID-HOME-21 @local-engine-fixture
   Scenario Outline: Home management fences launches and protects every retained session claim
     Given a home shared across state roots with reference "<reference>" and barriers at consent and durable retirement intent
     When reset and delete contend with launch then ordinary stop recovers the referenced session and fresh consented management is retried through both local backends
@@ -583,7 +583,7 @@ Feature: An approved persistent home for one checkout's harness
   # The replacement control substitutes a foreign same-named volume after the
   # first confirmed removal and before retry. Hold absence inspection after lost
   # replies so that the first attempt must actually retain uncertainty.
-  @wip @slice-34 @ID-HOME-22 @local-engine-fixture
+  @slice-34 @ID-HOME-22 @local-engine-fixture
   Scenario Outline: Interrupted home retirement remains bounded and recoverable by exact ID
     Given an unreferenced owned home with management fault "<fault>" and independent timely and replacement-volume controls
     When consented reset and delete encounter the fault and fresh status and consented retries follow through both local backends
@@ -603,7 +603,7 @@ Feature: An approved persistent home for one checkout's harness
 
   # Native evidence. First assertions require the absent persistent-home behavior;
   # /tmp execution, denied host access and teardown are explicit regression controls.
-  @wip @slice-34 @ID-HOME-13 @engine
+  @slice-34 @ID-HOME-13 @engine
   Scenario: Non-root runs retain home state and execute temporary binaries
     Given a CI home checkout with a cached approved image for the actual non-root controller UID GID and isolated host-home sentinels
     When two fresh product runs write then read a home marker and directly execute a copied ELF probe from /tmp
@@ -612,7 +612,7 @@ Feature: An approved persistent home for one checkout's harness
     And independent inspection finds only the approved home checkout and tmpfs mounts with no host-home or image-home copy
     And host-home sentinels and checkout ownership stay unchanged and both workers and anchors are absent while the home remains
 
-  @wip @slice-34 @ID-HOME-14 @engine
+  @slice-34 @ID-HOME-14 @engine
   Scenario: Equal checkout names never share harness state
     Given two CI home checkouts with equal basenames and the same approved image and host UID GID
     When their product workers write distinct private home markers and each checkout is run again
@@ -622,7 +622,7 @@ Feature: An approved persistent home for one checkout's harness
 
   # Controller death cannot supply retry output: use the independently captured
   # protected registration, then explicitly invoke fresh status and stop.
-  @wip @slice-34 @ID-HOME-15 @engine
+  @slice-34 @ID-HOME-15 @engine
   Scenario Outline: Home state survives every session ending without preserving a worker
     Given a CI home checkout with a cached image and a probe that writes a home marker before "<ending>"
     When the product session ends that way and fresh product status discovers the independently recorded session ID then fresh product stop recovers it and status inspects it again
@@ -644,7 +644,7 @@ Feature: An approved persistent home for one checkout's harness
   # after product stop confirmed worker absence, before management's new review.
   # The obsolete case selects the original scope explicitly after an identity
   # change; the other checkout's home is never a reclamation candidate.
-  @wip @slice-34 @ID-HOME-23 @engine
+  @slice-34 @ID-HOME-23 @engine
   Scenario Outline: A person can retire native home storage after its session is gone
     Given two CI home checkouts with retained markers one live worker and a disposable terminal for action "<action>"
     When home management is attempted while the worker lives then ordinary stop completes and the chosen action receives fresh consent

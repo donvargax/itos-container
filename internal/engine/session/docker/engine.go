@@ -176,6 +176,27 @@ func (c *connection) Inspect(ctx context.Context, id string) (port.Observation, 
 		observed.AnchorName = m.Source
 		observed.AnchorExact = safeAnchorMount(m, m.Source) && safeMounts(r.Mounts, m.Source)
 	}
+	if c.binding.Home && r.HostConfig != nil && len(r.HostConfig.Mounts) == 2 {
+		var authority port.Record
+		for _, m := range r.HostConfig.Mounts {
+			if m.Target == "/workspace" {
+				authority.Anchor.Name = m.Source
+			}
+			if m.Target == "/home/itos" {
+				authority.Home.Name = m.Source
+				authority.Home.ID = strings.TrimPrefix(m.Source, "itos-container-home-")
+			}
+		}
+		// This observation identifies actual mounts; the domain compares both
+		// names with protected authority before accepting them for recovery.
+		observed.AnchorName, observed.HomeName = authority.Anchor.Name, authority.Home.Name
+		for _, m := range r.HostConfig.Mounts {
+			if m.Target == "/workspace" {
+				observed.AnchorExact = safeAnchorMount(m, authority.Anchor.Name) && safeHomeMounts(r.Mounts, authority)
+			}
+		}
+		observed.HomeExact = port.HexID(authority.Home.ID) && observed.AnchorExact
+	}
 	if r.State != nil {
 		observed.Status = string(r.State.Status)
 		observed.Running = r.State.Running

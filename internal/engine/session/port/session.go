@@ -114,7 +114,8 @@ func (r Record) ValidTransition(next Record) bool {
 	expected := r
 	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
 	expected.Schema, expected.Anchor, expected.Egress = next.Schema, next.Anchor, next.Egress
-	if next != expected || !r.anchorTransition(next) || !r.egressTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
+	expected.Home = next.Home
+	if next != expected || !r.homeTransition(next) || !r.anchorTransition(next) || !r.egressTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
 		return false
 	}
 	switch r.Stage {
@@ -122,7 +123,7 @@ func (r Record) ValidTransition(next Record) bool {
 		return next.ContainerID == "" && (next.Stage == "reserved" || next.Stage == "intent" || next.Stage == "cancelled") &&
 			(next.Schema == 1 || next.Stage == "reserved" || (next.Stage == "intent" && next.Anchor.Stage == "owned") || next.Stage == "cancelled")
 	case "cancelled", "absent":
-		return next.Stage == r.Stage && next.ContainerID == r.ContainerID && (next == r || r.Schema >= 2 && r.anchorTransition(next))
+		return next.Stage == r.Stage && next.ContainerID == r.ContainerID && (next == r || r.Schema >= 2 && r.anchorTransition(next) || next.Home != r.Home && r.homeTransition(next))
 	default:
 		return HexID(next.ContainerID) && (next.Stage == "owned" || next.Stage == "absent")
 	}

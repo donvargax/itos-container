@@ -674,5 +674,17 @@ the approved host UID/GID, with project lifetime. The effective profile gains
 request changes the fingerprint and requires a new approval. Review explains
 retention after exit/stop, checkout scope and terminal-consented reset/deletion;
 it never allocates storage. This request grants neither networking nor credentials
-and does not lift version-3 run restrictions. Runtime support is being implemented
-under [slice-34's decision](decisions/0030-persistent-harness-home.md).
+and does not lift version-3 run restrictions. The worker receives `HOME=/home/itos`,
+`TMPDIR=/tmp` and fixed XDG config, data, state and cache paths beneath that home.
+Image defaults cannot redirect them. `/tmp` remains a separate executable tmpfs.
+
+The protected catalog is fixed at
+`<account home>/.local/state/itos-container/homes`, independent of `HOME` and
+`XDG_STATE_HOME`. Its scope binds checkout identity, UID/GID and the local daemon.
+Changing an image or approval generation preserves data; another scope cannot
+reuse it. Disabling the request retains the home, and re-enabling reuses it.
+Missing or changed recorded storage refuses reuse instead of silently replacing it.
+Use `status --homes` to discover retained and obsolete generations and the
+terminal-consented `stop --home <id> --reset|--delete` operations to retire one.
+Native CI evidence is required before claiming filesystem isolation; see
+[decision 0030](decisions/0030-persistent-harness-home.md).

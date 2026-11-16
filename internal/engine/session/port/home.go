@@ -125,6 +125,17 @@ type HomeManagement interface {
 }
 type HomePresentation interface{ PrintHomes(HomeResult, bool) int }
 
+func (r Record) homeTransition(next Record) bool {
+	if r.Home == next.Home {
+		return true
+	}
+	if r.Home == (HomeReference{}) {
+		return r.Stage == "reserved" && next.Stage == "reserved" && next.Home.Valid()
+	}
+	expected := r.Home
+	expected.Created = next.Home.Created
+	return r.Home.Created == "" && next.Home.Created != "" && next.Home == expected
+}
 func (r Record) ValidHome(b Binding) bool {
 	if r.Home == (HomeReference{}) {
 		return !b.Home || r.Stage == "reserved" || r.Stage == "cancelled"

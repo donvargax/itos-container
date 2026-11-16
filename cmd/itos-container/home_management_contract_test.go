@@ -240,6 +240,18 @@ func homeRetirementSubstitution(t *testing.T, defect string) {
 				}
 			}
 			f.retire(t, g.ID, action, expected)
+			wantRule := "recovery.not-owned"
+			switch defect {
+			case "symlinked home record":
+				wantRule = "recovery.unsafe-state"
+			case "missing original ownership tuple":
+				wantRule = "recovery.invalid-state"
+			case "unavailable original daemon":
+				wantRule = "recovery.temporary"
+			}
+			if f.lastRule != wantRule {
+				t.Fatal("wrong ownership diagnosis", defect, boundary, f.lastRule, wantRule)
+			}
 			for _, event := range f.engine.HomeEvents {
 				if event == "remove" {
 					t.Fatal("substitution was removed", defect, boundary)
@@ -256,6 +268,9 @@ func homeClaimFence(t *testing.T, reference string) {
 		f.consent = homeLocalConsent{yes: true}
 		before := len(f.engine.Events)
 		e := f.retire(t, g.ID, action, 1)
+		if f.lastRule != "recovery.home-in-use" {
+			t.Fatal("known claim lost its diagnosis", f.lastRule)
+		}
 		if !slices.Equal(e.References, []string{id}) || len(f.engine.Resources) != 1 {
 			t.Fatal("home claim not retained", e)
 		}
@@ -277,6 +292,9 @@ func homeClaimFence(t *testing.T, reference string) {
 		g = f.seedHome(t)
 		f.consent = homeLocalConsent{yes: true, before: func(sp.HomeEntry, string) { f.seedHomeSession(t, reference) }}
 		f.retire(t, g.ID, action, 1)
+		if f.lastRule != "recovery.home-in-use" {
+			t.Fatal("claim during consent lost its diagnosis", f.lastRule)
+		}
 		f.noHomeMutation(t, 0)
 		// A durable pending action fences all later launch/mount attempts.
 		f = newHomeLocalFixture(t, "1000", "1000")
@@ -340,7 +358,9 @@ func homeRetirementFault(t *testing.T, fault string) {
 			}
 			if cancel != nil {
 				close(release)
-				synctest.Wait()
+				if f.disk == nil {
+					synctest.Wait()
+				}
 			}
 			f.ctx = nil
 			f.homes.BeforeSave = nil
@@ -365,7 +385,7 @@ func homeRetirementFault(t *testing.T, fault string) {
 			f.noHomeMutation(t, before)
 		}
 		if fault == "engine removal consumes remaining budget" {
-			synctest.Test(t, run)
+			homeContractClock(t, run)
 		} else {
 			run(t)
 		}
@@ -400,7 +420,7 @@ func homeInvalidAction(t *testing.T, condition string) {
 			var cancel context.CancelFunc
 			f.ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			lock, _ = f.homes.Open(context.Background(), f.scope().Scope, false)
+			lock, _ = f.service().Store.Open(context.Background(), f.scope().Scope, false)
 			defer lock.Close()
 		case "pending allocation with name-only 404":
 			want = 75
@@ -431,7 +451,7 @@ func homeInvalidAction(t *testing.T, condition string) {
 		}
 	}
 	if condition == "scope lock exhausts the budget" {
-		synctest.Test(t, run)
+		homeContractClock(t, run)
 	} else {
 		run(t)
 	}

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 
+	budget "github.com/donvargax/itos-container/internal/engine/budget/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
@@ -67,7 +68,7 @@ func (s *Homes) Open(ctx context.Context, key string, create bool) (port.HomeTra
 		lock <- struct{}{}
 		return nil, ""
 	}
-	return &homeTransaction{store: s, key: key, lock: lock, ctx: ctx}, ""
+	return &homeTransaction{store: s, key: key, lock: lock, ctx: budget.Lifetime(ctx)}, ""
 }
 
 type homeTransaction struct {
