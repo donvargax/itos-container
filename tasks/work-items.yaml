@@ -2136,14 +2136,15 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-run-interactive-terminal
+  - id: slice-37
     title: Run an owned foreground workload with a TTY
     phase: 1
     owner: null
     status: todo
     depends_on: [T-56]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-run-interactive-terminal.
       Extend the run slice and shared session engine with terminal attachment, initial dimensions,
       resizes and Ctrl-C as input. Specify terminal selection and JSON refusal before
       implementation. Restore the terminal and stop the workload after client disconnect using
