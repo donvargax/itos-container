@@ -11,10 +11,10 @@ confirms or overturns [the credentials record](../decisions/0025-credentials-pas
 It defines two token kinds, no Codex delivery, and no permission to use real credentials.
 The harness-home design in [decision 0030](../decisions/0030-persistent-harness-home.md)
 was **selected by the coordinator in q-73 (2026-11-16 01:50 UTC)** on the person's
-standing instruction, for the person to ratify. It remains unimplemented and
-unproven, including consented reset, deletion and missing-storage recovery. The
-home responsibilities marked proposed below need implementation, not another
-storage-lifetime decision.
+standing instruction, for the person to ratify. Slice-34 implements retention,
+consented reset/deletion and missing-storage recovery. The local memory and
+protected disk/SDK fixtures pass; native green evidence remains with CI, so
+this implementation does not yet establish container-host support.
 
 The [charter](../charter.md) selects the milestone from the binding
 [pilot contract](../plans/container-pilot.md); the [plan](../../PLAN.md) records that
@@ -46,7 +46,7 @@ The required public operation is `itos container run -- <argv...>`: preserve exp
 arguments, run under an approved non-root identity, keep the checkout as the only host
 filesystem mount, and remove owned ephemeral resources when foreground work ends.
 Preserve checkout edits. A2 selects ephemeral tmpfs for the first-milestone profile.
-The charter's second-milestone harness home has a **proposed** opt-in exception in
+The charter's second-milestone harness home has an implemented opt-in exception in
 [decision 0030](../decisions/0030-persistent-harness-home.md): retain one approved
 per-checkout local volume, with explicit consented retirement. Omitted-home runs
 retain A2's exclusion of persistent worker volumes, caches and profiles. Host approval,
@@ -275,8 +275,8 @@ record schemas. Settled choices constrain them without proving their implementat
 | Credential source observation (in `internal/engine/readiness`) | Implemented by slice-29; synthetic observation evidence | Shared descriptor-based metadata checks for doctor, approve and run: no symlinks, trusted ancestors, private owned regular single-link files outside checkout and control state, bounded size and distinct inodes. Exclude root, descendant and file aliases through checkout inventory and state filesystem-coordinate projections. | Reuse the bounded checkout metadata scan; incomplete required evidence refuses. Decision 0027 specifies two bounded mount observations, pin/mapping rechecks and state subtrees independent of other projects' writes/history. No state enumeration, content read, hash or log; own port and disk adapter beside checkout inspection. Only run later reads the checked inode. Evidence remains a dependency of slice-30, T-48 and slice-31/33. |
 | Credential approval (in `internal/engine/approval`) | Implemented by slice-30 | Bind sorted `{kind, source, target}` grants, never contents, with `offline-credentials-v1` or `allowlist-credentials-v1`; review scope and exposure; apply q-52's terminal rule. | Reuse slice-26 canonicalization, differences and presentation. No-grant profiles keep their identity; source-content changes do not change approval. |
 | Credential staging (in `internal/engine/session`) | **Proposed**, T-48 | Intent before private `/dev/shm` staging, exact read-only file mounts, verification before start, unlink after the start attempt and owned recovery. | Session ports, I/O-free fake, disk/Docker adapters and shared contract; slice-31/33 consume it. Lost acknowledgement after mount acquisition must retain uncertainty; Codex file delivery waits on question 1. |
-| Persistent harness home (in `internal/engine/session`) | **Proposed and unproven**, slice-34 | Per-checkout generation allocation, initialization, cross-state-root session claims, exact ownership, retention and consented retirement; protected catalog and scope lock under the fixed account-home control boundary. | Own domain/port, disk/Docker and existing encoding/entropy adapters; I/O-free porttest fake and shared adapter contracts. Policy/approval retain validation and canonicalization. Only cmd assembles. [Decision 0030](../decisions/0030-persistent-harness-home.md). |
-| Home integration in existing run/doctor/approve/status/stop slices | **Proposed and unproven**, slice-34 | Review/freeze the opt-in home grant; run consumes it; session status/stop retain home storage. Separate `status --homes` discovery and `stop --home <id> --reset\|--delete` provide explicit person-controlled retirement. | Shared session/policy/approval ports, no slice-to-slice imports. Stop's terminal consent uses its own port and named adapter, wired by cmd; no engine I/O in handlers. |
+| Persistent harness home (in `internal/engine/session`) | **Implemented; native green pending**, slice-34 | Per-checkout generation allocation, initialization, cross-state-root session claims, exact ownership, retention and consented retirement; protected catalog and scope lock under the fixed account-home control boundary. | Own domain/port, disk/Docker and existing encoding/entropy adapters; I/O-free porttest fake and shared adapter contracts. Policy/approval retain validation and canonicalization. Only cmd assembles. [Decision 0030](../decisions/0030-persistent-harness-home.md). |
+| Home integration in existing run/doctor/approve/status/stop slices | **Implemented; native green pending**, slice-34 | Review/freeze the opt-in home grant; run consumes it; session status/stop retain home storage. Separate `status --homes` discovery and `stop --home <id> --reset\|--delete` provide explicit person-controlled retirement. | Shared session/policy/approval ports, no slice-to-slice imports. Stop's terminal consent uses its own port and named adapter, wired by cmd; no engine I/O in handlers. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
 or runtime permission. Doctor composes readiness and approval inspection; readiness
@@ -557,7 +557,7 @@ terminal gap remains. Slice-30 carries the rule and disclosure into help/securit
    [The failure-cleanup decision](../decisions/0009-foreground-failure-cleanup.md)
    records the review fixes and their local controller proof.
 
-For slice-34's **proposed, unproven** home profile, frozen approval also binds
+For slice-34's home profile (**implemented; native green pending**), frozen approval also binds
 `home: {storage: volume, target: /home/itos, lifetime: project, mode: "0700"}` and
 the fixed HOME/XDG mappings. Under a scope lock independent of selected state roots,
 publish a durable generation claim before allocation or mounting. Persist allocation
@@ -569,7 +569,7 @@ this additional managed volume. `/tmp` stays a separate executable tmpfs. Normal
 failure and session stop remove ephemeral resources while retaining the home; a missing
 recorded home refuses reuse until explicit consented reset, never automatic replacement.
 See [decision 0030](../decisions/0030-persistent-harness-home.md) and the
-[home specification](../../features/harness-home.feature) for the proposed protocol.
+[home specification](../../features/harness-home.feature) for the protocol and evidence requirements.
 
 ### State and result interpretation
 
@@ -617,7 +617,7 @@ These are T-11's interface meanings, not a storage schema or proof of a transiti
 | ready | Boundaries verified and ownership durable; launch proceeds directly, with no lifecycle hooks. Failure/cancellation enters stopping. |
 | running | Foreground launched under frozen settings. Observed exit/cancellation enters stopping; controller/engine loss is not observed termination. |
 | stopping | Bounded owned cleanup, including partial startup and already stopped workers. Confirmed completion reaches stopped; incomplete cleanup reaches failed. |
-| stopped | Required ephemeral cleanup confirmed, including recorded resources confirmed absent. Workload result and checkout edits remain; no restart authorized. The proposed home profile retains its separately owned persistent home; no-home runs retain A2's ephemeral worker state. |
+| stopped | Required ephemeral cleanup confirmed, including recorded resources confirmed absent. Workload result and checkout edits remain; no restart authorized. The opt-in home profile retains its separately owned persistent home; no-home runs retain A2's ephemeral worker state. |
 | failed | Startup/controller failure or incomplete cleanup. Report present/uncertain resources separately; later authorized stop may resume stopping. Never imply removal from this state name. |
 
 Preserve an observed nonzero workload exit even when cleanup fails, with a separate
@@ -669,10 +669,10 @@ cleanup using revalidated trusted ownership and concrete resource identity. Refu
 wrong-user, foreign, mismatched or ambiguous resources; labels/names only corroborate
 ownership. Confirmed-absent recorded resources are safe on repeated stop; an unreachable
 engine does not establish absence. Never prune unrelated resources or remove shared
-images or checkout edits. Worker tmpfs is ephemeral. The proposed home profile retains
+images or checkout edits. Worker tmpfs is ephemeral. The opt-in home profile retains
 its separately recorded volume; ordinary session stop never removes it.
 
-Slice-34's home recovery and management are **proposed and unproven** in
+Slice-34's home recovery and management are **implemented; native green pending**, as recorded in
 [decision 0030](../decisions/0030-persistent-harness-home.md). Home-bearing session
 status reports present/absent/unknown separately from worker cleanup and preserves
 the original workload outcome. Missing or substituted storage never causes an
@@ -972,8 +972,8 @@ settings require independent runtime probes; inspecting a flag cannot prove enfo
 | Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host directory, mounted through the descriptor-backed owned volume; proposed credential grants add staged single-file binds only. Substitution protection requires native proof. |
 | Local engine image store | Approved cached manifest digest, checked for architecture, compatibility and metadata. | The person pulls the manifest's digest and approval binds that content. Control commands inspect, never pull/build/substitute, keeping acquisition a deliberate host operation. Slice-3 owns checks; T-20 owns fixture preparation. |
 | Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces or engine/SSH-agent sockets. **Proposed** grants expose only approved mode-`0400` read-only token files under `/run/itos-container/credentials`, never original sources; private IPC keeps host `/dev/shm` inaccessible. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Offline proof is separate from slice-31/33's still-unproven credential boundary. |
-| Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its sole nonrecursive directory bind source. Proposed credential profiles add read-only binds of staged files. The **proposed, unproven** home profile adds one owned local volume at `/home/itos`, NoCopy, UID:GID and `0700`, retained across sessions. | A2 still holds for omitted-home runs; [decision 0030](../decisions/0030-persistent-harness-home.md) limits its exception to approved harness state. No host home, host `/tmp`, shared cache or host-wide chown. Home storage is worker data, never control authority. |
-| Home catalog and generation claims (**proposed**, slice-34) | Protected current bindings, generation records/tombstones and persistent scope locks under the fixed account-home coordination boundary, independent of XDG state roots; inaccessible to workers. | Separate from persistent home bytes. Exact ownership and claims govern reuse/retirement; reset/deletion require terminal consent and no retained session claim. No automatic garbage collection or engine-wide adoption. |
+| Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its sole nonrecursive directory bind source. Proposed credential profiles add read-only binds of staged files. The home profile (**implemented; native green pending**) adds one owned local volume at `/home/itos`, NoCopy, UID:GID and `0700`, retained across sessions. | A2 still holds for omitted-home runs; [decision 0030](../decisions/0030-persistent-harness-home.md) limits its exception to approved harness state. No host home, host `/tmp`, shared cache or host-wide chown. Home storage is worker data, never control authority. |
+| Home catalog and generation claims (implemented, slice-34) | Protected current bindings, generation records/tombstones and persistent scope locks under the fixed account-home coordination boundary, independent of XDG state roots; inaccessible to workers. | Separate from persistent home bytes. Exact ownership and claims govern reuse/retirement; reset/deletion require terminal consent and no retained session claim. No automatic garbage collection or engine-wide adoption. |
 | Host `/dev/shm` staging (**proposed**, T-48) | One random host-UID-owned `0700` directory per run; exclusive `0400` token copies, tmpfs verified. Durable intent names it before creation; each worker gets only its own file mounts. | Rootful dockerd in the host mount namespace is assumed. Host swap can persist bytes. Unlink after the start attempt does not revoke acquired mounts; completion needs worker and staging removal, with recovery on uncertainty. |
 | Worker network boundary, offline run | `NetworkMode` `none`, inspected before start; no external network path or published port from the first instruction. | Independent network/DNS probes must prove denial through controller loss. An offline run has no proxy, guard or session network; `NetworkMode` `none` is confined to offline runs. |
 | Session networks, egress run (created by T-40's session engine, bound by slice-27) | Two owned per-session bridge networks. The internal one has Internal true, IPv6 off and `com.docker.network.bridge.gateway_mode_ipv4=isolated`, so its bridge has no address; the worker joins it alone. The egress one is a plain bridge with IPv6 off and only the proxy on it. | Docker 28.0 or newer, else an unavailable control. Docker's embedded resolver at 127.0.0.11 stays, with no route behind it; AC-11 is the result to prove (q-50, provisional). Nothing is proven until slice-27 runs on the real engine. |
@@ -1246,7 +1246,7 @@ runtime scenarios remain CI-only.
 | [slice-1 and slice-5](../../tasks/work-items.yaml) | Implemented | Strict policy validation and parser-wide structural bounds; v4 policy parser, independent v3 tooling. |
 | A1, revised [q-2 and q-52](../../tasks/asks.yaml) | Person's settled approval answers; q-52 revisits A1 for grants | Bare terminal approve displays effective settings/differences then y/N; no prompt again until settings change and no hash typing. The optional exact-fingerprint route is confined to offline settings without credentials; network or credential grants require terminal consent. Canonical JSON SHA-256, protected host state and the faked-terminal caveat remain. Grant enforcement belongs to slice-26/27/30. |
 | A2 | Person's settled first-milestone state choice; selected second-milestone exception below | Checkout edits survive; omitted-home runs use ephemeral tmpfs with no persistent worker volumes/caches/profiles. Host approval/snapshot/recovery state remains separate. Init and lifecycle hooks are deferred. |
-| [Harness-home record (slice-34)](../decisions/0030-persistent-harness-home.md) | **Selected by coordinator q-73, 2026-11-16 01:50 UTC**, on the person's standing instruction, for the person to ratify; unimplemented and unproven | Charter milestone two step 3 permits a private home. Use an opt-in per-checkout local volume, exact recorded ownership, retained session-independent state, cross-root claims and terminal-consented reset/deletion including missing-storage recovery and obsolete-scope reclamation. No further storage-lifetime answer blocks implementation. Overrides only A2's exclusion for this profile. No automatic replacement, implicit deletion, dependency addition or passing runtime evidence. |
+| [Harness-home record (slice-34)](../decisions/0030-persistent-harness-home.md) | **Selected by coordinator q-73, 2026-11-16 01:50 UTC**, on the person's standing instruction, for the person to ratify; implemented with native green pending | Charter milestone two step 3 permits a private home. Use an opt-in per-checkout local volume, exact recorded ownership, retained session-independent state, cross-root claims and terminal-consented reset/deletion including missing-storage recovery and obsolete-scope reclamation. No further storage-lifetime answer blocks implementation. Overrides only A2's exclusion for this profile. No automatic replacement, implicit deletion, dependency addition or passing runtime evidence. |
 | A3 | Person's settled controller-loss choice | Leave worker isolated until stop; status identifies lost-controller sessions as candidates. No watchdog, immediate cleanup, restart or invented child exit. |
 | A4 | Person's settled resource choice | Pids limit 4096, no memory or CPU quota claim; distinct from parser and CI budgets. |
 | Effective UID and host UID/GID | Settled loop choice; specified in slice-4, consumed by slices 8/10 | Refuse root; resolve omissions to effective host UID, override image user and require manifest equality without chown. [Allocation decision](../decisions/0003-approval-identity-and-frozen-input.md) supersedes slices 3/8 as resolver owners. |
@@ -1436,7 +1436,7 @@ The six credential questions above are detailed in
 | Checkout identity | The safely resolved checkout and its relevant identity, not a folder basename or unchecked path. Rules remain open. |
 | Project identity | Separation of a checkout's user/engine context and protected host records from another project's; exact binding belongs to slice-3/4. |
 | Session identity | One owned foreground run and its concrete resources/recovery reference, not authority to adopt similarly labelled resources. |
-| Persistent state | Checkout edits and protected host control records survive. Slice-34 proposes a separately owned harness-home volume retained across sessions, with consented retirement; it is unproven worker data, never host control authority. Omitted-home runs retain A2's ephemeral worker state. |
+| Persistent state | Checkout edits and protected host control records survive. Slice-34 implements a separately owned harness-home volume retained across sessions, with consented retirement; native green remains pending. Its contents are hostile worker data, never host control authority. Omitted-home runs retain A2's ephemeral worker state. |
 | Ephemeral state | Worker tmpfs and owned session resources removed or confirmed absent during cleanup. |
 | Fake/contract evidence | Tests of decisions and agreed port behaviour using I/O-free in-memory implementations and adapter contract suites; not runtime isolation proof. |
 | HTTP Engine API fixture | Adapter-owned test support providing controlled HTTP responses/failures to the real Docker client without a daemon; mapping and transport evidence, not a domain fake or isolation proof. |
