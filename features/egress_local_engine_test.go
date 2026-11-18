@@ -1,7 +1,6 @@
 package features
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -33,25 +32,31 @@ type egressEvent struct {
 // removal is checked against the protected intent the product must have written
 // first; a mismatch is kept as the fixture's problem for the Then steps.
 type localEgressAPI struct {
-	mu          sync.Mutex
-	w           *world
-	proxyImage  map[string]any
-	proxyStatus int
-	defect      string
-	networks    map[string]map[string]any
-	containers  map[string]map[string]any
-	volumes     map[string]map[string]any
-	roles       map[string]string         // full ID or volume name to role
-	bodies      map[string]map[string]any // role to its create request
-	ids         map[string]string         // role to full ID
-	starts      map[string]int
-	removed     []string
-	attached    map[string]net.Conn
-	exited      map[string]chan struct{}
-	events      []egressEvent
-	problem     error
-	evidence    map[string]string // protected files naming the proxy config ID at the first create
-	observed    bool
+	mu                sync.Mutex
+	w                 *world
+	proxyImage        map[string]any
+	proxyStatus       int
+	defect            string
+	networks          map[string]map[string]any
+	containers        map[string]map[string]any
+	volumes           map[string]map[string]any
+	roles             map[string]string         // full ID or volume name to role
+	bodies            map[string]map[string]any // role to its create request
+	ids               map[string]string         // role to full ID
+	starts            map[string]int
+	removed           []string
+	attached          map[string]net.Conn
+	exited            map[string]chan struct{}
+	events            []egressEvent
+	problem           error
+	evidence          map[string]string // protected files naming the proxy config ID at the first create
+	observed          bool
+	copyStdout        *string // independent teardown source; startup retains its valid ready record
+	workerExit        int
+	copyFault         bool
+	removeFault       string
+	faults            []string
+	inspectIDMismatch string
 }
 
 func (w *world) localEgressFixture() error {
@@ -92,13 +97,6 @@ func (w *world) localEgressFixture() error {
 }
 
 func egressPinDigest() string { return busyboxFixturePin[strings.Index(busyboxFixturePin, "sha256:"):] }
-
-func egressFrame(stream byte, data string) []byte {
-	header := make([]byte, 8)
-	header[0] = stream
-	binary.BigEndian.PutUint32(header[4:], uint32(len(data)))
-	return append(header, data...)
-}
 
 func (a *localEgressAPI) fail(out http.ResponseWriter, format string, args ...any) {
 	if a.problem == nil {
@@ -444,6 +442,11 @@ func (a *localEgressAPI) container(out http.ResponseWriter, r *http.Request, par
 	switch {
 	case len(parts) == 1 && r.Method == "DELETE":
 		note("remove", role)
+		if a.removeFault == role {
+			a.faults = append(a.faults, "remove "+role)
+			http.Error(out, `{"message":"slice-28 fixture removal failure"}`, http.StatusInternalServerError)
+			return true
+		}
 		state := object(container["State"])
 		if state["Running"] == true {
 			a.fail(out, "%s removed while running", role)
@@ -469,6 +472,9 @@ func (a *localEgressAPI) container(out http.ResponseWriter, r *http.Request, par
 		note("inspect", role)
 		reply := approvalClone(container)
 		a.applyDefect(role, reply)
+		if parts[0] == a.inspectIDMismatch {
+			reply["Id"] = strings.Repeat("c", 64)
+		}
 		_ = json.NewEncoder(out).Encode(reply)
 	case action == "attach" && r.Method == "POST" && role == "worker":
 		note("attach", role)
@@ -504,7 +510,9 @@ func (a *localEgressAPI) container(out http.ResponseWriter, r *http.Request, par
 	case action == "logs" && r.Method == "GET" && role == "proxy":
 		note("logs", role)
 		out.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
-		if a.starts["proxy"] != 0 {
+		if a.copyStdout != nil && !a.running("proxy") {
+			a.copyLog(out)
+		} else if a.starts["proxy"] != 0 {
 			_, _ = out.Write(egressFrame(1, egressProxyReady+"\n"))
 		}
 	case action == "wait" && r.Method == "POST":
@@ -515,7 +523,7 @@ func (a *localEgressAPI) container(out http.ResponseWriter, r *http.Request, par
 				return true
 			}
 			a.stop(id, container)
-			_ = json.NewEncoder(out).Encode(map[string]any{"StatusCode": 0})
+			_ = json.NewEncoder(out).Encode(map[string]any{"StatusCode": a.workerExit})
 			return true
 		}
 		// The proxy runs until the controller's own SIGKILL. A watcher that

@@ -10,6 +10,7 @@ import (
 
 type RefusalLog struct {
 	BeginUncancellable <-chan struct{}
+	ReadUncancellable  <-chan struct{}
 	LastCopy           port.RefusalCopy
 	mu                 sync.Mutex
 	Copies             map[string][]byte
@@ -31,6 +32,36 @@ func (l *RefusalLog) Begin(ctx context.Context, id string) (port.RefusalCopy, po
 	copy := &refusalCopy{log: l, id: id, fault: l.Fault, report: report}
 	l.LastCopy = copy
 	return copy, ""
+}
+
+// Read reports the fake's last committed evidence for a session, pending until
+// one exists. A scripted gap makes the durable state gapped.
+func (l *RefusalLog) Read(ctx context.Context, id string) (port.RefusalLogReport, port.Outcome) {
+	if l.ReadUncancellable != nil {
+		<-l.ReadUncancellable
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if ctx.Err() != nil || l.Fault == "read" {
+		return port.RefusalLogReport{Path: l.Report.Path, State: "unknown", Missing: []port.RefusalGap{}}, port.Incomplete
+	}
+	if _, ok := l.Copies[id]; !ok {
+		return port.RefusalLogReport{State: "pending", Missing: []port.RefusalGap{}}, ""
+	}
+	report := l.Report
+	state, records := "stored", report.Records
+	if report.Outcome == port.RefusalLogGap {
+		state = "gapped"
+	}
+	path := report.Path
+	if path == "" {
+		path = "sessions/" + id + "/egress-refusals.jsonl"
+	}
+	missing := slices.Clone(report.Gaps)
+	if missing == nil {
+		missing = []port.RefusalGap{}
+	}
+	return port.RefusalLogReport{Path: path, State: state, Records: &records, Missing: missing}, ""
 }
 
 type refusalCopy struct {

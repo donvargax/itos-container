@@ -1,8 +1,8 @@
 package disk
 
 import (
-	"context"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -67,8 +67,14 @@ func (f refusalFixture) begin(t *testing.T) sp.RefusalCopy {
 	return copy
 }
 
-// copyAll writes each part, commits and closes, expecting a clean publication.
-func (f refusalFixture) copyAll(t *testing.T, parts ...string) {
+// path is the protected destination this fixture's staged log publishes to.
+func (f refusalFixture) path() string {
+	return "sessions/" + f.key + "/" + f.id + "/egress-refusals.jsonl"
+}
+
+// copyAll writes each part, commits and closes, expecting a publication whose
+// derived report names this destination and, at most, a real sequence gap.
+func (f refusalFixture) copyAll(t *testing.T, parts ...string) sp.RefusalReport {
 	t.Helper()
 	copy := f.begin(t)
 	defer copy.Close()
@@ -77,23 +83,11 @@ func (f refusalFixture) copyAll(t *testing.T, parts ...string) {
 			t.Fatalf("write of %d bytes = %d, %v", len(part), n, err)
 		}
 	}
-	if report, failure := copy.Commit(); failure != "" || report.Outcome != "" || report.Gaps != nil {
+	report, failure := copy.Commit()
+	if failure != "" || (report.Outcome != "" && report.Outcome != sp.RefusalLogGap) || report.Path != f.path() {
 		t.Fatalf("commit = %#v, %s", report, failure)
 	}
-}
-
-// sessionNamed hands Begin a registered session in place of the name the
-// shared contract passes, which no registry holds.
-type sessionNamed struct {
-	log sp.RefusalLog
-	id  string
-}
-
-func (l sessionNamed) Begin(ctx context.Context, session string) (sp.RefusalCopy, sp.Outcome) {
-	if session == "session" {
-		session = l.id
-	}
-	return l.log.Begin(ctx, session)
+	return report
 }
 
 func TestRefusalLogContract(t *testing.T) {
@@ -109,12 +103,14 @@ func TestRefusalLogContract(t *testing.T) {
 	lines := strings.SplitAfter(sf.ProxyStdout, "\n")
 	replacement := strings.Replace(lines[1], "not-listed", "port", 1)
 	fault := map[string]string{"write": "write", "commit": "file fsync", "": ""}
+	derived := sp.RefusalReport{Records: 1, Path: f.path()}
 	sf.RefusalLogContract(t, sf.RefusalLogFixture{
-		Log:    sessionNamed{f.log, f.id},
-		Read:   func(string) []byte { return f.stored() },
-		Fault:  func(name string) { f.files.Fault = fault[name] },
-		Report: func(sp.RefusalReport) {},
-	}, []byte(sf.ProxyStdout), []byte(lines[1]), []byte(lines[0]+replacement), []byte(replacement), sp.RefusalReport{})
+		SessionID: f.id,
+		Log:       f.log,
+		Read:      func(id string) []byte { data, _ := f.files.SessionLog(f.key, id); return data },
+		Fault:     func(name string) { f.files.Fault = fault[name] },
+		Report:    func(sp.RefusalReport) {},
+	}, []byte(sf.ProxyStdout), []byte(lines[1]), []byte(lines[0]+replacement), []byte(replacement), derived)
 	if f.staged() != 0 {
 		t.Fatal("the contract left a staged handle", f.staged())
 	}
@@ -127,55 +123,23 @@ func TestRefusalLogDropsOnlyReady(t *testing.T) {
 	ready := strings.SplitAfter(sf.ProxyStdout, "\n")[0]
 	refusal := strings.SplitAfter(sf.ProxyStdout, "\n")[1]
 	body := strings.TrimSuffix(ready, "\n")
-	for _, tc := range []struct {
-		name, line string
-		dropped    bool
-	}{
-		{"ready", ready, true},
-		{"reordered keys", `{"event":"ready","time":"2026-11-09T12:00:00Z","seq":1,"schema":1}` + "\n", true},
-		{"fractional seconds", strings.Replace(ready, "12:00:00Z", "12:00:00.123456789Z", 1), true},
-		{"spaces inside", `{ "schema" : 1 , "seq" : 1 , "time" : "2026-11-09T12:00:00Z" , "event" : "ready" }` + "\n", true},
-		{"leading spaces to 2,048 bytes", strings.Repeat(" ", 2048-len(body)) + ready, true},
-		{"leading spaces to 2,049 bytes", strings.Repeat(" ", 2049-len(body)) + ready, false},
-		{"stderr looking stdout", "failure\n", false},
-		{"extra key", `{"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z","event":"ready","extra":0}` + "\n", false},
-		{"wrong seq", strings.Replace(ready, `"seq":1`, `"seq":2`, 1), false},
-		{"wrong event", strings.Replace(ready, "ready", "refused", 1), false},
-		{"wrong time", strings.Replace(ready, "Z", "+00:00", 1), false},
-		{"long", strings.Repeat(" ", 2049) + "\n", false},
-		{"trailing space", body + " \n", false},
-		{"trailing carriage return", body + "\r\n", false},
-		{"trailing object", body + "{}\n", false},
-		{"repeated key", `{"schema":1,"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z","event":"ready"}` + "\n", false},
-		{"repeated key in place of one", `{"schema":1,"schema":1,"time":"2026-11-09T12:00:00Z","event":"ready"}` + "\n", false},
-		{"schema 1.0", strings.Replace(ready, `"schema":1`, `"schema":1.0`, 1), false},
-		{"schema 2", strings.Replace(ready, `"schema":1`, `"schema":2`, 1), false},
-		{"schema as text", strings.Replace(ready, `"schema":1`, `"schema":"1"`, 1), false},
-		{"seq as text", strings.Replace(ready, `"seq":1`, `"seq":"1"`, 1), false},
-		{"event as number", strings.Replace(ready, `"ready"`, `1`, 1), false},
-		{"time as number", strings.Replace(ready, `"2026-11-09T12:00:00Z"`, `1`, 1), false},
-		{"time that is no date", strings.Replace(ready, "2026-11-09T12:00:00Z", "soon, Z", 1), false},
-		{"no event", `{"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z"}` + "\n", false},
-		{"another key in place of schema", `{"other":1,"seq":1,"time":"2026-11-09T12:00:00Z","event":"ready"}` + "\n", false},
-		{"array", `[1,1,"2026-11-09T12:00:00Z","ready"]` + "\n", false},
-		{"unclosed object", strings.TrimSuffix(body, "}") + "\n", false},
-		{"missing value", `{"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z","event":}` + "\n", false},
-		{"key without value", `{"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z","event"}` + "\n", false},
-		{"unquoted key", `{schema:1,"seq":1,"time":"2026-11-09T12:00:00Z","event":"ready"}` + "\n", false},
-		{"empty line", "\n", false},
-		{"empty object", "{}\n", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if strings.Count(tc.line, "\n") != 1 || !strings.HasSuffix(tc.line, "\n") {
-				t.Fatal("each row is one terminated line")
+	for _, tc := range sf.ReadyRecords() {
+		t.Run(tc.Name, func(t *testing.T) {
+			if !strings.HasSuffix(tc.Line, "\n") {
+				f := refusalLogFixture()
+				f.copyAll(t, refusal+tc.Line)
+				if got := string(f.stored()); got != refusal+tc.Line {
+					t.Fatalf("unterminated evidence changed: %q", got)
+				}
+				return
 			}
 			// Each row stands between two refusals, so a dropped line loses nothing beside it.
-			want := refusal + tc.line + refusal
-			if tc.dropped {
+			want := refusal + tc.Line + refusal
+			if tc.Accepted {
 				want = refusal + refusal
 			}
 			f := refusalLogFixture()
-			f.copyAll(t, refusal+tc.line+refusal)
+			f.copyAll(t, refusal+tc.Line+refusal)
 			if got := string(f.stored()); got != want {
 				t.Fatalf("stored %d bytes, want %d: %q", len(got), len(want), got)
 			}
@@ -266,12 +230,16 @@ func TestRefusalLogStreamsLines(t *testing.T) {
 				t.Fatal("a log is visible before Commit")
 			}
 			calls := f.operations()
-			if report, failure := copy.Commit(); failure != "" || report.Outcome != "" || report.Gaps != nil {
+			report, failure := copy.Commit()
+			if failure != "" || (report.Outcome != "" && report.Outcome != sp.RefusalLogGap) || (report.Outcome == sp.RefusalLogGap) != (len(report.Gaps) > 0) || report.Path != f.path() {
 				t.Fatalf("commit = %#v, %s", report, failure)
 			}
 			last := written[strings.LastIndexByte(written, '\n')+1:]
 			want := stagedAfter(written+"\n", tc.ready...)
 			want = strings.TrimSuffix(want, "\n")
+			if report.Records != expectedRecords(want) {
+				t.Fatalf("commit counted %d records in %d stored bytes", report.Records, len(want))
+			}
 			if slices.Contains(tc.ready, last+"\n") {
 				t.Fatal("fixture: an unterminated line is never a ready record")
 			}
@@ -320,4 +288,141 @@ func dropped(input string, ready []string) int {
 		}
 	}
 	return n
+}
+
+// expectedRecords counts the complete lines a copy stores, plus a held
+// unterminated one Commit publishes as it is. A line already flushed past the
+// ready bound is stored as it arrives; only its completing newline counts it.
+func expectedRecords(stored string) uint64 {
+	records := uint64(strings.Count(stored, "\n"))
+	if tail := stored[strings.LastIndexByte(stored, '\n')+1:]; tail != "" && len(tail) <= 2048 {
+		records++
+	}
+	return records
+}
+
+// TestRefusalLogDerivesGaps exercises the sequence judgement over the whole
+// stream, ready included: a missing initial event is a gap in the report even
+// though the published file never holds readiness, log-full counts as a record,
+// and an empty valid copy reports a clean zero.
+func TestRefusalLogDerivesGaps(t *testing.T) {
+	ready := strings.SplitAfter(sf.ProxyStdout, "\n")[0]
+	refusal := strings.SplitAfter(sf.ProxyStdout, "\n")[1]
+	at := func(seq int) string {
+		return strings.Replace(refusal, `"seq":2`, `"seq":`+strconv.Itoa(seq), 1)
+	}
+	full := `{"schema":1,"seq":3,"time":"2026-11-16T00:00:00Z","event":"log-full"}` + "\n"
+	for _, tc := range []struct {
+		name    string
+		input   string
+		stored  string
+		gaps    []sp.RefusalGap
+		records uint64
+	}{
+		{"clean consecutive", ready + refusal + at(3), refusal + at(3), nil, 2},
+		{"initial ready missing", refusal + at(3), refusal + at(3), []sp.RefusalGap{{First: 1, Last: 1}}, 2},
+		{"middle gap", ready + at(2) + at(5) + at(6), at(2) + at(5) + at(6), []sp.RefusalGap{{First: 3, Last: 4}}, 3},
+		{"two gaps", at(2) + at(5) + at(7), at(2) + at(5) + at(7), []sp.RefusalGap{{First: 1, Last: 1}, {First: 3, Last: 4}, {First: 6, Last: 6}}, 3},
+		{"log-full counts", ready + refusal + full, refusal + full, nil, 2},
+		{"empty copy", "", "", nil, 0},
+		{"unparsed lines keep their bytes", "not JSON\n" + at(2), "not JSON\n" + at(2), []sp.RefusalGap{{First: 1, Last: 1}}, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := refusalLogFixture()
+			report := f.copyAll(t, tc.input)
+			if got := string(f.stored()); got != tc.stored {
+				t.Fatalf("stored %q, want %q", got, tc.stored)
+			}
+			want := sp.RefusalReport{Records: tc.records, Path: f.path(), Gaps: tc.gaps}
+			if len(want.Gaps) > 0 {
+				want.Outcome = sp.RefusalLogGap
+			}
+			if report.Outcome != want.Outcome || report.Records != want.Records || report.Path != want.Path || !slices.Equal(report.Gaps, want.Gaps) {
+				t.Fatalf("report = %#v, want %#v", report, want)
+			}
+		})
+	}
+}
+
+// TestRefusalLogReadDerivesEvidence reads a session's committed evidence back
+// through the same port: pending before any copy, stored or gapped from the
+// published pair, unknown when the report cannot confirm the log beside it.
+func TestRefusalLogReadDerivesEvidence(t *testing.T) {
+	ready := strings.SplitAfter(sf.ProxyStdout, "\n")[0]
+	refusal := strings.SplitAfter(sf.ProxyStdout, "\n")[1]
+	f := refusalLogFixture()
+	pending, failure := f.log.Read(t.Context(), f.id)
+	if failure != "" || pending.State != "pending" || pending.Records != nil || pending.Path != f.path() || !slices.Equal(pending.Missing, []sp.RefusalGap{}) {
+		t.Fatalf("unread evidence = %#v, %s", pending, failure)
+	}
+	f.copyAll(t, ready+refusal)
+	evidence, failure := f.log.Read(t.Context(), f.id)
+	records := uint64(1)
+	if failure != "" || evidence.State != "stored" || evidence.Path != f.path() || evidence.Records == nil || *evidence.Records != records || len(evidence.Missing) != 0 {
+		t.Fatalf("stored evidence = %#v, %s", evidence, failure)
+	}
+	gapped := f.copyAll(t, strings.Replace(refusal, `"seq":2`, `"seq":5`, 1))
+	if gapped.Outcome != sp.RefusalLogGap || len(gapped.Gaps) != 1 || gapped.Gaps[0] != (sp.RefusalGap{First: 1, Last: 4}) {
+		t.Fatalf("gapped copy = %#v", gapped)
+	}
+	evidence, failure = f.log.Read(t.Context(), f.id)
+	records = 1
+	if failure != "" || evidence.State != "gapped" || evidence.Records == nil || *evidence.Records != records || !slices.Equal(evidence.Missing, gapped.Gaps) {
+		t.Fatalf("gapped evidence = %#v, %s", evidence, failure)
+	}
+	// A log without its report claims nothing: an interrupted publication is
+	// unknown, never a stored zero.
+	log, report := f.files.SessionReport(f.key, f.id)
+	f.files.Sessions[f.key+"/"+f.id].Report = nil
+	evidence, failure = f.log.Read(t.Context(), f.id)
+	if failure != "" || evidence.State != "unknown" || evidence.Records != nil {
+		t.Fatalf("unconfirmed log = %#v, %s", evidence, failure)
+	}
+	f.files.Sessions[f.key+"/"+f.id].Report = report
+	f.files.Sessions[f.key+"/"+f.id].Log = append(log, []byte("changed\n")...)
+	evidence, failure = f.log.Read(t.Context(), f.id)
+	if failure != "" || evidence.State != "unknown" || evidence.Records != nil {
+		t.Fatalf("stale report = %#v, %s", evidence, failure)
+	}
+	// A retained sidecar without its committed log is required evidence gone
+	// missing: unknown, and a failed read, never a successful cleanup claim.
+	f.files.Sessions[f.key+"/"+f.id].Log = nil
+	evidence, failure = f.log.Read(t.Context(), f.id)
+	if failure != sp.Incomplete || evidence.Path != f.path() || evidence.State != "unknown" || evidence.Records != nil || evidence.Missing == nil || len(evidence.Missing) != 0 {
+		t.Fatalf("missing committed log = %#v, %s", evidence, failure)
+	}
+}
+
+func TestRefusalLogReadInvalidMetadataAndUnavailableEvidence(t *testing.T) {
+	f := refusalLogFixture()
+	read := func(id string, want sp.Outcome) {
+		t.Helper()
+		report, failure := f.log.Read(t.Context(), id)
+		if failure != want || report.State != "unknown" || report.Records != nil || report.Missing == nil || len(report.Missing) != 0 {
+			t.Fatalf("read = %#v, %s; want unknown, %s", report, failure, want)
+		}
+	}
+	read("invalid", sp.Invalid)
+	f.log.Store.Input.Root = "relative"
+	read(f.id, sp.Refused)
+	f = refusalLogFixture()
+	f.files.Failure = "state.unavailable"
+	read(f.id, sp.Incomplete)
+	// Evidence that cannot re-establish the pair's directory durability is a
+	// failed read: recovery keeps its resources instead of trusting the pair.
+	f.files.Failure = "state.write"
+	read(f.id, sp.Incomplete)
+	f.files.Failure = ""
+	f.copyAll(t, `{"seq":0}`+"\n"+`{"seq":-1}`+"\n"+`{"seq":1.5}`+"\n")
+	entry := f.files.Sessions[f.key+"/"+f.id]
+	good := string(entry.Report)
+	digestAt := strings.Index(good, `"sha256":"`) + len(`"sha256":"`)
+	for _, bad := range []string{
+		"{", strings.Replace(good, `"schema":1`, `"schema":2`, 1),
+		strings.Replace(good, `"records":3`, `"records":null`, 1),
+		good[:digestAt] + good[digestAt+1:], good[:digestAt] + "x" + good[digestAt+1:],
+	} {
+		entry.Report = []byte(bad)
+		read(f.id, "")
+	}
 }

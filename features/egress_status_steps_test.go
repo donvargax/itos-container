@@ -28,6 +28,10 @@ type egressStatus struct {
 }
 
 func (w *world) egressStatusSteps(sc *godog.ScenarioContext) {
+	w.egressEvidenceSteps(sc)
+	w.egressGapSteps(sc)
+	w.egressFaultSteps(sc)
+	w.egressLifeRecoverySteps(sc)
 	sc.Step(`^original protected egress and offline sessions with phase "([^"]*)"$`, w.egressSeedSessions)
 	sc.Step(`^the current policy and approval no longer describe either original session$`, w.egressCurrentDiffers)
 	sc.Step(`^status inspects those sessions in plain and JSON modes$`, func() error {
@@ -62,6 +66,18 @@ func (w *world) egressSeedSessions(phase string) error {
 	}
 	if err := w.egressSeedSession(&s.egress); err != nil {
 		return err
+	}
+	if phase == "stopped with cleanup complete" {
+		// A session that finished owns its committed evidence pair: teardown
+		// copies the stopped proxy's log before removing it, so the stopped
+		// fixture seeds one the way a real completed session holds it. Without
+		// the pair a correct read reports the completed session's required
+		// evidence as missing (recovery.temporary), which this read-only
+		// disclosure scenario does not exercise; the deleted-pair diagnosis
+		// has its own coverage beside the copy-phase judgement.
+		if err := w.egressEvidenceWrite(nil, []any{}); err != nil {
+			return err
+		}
 	}
 	if err := w.approvalNetworkRequest(1, nil); err != nil {
 		return err
@@ -191,10 +207,14 @@ func (w *world) egressCurrentDiffers() error {
 
 func (w *world) egressStatusResults() (plain, structured egressResult, err error) {
 	results := w.egressFixture().results
-	if len(results) != 2 || results[0].command != "status" || results[1].command != "status --json" {
+	if len(results) < 2 {
 		return plain, structured, fmt.Errorf("missing plain and JSON status results")
 	}
-	return results[0], results[1], nil
+	plain, structured = results[len(results)-2], results[len(results)-1]
+	if plain.command != "status" || structured.command != "status --json" {
+		return plain, structured, fmt.Errorf("missing plain and JSON status results")
+	}
+	return plain, structured, nil
 }
 
 // egressStatusBlocks splits plain status at each session line, by session ID.
@@ -305,8 +325,18 @@ func (w *world) egressStatusJSON() error {
 			}
 			continue
 		}
-		want := map[string]any{"profile": "allowlist-v1", "allow": offlineStrings(seeded.allow), "limitations": offlineStrings(egressLimitations)}
-		if !sameJSON(egress, want) || len(object(egress)) != 3 {
+		// Slice-28 extends this entry with the session's durable refusal
+		// evidence, never a claim about a live count. A session still running
+		// has no committed copy yet, so its destination is pending; a session
+		// that finished owns the committed pair its teardown published, so the
+		// stopped phase reports the stored copy with its published count.
+		state, records := "pending", any(nil)
+		if s.phase == "stopped with cleanup complete" {
+			state, records = "stored", any(0)
+		}
+		want := map[string]any{"profile": "allowlist-v1", "allow": offlineStrings(seeded.allow), "limitations": offlineStrings(egressLimitations),
+			"refusal_log": map[string]any{"path": w.egressEvidencePathFor(seeded.id), "state": state, "records": records, "missing": []any{}}}
+		if !sameJSON(egress, want) || len(object(egress)) != 4 {
 			return fmt.Errorf("egress object is %s, want %s", approvalJSON(egress), approvalJSON(want))
 		}
 	}
@@ -328,10 +358,19 @@ func (w *world) egressStatusNoClaim() error {
 		for _, limitation := range egressLimitations {
 			text = strings.ReplaceAll(text, limitation, "")
 		}
-		// Outside the four disclosed limits nothing may speak of interception,
-		// of a refusal log, of its path or of a count of stored refusals.
-		if claim := egressStatusClaim.FindString(text); claim != "" {
-			return fmt.Errorf("%s says %q outside the specified limitations", r.command, claim)
+		// Slice-28 adds the durable refusal_log report: its destination, state
+		// and stored count are disclosed facts, not a completeness claim, so
+		// they leave this scan exactly as the four limitations do.
+		text = strings.ReplaceAll(text, w.egressEvidencePath(), "")
+		text = strings.ReplaceAll(text, "refusal_log", "")
+		for _, line := range strings.Split(text, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "refusal log:") || strings.HasPrefix(trimmed, "stored records:") || strings.HasPrefix(trimmed, "missing sequences:") {
+				continue
+			}
+			if claim := egressStatusClaim.FindString(line); claim != "" {
+				return fmt.Errorf("%s says %q outside the specified limitations", r.command, claim)
+			}
 		}
 	}
 	return nil

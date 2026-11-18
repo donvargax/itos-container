@@ -184,7 +184,29 @@ owned worker and any owned proxy and networks. Zero requires confirmed removal a
 durable completion. An observed nonzero workload exit wins over a separate cleanup
 error. Failure retains a safe protected intent reference and a session ID for
 status/stop recovery using the original grant.
-The implementation targets Linux amd64/native Docker. Runtime support and the
+
+An allowlist session's teardown copies the stopped proxy's log to
+`sessions/<lookup>/<id>/egress-refusals.jsonl` before the proxy is removed, and the
+same commit publishes the copy's own report beside it. A gap in the log's sequences
+is its own diagnosis, not a cleanup failure: `run.refusal-log-gap` (exit 1) names the
+session, the quoted protected destination and the inclusive missing ranges, and says
+the lost records cannot be recovered by retrying. An observed nonzero workload exit
+and a cancellation keep their own exit precedence; a gap keeps exit 1 over a separate
+cleanup diagnosis, and both diagnoses remain when removal also fails. A retrying
+`stop` never rewrites a committed copy.
+
+`status` and `stop` read that committed evidence back in every session's
+`egress.refusal_log` object: `path` is the absolute protected destination, `state`
+is `pending` until a committed copy exists, `stored` for one without observed gaps,
+`gapped` for one with gaps, or `unknown` when publication or its evidence cannot be
+confirmed; `records` is null for pending/unknown and otherwise the number of
+published lines; `missing` holds ordered inclusive `{first,last}` ranges. Plain
+output prints the same path quoted, with control, C1 and bidi characters escaped,
+beside the state and stored count or ranges. A gapped log makes `status` and `stop`
+report `recovery.refusal-log-gap` (exit 1) with the same destination and ranges;
+cleanup may be complete alongside it, and repeated stop preserves the diagnosis
+without rewriting the file. Offline sessions omit the report with `egress`. The
+implementation targets Linux amd64/native Docker. Runtime support and the
 remaining isolation properties require their CI engine scenarios; local fixtures
 are not isolation evidence.
 

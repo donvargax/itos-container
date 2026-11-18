@@ -177,3 +177,30 @@ mutation:
       replacement: "false"
       reason: "This assignment is reached only when a prior capability is held and every metadata comparison succeeded. The immediately preceding capture.release closes all newly captured handles and sets capture.selected to nil. Replacing true with false only runs the deferred capture.release again: its range over nil closes no handles, and assigning nil again changes no state. The original s.held and s.checked remain untouched, all return values and filesystem calls are identical, and earlier failure paths are unchanged. TestCredentialCheckedSourcesRecheckRetainedMetadata and the retained-inode controls verify original handle preservation and complete release with either value. No behavior can distinguish this second empty release."
       line_text: success = true
+    - file: internal/engine/session/domain/egress_recovery.go
+      function: github.com/donvargax/itos-container/internal/engine/session/domain#inspectEgressRecord
+      hash: 603b62c9225967e2
+      line_in_function: 48
+      column: 14
+      original: "true"
+      replacement: "false"
+      reason: This return always includes port.Incomplete. Every caller in inspectEgress, releaseEgressResource and stopAndCopyProxy returns that failure before reading the presence flag. Toggling the flag cannot change either public report, retry, stored intent or engine call. TestEgressRecoveryKeepsUnexpectedProxyStatesRetryable covers those outcomes through status and repeated stop.
+      line_text: return id, true, running, port.Incomplete
+    - file: internal/engine/session/presentation/recovery.go
+      function: github.com/donvargax/itos-container/internal/engine/session/presentation.UI#Print
+      hash: 41c38be62b335846
+      line_in_function: 19
+      column: 13
+      original: ">"
+      replacement: ">="
+      reason: Only equal rule strings within the same session change this comparator result from zero to one. Go 1.27 slices.SortFunc tests only whether the comparison is negative in zsortanyfunc.go. All comparisons therefore make exactly the same decisions and permutations for every input, including duplicate rules with different message fields. Print never exposes the comparator result.
+      line_text: if a.Rule > b.Rule {
+    - file: internal/engine/session/domain/egress_recovery.go
+      function: github.com/donvargax/itos-container/internal/engine/session/domain#inspectEgressRecord
+      hash: 603b62c9225967e2
+      line_in_function: 7
+      column: 21
+      original: "false"
+      replacement: "true"
+      reason: This branch returns only after anchorAuthority has failed. Every caller of inspectEgressRecord and its forwarding helper inspectEgressResource immediately returns the nonempty failure before reading the running flag. Changing that discarded flag cannot change resource inspection, signals, deletion, retry or the public outcome.
+      line_text: return "", false, false, f

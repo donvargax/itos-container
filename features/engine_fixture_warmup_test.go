@@ -1,11 +1,9 @@
 package features
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -271,38 +269,6 @@ func TestEngineFixtureWarmup(t *testing.T) {
 			requireFixture(t, err != nil && stdout == "" && strings.Contains(stderr, "engine-fixture: warm-up "+phase+" timing output:"), "timing write failure was hidden: %v %s %s", err, stdout, stderr)
 		})
 	}
-}
-
-func fixtureWarmupClock(first, second string) string {
-	// Clock/output and ordering controls run only harmless commands. Real child
-	// termination is checked separately by the measured cases with coreutils.
-	return `timeout() { shift 3; "$@"; }
-engine_warmup_now() {
-  if [[ ! -e clock-read ]]; then
-    : > clock-read
-    printf '%s\n' '` + first + `'
-  else
-    [[ -n '` + second + `' ]] || return 1
-    printf '%s\n' '` + second + `'
-  fi
-}
-`
-}
-
-func runFixtureWarmupShell(t *testing.T, script string) (string, string, error) {
-	t.Helper()
-	library, err := filepath.Abs("../tools/lib/engine-fixture-warmup.sh")
-	requireFixture(t, err == nil, "%v", err)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "bash", "-euo", "pipefail", "-c", script, "T-55", library)
-	cmd.Dir = t.TempDir()
-	cmd.WaitDelay = time.Second
-	var stdout, stderr strings.Builder
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err = cmd.Run()
-	requireFixture(t, ctx.Err() == nil, "warm-up wrapper exceeded outer ten-second deadline")
-	return stdout.String(), stderr.String(), err
 }
 
 // Pin the actual acquisition/cleanup call sites, including their arguments and

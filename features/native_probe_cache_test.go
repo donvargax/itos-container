@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -55,7 +56,7 @@ func TestNativeProbeBuildReuse(t *testing.T) {
 				t.Fatal(err)
 			}
 			b, err := os.Stat(copied)
-			if err != nil || os.SameFile(a, b) || b.Mode().Perm()&0100 == 0 {
+			if err != nil || os.SameFile(a, b) || b.Mode().Perm() != nativeProbeMode(runtime.GOOS) {
 				t.Fatal("probe copy is shared or not executable", err)
 			}
 			// A different product build cannot reuse a previous suite's cache.
@@ -69,4 +70,13 @@ func TestNativeProbeBuildReuse(t *testing.T) {
 			}
 		})
 	}
+}
+
+// os.WriteFile's mode is a Unix permission mask; Windows exposes only writable
+// versus read-only through FileMode. The probe itself targets Linux either way.
+func nativeProbeMode(host string) os.FileMode {
+	if host == "windows" {
+		return 0666
+	}
+	return 0700
 }

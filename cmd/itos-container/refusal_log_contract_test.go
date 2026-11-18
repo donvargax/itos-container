@@ -17,20 +17,6 @@ import (
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
 
-// contractSession hands Begin a registered session in place of the name the
-// shared contract passes, which no registry holds.
-type contractSession struct {
-	log sp.RefusalLog
-	id  string
-}
-
-func (l contractSession) Begin(ctx context.Context, session string) (sp.RefusalCopy, sp.Outcome) {
-	if session == "session" {
-		session = l.id
-	}
-	return l.log.Begin(ctx, session)
-}
-
 // The two concrete adapters meet only here: session's RefusalLog over approval's
 // protected registry, on a real state root.
 func TestRefusalLogDiskContract(t *testing.T) {
@@ -82,8 +68,8 @@ func TestRefusalLogDiskContract(t *testing.T) {
 		t.Fatal("the log must land beside the session's record", err)
 	}
 	path := filepath.Join(directory, "egress-refusals.jsonl")
-	read := func(string) []byte {
-		data, err := os.ReadFile(path)
+	read := func(session string) []byte {
+		data, err := os.ReadFile(filepath.Join(filepath.Dir(directory), session, "egress-refusals.jsonl"))
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
@@ -94,12 +80,14 @@ func TestRefusalLogDiskContract(t *testing.T) {
 	}
 	lines := strings.SplitAfter(sf.ProxyStdout, "\n")
 	replacement := strings.Replace(lines[1], "not-listed", "port", 1)
+	derived := sp.RefusalReport{Records: 1, Path: path}
 	sf.RefusalLogContract(t, sf.RefusalLogFixture{
-		Log:    contractSession{log, id},
-		Read:   read,
-		Fault:  func(name string) { fault = name },
-		Report: func(sp.RefusalReport) {},
-	}, []byte(sf.ProxyStdout), []byte(lines[1]), []byte(lines[0]+replacement), []byte(replacement), sp.RefusalReport{})
+		SessionID: id,
+		Log:       log,
+		Read:      read,
+		Fault:     func(name string) { fault = name },
+		Report:    func(sp.RefusalReport) {},
+	}, []byte(sf.ProxyStdout), []byte(lines[1]), []byte(lines[0]+replacement), []byte(replacement), derived)
 
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -116,10 +104,47 @@ func TestRefusalLogDiskContract(t *testing.T) {
 	for _, entry := range entries {
 		names = append(names, entry.Name())
 	}
-	if !slices.Equal(names, []string{"controller.lock", "egress-refusals.jsonl", "operation.lock", "record.json"}) {
+	if !slices.Equal(names, []string{"controller.lock", "egress-refusals.json", "egress-refusals.jsonl", "operation.lock", "record.json"}) {
 		t.Fatal("the session directory holds a temporary or lost a file", names)
 	}
 	if failure := held.Validate(); failure != "" {
 		t.Fatal("the held session no longer validates beside its log", failure)
+	}
+	// The committed report reads back through the same port on a real state
+	// root: a clean copy reports its stored count, and one whose source skipped
+	// sequences reports the exact inclusive ranges, ready's omission included.
+	for _, tc := range []struct {
+		name    string
+		input   string
+		stored  string
+		state   string
+		records uint64
+		gaps    []sp.RefusalGap
+	}{
+		{"clean", sf.ProxyStdout, lines[1], "stored", 1, nil},
+		{"initial gap", lines[1], lines[1], "gapped", 1, []sp.RefusalGap{{First: 1, Last: 1}}},
+		{"middle gap", lines[0] + lines[1] + strings.Replace(lines[1], `"seq":2`, `"seq":5`, 1) + strings.Replace(lines[1], `"seq":2`, `"seq":7`, 1), lines[1] + strings.Replace(lines[1], `"seq":2`, `"seq":5`, 1) + strings.Replace(lines[1], `"seq":2`, `"seq":7`, 1), "gapped", 3, []sp.RefusalGap{{First: 3, Last: 4}, {First: 6, Last: 6}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			copy, failure := log.Begin(ctx, id)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			if n, err := copy.Write([]byte(tc.input)); n != len(tc.input) || err != nil {
+				t.Fatal(n, err)
+			}
+			report, failure := copy.Commit()
+			copy.Close()
+			if failure != "" || report.Outcome != (map[bool]sp.Outcome{true: sp.RefusalLogGap, false: ""}[len(tc.gaps) > 0]) || !slices.Equal(report.Gaps, tc.gaps) || report.Records != tc.records {
+				t.Fatalf("commit = %#v, %s", report, failure)
+			}
+			evidence, failure := log.Read(ctx, id)
+			if failure != "" || evidence.Path != path || evidence.State != tc.state || evidence.Records == nil || *evidence.Records != tc.records || !slices.Equal(evidence.Missing, tc.gaps) {
+				t.Fatalf("evidence = %#v, %s", evidence, failure)
+			}
+			if data, err := os.ReadFile(path); err != nil || string(data) != tc.stored {
+				t.Fatalf("published bytes changed: %q", data)
+			}
+		})
 	}
 }

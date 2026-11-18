@@ -70,7 +70,7 @@ func (w *world) offlineRuntimeSteps(sc *godog.ScenarioContext) {
 
 func (w *world) offlineHostMarkers() error {
 	for _, key := range []string{"HOST_ONLY", "GITHUB_TOKEN", "AWS_SECRET_ACCESS_KEY", "ITOS_ROOT_MARKER"} {
-		w.doctor.env[key] = "SLICE_10_SYNTHETIC_" + key
+		w.doctor.env[key] = "SLICE_10_SYNTHETIC_" + key + "_" + egressNonce()
 	}
 	bin := filepath.Join(w.doctor.host, "slice-10-host-bin")
 	if err := os.Mkdir(bin, 0700); err != nil {

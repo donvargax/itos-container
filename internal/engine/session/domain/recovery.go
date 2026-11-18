@@ -69,6 +69,13 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 		}
 	}
 	e.CredentialNetwork = binding.CredentialNetwork
+	// Durable refusal evidence outlives any one controller and survives an
+	// ownership refusal: read it before validation can fail, never from a
+	// live proxy or a cache.
+	evidence, evidenceFailure := s.refusalEvidence(ctx, id, entry.Intent().Record())
+	if e.Egress != nil {
+		e.Egress.RefusalLog = &evidence
+	}
 	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
 	noCreate := uncreated(entry)
 	if failure == "" && noCreate {
@@ -123,10 +130,54 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	finishEntry(&e)
 	r := recoveryResult()
 	r.Entries = append(r.Entries, e)
+	if evidence.State == "gapped" && evidenceFailure == "" {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: port.RefusalLogGap, Gaps: evidence.Missing, Path: evidence.Path})
+	}
+	if evidenceFailure != "" {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: evidenceFailure})
+	}
 	if failure != "" {
 		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: failure})
 	}
 	return r
+}
+
+// refusalEvidence reads a session's committed refusal log through the same
+// port that published it, without launching a copy or consulting a proxy.
+// A pending report is a copy still to come only while the persisted proxy
+// progress can produce one: a proxy that was created and later removed has
+// already passed the copy phase, so a missing pair then is required evidence
+// the removed proxy can no longer supply, reported unknown with a temporary
+// failure, never a clean pending or zero.
+func (s Recovery) refusalEvidence(ctx context.Context, id string, record port.Record) (port.RefusalLogReport, port.Outcome) {
+	pending := port.RefusalLogReport{State: "pending", Missing: []port.RefusalGap{}}
+	if !record.HasEgress() || s.Refusals == nil {
+		return pending, ""
+	}
+	evidence, failure := readRefusalEvidence(ctx, s.Refusals, id)
+	if failure == "" && evidence.State == "pending" && proxyPassedCopyPhase(record) {
+		return port.RefusalLogReport{Path: evidence.Path, State: "unknown", Missing: []port.RefusalGap{}}, port.Incomplete
+	}
+	return evidence, failure
+}
+
+// proxyPassedCopyPhase reports whether the persisted proxy progress has moved
+// past the copy: the proxy was created, so its log was required, and its
+// release finished, which happens only through the copy phase. A proxy never
+// created or still held can still supply a copy, and a progress shape the
+// record's own validation would refuse is not trusted to claim one is owed.
+func proxyPassedCopyPhase(record port.Record) bool {
+	return record.Egress.Proxy.Stage == "absent" && record.Egress.Proxy.ID != ""
+}
+
+func readRefusalEvidence(ctx context.Context, log port.RefusalLog, id string) (port.RefusalLogReport, port.Outcome) {
+	report, failure, err := budget.Call2(ctx, "refusal evidence read", func(call context.Context) (port.RefusalLogReport, port.Outcome) {
+		return log.Read(call, id)
+	})
+	if err != nil {
+		return port.RefusalLogReport{State: "unknown", Missing: []port.RefusalGap{}}, port.Incomplete
+	}
+	return report, failure
 }
 func sessionEntry(s port.Session) (port.RecoveryEntry, port.Outcome) {
 	r := s.Record()
@@ -268,10 +319,22 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	}
 	e.WorkloadExit = entry.Record().WorkloadExit
 	finishEntry(&e)
+	// The durable evidence read keeps the entry's report and the gap diagnosis
+	// alive across processes; the copy's own in-memory report is the fallback
+	// only when reading the committed files back cannot confirm them.
+	evidence, evidenceFailure := s.refusalEvidence(ctx, id, entry.Intent().Record())
+	if e.Egress != nil {
+		e.Egress.RefusalLog = &evidence
+	}
 	r := recoveryResult()
 	r.Entries = append(r.Entries, e)
-	if report.Outcome == port.RefusalLogGap {
-		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: port.RefusalLogGap, Gaps: report.Gaps})
+	if evidence.State == "gapped" && evidenceFailure == "" {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: port.RefusalLogGap, Gaps: evidence.Missing, Path: evidence.Path})
+	} else if report.Outcome == port.RefusalLogGap {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: port.RefusalLogGap, Gaps: report.Gaps, Path: report.Path})
+	}
+	if evidenceFailure != "" {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: evidenceFailure})
 	}
 	if failure != "" {
 		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: failure})

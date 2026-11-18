@@ -126,20 +126,12 @@ type failedLogWriter struct{}
 
 func (failedLogWriter) Write([]byte) (int, error) { return 0, errors.New("failed sink") }
 func TestProxyReadyReadsStdoutOnly(t *testing.T) {
-	for _, tc := range []struct {
-		name, line string
-		want       sp.Outcome
-	}{
-		{"ready", strings.SplitAfter(st.ProxyStdout, "\n")[0], ""},
-		{"stderr looking stdout", "failure\n", sp.ProxyFailed},
-		{"early end", "{", sp.ProxyFailed},
-		{"long", strings.Repeat(" ", 2049) + "\n", sp.ProxyFailed},
-		{"extra key", `{"schema":1,"seq":1,"time":"2026-11-09T12:00:00Z","event":"ready","extra":0}` + "\n", sp.ProxyFailed},
-		{"wrong seq", strings.Replace(strings.SplitAfter(st.ProxyStdout, "\n")[0], `"seq":1`, `"seq":2`, 1), sp.ProxyFailed},
-		{"wrong event", strings.Replace(strings.SplitAfter(st.ProxyStdout, "\n")[0], "ready", "refused", 1), sp.ProxyFailed},
-		{"wrong time", strings.Replace(strings.SplitAfter(st.ProxyStdout, "\n")[0], "Z", "+00:00", 1), sp.ProxyFailed},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, tc := range st.ReadyRecords() {
+		t.Run(tc.Name, func(t *testing.T) {
+			want := sp.ProxyFailed
+			if tc.Accepted {
+				want = ""
+			}
 			e, b, a, _ := egressSDKFixture(t)
 			c, f := e.OpenRun(t.Context(), b)
 			if f != "" {
@@ -148,9 +140,9 @@ func TestProxyReadyReadsStdoutOnly(t *testing.T) {
 			defer c.Close()
 			id := strings.Repeat("c", 64)
 			a.containers[id] = &container.InspectResponse{}
-			a.logs = append(logFrame(2, "not JSON\n"), logFrame(1, tc.line)...)
-			if f := c.ProxyReady(t.Context(), id); f != tc.want {
-				t.Errorf("ready = %s, want %s", f, tc.want)
+			a.logs = append(logFrame(2, "not JSON\n"), logFrame(1, tc.Line)...)
+			if f := c.ProxyReady(t.Context(), id); f != want {
+				t.Errorf("ready = %s, want %s", f, want)
 			}
 			if len(a.logQueries) != 1 {
 				t.Fatalf("want one log call, got %d", len(a.logQueries))

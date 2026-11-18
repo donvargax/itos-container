@@ -16,10 +16,13 @@ import (
 )
 
 type egressStep struct {
-	Op, Name, Mode, Method, Target, Input, Nonce, URL string
+	Op, Name, Mode, Method, Target, Input, Nonce, URL, Headers, Payload string
 }
 
 type egressProbeResult struct {
+	Sent, Count                           int
+	Digest                                string
+	EmptyLength, CloseHeader              bool
 	Op, Name, Mode, Method, Target, Input string
 	OK, Closed                            bool
 	Status, Body, Received                int
@@ -41,6 +44,7 @@ type egressObserved struct {
 }
 
 type egressNativeRun struct {
+	wrapper        []string // optional test-side child syscall observer, never product arguments
 	n              *egressNative
 	steps          []egressStep
 	wantExit       int
@@ -81,7 +85,8 @@ func (run *egressNativeRun) start() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	run.cancel = cancel
-	run.cmd = exec.CommandContext(ctx, w.bin, "run", "--", "/workspace/slice-27-probe", "/workspace/slice-27-plan.json")
+	command := append(append([]string{}, run.wrapper...), w.bin, "run", "--", "/workspace/slice-27-probe", "/workspace/slice-27-plan.json")
+	run.cmd = exec.CommandContext(ctx, command[0], command[1:]...)
 	run.cmd.Dir, run.cmd.Env = checkout, setEnv(w.env(), "ITOS_ROOT", checkout)
 	run.cmd.Stdout, run.cmd.Stderr = &run.stdout, &run.stderr
 	run.cmd.WaitDelay = 5 * time.Second

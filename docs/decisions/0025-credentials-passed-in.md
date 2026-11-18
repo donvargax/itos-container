@@ -409,10 +409,14 @@ and hyphens, puts the marker in proxy stdout, dockerd's json-file log and the te
 copy at `sessions/<lookup>/<id>/egress-refusals.jsonl` under protected state.
 
 That is persisted logging, not merely the workload's foreground stream. Omitting the
-other request fields does not close it. Question 6 asks the person how the target is to
-be represented or whether the guarantee must be explicitly revised. This record changes
-neither decision 0022 nor AC-36, chooses no sanitization scheme and promises no credential
-absence from refusal logs pending the answer and downstream proof.
+other request fields does not close it. **q-56 (the person; coordinator,
+2026-11-10 01:57 UTC), superseding q-55**, settles question 6: log redaction is the
+platform's job, not the proxy's. Keep decision 0022's refusal hostname verbatim and hash
+nothing. [AC-36](../plans/container-pilot.md#agents-credentials-and-useful-work) is revised
+to a platform guarantee. The current leak remains disclosed and unclosed; neither this
+decision nor slice-28's payload-field exclusions prove credential absence from logs.
+`p1-platform-log-redaction` owns the redaction design and the hostname-marker absence
+probe, including proxy stdout, Docker logs and the protected-state copy.
 
 ## Required evidence, all synthetic
 
@@ -439,7 +443,9 @@ hexadecimal digits. These bytes survive JSON and shell quoting unchanged. A coop
 workload proves the read by printing its SHA-256, never the marker. No real token,
 account, model, provider call or credential scanner is involved.
 
-Absence searches cover the raw marker and its base64 at all three offsets in:
+Provisioning absence searches use controlled workloads that do not deliberately copy
+the marker into a permitted logged hostname. They cover the raw marker and its base64
+at all three offsets in:
 
 - The worker's `docker inspect` and every request and response in the harness's Engine
   API recorder.
@@ -452,13 +458,14 @@ no staging directory under `/dev/shm` after acknowledged startup and staging cle
 or after confirmed teardown. The absence of that pathname alone proves nothing about a
 worker's outcome or an acquired mount.
 
-Require a separate adversarial **hostname-marker probe**: send the marker as a label of
-an unlisted, syntactically valid CONNECT hostname. Search the refusal in proxy output,
-Docker logs and the protected-state copy. Under decision 0022 as written, this must fail
-credential absence. Do not omit the hostname or either persisted copy, skip the probe,
-or count the expected leak as absence evidence. T-39 and slice-28 own the logging
-contract; slice-31 and slice-33 need the integrated probe after question 6 is answered.
-Their drafters reconcile that answer before claiming AC-36 closure.
+Under q-56, the separate adversarial **hostname-marker absence probe** moves to
+`p1-platform-log-redaction`: send the marker as a label of an unlisted, syntactically
+valid CONNECT hostname and search proxy stdout, Docker logs and the protected-state
+copy, with positive controls. Today's verbatim target must fail that absence assertion;
+do not count this expected leak as absence evidence. Remove this probe from slice-28's
+requirements and do not make it a slice-31/33 delivery gate. Those slices still prove
+their provisioning and payload-field exclusions; platform AC-36 closure needs the
+platform item's redaction proof across all three surfaces.
 
 Session domain tests use the I/O-free port fake to cover staging before create, unlink
 after the start attempt, provisioning refusal before any start attempt, and no marker
@@ -475,8 +482,9 @@ may satisfy an assertion that no workload ran or cleanup completed.
 
 These extend LIFECYCLE-03/07, not replace their rules: AC-22/23 for uncertain start and
 cleanup; AC-29 for approved-material-only access, source-modification refusal and project
-separation; AC-31's HTTPS/API half; AC-36 subject to question 6. AC-30 login/refresh and
-AC-31's SSH half remain deferred. Real-engine proof is CI-only; agents get no Docker
+separation; AC-31's HTTPS/API half; AC-36's provisioning checks under q-56, without
+claiming platform log-redaction closure. AC-30 login/refresh and AC-31's SSH half remain
+deferred. Real-engine proof is CI-only; agents get no Docker
 socket. There is no runtime evidence in this documentation change.
 
 ## Questions for the person
@@ -491,15 +499,16 @@ here for the coordinating loop; no unanswered question is silently resolved by t
 | 3. Deletion and account management | No command creates, rotates or deletes an original source; only staged copies are managed here. Should account-management commands exist, or is source-file deletion the person's act? | Account/profile management commands and deletion promises. |
 | 4. GitHub scope | No scope or expiry is required or checked; checking would require a GitHub call. Should approval require a fine-grained token restricted to the checkout's repository, or an expiry? | Any such GitHub scope/expiry guarantee; delivery alone supplies none. |
 | 5. Permission to use real credentials | Does this record satisfy, for these two token kinds, the contract's requirement that granting/revoking accounts, deleting profiles and rotating the sandbox SSH key and inspection CA be settled **before real credentials are used**? | Every real-credential run, including the person's smoke check, until answered. Synthetic scenarios remain possible. |
-| 6. Credential-bearing refusal hostnames | How should logs represent a hostile CONNECT hostname containing credential bytes given 0022's verbatim target and AC-36's marker exclusion? Changing representation or explicitly revising the guarantee belongs to the person. | The hostname-marker probe passing, affected T-39/slice-28 logging specs, and slice-31/slice-33 accepting credential-bearing egress under AC-36. Disclose the current leak until the chosen rule has proof. |
+| 6. Credential-bearing refusal hostnames — settled by q-56 | The person, recorded by the coordinator 2026-11-10 01:57 UTC, replaces q-55: redaction belongs to the platform. Keep 0022's refusal hostname verbatim; hash nothing. AC-36 is revised to a platform guarantee. | `p1-platform-log-redaction` owns the hostname-marker absence probe and redaction proof, outside slice-28 and slice-31/33 delivery gates. A valid credential-bearing hostname currently leaks through proxy stdout, dockerd's json-file and the protected-state copy; the guarantee remains unproven. |
 
-No question authorizes quietly weakening the contract or its probes. Question 1 has
-no replacement implementation selected; question 6 has no selected log fix.
+No unanswered question authorizes quietly weakening the contract or its probes.
+Question 1 has no replacement implementation selected. Question 6's responsibility and
+guarantee revision are settled by q-56; no platform redactor or passing proof is claimed.
 
 ## Contract passages superseded by the proposal or deferred
 
 The person can amend the [pilot contract](../plans/container-pilot.md) from this list;
-T-47 does not edit it or the charter.
+T-47 did not edit it or the charter. The slice-28 revision applies q-56 to AC-36 only.
 
 - The Agreed scope Mounts row's "do not bind-mount additional host paths" and
   Credentials and Git's "This is not an exception allowing host-file mounts" would
@@ -514,21 +523,23 @@ T-47 does not edit it or the charter.
   Experiments item 3: this proposal selects provisioning for two token kinds only.
   No login runs in the worker and no callback is needed for them; questions 2 to 5
   retain refresh, revocation, deletion, account management and live-use consent.
-- The Logging row and AC-36 remain required. Question 6 records a conflict with
-  decision 0022, not a supersession or a reduced acceptance rule.
+- The Logging row's permitted-metadata restrictions remain. q-56 revises AC-36 to
+  a platform redaction guarantee while decision 0022 keeps hostnames verbatim.
+  The current hostname leak and the unproven platform guarantee stay explicit.
 - The Git row's sandbox SSH identity, AC-31's SSH half and OpenCode remain deferred.
 
 ## Authority, sibling handoff and architecture changes
 
-q-52 is the person's settled approval decision. The charter supplies the credential
-shape, including the now-stale Codex premise that only the person may change. Grants
+q-52 is the person's settled approval decision; q-56 settles platform ownership of
+log redaction and supersedes q-55. The charter supplies the credential shape, including
+the now-stale Codex premise that only the person may change. Grants
 in `itos-container.yaml` with absolute host paths, and approval binding kinds and paths
 rather than contents, come from the coordinator's slice-29/30 breakdown.
 
 The staged binds, `/dev/shm`, unlink timing, fixed targets, kind names, version 3,
 host checks, profiles, `approve.terminal-required` and its precedence, carried-forward
-approvals, redaction and marker approach are **this record's own proposals**, for the
-person to confirm or overturn. Their presence here supplies design to downstream
+approvals, provisioning redaction and marker approach are **this record's own proposals**,
+for the person to confirm or overturn. Their presence here supplies design to downstream
 specs, not proof, charter amendments or authorization to use real credentials.
 
 | Owner | Handoff |
@@ -536,10 +547,11 @@ specs, not proof, charter amendments or authorization to use real credentials.
 | slice-29 | Wait for both T-47 and slice-25's version 2; take the closed version 3 shape, metadata scope and refusal gates. Implement and prove decision 0027's bounded state mount projections with concurrent writers and accumulated unrelated history before downstream handoff; the host-wide scan is withdrawn. Omit the Codex kind its older why named. |
 | slice-30 | Wait for slice-29's source-exclusion evidence before admitting grants. Take canonical grants, profiles, review and q-52; update help and `docs/security.md`. |
 | T-48 | Take slice-29's state-side exclusion specification in decision 0027, retaining its shared validation and proof dependency. Stage and recover through session ports, fake and adapter; the file half also waits for question 1. Its older "failed delivery stops the workload before it starts" applies only before a start attempt. Add acquired-mount/lost-acknowledgement coverage. |
-| slice-31 and slice-33 | Wait for slice-29's source-exclusion design and evidence, then prove token delivery, isolation and uncertain-start cleanup in CI. For slice-33, "where gh expects it" means `GH_TOKEN` exported by workload argv from its file. Neither can claim refusal-log absence before question 6 and its proof. |
+| slice-31 and slice-33 | Wait for slice-29's source-exclusion design and evidence, then prove token delivery, isolation and uncertain-start cleanup in CI. For slice-33, "where gh expects it" means `GH_TOKEN` exported by workload argv from its file. q-56 leaves platform log redaction and the hostname-marker absence probe to `p1-platform-log-redaction`; delivery proof does not close platform AC-36. |
 | slice-32 | Wait for question 1; the old in-place-write premise is invalid. |
 | slice-26 and slice-27 | Apply q-52 wherever the first network-granting approval lands; slice-26's branch spec still calls the approver open. |
-| T-39 and slice-28 | Reconcile question 6's eventual answer in the logging contract before downstream credential claims. Decision 0022 is unchanged here. |
+| T-39 and slice-28 | Apply q-56: keep decision 0022's hostname verbatim, hash nothing, and disclose the current leak. Slice-28 proves payload-field exclusions and omits the hostname-marker absence probe. |
+| p1-platform-log-redaction | Own the redaction design and hostname-marker absence probe across proxy stdout, Docker logs and protected-state copies before claiming platform AC-36. No implementation or proof is supplied here. |
 
 Under the charter's drift rule, this change updates
 [arc42](../architecture/arc42.md)'s opening and these sections, retaining its twelve
@@ -556,7 +568,8 @@ headings and all still-applicable offline limits:
   and the persisted-log conflict with its hostname-marker probe.
 - **Decisions** links this proposal and records that q-52 revisited A1.
 - **Quality requirements** maps unproven AC-29/31/36 and AC-22/23 credential evidence
-  to their owners; **Risks and open questions** carries questions 1 through 6.
+  to their owners; **Risks and open questions** carries questions 1 through 5 and
+  question 6's settled responsibility with its unclosed leak.
 
 PLAN.md, README.md and `docs/ORCHESTRATING.md` still exclude credentials from the older
 milestone. The charter governs; `p1-docs-admit-milestone-two-egress` owns their scope

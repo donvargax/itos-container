@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 	"strconv"
+	"strings"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
@@ -34,6 +35,13 @@ func problem(f port.RecoveryFailure) Problem {
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.usage", 2, "Invalid recovery invocation.", "Use status with no positional arguments, or stop with exactly one complete lowercase 64-digit session ID."
 	case port.Refused:
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.not-owned", 1, "The original session ownership could not be verified.", "Use the same effective project and host user; inspect the protected evidence without adopting other resources."
+	case port.RefusalLogGap:
+		p.Rule, p.Exit = "recovery.refusal-log-gap", 1
+		p.Message = fmt.Sprintf("Committed refusal log %q is missing sequences %s; the lost records cannot be recovered by retrying.", f.Path, gapRanges(f.Gaps))
+		p.Fix = "Inspect the stored log at its protected destination; a retry cannot restore bytes the source never delivered."
+		if port.HexID(f.Session) {
+			p.Message += " Session " + f.Session + "."
+		}
 	case port.Unsafe:
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.unsafe-state", 1, "Protected recovery state is unsafe.", "Have the host user inspect ownership, modes and links outside the checkout."
 	case port.Invalid:
@@ -117,6 +125,17 @@ func (u UI) Print(r port.RecoveryResult, withJSON bool) int {
 				for _, limitation := range e.Egress.Limitations {
 					_, _ = fmt.Fprintln(u.Out, limitation)
 				}
+				if e.Egress.RefusalLog != nil {
+					_, _ = fmt.Fprintf(u.Out, "refusal log: %q state %s\n", e.Egress.RefusalLog.Path, e.Egress.RefusalLog.State)
+					if e.Egress.RefusalLog.Records != nil {
+						_, _ = fmt.Fprintf(u.Out, "stored records: %d\n", *e.Egress.RefusalLog.Records)
+					} else {
+						_, _ = fmt.Fprintln(u.Out, "stored records: unknown")
+					}
+					if len(e.Egress.RefusalLog.Missing) > 0 {
+						_, _ = fmt.Fprintf(u.Out, "missing sequences: %s\n", gapRanges(e.Egress.RefusalLog.Missing))
+					}
+				}
 			}
 			if len(e.Retry) != 0 {
 				_, _ = fmt.Fprintf(u.Out, "Use the same effective project: itos container stop %s\n", e.ID)
@@ -127,4 +146,14 @@ func (u UI) Print(r port.RecoveryResult, withJSON bool) int {
 		_, _ = fmt.Fprintf(u.Err, "%s: %s %s\n", p.Rule, p.Message, p.Fix)
 	}
 	return code
+}
+
+// gapRanges renders inclusive sequence ranges for a diagnostic or a plain
+// report line, first-last, in the order the evidence keeps them.
+func gapRanges(gaps []port.RefusalGap) string {
+	parts := make([]string, 0, len(gaps))
+	for _, gap := range gaps {
+		parts = append(parts, strconv.FormatUint(gap.First, 10)+"-"+strconv.FormatUint(gap.Last, 10))
+	}
+	return strings.Join(parts, ",")
 }

@@ -305,6 +305,19 @@ func TestCredentialRegisteredRunAndEgressCleanup(t *testing.T) {
 				if count := len(registry.Records); count != 1 {
 					t.Fatal("registered run lost its public session")
 				}
+				recovery := Recovery{Registry: registry, Engine: engine, Credentials: fixture.Stager, Refusals: runner.Refusals}
+				status := recovery.Status(t.Context())
+				if len(status.Failures) != 0 || len(status.Entries) != 1 {
+					t.Fatalf("credential session status = %#v", status)
+				}
+				disclosure := status.Entries[0].Egress
+				if egress {
+					if disclosure == nil || disclosure.RefusalLog == nil || disclosure.RefusalLog.State != "stored" {
+						t.Fatalf("credential session lost its stored refusal log: %#v", disclosure)
+					}
+				} else if disclosure != nil {
+					t.Fatal("offline credential session reported egress")
+				}
 			})
 		}
 	}

@@ -36,8 +36,11 @@ type SessionFiles struct {
 	Controller      bool
 	Unsafe, Changed bool
 	// Log is the published egress-refusals.jsonl, nil until one is published.
-	// Staged counts the handles staged and not yet released by Publish or Close.
+	// Report is the committed copy's own report beside it, nil until the same
+	// publication puts it there. Staged counts the handles staged and not yet
+	// released by Publish or Close.
 	Log     []byte
+	Report  []byte
 	Staged  int
 	readers int
 	writer  bool

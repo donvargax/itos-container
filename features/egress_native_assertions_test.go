@@ -212,11 +212,17 @@ func (w *world) egressNativeAssertions(sc lifecycleStepRegistrar) {
 // cleaned is the product's own account of its end: the workload's exit code,
 // every planned step done, and nothing the project still owns on the engine.
 func (run *egressNativeRun) cleaned() error {
+	return run.cleanedWithExit(run.wantExit)
+}
+
+// A proxy failure can set the controller's exit independently of the worker's
+// planned exit. Keep the probe plan intact while checking that process result.
+func (run *egressNativeRun) cleanedWithExit(processExit int) error {
 	if run.err != nil {
 		return run.err
 	}
-	if run.timedOut || run.exit != run.wantExit {
-		return fmt.Errorf("the product returned %d, not the workload's %d", run.exit, run.wantExit)
+	if run.timedOut || run.exit != processExit {
+		return fmt.Errorf("the product returned %d, expected %d (timed out: %t)", run.exit, processExit, run.timedOut)
 	}
 	if !run.report.Done {
 		return errors.New("the worker did not finish its plan")
@@ -255,7 +261,9 @@ func (n *egressNative) exchanged(run *egressNativeRun, want int) error {
 			return err
 		}
 		for _, nonce := range nonces {
-			if !slices.ContainsFunc(receipts, func(r egressReceipt) bool { return r.Kind == "nonce" && r.Name == name && r.Nonce == nonce }) {
+			if !slices.ContainsFunc(receipts, func(r egressReceipt) bool {
+				return (r.Kind == "nonce" || r.Kind == "payload") && r.Name == name && r.Nonce == nonce
+			}) {
 				return fmt.Errorf("%s holds no receipt of the worker's nonce", name)
 			}
 		}

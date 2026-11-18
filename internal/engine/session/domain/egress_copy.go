@@ -33,12 +33,26 @@ func stopAndCopyProxy(ctx context.Context, i port.Intent, c port.RunConnection, 
 	if !ok || state.log == nil {
 		return port.Internal
 	}
+	// A committed copy is the evidence stop preserves; a retry never rewrites
+	// it. The durable report decides: the copy itself may be the only witness of
+	// a gap a fresh process must keep reporting.
+	session := i.Record().Anchor.Session
+	evidence, f := readRefusalEvidence(ctx, state.log, session)
+	if f != "" {
+		return f
+	}
+	if evidence.State == "stored" || evidence.State == "gapped" {
+		if evidence.State == "gapped" {
+			*state.report = port.RefusalReport{Outcome: port.RefusalLogGap, Gaps: evidence.Missing, Path: evidence.Path}
+		}
+		return ""
+	}
 	type opened struct {
 		copy port.RefusalCopy
 		f    port.Outcome
 	}
 	staged, err := budget.Acquire(ctx, "refusal copy begin", func(call context.Context) opened {
-		copy, f := state.log.Begin(call, i.Record().Anchor.Session)
+		copy, f := state.log.Begin(call, session)
 		return opened{copy, f}
 	}, func(v opened) {
 		if v.copy != nil {
@@ -51,7 +65,7 @@ func stopAndCopyProxy(ctx context.Context, i port.Intent, c port.RunConnection, 
 	if err != nil || staged.f != "" || staged.copy == nil {
 		return port.Incomplete
 	}
-	f, err := budget.Call(ctx, "proxy log copy", func(call context.Context) port.Outcome { return c.CopyProxyLog(call, id, staged.copy) })
+	f, err = budget.Call(ctx, "proxy log copy", func(call context.Context) port.Outcome { return c.CopyProxyLog(call, id, staged.copy) })
 	if err != nil || f != "" {
 		return port.Incomplete
 	}
@@ -60,7 +74,7 @@ func stopAndCopyProxy(ctx context.Context, i port.Intent, c port.RunConnection, 
 		return port.Incomplete
 	}
 	if report.Outcome == port.RefusalLogGap {
-		*state.report = port.RefusalReport{Outcome: report.Outcome, Gaps: append([]port.RefusalGap(nil), report.Gaps...)}
+		*state.report = report
 	}
 	return ""
 }

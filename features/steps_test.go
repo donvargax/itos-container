@@ -60,6 +60,7 @@ type world struct {
 	hardlinks           *hardlinkWorld
 	control             *controlFixture
 	egress              *egressWorld
+	markers             *syntheticMarkerWorld
 	duringQuiet         func() // Selected independent cases inside a stable quiet-worker lifetime.
 }
 
@@ -72,6 +73,7 @@ func (w *world) fixtureSocketRoot() string {
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w := &world{root: root, bin: bin}
+	w.syntheticMarkerSteps(sc)
 	sc.Before(func(ctx context.Context, scenario *godog.Scenario) (context.Context, error) {
 		if err := w.initializeCoverage(scenario); err != nil {
 			return ctx, err

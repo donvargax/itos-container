@@ -4,7 +4,6 @@ import (
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -67,7 +66,7 @@ func TestEgressForegroundPreservesExitAndReports(t *testing.T) {
 			} else if fault != "watch unavailable" && result.Cleanup != port.Complete {
 				t.Errorf("cleanup did not complete: %#v", result)
 			}
-			if !reflect.DeepEqual(result.RefusalLog, log.Report) {
+			if result.RefusalLog.Outcome != log.Report.Outcome || !slices.Equal(result.RefusalLog.Gaps, log.Report.Gaps) {
 				t.Errorf("log report lost: %#v", result)
 			}
 			if len(engine.Resources) != 0 || len(engine.Networks) != 0 || len(engine.Anchors) != 0 {
@@ -95,7 +94,7 @@ func TestEgressCleanupKeepsCommittedGap(t *testing.T) {
 	log := runner.Refusals.(*f.RefusalLog)
 	log.Report = port.RefusalReport{Outcome: port.RefusalLogGap, Gaps: []port.RefusalGap{{First: 2, Last: 2}}}
 	got := runner.Cleanup(t.Context(), registry.Records[id].Intent)
-	if got.Outcome != port.Complete || !reflect.DeepEqual(got.RefusalLog, log.Report) || len(engine.Resources) != 0 || len(engine.Networks) != 0 {
+	if got.Outcome != port.Complete || got.RefusalLog.Outcome != port.RefusalLogGap || !slices.Equal(got.RefusalLog.Gaps, log.Report.Gaps) || len(engine.Resources) != 0 || len(engine.Networks) != 0 {
 		t.Errorf("cleanup lost gap or retained resources: %#v", got)
 	}
 }
@@ -110,7 +109,31 @@ func TestEgressGapAndRemovalFailureRemainSeparate(t *testing.T) {
 	}
 	engine.EgressFault = ""
 	result = (Recovery{Registry: registry, Engine: engine, Refusals: log}).Stop(t.Context(), id)
-	if len(result.Failures) != 0 || result.Entries[0].Cleanup != "complete" || len(log.Copies[id]) == 0 {
+	// The committed gap outlives the cleanup that completed around it: a
+	// repeated stop keeps the diagnosis without finding new work.
+	if len(result.Failures) != 1 || result.Failures[0].Outcome != port.RefusalLogGap || result.Entries[0].Cleanup != "complete" || len(log.Copies[id]) == 0 {
 		t.Errorf("remaining cleanup lost published log: %#v", result)
+	}
+}
+
+func TestCommittedGapSurvivesUnavailableFinalRead(t *testing.T) {
+	runner, registry, engine, id, _ := seedEgressSession(t, 9)
+	log := runner.Refusals.(*f.RefusalLog)
+	want := port.RefusalReport{Outcome: port.RefusalLogGap, Path: "/private/refusals", Records: 3, Gaps: []port.RefusalGap{{First: 2, Last: 4}}}
+	log.Copies = map[string][]byte{id: []byte("stored")}
+	log.Report = want
+	recovery := Recovery{Registry: registry, Engine: engine, Refusals: log}
+	status := recovery.Status(t.Context())
+	if len(status.Failures) != 1 || status.Failures[0].Outcome != want.Outcome || status.Failures[0].Path != want.Path || !slices.Equal(status.Failures[0].Gaps, want.Gaps) {
+		t.Fatalf("status lost the gap: %#v", status)
+	}
+	engine.After = func(event string) {
+		if event == "proxy remove" {
+			log.Fault = "read"
+		}
+	}
+	stop := recovery.Stop(t.Context(), id)
+	if len(stop.Failures) != 2 || stop.Failures[0].Outcome != want.Outcome || stop.Failures[0].Path != want.Path || !slices.Equal(stop.Failures[0].Gaps, want.Gaps) || stop.Failures[1].Outcome != port.Incomplete || stop.Entries[0].Cleanup != "complete" || stop.Entries[0].Egress.RefusalLog.State != "unknown" || slices.Contains(engine.Events, "proxy copy") {
+		t.Fatalf("stop lost committed gap or repeated copy: %#v", stop)
 	}
 }

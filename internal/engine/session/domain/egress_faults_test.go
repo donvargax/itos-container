@@ -106,6 +106,16 @@ func TestEgressRechecksNetworkAndProxyAfterWorkerCreate(t *testing.T) {
 		})
 	}
 }
+
+// failureOutcomes lists a recovery result's failure outcomes in report order.
+func failureOutcomes(failures []port.RecoveryFailure) []port.Outcome {
+	outcomes := make([]port.Outcome, len(failures))
+	for i, failure := range failures {
+		outcomes[i] = failure.Outcome
+	}
+	return outcomes
+}
+
 func TestEgressRecoveryChecksNetworkOwnershipAndPresence(t *testing.T) {
 	for _, fault := range []string{"foreign", "unavailable", "changed", "endpoints", "absent present", "intent foreign"} {
 		t.Run(fault, func(t *testing.T) {
@@ -146,12 +156,19 @@ func TestEgressRecoveryChecksNetworkOwnershipAndPresence(t *testing.T) {
 			if fault == "unavailable" || fault == "endpoints" {
 				want = port.Incomplete
 			}
-			if len(result.Failures) != 1 || result.Failures[0].Outcome != want || len(engine.Networks) != 2 || len(engine.Anchors) != 1 {
+			// A record that already marks the proxy absent requires its
+			// evidence pair, so that row reports the missing copy beside the
+			// ownership conflict instead of only the conflict.
+			wantFailures := []port.Outcome{want}
+			if fault == "absent present" {
+				wantFailures = []port.Outcome{port.Incomplete, want}
+			}
+			if len(result.Failures) != len(wantFailures) || !slices.Equal(failureOutcomes(result.Failures), wantFailures) || len(engine.Networks) != 2 || len(engine.Anchors) != 1 {
 				t.Errorf("recovery %s = %#v", fault, result)
 			}
 			before := registry.Writes
 			status := (Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}).Status(t.Context())
-			if fault != "endpoints" && (len(status.Failures) != 1 || status.Failures[0].Outcome != want) {
+			if fault != "endpoints" && !slices.Equal(failureOutcomes(status.Failures), wantFailures) {
 				t.Errorf("status lost ownership failure: %#v", status)
 			}
 			if registry.Writes != before {

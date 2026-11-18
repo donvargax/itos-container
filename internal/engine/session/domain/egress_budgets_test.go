@@ -121,6 +121,56 @@ func TestFiniteEgressCallsRefuseExpiredBudget(t *testing.T) {
 	}
 }
 
+func TestEgressRefusalEvidenceReadsAreBounded(t *testing.T) {
+	for _, what := range []string{"status", "stop"} {
+		t.Run(what, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				runner, registry, engine, id, _ := seedEgressSession(t, 9)
+				log := runner.Refusals.(*f.RefusalLog)
+				release := make(chan struct{})
+				log.ReadUncancellable = release
+				go func() { time.Sleep(2*budget.CallDuration + time.Second); close(release) }()
+				recovery := Recovery{Registry: registry, Engine: engine, Refusals: log}
+				start := time.Now()
+				var result port.RecoveryResult
+				if what == "status" {
+					result = recovery.Status(t.Context())
+				} else {
+					result = recovery.Stop(t.Context(), id)
+				}
+				elapsed := time.Since(start)
+				// A stalled protected-state read cannot hold the controller past
+				// its call budget; the failure is the bounded incomplete outcome.
+				wantElapsed := budget.CallDuration
+				if what == "stop" {
+					wantElapsed += budget.CallDuration
+				}
+				if elapsed != wantElapsed || len(result.Failures) == 0 {
+					t.Fatalf("%s waited %s for a stalled evidence read: %#v", what, elapsed, result)
+				}
+				for _, failure := range result.Failures {
+					if failure.Outcome != port.Incomplete {
+						t.Fatalf("%s stalled read reported %#v", what, failure)
+					}
+				}
+				if entry := result.Entries[0]; entry.Cleanup == "complete" || entry.Egress.RefusalLog.State != "unknown" {
+					t.Fatalf("%s stalled read claimed complete cleanup: %#v", what, entry)
+				}
+				if what == "stop" {
+					if slices.Contains(engine.Events, "proxy copy") || slices.Contains(engine.Events, "proxy remove") || len(engine.Resources) != 1 {
+						t.Fatalf("stalled read released or lost the proxy: %v", engine.Events)
+					}
+				}
+				<-release
+				synctest.Wait()
+				log.ReadUncancellable = nil
+				if retry := recovery.Stop(t.Context(), id); len(retry.Failures) != 0 || len(engine.Resources) != 0 || len(engine.Networks) != 0 || len(engine.Anchors) != 0 {
+					t.Errorf("retry after the stalled read = %#v; %v", retry, engine.Events)
+				}
+			})
+		})
+	}
+}
 func TestEgressLateLogAcquisitionIsClosed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		runner, registry, engine, id, _ := seedEgressSession(t, 9)

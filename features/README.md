@@ -252,8 +252,9 @@ whose four `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row),
 (`anchors.feature`, `checkout-overlap.feature`, `doctor.feature`, `hardlinks.feature`,
 `recovery.feature`, `session.feature` and `sockets.feature`) and, since T-59, **egress**
 (`egress.feature`, moved whole from other after that shard's measured step passed 180
-seconds; slice-28's `egress_lifecycle.feature` joins it and slice-37's `run_terminal.feature`
-goes to other when those branches merge). A shard is a job of whole feature files on its own
+seconds, and `egress_lifecycle.feature`, which slice-28's merge of T-59 places by the same
+rule; slice-37's `run_terminal.feature`
+goes to other when that branch merges). A shard is a job of whole feature files on its own
 native `ubuntu-latest` runner and daemon, with its own checkout of the exact `${{ env.TO }}`
 head, preflight, fixture preparation and cleanup. Nothing crosses runners, `fail-fast` is off
 so a red shard hides no other, and no feature is ever split. Each runs on main pushes,
@@ -574,7 +575,7 @@ times that show the need. In the prepared CI tier only, the coordinator measures
 with:
 
 ```sh
-for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature' egress.feature; do
+for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature' 'egress.feature egress_lifecycle.feature'; do
   env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
 done
 ```

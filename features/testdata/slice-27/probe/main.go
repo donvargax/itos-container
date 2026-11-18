@@ -20,13 +20,15 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
 type step struct {
-	Op, Name, Mode, Method, Target, Input, Nonce, URL string
+	Op, Name, Mode, Method, Target, Input, Nonce, URL, Headers, Payload string
 }
 
 type plan struct {
@@ -35,6 +37,9 @@ type plan struct {
 }
 
 type result struct {
+	Sent, Count                           int
+	Digest                                string
+	EmptyLength, CloseHeader              bool
 	Op, Name, Mode, Method, Target, Input string
 	OK, Closed                            bool
 	Status, Body, Received                int
@@ -144,7 +149,13 @@ func exchange(s step, roots *x509.CertPool, r *result) error {
 	}
 	state := secure.ConnectionState()
 	r.Peer = fingerprint(&state)
-	if _, err = fmt.Fprintf(secure, "GET /nonce?n=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", url.QueryEscape(s.Nonce), s.Name); err != nil {
+	request := fmt.Sprintf("GET /nonce?n=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", url.QueryEscape(s.Nonce), s.Name)
+	if s.Mode == "payload" {
+		request = fmt.Sprintf("POST /payload?n=%s&token=%s HTTP/1.1\r\nHost: %s\r\nX-Slice-28: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", url.QueryEscape(s.Nonce), url.QueryEscape(s.Payload), s.Name, s.Payload, len(s.Payload), s.Payload)
+		payload := []byte(strings.Repeat(s.Payload, 3))
+		r.Sent, r.Digest = len(payload), digest(payload)
+	}
+	if _, err = io.WriteString(secure, request); err != nil {
 		return err
 	}
 	data, err := io.ReadAll(io.LimitReader(secure, 8192))
@@ -170,13 +181,18 @@ func raw(s step, r *result) error {
 	}
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(wait))
-	if _, err = fmt.Fprintf(conn, "%s %s HTTP/1.1\r\nHost: %s\r\n\r\n", s.Method, s.Target, s.Target); err != nil {
-		return err
-	}
-	status, _, err := head(conn)
+	request := fmt.Sprintf("%s %s HTTP/1.1\r\nHost: %s\r\n%s\r\n%s", s.Method, s.Target, s.Target, s.Headers, s.Payload)
+	r.Sent, err = io.WriteString(conn, request)
+	r.Digest = digest([]byte(request)[:r.Sent])
 	if err != nil {
 		return err
 	}
+	status, response, err := head(conn)
+	if err != nil {
+		return err
+	}
+	r.EmptyLength = bytes.Contains(response, []byte("Content-Length: 0\r\n"))
+	r.CloseHeader = bytes.Contains(response, []byte("Connection: close\r\n"))
 	r.Status = status
 	body, err := io.ReadAll(conn)
 	r.Body, r.Closed = len(body), err == nil
@@ -215,6 +231,8 @@ func clientHello(name string, ech bool) []byte {
 
 func helloInput(s step) (data []byte, half bool, err error) {
 	switch {
+	case s.Input == "payload bytes":
+		return []byte(s.Payload), false, nil
 	case s.Input == "ClientHello without SNI":
 		return clientHello("", false), false, nil
 	case s.Input == "ClientHello with ECH extension 0xfe0d":
@@ -246,7 +264,9 @@ func hello(s step, r *result) error {
 	if status != http.StatusOK {
 		return errors.New("tunnel refused")
 	}
-	if _, err = conn.Write(data); err != nil {
+	r.Sent, err = conn.Write(data)
+	r.Digest = digest(data[:r.Sent])
+	if err != nil {
 		return err
 	}
 	if tcp, ok := conn.(*net.TCPConn); ok && half {
@@ -375,7 +395,13 @@ func direct(s step, roots *x509.CertPool, r *result) error {
 	}
 	state := secure.ConnectionState()
 	r.Peer = fingerprint(&state)
-	if _, err = fmt.Fprintf(secure, "GET /nonce?n=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", url.QueryEscape(s.Nonce), s.Name); err != nil {
+	request := fmt.Sprintf("GET /nonce?n=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", url.QueryEscape(s.Nonce), s.Name)
+	if s.Mode == "payload" {
+		request = fmt.Sprintf("POST /payload?n=%s&token=%s HTTP/1.1\r\nHost: %s\r\nX-Slice-28: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", url.QueryEscape(s.Nonce), url.QueryEscape(s.Payload), s.Name, s.Payload, len(s.Payload), s.Payload)
+		payload := []byte(strings.Repeat(s.Payload, 3))
+		r.Sent, r.Digest = len(payload), digest(payload)
+	}
+	if _, err = io.WriteString(secure, request); err != nil {
 		return err
 	}
 	data, err := io.ReadAll(io.LimitReader(secure, 8192))
@@ -496,6 +522,9 @@ func save(dir string, value report) {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "dns-control" {
+		os.Exit(dnsControl())
+	}
 	if len(os.Args) != 2 {
 		fmt.Fprintln(os.Stderr, "usage: slice-27-probe <plan>")
 		os.Exit(96)
@@ -512,6 +541,14 @@ func main() {
 		roots.AppendCertsFromPEM(authority)
 	}
 	out := report{Env: map[string]string{}}
+	termination := make(chan os.Signal, 1)
+	for _, s := range p.Steps {
+		if s.Op == "wait-signal" || s.Op == "hold-after-signal" {
+			signal.Notify(termination, os.Interrupt, syscall.SIGTERM)
+			defer signal.Stop(termination)
+			break
+		}
+	}
 	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"} {
 		if value, ok := os.LookupEnv(key); ok {
 			out.Env[key] = value
@@ -521,12 +558,36 @@ func main() {
 		r := result{Op: s.Op, Name: s.Name, Mode: s.Mode, Method: s.Method, Target: s.Target, Input: s.Input}
 		var err error
 		switch s.Op {
+		case "edit":
+			err = os.WriteFile(filepath.Join(dir, "slice-28-edit"), []byte(s.Nonce), 0600)
+		case "wait-signal":
+			err = os.WriteFile(filepath.Join(dir, "slice-27-barrier-"+s.Name), nil, 0600)
+			if err == nil {
+				select {
+				case received := <-termination:
+					r.Reply = "SIGTERM"
+					if received == os.Interrupt {
+						r.Reply = "SIGINT"
+					}
+					err = os.WriteFile(filepath.Join(dir, "slice-28-signal"), []byte(r.Reply), 0600)
+				case <-time.After(3 * time.Minute):
+					err = errors.New("no termination signal received")
+				}
+			}
+		case "hold-after-signal":
+			// The report of the completed grace probes is already durable. Keep
+			// running until the controller's real SIGKILL, without an exit that
+			// could be mistaken for successful forced termination.
+			<-time.After(3 * time.Minute)
+			err = errors.New("forced termination never arrived")
 		case "barrier":
 			err = barrier(dir, s)
 		case "tls":
 			err = exchange(s, roots, &r)
 		case "raw":
 			err = raw(s, &r)
+		case "cap":
+			err = exhaust(dir, &r)
 		case "hello":
 			err = hello(s, &r)
 		case "loopback":
@@ -558,4 +619,38 @@ func main() {
 	out.Done = true
 	save(dir, out)
 	os.Exit(p.Exit)
+}
+
+func digest(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
+
+func capTarget(index int) string {
+	return fmt.Sprintf("%06d", index) + strings.Repeat("a", 57) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 63) + ":443"
+}
+
+// Keep the cap's per-attempt receipts on a streaming file, outside product state.
+// Every request is distinct and sent sequentially. Only the cap-triggering
+// connection may close before its response, as decision 0022 permits.
+func exhaust(dir string, r *result) error {
+	file, err := os.OpenFile(filepath.Join(dir, "slice-28-attempts.jsonl"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	encoder := json.NewEncoder(file)
+	for i := 1; i <= 20000; i++ {
+		s := step{Method: "CONNECT", Target: capTarget(i)}
+		attempt := result{Target: s.Target}
+		err := raw(s, &attempt)
+		if encodeErr := encoder.Encode(attempt); encodeErr != nil {
+			return encodeErr
+		}
+		r.Count++
+		if i == 20000 && (errors.Is(err, io.EOF) || errors.Is(err, syscall.ECONNRESET)) {
+			break
+		}
+		if err != nil || attempt.Status != 403 || !attempt.Closed || attempt.Body != 0 || !attempt.EmptyLength || !attempt.CloseHeader {
+			return errors.New("cap attempt lacked its refusal receipt")
+		}
+	}
+	return file.Sync()
 }

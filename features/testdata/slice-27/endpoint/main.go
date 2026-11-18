@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -32,11 +33,15 @@ type config struct {
 	Nonce    string
 	Listen   string
 	Redirect string
+	DNS      map[string]string
 }
 
 // receipt is one thing the endpoint saw. A conn receipt is written when a TCP
 // connection closes: how many bytes arrived on it, and whether TLS completed.
 type receipt struct {
+	Digest                    string
+	PayloadBytes              int
+	Answer                    string
 	Kind, Name, Nonce, Remote string
 	Bytes                     int64
 	Handshake                 bool
@@ -141,7 +146,24 @@ func serve(dir string) error {
 		return err
 	}
 	record := &recorder{path: filepath.Join(dir, "receipts.jsonl")}
+	if len(cfg.DNS) != 0 {
+		if err := serveDNS(cfg.DNS, record); err != nil {
+			return err
+		}
+	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/payload", func(out http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(io.LimitReader(r.Body, 8192))
+		if err != nil {
+			http.Error(out, "read failed", 500)
+			return
+		}
+		data := []byte(r.URL.Query().Get("token") + r.Header.Get("X-Slice-28") + string(body))
+		sum := sha256.Sum256(data)
+		record.add(receipt{Kind: "payload", Name: r.TLS.ServerName, Nonce: r.URL.Query().Get("n"), Digest: hex.EncodeToString(sum[:]), PayloadBytes: len(data)})
+		out.Header().Set("Connection", "close")
+		_, _ = fmt.Fprint(out, cfg.Nonce)
+	})
 	mux.HandleFunc("/nonce", func(out http.ResponseWriter, r *http.Request) {
 		record.add(receipt{Kind: "nonce", Name: r.TLS.ServerName, Nonce: r.URL.Query().Get("n"), Remote: r.RemoteAddr})
 		out.Header().Set("Connection", "close")

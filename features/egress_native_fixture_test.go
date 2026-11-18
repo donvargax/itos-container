@@ -32,6 +32,9 @@ import (
 var egressSubnets = map[string][2]string{"public": {"11.22.33.0/24", "fd27:27::/64"}, "private": {"192.168.227.0/24", ""}}
 
 type egressReceipt struct {
+	Digest                    string
+	PayloadBytes              int
+	Answer                    string
 	Kind, Name, Nonce, Remote string
 	Bytes                     int64
 	Handshake                 bool
@@ -42,6 +45,7 @@ type egressReceipt struct {
 type egressEndpoint struct {
 	key, network, dir, id, nonce, leaf, redirect string
 	names                                        []string
+	port                                         string
 	address, address6                            netip.Addr
 	controls                                     []error // independent harness exchanges, in order
 	sent                                         []string
@@ -178,6 +182,10 @@ func (n *egressNative) fixtureNetwork(ctx context.Context, key string) (*egressF
 // endpoint starts one trusted TLS service and waits until it has published its
 // certificates. names are both its network aliases and its certificate names.
 func (n *egressNative) endpoint(key, networkKey string, names []string, redirect string) (*egressEndpoint, error) {
+	return n.endpointConfigured(key, networkKey, names, redirect, "443", nil)
+}
+
+func (n *egressNative) endpointConfigured(key, networkKey string, names []string, redirect, port string, dns map[string]string) (*egressEndpoint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	f, err := n.fixtureNetwork(ctx, networkKey)
@@ -185,7 +193,7 @@ func (n *egressNative) endpoint(key, networkKey string, names []string, redirect
 		return nil, err
 	}
 	w := n.w
-	e := &egressEndpoint{key: key, network: networkKey, names: names, nonce: egressNonce(), redirect: redirect}
+	e := &egressEndpoint{key: key, network: networkKey, names: names, nonce: egressNonce(), redirect: redirect, port: port}
 	host := byte(10 + len(n.order))
 	four := netip.MustParsePrefix(egressSubnets[networkKey][0]).Addr().As4()
 	four[3] = host
@@ -208,7 +216,7 @@ func (n *egressNative) endpoint(key, networkKey string, names []string, redirect
 	if err = os.WriteFile(filepath.Join(e.dir, "slice-27-endpoint"), program, 0700); err != nil {
 		return nil, err
 	}
-	config := approvalJSON(map[string]any{"Names": names, "Nonce": e.nonce, "Redirect": redirect})
+	config := approvalJSON(map[string]any{"Names": names, "Nonce": e.nonce, "Redirect": redirect, "Listen": ":" + port, "DNS": dns})
 	if err = os.WriteFile(filepath.Join(e.dir, "config.json"), config, 0600); err != nil {
 		return nil, err
 	}
@@ -264,7 +272,7 @@ func (n *egressNative) control(e *egressEndpoint, name string) {
 		roots := x509.NewCertPool()
 		roots.AppendCertsFromPEM(n.authority)
 		dialer := &net.Dialer{Timeout: 10 * time.Second}
-		conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(e.address.String(), "443"), &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: name})
+		conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(e.address.String(), e.port), &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: name})
 		if err != nil {
 			return err
 		}

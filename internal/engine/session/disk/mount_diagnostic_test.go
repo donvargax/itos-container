@@ -17,7 +17,7 @@ func TestMountSystemErrorOmitsPrivatePayloads(t *testing.T) {
 		want port.MountSystemError
 	}{
 		{nil, port.MountSystemError{}},
-		{&os.PathError{Op: "private operation", Path: "private path", Err: syscall.EACCES}, port.MountSystemError{Errno: 13, Message: "permission denied"}},
+		{&os.PathError{Op: "private operation", Path: "private path", Err: syscall.EACCES}, port.MountSystemError{Errno: int(syscall.EACCES), Message: syscall.EACCES.Error()}},
 		{errors.New("private response body"), port.MountSystemError{Message: "unclassified system error"}},
 	} {
 		if got := mountSystemError(tc.err); got != tc.want {
@@ -32,7 +32,7 @@ func TestDiskMountErrorContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.MountErrorContract(t, w, func(fail bool) {
+	f.MountErrorContract(t, w, port.MountSystemError{Errno: int(syscall.EACCES), Message: syscall.EACCES.Error()}, func(fail bool) {
 		w.MountStat = func(string) (fs.FileInfo, error) {
 			if fail {
 				return nil, &os.PathError{Op: "stat", Path: "private path", Err: syscall.EACCES}
@@ -47,7 +47,7 @@ func TestDiskMountErrorContract(t *testing.T) {
 	}
 	p := &workerProcess{file: file}
 	defer p.Close()
-	f.MountErrorContract(t, p, func(fail bool) {
+	f.MountErrorContract(t, p, port.MountSystemError{Errno: int(syscall.EACCES), Message: syscall.EACCES.Error()}, func(fail bool) {
 		p.poll = func(int32) (int16, error) {
 			if fail {
 				return 0, syscall.EACCES
