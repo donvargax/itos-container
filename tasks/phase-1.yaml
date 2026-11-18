@@ -7902,18 +7902,117 @@
   type: ci
   title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
   why: >
-    T-45's rule keeps every engine shard's step under 180 seconds and moves whole feature files
-    between shards on measured times. The other shard is over it: on main at 83e4bc1 (run
-    43837945423) all 40 of its scenarios passed, the suite took 171.2 s and the step 180.84 s, so
-    the job failed with nothing red ('the log holds no go-test failure line; its last line: PASS').
-    It ran 143.9 s at a36768a, the first run with slice-27's eight egress scenarios live, and 90 to
-    140 s before them; T-55's and T-57's warm-ups added a few seconds since. The run after it
-    (43837968367 at 2897e10) failed ID-EGRESS-14 with 'recorded completed 10 connections for 11
-    exchanges', which a shard this full may explain. slice-28 adds egress lifecycle scenarios and
-    slice-37 terminal ones, so the next engine slices land on a shard with no room. Move
-    egress.feature whole to a fourth shard on these measurements, with the shard inventory pins, as
-    slice-27's own notes said to do when the shard neared the gate; and place
-    egress_lifecycle.feature and the terminal feature by the same rule. The 180-second gate, the
-    scenarios and the fixture limits do not change.
+    On main at 83e4bc1, run 43837945423 passed all 40 scenarios in Engine shard (other).
+    The suite took 171.2 s. The step printed "engine step timing: duration_ms=180840 outcome=failed".
+    Earlier that day the step took 143.9 s at a36768a, the first run with slice-27's eight
+    egress rows live, and 111 s and 90 s before them. Under T-45's measured
+    180-second step rule and decision 0028, the coordinator settled the move on 2026-11-16 at
+    09:44 UTC. Run 43837968367 at 2897e10 separately reported an ID-EGRESS-14 connection-count
+    failure. This task addresses the measured step overrun.
+
+    In one ci commit with --task T-59, add a fourth include named egress to the existing
+    engine-shard matrix in .github/workflows/ci.yml. Move the whole features/egress.feature
+    from other to egress using the basename egress.feature as its only file on this tree.
+    Keep offline.feature in offline and lifecycle.feature in lifecycle. The other shard keeps
+    anchors.feature, checkout-overlap.feature, doctor.feature, hardlinks.feature, recovery.feature,
+    session.feature and sockets.feature. At this baseline the resulting live row counts are 24
+    offline, 19 lifecycle, 32 other and 8 egress. Update the current shard lists and measurement
+    example in features/README.md and the inventory under Future behaviour evidence in
+    docs/architecture/arc42.md to match the matrix.
+
+    All four includes run the same job on separate native ubuntu-latest runners with fail-fast
+    false. Each gets the checkout at the tested SHA, Go setup, read-only preflight, fixture
+    preparation and its outputs, and the step-local feature and manual red selectors. Preparation
+    emits the existing "engine warm-up timing:" and "engine product warm-up timing:" lines.
+    TestFeatures emits "engine suite warm-up timing:" before its first selected row. Preserve the
+    failure diagnostics and unconditional fixture cleanup. The step fails above 180000 ms including
+    compilation. Keep the 10-minute job, 5-minute step, 4-minute test and all fixture limits.
+    Use the existing scenarios and assertions intact.
+
+    The engine job named Engine scenarios (Linux amd64) needs only engine-shard. Its Require
+    every engine shard step reads ${{ needs.engine-shard.result }} into SHARD_RESULT and accepts
+    only success. The fourth include feeds this same matrix result. Preserve the aggregate's
+    always() and event guard, the ci gate and the release dependency.
+
+    In features/engine_shards_test.go update TestEngineShards' exact name set, the in-memory
+    shardBaseline and the controls for extra or renamed shards. Pin the egress shard's complete
+    set of parsed basenames regardless of list order or whitespace. Reject a swap with a file
+    in other even if all four shards are nonempty and every file appears once. Also reject
+    an unrelated file in egress, the old three-shard layout and a fifth shard. Pin the
+    offline, lifecycle and other shards' complete sets the same way, and reject a file moved
+    whole from other into offline or lifecycle, where every file still appears exactly once,
+    so the placement rule behind the 180-second budget holds. Keep the real
+    partition check against the unsharded selection. It covers every effective @engine file
+    (live or @wip) exactly once, live row counts and IDs, and the nested ID-LIFECYCLE-09 and
+    ID-LIFECYCLE-13 schedule. Preserve the selector and aggregate negative controls.
+
+    In testShardPartition log strings.Join(files, " ") using the files already parsed with
+    strings.Fields(entry.Features), so each shard lists all its files on one line.
+    Add a "multiline egress report" subtest to TestEngineShards.
+    Parse an in-memory egress entry whose features value is a YAML literal block with
+    egress_lifecycle.feature on the first line and egress.feature on the second. Use the same
+    report formatter as the real partition and assert that its single line ends with
+    " in egress_lifecycle.feature egress.feature". The control can run before slice-28 lands.
+
+    When slice-28 merges main, it places its whole features/egress_lifecycle.feature alongside
+    egress.feature in egress and updates its inventory pins. This supersedes its earlier other
+    assignment. When slice-37 merges main, it places its whole features/run_terminal.feature
+    in other, where the seven remaining files previously ran in 111 s and 90 s. Each slice adds
+    its file on its own branch. Only files present on this tree belong in T-59's matrix. Use the
+    per-shard step timings on the pushed heads to judge those placements and any later whole-file
+    move. Each shard must pass within the same 180-second gate.
+
+    At a399bbf TestEngineShards passes and reports egress.feature among other's 40 rows. In a
+    scratch partition with slice-28's file, both spellings of the two-file list selected the same
+    27 rows. The placement assertion passed on the space-separated list and missed egress.feature
+    on the literal block's continuation line. The check below preserves go test's exit status,
+    checks placement only in the real partition, and requires the multiline control to pass.
+    It rejects unrelated files and allows slice-28's file once the inventory includes it.
+    Before implementation it exits 1 for the absent egress shard and the missing control.
+    Run it before changing the matrix and again with the new pins.
+
+    TestEngineSuiteWarmup creates its synthetic approval under the literal /tmp even when TMPDIR
+    is set. On the review runner, /tmp had UID 65534 and mode 1777. The product returned
+    run.approval-invalid before the recorder saw a create. On runners with an untrusted /tmp,
+    run the features self-tests below in a private mount namespace with a mode-0700 /tmp owned
+    by the test user. For example, set `cache=$(go env GOCACHE)` and prefix the features command with
+    `bwrap --ro-bind / / --dev /dev --bind "$cache" "$cache" --perms 0700 --tmpfs /tmp --`.
+
+    In the same implementation attempt run the workflow's engine-free self-tests locally with
+    go test ./features -count=1 -run
+    '^(TestEngine|TestFeatureSignalDiagnostics|TestLifecycleSignalWindow|TestPlatformSelection)'
+    and go test ./tools/release -count=1 -run '^TestReleaseWorkflow$'. All mutation proof runs
+    in CI alone, as the root AGENTS.md evidence workflow holds: an agent makes no local
+    mutation run and commits no generated mutation or coverage evidence before reporting
+    done, and a changed function's proof waits for the pinned itos-cc run at the pushed
+    head. The loop checks the four native timings, aggregate and required proof in CI at the
+    pushed head.
   done_when:
-    - run: go test ./features -count=1 -run 'TestEngineShards'
+    - run: |
+        report=$(go test ./features -count=1 -run '^TestEngineShards$' -v) || {
+          test_status=$?
+          printf '%s\n' "$report"
+          exit "$test_status"
+        }
+        printf '%s\n' "$report" | awk '
+          $1 == "===" { partition = ($3 == "TestEngineShards/partition") }
+          partition && /: shard / { print }
+          partition && /: shard egress: / {
+            sub(/^.* in /, "")
+            for (i = 1; i <= NF; i++) {
+              if ($i == "egress.feature") assigned++
+              else if ($i != "egress_lifecycle.feature") unexpected++
+            }
+          }
+          $1 == "---" && $2 == "PASS:" && $3 == "TestEngineShards/multiline_egress_report" { multiline = 1 }
+          END {
+            if (assigned != 1 || unexpected != 0) {
+              print "expected egress.feature once in the egress shard, with no unrelated features"
+              failed = 1
+            }
+            if (!multiline) {
+              print "expected TestEngineShards/multiline_egress_report to pass"
+              failed = 1
+            }
+            exit failed
+          }'
