@@ -3,6 +3,15 @@ phases:
   1: null
 queue:
   - T-59
+  - slice-28
+  - T-48
+  - slice-34
+  - slice-32
+  - slice-35
+  - slice-31
+  - slice-36
+  - slice-40
+  - slice-41
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
