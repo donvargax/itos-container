@@ -296,30 +296,29 @@ func refusalReportJSON(digest string, report port.RefusalReport) []byte {
 	return data
 }
 
-// Read derives a session's refusal evidence from its committed files alone. No
-// committed copy leaves a destination that is pending, not a missing file; a
-// log published without its report, or a report that does not describe the log
-// beside it, is unknown, never a stored zero.
+// Read verifies the committed report against the log in the same session directory.
 func (l RefusalLog) Read(ctx context.Context, session string) (port.RefusalLogReport, port.Outcome) {
-	pending := port.RefusalLogReport{State: "pending", Missing: []port.RefusalGap{}}
+	report := port.RefusalLogReport{State: "unknown", Missing: []port.RefusalGap{}}
 	if !port.HexID(session) {
-		return pending, port.Invalid
+		return report, port.Invalid
 	}
-	c, failure := Registry{Store: l.Store}.lookup()
+	c, failure := (Registry{Store: l.Store}).lookup()
 	if failure != "" {
-		return pending, failure
+		return report, failure
 	}
 	evidence, f := l.Storage.Evidence(ctx, c, session)
+	report.Path = evidence.Path
 	if f != "" {
-		return pending, storageFailure(f, false)
+		return report, storageFailure(f, false)
 	}
-	report := port.RefusalLogReport{Path: evidence.Path, Missing: []port.RefusalGap{}}
-	if evidence.Log == nil && evidence.Report == nil {
+	if evidence.Log == nil {
+		if evidence.Report != nil {
+			return report, port.Incomplete
+		}
 		report.State = "pending"
 		return report, ""
 	}
 	if evidence.Report == nil {
-		report.State = "unknown"
 		return report, ""
 	}
 	var sidecar struct {
@@ -329,11 +328,9 @@ func (l RefusalLog) Read(ctx context.Context, session string) (port.RefusalLogRe
 		Missing []port.RefusalGap `json:"missing"`
 	}
 	if json.Unmarshal(evidence.Report, &sidecar) != nil || sidecar.Schema != 1 || sidecar.Records == nil || !hexDigest(sidecar.SHA256) {
-		report.State = "unknown"
 		return report, ""
 	}
-	if evidence.Log == nil || sha256.Sum256(evidence.Log) != mustDigest(sidecar.SHA256) {
-		report.State = "unknown"
+	if sha256.Sum256(evidence.Log) != mustDigest(sidecar.SHA256) {
 		return report, ""
 	}
 	records := *sidecar.Records

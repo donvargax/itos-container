@@ -157,6 +157,28 @@ func TestEgressStopAcceptsProxyAlreadyRemovedAfterWait(t *testing.T) {
 		t.Errorf("confirmed absence refused: %#v", result)
 	}
 }
+func TestEgressMissingRefusalLogIsARecoveryFailure(t *testing.T) {
+	runner, registry, engine, id, _ := seedEgressSession(t, 8)
+	recovery := Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}
+	if result := recovery.Stop(t.Context(), id); len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" {
+		t.Fatalf("teardown = %#v", result)
+	}
+	log := runner.Refusals.(*f.RefusalLog)
+	// The completed session's sidecar outlives its committed log: cleanup is
+	// done, but the removed proxy can no longer supply the evidence, so status
+	// and a repeated stop report recovery.temporary, never a clean success.
+	log.Fault = "read"
+	log.Report.Path = "/fixture/egress-refusals.jsonl"
+	for _, result := range []port.RecoveryResult{recovery.Status(t.Context()), recovery.Stop(t.Context(), id)} {
+		if len(result.Failures) != 1 || result.Failures[0].Outcome != port.Incomplete {
+			t.Fatalf("missing committed log passed a clean stop or status: %#v", result)
+		}
+		entry := result.Entries[0]
+		if entry.Cleanup != "complete" || entry.Egress == nil || entry.Egress.RefusalLog == nil || entry.Egress.RefusalLog.State != "unknown" || entry.Egress.RefusalLog.Path != log.Report.Path {
+			t.Errorf("missing committed log lost complete cleanup or its unknown evidence: %#v", entry)
+		}
+	}
+}
 func TestEgressWatchRequiresConnectionAndSupportsOfflineCaller(t *testing.T) {
 	runner, registry, engine, _, r := seedEgressSession(t, 8)
 	b := registry.Store.Codec.(*f.Codec).Value

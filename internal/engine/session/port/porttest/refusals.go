@@ -10,6 +10,7 @@ import (
 
 type RefusalLog struct {
 	BeginUncancellable <-chan struct{}
+	ReadUncancellable  <-chan struct{}
 	LastCopy           port.RefusalCopy
 	mu                 sync.Mutex
 	Copies             map[string][]byte
@@ -36,10 +37,13 @@ func (l *RefusalLog) Begin(ctx context.Context, id string) (port.RefusalCopy, po
 // Read reports the fake's last committed evidence for a session, pending until
 // one exists. A scripted gap makes the durable state gapped.
 func (l *RefusalLog) Read(ctx context.Context, id string) (port.RefusalLogReport, port.Outcome) {
+	if l.ReadUncancellable != nil {
+		<-l.ReadUncancellable
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if ctx.Err() != nil || l.Fault == "read" {
-		return port.RefusalLogReport{State: "pending", Missing: []port.RefusalGap{}}, port.Incomplete
+		return port.RefusalLogReport{Path: l.Report.Path, State: "unknown", Missing: []port.RefusalGap{}}, port.Incomplete
 	}
 	if _, ok := l.Copies[id]; !ok {
 		return port.RefusalLogReport{State: "pending", Missing: []port.RefusalGap{}}, ""

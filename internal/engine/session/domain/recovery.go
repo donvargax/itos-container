@@ -68,7 +68,7 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	// ownership refusal: read it before validation can fail, never from a
 	// live proxy or a cache.
 	evidence, evidenceFailure := s.refusalEvidence(ctx, id, entry.Intent().Record())
-	if e.Egress != nil && evidenceFailure == "" {
+	if e.Egress != nil {
 		e.Egress.RefusalLog = &evidence
 	}
 	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
@@ -144,7 +144,17 @@ func (s Recovery) refusalEvidence(ctx context.Context, id string, record port.Re
 	if record.Schema != 3 || s.Refusals == nil {
 		return pending, ""
 	}
-	return s.Refusals.Read(ctx, id)
+	return readRefusalEvidence(ctx, s.Refusals, id)
+}
+
+func readRefusalEvidence(ctx context.Context, log port.RefusalLog, id string) (port.RefusalLogReport, port.Outcome) {
+	report, failure, err := budget.Call2(ctx, "refusal evidence read", func(call context.Context) (port.RefusalLogReport, port.Outcome) {
+		return log.Read(call, id)
+	})
+	if err != nil {
+		return port.RefusalLogReport{State: "unknown", Missing: []port.RefusalGap{}}, port.Incomplete
+	}
+	return report, failure
 }
 func sessionEntry(s port.Session) (port.RecoveryEntry, port.Outcome) {
 	r := s.Record()
@@ -284,7 +294,7 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	// alive across processes; the copy's own in-memory report is the fallback
 	// only when reading the committed files back cannot confirm them.
 	evidence, evidenceFailure := s.refusalEvidence(ctx, id, entry.Intent().Record())
-	if e.Egress != nil && evidenceFailure == "" {
+	if e.Egress != nil {
 		e.Egress.RefusalLog = &evidence
 	}
 	r := recoveryResult()

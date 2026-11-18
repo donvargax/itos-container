@@ -384,4 +384,11 @@ func TestRefusalLogReadDerivesEvidence(t *testing.T) {
 	if failure != "" || evidence.State != "unknown" || evidence.Records != nil {
 		t.Fatalf("stale report = %#v, %s", evidence, failure)
 	}
+	// A retained sidecar without its committed log is required evidence gone
+	// missing: unknown, and a failed read, never a successful cleanup claim.
+	f.files.Sessions[f.key+"/"+f.id].Log = nil
+	evidence, failure = f.log.Read(t.Context(), f.id)
+	if failure != sp.Incomplete || evidence.Path != f.path() || evidence.State != "unknown" || evidence.Records != nil || evidence.Missing == nil || len(evidence.Missing) != 0 {
+		t.Fatalf("missing committed log = %#v, %s", evidence, failure)
+	}
 }
