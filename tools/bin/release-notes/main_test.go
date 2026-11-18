@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -198,6 +199,93 @@ func TestBootstrapNotes(t *testing.T) {
 			}
 			if strings.Contains(message, "refactor!:") && !strings.Contains(got, "Breaking, abc1234 `refactor!: first break`") {
 				t.Errorf("bootstrap lost its breaking header:\n%s", got)
+			}
+		})
+	}
+}
+
+// A merge of main into an item branch is not a change of the release: the
+// notes leave it out, whatever its subject says or its first parent is, and the
+// merge that lands the item on main is listed under its own subject. Each case
+// builds two items over an example repository, slice-13 whose sync merge is
+// subjected as a feat and slice-14 whose sync merge has a feat as its first
+// parent, lands both on main, and renders what git-cliff would, every commit
+// under Features.
+func TestSyncMergesLeftOut(t *testing.T) {
+	for _, tagged := range []bool{false, true} {
+		name, rng, since := "a first release", "HEAD", "the first commit"
+		if tagged {
+			name, rng, since = "a release after v0.1.0", "v0.1.0..HEAD", "v0.1.0"
+		}
+		t.Run(name, func(t *testing.T) {
+			repo := releasetest.Example(t, tagged)
+			empty := func(message string) {
+				releasetest.Git(t, repo, "commit", "--quiet", "--allow-empty", "-m", message)
+			}
+			merge := func(message, branch string) {
+				releasetest.Git(t, repo, "merge", "--quiet", "--no-ff", "--no-edit", "-m", message, branch)
+			}
+			for _, item := range []struct{ branch, thing, sync string }{
+				{"slice-13", "feat: slice-13 thing", "feat: merge main into slice-13"},
+				{"slice-14", "feat: slice-14 thing", "Merge main into slice-14"},
+			} {
+				releasetest.Git(t, repo, "checkout", "--quiet", "-b", item.branch)
+				empty(item.thing)
+				releasetest.Git(t, repo, "checkout", "--quiet", "main")
+				empty("docs: main moves on past " + item.branch)
+				releasetest.Git(t, repo, "checkout", "--quiet", item.branch)
+				merge(item.sync, "main")
+				releasetest.Git(t, repo, "checkout", "--quiet", "main")
+				merge("feat: land "+item.branch, item.branch)
+			}
+			t.Chdir(repo)
+			list, err := commits(rng)
+			if err != nil {
+				t.Fatal(err)
+			}
+			syncs := map[string]string{} // SHA to subject
+			var changed strings.Builder
+			changed.WriteString("### Features\n\n")
+			for _, c := range list {
+				if c.Header == "feat: merge main into slice-13" || c.Header == "Merge main into slice-14" {
+					syncs[c.SHA] = c.Header
+				}
+				fmt.Fprintf(&changed, "- %s ([`%s`](https://github.com/%s/commit/%s))\n", c.Header, c.SHA[:7], repository, c.SHA)
+			}
+			if len(syncs) != 2 {
+				t.Fatalf("the example history holds %d sync merges, want 2: %v", len(syncs), syncs)
+			}
+			n := notes{Version: "0.1.0", Repository: repository, Commits: list, Changed: strings.TrimSpace(changed.String())}
+			if tagged {
+				n.Version, n.From = "0.2.0", "v0.1.0"
+			}
+			got, err := n.render()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for sha, subject := range syncs {
+				if strings.Contains(got, sha) || strings.Contains(got, subject) {
+					t.Errorf("the notes hold the sync merge %s %q:\n%s", sha[:7], subject, got)
+				}
+			}
+			features := ""
+			if at := strings.Index(got, "### Features"); at >= 0 {
+				features = got[at:]
+			}
+			for _, c := range list {
+				if c.Header == "feat: land slice-13" || c.Header == "feat: land slice-14" {
+					if want := "- " + c.Header + " ([`" + c.SHA[:7] + "`]"; !strings.Contains(features, want) {
+						t.Errorf("the notes lack the landing merge %q under Features:\n%s", want, got)
+					}
+				}
+			}
+			commitCount := "7 commits"
+			if tagged {
+				commitCount = "6 commits"
+			}
+			want := "Cut by CI from the " + commitCount + " since " + since + ": 4 feats, 0 fixes and 0 breaking changes"
+			if !strings.Contains(got, want) {
+				t.Errorf("the notes lack %q:\n%s", want, got)
 			}
 		})
 	}
