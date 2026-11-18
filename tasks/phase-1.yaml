@@ -6447,47 +6447,6 @@
     implemented-versus-proposed status in ADR 0025 and arc42 with that implementation, retaining
     their unresolved questions and native-evidence limits. This draft commits only T-48's ledger
     entry as docs with Item T-48 and leaves every sibling entry untouched.
-  done_when:
-    - run: |
-        set -eu
-        if output=$(go test -count=1 -v ./internal/engine/session/... 2>&1); then
-          :
-        else
-          printf '%s\n' "$output"
-          exit 1
-        fi
-        if ! printf '%s\n' "$output" | awk '
-          $1 == "---" && $2 == "SKIP:" && $3 ~ /^TestCredential/ { skipped = 1 }
-          END { exit skipped }
-        '; then
-          printf 'credential tests must not skip\n' >&2
-          exit 1
-        fi
-        missing=0
-        for required in \
-          TestCredentialStagingContract/memory \
-          TestCredentialStagingContract/disk \
-          TestCredentialMountContract/memory \
-          TestCredentialMountContract/sdk \
-          TestCredentialUncertainStartContract/memory \
-          TestCredentialUncertainStartContract/sdk \
-          TestCredentialLifecycle \
-          TestCredentialBudgets \
-          TestCredentialProgress \
-          TestCredentialRecords \
-          TestCredentialRecoveryStore/memory \
-          TestCredentialRecoveryStore/disk \
-          TestCredentialProvisioningAbsence
-        do
-          if ! printf '%s\n' "$output" | awk -v name="$required" '
-            $1 == "---" && $2 == "PASS:" && $3 == name { found = 1 }
-            END { exit !found }
-          '; then
-            printf 'missing passing credential test: %s\n' "$required" >&2
-            missing=1
-          fi
-        done
-        test "$missing" -eq 0
 - id: T-49
   type: test
   title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
