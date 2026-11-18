@@ -70,33 +70,48 @@ func TestLifecycleDisconnectWaitsForHealthyHeartbeat(t *testing.T) {
 }
 
 func TestLifecycleDisconnectWaitsForIndependentProgress(t *testing.T) {
-	for _, observation := range []string{"delayed progress", "missing", "unchanged", "regressed"} {
-		t.Run(observation, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, initial string
+		publish       int
+		wantProgress  bool
+	}{
+		{"already advanced and still progressing", "8", 9, true},
+		{"already advanced then stalled", "8", 0, false},
+		{"delayed progress", "7", 8, true},
+		{"temporarily missing", "", 8, true},
+		{"temporarily malformed", "partial", 8, true},
+		{"regressed then advanced", "6", 8, true},
+		{"missing", "", 0, false},
+		{"unchanged", "7", 0, false},
+		{"regressed", "6", 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				w := lifecycleReadinessWorld(t)
 				l := w.lifecycle
 				l.heartbeat, l.returned = 7, time.Now()
 				close(l.run.done) // Expected: the controller has already returned.
-				if observation != "missing" {
-					value := 7
-					if observation == "regressed" {
-						value = 6
+				if tc.initial != "" {
+					if err := os.WriteFile(filepath.Join(w.doctor.checkout, "slice-12-heartbeat"), []byte(tc.initial), 0600); err != nil {
+						t.Fatal(err)
 					}
-					lifecyclePublishHeartbeat(t, w, value)
 				}
-				if observation == "delayed progress" {
+				if tc.publish != 0 {
 					written := make(chan struct{})
 					defer func() { <-written }()
 					go func() {
 						defer close(written)
 						time.Sleep(100 * time.Millisecond)
-						lifecyclePublishHeartbeat(t, w, 8)
+						lifecyclePublishHeartbeat(t, w, tc.publish)
 					}()
 				}
 				w.lifecycleDisconnectProgress()
-				if observation == "delayed progress" {
-					if l.later != 8 || l.err != nil || time.Since(l.returned) < 100*time.Millisecond {
+				if tc.wantProgress {
+					if l.later != tc.publish || l.err != nil {
 						t.Errorf("did not await independent progress after controller exit: later=%d elapsed=%s err=%v", l.later, time.Since(l.returned), l.err)
+					}
+					if elapsed := time.Since(l.returned); elapsed < 100*time.Millisecond || elapsed > 110*time.Millisecond {
+						t.Errorf("observer did not await the next heartbeat within one poll: %s", elapsed)
 					}
 				} else if l.err == nil || time.Since(l.returned) != 5*time.Second {
 					t.Errorf("missing progress did not fail within its bound: later=%d elapsed=%s err=%v", l.later, time.Since(l.returned), l.err)

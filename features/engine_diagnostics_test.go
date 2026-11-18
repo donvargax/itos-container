@@ -21,7 +21,18 @@ func TestMain(m *testing.M) {
 	if os.Getenv("ITOS_CONTAINER_ENGINE_TESTS") == "1" || os.Getenv("ITOS_CONTAINER_SIGNAL_DIAGNOSTIC_CHILD") == "1" {
 		logFeatureSignals(runtime.GOOS)
 	}
-	os.Exit(m.Run())
+	var err error
+	standaloneProbeDir, err = os.MkdirTemp("", "itos-container-feature-binaries-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "create feature binary directory:", err)
+		os.Exit(1)
+	}
+	code := m.Run()
+	if err := os.RemoveAll(standaloneProbeDir); err != nil {
+		fmt.Fprintln(os.Stderr, "remove feature binary directory:", err)
+		code = 1
+	}
+	os.Exit(code)
 }
 
 func logFeatureSignals(hostOS string) {

@@ -2,7 +2,14 @@
 phases:
   1: null
 queue:
-  - T-59
+  - slice-28
+  - slice-34
+  - slice-32
+  - slice-35
+  - slice-40
+  - slice-41
+  - slice-31
+  - slice-36
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -185,6 +192,11 @@ items:
       per-slice red-evidence and history notes out of it (the commits and run numbers already record
       them), keep only the standing harness rules, and add a doc-caps entry with headroom over the
       shortened size so later slices cannot grow it back.
+
+      This item already covers scenario guidance in features/README.md. Include a review rule there:
+      when a spec claims an exact mount option string produces a particular behavior, cite the
+      relevant engine source or a native CI observation. The executable /tmp spec shows why omitting
+      noexec is insufficient evidence.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -589,6 +601,17 @@ items:
       is the worker's and the anchor's today and is not T-40's to change. But T-40 adds two network
       creates per egress run, so slice-27 makes the stuck session reachable and nested checkouts
       then stay blocked. The item is p3; its phase is worth revisiting once slice-27 is queued.
+
+      Include a controller killed after publishing the stage intent and claim but before issuing
+      VolumeCreate. This item already covers safe retirement when durable evidence proves a create
+      was never issued. A name-only lookup that finds no volume cannot rule out a late allocation.
+      Any broader reclaim rule needs the person’s decision.
+
+      This recovery item already covers uncertain creates that leave a session stuck. Add the case
+      where VolumeCreate was dispatched, its reply was lost, and later lookups continue to find no
+      volume. HOME-10 covers a volume that eventually appears. The person must settle what evidence
+      permits releasing the claim while a delayed allocation is still possible. Elapsed time and
+      repeated name-only misses do not establish that the create has finished.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
@@ -747,19 +770,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p3-release-notes-skip-merges
+  - id: T-61
     title: Release notes leave out merges of main into an item branch
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      v0.1.0's generated notes (2026-11-09) list 'Merge main into slice-13', 'slice-14' and
-      'slice-11' under Features: release-notes counts a merge commit whose subject carries a feat
-      type, or classifies merges by their first parent's type. A merge of main into an item branch
-      changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
-      own subject names the item).
+    kind: task
   - id: p2-profile-non-engine-feature-suite
     title: Profile the non-engine feature suite and cut its roughly 300 s wall time
     phase: 1
@@ -1449,30 +1466,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p2-harness-env-clears-columns
+  - id: T-60
     title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      No item covers this. world.env() (features/steps_test.go:223) copies the caller's environment
-      and drops only GIT_, ITOS_, ITOS_CONTAINER_, GITHUB_, GH_, CI and PATH, so an inherited
-      COLUMNS reaches the product and Kong wraps help to it. Measured under COLUMNS=30:
-      ID-APPROVAL-29 fails a correct build at its step 'its standard output says "an agent on the
-      host can approve"', because the wrap splits the phrase. Only ID-APPROVAL-56 names its own
-      width (COLUMNS=200). Six other help scenarios are exposed: completion --help, count --help,
-      doctor --help in manifest.feature and policy.feature, and the product status/stop help in
-      recovery.feature. A suite that fails a correct build on a caller's terminal setting breaks the
-      charter's rule that suite and proof reliability fixes stay inside the first milestone. Fix:
-      have env() drop COLUMNS, or set a fixed wide value, and add a harness regression committed red
-      that runs a help scenario under a narrow inherited COLUMNS and fails before the fix. Check
-      that fixtures building their environment from os.Environ() directly, such as
-      sessionChildEnvironment, do not reintroduce it. Keep every scenario and assertion unchanged
-      and leave ID-APPROVAL-56's explicit width alone. Phase p2: nothing blocks the current step,
-      and CI normally exports no COLUMNS. The harness came from go-template-itos, so once this lands
-      the coordinator files it there as a backport issue.
+    kind: task
   - id: p2-approve-allowlist-added-removed-names
     title: Approve's review shows an allowlist change as the names added and removed
     phase: 1
@@ -1552,6 +1552,11 @@ items:
       static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
       own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
       already ships.
+
+      This item already proposes Windows and Darwin static checks in the Linux PR job.
+      Cross-compilation and standard go vet would have accepted the overlap test because both path
+      APIs are valid. The assertion failed only when Windows produced a drive-letter path. Commit
+      91d84d5 fixed the fixture to use the Linux paths the test models.
   - id: p3-workspace-copy-mode
     title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
     phase: 1
@@ -1664,6 +1669,17 @@ items:
       failure. The reading confirms or refutes the hypothesis on the next cold run. The remedy is
       not this item's: it belongs to p2-first-engine-row-slow-create, added by the same triage, and
       the warm cache to p2-ci-go-build-cache-rolling-key.
+
+      This item already publishes timing notices on green and failed engine runs. Include
+      registration duration and elapsed time from registration completion to create submission for
+      passing controls, so a failed control can be compared with a passing row from the same run.
+      Use the same phase boundaries and units for both outcomes.
+
+      This item already covers registration timing and the launch details visible in CI annotations.
+      When registration times out, include the last observed step (reservation, storage
+      registration, or admission publication) and its elapsed time on the launch line. That gives
+      the reader evidence the five-call engine journal cannot supply and fits q-65’s instrumentation
+      decision.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
@@ -1696,7 +1712,7 @@ items:
     title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-47, slice-29]
     kind: task
   - id: slice-31
@@ -1819,6 +1835,11 @@ items:
       later stop's copy would differ, and which rename lands last would matter. Whoever drafts this
       item must revisit that argument, either by scrubbing identically from every controller or by
       running the copy's Commit through the session's gate.
+
+      This item already owns AC-36’s hostname-marker probe. Because q-56 preserves refused hostnames
+      verbatim, verify that a synthetic credential marker embedded in a valid refused hostname is
+      absent from retained proxy stdout, Docker’s proxy log, and the protected egress-refusals.jsonl
+      copy.
   - id: T-53
     title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
     phase: 1
@@ -2177,6 +2198,11 @@ items:
       of the failed jobs passed. The other shard took 144 s of its 180 s gate in that run, with
       slice-27's egress rows now live, so a timing dependence under a fuller shard is the first
       thing to check. One occurrence; record the next with its run before repairing anything.
+
+      The existing item tracks intermittent failures in ID-OVERLAP-06. Run 44286115510 failed the
+      activity check, which 369b58b changed to retry. The cleanup check still samples the daemon
+      once to confirm a 404 for the original worker ID. No cleanup failure has been observed. If one
+      occurs, record the CI run on this item.
   - id: p2-repair-platform-ci-fixtures
     title: Repair shell and Windows assumptions in portability fixtures
     phase: 1
@@ -2190,6 +2216,30 @@ items:
       foundation maintenance: no supplied evidence shows it blocks the charter's current
       harness-home step. Require focused regressions and platform CI evidence without weakening
       assertions or claiming additional container-host support.
+
+      Commit aaf919c makes runFixtureWarmupShell pass --binary to jq on every platform to handle
+      Windows line endings. The existing item covers this fixture. Check the wrapper on macos-latest
+      before attributing a dispatch failure to it.
+
+      Include the shared Linux machine in the fixture repair. Start with one approval disk-contract
+      test that returns state.unsafe locally and passes on Ubuntu CI. Use it to identify the
+      filesystem assumption, then check the admission-leftover tests and affected feature rows while
+      preserving the production ownership checks.
+
+      This item already covers local state.unsafe failures on the shared Linux machine and the
+      affected feature scenarios. Both / and /tmp are owned by UID 65534 in the agent sandbox. Use
+      ID-EGRESS-09 to verify and document where implementers can run the fixture and reach its
+      behavior assertion with production ownership checks intact.
+
+      This item already records UID 65534 on `/` and `/tmp` and names ID-EGRESS-09 as a verification
+      case. Include the disk home fixtures in its scope. Name the first untrusted ancestor and its
+      UID in the fixture diagnostic, or document the ancestor-ownership prerequisite in
+      `features/README.md`. Keep the production ownership check and fixture assertions intact.
+
+      This item already records UID 65534 on / and /tmp and tracks the affected approval, home and
+      feature fixtures. Include the three reported cmd RealStore contract failures when verifying a
+      fixture environment that satisfies both ancestor ownership and the non-root manifest identity
+      requirement.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
@@ -2206,6 +2256,17 @@ items:
       passed, so this is not the first-row failure T-54, T-55 and T-57 dealt with. The journal
       printed with the failure omits entries 2 to 18, which hold the launch itself. One occurrence;
       with the next, read the full journal for which call took the time before choosing anything.
+
+      Include the ID-LIFECYCLE-12 healthy control in the existing startup-timeout investigation. In
+      run 43981890039 at c84b238, create was submitted 2.6 s into the 3 s budget and the engine
+      answered in 49 ms. Measure elapsed time from registration completion to create submission
+      alongside registration itself. That will let the two failures be compared before choosing a
+      remedy. T-50 is merged, and q-65 scoped its instrumentation to registration.
+
+      This investigation already tracks run 43981890039. Its healthy control submitted create 2.6 s
+      into the 3 s startup budget, and the engine answered in 49 ms. Include the separate 1 s
+      registration timeout when comparing where startup time went. The coordinator can use those
+      measurements to judge budget headroom. q-70 authorized reruns only for the slow first create.
   - id: T-58
     title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
     phase: 1
@@ -2216,7 +2277,54 @@ items:
   - id: T-59
     title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
     phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: slice-40
+    title: Deliver an approved OpenCode login to one container run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-48, slice-34, slice-30]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-32. The source is auth.json under
+      ~/.local/share/opencode and may include the OpenCode Go provider key alongside other provider
+      entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
+      approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
+      of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
+      the scenarios. Name any unresolved account decision explicitly. Specification first;
+      implementation follows the Codex and Claude slices. Real credential use is subject to decision
+      0025 question 5.
+  - id: slice-41
+    title: Start OpenCode headless with isolated home and configuration
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-35 in the approved worker. Run opencode --standalone
+      run --format json against its isolated home and configuration, with the authorized provider
+      and model. Cover separation from host configuration and services, bounded startup, final
+      output and failure, approved egress and cleanup. Scenarios use synthetic credentials and a
+      fake provider. Specify only for now; implementation follows the Codex and Claude slices.
+  - id: T-62
+    title: Clarify how branch syncs contribute to release version counts
+    phase: 1
     owner: null
     status: todo
     depends_on: []
     kind: task
+  - id: p3-release-notes-first-parent-fixture
+    title: Cover a nested item merge whose first parent is on main
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      PR 69's second local review identified a topology missing from the regression: a nested merge
+      can start an item branch at main's tip. It should remain listed when only its first parent is
+      on main's line. See PR 69 discussion in comment 6988903923.

@@ -231,14 +231,21 @@ func TestVerifyActualBoundary(t *testing.T) {
 		"published port": func(r *container.InspectResponse) {
 			r.NetworkSettings.Ports = network.PortMap{network.MustParsePort("8080/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: "18080"}}}
 		},
-		"root":            func(r *container.InspectResponse) { r.Config.User = "0:0" },
-		"gid":             func(r *container.InspectResponse) { r.Config.User = "1000:0" },
-		"group":           func(r *container.InspectResponse) { r.HostConfig.GroupAdd = []string{"0"} },
-		"root filesystem": func(r *container.InspectResponse) { r.HostConfig.ReadonlyRootfs = false },
-		"bind":            func(r *container.InspectResponse) { r.HostConfig.Binds = []string{"/:/host"} },
-		"source":          func(r *container.InspectResponse) { r.HostConfig.Mounts[0].Source = "/host" },
-		"anchor subpath":  func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.Subpath = "replacement" },
-		"anchor copy":     func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.NoCopy = false },
+		"port binding": func(r *container.InspectResponse) {
+			r.HostConfig.PortBindings = network.PortMap{network.MustParsePort("8080/tcp"): {{HostPort: "18080"}}}
+		},
+		"publish all ports": func(r *container.InspectResponse) { r.HostConfig.PublishAllPorts = true },
+		"root":              func(r *container.InspectResponse) { r.Config.User = "0:0" },
+		"gid":               func(r *container.InspectResponse) { r.Config.User = "1000:0" },
+		"group":             func(r *container.InspectResponse) { r.HostConfig.GroupAdd = []string{"0"} },
+		"root filesystem":   func(r *container.InspectResponse) { r.HostConfig.ReadonlyRootfs = false },
+		"bind":              func(r *container.InspectResponse) { r.HostConfig.Binds = []string{"/:/host"} },
+		"volumes from":      func(r *container.InspectResponse) { r.HostConfig.VolumesFrom = []string{"foreign"} },
+		"links":             func(r *container.InspectResponse) { r.HostConfig.Links = []string{"foreign"} },
+		"extra hosts":       func(r *container.InspectResponse) { r.HostConfig.ExtraHosts = []string{"foreign:127.0.0.1"} },
+		"source":            func(r *container.InspectResponse) { r.HostConfig.Mounts[0].Source = "/host" },
+		"anchor subpath":    func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.Subpath = "replacement" },
+		"anchor copy":       func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.NoCopy = false },
 		"propagation": func(r *container.InspectResponse) {
 			r.HostConfig.Mounts[0].BindOptions = &mount.BindOptions{Propagation: "shared"}
 		},
@@ -265,12 +272,24 @@ func TestVerifyActualBoundary(t *testing.T) {
 		"seccomp": func(r *container.InspectResponse) {
 			r.HostConfig.SecurityOpt = append(r.HostConfig.SecurityOpt, "seccomp=unconfined")
 		},
-		"pid": func(r *container.InspectResponse) { r.HostConfig.PidMode = "host" },
-		"ipc": func(r *container.InspectResponse) { r.HostConfig.IpcMode = "host" },
-		"uts": func(r *container.InspectResponse) { r.HostConfig.UTSMode = "host" },
+		"pid":              func(r *container.InspectResponse) { r.HostConfig.PidMode = "host" },
+		"ipc":              func(r *container.InspectResponse) { r.HostConfig.IpcMode = "host" },
+		"uts":              func(r *container.InspectResponse) { r.HostConfig.UTSMode = "host" },
+		"user namespace":   func(r *container.InspectResponse) { r.HostConfig.UsernsMode = "host" },
+		"cgroup namespace": func(r *container.InspectResponse) { r.HostConfig.CgroupnsMode = "host" },
 		"device": func(r *container.InspectResponse) {
 			r.HostConfig.Devices = []container.DeviceMapping{{PathOnHost: "/dev/x"}}
 		},
+		"device request": func(r *container.InspectResponse) {
+			r.HostConfig.DeviceRequests = []container.DeviceRequest{{Driver: "foreign"}}
+		},
+		"device rules": func(r *container.InspectResponse) { r.HostConfig.DeviceCgroupRules = []string{"a"} },
+		"sysctl": func(r *container.InspectResponse) {
+			r.HostConfig.Sysctls = map[string]string{"net.ipv4.ip_forward": "1"}
+		},
+		"absent init":      func(r *container.InspectResponse) { r.HostConfig.Init = nil },
+		"enabled init":     func(r *container.InspectResponse) { enabled := true; r.HostConfig.Init = &enabled },
+		"absent pids":      func(r *container.InspectResponse) { r.HostConfig.PidsLimit = nil },
 		"pids":             func(r *container.InspectResponse) { n := int64(4095); r.HostConfig.PidsLimit = &n },
 		"restart":          func(r *container.InspectResponse) { r.HostConfig.RestartPolicy.Name = "always" },
 		"autoremove":       func(r *container.InspectResponse) { r.HostConfig.AutoRemove = true },
