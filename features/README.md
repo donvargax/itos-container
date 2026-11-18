@@ -246,10 +246,14 @@ receive a Docker socket and never run the engine tier locally or spoof the CI co
 `TestEngineWorkflow` and `TestEngineFixtureWorkflow` parse the workflow and reject broken
 fixtures without executing Docker. The latter also checks the pinned recipe and helper guards.
 
-Since T-45 the engine tier runs in three engine shards, the matrix of the `engine-shard` job in
+Since T-45 the engine tier runs in engine shards, the matrix of the `engine-shard` job in
 `.github/workflows/ci.yml`: **offline** (`offline.feature`), **lifecycle** (`lifecycle.feature`,
-whose four `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row) and **other**
-(every other feature with an engine case). A shard is a job of whole feature files on its own
+whose four `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row), **other**
+(`anchors.feature`, `checkout-overlap.feature`, `doctor.feature`, `hardlinks.feature`,
+`recovery.feature`, `session.feature` and `sockets.feature`) and, since T-59, **egress**
+(`egress.feature`, moved whole from other after that shard's measured step passed 180
+seconds; slice-28's `egress_lifecycle.feature` joins it and slice-37's `run_terminal.feature`
+goes to other when those branches merge). A shard is a job of whole feature files on its own
 native `ubuntu-latest` runner and daemon, with its own checkout of the exact `${{ env.TO }}`
 head, preflight, fixture preparation and cleanup. Nothing crosses runners, `fail-fast` is off
 so a red shard hides no other, and no feature is ever split. Each runs on main pushes,
@@ -287,14 +291,24 @@ shard's selection. The `ITOS_CONTAINER_ENGINE_` prefix keeps it from product chi
 harness subprocesses, as for the switch.
 
 `TestEngineShards` holds all of this without an engine. Its workflow subtest parses the actual
-workflow; its partition subtest selects each shard over the real feature files and requires
-each shard's rows and IDs to be the unsharded selection's in its files, the three together the
-whole tier exactly once, every feature with an engine case in exactly one shard, and
-`ID-LIFECYCLE-09` and `-13` in the lifecycle shard; its selector subtest runs fixture
-features with memory-only steps; and its broken-workflows subtest refuses a dropped, doubled,
-unknown or path-named feature, an empty or fourth shard, a weakened aggregate, a gate that
-accepts another result, `continue-on-error`, `fail-fast: true`, the feature input at job
-level and a second engine switch.
+workflow, names exactly the four shards and pins the egress shard's complete file set —
+`egress.feature`, plus `egress_lifecycle.feature` once the inventory has it, and never the
+inventory's leftover — whatever its list's order or whitespace; its partition subtest selects
+each shard over the real feature files and requires each shard's rows and IDs to be the
+unsharded selection's in its files, the four together the whole tier exactly once, every
+feature with an engine case in exactly one shard, and `ID-LIFECYCLE-09` and `-13` in the
+lifecycle shard; its selector subtest
+runs fixture features with memory-only steps; its multiline egress report subtest formats an
+in-memory egress entry whose YAML literal block names `egress_lifecycle.feature` and
+`egress.feature` and requires the same one-line report the real partition logs to end with
+both files; its not-yet-listed egress file subtest refuses a synthetic engine file no shard's
+set lists yet, like slice-37's `run_terminal.feature` before it extends other, so a new engine
+file cannot hide in egress and fails visibly until a shard's set or a new shard takes it; and
+its broken-workflows subtest refuses a dropped, doubled,
+unknown or path-named feature, an empty or fifth shard, the old three-shard layout, a file
+swapped between egress and other, an unrelated file in the egress shard, a weakened
+aggregate, a gate that accepts another result, `continue-on-error`, `fail-fast: true`, the
+feature input at job level and a second engine switch.
 
 A read-only server preflight targets `unix:///var/run/docker.sock`, clearing caller-selected
 Docker host/context and TLS/API overrides. Missing CLI/socket, denied access, daemon failure,
@@ -543,7 +557,10 @@ binary's four-minute timeout. T-41 lengthened nothing the engine step runs: befo
 runner speed. T-33's rule applied: the
 measured unsharded step exceeded 240 seconds, so whole-feature shards on separate native
 runners with an exact parsed-example partition check. Offline holds 24 examples, lifecycle 19
-and other 32, of which 12 are `ID-SOCKETS-01` refusals before any worker exists. An estimate
+and other 32, of which 12 are `ID-SOCKETS-01` refusals before any worker exists. T-59's
+measured move (171.2 s in the other shard at `83e4bc1`, run 43837945423, after 143.9 s at
+`a36768a` and 111 s and 90 s before slice-27's eight egress rows went live) took the whole
+`egress.feature`, its eight rows, into a fourth shard of its own. An estimate
 from those shares and a cold compile, not a measurement, puts the slowest shard between two
 and two and a half minutes on the slowest runner seen.
 
@@ -554,7 +571,7 @@ times that show the need. In the prepared CI tier only, the coordinator measures
 with:
 
 ```sh
-for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature egress.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
+for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature' egress.feature; do
   env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
 done
 ```
@@ -760,7 +777,8 @@ create without a CID is recovered only by the recorded name, image ID, labels an
 mounts. Cleanup still tries the remaining resources, preserves the original preparation failure
 and retains ownership records when incomplete. It never prunes or deletes shared images.
 
-Both phases run once before the first engine row in each of the offline, lifecycle and other shard
+Both phases run once before the first engine row in each of the offline, lifecycle, other and
+egress shard
 jobs. They change no product, fixture-call, startup or workflow limit, assertion or row selection,
 and add no retry. Ordinary `TestEngineFixtureWarmup`, `TestEngineFixtureWarmupProduct` and
 `TestEngineFixtureWorkflow` regressions check executable wiring, decoded request and data-only
