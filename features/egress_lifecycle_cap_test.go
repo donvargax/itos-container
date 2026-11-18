@@ -139,10 +139,12 @@ func (w *world) egressLifeCapReceipts() error {
 // Extend only the existing child syscall observer. The product, budgets, return
 // values and filesystem calls are untouched. Both entry and completion of writes
 // and fsyncs are captured, including Go threads and the durable rename's parent.
+// Each write also records the file's size at syscall entry, which separates a
+// released temporary's reused inode number from the published file's own writes.
 func egressLifeTraceSource() string {
 	source := recoveryTraceSource
 	for _, change := range [][2]string{
-		{`type event struct {`, `type event struct { Op string; Started time.Time; Bytes int64; Observer int64;`},
+		{`type event struct {`, `type event struct { Op string; Started time.Time; Bytes, Before int64; Observer int64;`},
 		{`exit := 96`, `exit := 96
     var observer time.Duration`},
 		{`signal := int(status.StopSignal())`, `stopObserved := time.Now()
@@ -153,7 +155,11 @@ func egressLifeTraceSource() string {
                     if c.sync != nil {
                         c.sync.Started = started
                         c.sync.Op = "write"
-                        if regs.Orig_rax == unix.SYS_FSYNC { c.sync.Op = "fsync" }
+                        if regs.Orig_rax == unix.SYS_FSYNC {
+                            c.sync.Op = "fsync"
+                        } else if info, statErr := os.Stat(fmt.Sprintf("/proc/%d/fd/%d", tid, regs.Rdi)); statErr == nil {
+                            c.sync.Before = info.Size()
+                        }
                     }
                 }`},
 		{`if regs.Rax == 0 {
@@ -175,9 +181,10 @@ func egressLifeTraceSource() string {
 
 type egressLifeTimingEvent struct {
 	recoverySync
-	Op              string
-	Started         time.Time
-	Bytes, Observer int64
+	Op            string
+	Started       time.Time
+	Bytes, Before int64
+	Observer      int64
 }
 
 type egressLifeMeasurement struct {
@@ -234,10 +241,25 @@ func egressLifeMeasure(journal string, requests []egressLifeRequest, path string
 		}
 	}
 	inode := parent.Files[filepath.Base(path)]
-	var written int64
-	for _, e := range events {
+	// A released temporary's inode number can be reused by the staged log: a
+	// republished record's or a retried copy's. An inode string alone would
+	// merge both files' journal events, so count only the published file's own
+	// generation of writes: the staged log is created empty and only appended,
+	// so its writes begin at the last one that observed an empty file.
+	final := -1
+	for i, e := range events {
+		if e.Inode == inode && e.Op == "write" && e.Before == 0 {
+			final = i
+		}
+	}
+	var written, earlier int64
+	for i, e := range events {
 		if inode != "" && e.Inode == inode {
 			if e.Op == "write" {
+				if i < final {
+					earlier++
+					continue
+				}
 				written += e.Bytes
 				stagedWrites++
 				if e.At.After(lastWrite.At) {
@@ -250,7 +272,7 @@ func egressLifeMeasure(journal string, requests []egressLifeRequest, path string
 			}
 		}
 	}
-	m.Trace = fmt.Sprintf("events=%d session-dir-fsyncs=%d parent-fsync-with-log=%t log-inode-writes=%d log-inode-fsyncs=%d written=%d bytes=%d observer=%s", len(events), dirSyncs, inode != "", stagedWrites, stagedSyncs, written, m.Bytes, m.ObserverHandling)
+	m.Trace = fmt.Sprintf("events=%d session-dir-fsyncs=%d parent-fsync-with-log=%t log-inode-writes=%d earlier-same-inode-writes=%d log-inode-fsyncs=%d written=%d bytes=%d observer=%s", len(events), dirSyncs, inode != "", stagedWrites, earlier, stagedSyncs, written, m.Bytes, m.ObserverHandling)
 	// The six durability observations are individually named so a failed run
 	// reports which phase the real engine did not deliver; together they are
 	// exactly the one reviewed "incomplete staged-write/file-fsync/rename/
@@ -258,6 +280,8 @@ func egressLifeMeasure(journal string, requests []egressLifeRequest, path string
 	switch {
 	case inode == "":
 		return bad("no parent fsync observed the renamed log in its session directory")
+	case final < 0:
+		return bad("no staged write observed an empty file for the published log's inode")
 	case lastWrite.At.IsZero():
 		return bad("no staged write observed for the published log's inode")
 	case fsync.At.IsZero():
@@ -267,7 +291,7 @@ func egressLifeMeasure(journal string, requests []egressLifeRequest, path string
 	case parent.At.Before(fsync.At):
 		return bad("the session directory fsync completed before the log's file fsync")
 	case written != m.Bytes:
-		return bad(fmt.Sprintf("staged writes observed %d of the file's %d bytes", written, m.Bytes))
+		return bad(fmt.Sprintf("staged writes observed %d of the file's %d bytes with %d earlier same-inode writes", written, m.Bytes, earlier))
 	case m.ObserverHandling == 0:
 		return bad("the observer reported no handling time")
 	}

@@ -177,6 +177,61 @@ func main(){
 }
 `
 
+// A released temporary's inode number can be reused by the staged log's own
+// temporary, and the observer's journal then holds two generations of writes
+// under one inode string. The measurement must count only the generation the
+// published file kept: the staged log is created empty, so its writes begin at
+// the last write that observed an empty file. Merged generations would report
+// the earlier file's 1701 bytes against this file's twelve.
+func TestEgressLifecycleMeasurementExcludesReusedInodeGenerations(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "egress-refusals.jsonl")
+	body := []byte("staged line\n")
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now().Add(-time.Minute)
+	stamp := func(offset time.Duration) time.Time { return start.Add(offset) }
+	const inode = "8:1701"
+	events := []egressLifeTimingEvent{
+		{recoverySync: recoverySync{Inode: inode, At: stamp(100 * time.Millisecond)}, Op: "write", Started: stamp(99 * time.Millisecond), Bytes: 1701, Before: 0},
+		{recoverySync: recoverySync{Inode: inode, At: stamp(200 * time.Millisecond)}, Op: "write", Started: stamp(199 * time.Millisecond), Bytes: int64(len(body[:6])), Before: 0},
+		{recoverySync: recoverySync{Inode: inode, At: stamp(250 * time.Millisecond)}, Op: "write", Started: stamp(249 * time.Millisecond), Bytes: int64(len(body[6:])), Before: 6},
+		{recoverySync: recoverySync{Inode: inode, At: stamp(320 * time.Millisecond)}, Op: "fsync", Started: stamp(300 * time.Millisecond)},
+		{recoverySync: recoverySync{Path: dir, At: stamp(340 * time.Millisecond), Directory: true, Files: map[string]string{filepath.Base(path): inode}}, Op: "fsync"},
+		{Op: "observer", Observer: int64(time.Millisecond)},
+	}
+	journal := filepath.Join(dir, "trace.jsonl")
+	file, err := os.OpenFile(journal, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events {
+		if err := json.NewEncoder(file).Encode(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	requests := []egressLifeRequest{
+		{method: "GET", path: "/containers/proxy/logs", at: stamp(0), finished: stamp(90 * time.Millisecond)},
+		{method: "DELETE", path: "/containers/proxy", status: 204, at: stamp(400 * time.Millisecond), logBefore: body},
+		{method: "POST", path: "/containers/worker/wait", status: 200, finished: stamp(500 * time.Millisecond)},
+		{method: "GET", path: "/volumes/anchor", status: 404, finished: stamp(600 * time.Millisecond)},
+	}
+	m := egressLifeMeasure(journal, requests, path)
+	if m.Error != "" {
+		t.Fatalf("reused inode generation broke the measurement: %s; %s", m.Error, m.Trace)
+	}
+	if m.Bytes != int64(len(body)) {
+		t.Fatalf("measured %d bytes, want %d", m.Bytes, len(body))
+	}
+	if !strings.Contains(m.Trace, "earlier-same-inode-writes=1") {
+		t.Fatalf("trace lost the excluded generation: %s", m.Trace)
+	}
+}
+
 func TestEgressLifecycleCapProbeStreamsEveryDistinctAttempt(t *testing.T) {
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("the worker probe targets Linux amd64")
