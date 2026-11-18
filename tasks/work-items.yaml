@@ -2234,6 +2234,11 @@ items:
       affected feature scenarios. Both / and /tmp are owned by UID 65534 in the agent sandbox. Use
       ID-EGRESS-09 to verify and document where implementers can run the fixture and reach its
       behavior assertion with production ownership checks intact.
+
+      This item already records UID 65534 on `/` and `/tmp` and names ID-EGRESS-09 as a verification
+      case. Include the disk home fixtures in its scope. Name the first untrusted ancestor and its
+      UID in the fixture diagnostic, or document the ancestor-ownership prerequisite in
+      `features/README.md`. Keep the production ownership check and fixture assertions intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
