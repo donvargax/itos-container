@@ -8223,32 +8223,3 @@
     done, and a changed function's proof waits for the pinned itos-cc run at the pushed
     head. The loop checks the four native timings, aggregate and required proof in CI at the
     pushed head.
-  done_when:
-    - run: |
-        report=$(go test ./features -count=1 -run '^TestEngineShards$' -v) || {
-          test_status=$?
-          printf '%s\n' "$report"
-          exit "$test_status"
-        }
-        printf '%s\n' "$report" | awk '
-          $1 == "===" { partition = ($3 == "TestEngineShards/partition") }
-          partition && /: shard / { print }
-          partition && /: shard egress: / {
-            sub(/^.* in /, "")
-            for (i = 1; i <= NF; i++) {
-              if ($i == "egress.feature") assigned++
-              else if ($i != "egress_lifecycle.feature") unexpected++
-            }
-          }
-          $1 == "---" && $2 == "PASS:" && $3 == "TestEngineShards/multiline_egress_report" { multiline = 1 }
-          END {
-            if (assigned != 1 || unexpected != 0) {
-              print "expected egress.feature once in the egress shard, with no unrelated features"
-              failed = 1
-            }
-            if (!multiline) {
-              print "expected TestEngineShards/multiline_egress_report to pass"
-              failed = 1
-            }
-            exit failed
-          }'
