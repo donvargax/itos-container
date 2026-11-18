@@ -188,6 +188,10 @@ type egressLifeMeasurement struct {
 	ObserverHandling                         time.Duration
 	CopyMargin, CommitMargin, TeardownMargin time.Duration
 	Error                                    string `json:"error,omitempty"`
+	// Trace is a failure diagnostic, never a bound: the event counts the
+	// observer recorded around the published log, so a failed run names the
+	// durability phase the real engine did not deliver.
+	Trace string `json:"trace,omitempty"`
 }
 
 func egressLifeMeasure(journal string, requests []egressLifeRequest, path string) egressLifeMeasurement {
@@ -220,10 +224,13 @@ func egressLifeMeasure(journal string, requests []egressLifeRequest, path string
 		}
 	}
 	var parent, fsync, lastWrite egressLifeTimingEvent
+	var dirSyncs, stagedSyncs, stagedWrites int64
 	for _, e := range events {
-		if e.Op == "fsync" && e.Directory && e.Path == filepath.Dir(path) && e.Files[filepath.Base(path)] != "" {
-			parent = e
-			break
+		if e.Op == "fsync" && e.Directory && e.Path == filepath.Dir(path) {
+			dirSyncs++
+			if e.Files[filepath.Base(path)] != "" && parent.At.IsZero() {
+				parent = e
+			}
 		}
 	}
 	inode := parent.Files[filepath.Base(path)]
@@ -232,17 +239,37 @@ func egressLifeMeasure(journal string, requests []egressLifeRequest, path string
 		if inode != "" && e.Inode == inode {
 			if e.Op == "write" {
 				written += e.Bytes
+				stagedWrites++
 				if e.At.After(lastWrite.At) {
 					lastWrite = e
 				}
 			}
 			if e.Op == "fsync" && !e.Directory {
 				fsync = e
+				stagedSyncs++
 			}
 		}
 	}
-	if inode == "" || lastWrite.At.IsZero() || fsync.Started.Before(lastWrite.At) || parent.At.Before(fsync.At) || written != m.Bytes || m.ObserverHandling == 0 {
-		return bad("incomplete staged-write/file-fsync/rename/parent-fsync timing")
+	m.Trace = fmt.Sprintf("events=%d session-dir-fsyncs=%d parent-fsync-with-log=%t log-inode-writes=%d log-inode-fsyncs=%d written=%d bytes=%d observer=%s", len(events), dirSyncs, inode != "", stagedWrites, stagedSyncs, written, m.Bytes, m.ObserverHandling)
+	// The six durability observations are individually named so a failed run
+	// reports which phase the real engine did not deliver; together they are
+	// exactly the one reviewed "incomplete staged-write/file-fsync/rename/
+	// parent-fsync timing" refusal.
+	switch {
+	case inode == "":
+		return bad("no parent fsync observed the renamed log in its session directory")
+	case lastWrite.At.IsZero():
+		return bad("no staged write observed for the published log's inode")
+	case fsync.At.IsZero():
+		return bad("no file fsync observed for the published log's inode")
+	case fsync.Started.Before(lastWrite.At):
+		return bad("the log's file fsync began before its last staged write")
+	case parent.At.Before(fsync.At):
+		return bad("the session directory fsync completed before the log's file fsync")
+	case written != m.Bytes:
+		return bad(fmt.Sprintf("staged writes observed %d of the file's %d bytes", written, m.Bytes))
+	case m.ObserverHandling == 0:
+		return bad("the observer reported no handling time")
 	}
 	saved, err := os.ReadFile(path)
 	if err != nil {
