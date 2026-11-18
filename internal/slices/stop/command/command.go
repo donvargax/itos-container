@@ -21,8 +21,11 @@ func (CLI) Help() string {
 		"--json or ITOS_JSON=1 selects JSON; --no-json overrides the environment.\n" +
 		"Exit 0 confirms durable cleanup, not successful workload execution; an unknown exit stays unknown.\n" +
 		"An absent controller never authorizes restart. Explicit stop also works with a present controller.\n" +
-		"Exit 1 means refused ownership/unsafe state, 2 usage/invalid state, 3 unavailable environment,\n" +
-		"70 internal failure, 75 temporary uncertainty; retry in the same effective project.\n"
+		"Exit 1 means refused ownership/unsafe state, or a gapped committed refusal log\n" +
+		"(recovery.refusal-log-gap) whose lost records a retry cannot restore; cleanup may\n" +
+		"already be complete alongside it, and a repeated stop preserves the diagnosis.\n" +
+		"Exit 2 means usage/invalid state, 3 unavailable environment, 70 internal failure,\n" +
+		"75 temporary uncertainty; retry in the same effective project.\n"
 }
 func (c CLI) Run() int {
 	ctx := c.Context
