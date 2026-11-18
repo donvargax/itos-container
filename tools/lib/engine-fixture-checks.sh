@@ -38,9 +38,12 @@ fail_manifest_read() {
 validate_manifest() {
   local manifest=$1 headers=$2 built=$3 daemon_config=${4:-} header_data line digest='' header_count=0 actual store
   header_data=$(cat -- "$headers") || fail_manifest_read 'manifest header read' "$manifest" "$built" '<unavailable>' "$?"
+  # A platform portability runner may carry bash 3.2 (macOS), where the
+  # ${line,,} case-modifier expansion is a bad substitution: fold the header
+  # name with tr instead.
   while IFS= read -r line; do
     line=${line%$'\r'}
-    if [[ ${line,,} == docker-content-digest:* ]]; then
+    if [[ $(printf '%s' "$line" | tr '[:upper:]' '[:lower:]') == docker-content-digest:* ]]; then
       digest=${line#*: }
       header_count=$((header_count + 1))
     fi
