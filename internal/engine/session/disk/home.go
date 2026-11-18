@@ -3,7 +3,7 @@ package disk
 import (
 	"bytes"
 	"context"
-	"path/filepath"
+	"path"
 	"strings"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
@@ -117,8 +117,12 @@ func completingHome(codec port.HomeCodec, previous []byte, next port.HomeScope) 
 	}
 	return false
 }
+
+// Recorded state roots and checkout roots follow the selected Linux platform,
+// so slash rules validate them on every host OS the adapter may run on; the
+// host's own path rules would refuse the platform's paths elsewhere.
 func (s Homes) Claim(r port.Record, session string) (port.HomeClaim, port.Outcome) {
-	if !filepath.IsAbs(s.StateRoot) || filepath.Clean(s.StateRoot) != s.StateRoot || !port.HexID(session) {
+	if !path.IsAbs(s.StateRoot) || path.Clean(s.StateRoot) != s.StateRoot || !port.HexID(session) {
 		return port.HomeClaim{}, port.Invalid
 	}
 	return port.HomeClaim{Session: session, StateRoot: s.StateRoot, Intent: port.Reference(r.Project, r.NameToken())}, ""
@@ -154,7 +158,7 @@ func (s Homes) claimBytes(ctx context.Context, c approval.Candidate, root, colle
 // An exited worker or a stopped public record never releases a durable claim.
 func (s Homes) checkClaim(ctx context.Context, scope port.HomeScope, g port.HomeGeneration, claim port.HomeClaim) port.Outcome {
 	project, token, valid := port.ParseReference(claim.Intent)
-	if !valid || project != scope.Project || !port.HexID(claim.Session) || !filepath.IsAbs(claim.StateRoot) || filepath.Clean(claim.StateRoot) != claim.StateRoot {
+	if !valid || project != scope.Project || !port.HexID(claim.Session) || !path.IsAbs(claim.StateRoot) || path.Clean(claim.StateRoot) != claim.StateRoot {
 		return port.Invalid
 	}
 	codec, ok := s.Codec.(port.Codec)
@@ -223,7 +227,7 @@ func (s Homes) checkClaim(ctx context.Context, scope port.HomeScope, g port.Home
 
 func originalOverlap(state, checkout string) bool {
 	within := func(p, root string) bool {
-		return p == root || strings.HasPrefix(p, strings.TrimRight(root, string(filepath.Separator))+string(filepath.Separator))
+		return p == root || strings.HasPrefix(p, strings.TrimRight(root, "/")+"/")
 	}
-	return !filepath.IsAbs(checkout) || within(state, checkout) || within(checkout, state)
+	return !path.IsAbs(checkout) || within(state, checkout) || within(checkout, state)
 }
