@@ -7938,7 +7938,10 @@
     shardBaseline and the controls for extra or renamed shards. Pin the egress shard's complete
     set of parsed basenames regardless of list order or whitespace. Reject a swap with a file
     in other even if all four shards are nonempty and every file appears once. Also reject
-    an unrelated file in egress, the old three-shard layout and a fifth shard. Keep the real
+    an unrelated file in egress, the old three-shard layout and a fifth shard. Pin the
+    offline, lifecycle and other shards' complete sets the same way, and reject a file moved
+    whole from other into offline or lifecycle, where every file still appears exactly once,
+    so the placement rule behind the 180-second budget holds. Keep the real
     partition check against the unsharded selection. It covers every effective @engine file
     (live or @wip) exactly once, live row counts and IDs, and the nested ID-LIFECYCLE-09 and
     ID-LIFECYCLE-13 schedule. Preserve the selector and aggregate negative controls.
