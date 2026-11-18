@@ -7957,6 +7957,13 @@
     allows slice-28's file once the real inventory includes it. Today the check exits 1 because the
     partition has no egress shard. Run it before changing the matrix and again with the new pins.
 
+    TestEngineSuiteWarmup creates its synthetic approval under the literal /tmp even when TMPDIR
+    is set. On the review runner, /tmp had UID 65534 and mode 1777. The product returned
+    run.approval-invalid before the recorder saw a create. On runners with an untrusted /tmp,
+    run the features self-tests below in a private mount namespace with a mode-0700 /tmp owned
+    by the test user. For example, set `cache=$(go env GOCACHE)` and prefix the features command with
+    `bwrap --ro-bind / / --dev /dev --bind "$cache" "$cache" --perms 0700 --tmpfs /tmp --`.
+
     In the same implementation attempt run the workflow's engine-free self-tests locally with
     go test ./features -count=1 -run
     '^(TestEngine|TestFeatureSignalDiagnostics|TestLifecycleSignalWindow|TestPlatformSelection)'
