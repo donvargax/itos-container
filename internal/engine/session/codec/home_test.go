@@ -87,6 +87,40 @@ func TestHomeCodecRejectsIncompleteAuthority(t *testing.T) {
 	}
 }
 
+func TestHomeCodecRejectsRecycledGenerationIdentities(t *testing.T) {
+	j := JSON{}
+	a, b := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	for _, tc := range []struct {
+		name   string
+		reason string
+		change func(*port.HomeScope)
+	}{
+		{"pending successor names a retired generation", "a pending reset must reserve a fresh token, not an identity the record already holds", func(s *port.HomeScope) {
+			s.Generations = []port.HomeGeneration{
+				{ID: b, Name: "itos-container-home-" + b, Created: "first", Stage: "reset", Successor: a, Claims: []port.HomeClaim{}},
+				{ID: a, Name: "itos-container-home-" + a, Created: "second", Stage: "reset-pending", Successor: b, Claims: []port.HomeClaim{}},
+			}
+			s.Current = a
+		}},
+		{"reset chain returns to its own generation", "one generation ID can bind only one home identity", func(s *port.HomeScope) {
+			s.Generations = []port.HomeGeneration{
+				{ID: a, Name: "itos-container-home-" + a, Created: "first", Stage: "reset", Successor: b, Claims: []port.HomeClaim{}},
+				{ID: b, Name: "itos-container-home-" + b, Created: "second", Stage: "reset", Successor: a, Claims: []port.HomeClaim{}},
+				{ID: a, Name: "itos-container-home-" + a, Created: "third", Stage: "retained", Claims: []port.HomeClaim{}},
+			}
+			s.Current = a
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := homeScopeFixture()
+			tc.change(&s)
+			if _, failure := j.DecodeHome(j.EncodeHome(s)); failure != port.Invalid {
+				t.Fatalf("%s: %s", tc.reason, failure)
+			}
+		})
+	}
+}
+
 func TestHomeCodecGenerationChainAndClaims(t *testing.T) {
 	j := JSON{}
 	for _, stage := range []string{"awaiting-allocation", "intent", "retained", "reset-pending", "delete-pending", "deleted", "reset"} {
