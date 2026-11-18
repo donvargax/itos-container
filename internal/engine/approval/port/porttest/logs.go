@@ -119,7 +119,7 @@ func (l *stagedLog) Write(data []byte) port.Failure {
 func (l *stagedLog) Attach(data []byte) port.Failure {
 	l.s.mu.Lock()
 	defer l.s.mu.Unlock()
-	if l.released || l.poisoned {
+	if l.released || l.poisoned || l.s.Fault == "report write" {
 		return "state.write"
 	}
 	if l.report != nil {

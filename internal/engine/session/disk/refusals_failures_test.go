@@ -102,6 +102,7 @@ func TestRefusalLogFailuresKeepEarlierCopy(t *testing.T) {
 		{"none", "", "", refusal + next},
 		{"write", "write", sp.Incomplete, "earlier\n"},
 		{"write of the held line", "write", sp.Incomplete, "earlier\n"},
+		{"report write", "report write", sp.Incomplete, "earlier\n"},
 		{"write, then Close with no Commit", "write", sp.Incomplete, "earlier\n"},
 		{"file fsync", "file fsync", sp.Incomplete, "earlier\n"},
 		{"atomic publication", "atomic publication", sp.Incomplete, "earlier\n"},

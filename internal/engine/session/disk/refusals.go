@@ -140,9 +140,8 @@ func (c *refusalCopy) lines(p []byte) []byte {
 }
 
 // Commit stores a held unfinished line as it is, then publishes the log with
-// its own report beside it. On a live copy it always runs the staged log's
-// Publish, once: after a failed write the handle is poisoned, so Publish
-// refuses and still removes the temporary. The report derives from the bytes
+// its own report beside it. If either write failed, Close discards the stage
+// and leaves the earlier log and its report intact. The report derives from the bytes
 // this copy staged: the published record count and the inclusive sequence
 // ranges the source never delivered, ready's deliberate omission included.
 func (c *refusalCopy) Commit() (port.RefusalReport, port.Outcome) {
@@ -170,7 +169,7 @@ func (c *refusalCopy) Commit() (port.RefusalReport, port.Outcome) {
 		report.Outcome = port.RefusalLogGap
 	}
 	if f := c.staged.Attach(refusalReportJSON(c.digest.Sum(), report)); f != "" {
-		c.staged.Publish()
+		c.staged.Close()
 		return port.RefusalReport{}, storageFailure(f, false)
 	}
 	if f := c.staged.Publish(); f != "" {
