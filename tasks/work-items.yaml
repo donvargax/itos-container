@@ -2219,6 +2219,12 @@ items:
       passed, so this is not the first-row failure T-54, T-55 and T-57 dealt with. The journal
       printed with the failure omits entries 2 to 18, which hold the launch itself. One occurrence;
       with the next, read the full journal for which call took the time before choosing anything.
+
+      Include the ID-LIFECYCLE-12 healthy control in the existing startup-timeout investigation. In
+      run 43981890039 at c84b238, create was submitted 2.6 s into the 3 s budget and the engine
+      answered in 49 ms. Measure elapsed time from registration completion to create submission
+      alongside registration itself. That will let the two failures be compared before choosing a
+      remedy. T-50 is merged, and q-65 scoped its instrumentation to registration.
   - id: T-58
     title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
     phase: 1
