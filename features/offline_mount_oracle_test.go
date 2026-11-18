@@ -19,7 +19,7 @@ func mountOracleFixture() (*isolationWorld, *isolationRun) {
 	volume := map[string]any{"Name": name, "Driver": "local", "Scope": "local", "CreatedAt": anchor["created"], "Mountpoint": "/var/lib/docker/volumes/" + name + "/_data", "Labels": volumeLabels, "Options": map[string]any{"type": "none", "o": "bind", "device": anchor["source"]}}
 	worker := map[string]any{
 		"Id": id, "Config": map[string]any{"Labels": labels},
-		"HostConfig": map[string]any{"ReadonlyRootfs": true, "Tmpfs": map[string]any{"/tmp": "rw,nosuid,nodev,mode=1777"}, "Mounts": []any{map[string]any{"Type": "volume", "Source": name, "Target": "/workspace", "VolumeOptions": map[string]any{"NoCopy": true}}}},
+		"HostConfig": map[string]any{"ReadonlyRootfs": true, "Tmpfs": map[string]any{"/tmp": "rw,exec,nosuid,nodev,mode=1777"}, "Mounts": []any{map[string]any{"Type": "volume", "Source": name, "Target": "/workspace", "VolumeOptions": map[string]any{"NoCopy": true}}}},
 		"Mounts":     []any{map[string]any{"Type": "volume", "Name": name, "Driver": "local", "Source": volume["Mountpoint"], "Destination": "/workspace", "RW": true}},
 	}
 	s := &isolationWorld{w: &world{approval: &approvalWorld{uid: "1001", project: "project", fingerprint: "fingerprint", settings: map[string]any{"checkout": map[string]any{"device": "2049", "inode": "42"}}}}}

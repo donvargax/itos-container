@@ -105,6 +105,7 @@ func (u UI) Print(v port.View, withJSON bool) int {
 			u.networkDisclosure(report.Effective)
 		}
 		u.credentialDisclosure(report.Effective)
+		u.homeDisclosure(report.Effective)
 		for _, line := range grantLines(requested(v)) {
 			_, _ = fmt.Fprintln(u.Out, line)
 		}
@@ -130,6 +131,7 @@ func (u UI) Review(v port.View) bool {
 		_, _ = fmt.Fprintln(u.Out, restriction(effective))
 	}
 	u.credentialDisclosure(effective)
+	u.homeDisclosure(effective)
 	if m := v.Inspection.Manifest; m != nil {
 		for _, unused := range append(append([]string{}, m.Unused...), m.Metadata.Unused...) {
 			_, _ = fmt.Fprintln(u.Out, "Unused field:", jsonText(unused))
@@ -150,13 +152,24 @@ func (u UI) Review(v port.View) bool {
 // allowlist reads only the validated candidate, never a previous approval.
 func allowlist(effective any) []any {
 	s, _ := effective.(map[string]any)
-	if s["profile"] != "allowlist-v1" && s["profile"] != "allowlist-credentials-v1" {
+	if s["profile"] != "allowlist-v1" && s["profile"] != "allowlist-credentials-v1" && s["profile"] != "allowlist-home-v1" && s["profile"] != "allowlist-credentials-home-v1" {
 		return nil
 	}
 	p, _ := s["policy"].(map[string]any)
 	n, _ := p["network"].(map[string]any)
 	names, _ := n["allow"].([]any)
 	return names
+}
+
+func (u UI) homeDisclosure(effective any) {
+	s, _ := effective.(map[string]any)
+	if s["home"] == nil {
+		return
+	}
+	host, _ := s["host"].(map[string]any)
+	_, _ = fmt.Fprintf(u.Out, "Harness home: private volume at /home/itos, mode 0700, owner %s:%s.\n", host["uid"], host["gid"])
+	_, _ = fmt.Fprintln(u.Out, "Scoped to this checkout and retained after exit and stop; the host home is never mounted or copied.")
+	_, _ = fmt.Fprintln(u.Out, "Contents are hostile worker data reused by the next run. Only a terminal-consented reset or delete discards them; disabling home does not delete it.")
 }
 
 func (u UI) networkDisclosure(effective any) {

@@ -158,12 +158,16 @@ func TestPublicStopPreservesResultAndReloadsCompletion(t *testing.T) {
 			if len(first.Failures) != 0 || len(first.Entries) != 1 || first.Entries[0].Cleanup != "complete" {
 				t.Fatal(first)
 			}
-			want := 7
+			// Without a controller present, an unknown result stays unknown:
+			// the exit this stop's own signal causes is not workload
+			// knowledge. A recorded result stays preserved.
+			want := (*int)(nil)
 			if known {
-				want = 75
+				n := 75
+				want = &n
 			}
-			if first.Entries[0].WorkloadExit == nil || *first.Entries[0].WorkloadExit != want {
-				t.Fatal(first)
+			if !reflect.DeepEqual(first.Entries[0].WorkloadExit, want) || !reflect.DeepEqual(r.Records[id].WorkloadExit, want) {
+				t.Fatal(first, r.Records[id])
 			}
 			writes := r.Writes
 			mutations := 0

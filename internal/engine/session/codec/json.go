@@ -35,9 +35,21 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 	if value.Fields["schema"].Kind != manifest.Number {
 		return bad()
 	}
+	homeFields := 0
+	if h, exists := value.Fields["home"]; exists {
+		homeFields = 1
+		if h.Kind != manifest.Object || len(h.Fields) != 4 {
+			return bad()
+		}
+		for _, key := range []string{"id", "scope", "name", "created"} {
+			if h.Fields[key].Kind != manifest.String {
+				return bad()
+			}
+		}
+	}
 	switch value.Fields["schema"].Text {
 	case "1":
-		if len(value.Fields) != 14 {
+		if len(value.Fields) != 14+homeFields {
 			return bad()
 		}
 	case "2", "3", "4":
@@ -61,7 +73,7 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 				}
 			}
 		}
-		if len(value.Fields) != count || a.Kind != manifest.Object || len(a.Fields) != 7 {
+		if len(value.Fields) != count+homeFields || a.Kind != manifest.Object || len(a.Fields) != 7 {
 			return bad()
 		}
 		for _, k := range []string{"session", "name", "source", "device", "inode", "created", "stage"} {
@@ -77,6 +89,9 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 		return bad()
 	}
 	if !port.HexID(record.Project) || !port.HexID(record.NameToken()) {
+		return bad()
+	}
+	if homeFields != 0 && !record.Home.Valid() {
 		return bad()
 	}
 	if record.Schema >= 2 {
@@ -144,6 +159,7 @@ func binding(r approval.Record, f approval.Frozen) port.Binding {
 			ContainerEnv    json.RawMessage `json:"containerEnv"`
 		}
 		Profile string
+		Home    *struct{ Storage string }
 		Policy  struct {
 			Network struct {
 				Mode  string
@@ -158,7 +174,8 @@ func binding(r approval.Record, f approval.Frozen) port.Binding {
 	b.Checkout.Root, b.Checkout.Device, b.Checkout.Inode = settings.Checkout.Root, settings.Checkout.Device, settings.Checkout.Inode
 	b.Checkout.GitDevice, b.Checkout.GitInode = settings.Checkout.GitDevice, settings.Checkout.GitInode
 	b.Workspace, b.Environment = settings.Manifest.WorkspaceFolder, string(settings.Manifest.ContainerEnv)
-	if settings.Profile == "allowlist-v1" {
+	b.Home = settings.Home != nil
+	if settings.Profile == "allowlist-v1" || settings.Profile == "allowlist-home-v1" {
 		b.Egress.Names = strings.Join(settings.Policy.Network.Allow, "\n")
 	}
 	return b

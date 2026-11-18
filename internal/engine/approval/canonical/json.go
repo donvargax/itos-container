@@ -67,6 +67,7 @@ type image struct {
 	Architecture string `json:"architecture"`
 }
 type settings struct {
+	Home        *home                  `json:"home,omitempty"`
 	Schema      int                    `json:"schema"`
 	Profile     string                 `json:"profile"`
 	Proxy       *proxy                 `json:"proxy,omitempty"`
@@ -78,6 +79,15 @@ type settings struct {
 	Image       image                  `json:"image"`
 	Credentials []port.CredentialGrant `json:"credentials,omitempty"`
 }
+type home struct {
+	Storage  string `json:"storage"`
+	Target   string `json:"target"`
+	Lifetime string `json:"lifetime"`
+	Mode     string `json:"mode"`
+}
+
+func volumeHome() home { return home{"volume", "/home/itos", "project", "0700"} }
+
 type envelope struct {
 	Schema      int      `json:"schema"`
 	Project     string   `json:"project"`
@@ -128,6 +138,11 @@ func (JSON) Candidate(r readiness.Result, uid, gid string) port.Candidate {
 	if len(s.Credentials) > 0 {
 		slices.SortFunc(s.Credentials, func(a, b port.CredentialGrant) int { return strings.Compare(a.Kind, b.Kind) })
 		s.Profile = strings.TrimSuffix(s.Profile, "-v1") + "-credentials-v1"
+	}
+	if r.Policy.Policy.Home != nil {
+		h := volumeHome()
+		s.Home = &h
+		s.Profile = strings.TrimSuffix(s.Profile, "-v1") + "-home-v1"
 	}
 	return candidate(s)
 }
@@ -218,6 +233,12 @@ func valid(s settings) bool {
 func validProfile(s settings) bool {
 	n := s.Policy.Network
 	profile := s.Profile
+	if s.Home != nil {
+		if *s.Home != volumeHome() || !strings.HasSuffix(profile, "-home-v1") {
+			return false
+		}
+		profile = strings.TrimSuffix(profile, "-home-v1") + "-v1"
+	}
 	if len(s.Credentials) > 0 {
 		if s.Policy.Version != 3 || !validGrants(s.Credentials) {
 			return false

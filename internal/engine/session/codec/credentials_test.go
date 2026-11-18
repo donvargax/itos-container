@@ -153,6 +153,17 @@ func TestCredentialRecordsWithEgress(t *testing.T) {
 	}
 }
 
+func TestCredentialRecordRetainsHome(t *testing.T) {
+	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
+	scope := homeScopeFixture()
+	r.Home = scope.Generations[0].Reference(scope.Scope)
+	data := (JSON{}).Encode(r)
+	codec := JSON{Parser: &mf.Parser{Value: credentialValue(t, data)}}
+	if got, failure := codec.Decode(data); failure != "" || got != r {
+		t.Fatalf("credential session failed to round-trip its home reference: %s", failure)
+	}
+}
+
 func TestCredentialRecordsRejectUnknownAnchorField(t *testing.T) {
 	r := f.CredentialIntent(port.CredentialKinds{Claude: true})
 	parser := &mf.Parser{}

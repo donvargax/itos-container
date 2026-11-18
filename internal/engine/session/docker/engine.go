@@ -46,7 +46,17 @@ func (e Engine) open(ctx context.Context, b port.Binding, unavailable port.Outco
 		return nil, port.Incomplete
 	}
 	deadline, _ := call.Deadline()
-	pin, f := e.Readiness.Open(e.Selection, b.Checkout.Root, time.Until(deadline))
+	var pin rp.Session
+	var f rp.Failure
+	if b.Checkout.Root == "" {
+		catalog, ok := e.Readiness.(rp.CatalogEngine)
+		if !ok {
+			return nil, port.Refused
+		}
+		pin, f = catalog.OpenCatalog(e.Selection, time.Until(deadline))
+	} else {
+		pin, f = e.Readiness.Open(e.Selection, b.Checkout.Root, time.Until(deadline))
+	}
 	if f != rp.None {
 		if f == rp.EngineUnavailable {
 			return nil, unavailable
@@ -171,8 +181,7 @@ func (c *connection) Inspect(ctx context.Context, id string) (port.Observation, 
 	}
 	observed := port.Observation{Kind: r.Config.Labels["io.itos-container.kind"], Session: r.Config.Labels["io.itos-container.session"], ID: r.ID, Name: strings.TrimPrefix(r.Name, "/"), ImageID: r.Image, Token: r.Config.Labels["io.itos-container.intent"], Project: r.Config.Labels["io.itos-container.project"], Fingerprint: r.Config.Labels["io.itos-container.fingerprint"], StatePresent: r.State != nil}
 	observed.Mounts, observed.Volumes = len(r.Mounts) != 0, len(r.Config.Volumes) != 0
-	credentialObservation(r, &observed)
-
+	observeWorkerMounts(r, c.binding.Home, &observed)
 	if r.State != nil {
 		observed.Status = string(r.State.Status)
 		observed.Running = r.State.Running

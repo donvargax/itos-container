@@ -11,6 +11,7 @@ import (
 
 // Recovery observes and removes registered sessions; it has no launch path.
 type Recovery struct {
+	Homes       *Homes
 	Credentials port.CredentialStager
 	Refusals    port.RefusalLog
 	Registry    port.Registry
@@ -79,13 +80,24 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	}
 	// Validated no-create evidence proves worker absence for either schema.
 	// An anchored session still needs an independent volume observation.
-	if failure == "" && (!noCreate || entry.Intent().Record().Schema >= 2) {
+	if failure == "" && (!noCreate || entry.Intent().Record().Schema >= 2 || e.Home != nil) {
 		connection, f := s.Engine.OpenRun(ctx, entry.Intent().Binding())
 		failure = f
 		if failure == "" {
 			defer connection.Close()
+			if entry.Intent().Record().Home != (port.HomeReference{}) {
+				if s.Homes == nil {
+					failure = port.Incomplete
+				} else {
+					e.Home.State, failure = s.Homes.reconcile(ctx, entry, connection, false)
+				}
+			}
 			if !noCreate {
-				_, e.Resource, failure = inspectSession(ctx, entry, connection)
+				var workerFailure port.Outcome
+				_, e.Resource, workerFailure = inspectSession(ctx, entry, connection)
+				if workerFailure != "" {
+					failure = workerFailure
+				}
 			}
 			if entry.Intent().Record().Schema >= 2 {
 				_, anchorFailure := inspectRecoveryAnchor(ctx, entry.Intent(), connection)
@@ -136,6 +148,9 @@ func sessionEntry(s port.Session) (port.RecoveryEntry, port.Outcome) {
 		e.Anchor = "unknown"
 	}
 	e.Egress = s.Intent().Binding().Egress.Disclosure()
+	if h := s.Intent().Record().Home; h != (port.HomeReference{}) {
+		e.Home = &port.HomeDisclosure{Storage: "volume", State: "unknown", Name: h.Name}
+	}
 	return e, failure
 }
 func finishEntry(e *port.RecoveryEntry) {
@@ -189,7 +204,13 @@ func inspectSession(ctx context.Context, s port.Session, c port.RunConnection) (
 	if status != port.Observed || !o.StatePresent {
 		return o, "unknown", port.Incomplete
 	}
-	if o.ID != id || !owns(r, o) || r.Stage == "absent" || (r.Schema >= 2 && (!o.AnchorExact || o.AnchorName != r.Anchor.Name)) {
+	// A durably owned worker rejected before its first start can be removed
+	// by immutable ID even when boundary inspection found the wrong mounts.
+	// Removal never requests deletion of mounted volumes. Name reconciliation
+	// and previously started workers still require the complete mount binding.
+	unstartedHome := r.Home != (port.HomeReference{}) && r.ContainerID == id && o.Status == "created" && !o.Running && !o.Started && o.PID == 0
+	wrongMounts := (r.Schema >= 2 && (!o.AnchorExact || o.AnchorName != r.Anchor.Name)) || (r.Home != (port.HomeReference{}) && (!o.HomeExact || o.HomeName != r.Home.Name))
+	if o.ID != id || !owns(r, o) || r.Stage == "absent" || wrongMounts && !unstartedHome {
 		return o, "unknown", port.Refused
 	}
 	switch {
@@ -227,7 +248,11 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	// is independently revalidated by stopSession before any mutation.
 	e, _ := sessionEntry(entry)
 	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
-	if uncreated(entry) && entry.Intent().Record().Schema == 1 {
+	// Only a controller present at the stop can still report a workload
+	// result. An absent or unknown one leaves any exit this stop causes
+	// itself unpublished as workload knowledge.
+	live := e.Controller == "present"
+	if uncreated(entry) && entry.Intent().Record().Schema == 1 && entry.Intent().Record().Home == (port.HomeReference{}) {
 		failure = cancelUncreated(entry)
 	} else {
 		var connection port.RunConnection
@@ -235,9 +260,22 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 		if failure == "" {
 			defer connection.Close()
 			if entry.Intent().Record().Schema >= 2 {
-				failure = stopAnchoredSession(ctx, entry, connection, signal, exit, remove, s.immediate)
+				failure = stopAnchoredSession(ctx, entry, connection, signal, exit, remove, s.immediate, live)
+			} else if uncreated(entry) {
+				failure = cancelUncreated(entry)
 			} else {
-				failure = stopSession(ctx, entry, connection, signal, exit, remove)
+				failure = stopSession(ctx, entry, connection, signal, exit, remove, live)
+			}
+			if h := entry.Intent().Record().Home; h != (port.HomeReference{}) {
+				if s.Homes == nil {
+					failure = port.Incomplete
+				} else {
+					state, f := s.Homes.reconcile(ctx, entry, connection, remove)
+					e.Home.State = state
+					if f != "" {
+						failure = f
+					}
+				}
 			}
 		}
 	}
@@ -301,7 +339,7 @@ func cancelUncreated(s port.Session) port.Outcome {
 	return s.Save(r)
 }
 
-func stopSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, exit *int, remove bool) port.Outcome {
+func stopSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, exit *int, remove, live bool) port.Outcome {
 	r := s.Record()
 	o, resource, failure := inspectSession(ctx, s, c)
 	if failure != "" && !retryableRecovery(failure) {
@@ -350,7 +388,7 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 		}
 	}
 	if resource == "running" {
-		if failure = terminateSession(ctx, s, c, signal); failure != "" {
+		if failure = terminateSession(ctx, s, c, signal, live); failure != "" {
 			return failure
 		}
 	}
@@ -395,7 +433,7 @@ func retryableRecovery(f port.Outcome) bool {
 		return false
 	}
 }
-func terminateSession(ctx context.Context, s port.Session, c port.RunConnection, signal string) port.Outcome {
+func terminateSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, live bool) port.Outcome {
 	deadline, foreground := ctx.Value(runGraceKey{}).(time.Time)
 	// Explicit stop retains slice-11's contract. Foreground run supplies the
 	// cancellation deadline so delivery time cannot restart its grace.
@@ -411,7 +449,7 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 	defer end()
 	exit, failure := c.Wait(grace, s.Intent().Record().ContainerID)
 	if failure == "" {
-		return recordExit(s, exit)
+		return stopObservedExit(s, exit, foreground, live)
 	}
 	_, resource, failure := inspectSession(ctx, s, c)
 	if failure != "" {
@@ -437,7 +475,7 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 	}
 	exit, failure = c.Wait(ctx, s.Intent().Record().ContainerID)
 	if failure == "" {
-		return recordExit(s, exit)
+		return stopObservedExit(s, exit, foreground, live)
 	}
 	_, resource, failure = inspectSession(ctx, s, c)
 	if failure != "" {
@@ -475,6 +513,25 @@ func recordExit(s port.Session, exit int) port.Outcome {
 	}
 	r.WorkloadExit = &exit
 	return s.Save(r)
+}
+
+// stopObservedExit publishes a termination's observed exit only where a
+// controller that reports the workload's result can carry it: the foreground
+// teardown, whose own reporting needs the exit it causes, or a live controller
+// present at the stop, which adopts the shared observation (run_exit's
+// positive controls, ID-RECOVERY-32). Without one, the exit was caused by
+// this stop itself and nobody is left to report it; publishing it would
+// invent workload knowledge, so an unknown result stays unknown
+// (ID-RECOVERY-07, ID-HOME-15). A malformed observation still refuses
+// completed cleanup.
+func stopObservedExit(s port.Session, exit int, foreground, live bool) port.Outcome {
+	if foreground || live {
+		return recordExit(s, exit)
+	}
+	if exit < 0 || exit > 255 {
+		return port.Incomplete
+	}
+	return ""
 }
 func finishSession(s port.Session) port.Outcome {
 	i := s.Intent().Record()

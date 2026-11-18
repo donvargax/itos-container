@@ -19,6 +19,7 @@ type Directory struct {
 	Execution                              bool
 	Files                                  map[string][]byte
 	ReadFailure, WriteFailure, SyncFailure port.Failure
+	PublishFailure                         port.Failure
 	Changed, Locked                        bool
 }
 
@@ -86,7 +87,7 @@ func (d *Directory) Publish(name string, previous, next []byte) port.Failure {
 		return d.WriteFailure
 	}
 	d.Files[name] = append([]byte{}, next...)
-	return ""
+	return d.PublishFailure
 }
 func (d *Directory) Sync(name string, expected []byte) port.Failure {
 	old, f := d.Read(name)
