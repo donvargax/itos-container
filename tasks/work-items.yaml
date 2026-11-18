@@ -3,6 +3,15 @@ phases:
   1: null
 queue:
   - T-59
+  - slice-28
+  - T-48
+  - slice-34
+  - slice-32
+  - slice-35
+  - slice-40
+  - slice-41
+  - slice-31
+  - slice-36
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -1664,6 +1673,17 @@ items:
       failure. The reading confirms or refutes the hypothesis on the next cold run. The remedy is
       not this item's: it belongs to p2-first-engine-row-slow-create, added by the same triage, and
       the warm cache to p2-ci-go-build-cache-rolling-key.
+
+      This item already publishes timing notices on green and failed engine runs. Include
+      registration duration and elapsed time from registration completion to create submission for
+      passing controls, so a failed control can be compared with a passing row from the same run.
+      Use the same phase boundaries and units for both outcomes.
+
+      This item already covers registration timing and the launch details visible in CI annotations.
+      When registration times out, include the last observed step (reservation, storage
+      registration, or admission publication) and its elapsed time on the launch line. That gives
+      the reader evidence the five-call engine journal cannot supply and fits q-65’s instrumentation
+      decision.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
@@ -2190,6 +2210,10 @@ items:
       foundation maintenance: no supplied evidence shows it blocks the charter's current
       harness-home step. Require focused regressions and platform CI evidence without weakening
       assertions or claiming additional container-host support.
+
+      Commit aaf919c makes runFixtureWarmupShell pass --binary to jq on every platform to handle
+      Windows line endings. The existing item covers this fixture. Check the wrapper on macos-latest
+      before attributing a dispatch failure to it.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
@@ -2206,6 +2230,17 @@ items:
       passed, so this is not the first-row failure T-54, T-55 and T-57 dealt with. The journal
       printed with the failure omits entries 2 to 18, which hold the launch itself. One occurrence;
       with the next, read the full journal for which call took the time before choosing anything.
+
+      Include the ID-LIFECYCLE-12 healthy control in the existing startup-timeout investigation. In
+      run 43981890039 at c84b238, create was submitted 2.6 s into the 3 s budget and the engine
+      answered in 49 ms. Measure elapsed time from registration completion to create submission
+      alongside registration itself. That will let the two failures be compared before choosing a
+      remedy. T-50 is merged, and q-65 scoped its instrumentation to registration.
+
+      This investigation already tracks run 43981890039. Its healthy control submitted create 2.6 s
+      into the 3 s startup budget, and the engine answered in 49 ms. Include the separate 1 s
+      registration timeout when comparing where startup time went. The coordinator can use those
+      measurements to judge budget headroom. q-70 authorized reruns only for the slow first create.
   - id: T-58
     title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
     phase: 1
@@ -2220,3 +2255,32 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: slice-40
+    title: Deliver an approved OpenCode login to one container run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-48, slice-34, slice-30]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-32. The source is auth.json under
+      ~/.local/share/opencode and may include the OpenCode Go provider key alongside other provider
+      entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
+      approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
+      of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
+      the scenarios. Name any unresolved account decision explicitly. Specification first;
+      implementation follows the Codex and Claude slices. Real credential use is subject to decision
+      0025 question 5.
+  - id: slice-41
+    title: Start OpenCode headless with isolated home and configuration
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-35 in the approved worker. Run opencode --standalone
+      run --format json against its isolated home and configuration, with the authorized provider
+      and model. Cover separation from host configuration and services, bounded startup, final
+      output and failure, approved egress and cleanup. Scenarios use synthetic credentials and a
+      fake provider. Specify only for now; implementation follows the Codex and Claude slices.
