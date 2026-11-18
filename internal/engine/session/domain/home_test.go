@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -344,5 +345,90 @@ func TestHomeUnallocatedSuccessorCannotBeRetired(t *testing.T) {
 	result := x.h.Retire(t.Context(), g.ID, "delete", f.HomeConsent{Yes: true})
 	if homeOutcome(result) != port.Incomplete {
 		t.Fatal(result)
+	}
+}
+
+// Another checkout's interrupted first run leaves a created scope directory
+// with no published record. It must not invalidate this UID's catalog or stop
+// retirement of the homes the catalog does hold.
+func TestHomeCatalogIgnoresUnallocatedScopeDirectories(t *testing.T) {
+	x := domainHomeFixture()
+	g := x.seed()
+	seeded := x.store.Scope(x.b)
+	// Pick another identity whose scope key sorts before the seeded one, so
+	// the catalog scan must continue past the empty directory.
+	other := x.b
+	other.GID = ""
+	var empty string
+	for i := 0; i < 64; i++ {
+		other.GID = strconv.Itoa(1000 + i)
+		if empty = x.store.Scope(other); empty != seeded && empty < seeded {
+			break
+		}
+	}
+	if empty == "" || empty > seeded {
+		t.Fatal("no earlier scope key found")
+	}
+	created, failure := x.store.Open(t.Context(), empty, true)
+	if failure != "" || created == nil {
+		t.Fatal(failure)
+	}
+	created.Close()
+	if r := x.h.ListHomes(t.Context()); homeOutcome(r) != "" || len(r.Homes) != 1 || r.Homes[0].ID != g.ID {
+		t.Fatal(r)
+	}
+	if r := x.h.Retire(t.Context(), g.ID, "delete", f.HomeConsent{Yes: true}); homeOutcome(r) != "" || len(x.engine.Homes) != 0 {
+		t.Fatal(r)
+	}
+	// A home inside the empty scope is simply unknown, not an invalid catalog.
+	if r := x.h.Retire(t.Context(), strings.Repeat("f", 64), "reset", nil); homeOutcome(r) != port.Refused {
+		t.Fatal(r)
+	}
+}
+
+// A create the engine connection proves was never issued cancels the
+// reservation: the generation returns to awaiting-allocation, the claim is
+// released and a later run of the same checkout can allocate again.
+func TestHomePreparationCancelsAnUnissuedReservation(t *testing.T) {
+	x := domainHomeFixture()
+	// An occupied fresh random name is refused before any request is sent.
+	c, failure := x.engine.OpenRun(t.Context(), x.b)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	hc, ok := c.(port.HomeConnection)
+	if !ok {
+		t.Fatal("home capability unavailable")
+	}
+	occupied := strings.Repeat("a", 64)
+	name := "itos-container-home-" + occupied
+	x.engine.Homes[name] = port.HomeObservation{}
+	if got := hc.AllocateHome(t.Context(), port.HomeReference{Scope: x.store.Scope(x.b), ID: occupied, Name: name}); got != port.HomeNotIssued {
+		t.Fatal("an occupied name was not refused before any request", got)
+	}
+	delete(x.engine.Homes, name)
+	c.Close()
+	// Two full runs need their own registration tokens.
+	x.runner.Entropy = &f.EntropySequence{Values: []f.Entropy{
+		{Value: strings.Repeat("1", 64)}, {Value: strings.Repeat("2", 64)},
+		{Value: strings.Repeat("3", 64)}, {Value: strings.Repeat("4", 64)},
+	}}
+	x.engine.HomeFault = "refuse"
+	first := x.run(t)
+	if first.Outcome != port.HomeUnavailable || first.Started || first.Exited || first.Cleanup != port.Complete {
+		t.Fatal(first)
+	}
+	key := x.store.Scope(x.b)
+	s := x.store.Scopes[key]
+	if len(s.Generations) != 1 || s.Generations[0].Stage != "awaiting-allocation" || len(s.Generations[0].Claims) != 0 || len(x.engine.Homes) != 0 {
+		t.Fatal("a create refused before any request left the reservation stuck", s)
+	}
+	x.engine.HomeFault = ""
+	second := x.run(t)
+	if second.Outcome != "" || !second.Started || second.Cleanup != port.Complete || !second.Exited || second.Exit != 17 {
+		t.Fatal(second)
+	}
+	if len(x.engine.Homes) != 1 || len(x.store.Scopes[key].Generations[0].Claims) != 0 {
+		t.Fatal("the cancelled reservation blocked a fresh allocation")
 	}
 }

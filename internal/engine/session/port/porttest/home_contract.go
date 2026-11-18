@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
@@ -89,6 +90,30 @@ func HomeStoreContract(t Reporter, store port.HomeStore, binding port.Binding) {
 			t.Errorf("%s did not isolate scope", kind)
 		}
 	}
+	// An interrupted first run can leave a created scope directory holding no
+	// published record. It stays discoverable and reads as an unallocated
+	// scope, never as another scope's invalid catalog.
+	other := binding
+	other.GID = "3001"
+	empty := store.Scope(other)
+	created, f := store.Open(ctx, empty, true)
+	if f != "" || created == nil {
+		t.Errorf("unallocated scope creation: %v %s", created, f)
+		return
+	}
+	created.Close()
+	discovered, f := store.List(ctx)
+	if f != "" || !slices.Contains(discovered, key) || !slices.Contains(discovered, empty) {
+		t.Errorf("unallocated scope discovery: %v %s", discovered, f)
+	}
+	if tx, f = store.Open(ctx, empty, false); f != "" || tx == nil {
+		t.Errorf("unallocated scope read: %v %s", tx, f)
+		return
+	}
+	if unallocated, f := tx.Read(); f != "" || unallocated.Schema != 0 || unallocated.Scope != "" || len(unallocated.Generations) != 0 {
+		t.Errorf("unallocated scope record: %+v %s", unallocated, f)
+	}
+	tx.Close()
 }
 
 // HomeEngineContract never starts a worker or reads worker file bodies.

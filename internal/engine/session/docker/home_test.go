@@ -166,7 +166,7 @@ func TestHomeInvalidRequestsAndLostPinDoNotReachEngine(t *testing.T) {
 	owned := fresh
 	owned.Created = "original"
 	for _, h := range []sp.HomeReference{{}, owned} {
-		if got := c.AllocateHome(t.Context(), h); got != sp.HomeRefused {
+		if got := c.AllocateHome(t.Context(), h); got != sp.HomeNotIssued {
 			t.Fatal(got)
 		}
 	}
@@ -181,7 +181,7 @@ func TestHomeInvalidRequestsAndLostPinDoNotReachEngine(t *testing.T) {
 		t.Fatal(got)
 	}
 	pin.Current = false
-	if got := c.AllocateHome(t.Context(), fresh); got != sp.HomeRefused {
+	if got := c.AllocateHome(t.Context(), fresh); got != sp.HomeNotIssued {
 		t.Fatal(got)
 	}
 	if _, got := c.InspectHome(t.Context(), fresh.Name); got != sp.Changed {

@@ -15,7 +15,9 @@ import (
 
 func (c *runConnection) AllocateHome(ctx context.Context, h port.HomeReference) port.Outcome {
 	if !h.Valid() || h.Created != "" || !c.pin.Unchanged() {
-		return port.HomeRefused
+		// Refused before any request is sent: the caller may cancel its
+		// reservation instead of reconciling an uncertain allocation.
+		return port.HomeNotIssued
 	}
 	call, cancel := c.call(ctx)
 	defer cancel()

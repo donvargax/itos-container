@@ -55,10 +55,16 @@ func (t *finiteHomeTransaction) Close() {
 func (c finiteConnection) homeCall(ctx context.Context, name string, fn func(context.Context, port.HomeConnection) port.Outcome) port.Outcome {
 	h, ok := c.RunConnection.(port.HomeConnection)
 	if !ok {
-		return port.HomeUnavailable
+		return port.HomeNotIssued
+	}
+	// A phase that already expired can no longer dispatch any request.
+	if budget.Cause(ctx) != nil {
+		return port.HomeNotIssued
 	}
 	f, err := connectionCall(ctx, c.gate, name, func(call context.Context) port.Outcome { return fn(call, h) })
 	if err != nil {
+		// The call may have been dispatched and overrun its deadline: a lost
+		// reply is uncertain, never proof that no request was sent.
 		return port.HomeUnavailable
 	}
 	return f

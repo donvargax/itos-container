@@ -78,9 +78,14 @@ func (s *Homes) Open(ctx context.Context, key string, create bool) (port.HomeTra
 		lock <- struct{}{}
 		return nil, ""
 	}
-	if _, ok := s.Scopes[key]; !ok && !create {
-		lock <- struct{}{}
-		return nil, ""
+	if _, ok := s.Scopes[key]; !ok {
+		if !create {
+			lock <- struct{}{}
+			return nil, ""
+		}
+		// Like the protected disk adapter, a created scope directory exists
+		// and is discoverable before any scope record is published.
+		s.Scopes[key] = port.HomeScope{}
 	}
 	return &homeTransaction{store: s, key: key, lock: lock, ctx: budget.Lifetime(ctx)}, ""
 }
@@ -220,8 +225,12 @@ func (c *homeConnection) AllocateHome(ctx context.Context, h port.HomeReference)
 	if ctx.Err() != nil {
 		return port.HomeUnavailable
 	}
+	if c.home.HomeFault == "refuse" {
+		// A create the engine never saw, refused before any request is sent.
+		return port.HomeNotIssued
+	}
 	if _, ok := c.home.Homes[h.Name]; ok {
-		return port.HomeRefused
+		return port.HomeNotIssued
 	}
 	c.home.Homes[h.Name] = port.HomeObservation{Name: h.Name, Created: "generation-" + strconv.Itoa(len(c.home.HomeEvents)), Driver: "local", Scope: "local", Token: h.ID, Key: h.Scope, ExactLabels: true, EmptyOptions: true}
 	c.home.Roots[h.Name] = HomeRoot{UID: "0", GID: "0", Mode: 0755, Directory: true}

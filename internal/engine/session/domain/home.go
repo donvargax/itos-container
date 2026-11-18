@@ -129,7 +129,19 @@ func (h Homes) prepare(ctx context.Context, entry port.Session, c port.RunConnec
 			return homeFailure(f)
 		}
 		if f = hc.AllocateHome(ctx, r.Home); f != "" {
-			return homeFailure(f)
+			if f == port.HomeNotIssued {
+				// The create was refused or skipped before any request was
+				// sent. Cancel the reservation instead of leaving an intent
+				// no stop or retirement can reconcile; a later run of this
+				// checkout may allocate again. Only a failed cancellation
+				// publication keeps the uncertainty.
+				g.Stage = "awaiting-allocation"
+				g.Claims = slices.DeleteFunc(g.Claims, func(c port.HomeClaim) bool { return c.Session == entry.Record().ID })
+				if f = t.Save(s); f != "" {
+					return homeFailure(f)
+				}
+			}
+			return port.HomeUnavailable
 		}
 		o, status = hc.InspectHome(ctx, g.Name)
 		if status != port.Observed {
@@ -365,7 +377,11 @@ func (h Homes) ListHomes(ctx context.Context) port.HomeResult {
 			return homeResult(nil, f)
 		}
 		if s.Schema == 0 {
-			return homeResult(nil, port.Invalid)
+			// An interrupted first run can leave a created scope directory
+			// with no published record. It holds no generation and no claim,
+			// so the catalog treats it as an unallocated, ignorable scope
+			// instead of invalidating every other home of this UID.
+			continue
 		}
 		for _, g := range s.Generations {
 			e, f := h.observe(ctx, s, g, true)
@@ -398,7 +414,9 @@ func (h Homes) locate(ctx context.Context, id string) (port.HomeScope, port.Home
 			return s, port.HomeGeneration{}, f
 		}
 		if s.Schema == 0 {
-			return s, port.HomeGeneration{}, port.Invalid
+			// A scope directory with no published record is unallocated: it
+			// hides no home and must not stop the search of this catalog.
+			continue
 		}
 		if n := homeGeneration(s, id); n >= 0 {
 			return s, s.Generations[n], ""

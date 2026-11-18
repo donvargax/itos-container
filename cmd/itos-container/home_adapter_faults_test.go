@@ -19,7 +19,7 @@ func TestHomeSDKRejectsUnprovenArgumentsAndLatePinChanges(t *testing.T) {
 	fresh := g.Reference(f.scope().Scope)
 	fresh.Created = ""
 	for _, r := range []sp.HomeReference{{}, g.Reference(f.scope().Scope)} {
-		if got := h.AllocateHome(t.Context(), r); got != sp.HomeRefused {
+		if got := h.AllocateHome(t.Context(), r); got != sp.HomeNotIssued {
 			t.Fatal("unsafe allocation", got)
 		}
 	}
@@ -34,7 +34,7 @@ func TestHomeSDKRejectsUnprovenArgumentsAndLatePinChanges(t *testing.T) {
 		t.Fatal("invalid home reached create", got)
 	}
 	f.engine.Replaced = true
-	if got := h.AllocateHome(t.Context(), fresh); got != sp.HomeRefused {
+	if got := h.AllocateHome(t.Context(), fresh); got != sp.HomeNotIssued {
 		t.Fatal(got)
 	}
 	if _, got := h.InspectHome(t.Context(), g.Name); got != sp.Changed {

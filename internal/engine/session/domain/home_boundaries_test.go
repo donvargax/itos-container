@@ -273,7 +273,7 @@ func TestHomeReconciliationPreservesUncertainAllocation(t *testing.T) {
 }
 
 func TestHomeCatalogNeverReturnsPartialTrustedState(t *testing.T) {
-	for _, fault := range []string{"open", "missing", "read", "empty"} {
+	for _, fault := range []string{"open", "missing", "read"} {
 		t.Run(fault, func(t *testing.T) {
 			x := domainHomeFixture()
 			g := x.seed()
@@ -291,8 +291,6 @@ func TestHomeCatalogNeverReturnsPartialTrustedState(t *testing.T) {
 			case "read":
 				x.store.ReadFailure = port.Unsafe
 				want = port.Unsafe
-			case "empty":
-				x.store.Scopes[x.store.Scope(x.b)] = port.HomeScope{}
 			}
 			if r := x.h.ListHomes(t.Context()); homeOutcome(r) != want || len(r.Homes) != 0 {
 				t.Fatal(r)
@@ -424,7 +422,12 @@ func TestHomeFiniteOperationsDiscardLateReplies(t *testing.T) {
 					}
 				}
 				if operation != "inspect" {
-					if f := hc.AllocateHome(ctx, g.Reference(x.store.Scope(x.b))); f != port.HomeUnavailable {
+					want := port.HomeUnavailable
+					if operation == "missing capability" {
+						// Without the home capability no request can be issued.
+						want = port.HomeNotIssued
+					}
+					if f := hc.AllocateHome(ctx, g.Reference(x.store.Scope(x.b))); f != want {
 						t.Fatal(f)
 					}
 				}

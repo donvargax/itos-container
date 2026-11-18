@@ -6,6 +6,11 @@ const (
 	HomeRefused     Outcome = "home-refused"
 	HomeUnavailable Outcome = "home-unavailable"
 	HomeInUse       Outcome = "home-in-use"
+	// HomeNotIssued reports a create the adapter or its finite wrapper refused
+	// or skipped before any engine request was sent. Such a failure cancels
+	// the caller's reservation; every other failure may have been issued and
+	// keeps its uncertainty.
+	HomeNotIssued   Outcome = "home-not-issued"
 	ConsentRequired Outcome = "consent-required"
 )
 
@@ -72,6 +77,9 @@ type HomeObservation struct {
 	ExactLabels, EmptyOptions                bool
 }
 type HomeConnection interface {
+	// AllocateHome returns HomeNotIssued only when no engine request was sent
+	// and HomeUnavailable when one may have been; it never reports success
+	// for a request whose reply was lost.
 	AllocateHome(context.Context, HomeReference) Outcome
 	InspectHome(context.Context, string) (HomeObservation, Inspection)
 	InitializeHome(context.Context, string, string, string) Outcome
