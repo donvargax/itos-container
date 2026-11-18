@@ -11,6 +11,7 @@ const bodyLimit = 125000 // GitHub's character limit, conservatively enforced in
 // Selection below replaces slices; it never edits the caller's backing arrays.
 type renderedNotes struct {
 	notes
+	VersionCounts    string // counts used by release-version when the visible list omits sync merges
 	Breaking         []commit
 	DependencyPatch  bool
 	Omitted          bool
@@ -130,13 +131,17 @@ func (n notes) render() (string, error) {
 		}
 	}
 	entries := readChanges(n.Changed)
+	var versionCounts string
 	if len(syncs) > 0 {
+		versionCounts = fmt.Sprintf("%s, %s and %s",
+			plural(n.count("feat"), "feat", "feats"), plural(n.count("fix"), "fix", "fixes"),
+			plural(n.count("breaking"), "breaking change", "breaking changes"))
 		n.Commits = kept
 		if entries.without(syncs) {
 			n.Changed = entries.text()
 		}
 	}
-	view := renderedNotes{notes: n, DependencyPatch: len(n.Moved) > 0}
+	view := renderedNotes{notes: n, VersionCounts: versionCounts, DependencyPatch: len(n.Moved) > 0}
 	for _, c := range n.Commits {
 		if c.Breaking != "" {
 			view.Breaking = append(view.Breaking, c)

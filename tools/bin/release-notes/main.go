@@ -355,9 +355,6 @@ func footers(itos, name, from, to string) ([]footer, error) {
 func (n notes) count(kind string) int {
 	c := 0
 	for _, commit := range n.Commits {
-		if commit.sync {
-			continue
-		}
 		if (kind == "breaking" && commit.Breaking != "") || (kind != "breaking" && commit.Type == kind) {
 			c++
 		}
@@ -408,7 +405,7 @@ func (n renderedNotes) document() (string, error) {
 
 const notesTemplate = `# itos-container {{.Version}}
 
-Cut by CI from the {{plural (len .Commits) "commit" "commits"}} since {{since}}: {{if .DependencyPatch}}no feat, no fix and no breaking change, but the binary is built from what moved beneath it, which makes a patch{{if .Moved}}: {{join .Moved "; "}}{{end}}.{{else}}{{plural (count "feat") "feat" "feats"}}, {{plural (count "fix") "fix" "fixes"}} and {{plural (count "breaking") "breaking change" "breaking changes"}}, {{if .From}}where a breaking change makes a major release, a feat a minor one and a fix a patch.{{else}}the initial version is 0.1.0 for any releasable history, including fixes and breaking changes.{{end}}{{end}}{{if .From}} Every change: {{history}}{{else}} Complete history: {{history}}{{end}}
+Cut by CI from the {{plural (len .Commits) "commit" "commits"}} since {{since}}: {{if .DependencyPatch}}no feat, no fix and no breaking change, but the binary is built from what moved beneath it, which makes a patch{{if .Moved}}: {{join .Moved "; "}}{{end}}.{{else}}{{plural (count "feat") "feat" "feats"}}, {{plural (count "fix") "fix" "fixes"}} and {{plural (count "breaking") "breaking change" "breaking changes"}}, {{if .From}}where a breaking change makes a major release, a feat a minor one and a fix a patch.{{else}}the initial version is 0.1.0 for any releasable history, including fixes and breaking changes.{{end}}{{end}}{{if .VersionCounts}} The version calculation includes branch syncs: {{.VersionCounts}}.{{end}}{{if .From}} Every change: {{history}}{{else}} Complete history: {{history}}{{end}}
 {{if .Omitted}}
 Some entries were omitted to keep these notes below 125000 bytes. Read the complete history: {{history}}
 {{end}}
@@ -434,7 +431,7 @@ See https://github.com/{{.Repository}}/blob/v{{.Version}}/docs/security.md.
 {{- if .MigrationOmitted}} Some migration instructions were omitted; read the complete history before upgrading: {{history}}
 {{- else if and .DependencyPatch (not .Upgrading)}} Nothing to change: no commit since {{since}} is a breaking change, and none has an ` + "`Upgrading:`" + ` footer asking for anything.
 {{- else}}
-{{- if eq (count "breaking") 0}} No commit since {{since}} is a breaking change.{{end}}
+{{- if eq (count "breaking") 0}}{{if .VersionCounts}} No listed change is breaking.{{else}} No commit since {{since}} is a breaking change.{{end}}{{end}}
 {{- end}}
 {{- range .Breaking}}
    - Breaking, {{short .SHA}} ` + "`{{.Header}}`" + `:
