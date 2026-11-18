@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - slice-28
-  - slice-34
   - slice-32
   - slice-35
   - slice-40
@@ -2074,18 +2073,9 @@ items:
     title: Run provides an isolated, writable harness home
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-harness-owned-home.
-      Specify the storage lifetime first: the registry recommends a per-checkout volume, but volume
-      versus tmpfs remains unsettled. Cover approved settings, non-root access, project isolation,
-      ownership, bounded creation and cleanup/recovery consistent with the chosen lifetime. Never
-      mount the host home or place harness state in the checkout. Keep shared storage behavior under
-      an engine package and command integration in existing slices. Record the architecture change.
-      Add black-box scenarios, including executable /tmp proof; its current configuration already
-      omits noexec. Real-engine red/green evidence runs only in CI. Broken down from null.
   - id: slice-35
     title: Codex starts with isolated state and unwanted startup services disabled
     phase: 1
@@ -2240,6 +2230,18 @@ items:
       feature fixtures. Include the three reported cmd RealStore contract failures when verifying a
       fixture environment that satisfies both ancestor ownership and the non-root manifest identity
       requirement.
+
+      This item already tracks UID 65534 on `/` and `/tmp` and the resulting `approval.state.unsafe`
+      failures in disk tests and feature scenarios. Before judging a worker’s local evidence, use
+      the existing ID-EGRESS-09 fixture to confirm it reaches its behavior assertion with production
+      ownership checks intact. If an ancestor check stops it first, record the path and UID as an
+      environment blocker.
+
+      This item already records that `/` and `/tmp` appear as UID 65534 in the shared Linux sandbox
+      and that approval disk contracts fail the ancestor-ownership check. It also calls for
+      documenting the fixture prerequisite in `features/README.md` and using ID-EGRESS-09 to verify
+      that a suitable environment reaches the behavior assertion with production ownership checks
+      intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1

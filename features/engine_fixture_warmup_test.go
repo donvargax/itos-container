@@ -470,7 +470,7 @@ func fixtureProductExpected() container.CreateRequest {
 			Resources: container.Resources{PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: "no"},
 			IpcMode: "private", CgroupnsMode: "private", Init: &init, LogConfig: container.LogConfig{Type: "none"},
 			Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: "T-55-anchor", Target: "/workspace", VolumeOptions: &mount.VolumeOptions{NoCopy: true}}},
-			Tmpfs:  map[string]string{"/tmp": "rw,nosuid,nodev,mode=1777"}},
+			Tmpfs:  map[string]string{"/tmp": "rw,exec,nosuid,nodev,mode=1777"}},
 	}
 }
 
@@ -580,7 +580,7 @@ func testFixtureProductOwnership(t *testing.T) {
 			for _, replacement := range []struct{ old, new string }{
 				{`/T-55-product`, `/foreign`}, {strings.Repeat("a", 64), strings.Repeat("c", 64)},
 				{`"RW":true`, `"RW":false`}, {`"volume"`, `"bind"`},
-				{`"NoCopy":true`, `"NoCopy":false`}, {`rw,nosuid,nodev,mode=1777`, `rw`},
+				{`"NoCopy":true`, `"NoCopy":false`}, {`rw,exec,nosuid,nodev,mode=1777`, `rw`},
 				{`"/tmp"`, `"/elsewhere"`},
 			} {
 				check(strings.ReplaceAll(original, replacement.old, replacement.new), false)

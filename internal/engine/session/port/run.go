@@ -35,6 +35,7 @@ type Streams struct {
 }
 
 type RunResult struct {
+	HomeID          string
 	Restore         Outcome
 	MountDiagnostic MountDiagnostic
 	Stream          Outcome

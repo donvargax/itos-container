@@ -41,6 +41,7 @@ type world struct {
 	stdin               string // the text the run reads from its standard input, "" for none
 	credentials         *credentialWorld
 	policy              *policyWorld
+	home                *homeWorld
 	manifest            *manifestWorld
 	doctor              *doctorWorld
 	approval            *approvalWorld
@@ -91,7 +92,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		// Before the world is reset, whatever the row's outcome: a failing row is the
 		// one whose offsets matter, and godog skips the steps after a failure.
 		ctx = withSignalOffsets(ctx, w.lifecycle.signalOffsets())
-		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative())
+		sessionErr := errors.Join(w.closeHomeNative(), w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative())
 		w.closeCredentials()
 		w.closeDoctor()
 		w.closePolicy()
@@ -188,6 +189,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	})
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
 	w.policySteps(sc)
+	w.homeSteps(sc)
 	w.credentialSteps(sc)
 	w.manifestSteps(sc)
 	w.doctorSteps(sc)

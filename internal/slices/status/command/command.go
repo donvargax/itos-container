@@ -8,11 +8,14 @@ import (
 )
 
 type CLI struct {
-	Context      context.Context           `kong:"-"`
-	Service      port.Recovery             `kong:"-"`
-	Presentation port.RecoveryPresentation `kong:"-"`
-	JSON         bool                      `name:"json" negatable:"" help:"Print one schema-1 JSON object."`
-	Args         []string                  `arg:"" optional:"" sep:"none" help:"No positional arguments are accepted."`
+	Homes            bool                      `name:"homes" help:"Inspect this host user's retained home catalog across checkouts."`
+	HomeService      port.HomeManagement       `kong:"-"`
+	HomePresentation port.HomePresentation     `kong:"-"`
+	Context          context.Context           `kong:"-"`
+	Service          port.Recovery             `kong:"-"`
+	Presentation     port.RecoveryPresentation `kong:"-"`
+	JSON             bool                      `name:"json" negatable:"" help:"Print one schema-1 JSON object."`
+	Args             []string                  `arg:"" optional:"" sep:"none" help:"No positional arguments are accepted."`
 }
 
 func (CLI) Help() string {
@@ -28,6 +31,12 @@ func (c CLI) Run() int {
 	ctx := c.Context
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if c.Homes {
+		if len(c.Args) != 0 {
+			return c.HomePresentation.PrintHomes(port.HomeResult{Failures: []port.RecoveryFailure{{Outcome: port.Usage}}}, c.JSON)
+		}
+		return c.HomePresentation.PrintHomes(c.HomeService.ListHomes(ctx), c.JSON)
 	}
 	return c.Presentation.Print(domain.Inspect(ctx, c.Service, c.Args), c.JSON)
 }

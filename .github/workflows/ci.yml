@@ -68,7 +68,7 @@ jobs:
       matrix:
         include:
           - shard: offline
-            features: offline.feature
+            features: offline.feature harness-home.feature
           - shard: lifecycle
             features: lifecycle.feature
           - shard: other

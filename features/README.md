@@ -247,8 +247,9 @@ receive a Docker socket and never run the engine tier locally or spoof the CI co
 fixtures without executing Docker. The latter also checks the pinned recipe and helper guards.
 
 Since T-45 the engine tier runs in engine shards, the matrix of the `engine-shard` job in
-`.github/workflows/ci.yml`: **offline** (`offline.feature`), **lifecycle** (`lifecycle.feature`,
-whose four `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row), **other**
+`.github/workflows/ci.yml`: **offline** (`offline.feature` and `harness-home.feature`),
+**lifecycle** (`lifecycle.feature`, whose four `ID-LIFECYCLE-09` rows stay nested in
+`ID-LIFECYCLE-13`'s quiet row), **other**
 (`anchors.feature`, `checkout-overlap.feature`, `doctor.feature`, `hardlinks.feature`,
 `recovery.feature`, `run_terminal.feature`, `session.feature` and `sockets.feature`) and,
 since T-59, **egress** (`egress.feature`, moved whole from other after that shard's
@@ -291,8 +292,8 @@ shard's selection. The `ITOS_CONTAINER_ENGINE_` prefix keeps it from product chi
 harness subprocesses, as for the switch.
 
 `TestEngineShards` holds all of this without an engine. Its workflow subtest parses the actual
-workflow, names exactly the four shards and pins each shard's complete file set — offline and
-lifecycle their one file each, other its seven, and egress `egress.feature`, plus
+workflow, names exactly the four shards and pins each shard's complete file set — offline
+its two files, lifecycle its one, other its seven, and egress `egress.feature`, plus
 `egress_lifecycle.feature` once the inventory has it, never the inventory's leftover — whatever
 each list's order or whitespace, so a file moved whole between shards fails even when every file
 still runs exactly once; its partition subtest selects
@@ -557,14 +558,21 @@ binary's four-minute timeout. T-41 lengthened nothing the engine step runs: befo
 14, at 164 to 196 and 212 to 245. Nothing measured points at one step; the spread reads as
 runner speed. T-33's rule applied: the
 measured unsharded step exceeded 240 seconds, so whole-feature shards on separate native
-runners with an exact parsed-example partition check. The original offline shard held 24
-examples, lifecycle 19 and other 32, including 12 `ID-SOCKETS-01` refusals before worker
-creation. Slice-37 adds 14 terminal rows to other, bringing its total to 46. T-59's
+runners with an exact parsed-example partition check. T-45 originally assigned 24 examples
+to offline, 19 to lifecycle and 32 to other, of which 12 are `ID-SOCKETS-01` refusals before
+any worker exists. T-59's
 measured move (171.2 s in the other shard at `83e4bc1`, run 43837945423, after 143.9 s at
 `a36768a` and 111 s and 90 s before slice-27's eight egress rows went live) took the whole
 `egress.feature`, its eight rows, into a fourth shard of its own. An estimate
 from those shares and a cold compile, not a measurement, puts the slowest shard between two
 and two and a half minutes on the slowest runner seen.
+
+For slice-34, the coordinator's 2026-11-16 observations put offline at 31 to 40 seconds,
+lifecycle at 43 to 110 and other at 90 to 140. The whole home feature went to offline,
+which had room under the 180-second gate. Its nine live home rows bring offline to 33
+examples. `TestEngineShards` also checks that manual selection of all four home IDs
+selects those nine rows in offline alone. Slice-37 adds 15 terminal rows to other,
+bringing that shard to 47 examples.
 
 The loop records each shard's step time from the public job metadata and, from its log, the
 runner image (`/etc/os-release`) and the preflight's Docker version, so a later image change
@@ -573,7 +581,7 @@ times that show the need. In the prepared CI tier only, the coordinator measures
 with:
 
 ```sh
-for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature' egress.feature; do
+for features in 'offline.feature harness-home.feature' lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature' egress.feature; do
   env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
 done
 ```
@@ -734,7 +742,7 @@ smoke and both warm-ups, with a separate 30-second cleanup attempt on failure. I
    no TTY and healthcheck `NONE`. Preserve the SDK's other serialized fields. HostConfig uses
    network none, read-only root, cap-drop ALL, no-new-privileges, PID limit 4096, restart no,
    private IPC/cgroup namespaces, init false, logging none, and `/tmp` tmpfs with
-   `rw,nosuid,nodev,mode=1777`. Its sole read-write workspace mount is a named local volume
+   `rw,exec,nosuid,nodev,mode=1777`. Its sole read-write workspace mount is a named local volume
    with `NoCopy=true`, matching the product's checkout anchor rather than an anonymous
    volume or direct bind. Allocate that volume with `type=none`, `o=bind` and a source through
    a held `/proc/<pid>/fd/<fd>` directory descriptor at a fresh empty attempt-owned directory

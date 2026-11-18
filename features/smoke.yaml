@@ -116,3 +116,7 @@
   scenarios:
     - id: "@ID-EGRESS-07"
       why: the file's only live scenario until the allowlist run is built, and fast with no engine; the proxy executable rule and its ELF adapter admit the static control and refuse each unsafe delivery. Choose the run through the proxy in its place once that is live
+- file: harness-home.feature
+  scenarios:
+    - id: "@ID-HOME-01"
+      why: closed home policy validation and unchanged omitted-home defaults without state or engine access

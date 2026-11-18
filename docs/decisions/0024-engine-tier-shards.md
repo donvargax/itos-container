@@ -79,6 +79,16 @@ at 242, 244 and 245 seconds and in that timeout, so:
 `TestEngineShards` holds the partition against the real feature files. Move a whole feature
 between shards only with measured shard times that show the need, and never split one.
 
+### Slice-34 placement, 2026-11-16
+
+Add the whole `harness-home.feature` to **offline**. The coordinator measured recent
+offline steps at 31 to 40 seconds, lifecycle at 43 to 110 and other at 90 to 140, giving
+offline room under the unchanged 180-second gate. Its 24 live rows are joined by nine
+home engine rows across `ID-HOME-13`, `14`, `15` and `23`, all still `@wip`. Normal live
+counts remain 24/19/32; manual red selection assigns the nine home rows only to offline.
+The workflow, negative-control inventory and selector regression use that placement.
+No home runtime timing or red behaviour evidence is claimed by this assignment.
+
 ## Alternatives left
 
 - **Lowering the unsharded budget.** Today's suite took at most 180 seconds on 9 of those 33
