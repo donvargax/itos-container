@@ -72,6 +72,16 @@ checkout Unix-socket gap described above.
 
 ## Approval boundary
 
+The opt-in harness-home profile retains a named volume for one checkout
+until a person consents at a terminal to its reset or deletion. What a run leaves
+there, including harness settings, hooks and session files, is hostile worker
+data that the next run of the same checkout starts with. Its scope is bounded to
+that checkout; the consented reset removes it. Persistence does not confer host
+approval or recovery authority. Local memory and disk/SDK fixtures exercise the
+ownership and recovery decisions; native CI evidence is required before claiming
+container isolation or filesystem behavior;
+see [decision 0030](decisions/0030-persistent-harness-home.md).
+
 [Slice-4's approval scenarios](../features/approval.feature) exercise the implemented
 approval flow with temporary host state and a synthetic Engine API. The host identity is
 the effective UID, root is refused, and the worker uses the effective host UID/GID.

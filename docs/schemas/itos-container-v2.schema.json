@@ -71,6 +71,19 @@
           }
         }
       ]
+    },
+    "home": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "storage"
+      ],
+      "properties": {
+        "storage": {
+          "type": "string",
+          "const": "volume"
+        }
+      }
     }
   }
 }

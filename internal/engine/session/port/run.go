@@ -29,6 +29,7 @@ type Streams struct {
 }
 
 type RunResult struct {
+	HomeID          string
 	MountDiagnostic MountDiagnostic
 	Stream          Outcome
 	// Teardown retains a cleanup deadline failure separately from the run cause.

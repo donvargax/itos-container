@@ -106,6 +106,22 @@ func EngineContract(t Reporter, create func(*Session) (port.Engine, string, stri
 	}
 }
 
+// CatalogEngineContract holds the same pinned inspection contract without a
+// checkout. It requires the distinct capability rather than an empty Open root.
+func CatalogEngineContract(t Reporter, create func(*Session) (port.CatalogEngine, string)) {
+	t.Helper()
+	EngineContract(t, func(s *Session) (port.Engine, string, string) {
+		e, endpoint := create(s)
+		return catalogOpening{e}, endpoint, ""
+	})
+}
+
+type catalogOpening struct{ port.CatalogEngine }
+
+func (e catalogOpening) Open(selection, _ string, budget time.Duration) (port.Session, port.Failure) {
+	return e.OpenCatalog(selection, budget)
+}
+
 // CheckoutContract checks stable identities, observed replacement and release.
 func CheckoutContract(t Reporter, create func() (port.Checkout, port.CheckoutIdentity, func())) {
 	t.Helper()

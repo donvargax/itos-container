@@ -24,6 +24,9 @@ func (r *Readiness) Open(_, _ string, budget time.Duration) (rp.Session, rp.Fail
 	r.Closed = false
 	return r, rp.None
 }
+func (r *Readiness) OpenCatalog(selection string, budget time.Duration) (rp.Session, rp.Failure) {
+	return r.Open(selection, "", budget)
+}
 func (r *Readiness) Endpoint() string                  { return r.EndpointValue }
 func (r *Readiness) Version() (rp.Version, rp.Failure) { return r.VersionValue, r.Failure }
 func (r *Readiness) Info() (rp.Info, rp.Failure)       { return r.InfoValue, r.Failure }

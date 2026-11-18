@@ -14,6 +14,7 @@ import (
 // Runner preserves the unstarted-only Service contract while adding an explicit
 // foreground lifecycle. The durable intent contains no command or stream data.
 type Runner struct {
+	Homes          *Homes
 	sourceOwner    chan struct{}
 	Credentials    port.CredentialStager
 	Sources        port.CredentialSources
@@ -249,7 +250,7 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 		return result, nil, nil
 	}
 	defer intent.Close()
-	if intent.Binding().Egress != (port.EgressGrant{}) || intent.Binding().StagingKinds != (port.CredentialKinds{}) {
+	if intent.Binding().Home || intent.Binding().Egress != (port.EgressGrant{}) || intent.Binding().StagingKinds != (port.CredentialKinds{}) {
 		result.Outcome = port.Refused
 		return result, nil, nil
 	}

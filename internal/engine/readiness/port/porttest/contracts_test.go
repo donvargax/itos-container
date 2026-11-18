@@ -10,6 +10,12 @@ func TestEngineContract(t *testing.T) {
 	EngineContract(t, func(s *Session) (port.Engine, string, string) { return &Engine{Session: s}, s.Address, "/checkout" })
 }
 
+func TestCatalogEngineContract(t *testing.T) {
+	CatalogEngineContract(t, func(s *Session) (port.CatalogEngine, string) {
+		return &Engine{Session: s}, s.Address
+	})
+}
+
 func TestCheckoutContract(t *testing.T) {
 	CheckoutContract(t, func() (port.Checkout, port.CheckoutIdentity, func()) {
 		identity := port.CheckoutIdentity{Root: "/checkout", Device: "1", Inode: "2", GitDevice: "1", GitInode: "3"}

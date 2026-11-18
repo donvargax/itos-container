@@ -11,6 +11,7 @@ import (
 
 type startupKey struct{}
 type startupState struct {
+	homeID          string
 	binding         port.Binding
 	record          port.Record
 	mountDiagnostic port.MountDiagnostic
