@@ -8207,3 +8207,13 @@
     For both a first release and a tagged release, omit the sync entry and its contribution to
     the commit and feature counts. Keep each item landing under its own subject. The regression
     exercises both a sync with a feature subject and a sync whose first parent is a feature.
+- id: T-62
+  type: ci
+  title: Clarify how branch syncs contribute to release version counts
+  why: >
+    PR 69's second local review found that release totals beside listed totals can read as the
+    syncs' own contribution and can repeat identical numbers for untyped syncs. Pin the mixed and
+    untyped cases in the release tool's tests. See PR 69 discussion in comment 6988903923.
+  done_when:
+    - run: go test ./tools/bin/release-notes -count=1
+      timeout: 180
