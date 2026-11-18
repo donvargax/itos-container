@@ -2226,6 +2226,11 @@ items:
       test that returns state.unsafe locally and passes on Ubuntu CI. Use it to identify the
       filesystem assumption, then check the admission-leftover tests and affected feature rows while
       preserving the production ownership checks.
+
+      This item already covers local state.unsafe failures on the shared Linux machine and the
+      affected feature scenarios. Both / and /tmp are owned by UID 65534 in the agent sandbox. Use
+      ID-EGRESS-09 to verify and document where implementers can run the fixture and reach its
+      behavior assertion with production ownership checks intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
