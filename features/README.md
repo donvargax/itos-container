@@ -291,16 +291,19 @@ shard's selection. The `ITOS_CONTAINER_ENGINE_` prefix keeps it from product chi
 harness subprocesses, as for the switch.
 
 `TestEngineShards` holds all of this without an engine. Its workflow subtest parses the actual
-workflow; its partition subtest selects each shard over the real feature files and requires
-each shard's rows and IDs to be the unsharded selection's in its files, the four together the
-whole tier exactly once, every feature with an engine case in exactly one shard, and
-`ID-LIFECYCLE-09` and `-13` in the lifecycle shard, and pins the egress shard's complete
-file set; its selector subtest runs fixture
-features with memory-only steps; and its broken-workflows subtest refuses a dropped, doubled,
+workflow, names exactly the four shards and pins the egress shard's complete file set,
+whatever its list's order or whitespace; its partition subtest selects each shard over the real
+feature files and requires each shard's rows and IDs to be the unsharded selection's in its
+files, the four together the whole tier exactly once, every feature with an engine case in
+exactly one shard, and `ID-LIFECYCLE-09` and `-13` in the lifecycle shard; its selector subtest
+runs fixture features with memory-only steps; its multiline egress report subtest formats an
+in-memory egress entry whose YAML literal block names `egress_lifecycle.feature` and
+`egress.feature` and requires the same one-line report the real partition logs to end with
+both files; and its broken-workflows subtest refuses a dropped, doubled,
 unknown or path-named feature, an empty or fifth shard, the old three-shard layout, a file
-swapped between egress and other, a weakened aggregate, a gate that
-accepts another result, `continue-on-error`, `fail-fast: true`, the feature input at job
-level and a second engine switch.
+swapped between egress and other, an unrelated file in the egress shard, a weakened
+aggregate, a gate that accepts another result, `continue-on-error`, `fail-fast: true`, the
+feature input at job level and a second engine switch.
 
 A read-only server preflight targets `unix:///var/run/docker.sock`, clearing caller-selected
 Docker host/context and TLS/API overrides. Missing CLI/socket, denied access, daemon failure,
