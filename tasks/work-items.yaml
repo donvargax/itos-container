@@ -2240,6 +2240,12 @@ items:
       feature fixtures. Include the three reported cmd RealStore contract failures when verifying a
       fixture environment that satisfies both ancestor ownership and the non-root manifest identity
       requirement.
+
+      This item already tracks UID 65534 on `/` and `/tmp` and the resulting `approval.state.unsafe`
+      failures in disk tests and feature scenarios. Before judging a worker’s local evidence, use
+      the existing ID-EGRESS-09 fixture to confirm it reaches its behavior assertion with production
+      ownership checks intact. If an ancestor check stops it first, record the path and UID as an
+      environment blocker.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
