@@ -77,7 +77,7 @@ type homeDiskFixture struct {
 
 func homeDisk(t *testing.T, f *homeLocalFixture) *homeDiskFixture {
 	t.Helper()
-	root := t.TempDir()
+	root := homeProtectedRoot(t)
 	account := filepath.Join(root, "account")
 	if err := os.Mkdir(account, 0700); err != nil {
 		t.Fatal(err)
@@ -92,6 +92,31 @@ func homeDisk(t *testing.T, f *homeLocalFixture) *homeDiskFixture {
 	f.m.registry.Storage = homeFixtureRegistry{ad.Registry{Store: protected}}
 	d.store = sd.Homes{Storage: homeFixtureCatalog{ad.Catalog{Account: homeFixtureAccount(account), Store: protected}}, Codec: f.m.registry.Store.Codec.(sp.HomeCodec), Host: f.m.host, StateRoot: d.root, Locations: homeFixtureLocations{ad.Locations{Store: protected}}}
 	return d
+}
+
+// homeProtectedRoot keeps the disk adapter's protected state on the Linux
+// tmpfs every host mounts at /dev/shm, the same memory-backed location the
+// credential staging adapter relies on, falling back to the ordinary temp
+// root where no such mount exists. Every adapter check still runs for real
+// through this root: pinned no-follow opens, inode, ownership, mode and
+// link-count revalidation, exclusive flocks and the atomic nonce, fsync and
+// rename publication with its directory syncs. Only the calls' dependence on
+// a host platter's latency is removed: CI runs go test ./... with the
+// features package's durable-publication suite beside this contract, and a
+// runner's fsync tail can then consume a whole ten-second operation budget.
+// The pull request's run 44387768791 failed exactly there, its fenced launch
+// reporting run.call-timeout on intent lock acquisition and intent
+// publication although nothing held any lock, and a state root on a slow
+// disk reproduces the same budget expiry locally.
+func homeProtectedRoot(t *testing.T) string {
+	t.Helper()
+	for _, base := range []string{"/dev/shm", os.TempDir()} {
+		if dir, err := os.MkdirTemp(base, "slice-34-home-"); err == nil {
+			t.Cleanup(func() { _ = os.RemoveAll(dir) })
+			return dir
+		}
+	}
+	return t.TempDir()
 }
 func (d *homeDiskFixture) write(path string, data []byte) {
 	d.t.Helper()
