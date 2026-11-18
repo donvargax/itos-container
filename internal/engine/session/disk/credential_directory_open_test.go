@@ -11,7 +11,12 @@ import (
 )
 
 func TestCredentialDirectoryOpenFailurePreservesSubstitution(t *testing.T) {
-	for _, replacement := range []string{"directory", "symlink", "file", "missing", "extra entry"} {
+	// "transient" is the reviewer's failure mode: the open fails once, for
+	// example at the descriptor limit, with the new directory still in place.
+	// The refusal cannot leave it allocated: recovery repeated after the
+	// original error clears must finish safe cleanup without adopting or
+	// deleting any other entry.
+	for _, replacement := range []string{"directory", "symlink", "file", "missing", "extra entry", "transient"} {
 		t.Run(replacement, func(t *testing.T) {
 			fixture := diskCredentialFixture(t, map[string][]byte{"claude-token": []byte("synthetic\n")})
 			s := fixture.Stager.(Credentials)
@@ -30,7 +35,7 @@ func TestCredentialDirectoryOpenFailurePreservesSubstitution(t *testing.T) {
 				}
 				if replacement == "extra entry" {
 					err = os.WriteFile(filepath.Join(path, "unexpected"), []byte("retain"), 0400)
-				} else {
+				} else if replacement != "transient" {
 					if err = os.Rename(path, retained); err != nil {
 						t.Fatal(err)
 					}
@@ -46,7 +51,7 @@ func TestCredentialDirectoryOpenFailurePreservesSubstitution(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if replacement != "missing" {
+				if replacement != "missing" && replacement != "transient" {
 					substituted, err = os.Lstat(path)
 					if err != nil {
 						t.Fatal(err)
@@ -68,6 +73,12 @@ func TestCredentialDirectoryOpenFailurePreservesSubstitution(t *testing.T) {
 					}
 					continue
 				}
+				if replacement == "transient" {
+					if failure := fixture.Stager.Remove(t.Context(), r); failure != "" {
+						t.Fatal("transient directory open blocked repeated recovery", failure)
+					}
+					continue
+				}
 				if failure := fixture.Stager.Remove(t.Context(), r); failure != port.CredentialRefused {
 					t.Fatal("intent-only recovery adopted substituted staging", failure)
 				}
@@ -75,7 +86,11 @@ func TestCredentialDirectoryOpenFailurePreservesSubstitution(t *testing.T) {
 					t.Fatal("cleanup removed or changed the substituted entry")
 				}
 			}
-			if replacement == "extra entry" {
+			if replacement == "transient" {
+				if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
+					t.Fatal("repeated recovery left the staging directory allocated")
+				}
+			} else if replacement == "extra entry" {
 				if data, err := os.ReadFile(filepath.Join(path, "unexpected")); err != nil || string(data) != "retain" {
 					t.Fatal("cleanup changed an unexpected entry")
 				}
