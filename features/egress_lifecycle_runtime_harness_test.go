@@ -70,8 +70,23 @@ func TestEgressLifecycleGraceRequiresObservedSignalsAndFullBudget(t *testing.T) 
 	if err := egressLifeSignalOrder([]egressLifeRequest{term, kill}, "worker", after, true); err != nil {
 		t.Fatal(err)
 	}
+	// The grace runs from the observed loss, including delivery time: a busy
+	// runner's controller may spend part of it before the SIGTERM is delivered,
+	// so a late signal with the kill still at the loss's deadline is conformant.
+	late := term
+	late.at = after.Add(2 * time.Second)
+	lateKill := kill
+	lateKill.at = after.Add(10 * time.Second)
+	if err := egressLifeSignalOrder([]egressLifeRequest{late, lateKill}, "worker", after, true); err != nil {
+		t.Fatal(err)
+	}
 	early, failed, before, wrong := kill, term, term, term
 	early.at, failed.status, before.at, wrong.query = term.at.Add(9*time.Second), 500, after.Add(-time.Second), "signal=SIGINT"
+	edge, stalled := kill, kill
+	edge.at = after.Add(10*time.Second - 100*time.Millisecond - time.Millisecond)
+	stalled.at = after.Add(10*time.Second + engineEscalationTolerance + time.Millisecond)
+	restarted := lateKill
+	restarted.at = after.Add(3*time.Second + 10*time.Second)
 	for _, tc := range []struct {
 		name    string
 		journal []egressLifeRequest
@@ -82,6 +97,9 @@ func TestEgressLifecycleGraceRequiresObservedSignalsAndFullBudget(t *testing.T) 
 		{"preceded loss", []egressLifeRequest{before}, false}, {"wrong signal", []egressLifeRequest{wrong}, false},
 		{"kill before term", []egressLifeRequest{kill, term}, true}, {"duplicate term", []egressLifeRequest{term, term}, false},
 		{"unexpected kill", []egressLifeRequest{term, kill}, false},
+		{"kill before the grace allowance", []egressLifeRequest{term, edge}, true},
+		{"kill past the escalation tolerance", []egressLifeRequest{term, stalled}, true},
+		{"kill restarted from a late delivery", []egressLifeRequest{late, restarted}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := egressLifeSignalOrder(tc.journal, "worker", after, tc.forced); err == nil {

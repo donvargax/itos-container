@@ -211,8 +211,14 @@ func (w *world) egressLifeTermination(exit, process int) error {
 
 // Judge real signal requests against the product's unchanged grace, including
 // the lower bound: an early KILL must not pass merely because exit was 137.
-// The request recorder runs after the controller starts its signal call; allow
-// 100 ms for that observation lag, not a shorter product grace.
+// The settled lifecycle contract gives the primary until ten seconds after the
+// loss was first observed, including signal-delivery time, so the window runs
+// from the harness's own proxy kill: the controller's inspection, revalidation
+// and durable writes before the SIGTERM are part of the grace, as
+// escalationWindow judges LIFECYCLE-09 from the harness's own signal. The
+// request recorder runs after the controller starts its signal call; allow
+// 100 ms for that observation lag on the early side, never a shorter product
+// grace, and the suite's absolute escalation tolerance on the late side.
 func egressLifeSignalOrder(journal []egressLifeRequest, id string, after time.Time, forced bool) error {
 	var term, kill time.Time
 	count := 0
@@ -232,8 +238,15 @@ func egressLifeSignalOrder(journal []egressLifeRequest, id string, after time.Ti
 			}
 			term = r.at
 		case "SIGKILL":
-			if term.IsZero() || !kill.IsZero() || r.at.Sub(term) < 10*time.Second-100*time.Millisecond {
-				return errors.New("SIGKILL did not respect the product grace")
+			if term.IsZero() || !kill.IsZero() {
+				return errors.New("SIGKILL without or after another signal")
+			}
+			elapsed := r.at.Sub(after)
+			if elapsed < 10*time.Second-100*time.Millisecond {
+				return fmt.Errorf("SIGKILL %s after the proxy loss did not respect the product grace", elapsed)
+			}
+			if elapsed > 10*time.Second+engineEscalationTolerance {
+				return fmt.Errorf("SIGKILL %s after the proxy loss left the grace window", elapsed)
 			}
 			kill = r.at
 		default:
