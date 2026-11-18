@@ -67,6 +67,18 @@ func (w *world) egressSeedSessions(phase string) error {
 	if err := w.egressSeedSession(&s.egress); err != nil {
 		return err
 	}
+	if phase == "stopped with cleanup complete" {
+		// A session that finished owns its committed evidence pair: teardown
+		// copies the stopped proxy's log before removing it, so the stopped
+		// fixture seeds one the way a real completed session holds it. Without
+		// the pair a correct read reports the completed session's required
+		// evidence as missing (recovery.temporary), which this read-only
+		// disclosure scenario does not exercise; the deleted-pair diagnosis
+		// has its own coverage beside the copy-phase judgement.
+		if err := w.egressEvidenceWrite(nil, []any{}); err != nil {
+			return err
+		}
+	}
 	if err := w.approvalNetworkRequest(1, nil); err != nil {
 		return err
 	}
@@ -313,11 +325,17 @@ func (w *world) egressStatusJSON() error {
 			}
 			continue
 		}
+		// Slice-28 extends this entry with the session's durable refusal
+		// evidence, never a claim about a live count. A session still running
+		// has no committed copy yet, so its destination is pending; a session
+		// that finished owns the committed pair its teardown published, so the
+		// stopped phase reports the stored copy with its published count.
+		state, records := "pending", any(nil)
+		if s.phase == "stopped with cleanup complete" {
+			state, records = "stored", any(0)
+		}
 		want := map[string]any{"profile": "allowlist-v1", "allow": offlineStrings(seeded.allow), "limitations": offlineStrings(egressLimitations),
-			// Slice-28 extends this entry with the session's durable refusal
-			// evidence: a destination that is pending until a committed copy
-			// exists, never a claim about a live count.
-			"refusal_log": map[string]any{"path": w.egressEvidencePathFor(seeded.id), "state": "pending", "records": nil, "missing": []any{}}}
+			"refusal_log": map[string]any{"path": w.egressEvidencePathFor(seeded.id), "state": state, "records": records, "missing": []any{}}}
 		if !sameJSON(egress, want) || len(object(egress)) != 4 {
 			return fmt.Errorf("egress object is %s, want %s", approvalJSON(egress), approvalJSON(want))
 		}
