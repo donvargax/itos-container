@@ -66,7 +66,11 @@ func (h Homes) prepare(ctx context.Context, entry port.Session, c port.RunConnec
 	if t == nil {
 		return port.HomeUnavailable
 	}
-	defer t.Close()
+	defer func() {
+		if t != nil {
+			t.Close()
+		}
+	}()
 	s, f := t.Read()
 	if f != "" {
 		return homeFailure(f)
@@ -112,34 +116,42 @@ func (h Homes) prepare(ctx context.Context, entry port.Session, c port.RunConnec
 	if f = t.Save(s); f != "" {
 		return homeFailure(f)
 	}
+	// Beyond the durable claim the startup phase can expire or be interrupted
+	// at any point. A failure that proves no create reached the engine
+	// cancels the reservation under a budget of its own, as teardown's is;
+	// the failed phase cannot carry that publication. Every failure that may
+	// have issued a create keeps the allocation's uncertainty instead.
+	abandon := func(failure port.Outcome) port.Outcome {
+		t.Close()
+		t = nil
+		return h.abandon(ctx, key, g.ID, entry.Record().ID, failure)
+	}
 	hc, ok := c.(port.HomeConnection)
 	if !ok {
-		return port.HomeUnavailable
+		return abandon(port.HomeUnavailable)
 	}
 	o, status := hc.InspectHome(ctx, g.Name)
 	if g.Stage == "awaiting-allocation" {
 		if status == port.Observed || status == port.Changed {
-			return port.HomeRefused
+			return abandon(port.HomeRefused)
 		}
 		if status != port.NotFound {
-			return port.HomeUnavailable
+			return abandon(port.HomeUnavailable)
 		}
 		g.Stage = "intent"
 		if f = t.Save(s); f != "" {
-			return homeFailure(f)
+			return abandon(homeFailure(f))
 		}
 		if f = hc.AllocateHome(ctx, r.Home); f != "" {
 			if f == port.HomeNotIssued {
 				// The create was refused or skipped before any request was
-				// sent. Cancel the reservation instead of leaving an intent
-				// no stop or retirement can reconcile; a later run of this
-				// checkout may allocate again. Only a failed cancellation
-				// publication keeps the uncertainty.
-				g.Stage = "awaiting-allocation"
-				g.Claims = slices.DeleteFunc(g.Claims, func(c port.HomeClaim) bool { return c.Session == entry.Record().ID })
-				if f = t.Save(s); f != "" {
-					return homeFailure(f)
-				}
+				// sent, including by the finite wrapper when the startup
+				// budget already expired or the run was interrupted. Cancel
+				// the reservation instead of leaving an intent no stop or
+				// retirement can reconcile; a later run of this checkout may
+				// allocate again. Only a failed cancellation publication
+				// keeps the uncertainty.
+				return abandon(port.HomeUnavailable)
 			}
 			return port.HomeUnavailable
 		}
@@ -155,15 +167,51 @@ func (h Homes) prepare(ctx context.Context, entry port.Session, c port.RunConnec
 			return homeFailure(f)
 		}
 	} else if status == port.NotFound || status == port.Changed {
-		return port.HomeRefused
+		return abandon(port.HomeRefused)
 	} else if status != port.Observed {
-		return port.HomeUnavailable
+		return abandon(port.HomeUnavailable)
 	}
 	if !g.Reference(key).Owns(o) {
-		return port.HomeRefused
+		return abandon(port.HomeRefused)
 	}
 	r.Home = g.Reference(key)
 	return homeFailure(i.Save(r))
+}
+
+// abandon releases a reservation whose create never reached the engine: the
+// generation's unissued intent is withdrawn and this session's claim removed.
+// The publication runs under a budget of its own, independent of the startup
+// phase that expired or was interrupted, as teardown's budget is; that phase
+// can no longer carry any write, including this cancellation. Only a failed
+// publication keeps the uncertainty.
+func (h Homes) abandon(ctx context.Context, scope, id, session string, failure port.Outcome) port.Outcome {
+	rescind, end := context.WithTimeout(context.WithoutCancel(ctx), budget.CallDuration)
+	defer end()
+	t, f := h.open(rescind, scope, false)
+	if f != "" {
+		return homeFailure(f)
+	}
+	if t == nil {
+		return failure
+	}
+	defer t.Close()
+	s, f := t.Read()
+	if f != "" {
+		return homeFailure(f)
+	}
+	n := homeGeneration(s, id)
+	if n < 0 {
+		return failure
+	}
+	g := &s.Generations[n]
+	if g.Stage == "intent" {
+		g.Stage = "awaiting-allocation"
+	}
+	g.Claims = slices.DeleteFunc(g.Claims, func(c port.HomeClaim) bool { return c.Session == session })
+	if f = t.Save(s); f != "" {
+		return homeFailure(f)
+	}
+	return failure
 }
 
 func (h Homes) verify(ctx context.Context, entry port.Session, c port.RunConnection, initialize bool) port.Outcome {

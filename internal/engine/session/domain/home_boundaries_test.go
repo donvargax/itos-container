@@ -356,6 +356,71 @@ func (s lateHomeStore) Open(ctx context.Context, key string, create bool) (port.
 	return t, f
 }
 
+// The cancellation of an unissued reservation publishes under a budget of its
+// own, but only as far as its own publication succeeds: every failure of that
+// second publication keeps the reservation's uncertainty, reporting
+// unavailable or the refused outcome it was asked to complete rather than
+// claiming a cancellation that never landed.
+func TestHomeAbandonedReservationsKeepUncertaintyOnPublicationFailures(t *testing.T) {
+	for _, fault := range []string{"open", "missing", "read", "generation", "save"} {
+		t.Run(fault, func(t *testing.T) {
+			x := domainHomeFixture()
+			entry := x.session(t, nil, "reserved")
+			c, failure := x.engine.OpenRun(t.Context(), x.b)
+			if failure != "" {
+				t.Fatal(failure)
+			}
+			defer c.Close()
+			// An occupied fresh random name is refused before any request is
+			// sent, so the reservation must be cancelled after the refusal.
+			occupied := strings.Repeat("e", 64)
+			name := "itos-container-home-" + occupied
+			x.engine.Homes[name] = port.HomeObservation{}
+			key := x.store.Scope(x.b)
+			opens := 0
+			x.store.Before = func(event string) {
+				if event != "open" {
+					return
+				}
+				opens++
+				if opens != 2 {
+					return
+				}
+				switch fault {
+				case "open":
+					x.store.Failure = port.Incomplete
+				case "missing":
+					x.store.MissingOpen = true
+				case "read":
+					x.store.ReadFailure = port.Unsafe
+				case "generation":
+					s := x.store.Scopes[key]
+					s.Generations = nil
+					x.store.Scopes[key] = s
+				case "save":
+					x.store.BeforeSave = func(port.HomeScope) port.Outcome { return port.IntentWrite }
+				}
+			}
+			want := port.HomeUnavailable
+			if fault == "read" || fault == "missing" || fault == "generation" {
+				want = port.HomeRefused
+			}
+			if got := x.h.prepare(t.Context(), entry, c); got != want {
+				t.Fatalf("prepare %s want %s", got, want)
+			}
+			if fault != "generation" {
+				s := x.store.Scopes[key]
+				if len(s.Generations) != 1 || s.Generations[0].Stage != "awaiting-allocation" || len(s.Generations[0].Claims) != 1 {
+					t.Fatal("a failed cancellation hid the stranded reservation", s)
+				}
+			}
+			if len(x.engine.HomeEvents) != 1 || slices.Contains(x.engine.HomeEvents, "allocate") {
+				t.Fatal("a refused name dispatched a create", x.engine.HomeEvents)
+			}
+		})
+	}
+}
+
 func TestHomeFiniteOperationsDiscardLateReplies(t *testing.T) {
 	for _, operation := range []string{"list", "claims", "read", "open", "inspect", "allocate", "missing capability"} {
 		synctest.Test(t, func(t *testing.T) {

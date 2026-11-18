@@ -21,8 +21,12 @@ type Homes struct {
 	ClaimsFailure port.Outcome
 	Before        func(string)
 	BeforeSave    func(port.HomeScope) port.Outcome
-	mu            sync.Mutex
-	locks         map[string]chan struct{}
+	// AfterSave runs once a publication has landed, before its caller can
+	// observe the reply. A controller interrupted in that instant has durable
+	// state it can no longer report, which no other fake point models.
+	AfterSave func(port.HomeScope)
+	mu        sync.Mutex
+	locks     map[string]chan struct{}
 }
 
 func (s *Homes) Scope(b port.Binding) string { return s.Codec.Scope(b) }
@@ -140,6 +144,9 @@ func (t *homeTransaction) Save(s port.HomeScope) port.Outcome {
 		return f
 	}
 	t.store.Scopes[t.key] = cloneHome(s)
+	if t.store.AfterSave != nil {
+		t.store.AfterSave(s)
+	}
 	return ""
 }
 func (s *Homes) Claim(r port.Record, id string) (port.HomeClaim, port.Outcome) {

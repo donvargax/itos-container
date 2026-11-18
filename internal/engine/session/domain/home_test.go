@@ -432,3 +432,81 @@ func TestHomePreparationCancelsAnUnissuedReservation(t *testing.T) {
 		t.Fatal("the cancelled reservation blocked a fresh allocation")
 	}
 }
+
+// A run whose startup phase is interrupted between its durable intent
+// publication and the create can no longer publish through that phase, so the
+// cancellation of the never-issued reservation needs a budget of its own, as
+// teardown does. The generation must return to awaiting-allocation without
+// the claim, or no later run of the checkout can allocate, no stop completes
+// and retirement refuses forever.
+func TestHomePreparationCancelsUnissuedReservationsAfterStartupExpiry(t *testing.T) {
+	x := domainHomeFixture()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	// Interrupt the run once the intent publication is durable but before
+	// any create request is dispatched. The publication's reply is lost with
+	// the phase, so the controller alone knows no create was issued.
+	x.store.AfterSave = func(s port.HomeScope) {
+		if len(s.Generations) != 0 && s.Generations[0].Stage == "intent" {
+			cancel(port.Interrupt{Signal: "SIGINT"})
+		}
+	}
+	// Two full runs need their own registration tokens.
+	x.runner.Entropy = &f.EntropySequence{Values: []f.Entropy{
+		{Value: strings.Repeat("1", 64)}, {Value: strings.Repeat("2", 64)},
+		{Value: strings.Repeat("3", 64)}, {Value: strings.Repeat("4", 64)},
+	}}
+	first := x.runner.Run(ctx, x.frozen, []string{"probe"}, port.Streams{})
+	if first.Outcome != "" || first.Signal != "SIGINT" || first.Started || first.Cleanup != port.Complete {
+		t.Fatal("interrupted launch lost its signal or safe cleanup", first)
+	}
+	key := x.store.Scope(x.b)
+	s := x.store.Scopes[key]
+	if len(s.Generations) != 1 || s.Generations[0].Stage != "awaiting-allocation" || len(s.Generations[0].Claims) != 0 {
+		t.Fatal("an interrupted first run stranded its reservation", s)
+	}
+	if slices.Contains(x.engine.HomeEvents, "allocate") {
+		t.Fatal("an interrupted launch dispatched a create", x.engine.HomeEvents)
+	}
+	second := x.run(t)
+	if second.Outcome != "" || !second.Started || !second.Exited || second.Exit != 17 || second.Cleanup != port.Complete {
+		t.Fatal("the interrupted reservation blocked a fresh allocation", second)
+	}
+	if len(x.engine.Homes) != 1 || len(x.store.Scopes[key].Generations[0].Claims) != 0 {
+		t.Fatal("the later run could not keep the released home", x.store.Scopes[key])
+	}
+}
+
+// A phase that already expired or was interrupted dispatches no home request
+// at all. Every home call then reports the operation as never issued, which
+// is what lets its caller cancel the reservation instead of reconciling.
+func TestHomeCallsSkippedByExpiredPhasesNeverReachTheEngine(t *testing.T) {
+	x := domainHomeFixture()
+	g := x.seed()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(port.Interrupt{Signal: "SIGINT"})
+	c, failure := (finiteEngine{x.engine}).OpenRun(t.Context(), x.b)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer c.Close()
+	hc, ok := c.(port.HomeConnection)
+	if !ok {
+		t.Fatal("home capability unavailable")
+	}
+	ref := g.Reference(x.store.Scope(x.b))
+	for _, call := range []func() port.Outcome{
+		func() port.Outcome { return hc.AllocateHome(ctx, ref) },
+		func() port.Outcome { return hc.InitializeHome(ctx, ref.ID, x.b.UID, x.b.GID) },
+		func() port.Outcome { return hc.VerifyHomeRoot(ctx, ref.ID, x.b.UID, x.b.GID) },
+		func() port.Outcome { return hc.RemoveHome(ctx, ref.Name) },
+	} {
+		before := len(x.engine.HomeEvents)
+		if got := call(); got != port.HomeNotIssued {
+			t.Fatal("an expired phase was not reported as never issued", got)
+		}
+		if got := len(x.engine.HomeEvents); got != before {
+			t.Fatal("an expired phase dispatched a home request", x.engine.HomeEvents)
+		}
+	}
+}
