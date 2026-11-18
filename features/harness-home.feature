@@ -509,6 +509,7 @@ Feature: An approved persistent home for one checkout's harness
       | action intent fsync fails             | recovery.temporary    | 75   |
       | scope lock exhausts the budget        | recovery.temporary    | 75   |
       | pending allocation with name-only 404 | recovery.temporary    | 75   |
+      | delayed create landed at intent       | recovery.temporary    | 75   |
       | claim state root unavailable          | recovery.temporary    | 75   |
       | unsafe session claim                  | recovery.unsafe-state | 1    |
 
@@ -574,13 +575,14 @@ Feature: An approved persistent home for one checkout's harness
     And only confirmed session cleanup releases the claim so fresh consent can retire the exact home without changing workload knowledge
 
     Examples:
-      | reference                          |
-      | running with live controller       |
-      | running after controller death     |
-      | exited worker not yet removed      |
-      | unstarted owned worker             |
-      | uncertain worker create            |
-      | paused launch before worker create |
+      | reference                                 |
+      | running with live controller              |
+      | running after controller death            |
+      | exited worker not yet removed             |
+      | unstarted owned worker                    |
+      | uncertain worker create                   |
+      | paused launch before worker create        |
+      | running with a held session operation lock |
 
   # The replacement control substitutes a foreign same-named volume after the
   # first confirmed removal and before retry. Hold absence inspection after lost

@@ -392,10 +392,23 @@ func (h Homes) observe(ctx context.Context, s port.HomeScope, g port.HomeGenerat
 			return e, port.Incomplete
 		}
 	case port.Observed:
-		if g.Created == "" || !g.Reference(s.Scope).Owns(o) {
+		if !g.Reference(s.Scope).Owns(o) {
+			return e, port.Refused
+		}
+		// A create whose reply was lost can land on the engine with the
+		// exact token and scope labels before any Created is recorded, and
+		// reconcile adopts exactly that observation from an intent
+		// generation. The catalog must not misreport the owned volume as
+		// foreign: refuse a missing Created only for stages that had
+		// recorded one, and report the pending allocation as incomplete,
+		// the outcome the claiming session's stop resolves.
+		if g.Created == "" && g.Stage != "intent" {
 			return e, port.Refused
 		}
 		e.State = "present"
+		if g.Stage == "intent" {
+			return e, port.Incomplete
+		}
 	case port.Changed:
 		return e, port.Refused
 	default:
