@@ -94,7 +94,10 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		Resources: container.Resources{PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: "no"},
 		IpcMode: "private", CgroupnsMode: "private", Init: &init, LogConfig: container.LogConfig{Type: "none"},
 		Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: r.Anchor.Name, Target: "/workspace", VolumeOptions: &mount.VolumeOptions{NoCopy: true}}},
-		Tmpfs:  map[string]string{"/tmp": "rw,nosuid,nodev,mode=1777"},
+		// Moby prepends noexec to every tmpfs option list and only a later
+		// exec token overrides it (daemon/oci_linux.go, MergeTmpfsOptions),
+		// so the approved executable /tmp must name exec explicitly.
+		Tmpfs: map[string]string{"/tmp": "rw,exec,nosuid,nodev,mode=1777"},
 	}
 	if r.Schema == 3 {
 		host.NetworkMode = container.NetworkMode(r.Egress.Internal.Name)
@@ -185,7 +188,7 @@ func safeHost(h *container.HostConfig, root string) bool {
 		len(h.Devices) != 0 || len(h.DeviceRequests) != 0 || len(h.DeviceCgroupRules) != 0 || len(h.PortBindings) != 0 ||
 		len(h.Binds) != 0 || len(h.VolumesFrom) != 0 || len(h.Links) != 0 || len(h.ExtraHosts) != 0 ||
 		len(h.Sysctls) != 0 || h.Init == nil || *h.Init || h.LogConfig.Type != "none" || len(h.Mounts) != 1 ||
-		len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] != "rw,nosuid,nodev,mode=1777" {
+		len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] != "rw,exec,nosuid,nodev,mode=1777" {
 		return false
 	}
 	if len(h.SecurityOpt) != 1 || (h.SecurityOpt[0] != "no-new-privileges" && h.SecurityOpt[0] != "no-new-privileges=true") {

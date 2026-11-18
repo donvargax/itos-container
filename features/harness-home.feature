@@ -79,7 +79,9 @@ Feature: An approved persistent home for one checkout's harness
   #   consume file bodies or require a full home inventory for admission.
   #   No new workload instruction executes before existing ownership and boundary
   #   checks plus this verification. No argv wrapper or injected harness flag.
-  # - /tmp remains a separate rw,nosuid,nodev,mode=1777 executable tmpfs. No memory
+  # - /tmp remains a separate rw,exec,nosuid,nodev,mode=1777 executable tmpfs: moby
+  #   prepends noexec to every tmpfs list and only a later exec token clears it,
+  #   so exec is named explicitly. No memory
   #   quota is claimed. Native proof copies an ELF probe there and execs that file
   #   directly (not `sh /tmp/script`), then observes a fresh /tmp on a later run.
   #   Executability already exists: ID-HOME-13 fails first on the new persistent

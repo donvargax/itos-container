@@ -42,7 +42,7 @@ func (w *world) homeNativeMounts() error {
 				return fmt.Errorf("home worker environment %s differs from its approved mapping", key)
 			}
 		}
-		if !reflect.DeepEqual(host["Tmpfs"], map[string]any{"/tmp": "rw,nosuid,nodev,mode=1777"}) {
+		if !reflect.DeepEqual(host["Tmpfs"], map[string]any{"/tmp": "rw,exec,nosuid,nodev,mode=1777"}) {
 			return errors.New("home worker has an unexpected temporary mount")
 		}
 		requested := homeNativeArray(host["Mounts"])

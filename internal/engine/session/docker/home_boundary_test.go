@@ -30,7 +30,7 @@ func TestHomeWorkerRejectsAlteredMountOptions(t *testing.T) {
 			r.Anchor.Name = "checkout"
 			pids, init := int64(4096), false
 			h := &container.HostConfig{NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges"},
-				Resources: container.Resources{PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: "no"}, IpcMode: "private", CgroupnsMode: "private", Init: &init, LogConfig: container.LogConfig{Type: "none"}, Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,mode=1777"},
+				Resources: container.Resources{PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: "no"}, IpcMode: "private", CgroupnsMode: "private", Init: &init, LogConfig: container.LogConfig{Type: "none"}, Tmpfs: map[string]string{"/tmp": "rw,exec,nosuid,nodev,mode=1777"},
 				Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: "checkout", Target: "/workspace", VolumeOptions: &mount.VolumeOptions{NoCopy: true}}, {Type: mount.TypeVolume, Source: r.Home.Name, Target: "/home/itos", VolumeOptions: &mount.VolumeOptions{NoCopy: true}}}}
 			actual := []container.MountPoint{{Type: mount.TypeVolume, Name: "checkout", Driver: "local", Destination: "/workspace", RW: true}, {Type: mount.TypeVolume, Name: r.Home.Name, Driver: "local", Destination: "/home/itos", RW: true}}
 			m := &h.Mounts[1]

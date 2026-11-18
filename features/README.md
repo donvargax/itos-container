@@ -723,7 +723,7 @@ smoke and both warm-ups, with a separate 30-second cleanup attempt on failure. I
    no TTY and healthcheck `NONE`. Preserve the SDK's other serialized fields. HostConfig uses
    network none, read-only root, cap-drop ALL, no-new-privileges, PID limit 4096, restart no,
    private IPC/cgroup namespaces, init false, logging none, and `/tmp` tmpfs with
-   `rw,nosuid,nodev,mode=1777`. Its sole read-write workspace mount is a named local volume
+   `rw,exec,nosuid,nodev,mode=1777`. Its sole read-write workspace mount is a named local volume
    with `NoCopy=true`, matching the product's checkout anchor rather than an anonymous
    volume or direct bind. Allocate that volume with `type=none`, `o=bind` and a source through
    a held `/proc/<pid>/fd/<fd>` directory descriptor at a fresh empty attempt-owned directory
