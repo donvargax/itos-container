@@ -2246,6 +2246,12 @@ items:
       the existing ID-EGRESS-09 fixture to confirm it reaches its behavior assertion with production
       ownership checks intact. If an ancestor check stops it first, record the path and UID as an
       environment blocker.
+
+      This item already records that `/` and `/tmp` appear as UID 65534 in the shared Linux sandbox
+      and that approval disk contracts fail the ancestor-ownership check. It also calls for
+      documenting the fixture prerequisite in `features/README.md` and using ID-EGRESS-09 to verify
+      that a suitable environment reaches the behavior assertion with production ownership checks
+      intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
