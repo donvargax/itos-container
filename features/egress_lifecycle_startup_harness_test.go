@@ -7,10 +7,35 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestEgressLifecycleCurrentIntentIgnoresImageSidecar(t *testing.T) {
+	w := &world{doctor: &doctorWorld{env: map[string]string{"XDG_STATE_HOME": t.TempDir()}}, approval: &approvalWorld{project: "project"}}
+	root := w.egressStatePath("intents", w.approval.project)
+	token := strings.Repeat("a", 64)
+	for name, data := range map[string]string{
+		token + ".json":        `{"anchor":{"stage":"owned"}}`,
+		token + ".egress.json": `{"schema":1,"proxy_image_id":"image"}`,
+	} {
+		if err := writeManifestFixture(filepath.Join(root, name), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	intent, err := w.egressLifeCurrentIntent()
+	if err != nil || object(intent["anchor"])["stage"] != "owned" {
+		t.Fatal("did not select the live intent beside its image sidecar", err)
+	}
+	if err := writeManifestFixture(filepath.Join(root, strings.Repeat("b", 64)+".json"), approvalJSON(intent), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.egressLifeCurrentIntent(); err == nil {
+		t.Fatal("two live intents were accepted")
+	}
+}
 
 func TestEgressLifecycleCreateBarrierHoldsOnlyAcceptedReply(t *testing.T) {
 	for _, kind := range []string{"internal", "egress", "proxy"} {

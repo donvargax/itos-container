@@ -171,7 +171,8 @@ func (w *world) egressLifeCurrentIntent() (map[string]any, error) {
 	}
 	var found map[string]any
 	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), ".json") {
+		token, ok := strings.CutSuffix(entry.Name(), ".json")
+		if !ok || !offlineHex(token) {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(root, entry.Name()))
