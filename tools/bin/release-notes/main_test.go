@@ -226,11 +226,17 @@ func TestSyncMergesLeftOut(t *testing.T) {
 				releasetest.Git(t, repo, "merge", "--quiet", "--no-ff", "--no-edit", "-m", message, branch)
 			}
 			for _, item := range []struct{ branch, thing, sync string }{
-				{"slice-13", "feat: slice-13 thing", "feat: merge main into slice-13"},
-				{"slice-14", "feat: slice-14 thing", "Merge main into slice-14"},
+				{"slice-13", "feat: slice-13 thing", "feat: catch up"},
+				{"slice-14", "feat: slice-14 thing", "Refresh the item"},
 			} {
 				releasetest.Git(t, repo, "checkout", "--quiet", "-b", item.branch)
 				empty(item.thing)
+				if item.branch == "slice-14" {
+					releasetest.Git(t, repo, "checkout", "--quiet", "-b", "item-detail")
+					empty("docs: describe the item")
+					releasetest.Git(t, repo, "checkout", "--quiet", item.branch)
+					merge("feat: integrate item detail", "item-detail")
+				}
 				releasetest.Git(t, repo, "checkout", "--quiet", "main")
 				empty("docs: main moves on past " + item.branch)
 				releasetest.Git(t, repo, "checkout", "--quiet", item.branch)
@@ -247,7 +253,7 @@ func TestSyncMergesLeftOut(t *testing.T) {
 			var changed strings.Builder
 			changed.WriteString("### Features\n\n")
 			for _, c := range list {
-				if c.Header == "feat: merge main into slice-13" || c.Header == "Merge main into slice-14" {
+				if c.Header == "feat: catch up" || c.Header == "Refresh the item" {
 					syncs[c.SHA] = c.Header
 				}
 				fmt.Fprintf(&changed, "- %s ([`%s`](https://github.com/%s/commit/%s))\n", c.Header, c.SHA[:7], repository, c.SHA)
@@ -273,21 +279,54 @@ func TestSyncMergesLeftOut(t *testing.T) {
 				features = got[at:]
 			}
 			for _, c := range list {
-				if c.Header == "feat: land slice-13" || c.Header == "feat: land slice-14" {
+				if c.Header == "feat: land slice-13" || c.Header == "feat: land slice-14" || c.Header == "feat: integrate item detail" {
 					if want := "- " + c.Header + " ([`" + c.SHA[:7] + "`]"; !strings.Contains(features, want) {
 						t.Errorf("the notes lack the landing merge %q under Features:\n%s", want, got)
 					}
 				}
 			}
-			commitCount := "7 commits"
+			commitCount := "9 commits"
 			if tagged {
-				commitCount = "6 commits"
+				commitCount = "8 commits"
 			}
-			want := "Cut by CI from the " + commitCount + " since " + since + ": 4 feats, 0 fixes and 0 breaking changes"
+			want := "Cut by CI from the " + commitCount + " since " + since + ": 5 feats, 0 fixes and 0 breaking changes"
 			if !strings.Contains(got, want) {
 				t.Errorf("the notes lack %q:\n%s", want, got)
 			}
 		})
+	}
+	t.Run("version calculation", checkSyncMergeVersionExplanation)
+}
+
+// A typed sync contributes to the version even if a dependency also moved.
+// The item history has no listed feature that could explain a minor bump.
+func checkSyncMergeVersionExplanation(t *testing.T) {
+	repo := releasetest.Example(t, true)
+	releasetest.Git(t, repo, "checkout", "--quiet", "-b", "topic")
+	releasetest.Git(t, repo, "commit", "--quiet", "--allow-empty", "-m", "docs: describe the change")
+	releasetest.Git(t, repo, "checkout", "--quiet", "main")
+	releasetest.Change(t, filepath.Join(repo, "go.mod"), "example.com/lib v1.0.0", "example.com/lib v1.1.0")
+	releasetest.Commit(t, repo, "build: update library")
+	releasetest.Git(t, repo, "checkout", "--quiet", "topic")
+	releasetest.Git(t, repo, "merge", "--quiet", "--no-ff", "-m", "feat: catch up", "main")
+	releasetest.Git(t, repo, "checkout", "--quiet", "main")
+	releasetest.Git(t, repo, "merge", "--quiet", "--no-ff", "-m", "docs: land topic", "topic")
+	t.Chdir(repo)
+	list, err := commits("v0.1.0..HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := notes{From: "v0.1.0", Version: "0.2.0", Repository: repository, Commits: list}
+	if err := n.readMoved("HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := n.render()
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireText(t, got, "0 feats, 0 fixes and 0 breaking changes", "The version calculation includes branch syncs: 1 feat, 0 fixes and 0 breaking changes.")
+	if strings.Contains(got, "which makes a patch") {
+		t.Errorf("described the minor release as a dependency patch:\n%s", got)
 	}
 }
 
