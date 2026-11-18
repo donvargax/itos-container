@@ -2230,6 +2230,11 @@ items:
       answered in 49 ms. Measure elapsed time from registration completion to create submission
       alongside registration itself. That will let the two failures be compared before choosing a
       remedy. T-50 is merged, and q-65 scoped its instrumentation to registration.
+
+      This investigation already tracks run 43981890039. Its healthy control submitted create 2.6 s
+      into the 3 s startup budget, and the engine answered in 49 ms. Include the separate 1 s
+      registration timeout when comparing where startup time went. The coordinator can use those
+      measurements to judge budget headroom. q-70 authorized reruns only for the slow first create.
   - id: T-58
     title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
     phase: 1
