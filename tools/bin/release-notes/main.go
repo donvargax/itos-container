@@ -148,6 +148,7 @@ func (n *notes) readMoved(to string) error {
 type commit struct {
 	SHA, Header, Type, Breaking string // Breaking: what its footer asks, or its header for a !
 	message                     string
+	sync                        bool // a merge of main into an item branch, left out of the notes
 }
 
 type footer struct {
@@ -184,13 +185,58 @@ func lastRelease(rev, own string) (string, error) {
 	return release.Newest(tags), nil
 }
 
-// commits lists the range's commits, each with its type and what it breaks.
+// commits lists the range's commits, each with its type and what it breaks,
+// and marks the merges of main into an item branch (see syncMerges).
 func commits(rng string) ([]commit, error) {
 	out, err := command("git", "log", "--reverse", "--format=%H%x1f%B%x1e", rng)
 	if err != nil {
 		return nil, err
 	}
-	return parseLog(out), nil
+	list := parseLog(out)
+	to := rng
+	if at := strings.LastIndex(rng, ".."); at >= 0 {
+		to = rng[at+2:]
+	}
+	line, err := command("git", "rev-list", "--first-parent", to)
+	if err != nil {
+		return nil, err
+	}
+	merges, err := command("git", "rev-list", "--merges", "--parents", rng)
+	if err != nil {
+		return nil, err
+	}
+	sync := syncMerges(line, merges)
+	for i := range list {
+		list[i].sync = sync[list[i].SHA]
+	}
+	return list, nil
+}
+
+// syncMerges names the merges that bring main into an item branch, from the
+// first-parent line of the range's end (git rev-list --first-parent <to>, main's
+// own history) and the range's merges with their parents (git rev-list --merges
+// --parents). Where a merge sits decides, never its subject or its first
+// parent's type: a sync merge is off main's line and takes a later parent from
+// it, while the merge that lands an item is on that line and is a change.
+func syncMerges(line, merges string) map[string]bool {
+	onLine := make(map[string]bool)
+	for _, sha := range strings.Fields(line) {
+		onLine[sha] = true
+	}
+	sync := make(map[string]bool)
+	for _, record := range strings.Split(merges, "\n") {
+		shas := strings.Fields(record)
+		if len(shas) < 3 || onLine[shas[0]] {
+			continue
+		}
+		for _, parent := range shas[2:] {
+			if onLine[parent] {
+				sync[shas[0]] = true
+				break
+			}
+		}
+	}
+	return sync
 }
 
 // parseLog reads git log's records, oldest first, into commits.
@@ -309,6 +355,9 @@ func footers(itos, name, from, to string) ([]footer, error) {
 func (n notes) count(kind string) int {
 	c := 0
 	for _, commit := range n.Commits {
+		if commit.sync {
+			continue
+		}
 		if (kind == "breaking" && commit.Breaking != "") || (kind != "breaking" && commit.Type == kind) {
 			c++
 		}

@@ -95,14 +95,53 @@ func (c changes) first(commits []commit) changes {
 	return out
 }
 
+// without drops the entries whose commit link names one of the commits, and
+// says whether it dropped any. A heading left with no entry is not written back
+// by text.
+func (c *changes) without(drop []commit) bool {
+	kept := c.entries[:0:0]
+	for _, entry := range c.entries {
+		gone := false
+		for _, d := range drop {
+			if strings.Contains(entry.text, "/commit/"+d.SHA+")") {
+				gone = true
+				break
+			}
+		}
+		if !gone {
+			kept = append(kept, entry)
+		}
+	}
+	dropped := len(kept) < len(c.entries)
+	c.entries = kept
+	return dropped
+}
+
 func (n notes) render() (string, error) {
+	// A merge of main into an item branch is no change of the release: it is
+	// neither counted nor listed, and git-cliff's entry for it goes. With none,
+	// the text is left exactly as git-cliff wrote it.
+	var syncs, kept []commit
+	for _, c := range n.Commits {
+		if c.sync {
+			syncs = append(syncs, c)
+		} else {
+			kept = append(kept, c)
+		}
+	}
+	entries := readChanges(n.Changed)
+	if len(syncs) > 0 {
+		n.Commits = kept
+		if entries.without(syncs) {
+			n.Changed = entries.text()
+		}
+	}
 	view := renderedNotes{notes: n, DependencyPatch: len(n.Moved) > 0}
 	for _, c := range n.Commits {
 		if c.Breaking != "" {
 			view.Breaking = append(view.Breaking, c)
 		}
 	}
-	entries := readChanges(n.Changed)
 	if n.From == "" {
 		entries = entries.first(n.Commits)
 		view.Changed = entries.text()
