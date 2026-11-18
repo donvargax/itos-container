@@ -7981,12 +7981,12 @@
     In the same implementation attempt run the workflow's engine-free self-tests locally with
     go test ./features -count=1 -run
     '^(TestEngine|TestFeatureSignalDiagnostics|TestLifecycleSignalWindow|TestPlatformSelection)'
-    and go test ./tools/release -count=1 -run '^TestReleaseWorkflow$'. Run the configured code
-    proof locally before reporting done, using the full merge base with origin/main as BASE for
-    tools/bin/pinned itos-cc mutation run --count 10 --since "$BASE" --seed "$BASE"
-    --fail-uncovered=lines --json cmd internal. Report its actual result, including an empty
-    draw when the range touches no production Go. The loop checks the four native timings,
-    aggregate and required proof in CI at the pushed head.
+    and go test ./tools/release -count=1 -run '^TestReleaseWorkflow$'. All mutation proof runs
+    in CI alone, as the root AGENTS.md evidence workflow holds: an agent makes no local
+    mutation run and commits no generated mutation or coverage evidence before reporting
+    done, and a changed function's proof waits for the pinned itos-cc run at the pushed
+    head. The loop checks the four native timings, aggregate and required proof in CI at the
+    pushed head.
   done_when:
     - run: |
         report=$(go test ./features -count=1 -run '^TestEngineShards$' -v) || {
