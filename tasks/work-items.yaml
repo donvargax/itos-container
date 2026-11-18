@@ -773,8 +773,8 @@ items:
   - id: T-61
     title: Release notes leave out merges of main into an item branch
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-profile-non-engine-feature-suite
