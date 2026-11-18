@@ -7935,13 +7935,21 @@
     always() and event guard, the ci gate and the release dependency.
 
     In features/engine_shards_test.go update TestEngineShards' exact name set, the in-memory
-    shardBaseline and the controls for extra or renamed shards. Pin the egress shard's complete file
-    list in the parsed workflow. Reject a swap with a file in other even if all four shards
-    are nonempty and every file appears once. Also reject sharing egress with an unrelated file,
-    the old three-shard layout and a fifth shard. Keep the real partition check against the
-    unsharded selection, including every effective @engine file (live or @wip) exactly once,
-    live row counts and IDs, and the nested ID-LIFECYCLE-09 and ID-LIFECYCLE-13 schedule.
-    Preserve the selector and aggregate negative controls.
+    shardBaseline and the controls for extra or renamed shards. Pin the egress shard's complete
+    set of parsed basenames regardless of list order or whitespace. Reject a swap with a file
+    in other even if all four shards are nonempty and every file appears once. Also reject
+    an unrelated file in egress, the old three-shard layout and a fifth shard. Keep the real
+    partition check against the unsharded selection. It covers every effective @engine file
+    (live or @wip) exactly once, live row counts and IDs, and the nested ID-LIFECYCLE-09 and
+    ID-LIFECYCLE-13 schedule. Preserve the selector and aggregate negative controls.
+
+    In testShardPartition log strings.Join(files, " ") using the files already parsed with
+    strings.Fields(entry.Features), so each shard lists all its files on one line.
+    Add a "multiline egress report" subtest to TestEngineShards.
+    Parse an in-memory egress entry whose features value is a YAML literal block with
+    egress_lifecycle.feature on the first line and egress.feature on the second. Use the same
+    report formatter as the real partition and assert that its single line ends with
+    " in egress_lifecycle.feature egress.feature". The control can run before slice-28 lands.
 
     When slice-28 merges main, it places its whole features/egress_lifecycle.feature alongside
     egress.feature in egress and updates its inventory pins. This supersedes its earlier other
@@ -7951,11 +7959,14 @@
     per-shard step timings on the pushed heads to judge those placements and any later whole-file
     move. Each shard must pass within the same 180-second gate.
 
-    At a8a74d4 the original TestEngineShards passes and its partition reports egress.feature
-    among other's 40 rows. The check below preserves go test's exit status and also requires
-    the partition to report egress.feature in egress. It rejects unrelated files in egress and
-    allows slice-28's file once the real inventory includes it. Today the check exits 1 because the
-    partition has no egress shard. Run it before changing the matrix and again with the new pins.
+    At a399bbf TestEngineShards passes and reports egress.feature among other's 40 rows. In a
+    scratch partition with slice-28's file, both spellings of the two-file list selected the same
+    27 rows. The placement assertion passed on the space-separated list and missed egress.feature
+    on the literal block's continuation line. The check below preserves go test's exit status,
+    checks placement only in the real partition, and requires the multiline control to pass.
+    It rejects unrelated files and allows slice-28's file once the inventory includes it.
+    Before implementation it exits 1 for the absent egress shard and the missing control.
+    Run it before changing the matrix and again with the new pins.
 
     TestEngineSuiteWarmup creates its synthetic approval under the literal /tmp even when TMPDIR
     is set. On the review runner, /tmp had UID 65534 and mode 1777. The product returned
@@ -7981,17 +7992,24 @@
           exit "$test_status"
         }
         printf '%s\n' "$report" | awk '
-          /: shard / { print }
-          /: shard egress: / {
+          $1 == "===" { partition = ($3 == "TestEngineShards/partition") }
+          partition && /: shard / { print }
+          partition && /: shard egress: / {
             sub(/^.* in /, "")
             for (i = 1; i <= NF; i++) {
               if ($i == "egress.feature") assigned++
               else if ($i != "egress_lifecycle.feature") unexpected++
             }
           }
+          $1 == "---" && $2 == "PASS:" && $3 == "TestEngineShards/multiline_egress_report" { multiline = 1 }
           END {
             if (assigned != 1 || unexpected != 0) {
               print "expected egress.feature once in the egress shard, with no unrelated features"
-              exit 1
+              failed = 1
             }
+            if (!multiline) {
+              print "expected TestEngineShards/multiline_egress_report to pass"
+              failed = 1
+            }
+            exit failed
           }'
