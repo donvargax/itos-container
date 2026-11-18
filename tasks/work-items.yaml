@@ -2261,8 +2261,8 @@ items:
   - id: T-59
     title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: slice-40
