@@ -8,10 +8,10 @@ queue:
   - slice-34
   - slice-32
   - slice-35
-  - slice-31
-  - slice-36
   - slice-40
   - slice-41
+  - slice-31
+  - slice-36
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
