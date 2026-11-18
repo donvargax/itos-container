@@ -2,9 +2,7 @@
 phases:
   1: null
 queue:
-  - T-59
   - slice-28
-  - T-48
   - slice-34
   - slice-32
   - slice-35
@@ -1721,7 +1719,7 @@ items:
     title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-47, slice-29]
     kind: task
   - id: slice-31
@@ -2262,7 +2260,7 @@ items:
     title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: slice-40

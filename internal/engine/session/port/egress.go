@@ -93,7 +93,7 @@ type EgressConnection interface {
 
 // ValidEgress binds persisted progress to the frozen grant without enabling it.
 func (r Record) ValidEgress(b Binding) bool {
-	if r.Schema != 3 {
+	if !r.HasEgress() {
 		return r.Egress == (EgressRecord{}) && (b.Egress == (EgressGrant{}) || r.Stage == "reserved" || r.Stage == "cancelled")
 	}
 	return b.Egress != (EgressGrant{}) && b.Egress.Valid() && r.ValidEgressShape()
@@ -109,7 +109,7 @@ func (r Record) EgressGone() bool {
 
 // ValidEgressShape checks the independently decoded resource authority.
 func (r Record) ValidEgressShape() bool {
-	if r.Schema != 3 {
+	if !r.HasEgress() {
 		return r.Egress == (EgressRecord{})
 	}
 	values := []EgressResource{r.Egress.Internal, r.Egress.Network, r.Egress.Proxy}

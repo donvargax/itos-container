@@ -50,7 +50,12 @@ func (p *workerProcess) Exited() (bool, port.Outcome) {
 	}
 	// Signal 0 also succeeds for zombies, whose /proc root is already gone.
 	// Readability observes exit before reaping without consuming its wait status.
+	// Signal delivery can interrupt even this non-blocking poll (EINTR) without
+	// anything being known about the held process; retry instead of refusing.
 	events, err := p.poll(int32(fd))
+	for errors.Is(err, syscall.EINTR) {
+		events, err = p.poll(int32(fd))
+	}
 	if err != nil {
 		p.mountError = mountSystemError(err)
 		return false, port.MountRefused

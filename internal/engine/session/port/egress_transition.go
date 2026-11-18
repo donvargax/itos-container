@@ -1,6 +1,21 @@
 package port
 
 func (r Record) egressTransition(n Record) bool {
+	if r.Schema == 4 {
+		if r.HasEgress() {
+			r.Schema = 3
+		} else {
+			r.Schema = 2
+		}
+	}
+	if n.Schema == 4 {
+		if n.HasEgress() {
+			n.Schema = 3
+		} else {
+			n.Schema = 2
+		}
+	}
+
 	if r.Schema != 3 && n.Schema != 3 {
 		return r.Egress == (EgressRecord{}) && n.Egress == (EgressRecord{})
 	}

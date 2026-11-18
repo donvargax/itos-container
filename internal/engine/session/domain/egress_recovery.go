@@ -86,7 +86,7 @@ func inspectEgressRecord(ctx context.Context, i port.Intent, c port.RunConnectio
 	return id, true, running, ""
 }
 func inspectEgress(ctx context.Context, i port.Intent, c port.RunConnection) port.Outcome {
-	if i.Record().Schema != 3 {
+	if !i.Record().HasEgress() {
 		return ""
 	}
 	for index := 2; index >= 0; index-- {
@@ -112,7 +112,7 @@ func inspectEgress(ctx context.Context, i port.Intent, c port.RunConnection) por
 }
 func releaseEgress(ctx context.Context, i port.Intent, c port.RunConnection) port.Outcome {
 	r := i.Record()
-	if r.Schema != 3 {
+	if !r.HasEgress() {
 		return ""
 	}
 	if r.Stage != "reserved" && r.Stage != "cancelled" && r.Stage != "absent" {
@@ -200,6 +200,9 @@ func releaseEgressResource(ctx context.Context, i port.Intent, c port.RunConnect
 	return ""
 }
 func releaseSessionResources(ctx context.Context, i port.Intent, c port.RunConnection) port.Outcome {
+	if f := releaseCredentials(ctx, i); f != "" {
+		return f
+	}
 	if f := releaseEgress(ctx, i, c); f != "" {
 		return f
 	}
