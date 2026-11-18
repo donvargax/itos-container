@@ -347,3 +347,6 @@ questions:
     item: "slice-28"
     question: "slice-28: its implementer (attempt 4) stopped for engine red evidence on @ID-EGRESSLIFE-06, 07, 10, 11, 12 and 13 at 4b8cc34. Is the evidence accepted?"
     answer: "Yes (the coordinator, 2026-11-16). Dispatch 43952255861 at 4b8cc34, Engine shard (other): ten cases, 86 steps, 54 passed, 10 failed, 22 skipped, none undefined, no panic; each case fails at an assertion after its product run. slice-28 goes on to the implementation; the run and each failure are in its steer file."
+  - id: q-87
+    item: "slice-28"
+    question: "slice-28: the implementer (attempt 9) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-28-implementer-9.result.json"
