@@ -188,8 +188,14 @@ func TestEgressStopAcceptsProxyAlreadyRemovedAfterWait(t *testing.T) {
 		}
 	}
 	result := (Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}).Stop(t.Context(), id)
-	if len(result.Failures) != 0 || result.Entries[0].Cleanup != "complete" {
+	// Confirmed absence still completes cleanup, but the proxy vanished with its
+	// daemon log before any copy: the required evidence can no longer be
+	// supplied, so the stop reports it instead of a clean zero.
+	if len(result.Failures) != 1 || result.Failures[0].Outcome != port.Incomplete || result.Entries[0].Cleanup != "complete" {
 		t.Errorf("confirmed absence refused: %#v", result)
+	}
+	if entry := result.Entries[0]; entry.Egress == nil || entry.Egress.RefusalLog == nil || entry.Egress.RefusalLog.State != "unknown" {
+		t.Errorf("vanishing proxy lost the missing-evidence report: %#v", entry)
 	}
 }
 func TestEgressMissingRefusalLogIsARecoveryFailure(t *testing.T) {
@@ -214,6 +220,60 @@ func TestEgressMissingRefusalLogIsARecoveryFailure(t *testing.T) {
 		}
 	}
 }
+func TestEgressDeletedRefusalEvidencePairIsARecoveryFailure(t *testing.T) {
+	runner, registry, engine, id, _ := seedEgressSession(t, 8)
+	recovery := Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}
+	if result := recovery.Stop(t.Context(), id); len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" {
+		t.Fatalf("teardown = %#v", result)
+	}
+	log := runner.Refusals.(*f.RefusalLog)
+	// Single-goroutine teardown is done; nothing else touches the fake now.
+	delete(log.Copies, id)
+	// Both evidence files are deleted after complete teardown: the removed
+	// proxy cannot supply another copy, so a pending report would claim a copy
+	// still to come. Status and a repeated stop report unknown evidence with a
+	// temporary failure while cleanup stays complete, never a clean zero.
+	for _, what := range []string{"status", "stop"} {
+		var result port.RecoveryResult
+		if what == "status" {
+			result = recovery.Status(t.Context())
+		} else {
+			result = recovery.Stop(t.Context(), id)
+		}
+		if len(result.Failures) != 1 || result.Failures[0].Outcome != port.Incomplete || result.Failures[0].Session != id {
+			t.Fatalf("%s passed a completed session whose evidence pair is missing: %#v", what, result)
+		}
+		entry := result.Entries[0]
+		if entry.Cleanup != "complete" || len(entry.Retry) != 0 || entry.Egress == nil || entry.Egress.RefusalLog == nil || entry.Egress.RefusalLog.State != "unknown" || entry.Egress.RefusalLog.Records != nil {
+			t.Errorf("%s lost complete cleanup or invented evidence facts: %#v", what, entry)
+		}
+	}
+	// A read that reports its own failure keeps that outcome: only a successful
+	// pending read is reinterpreted as missing required evidence, so a specific
+	// refusal is never masked as temporary uncertainty.
+	stub := pendingReadLog{failure: port.Refused}
+	failing := Recovery{Registry: registry, Engine: engine, Refusals: stub}
+	result := failing.Status(t.Context())
+	if len(result.Failures) != 1 || result.Failures[0].Outcome != port.Refused {
+		t.Fatalf("pending read with its own failure was masked: %#v", result)
+	}
+	if entry := result.Entries[0]; entry.Egress == nil || entry.Egress.RefusalLog == nil || entry.Egress.RefusalLog.State != "pending" {
+		t.Errorf("failed pending read lost its report: %#v", entry)
+	}
+}
+
+// pendingReadLog is an I/O-free RefusalLog whose read always reports pending
+// with its own failure, a shape the current adapters never produce but the
+// port permits; the domain must not reinterpret it as missing evidence.
+type pendingReadLog struct{ failure port.Outcome }
+
+func (l pendingReadLog) Begin(context.Context, string) (port.RefusalCopy, port.Outcome) {
+	return nil, port.Internal
+}
+func (l pendingReadLog) Read(context.Context, string) (port.RefusalLogReport, port.Outcome) {
+	return port.RefusalLogReport{State: "pending", Missing: []port.RefusalGap{}}, l.failure
+}
+
 func TestEgressWatchRequiresConnectionAndSupportsOfflineCaller(t *testing.T) {
 	runner, registry, engine, _, r := seedEgressSession(t, 8)
 	b := registry.Store.Codec.(*f.Codec).Value

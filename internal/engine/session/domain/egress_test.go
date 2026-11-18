@@ -296,7 +296,17 @@ func TestEgressStatus(t *testing.T) {
 		if stage == 13 {
 			want = "complete"
 		}
-		if len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != want || registry.Writes != before {
+		if len(result.Entries) != 1 || result.Entries[0].Cleanup != want || registry.Writes != before {
+			t.Error("egress status", stage, result)
+		}
+		if stage == 13 {
+			// The completed session's evidence pair does not exist and its
+			// removed proxy cannot supply one: status reports the missing
+			// required evidence, never a pending copy or a clean zero.
+			if len(result.Failures) != 1 || result.Failures[0].Outcome != port.Incomplete || result.Entries[0].Egress.RefusalLog.State != "unknown" {
+				t.Error("completed session hid its missing evidence", stage, result)
+			}
+		} else if len(result.Failures) != 0 {
 			t.Error("egress status", stage, result)
 		}
 	}

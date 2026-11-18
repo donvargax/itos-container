@@ -144,12 +144,30 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 
 // refusalEvidence reads a session's committed refusal log through the same
 // port that published it, without launching a copy or consulting a proxy.
+// A pending report is a copy still to come only while the persisted proxy
+// progress can produce one: a proxy that was created and later removed has
+// already passed the copy phase, so a missing pair then is required evidence
+// the removed proxy can no longer supply, reported unknown with a temporary
+// failure, never a clean pending or zero.
 func (s Recovery) refusalEvidence(ctx context.Context, id string, record port.Record) (port.RefusalLogReport, port.Outcome) {
 	pending := port.RefusalLogReport{State: "pending", Missing: []port.RefusalGap{}}
 	if !record.HasEgress() || s.Refusals == nil {
 		return pending, ""
 	}
-	return readRefusalEvidence(ctx, s.Refusals, id)
+	evidence, failure := readRefusalEvidence(ctx, s.Refusals, id)
+	if failure == "" && evidence.State == "pending" && proxyPassedCopyPhase(record) {
+		return port.RefusalLogReport{Path: evidence.Path, State: "unknown", Missing: []port.RefusalGap{}}, port.Incomplete
+	}
+	return evidence, failure
+}
+
+// proxyPassedCopyPhase reports whether the persisted proxy progress has moved
+// past the copy: the proxy was created, so its log was required, and its
+// release finished, which happens only through the copy phase. A proxy never
+// created or still held can still supply a copy, and a progress shape the
+// record's own validation would refuse is not trusted to claim one is owed.
+func proxyPassedCopyPhase(record port.Record) bool {
+	return record.Egress.Proxy.Stage == "absent" && record.Egress.Proxy.ID != ""
 }
 
 func readRefusalEvidence(ctx context.Context, log port.RefusalLog, id string) (port.RefusalLogReport, port.Outcome) {
