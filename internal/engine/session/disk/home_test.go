@@ -2,7 +2,7 @@ package disk
 
 import (
 	"bytes"
-	"path/filepath"
+	"path"
 	"strings"
 	"testing"
 
@@ -15,20 +15,17 @@ import (
 )
 
 func TestHomeOriginalStateMustBeOutsideTheCheckout(t *testing.T) {
-	root, err := filepath.Abs("original-home-fixture")
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := "/original-home-fixture"
 	for _, tc := range []struct {
 		name, state, checkout string
 		unsafe                bool
 	}{
 		{"same directory", root, root, true},
-		{"state inside checkout", filepath.Join(root, "state"), root, true},
-		{"checkout inside state", root, filepath.Join(root, "checkout"), true},
+		{"state inside checkout", path.Join(root, "state"), root, true},
+		{"checkout inside state", root, path.Join(root, "checkout"), true},
 		{"prefix sibling", root + "-state", root, false},
 		{"reverse prefix sibling", root, root + "-checkout", false},
-		{"separate roots", filepath.Join(root, "state"), filepath.Join(root, "checkout"), false},
+		{"separate roots", path.Join(root, "state"), path.Join(root, "checkout"), false},
 		{"relative checkout", root, "checkout", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
