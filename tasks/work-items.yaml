@@ -1561,6 +1561,11 @@ items:
       static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
       own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
       already ships.
+
+      This item already proposes Windows and Darwin static checks in the Linux PR job.
+      Cross-compilation and standard go vet would have accepted the overlap test because both path
+      APIs are valid. The assertion failed only when Windows produced a drive-letter path. Commit
+      91d84d5 fixed the fixture to use the Linux paths the test models.
   - id: p3-workspace-copy-mode
     title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
     phase: 1
