@@ -2235,6 +2235,17 @@ items:
       case. Include the disk home fixtures in its scope. Name the first untrusted ancestor and its
       UID in the fixture diagnostic, or document the ancestor-ownership prerequisite in
       `features/README.md`. Keep the production ownership check and fixture assertions intact.
+
+      This item already records UID 65534 on / and /tmp and tracks the affected approval, home and
+      feature fixtures. Include the three reported cmd RealStore contract failures when verifying a
+      fixture environment that satisfies both ancestor ownership and the non-root manifest identity
+      requirement.
+
+      This item already tracks UID 65534 on `/` and `/tmp` and the resulting `approval.state.unsafe`
+      failures in disk tests and feature scenarios. Before judging a worker’s local evidence, use
+      the existing ID-EGRESS-09 fixture to confirm it reaches its behavior assertion with production
+      ownership checks intact. If an ancestor check stops it first, record the path and UID as an
+      environment blocker.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
@@ -2305,17 +2316,13 @@ items:
       and model. Cover separation from host configuration and services, bounded startup, final
       output and failure, approved egress and cleanup. Scenarios use synthetic credentials and a
       fake provider. Specify only for now; implementation follows the Codex and Claude slices.
-  - id: p3-release-notes-sync-wording
+  - id: T-62
     title: Clarify how branch syncs contribute to release version counts
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      PR 69's second local review found that release totals beside listed totals can read as the
-      syncs' own contribution and can repeat identical numbers for untyped syncs. Pin the mixed and
-      untyped cases in the release tool's tests. See PR 69 discussion in comment 6988903923.
+    kind: task
   - id: p3-release-notes-first-parent-fixture
     title: Cover a nested item merge whose first parent is on main
     phase: 1
