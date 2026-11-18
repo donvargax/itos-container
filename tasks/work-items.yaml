@@ -194,6 +194,11 @@ items:
       per-slice red-evidence and history notes out of it (the commits and run numbers already record
       them), keep only the standing harness rules, and add a doc-caps entry with headroom over the
       shortened size so later slices cannot grow it back.
+
+      This item already covers scenario guidance in features/README.md. Include a review rule there:
+      when a spec claims an exact mount option string produces a particular behavior, cite the
+      relevant engine source or a native CI observation. The executable /tmp spec shows why omitting
+      noexec is insufficient evidence.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
