@@ -8182,3 +8182,15 @@
     done, and a changed function's proof waits for the pinned itos-cc run at the pushed
     head. The loop checks the four native timings, aggregate and required proof in CI at the
     pushed head.
+- id: T-60
+  type: fix
+  title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
+  why: >
+    The harness passes the caller's COLUMNS into help scenarios. At COLUMNS=30 Kong wraps a phrase
+    checked by ID-APPROVAL-29, making a correct build fail. Drop inherited terminal width in the
+    scenario environment and preserve a scenario's explicit width, including ID-APPROVAL-56. Keep
+    the existing scenarios and assertions. A focused regression must fail on the old harness and
+    pass after the fix.
+  done_when:
+    - run: "report=$(go test ./features -run \"^TestHarnessEnvClearsColumns$\" -count=1 -v) || { printf \"%s\\n\" \"$report\"; exit 1; }; printf \"%s\\n\" \"$report\" | grep -F -- \"--- PASS: TestHarnessEnvClearsColumns (\""
+      timeout: 180
