@@ -25,6 +25,7 @@ type runAPI struct {
 	mu            sync.Mutex
 	resource      *container.InspectResponse
 	attached      net.Conn
+	attach        []attachEscapeWire
 	defect        func(*container.InspectResponse)
 	readInput     bool
 	closeInput    bool
@@ -32,6 +33,14 @@ type runAPI struct {
 	signals       []string
 	signalTargets []string
 	resizes       []string
+}
+
+// attachEscapeWire is one attach request's escape-sequence request as the
+// daemon would read it: whether a detachKeys parameter was sent at all, and
+// its exact value.
+type attachEscapeWire struct {
+	value string
+	sent  bool
 }
 
 func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
@@ -79,6 +88,7 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 			}
 			_ = json.NewEncoder(w).Encode(observed)
 		case strings.HasSuffix(path, "/attach"):
+			a.attach = append(a.attach, attachEscapeWire{value: r.URL.Query().Get("detachKeys"), sent: r.URL.Query().Has("detachKeys")})
 			conn, buf, err := w.(http.Hijacker).Hijack()
 			if err != nil {
 				t.Error(err)

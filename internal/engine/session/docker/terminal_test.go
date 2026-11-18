@@ -78,3 +78,69 @@ func TestTerminalResizeRefusesChangedDaemonPin(t *testing.T) {
 		t.Fatal("resize reached a replaced daemon")
 	}
 }
+
+// The daemon applies escape-sequence handling to every TTY attach and cannot
+// disable it: with no detachKeys request it swallows Docker's default
+// ctrl-p,ctrl-q as a detach and drops the attach. A terminal attach must
+// therefore request an escape sequence beyond that default, while a plain
+// attach never asks the daemon to interpret one.
+func TestTerminalAttachPinsEscapeSequenceBeyondDaemonDefault(t *testing.T) {
+	e, b, a := runSDKFixture(t)
+	ctx := t.Context()
+	terminal, failure := e.OpenRun(ctx, b)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer terminal.Close()
+	capability, ok := terminal.(sp.TerminalConnection)
+	if !ok {
+		t.Fatal("missing terminal capability")
+	}
+	if f := capability.SetTerminal(tp.Dimensions{Columns: 113, Rows: 37}); f != "" {
+		t.Fatal(f)
+	}
+	argv := []string{"probe"}
+	id, f := terminal.CreateRun(ctx, st.RunIntent(b), argv)
+	if f != "" {
+		t.Fatal(f)
+	}
+	if f := terminal.VerifyRun(ctx, id, argv); f != "" {
+		t.Fatal(f)
+	}
+	attachment, f := terminal.Attach(ctx, id, sp.Streams{})
+	if f != "" {
+		t.Fatal(f)
+	}
+	defer attachment.Close()
+	plain, failure := e.OpenRun(ctx, b)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer plain.Close()
+	plainID, f := plain.CreateRun(ctx, st.RunIntent(b), argv)
+	if f != "" {
+		t.Fatal(f)
+	}
+	if f := plain.VerifyRun(ctx, plainID, argv); f != "" {
+		t.Fatal(f)
+	}
+	plainAttachment, f := plain.Attach(ctx, plainID, sp.Streams{})
+	if f != "" {
+		t.Fatal(f)
+	}
+	defer plainAttachment.Close()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.attach) != 2 {
+		t.Fatal("expected one terminal and one plain attach", a.attach)
+	}
+	if !a.attach[0].sent || a.attach[0].value != terminalDetachKeys {
+		t.Fatalf("terminal attach escape request differs: sent=%t value=%q", a.attach[0].sent, a.attach[0].value)
+	}
+	if a.attach[0].value == "ctrl-p,ctrl-q" {
+		t.Fatal("terminal attach kept the daemon's default escape sequence")
+	}
+	if a.attach[1].sent {
+		t.Fatalf("plain attach sent an escape request: %q", a.attach[1].value)
+	}
+}

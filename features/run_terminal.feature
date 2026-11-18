@@ -417,7 +417,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # transport decisions above). The fixture's keystroke after the detach attempt
   # models the client's next write, which the dropped attach fails; a swallowed
   # 10 11 leaves the workload without its bytes and the run failed, not exited.
-  @slice-37 @ID-RUNTTY-20 @wip @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-20 @linux @local-engine-fixture
   Scenario: The daemon's default detach bytes reach the workload as input
     Given a local terminal-run fixture with shared terminal stdin and stdout
     When the fixture writes the daemon's default detach bytes and one further keystroke to the attached workload
@@ -427,7 +427,7 @@ Feature: An explicitly selected terminal for an owned foreground run
 
   # Same oracle as RUNTTY-08 against the real daemon's own escape handling:
   # bytes 10 11 must not detach the attach, echo or cancel the controller.
-  @slice-37 @ID-RUNTTY-21 @wip @engine @linux
+  @slice-37 @ID-RUNTTY-21 @engine @linux
   Scenario: Docker's default detach escape remains workload input on a real engine
     Given a CI terminal-run fixture with a raw input-reporting probe
     When terminal run reaches the raw probe ready frame and the harness writes bytes 10 11 65 without a newline then a final release frame

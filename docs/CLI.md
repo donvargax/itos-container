@@ -165,7 +165,10 @@ terminal. Stdin and stdout must both be terminals; otherwise run exits 2 with
 `run.terminal-unavailable`. These checks follow JSON and argv validation and
 precede preflight. Stdin supplies the initial size and later resizes. Distinct
 stdout gets its own saved-state lease without supplying dimensions. Control keys,
-including Ctrl-C and Ctrl-D, go to the workload as bytes. Both worker output
+including Ctrl-C and Ctrl-D, go to the workload as bytes; Docker's own default
+Ctrl-P Ctrl-Q detach sequence does too, because run pins one long escape
+sequence the daemon cannot refuse (ctrl-^,ctrl-_,ctrl-^,ctrl-_,ctrl-^,ctrl-_,
+ctrl-^,ctrl-_) and that exact sequence alone detaches. Both worker output
 streams share one raw stream on stdout; controller diagnostics stay on stderr.
 
 Terminal state is restored on every return. Losing either terminal stops the owned
