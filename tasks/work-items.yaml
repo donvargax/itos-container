@@ -2235,6 +2235,11 @@ items:
       case. Include the disk home fixtures in its scope. Name the first untrusted ancestor and its
       UID in the fixture diagnostic, or document the ancestor-ownership prerequisite in
       `features/README.md`. Keep the production ownership check and fixture assertions intact.
+
+      This item already records UID 65534 on / and /tmp and tracks the affected approval, home and
+      feature fixtures. Include the three reported cmd RealStore contract failures when verifying a
+      fixture environment that satisfies both ancestor ownership and the non-root manifest identity
+      requirement.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
