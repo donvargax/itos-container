@@ -770,22 +770,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p3-release-notes-skip-merges
+  - id: T-61
     title: Release notes leave out merges of main into an item branch
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      v0.1.0's generated notes (2026-11-09) list 'Merge main into slice-13', 'slice-14' and
-      'slice-11' under Features: release-notes counts a merge commit whose subject carries a feat
-      type, or classifies merges by their first parent's type. A merge of main into an item branch
-      changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
-      own subject names the item).
-    deferred: >
-      Reserved for an external contribution. The coordinator will resume this item when the patch
-      arrives.
+    kind: task
   - id: p2-profile-non-engine-feature-suite
     title: Profile the non-engine feature suite and cut its roughly 300 s wall time
     phase: 1
@@ -1561,6 +1552,11 @@ items:
       static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
       own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
       already ships.
+
+      This item already proposes Windows and Darwin static checks in the Linux PR job.
+      Cross-compilation and standard go vet would have accepted the overlap test because both path
+      APIs are valid. The assertion failed only when Windows produced a drive-letter path. Commit
+      91d84d5 fixed the fixture to use the Linux paths the test models.
   - id: p3-workspace-copy-mode
     title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
     phase: 1
@@ -2309,3 +2305,25 @@ items:
       and model. Cover separation from host configuration and services, bounded startup, final
       output and failure, approved egress and cleanup. Scenarios use synthetic credentials and a
       fake provider. Specify only for now; implementation follows the Codex and Claude slices.
+  - id: p3-release-notes-sync-wording
+    title: Clarify how branch syncs contribute to release version counts
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      PR 69's second local review found that release totals beside listed totals can read as the
+      syncs' own contribution and can repeat identical numbers for untyped syncs. Pin the mixed and
+      untyped cases in the release tool's tests. See PR 69 discussion in comment 6988903923.
+  - id: p3-release-notes-first-parent-fixture
+    title: Cover a nested item merge whose first parent is on main
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      PR 69's second local review identified a topology missing from the regression: a nested merge
+      can start an item branch at main's tip. It should remain listed when only its first parent is
+      on main's line. See PR 69 discussion in comment 6988903923.

@@ -8195,3 +8195,15 @@
     world.withEnv("COLUMNS=200") must supply exactly one width with that value.
     The focused test runs the help scenario in an unfiltered suite. Filtered runs execute only
     their selected scenarios.
+- id: T-61
+  type: ci
+  title: Release notes leave out merges of main into an item branch
+  why: >
+    v0.1.0's generated notes (2026-11-09) list 'Merge main into slice-13', 'slice-14' and 'slice-11'
+    under Features: release-notes counts a merge commit whose subject carries a feat type, or
+    classifies merges by their first parent's type. A merge of main into an item branch changes
+    nothing a user sees; leave such merges out, and keep the merge that lands an item (its own
+    subject names the item). Use Git parentage to distinguish a branch sync from an item landing.
+    For both a first release and a tagged release, omit the sync entry and its contribution to
+    the commit and feature counts. Keep each item landing under its own subject. The regression
+    exercises both a sync with a feature subject and a sync whose first parent is a feature.
