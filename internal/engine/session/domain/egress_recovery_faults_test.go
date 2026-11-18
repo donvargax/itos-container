@@ -104,6 +104,41 @@ func TestEgressStopRevalidatesEachDestructiveBoundary(t *testing.T) {
 		})
 	}
 }
+func TestEgressStatusRechecksNameCandidateByFullID(t *testing.T) {
+	for _, change := range []string{"unchanged", "disappeared", "substituted"} {
+		t.Run(change, func(t *testing.T) {
+			runner, registry, engine, _, r := seedEgressSession(t, 5)
+			proxy := f.EgressProxy(r, registry.Store.Codec.(*f.Codec).Value)
+			proxy.ID = strings.Repeat("e", 64)
+			engine.Resources[proxy.ID] = proxy
+			engine.AfterInspect = func() {
+				events := engine.Engine.Events
+				if events[len(events)-1].Target == r.Egress.Proxy.Name {
+					switch change {
+					case "disappeared":
+						delete(engine.Resources, proxy.ID)
+					case "substituted":
+						engine.Inspection = "different name"
+					}
+				}
+			}
+			before := registry.Writes
+			result := (Recovery{Registry: registry, Engine: engine, Refusals: runner.Refusals}).Status(t.Context())
+			want := map[string]port.Outcome{"disappeared": port.Incomplete, "substituted": port.Refused}[change]
+			if registry.Writes != before || len(result.Entries) != 1 {
+				t.Fatal("inspection changed the registry or lost the session", result)
+			}
+			if want == "" {
+				if len(result.Failures) != 0 {
+					t.Fatal("matching candidate refused", result)
+				}
+			} else if len(result.Failures) != 1 || result.Failures[0].Outcome != want {
+				t.Fatalf("expected %s for a %s candidate: %#v", want, change, result)
+			}
+		})
+	}
+}
+
 func TestEgressLostProxyAdoptionMustBeDurable(t *testing.T) {
 	for _, fault := range []string{"authority", "save", "substitution", "healthy"} {
 		t.Run(fault, func(t *testing.T) {

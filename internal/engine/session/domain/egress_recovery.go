@@ -31,7 +31,10 @@ func egressKind(index int) port.NetworkKind {
 // Inspection never adopts an intent. Only the mutating recovery path may save
 // its independently observed full ID before releasing it.
 func inspectEgressResource(ctx context.Context, i port.Intent, c port.RunConnection, index int) (id string, present, running bool, failure port.Outcome) {
-	r := i.Record()
+	return inspectEgressRecord(ctx, i, c, index, i.Record())
+}
+
+func inspectEgressRecord(ctx context.Context, i port.Intent, c port.RunConnection, index int, r port.Record) (id string, present, running bool, failure port.Outcome) {
 	v := *egressResource(&r, index)
 	if v.Stage == "" {
 		return "", false, false, ""
@@ -87,8 +90,22 @@ func inspectEgress(ctx context.Context, i port.Intent, c port.RunConnection) por
 		return ""
 	}
 	for index := 2; index >= 0; index-- {
-		if _, _, _, f := inspectEgressResource(ctx, i, c, index); f != "" {
+		r := i.Record()
+		id, _, _, f := inspectEgressRecord(ctx, i, c, index, r)
+		if f != "" {
 			return f
+		}
+		v := egressResource(&r, index)
+		if v.Stage == "intent" {
+			// Recheck the name's candidate by full ID without adopting it.
+			v.ID, v.Stage = id, "owned"
+			_, present, _, f := inspectEgressRecord(ctx, i, c, index, r)
+			if f != "" {
+				return f
+			}
+			if !present {
+				return port.Incomplete
+			}
 		}
 	}
 	return ""
@@ -100,6 +117,10 @@ func releaseEgress(ctx context.Context, i port.Intent, c port.RunConnection) por
 	}
 	if r.Stage != "reserved" && r.Stage != "cancelled" && r.Stage != "absent" {
 		return port.Refused
+	}
+	// Inspect the complete ownership set before dismantling any dependency.
+	if f := inspectEgress(ctx, i, c); f != "" {
+		return f
 	}
 	for index := 2; index >= 0; index-- {
 		if f := releaseEgressResource(ctx, i, c, index); f != "" {
