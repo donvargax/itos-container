@@ -26,7 +26,10 @@ const evidenceLimit = 64 << 20
 
 // Evidence reads a session's published log and report through the same pinned
 // directory Stage publishes into. It takes no lock and creates no directory; an
-// absent file is nil with no failure.
+// absent file is nil with no failure. Before it hands back a published pair it
+// re-establishes the directory entry that links both names: a publication whose
+// report rename outlived its parent fsync is visible without a durability
+// claim, and a pair it returns with no failure is committed.
 func (s Registry) Evidence(ctx context.Context, c port.Candidate, id string) (port.SessionEvidence, port.Failure) {
 	if !publicID(id) {
 		return port.SessionEvidence{}, "state.invalid"
@@ -51,6 +54,17 @@ func (s Registry) Evidence(ctx context.Context, c port.Candidate, id string) (po
 			return port.SessionEvidence{}, f
 		}
 		*target = data
+	}
+	if evidence.Log != nil && evidence.Report != nil {
+		// Both names visible are a committed copy only when the directory
+		// entry linking the report is durable. Publish reports the pair's
+		// last parent fsync as state.write when it fails, so confirm that
+		// durability here, exactly as Stage re-establishes the directory
+		// after an uncertain mkdir: a sync that cannot succeed refuses the
+		// pair instead of letting recovery treat it as committed.
+		if f := p.ops.syncParent(p.dir); f != nil {
+			return port.SessionEvidence{}, "state.write"
+		}
 	}
 	if !p.unchanged() {
 		return port.SessionEvidence{}, "state.path"

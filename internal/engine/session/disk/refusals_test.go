@@ -408,6 +408,10 @@ func TestRefusalLogReadInvalidMetadataAndUnavailableEvidence(t *testing.T) {
 	f = refusalLogFixture()
 	f.files.Failure = "state.unavailable"
 	read(f.id, sp.Incomplete)
+	// Evidence that cannot re-establish the pair's directory durability is a
+	// failed read: recovery keeps its resources instead of trusting the pair.
+	f.files.Failure = "state.write"
+	read(f.id, sp.Incomplete)
 	f.files.Failure = ""
 	f.copyAll(t, `{"seq":0}`+"\n"+`{"seq":-1}`+"\n"+`{"seq":1.5}`+"\n")
 	entry := f.files.Sessions[f.key+"/"+f.id]

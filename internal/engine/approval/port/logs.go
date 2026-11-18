@@ -11,7 +11,11 @@ type SessionLogs interface {
 	Stage(context.Context, Candidate, string) (StagedLog, Failure)
 	// Evidence reads a session's published log and its report through the same
 	// pinned directory Stage publishes into. Absent files are nil with no
-	// failure; Path names the log's protected destination.
+	// failure; Path names the log's protected destination. Before it returns a
+	// published pair with no failure it makes the directory entry linking both
+	// names durable again: a publication whose report rename outlived its
+	// parent fsync leaves the pair visible without a durability claim, and a
+	// pair it returns with no failure is committed.
 	Evidence(ctx context.Context, c Candidate, id string) (SessionEvidence, Failure)
 }
 

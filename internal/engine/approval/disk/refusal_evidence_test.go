@@ -82,6 +82,63 @@ func TestSessionEvidenceReadsOnlyPrivatePublishedFiles(t *testing.T) {
 	check(t.Context(), id, "state.path")
 }
 
+func TestEvidenceConfirmsPairDurabilityBeforeCommitting(t *testing.T) {
+	s, c, _ := diskFixture(t)
+	r := Registry{Store: s}
+	id, dir := stagedSession(t, r, c)
+	stage, failure := r.Stage(t.Context(), c, id)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	l := stage.(*stagedLog)
+	defer l.Close()
+	bad := errors.New("report durability fault")
+	sync := l.pin.ops.syncParent
+	l.pin.ops.syncParent = func(f *os.File) error {
+		if _, err := os.Stat(filepath.Join(dir, stagedReportName)); err == nil {
+			return bad
+		}
+		return sync(f)
+	}
+	if l.Write([]byte("line\n")) != "" || l.Attach([]byte("report")) != "" {
+		t.Fatal("staging failed")
+	}
+	if f := l.Publish(); f != "state.write" {
+		t.Fatalf("publish = %q, want the report parent sync failure", f)
+	}
+	for _, name := range []string{stagedLogName, stagedReportName} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("failed publication left %s invisible: %v", name, err)
+		}
+	}
+
+	// The pair is visible but its report rename was never confirmed durable.
+	// Evidence must refuse it while the directory sync cannot be re-run, and
+	// serve it only after one sync confirms the pair's directory entry.
+	ops := s.operations()
+	syncs := 0
+	ops.syncParent = func(f *os.File) error {
+		syncs++
+		return bad
+	}
+	s.ops = &ops
+	e, failure := r.Evidence(t.Context(), c, id)
+	if failure != "state.write" || e.Log != nil || e.Report != nil {
+		t.Fatalf("unconfirmed pair served as evidence: %q %+v", failure, e)
+	}
+	ops.syncParent = func(f *os.File) error {
+		syncs++
+		return sync(f)
+	}
+	e, failure = r.Evidence(t.Context(), c, id)
+	if failure != "" || string(e.Log) != "line\n" || string(e.Report) != "report" {
+		t.Fatalf("confirmed pair did not round trip: %q %+v", failure, e)
+	}
+	if syncs != 1 {
+		t.Fatalf("evidence confirmed the pair with %d syncs, want 1", syncs)
+	}
+}
+
 func TestReadEvidenceRejectsUnverifiedFiles(t *testing.T) {
 	s, c, _ := diskFixture(t)
 	id, dir := stagedSession(t, Registry{Store: s}, c)
