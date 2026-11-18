@@ -2316,3 +2316,14 @@ items:
       PR 69's second local review found that release totals beside listed totals can read as the
       syncs' own contribution and can repeat identical numbers for untyped syncs. Pin the mixed and
       untyped cases in the release tool's tests. See PR 69 discussion in comment 6988903923.
+  - id: p3-release-notes-first-parent-fixture
+    title: Cover a nested item merge whose first parent is on main
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      PR 69's second local review identified a topology missing from the regression: a nested merge
+      can start an item branch at main's tip. It should remain listed when only its first parent is
+      on main's line. See PR 69 discussion in comment 6988903923.
