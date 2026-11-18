@@ -105,3 +105,12 @@ mutation:
       replacement: "false"
       reason: "This sibling of the CI-reported after-key insertion also writes an unread set value. keys is a local map: assigning false still inserts every before key, the second loop adds all after keys, and the final loop ranges over keys only. Shared keys may be overwritten and before-only values remain false, but neither value is read or escapes. The key union and every resulting Change are identical for all inputs. Exact-result tests cover removed, added, shared and nested keys; no behavioral test can distinguish this mutation."
       line_text: keys[key] = true
+    - file: internal/engine/session/domain/egress_recovery.go
+      function: github.com/donvargax/itos-container/internal/engine/session/domain#inspectEgressRecord
+      hash: 603b62c9225967e2
+      line_in_function: 48
+      column: 14
+      original: "true"
+      replacement: "false"
+      reason: This return always includes port.Incomplete. Every caller in inspectEgress, releaseEgressResource and stopAndCopyProxy returns that failure before reading the presence flag. Toggling the flag cannot change either public report, retry, stored intent or engine call. TestEgressRecoveryKeepsUnexpectedProxyStatesRetryable covers those outcomes through status and repeated stop.
+      line_text: return id, true, running, port.Incomplete
