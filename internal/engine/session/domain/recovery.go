@@ -242,6 +242,10 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	// is independently revalidated by stopSession before any mutation.
 	e, _ := sessionEntry(entry)
 	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
+	// Only a controller present at the stop can still report a workload
+	// result. An absent or unknown one leaves any exit this stop causes
+	// itself unpublished as workload knowledge.
+	live := e.Controller == "present"
 	if uncreated(entry) && entry.Intent().Record().Schema == 1 && entry.Intent().Record().Home == (port.HomeReference{}) {
 		failure = cancelUncreated(entry)
 	} else {
@@ -250,11 +254,11 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 		if failure == "" {
 			defer connection.Close()
 			if entry.Intent().Record().Schema >= 2 {
-				failure = stopAnchoredSession(ctx, entry, connection, signal, exit, remove, s.immediate)
+				failure = stopAnchoredSession(ctx, entry, connection, signal, exit, remove, s.immediate, live)
 			} else if uncreated(entry) {
 				failure = cancelUncreated(entry)
 			} else {
-				failure = stopSession(ctx, entry, connection, signal, exit, remove)
+				failure = stopSession(ctx, entry, connection, signal, exit, remove, live)
 			}
 			if h := entry.Intent().Record().Home; h != (port.HomeReference{}) {
 				if s.Homes == nil {
@@ -324,7 +328,7 @@ func cancelUncreated(s port.Session) port.Outcome {
 	return s.Save(r)
 }
 
-func stopSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, exit *int, remove bool) port.Outcome {
+func stopSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, exit *int, remove, live bool) port.Outcome {
 	r := s.Record()
 	o, resource, failure := inspectSession(ctx, s, c)
 	if failure != "" && !retryableRecovery(failure) {
@@ -373,7 +377,7 @@ func stopSession(ctx context.Context, s port.Session, c port.RunConnection, sign
 		}
 	}
 	if resource == "running" {
-		if failure = terminateSession(ctx, s, c, signal); failure != "" {
+		if failure = terminateSession(ctx, s, c, signal, live); failure != "" {
 			return failure
 		}
 	}
@@ -418,7 +422,7 @@ func retryableRecovery(f port.Outcome) bool {
 		return false
 	}
 }
-func terminateSession(ctx context.Context, s port.Session, c port.RunConnection, signal string) port.Outcome {
+func terminateSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, live bool) port.Outcome {
 	deadline, foreground := ctx.Value(runGraceKey{}).(time.Time)
 	// Explicit stop retains slice-11's contract. Foreground run supplies the
 	// cancellation deadline so delivery time cannot restart its grace.
@@ -434,7 +438,7 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 	defer end()
 	exit, failure := c.Wait(grace, s.Intent().Record().ContainerID)
 	if failure == "" {
-		return recordExit(s, exit)
+		return stopObservedExit(s, exit, foreground, live)
 	}
 	_, resource, failure := inspectSession(ctx, s, c)
 	if failure != "" {
@@ -460,7 +464,7 @@ func terminateSession(ctx context.Context, s port.Session, c port.RunConnection,
 	}
 	exit, failure = c.Wait(ctx, s.Intent().Record().ContainerID)
 	if failure == "" {
-		return recordExit(s, exit)
+		return stopObservedExit(s, exit, foreground, live)
 	}
 	_, resource, failure = inspectSession(ctx, s, c)
 	if failure != "" {
@@ -498,6 +502,25 @@ func recordExit(s port.Session, exit int) port.Outcome {
 	}
 	r.WorkloadExit = &exit
 	return s.Save(r)
+}
+
+// stopObservedExit publishes a termination's observed exit only where a
+// controller that reports the workload's result can carry it: the foreground
+// teardown, whose own reporting needs the exit it causes, or a live controller
+// present at the stop, which adopts the shared observation (run_exit's
+// positive controls, ID-RECOVERY-32). Without one, the exit was caused by
+// this stop itself and nobody is left to report it; publishing it would
+// invent workload knowledge, so an unknown result stays unknown
+// (ID-RECOVERY-07, ID-HOME-15). A malformed observation still refuses
+// completed cleanup.
+func stopObservedExit(s port.Session, exit int, foreground, live bool) port.Outcome {
+	if foreground || live {
+		return recordExit(s, exit)
+	}
+	if exit < 0 || exit > 255 {
+		return port.Incomplete
+	}
+	return ""
 }
 func finishSession(s port.Session) port.Outcome {
 	i := s.Intent().Record()

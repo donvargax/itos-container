@@ -40,7 +40,7 @@ func TestForegroundStopRetainsWorkerWhenObservedExitCannotBeSaved(t *testing.T) 
 		}
 	}
 	ctx := context.WithValue(t.Context(), runGraceKey{}, time.Now().Add(10*time.Second))
-	failure := stopSession(ctx, s, c, "SIGTERM", nil, true)
+	failure := stopSession(ctx, s, c, "SIGTERM", nil, true, false)
 	if failure != port.IntentWrite || s.Record().WorkloadExit != nil || s.Record().State != "stopping" {
 		t.Fatal("failed exit publication claimed durable progress", failure, s.Record())
 	}
@@ -50,7 +50,7 @@ func TestForegroundStopRetainsWorkerWhenObservedExitCannotBeSaved(t *testing.T) 
 	// Once storage recovers, fresh owned reconciliation can record the exit
 	// and finish cleanup without signalling an already exited primary.
 	registry.BeforeSave, registry.SaveFailure = nil, ""
-	if failure = stopSession(ctx, s, c, "SIGTERM", nil, true); failure != "" || s.Record().State != "stopped" || s.Record().WorkloadExit == nil || *s.Record().WorkloadExit != 17 || len(engine.Resources) != 0 {
+	if failure = stopSession(ctx, s, c, "SIGTERM", nil, true, false); failure != "" || s.Record().State != "stopped" || s.Record().WorkloadExit == nil || *s.Record().WorkloadExit != 17 || len(engine.Resources) != 0 {
 		t.Fatal("retry lost the observed exit or failed owned cleanup", failure, s.Record())
 	}
 }
@@ -68,7 +68,7 @@ func TestForegroundTerminationReobservesExitAfterLostGraceWait(t *testing.T) {
 		}
 	}
 	ctx := context.WithValue(t.Context(), runGraceKey{}, time.Now().Add(10*time.Second))
-	failure := terminateSession(ctx, s, c, "SIGTERM")
+	failure := terminateSession(ctx, s, c, "SIGTERM", false)
 	if failure != "" || s.Record().WorkloadExit == nil || *s.Record().WorkloadExit != 17 || waits != 2 {
 		t.Fatal("fresh exit observation was lost after the grace wait failed", failure, s.Record(), waits)
 	}
@@ -92,7 +92,7 @@ func TestForegroundTerminationCannotEscalateBeyondTeardownDeadline(t *testing.T)
 		defer cancel()
 		ctx = context.WithValue(ctx, runGraceKey{}, time.Now().Add(10*time.Second))
 		start := time.Now()
-		failure := terminateSession(ctx, s, c, "SIGTERM")
+		failure := terminateSession(ctx, s, c, "SIGTERM", false)
 		if failure != port.Incomplete || time.Since(start) != 5*time.Second || s.Record().WorkloadExit != nil {
 			t.Fatal("grace outlived teardown or invented an exit", failure, time.Since(start), s.Record())
 		}

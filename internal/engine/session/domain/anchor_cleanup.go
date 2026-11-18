@@ -6,7 +6,7 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
-func stopAnchoredSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, exit *int, remove, immediate bool) port.Outcome {
+func stopAnchoredSession(ctx context.Context, s port.Session, c port.RunConnection, signal string, exit *int, remove, immediate, live bool) port.Outcome {
 	if _, failure := inspectRecoveryAnchor(ctx, s.Intent(), c); failure != "" {
 		return failure
 	}
@@ -30,7 +30,7 @@ func stopAnchoredSession(ctx context.Context, s port.Session, c port.RunConnecti
 		return cancelUncreated(s)
 	}
 	if !immediate {
-		return stopSession(ctx, s, c, signal, exit, remove)
+		return stopSession(ctx, s, c, signal, exit, remove, live)
 	}
 	// A failed detector is not a graceful cancellation. Kill the independently
 	// revalidated worker immediately, without waiting or inventing its exit.

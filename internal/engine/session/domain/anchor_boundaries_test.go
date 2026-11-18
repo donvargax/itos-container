@@ -315,7 +315,7 @@ func TestImmediateAnchorTeardownRetainsBothResourcesOnFailure(t *testing.T) {
 				}
 				want = port.Unsafe
 			}
-			if got := stopAnchoredSession(t.Context(), s, a.connection, "SIGTERM", exit, true, true); got != want {
+			if got := stopAnchoredSession(t.Context(), s, a.connection, "SIGTERM", exit, true, true, false); got != want {
 				t.Fatalf("teardown = %s, want %s", got, want)
 			}
 			if name == "exit recorded" {
