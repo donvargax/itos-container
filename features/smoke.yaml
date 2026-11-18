@@ -112,3 +112,7 @@
   scenarios:
     - id: "@ID-EGRESS-07"
       why: the file's only live scenario until the allowlist run is built, and fast with no engine; the proxy executable rule and its ELF adapter admit the static control and refuse each unsafe delivery. Choose the run through the proxy in its place once that is live
+- file: egress_lifecycle.feature
+  scenarios:
+    - id: "@ID-EGRESSLIFE-01"
+      why: read-only status reads a session's durable refusal evidence back through the real disk writer with no engine, covering pending and stored states, the protected destination and the offline omission that bounds the report

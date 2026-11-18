@@ -255,7 +255,7 @@ Feature: Egress refusal evidence and owned failure recovery
   # already green, report the spec defect rather than weakening it or faking red.
 
   # Read-only evidence, including the difference between no copy and zero rows.
-  @wip @slice-28 @ID-EGRESSLIFE-01 @local-engine-fixture @linux
+  @slice-28 @ID-EGRESSLIFE-01 @local-engine-fixture @linux
   Scenario Outline: Status describes this session's stored evidence without inventing a live count
     Given an original protected egress session with evidence fixture "<fixture>" and a separate offline session
     And the current policy and approval differ from both original sessions
@@ -274,7 +274,7 @@ Feature: Egress refusal evidence and owned failure recovery
   # Known loss is separate from resource cleanup and survives another process.
   # "none" omits ready only from the teardown copy's source; a run fixture
   # independently supplies valid startup readiness before that simulated loss.
-  @wip @slice-28 @ID-EGRESSLIFE-02 @local-engine-fixture @linux
+  @slice-28 @ID-EGRESSLIFE-02 @local-engine-fixture @linux
   Scenario Outline: A hole in the copied sequence is reported after owned resources are released
     Given a local egress lifecycle fixture for "<operation>" with observed workload exit "<workload>"
     And its copied proxy stdout has ready sequence "<ready>" and request sequences "<requests>"
@@ -297,7 +297,7 @@ Feature: Egress refusal evidence and owned failure recovery
 
   # Copy faults keep the source; a committed gap plus removal fault keeps both
   # diagnoses. A fresh process, not the failed controller's memory, retries.
-  @wip @slice-28 @ID-EGRESSLIFE-03 @local-engine-fixture @linux
+  @slice-28 @ID-EGRESSLIFE-03 @local-engine-fixture @linux
   Scenario Outline: Failed log preservation or removal retains the exact recovery work
     Given a local egress lifecycle fixture with an observed zero workload exit and fault "<fault>"
     When run tears down and a separate status inspects the retained session
@@ -320,7 +320,7 @@ Feature: Egress refusal evidence and owned failure recovery
       | refusal copy parent fsync fails     | run.cleanup-temporary                      | 75   | unknown  |
       | gapped copy then proxy remove fails | run.refusal-log-gap,run.cleanup-temporary   | 1    | gapped   |
 
-  @wip @slice-28 @ID-EGRESSLIFE-04 @local-engine-fixture @linux
+  @slice-28 @ID-EGRESSLIFE-04 @local-engine-fixture @linux
   Scenario Outline: Recovery never adopts or removes a foreign egress resource
     Given protected egress recovery records with a committed two-record log and ownership defect "<defect>"
     And independently recorded foreign containers networks and another project's live session
@@ -341,7 +341,7 @@ Feature: Egress refusal evidence and owned failure recovery
       | name-only candidate conflicts with full ID |
 
   # Path display is hostile input even though the host owns the state folder.
-  @wip @slice-28 @ID-EGRESSLIFE-05 @local-engine-fixture @linux
+  @slice-28 @ID-EGRESSLIFE-05 @local-engine-fixture @linux
   Scenario Outline: Status and gap diagnostics escape the refusal log path without changing its identity
     Given an original protected egress session with a gapped log under a state-root name containing "<text>"
     When fresh status processes inspect that session in plain and JSON modes
@@ -363,7 +363,7 @@ Feature: Egress refusal evidence and owned failure recovery
   # on the host. The allowed-name control uses that same DNS path successfully.
   # It changes neither host DNS nor the product's address rule. Pre/post DNS
   # and connection controls prove these exact faults, not a broken fixture.
-  @wip @slice-28 @ID-EGRESSLIFE-06 @engine @linux
+  @slice-28 @ID-EGRESSLIFE-06 @engine @linux
   Scenario: Every refused request retains safe metadata and separates policy from upstream failure
     Given a CI egress checkout allowing "api.example.com dns.example connect.example" and matching protected approval
     And independent allowed TLS DNS-failure and connect-failure controls with request receipts
@@ -389,7 +389,7 @@ Feature: Egress refusal evidence and owned failure recovery
   # in-memory endpoint; refused targets/hellos never send their payload upstream.
   # Engine-failure bodies are confined to the named cleanup fault, not workload
   # stdout/stderr. The tree scan excludes fixture sources/positive controls.
-  @wip @slice-28 @ID-EGRESSLIFE-07 @engine @linux
+  @slice-28 @ID-EGRESSLIFE-07 @engine @linux
   Scenario: Payload and failure markers never enter proxy logs or controller status
     Given a CI egress checkout allowing "api.example.com" and matching protected approval
     And an independent TLS endpoint and fresh synthetic payload markers for these surfaces and expected log reasons:
@@ -413,7 +413,7 @@ Feature: Egress refusal evidence and owned failure recovery
 
   # SIGINT/TERM rows use a cooperative worker exiting 17 after its receipt;
   # nonzero precedence is real engine evidence, not a manufactured 130/143.
-  @wip @slice-28 @ID-EGRESSLIFE-08 @engine @linux
+  @slice-28 @ID-EGRESSLIFE-08 @engine @linux
   Scenario Outline: Normal failure and interruption preserve the final refusal before reverse teardown
     Given a CI egress lifecycle probe with a retained checkout edit and ending "<ending>"
     And unrelated control resources and an independent allowed TLS endpoint
@@ -434,7 +434,7 @@ Feature: Egress refusal evidence and owned failure recovery
   # Each faulted invocation is paired with a separate healthy run in When.
   # Capturing a failure at readiness cannot count as a successful no-worker test
   # unless the product actually created/started/verified the original proxy.
-  @wip @slice-28 @ID-EGRESSLIFE-09 @engine @linux
+  @slice-28 @ID-EGRESSLIFE-09 @engine @linux
   Scenario Outline: A proxy that never becomes ready cannot start the workload
     Given a CI egress startup fixture with readiness fault "<fault>" and a separate healthy control
     When run executes the healthy control and then the faulted invocation
@@ -450,7 +450,7 @@ Feature: Egress refusal evidence and owned failure recovery
 
   # Probe remains busy after a successful allowed exchange; it records TERM or
   # ignores it. A teardown observation, not the harness kill, determines exit.
-  @wip @slice-28 @ID-EGRESSLIFE-10 @engine @linux
+  @slice-28 @ID-EGRESSLIFE-10 @engine @linux
   Scenario Outline: Losing the running proxy stops the workload without a new route
     Given a CI egress failure probe whose worker "<response>" after a successful tunnel and one refusal
     And independent direct-route controls remain reachable outside the worker
@@ -483,7 +483,7 @@ Feature: Egress refusal evidence and owned failure recovery
   # Missing measurements fail this assertion. A timeout still fails cleanup;
   # a thin measured margin is a finding for the person, never permission to
   # extend the budget, lower the cap or skip the full-log case.
-  @wip @slice-28 @ID-EGRESSLIFE-11 @engine @linux
+  @slice-28 @ID-EGRESSLIFE-11 @engine @linux
   Scenario: Exhausting the refusal budget stops the proxy and preserves its earliest attempts
     Given a CI egress cap probe with an allowed TLS control and a worker that exits zero on SIGTERM
     When run starts it and the worker completes a control then sends 20000 refused CONNECT attempts
@@ -495,7 +495,7 @@ Feature: Egress refusal evidence and owned failure recovery
 
   # Native removal failure uses the recording forwarder's named one-shot error;
   # it does not remove resources in the harness and then claim product cleanup.
-  @wip @slice-28 @ID-EGRESSLIFE-12 @engine @linux
+  @slice-28 @ID-EGRESSLIFE-12 @engine @linux
   Scenario Outline: A failed egress removal is recoverable by the exact public stop command
     Given a CI egress cleanup probe with one refusal and a one-shot removal fault on "<resource>"
     And another project's live worker proxy and networks with independent progress receipts
@@ -516,7 +516,7 @@ Feature: Egress refusal evidence and owned failure recovery
 
   # A3 keeps both alive under the frozen grant after controller SIGKILL. The
   # worker attempts the same routes/names before and after loss, with controls.
-  @wip @slice-28 @ID-EGRESSLIFE-13 @engine @linux
+  @slice-28 @ID-EGRESSLIFE-13 @engine @linux
   Scenario: Controller death preserves frozen egress and a fresh stop saves refusals from both sides of the loss
     Given a CI egress controller-loss probe with allowed and refused names and independently reachable route controls
     When run starts it the worker records one refusal and the harness kills only the controller
@@ -531,7 +531,7 @@ Feature: Egress refusal evidence and owned failure recovery
   # beneath this native proof in the local contract: keep recovery incomplete
   # until the original full ID is found, saved and independently revalidated.
   # No worker should yet exist at these barriers, so workload_exit stays null.
-  @wip @slice-28 @ID-EGRESSLIFE-14 @engine @linux
+  @slice-28 @ID-EGRESSLIFE-14 @engine @linux
   Scenario Outline: Controller loss during egress creation leaves original resources recoverable without starting work
     Given a CI egress startup fixture that withholds the accepted "<resource>" create reply
     When run reaches that native create barrier the controller is killed and a fresh stop reconciles the original session

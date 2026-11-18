@@ -2,6 +2,7 @@ package disk
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -66,8 +67,14 @@ func (f refusalFixture) begin(t *testing.T) sp.RefusalCopy {
 	return copy
 }
 
-// copyAll writes each part, commits and closes, expecting a clean publication.
-func (f refusalFixture) copyAll(t *testing.T, parts ...string) {
+// path is the protected destination this fixture's staged log publishes to.
+func (f refusalFixture) path() string {
+	return "sessions/" + f.key + "/" + f.id + "/egress-refusals.jsonl"
+}
+
+// copyAll writes each part, commits and closes, expecting a publication whose
+// derived report names this destination and, at most, a real sequence gap.
+func (f refusalFixture) copyAll(t *testing.T, parts ...string) sp.RefusalReport {
 	t.Helper()
 	copy := f.begin(t)
 	defer copy.Close()
@@ -76,9 +83,11 @@ func (f refusalFixture) copyAll(t *testing.T, parts ...string) {
 			t.Fatalf("write of %d bytes = %d, %v", len(part), n, err)
 		}
 	}
-	if report, failure := copy.Commit(); failure != "" || report.Outcome != "" || report.Gaps != nil {
+	report, failure := copy.Commit()
+	if failure != "" || (report.Outcome != "" && report.Outcome != sp.RefusalLogGap) || report.Path != f.path() {
 		t.Fatalf("commit = %#v, %s", report, failure)
 	}
+	return report
 }
 
 func TestRefusalLogContract(t *testing.T) {
@@ -94,13 +103,14 @@ func TestRefusalLogContract(t *testing.T) {
 	lines := strings.SplitAfter(sf.ProxyStdout, "\n")
 	replacement := strings.Replace(lines[1], "not-listed", "port", 1)
 	fault := map[string]string{"write": "write", "commit": "file fsync", "": ""}
+	derived := sp.RefusalReport{Records: 1, Path: f.path()}
 	sf.RefusalLogContract(t, sf.RefusalLogFixture{
 		SessionID: f.id,
 		Log:       f.log,
 		Read:      func(id string) []byte { data, _ := f.files.SessionLog(f.key, id); return data },
 		Fault:     func(name string) { f.files.Fault = fault[name] },
 		Report:    func(sp.RefusalReport) {},
-	}, []byte(sf.ProxyStdout), []byte(lines[1]), []byte(lines[0]+replacement), []byte(replacement), sp.RefusalReport{})
+	}, []byte(sf.ProxyStdout), []byte(lines[1]), []byte(lines[0]+replacement), []byte(replacement), derived)
 	if f.staged() != 0 {
 		t.Fatal("the contract left a staged handle", f.staged())
 	}
@@ -220,12 +230,16 @@ func TestRefusalLogStreamsLines(t *testing.T) {
 				t.Fatal("a log is visible before Commit")
 			}
 			calls := f.operations()
-			if report, failure := copy.Commit(); failure != "" || report.Outcome != "" || report.Gaps != nil {
+			report, failure := copy.Commit()
+			if failure != "" || (report.Outcome != "" && report.Outcome != sp.RefusalLogGap) || (report.Outcome == sp.RefusalLogGap) != (len(report.Gaps) > 0) || report.Path != f.path() {
 				t.Fatalf("commit = %#v, %s", report, failure)
 			}
 			last := written[strings.LastIndexByte(written, '\n')+1:]
 			want := stagedAfter(written+"\n", tc.ready...)
 			want = strings.TrimSuffix(want, "\n")
+			if report.Records != expectedRecords(want) {
+				t.Fatalf("commit counted %d records in %d stored bytes", report.Records, len(want))
+			}
 			if slices.Contains(tc.ready, last+"\n") {
 				t.Fatal("fixture: an unterminated line is never a ready record")
 			}
@@ -274,4 +288,100 @@ func dropped(input string, ready []string) int {
 		}
 	}
 	return n
+}
+
+// expectedRecords counts the complete lines a copy stores, plus a held
+// unterminated one Commit publishes as it is. A line already flushed past the
+// ready bound is stored as it arrives; only its completing newline counts it.
+func expectedRecords(stored string) uint64 {
+	records := uint64(strings.Count(stored, "\n"))
+	if tail := stored[strings.LastIndexByte(stored, '\n')+1:]; tail != "" && len(tail) <= 2048 {
+		records++
+	}
+	return records
+}
+
+// TestRefusalLogDerivesGaps exercises the sequence judgement over the whole
+// stream, ready included: a missing initial event is a gap in the report even
+// though the published file never holds readiness, log-full counts as a record,
+// and an empty valid copy reports a clean zero.
+func TestRefusalLogDerivesGaps(t *testing.T) {
+	ready := strings.SplitAfter(sf.ProxyStdout, "\n")[0]
+	refusal := strings.SplitAfter(sf.ProxyStdout, "\n")[1]
+	at := func(seq int) string {
+		return strings.Replace(refusal, `"seq":2`, `"seq":`+strconv.Itoa(seq), 1)
+	}
+	full := `{"schema":1,"seq":3,"time":"2026-11-16T00:00:00Z","event":"log-full"}` + "\n"
+	for _, tc := range []struct {
+		name    string
+		input   string
+		stored  string
+		gaps    []sp.RefusalGap
+		records uint64
+	}{
+		{"clean consecutive", ready + refusal + at(3), refusal + at(3), nil, 2},
+		{"initial ready missing", refusal + at(3), refusal + at(3), []sp.RefusalGap{{First: 1, Last: 1}}, 2},
+		{"middle gap", ready + at(2) + at(5) + at(6), at(2) + at(5) + at(6), []sp.RefusalGap{{First: 3, Last: 4}}, 3},
+		{"two gaps", at(2) + at(5) + at(7), at(2) + at(5) + at(7), []sp.RefusalGap{{First: 1, Last: 1}, {First: 3, Last: 4}, {First: 6, Last: 6}}, 3},
+		{"log-full counts", ready + refusal + full, refusal + full, nil, 2},
+		{"empty copy", "", "", nil, 0},
+		{"unparsed lines keep their bytes", "not JSON\n" + at(2), "not JSON\n" + at(2), []sp.RefusalGap{{First: 1, Last: 1}}, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := refusalLogFixture()
+			report := f.copyAll(t, tc.input)
+			if got := string(f.stored()); got != tc.stored {
+				t.Fatalf("stored %q, want %q", got, tc.stored)
+			}
+			want := sp.RefusalReport{Records: tc.records, Path: f.path(), Gaps: tc.gaps}
+			if len(want.Gaps) > 0 {
+				want.Outcome = sp.RefusalLogGap
+			}
+			if report.Outcome != want.Outcome || report.Records != want.Records || report.Path != want.Path || !slices.Equal(report.Gaps, want.Gaps) {
+				t.Fatalf("report = %#v, want %#v", report, want)
+			}
+		})
+	}
+}
+
+// TestRefusalLogReadDerivesEvidence reads a session's committed evidence back
+// through the same port: pending before any copy, stored or gapped from the
+// published pair, unknown when the report cannot confirm the log beside it.
+func TestRefusalLogReadDerivesEvidence(t *testing.T) {
+	ready := strings.SplitAfter(sf.ProxyStdout, "\n")[0]
+	refusal := strings.SplitAfter(sf.ProxyStdout, "\n")[1]
+	f := refusalLogFixture()
+	pending, failure := f.log.Read(t.Context(), f.id)
+	if failure != "" || pending.State != "pending" || pending.Records != nil || pending.Path != f.path() || !slices.Equal(pending.Missing, []sp.RefusalGap{}) {
+		t.Fatalf("unread evidence = %#v, %s", pending, failure)
+	}
+	f.copyAll(t, ready+refusal)
+	evidence, failure := f.log.Read(t.Context(), f.id)
+	records := uint64(1)
+	if failure != "" || evidence.State != "stored" || evidence.Path != f.path() || evidence.Records == nil || *evidence.Records != records || len(evidence.Missing) != 0 {
+		t.Fatalf("stored evidence = %#v, %s", evidence, failure)
+	}
+	gapped := f.copyAll(t, strings.Replace(refusal, `"seq":2`, `"seq":5`, 1))
+	if gapped.Outcome != sp.RefusalLogGap || len(gapped.Gaps) != 1 || gapped.Gaps[0] != (sp.RefusalGap{First: 1, Last: 4}) {
+		t.Fatalf("gapped copy = %#v", gapped)
+	}
+	evidence, failure = f.log.Read(t.Context(), f.id)
+	records = 1
+	if failure != "" || evidence.State != "gapped" || evidence.Records == nil || *evidence.Records != records || !slices.Equal(evidence.Missing, gapped.Gaps) {
+		t.Fatalf("gapped evidence = %#v, %s", evidence, failure)
+	}
+	// A log without its report claims nothing: an interrupted publication is
+	// unknown, never a stored zero.
+	log, report := f.files.SessionReport(f.key, f.id)
+	f.files.Sessions[f.key+"/"+f.id].Report = nil
+	evidence, failure = f.log.Read(t.Context(), f.id)
+	if failure != "" || evidence.State != "unknown" || evidence.Records != nil {
+		t.Fatalf("unconfirmed log = %#v, %s", evidence, failure)
+	}
+	f.files.Sessions[f.key+"/"+f.id].Report = report
+	f.files.Sessions[f.key+"/"+f.id].Log = append(log, []byte("changed\n")...)
+	evidence, failure = f.log.Read(t.Context(), f.id)
+	if failure != "" || evidence.State != "unknown" || evidence.Records != nil {
+		t.Fatalf("stale report = %#v, %s", evidence, failure)
+	}
 }

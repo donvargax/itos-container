@@ -33,6 +33,15 @@ func stopAndCopyProxy(ctx context.Context, i port.Intent, c port.RunConnection, 
 	if !ok || state.log == nil {
 		return port.Internal
 	}
+	// A committed copy is the evidence stop preserves; a retry never rewrites
+	// it. The durable report decides: the copy itself may be the only witness of
+	// a gap a fresh process must keep reporting.
+	if evidence, f := state.log.Read(ctx, i.Record().Anchor.Session); f == "" && (evidence.State == "stored" || evidence.State == "gapped") {
+		if evidence.State == "gapped" {
+			*state.report = port.RefusalReport{Outcome: port.RefusalLogGap, Gaps: evidence.Missing, Records: valueOf(evidence.Records), Path: evidence.Path}
+		}
+		return ""
+	}
 	type opened struct {
 		copy port.RefusalCopy
 		f    port.Outcome
@@ -63,4 +72,12 @@ func stopAndCopyProxy(ctx context.Context, i port.Intent, c port.RunConnection, 
 		*state.report = port.RefusalReport{Outcome: report.Outcome, Gaps: append([]port.RefusalGap(nil), report.Gaps...)}
 	}
 	return ""
+}
+
+// valueOf reads a report's optional record count.
+func valueOf(records *uint64) uint64 {
+	if records == nil {
+		return 0
+	}
+	return *records
 }

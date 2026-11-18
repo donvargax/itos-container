@@ -52,7 +52,12 @@ func (w *world) egressEvidenceWrite(data []byte, missing []any) error {
 }
 
 func (w *world) egressEvidencePath() string {
-	return w.egressStatePath("sessions", w.recoveryIndexKey(), w.egress.status.egress.id, "egress-refusals.jsonl")
+	return w.egressEvidencePathFor(w.egress.status.egress.id)
+}
+
+// egressEvidencePathFor names one session's protected refusal destination.
+func (w *world) egressEvidencePathFor(id string) string {
+	return w.egressStatePath("sessions", w.recoveryIndexKey(), id, "egress-refusals.jsonl")
 }
 
 func (w *world) egressEvidenceSteps(sc *godog.ScenarioContext) {

@@ -64,6 +64,11 @@ func (w *world) egressLifeRuntimeFixture(response string) error {
 	default:
 		return fmt.Errorf("unknown runtime response %q", response)
 	}
+	// These scenarios judge the product's unchanged grace, call and teardown
+	// budgets, so the world's product is the unmodified-budget build.
+	if err := w.egressLifeFullProduct(); err != nil {
+		return err
+	}
 	if err := w.egressNativeCheckout([]string{"api.example.com"}, []string{"api.example.com"}); err != nil {
 		return err
 	}

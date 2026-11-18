@@ -64,6 +64,13 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 		}
 	}
 	e.CredentialNetwork = binding.CredentialNetwork
+	// Durable refusal evidence outlives any one controller and survives an
+	// ownership refusal: read it before validation can fail, never from a
+	// live proxy or a cache.
+	evidence, evidenceFailure := s.refusalEvidence(ctx, id, entry.Intent().Record())
+	if e.Egress != nil && evidenceFailure == "" {
+		e.Egress.RefusalLog = &evidence
+	}
 	ctx = context.WithValue(ctx, recoveryAnchorKey{}, recoveryAnchorState{session: entry, entry: &e})
 	noCreate := uncreated(entry)
 	if failure == "" && noCreate {
@@ -118,10 +125,26 @@ func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
 	finishEntry(&e)
 	r := recoveryResult()
 	r.Entries = append(r.Entries, e)
+	if evidence.State == "gapped" && evidenceFailure == "" {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: port.RefusalLogGap, Gaps: evidence.Missing, Path: evidence.Path})
+	}
+	if evidenceFailure != "" {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: evidenceFailure})
+	}
 	if failure != "" {
 		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: failure})
 	}
 	return r
+}
+
+// refusalEvidence reads a session's committed refusal log through the same
+// port that published it, without launching a copy or consulting a proxy.
+func (s Recovery) refusalEvidence(ctx context.Context, id string, record port.Record) (port.RefusalLogReport, port.Outcome) {
+	pending := port.RefusalLogReport{State: "pending", Missing: []port.RefusalGap{}}
+	if record.Schema != 3 || s.Refusals == nil {
+		return pending, ""
+	}
+	return s.Refusals.Read(ctx, id)
 }
 func sessionEntry(s port.Session) (port.RecoveryEntry, port.Outcome) {
 	r := s.Record()
@@ -257,10 +280,22 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 	}
 	e.WorkloadExit = entry.Record().WorkloadExit
 	finishEntry(&e)
+	// The durable evidence read keeps the entry's report and the gap diagnosis
+	// alive across processes; the copy's own in-memory report is the fallback
+	// only when reading the committed files back cannot confirm them.
+	evidence, evidenceFailure := s.refusalEvidence(ctx, id, entry.Intent().Record())
+	if e.Egress != nil && evidenceFailure == "" {
+		e.Egress.RefusalLog = &evidence
+	}
 	r := recoveryResult()
 	r.Entries = append(r.Entries, e)
-	if report.Outcome == port.RefusalLogGap {
-		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: port.RefusalLogGap, Gaps: report.Gaps})
+	if evidence.State == "gapped" && evidenceFailure == "" {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: port.RefusalLogGap, Gaps: evidence.Missing, Path: evidence.Path})
+	} else if report.Outcome == port.RefusalLogGap {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: port.RefusalLogGap, Gaps: report.Gaps, Path: report.Path})
+	}
+	if evidenceFailure != "" {
+		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: evidenceFailure})
 	}
 	if failure != "" {
 		r.Failures = append(r.Failures, port.RecoveryFailure{Session: id, Outcome: failure})

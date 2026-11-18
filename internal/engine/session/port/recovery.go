@@ -84,6 +84,7 @@ type RecoveryEntry struct {
 type RecoveryFailure struct {
 	Gaps    []RefusalGap
 	Session string
+	Path    string
 	Outcome Outcome
 }
 type RecoveryResult struct {

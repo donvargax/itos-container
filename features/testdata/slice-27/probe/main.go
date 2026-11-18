@@ -395,7 +395,13 @@ func direct(s step, roots *x509.CertPool, r *result) error {
 	}
 	state := secure.ConnectionState()
 	r.Peer = fingerprint(&state)
-	if _, err = fmt.Fprintf(secure, "GET /nonce?n=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", url.QueryEscape(s.Nonce), s.Name); err != nil {
+	request := fmt.Sprintf("GET /nonce?n=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", url.QueryEscape(s.Nonce), s.Name)
+	if s.Mode == "payload" {
+		request = fmt.Sprintf("POST /payload?n=%s&token=%s HTTP/1.1\r\nHost: %s\r\nX-Slice-28: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", url.QueryEscape(s.Nonce), url.QueryEscape(s.Payload), s.Name, s.Payload, len(s.Payload), s.Payload)
+		payload := []byte(strings.Repeat(s.Payload, 3))
+		r.Sent, r.Digest = len(payload), digest(payload)
+	}
+	if _, err = io.WriteString(secure, request); err != nil {
 		return err
 	}
 	data, err := io.ReadAll(io.LimitReader(secure, 8192))

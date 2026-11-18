@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -182,4 +183,39 @@ func TestEgressLifecycleProbeRecordsSignalsWithoutAnEngine(t *testing.T) {
 			t.Fatal("probe signal completion was not reported")
 		}
 	}
+}
+
+// fullBudgetProduct builds, once per test process, the product compiled from
+// the checkout and so carrying its production limits. The engine tier's
+// ordinary product is the q-40 harness copy with shortened budgets for timing
+// faults; slice-28's runtime, cap and recovery scenarios prove the unmodified
+// budgets (a ten-second grace and a ten-second copy call), with no product flag
+// or environment seam.
+var fullBudgetProduct struct {
+	once sync.Once
+	path string
+	err  error
+}
+
+// egressLifeFullProduct selects the unmodified-budget product for this world's
+// own invocations. Only the harness chooses it; the product never learns why.
+func (w *world) egressLifeFullProduct() error {
+	fullBudgetProduct.once.Do(func() {
+		root, err := moduleRoot()
+		if err != nil {
+			fullBudgetProduct.err = err
+			return
+		}
+		dir, err := os.MkdirTemp("", "slice-28-full-budget-")
+		if err != nil {
+			fullBudgetProduct.err = err
+			return
+		}
+		fullBudgetProduct.path, fullBudgetProduct.err = build(root, dir)
+	})
+	if fullBudgetProduct.err != nil {
+		return fullBudgetProduct.err
+	}
+	w.bin = fullBudgetProduct.path
+	return nil
 }

@@ -134,7 +134,7 @@ func TestRefusalLogFailuresKeepEarlierCopy(t *testing.T) {
 			}
 			if tc.name != "write, then Close with no Commit" {
 				report, failure := copy.Commit()
-				if failure != tc.want || report.Outcome != "" || report.Gaps != nil {
+				if failure != tc.want || (failure == "" && report.Path != f.path()) || (failure == "" && report.Outcome != "" && report.Outcome != sp.RefusalLogGap) {
 					t.Fatalf("commit = %#v, %s; want %q", report, failure, tc.want)
 				}
 				if f.staged() != 0 {
@@ -342,7 +342,8 @@ func TestRefusalLogCloseNeverWaits(t *testing.T) {
 		t.Fatalf("the second controller stored %q with %d staged", got, f.staged())
 	}
 	logs.release <- struct{}{}
-	if done := <-commit; done.failure != "" || done.report.Outcome != "" || done.report.Gaps != nil {
+	derived := sp.RefusalReport{Outcome: sp.RefusalLogGap, Gaps: []sp.RefusalGap{{First: 1, Last: 1}}, Records: 1, Path: f.path()}
+	if done := <-commit; done.failure != "" || !slices.Equal(done.report.Gaps, derived.Gaps) || done.report.Outcome != derived.Outcome || done.report.Records != derived.Records || done.report.Path != derived.Path {
 		t.Fatalf("the late Commit = %#v, %s", done.report, done.failure)
 	}
 	if got := string(f.stored()); got != first || f.staged() != 0 {

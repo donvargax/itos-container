@@ -188,7 +188,7 @@ func recoveryCleanup(r port.RecoveryResult, report *port.RefusalReport) port.Out
 	outcome := port.Complete
 	for _, f := range r.Failures {
 		if f.Outcome == port.RefusalLogGap {
-			*report = port.RefusalReport{Outcome: f.Outcome, Gaps: append([]port.RefusalGap(nil), f.Gaps...)}
+			*report = port.RefusalReport{Outcome: f.Outcome, Gaps: append([]port.RefusalGap(nil), f.Gaps...), Path: f.Path}
 		} else if outcome == port.Complete {
 			outcome = f.Outcome
 		}

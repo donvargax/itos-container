@@ -63,6 +63,11 @@ func (w *world) egressLifeTrafficSteps(sc lifecycleStepRegistrar) {
 }
 
 func (w *world) egressLifeTrafficFixture(kind string) error {
+	// The cap scenario measures the unmodified copy and commit budgets, and
+	// the metadata and payload scenarios share its runs.
+	if err := w.egressLifeFullProduct(); err != nil {
+		return err
+	}
 	recorder, err := w.egressLifeRecord()
 	if err != nil {
 		return err

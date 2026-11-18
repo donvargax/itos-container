@@ -195,10 +195,14 @@ func (w *world) egressCurrentDiffers() error {
 
 func (w *world) egressStatusResults() (plain, structured egressResult, err error) {
 	results := w.egressFixture().results
-	if len(results) != 2 || results[0].command != "status" || results[1].command != "status --json" {
+	if len(results) < 2 {
 		return plain, structured, fmt.Errorf("missing plain and JSON status results")
 	}
-	return results[0], results[1], nil
+	plain, structured = results[len(results)-2], results[len(results)-1]
+	if plain.command != "status" || structured.command != "status --json" {
+		return plain, structured, fmt.Errorf("missing plain and JSON status results")
+	}
+	return plain, structured, nil
 }
 
 // egressStatusBlocks splits plain status at each session line, by session ID.
@@ -309,8 +313,12 @@ func (w *world) egressStatusJSON() error {
 			}
 			continue
 		}
-		want := map[string]any{"profile": "allowlist-v1", "allow": offlineStrings(seeded.allow), "limitations": offlineStrings(egressLimitations)}
-		if !sameJSON(egress, want) || len(object(egress)) != 3 {
+		want := map[string]any{"profile": "allowlist-v1", "allow": offlineStrings(seeded.allow), "limitations": offlineStrings(egressLimitations),
+			// Slice-28 extends this entry with the session's durable refusal
+			// evidence: a destination that is pending until a committed copy
+			// exists, never a claim about a live count.
+			"refusal_log": map[string]any{"path": w.egressEvidencePathFor(seeded.id), "state": "pending", "records": nil, "missing": []any{}}}
+		if !sameJSON(egress, want) || len(object(egress)) != 4 {
 			return fmt.Errorf("egress object is %s, want %s", approvalJSON(egress), approvalJSON(want))
 		}
 	}
@@ -332,10 +340,19 @@ func (w *world) egressStatusNoClaim() error {
 		for _, limitation := range egressLimitations {
 			text = strings.ReplaceAll(text, limitation, "")
 		}
-		// Outside the four disclosed limits nothing may speak of interception,
-		// of a refusal log, of its path or of a count of stored refusals.
-		if claim := egressStatusClaim.FindString(text); claim != "" {
-			return fmt.Errorf("%s says %q outside the specified limitations", r.command, claim)
+		// Slice-28 adds the durable refusal_log report: its destination, state
+		// and stored count are disclosed facts, not a completeness claim, so
+		// they leave this scan exactly as the four limitations do.
+		text = strings.ReplaceAll(text, w.egressEvidencePath(), "")
+		text = strings.ReplaceAll(text, "refusal_log", "")
+		for _, line := range strings.Split(text, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "refusal log:") || strings.HasPrefix(trimmed, "stored records:") || strings.HasPrefix(trimmed, "missing sequences:") {
+				continue
+			}
+			if claim := egressStatusClaim.FindString(line); claim != "" {
+				return fmt.Errorf("%s says %q outside the specified limitations", r.command, claim)
+			}
 		}
 	}
 	return nil

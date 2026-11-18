@@ -17,6 +17,9 @@ type EgressDisclosure struct {
 	Profile     string   `json:"profile"`
 	Allow       []string `json:"allow"`
 	Limitations []string `json:"limitations"`
+	// RefusalLog reports this session's protected refusal evidence; a fresh
+	// process reads it back from durable storage, never a live proxy.
+	RefusalLog *RefusalLogReport `json:"refusal_log,omitempty"`
 }
 
 func (g EgressGrant) Disclosure() *EgressDisclosure {
@@ -167,13 +170,35 @@ func (r Record) OwnsProxy(o Observation, b Binding) bool {
 		o.Token == r.NameToken() && o.Project == r.Project && o.Fingerprint == r.Fingerprint && o.Session == r.Anchor.Session && o.Kind == "egress-proxy"
 }
 
-type RefusalGap struct{ First, Last uint64 }
+type RefusalGap struct {
+	First uint64 `json:"first"`
+	Last  uint64 `json:"last"`
+}
+
+// RefusalReport is one committed copy's own judgement: the published record
+// count (log-full counts, ready does not), the inclusive sequence ranges the
+// source never delivered, and the protected destination the copy published.
 type RefusalReport struct {
 	Outcome Outcome
 	Gaps    []RefusalGap
+	Records uint64
+	Path    string
 }
+
+// RefusalLogReport is the durable evidence a fresh process reads back: state is
+// pending until a committed copy exists, stored for a copy without observed
+// gaps, gapped for one with gaps, unknown when publication or its evidence
+// cannot be confirmed. Records is null for pending and unknown.
+type RefusalLogReport struct {
+	Path    string       `json:"path"`
+	State   string       `json:"state"`
+	Records *uint64      `json:"records"`
+	Missing []RefusalGap `json:"missing"`
+}
+
 type RefusalLog interface {
 	Begin(context.Context, string) (RefusalCopy, Outcome)
+	Read(context.Context, string) (RefusalLogReport, Outcome)
 }
 type RefusalCopy interface {
 	Writer
