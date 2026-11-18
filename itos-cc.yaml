@@ -177,3 +177,12 @@ mutation:
       replacement: "false"
       reason: "This assignment is reached only when a prior capability is held and every metadata comparison succeeded. The immediately preceding capture.release closes all newly captured handles and sets capture.selected to nil. Replacing true with false only runs the deferred capture.release again: its range over nil closes no handles, and assigning nil again changes no state. The original s.held and s.checked remain untouched, all return values and filesystem calls are identical, and earlier failure paths are unchanged. TestCredentialCheckedSourcesRecheckRetainedMetadata and the retained-inode controls verify original handle preservation and complete release with either value. No behavior can distinguish this second empty release."
       line_text: success = true
+    - file: internal/slices/stop/terminal/consent.go
+      function: github.com/donvargax/itos-container/internal/slices/stop/terminal.Consent#Review
+      hash: 2e9e1bdb33164db1
+      line_in_function: 9
+      column: 28
+      original: "1"
+      replacement: "0"
+      reason: "The buffer only lets the reader goroutine complete its send after the select has already returned on cancellation, so it exits instead of blocking. That completion is the only difference: every returned decision, prompt byte and terminal read is identical. A live context receives the same answer value through the same select whether the send must rendezvous or completes into the buffer, and a context that is cancelled before, during or after the prompt returns false through the same ctx.Done case either way. Nothing joins the goroutine, receives from the channel again, or observes its exit; its bufio reader is discarded with the call. The package tests drive real ptys with no goroutine-leak detector, so no black-box test can distinguish the two versions. This entry is the reviewed CI survivor from the slice-34 proof run."
+      line_text: answer := make(chan bool, 1)
