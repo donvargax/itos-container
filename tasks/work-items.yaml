@@ -2234,7 +2234,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-32, slice-35, slice-31, slice-36]
+    depends_on: [T-48, slice-34, slice-30]
     kind: slice
     why: >
       Specify the OpenCode counterpart to slice-32. The source is auth.json under
