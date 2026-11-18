@@ -2236,3 +2236,16 @@ items:
       the scenarios. Name any unresolved account decision explicitly. Specification first;
       implementation follows the Codex and Claude slices. Real credential use is subject to decision
       0025 question 5.
+  - id: slice-41
+    title: Start OpenCode headless with isolated home and configuration
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-32, slice-35, slice-31, slice-36]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-35 in the approved worker. Run opencode --standalone
+      run --format json against its isolated home and configuration, with the authorized provider
+      and model. Cover separation from host configuration and services, bounded startup, final
+      output and failure, approved egress and cleanup. Scenarios use synthetic credentials and a
+      fake provider. Specify only for now; implementation follows the Codex and Claude slices.
