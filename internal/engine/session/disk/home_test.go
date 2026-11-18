@@ -165,7 +165,7 @@ func TestHomeCompletionFailureKeepsPendingAuthority(t *testing.T) {
 }
 
 func TestHomeClaimsReadOriginalAuthorityWithoutReleasingIt(t *testing.T) {
-	for _, fault := range []string{"valid", "bad claim", "no codecs", "no locations", "no original reader", "read failure", "intent missing", "intent malformed", "snapshot missing", "snapshot malformed", "wrong binding", "overlap", "inspect failure", "registry absent", "sessions failure", "public malformed", "public changed", "wrong session", "replaced directory"} {
+	for _, fault := range []string{"valid", "bad claim", "no codecs", "no locations", "no original reader", "read failure", "intent missing", "intent malformed", "snapshot missing", "snapshot malformed", "wrong binding", "swapped generation id", "overlap", "inspect failure", "registry absent", "sessions failure", "public malformed", "public changed", "wrong session", "replaced directory"} {
 		t.Run(fault, func(t *testing.T) {
 			h, s, _, codec := homeDiskState()
 			b := codec.Value
@@ -211,6 +211,12 @@ func TestHomeClaimsReadOriginalAuthorityWithoutReleasingIt(t *testing.T) {
 			case "wrong binding":
 				r.GID = "42"
 				intents.Files[token+".json"] = codec.Encode(r)
+				want = sp.Invalid
+			case "swapped generation id":
+				// The claimed home binds the exact generation identity: a
+				// generation that swaps its ID while keeping the claimed
+				// home's name is refused, never released.
+				s.Generations[0].ID = strings.Repeat("f", 64)
 				want = sp.Invalid
 			case "overlap":
 				claim.StateRoot = b.Checkout.Root
