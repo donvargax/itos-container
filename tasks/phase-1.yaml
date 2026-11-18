@@ -8193,7 +8193,8 @@
     pass after the fix. With an inherited COLUMNS=30, world.env must omit the key
     regardless of case and ID-APPROVAL-29 must still pass against the built CLI.
     world.withEnv("COLUMNS=200") must supply exactly one width with that value.
-    The focused test selects the help scenario itself so a suite filter cannot skip the check.
+    The focused test runs the help scenario in an unfiltered suite. Filtered runs execute only
+    their selected scenarios.
   done_when:
     - run: "report=$(go test ./features -run \"^TestHarnessEnvClearsColumns$\" -count=1 -v) || { printf \"%s\\n\" \"$report\"; exit 1; }; printf \"%s\\n\" \"$report\" | grep -F -- \"--- PASS: TestHarnessEnvClearsColumns (\""
       timeout: 180

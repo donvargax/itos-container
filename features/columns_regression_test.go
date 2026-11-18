@@ -2,6 +2,8 @@ package features
 
 import (
 	"bytes"
+	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -11,8 +13,10 @@ import (
 // An inherited COLUMNS makes Kong wrap help to the caller's terminal width, which
 // splits the phrases help scenarios assert. The scenarios' environment must not
 // carry the caller's width, while a scenario that names its own still gets it.
-// It runs on filtered runs too: it selects its own scenario.
 func TestHarnessEnvClearsColumns(t *testing.T) {
+	if filteredFeatureRun(*scenarios, readFeatureEnvironment(os.Getenv, runtime.GOOS, runtime.GOARCH)) {
+		t.Skip("whole-suite harness regression; filtered runs must execute only their selected scenarios")
+	}
 	isolateProductCoverage(t)
 	t.Cleanup(removeCallerPath)
 	t.Setenv("COLUMNS", "30")
