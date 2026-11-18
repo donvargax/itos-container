@@ -114,28 +114,31 @@ func TestEvidenceConfirmsPairDurabilityBeforeCommitting(t *testing.T) {
 
 	// The pair is visible but its report rename was never confirmed durable.
 	// Evidence must refuse it while the directory sync cannot be re-run, and
-	// serve it only after one sync confirms the pair's directory entry.
+	// serve it only after one sync confirms the pair's directory entry. A
+	// registry snapshots the store at construction, so the faulted operations
+	// reach it only through a registry built after they are installed.
 	ops := s.operations()
-	syncs := 0
+	var attempted, confirmed int
 	ops.syncParent = func(f *os.File) error {
-		syncs++
+		attempted++
 		return bad
 	}
 	s.ops = &ops
-	e, failure := r.Evidence(t.Context(), c, id)
+	refused := Registry{Store: s}
+	e, failure := refused.Evidence(t.Context(), c, id)
 	if failure != "state.write" || e.Log != nil || e.Report != nil {
 		t.Fatalf("unconfirmed pair served as evidence: %q %+v", failure, e)
 	}
 	ops.syncParent = func(f *os.File) error {
-		syncs++
+		confirmed++
 		return sync(f)
 	}
-	e, failure = r.Evidence(t.Context(), c, id)
+	e, failure = refused.Evidence(t.Context(), c, id)
 	if failure != "" || string(e.Log) != "line\n" || string(e.Report) != "report" {
 		t.Fatalf("confirmed pair did not round trip: %q %+v", failure, e)
 	}
-	if syncs != 1 {
-		t.Fatalf("evidence confirmed the pair with %d syncs, want 1", syncs)
+	if attempted != 1 || confirmed != 1 {
+		t.Fatalf("evidence attempted %d and confirmed %d syncs, want one of each", attempted, confirmed)
 	}
 }
 
