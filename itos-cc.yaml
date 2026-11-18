@@ -186,3 +186,12 @@ mutation:
       replacement: "0"
       reason: "The buffer only lets the reader goroutine complete its send after the select has already returned on cancellation, so it exits instead of blocking. That completion is the only difference: every returned decision, prompt byte and terminal read is identical. A live context receives the same answer value through the same select whether the send must rendezvous or completes into the buffer, and a context that is cancelled before, during or after the prompt returns false through the same ctx.Done case either way. Nothing joins the goroutine, receives from the channel again, or observes its exit; its bufio reader is discarded with the call. The package tests drive real ptys with no goroutine-leak detector, so no black-box test can distinguish the two versions. This entry is the reviewed CI survivor from the slice-34 proof run."
       line_text: answer := make(chan bool, 1)
+    - file: cmd/itos-container/main.go
+      function: github.com/donvargax/itos-container/cmd/itos-container#run
+      hash: 3a774b65f8844ebd
+      line_in_function: 21
+      column: 15
+      original: ">"
+      replacement: ">="
+      reason: run replaces an empty args with the one-element --help line before anything parses, so len(args) is at least one wherever this guard is evaluated. Both len(args) > 0 and the mutant len(args) >= 0 are therefore always true there, and the args[0] comparison plus every following completion, parse and dispatch path is identical for every input, including an empty command line. No observable result can differ, so no test can fail on the mutant.
+      line_text: if len(args) > 0 && args[0] == "__complete" {
