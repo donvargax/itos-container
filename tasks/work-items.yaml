@@ -606,6 +606,12 @@ items:
       VolumeCreate. This item already covers safe retirement when durable evidence proves a create
       was never issued. A name-only lookup that finds no volume cannot rule out a late allocation.
       Any broader reclaim rule needs the person’s decision.
+
+      This recovery item already covers uncertain creates that leave a session stuck. Add the case
+      where VolumeCreate was dispatched, its reply was lost, and later lookups continue to find no
+      volume. HOME-10 covers a volume that eventually appears. The person must settle what evidence
+      permits releasing the claim while a delayed allocation is still possible. Elapsed time and
+      repeated name-only misses do not establish that the create has finished.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
@@ -777,6 +783,9 @@ items:
       type, or classifies merges by their first parent's type. A merge of main into an item branch
       changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
       own subject names the item).
+    deferred: >
+      Reserved for an external contribution. The coordinator will resume this item when the patch
+      arrives.
   - id: p2-profile-non-engine-feature-suite
     title: Profile the non-engine feature suite and cut its roughly 300 s wall time
     phase: 1
@@ -2215,6 +2224,16 @@ items:
       Commit aaf919c makes runFixtureWarmupShell pass --binary to jq on every platform to handle
       Windows line endings. The existing item covers this fixture. Check the wrapper on macos-latest
       before attributing a dispatch failure to it.
+
+      Include the shared Linux machine in the fixture repair. Start with one approval disk-contract
+      test that returns state.unsafe locally and passes on Ubuntu CI. Use it to identify the
+      filesystem assumption, then check the admission-leftover tests and affected feature rows while
+      preserving the production ownership checks.
+
+      This item already covers local state.unsafe failures on the shared Linux machine and the
+      affected feature scenarios. Both / and /tmp are owned by UID 65534 in the agent sandbox. Use
+      ID-EGRESS-09 to verify and document where implementers can run the fixture and reach its
+      behavior assertion with production ownership checks intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
