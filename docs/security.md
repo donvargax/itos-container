@@ -65,7 +65,12 @@ protected intent, independently of the approved proxy manifest digest. Recovery
 requires that original observation and never derives it from current policy,
 approval or a replacement cached image. The snapshot and fingerprint do not change.
 Cleanup stops the worker and proxy, streams the refusal log into the protected
-session directory, then removes the proxy, networks and anchor. A failed copy
+session directory, then removes the proxy, networks and anchor. The same commit
+publishes the copy's own report beside the log; status and stop read that
+committed evidence back (`refusal_log` with a protected destination, a state of
+pending, stored, gapped or unknown, the stored record count and any missing
+sequence ranges), and a committed gap is its own exit-1 diagnosis that retrying
+cannot repair. A retry never rewrites a committed copy. A failed copy
 retains the stopped proxy and its log for recovery. Slice-28 owns the additional
 native proxy-failure and log-gap reporting proof. None of this closes the late
 checkout Unix-socket gap described above.
