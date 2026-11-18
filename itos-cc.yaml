@@ -26,7 +26,7 @@ mutation:
       line_text: return (b.Stage == "owned" || b.Stage == "absent" && b.Device == "" && b.Inode == "") && r.Stage == n.Stage && r.ContainerID == n.ContainerID
     - file: internal/engine/session/docker/run.go
       function: github.com/donvargax/itos-container/internal/engine/session/docker#safeHost
-      hash: 0d125654dcccfa55
+      hash: f3697e81bc31de7d
       line_in_function: 22
       column: 14
       original: "false"
@@ -125,7 +125,7 @@ mutation:
       line_text: keys[key] = true
     - file: internal/engine/session/docker/run.go
       function: github.com/donvargax/itos-container/internal/engine/session/docker#safeHost
-      hash: 0d125654dcccfa55
+      hash: f3697e81bc31de7d
       line_in_function: 34
       column: 16
       original: "&&"
@@ -161,12 +161,12 @@ mutation:
       line_text: for _, later := range values[i+1:] {
     - file: internal/engine/session/codec/json.go
       function: github.com/donvargax/itos-container/internal/engine/session/codec.JSON#Decode
-      hash: 369acf4511e84981
+      hash: 79e034e52b3a9d7e
       line_in_function: 3
       column: 18
       original: "0"
       replacement: "1"
-      reason: Only input lengths zero and one change the early branch. Neither can encode a JSON object containing the required session fields. An initialized codec still returns the empty Record and port.Invalid when the pure manifest parser refuses or reports a non-object; even a parser reporting every required field then reaches json.Unmarshal, which rejects every such input. Longer inputs take identical paths. No I/O or persisted state changes. TestCredentialRecordsRejectEmptyAndSingleByteInputs checks all 257 short inputs with a valid-record parser value, covering the independent decoding refusal. Thus the mutation changes only where invalid input is refused.
+      reason: Only input lengths zero and one change the early branch. Neither can encode a JSON object containing the required session fields. An initialized codec still returns the empty Record and port.Invalid when the pure manifest parser refuses or reports a non-object; even a parser reporting every required field, with or without the optional home object, passes only pure field-shape checks and then reaches json.Unmarshal, which rejects every such input, so the home-field validation this slice added reads no state and cannot turn those bytes into a record. Longer inputs take identical paths. No I/O or persisted state changes. TestCredentialRecordsRejectEmptyAndSingleByteInputs checks all 257 short inputs with a valid-record parser value, covering the independent decoding refusal. Thus the mutation changes only where invalid input is refused.
       line_text: if len(data) == 0 || len(data) > 65536 {
     - file: internal/engine/session/disk/credential_sources.go
       function: github.com/donvargax/itos-container/internal/engine/session/disk.CheckedSources#Revalidate
