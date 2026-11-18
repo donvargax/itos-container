@@ -2220,3 +2220,19 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: slice-40
+    title: Deliver an approved OpenCode login to one container run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-32, slice-35, slice-31, slice-36]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-32. The source is auth.json under
+      ~/.local/share/opencode and may include the OpenCode Go provider key alongside other provider
+      entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
+      approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
+      of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
+      the scenarios. Name any unresolved account decision explicitly. Specification first;
+      implementation follows the Codex and Claude slices. Real credential use is subject to decision
+      0025 question 5.
