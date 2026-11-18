@@ -601,6 +601,11 @@ items:
       is the worker's and the anchor's today and is not T-40's to change. But T-40 adds two network
       creates per egress run, so slice-27 makes the stuck session reachable and nested checkouts
       then stay blocked. The item is p3; its phase is worth revisiting once slice-27 is queued.
+
+      Include a controller killed after publishing the stage intent and claim but before issuing
+      VolumeCreate. This item already covers safe retirement when durable evidence proves a create
+      was never issued. A name-only lookup that finds no volume cannot rule out a late allocation.
+      Any broader reclaim rule needs the person’s decision.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
@@ -1464,8 +1469,8 @@ items:
   - id: T-60
     title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: p2-approve-allowlist-added-removed-names

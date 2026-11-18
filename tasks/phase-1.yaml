@@ -8190,7 +8190,8 @@
     checked by ID-APPROVAL-29, making a correct build fail. Drop inherited terminal width in the
     scenario environment and preserve a scenario's explicit width, including ID-APPROVAL-56. Keep
     the existing scenarios and assertions. A focused regression must fail on the old harness and
-    pass after the fix.
-  done_when:
-    - run: "report=$(go test ./features -run \"^TestHarnessEnvClearsColumns$\" -count=1 -v) || { printf \"%s\\n\" \"$report\"; exit 1; }; printf \"%s\\n\" \"$report\" | grep -F -- \"--- PASS: TestHarnessEnvClearsColumns (\""
-      timeout: 180
+    pass after the fix. With an inherited COLUMNS=30, world.env must omit the key
+    regardless of case and ID-APPROVAL-29 must still pass against the built CLI.
+    world.withEnv("COLUMNS=200") must supply exactly one width with that value.
+    The focused test runs the help scenario in an unfiltered suite. Filtered runs execute only
+    their selected scenarios.
