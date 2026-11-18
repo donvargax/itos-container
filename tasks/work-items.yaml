@@ -1464,8 +1464,8 @@ items:
   - id: T-60
     title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p2-approve-allowlist-added-removed-names
