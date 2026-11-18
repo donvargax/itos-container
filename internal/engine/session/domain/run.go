@@ -14,13 +14,17 @@ import (
 // Runner preserves the unstarted-only Service contract while adding an explicit
 // foreground lifecycle. The durable intent contains no command or stream data.
 type Runner struct {
-	Homes     *Homes
-	Refusals  port.RefusalLog
-	Store     port.Store
-	Engine    port.RunEngine
-	Entropy   port.Entropy
-	Workspace port.Workspace
-	Registry  port.Registry
+	Homes          *Homes
+	sourceOwner    chan struct{}
+	Credentials    port.CredentialStager
+	Sources        port.CredentialSources
+	StagingEntropy port.CredentialEntropy
+	Refusals       port.RefusalLog
+	Store          port.Store
+	Engine         port.RunEngine
+	Entropy        port.Entropy
+	Workspace      port.Workspace
+	Registry       port.Registry
 }
 
 // waitUnreconciled is provisional, only for a registered stdin-close probe
@@ -28,6 +32,18 @@ type Runner struct {
 const waitUnreconciled port.Outcome = "wait-unreconciled"
 
 func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string, streams port.Streams) port.RunResult {
+	if s.Sources != nil {
+		s.sourceOwner = make(chan struct{}, 1)
+		s.sourceOwner <- struct{}{}
+		defer func() {
+			select {
+			case <-s.sourceOwner:
+				s.Sources.Close()
+			default:
+			}
+		}()
+	}
+
 	if s.Registry != nil {
 		return s.registeredRun(ctx, frozen, argv, streams)
 	}
@@ -234,7 +250,7 @@ func (s Runner) launch(ctx context.Context, frozen approval.Durable, argv []stri
 		return result, nil, nil
 	}
 	defer intent.Close()
-	if intent.Binding().Egress != (port.EgressGrant{}) || intent.Binding().Home {
+	if intent.Binding().Home || intent.Binding().Egress != (port.EgressGrant{}) || intent.Binding().StagingKinds != (port.CredentialKinds{}) {
 		result.Outcome = port.Refused
 		return result, nil, nil
 	}
@@ -341,7 +357,7 @@ func (s Runner) Cleanup(ctx context.Context, reference string) (result port.Resu
 		return result
 	}
 	defer intent.Close()
-	if intent.Record().Schema == 3 {
+	if intent.Record().HasEgress() {
 		s.Engine = finiteEngine{s.Engine}
 	}
 	connection, failure := s.Engine.OpenRun(ctx, intent.Binding())
@@ -422,6 +438,6 @@ func cleanupRun(ctx context.Context, intent port.Intent, connection port.RunConn
 }
 
 func owns(record port.Record, observed port.Observation) bool {
-	return port.HexID(observed.ID) && observed.Name == record.Name && observed.ImageID == record.ImageID &&
+	return record.OwnsCredentialMounts(observed) && port.HexID(observed.ID) && observed.Name == record.Name && observed.ImageID == record.ImageID &&
 		observed.Token == record.NameToken() && observed.Project == record.Project && observed.Fingerprint == record.Fingerprint
 }

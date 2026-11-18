@@ -52,13 +52,25 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 		if len(value.Fields) != 14+homeFields {
 			return bad()
 		}
-	case "2", "3":
+	case "2", "3", "4":
 		a := value.Fields["anchor"]
 		count := 15
 		if value.Fields["schema"].Text == "3" {
 			count = 16
 			if !egressFields(value.Fields["egress"]) {
 				return bad()
+			}
+		}
+		if value.Fields["schema"].Text == "4" {
+			count = 16
+			if !credentialFields(value.Fields["credentials"]) {
+				return bad()
+			}
+			if e, ok := value.Fields["egress"]; ok {
+				count++
+				if !egressFields(e) {
+					return bad()
+				}
 			}
 		}
 		if len(value.Fields) != count+homeFields || a.Kind != manifest.Object || len(a.Fields) != 7 {
@@ -85,7 +97,7 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 	if record.Schema >= 2 {
 		b := port.Binding{}
 		b.Checkout.Device, b.Checkout.Inode = record.Anchor.Device, record.Anchor.Inode
-		if !record.ValidAnchor(b) || !record.ValidEgressShape() {
+		if !record.ValidAnchor(b) || !record.ValidEgressShape() || !record.CredentialShape() {
 			return bad()
 		}
 		if (record.Stage == "intent" || record.Stage == "owned") && record.Anchor.Stage != "owned" {

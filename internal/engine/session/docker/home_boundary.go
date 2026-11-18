@@ -3,7 +3,6 @@ package docker
 import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"maps"
 	"slices"
 	"strings"
@@ -28,37 +27,22 @@ func safeHomeWorkerHost(h *container.HostConfig, r port.Record) bool {
 	if r.Home == (port.HomeReference{}) {
 		return safeWorkerHost(h, r)
 	}
-	if !r.Home.Valid() || len(h.Mounts) != 2 {
+	if !r.Home.Valid() || len(h.Mounts) != 2+len(r.Credentials.Mounts()) {
 		return false
 	}
 	copy := *h
 	copy.Mounts = nil
 	for _, m := range h.Mounts {
 		if m.Target == "/home/itos" {
-			if m.Type != mount.TypeVolume || m.Source != r.Home.Name || m.ReadOnly || m.BindOptions != nil || m.VolumeOptions == nil || !m.VolumeOptions.NoCopy || m.VolumeOptions.Subpath != "" || m.VolumeOptions.DriverConfig != nil || len(m.VolumeOptions.Labels) != 0 {
+			if !safeVolumeMount(m, r.Home.Name, "/home/itos") {
 				return false
 			}
 		} else {
 			copy.Mounts = append(copy.Mounts, m)
 		}
 	}
-	return len(copy.Mounts) == 1 && safeWorkerHost(&copy, r)
+	return safeWorkerHost(&copy, r)
 }
 func safeHomeMounts(mounts []container.MountPoint, r port.Record) bool {
-	if r.Home == (port.HomeReference{}) {
-		return safeMounts(mounts, r.Anchor.Name)
-	}
-	home := false
-	remaining := make([]container.MountPoint, 0, len(mounts))
-	for _, m := range mounts {
-		if m.Destination == "/home/itos" {
-			if home || m.Type != mount.TypeVolume || m.Name != r.Home.Name || m.Driver != "local" || !m.RW || m.Propagation != "" && m.Propagation != mount.PropagationRPrivate {
-				return false
-			}
-			home = true
-		} else {
-			remaining = append(remaining, m)
-		}
-	}
-	return home && safeMounts(remaining, r.Anchor.Name)
+	return safeMounts(mounts, r.Anchor.Name, r.Home.Name, r.Credentials.Mounts()...)
 }

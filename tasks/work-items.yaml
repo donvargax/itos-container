@@ -2,9 +2,7 @@
 phases:
   1: null
 queue:
-  - T-59
   - slice-28
-  - T-48
   - slice-34
   - slice-32
   - slice-35
@@ -194,6 +192,11 @@ items:
       per-slice red-evidence and history notes out of it (the commits and run numbers already record
       them), keep only the standing harness rules, and add a doc-caps entry with headroom over the
       shortened size so later slices cannot grow it back.
+
+      This item already covers scenario guidance in features/README.md. Include a review rule there:
+      when a spec claims an exact mount option string produces a particular behavior, cite the
+      relevant engine source or a native CI observation. The executable /tmp spec shows why omitting
+      noexec is insufficient evidence.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -1716,7 +1719,7 @@ items:
     title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-47, slice-29]
     kind: task
   - id: slice-31
@@ -1839,6 +1842,11 @@ items:
       later stop's copy would differ, and which rename lands last would matter. Whoever drafts this
       item must revisit that argument, either by scrubbing identically from every controller or by
       running the copy's Commit through the session's gate.
+
+      This item already owns AC-36’s hostname-marker probe. Because q-56 preserves refused hostnames
+      verbatim, verify that a synthetic credential marker embedded in a valid refused hostname is
+      absent from retained proxy stdout, Docker’s proxy log, and the protected egress-refusals.jsonl
+      copy.
   - id: T-53
     title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
     phase: 1
@@ -2197,6 +2205,11 @@ items:
       of the failed jobs passed. The other shard took 144 s of its 180 s gate in that run, with
       slice-27's egress rows now live, so a timing dependence under a fuller shard is the first
       thing to check. One occurrence; record the next with its run before repairing anything.
+
+      The existing item tracks intermittent failures in ID-OVERLAP-06. Run 44286115510 failed the
+      activity check, which 369b58b changed to retry. The cleanup check still samples the daemon
+      once to confirm a 404 for the original worker ID. No cleanup failure has been observed. If one
+      occurs, record the CI run on this item.
   - id: p2-repair-platform-ci-fixtures
     title: Repair shell and Windows assumptions in portability fixtures
     phase: 1
@@ -2251,8 +2264,8 @@ items:
   - id: T-59
     title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: slice-40

@@ -6239,19 +6239,214 @@
     them. It fails today at ls, because no record exists. The second fails today on its first anchor,
     ### Credential run.
 - id: T-48
-  type: feat
-  title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
+  type: chore
+  title: Prepare session token staging, exact file mounts and owned recovery
   why: >
-    The shared seam every credential slice needs, built before them, as T-40 is for the proxy. A
-    port method, a stateful fake in porttest and a docker adapter hand secret bytes or a
-    bind-mounted host file to one worker for one command, by the mechanism the decision record
-    chose. The port's shared contract runs against the fake and the adapter. It asserts that the
-    created container's configuration, mounts list, labels and recovery records hold no secret
-    value, that the secret is gone with the session, and that a failed delivery stops the workload
-    before it starts. Real-engine proof runs in CI only, on a synthetic marker, and the agent never
-    receives the Docker socket. The fake does no I/O. Broken down from p1-credentials-passed-in.
-  done_when:
-    - run: go test ./internal/engine/session/...
+    Charter milestone two, step 2 needs the shared session seam before slice-31 and slice-33 can
+    deliver tokens. This is internal foundation work, with task checks and no new command
+    behaviour or scenarios. It does not lift any policy, approval or run refusal. Read
+    docs/decisions/0025-credentials-passed-in.md in full, arc42's Credential run and credential
+    building blocks, docs/architecture.md's Slices, decision 0017 and LIFECYCLE-03/07. The design
+    remains ADR 0025's proposal, not a charter amendment, runtime evidence or permission to use
+    real credentials. Its question 1 defers Codex and the original task's direct single-file
+    source-mount half; implement neither a Codex kind nor a replacement login mechanism here.
+    Question 5 bars real credentials. Question 6 bars an integrated refusal-log absence claim;
+    this task neither fixes the logging contract nor declares AC-36 satisfied.
+
+    The coordinator's q-67 decision of 2026-11-15 21:15 UTC confirms the slice-29 prerequisite
+    is met: slice-29 merged at ae2e666 and closed at 07a596e on 2026-11-14, and q-54 applies.
+    Implement T-48 as specified without another prerequisite question. Consume slice-29's
+    bounded, concurrency-safe state-side descendant-exclusion handoff, including refusal of a
+    state-descendant alias while admitting a distinct source during another project's
+    publications and removals and with more than 100,000 unrelated retained entries. Older
+    unresolved-state wording in ADR 0025 or arc42 predates that merge; do not rewrite it in
+    this task. Do not implement the withdrawn host-wide state scan, a current-project-only
+    substitute, or a fallback. The source capability below consumes that handoff; it does not
+    invent its exclusion algorithm.
+
+    Extend internal/engine/session's domain, port, port/porttest, disk, docker, codec and entropy
+    responsibilities, preserving the existing slice/engine arrows. Keep OS, filesystem and SDK
+    operations behind ports, and the stateful fake entirely in memory. Only cmd may assemble
+    concrete adapters; public assembly and grant admission belong to the consuming slices.
+    Reuse the session intent, registry, per-session operation lock, finite-call wrappers and
+    shared Recovery path, not a second worker lifecycle. No-grant runs keep their existing
+    configuration, record meaning, hardening and lifecycle. Preserve T-40's resource ownership
+    and cleanup when its changes land; credential cleanup cannot declare a session complete
+    while an anchor, worker or other owned resource remains. Reuse the pinned Moby client
+    v0.6.2/API v1.56.1, golang.org/x/sys v0.48.0 and Go 1.27 standard library; they already supply
+    engine mounts, descriptor operations, tmpfs observation and entropy. No new library, host
+    shell, HTTP bridge, network service, init wrapper or dependency upgrade is needed.
+
+    Accept only the two token kinds from ADR 0025, at most one of each. Their immutable targets
+    are /run/itos-container/credentials/claude-token and
+    /run/itos-container/credentials/github-token. Represent checked source access separately
+    from persisted metadata: the source capability retains the descriptor and identity validated
+    by readiness, and reading reopens that descriptor through /proc/self/fd, never the supplied
+    pathname. Consume slice-29's revalidation, including exclusion, for the complete source set
+    before reading or staging; refusal means no staging or create. Read each checked source once
+    per command, 1 through 65536 bytes, without trimming. A short read, changed observed size or
+    failed read refuses.
+    Keep bytes in the copying adapter, not Binding, Record or a Docker request. Use one bounded
+    read/write buffer and overwrite it after use on success and failure; this is hygiene, not
+    guaranteed Go-memory zeroization. Never read, hash or compare contents to decide approval.
+
+    Publish durable staging intent under the existing protected session authority before mkdir
+    or any token copy. Allocate an independent 128-bit random staging name, /dev/shm/itos-container-
+    followed by 32 lowercase hexadecimal digits, through the entropy adapter; do not shorten
+    existing session or intent IDs or change HexID. Verify /dev/shm is tmpfs with statfs. Create
+    a new host-UID-owned directory with mode 0700 and validate it by descriptor after mkdir;
+    collision refuses instead of reusing it. Create exactly the selected kind-named regular
+    files with O_CREAT, O_EXCL and O_NOFOLLOW, mode 0400, owned by the host UID, and copy the
+    checked bytes. A partial failure keeps enough original intent for owned cleanup. Never
+    write copies under the checkout, protected state, a disk-backed volume or an image; never
+    bind the original source or the staging directory. No grant means no staging allocation.
+
+    Supply only staged paths and fixed targets to the Docker adapter. CreateRun adds one
+    read-only HostConfig.Mounts bind per token, alongside the existing checkout anchor volume
+    and /tmp tmpfs. Retain private IPC, a separate worker /dev/shm, the read-only root, non-root
+    UID/GID, literal workload argv as PID 1, no restart and every existing hardening check.
+    Create-time paths may be visible in inspect; token values may not. Extend VerifyRun's
+    safeHost and safeMounts to require exactly the intended sources, targets, types and read-only
+    flags, refusing missing, extra, duplicate, writable, directory or original-source mounts.
+    Do not weaken the existing Docker variation that may omit /tmp from materialized Mounts.
+    Inspect's recovery ownership currently recognizes only one HostConfig mount: extend that
+    observation and its consumers too, so a legitimate credential bind neither hides an anchor
+    mismatch nor prevents owned recovery. Assertions must inspect raw requests and independent
+    fixture observations, not call safeHost or safeMounts as the oracle for their own correctness.
+
+    Stage before worker create and keep copies until the start wait returns and the applicable
+    existing checkout-mount detector has run. On every path after that point, including failed
+    acknowledgement or detector failure, attempt to unlink every staged file and remove the
+    directory. On failures before any start attempt, clean partial staging and any owned
+    unstarted resources without starting work. Preserve the primary failure if cleanup fails.
+    Source inspection, reading, staging, publication, create and verification failures before
+    start therefore prevent launch; this does not say a failed start acknowledgement prevents
+    launch. Do not add start retries, a new workload lifetime, or a restart after unlink.
+
+    Model staged pathname presence and runtime-acquired references independently. A runtime
+    may acquire a credential mount, lose its start acknowledgement, and finish starting after
+    the controller unlinks the files. The acquired copy can still be read until that worker's
+    mounts are torn down. Preserve the original protected full worker ID; reconcile it within
+    the existing operation and teardown budgets and attempt owned termination/removal. Retain
+    an unobserved workload outcome as unknown. Missing staged paths, a failed start, or restart
+    policy no cannot prove that no workload ran or that credential cleanup completed. Completion
+    requires confirmed worker removal AND confirmed staging-path removal, plus the other owned
+    resources. A known workload exit keeps its existing precedence over controller failures.
+
+    Retain only kind, paths, original session authority and necessary staging identity/progress
+    in recovery evidence, never token bytes or their hashes. Evolve the strict record encoding
+    explicitly without repurposing existing schema-1/2 records or accepting unknown fields; keep
+    original identities immutable and completion terminal. Coordinate any newer schema number
+    with T-40's landed encoding instead of silently colliding with it. Recovery must reconstruct
+    its staging authority from protected records without reopening original sources, current
+    policy or approval. It verifies directory ownership/mode, identity and the expected file
+    names before removal, follows no symlink and never recursively deletes unexpected entries.
+    Unexpected or substituted contents refuse cleanup and retain evidence. Missing staging
+    after a reboot confirms only path absence, never an earlier workload result. Return staging
+    presence as present, absent or unknown through the recovery port for the consuming slices'
+    status presentation. Incomplete cleanup keeps the public session ID and exact
+    itos container stop <session-id> retry; only observed absence permits the durable completion
+    transition. Status is read-only and repeated stop after confirmed completion is idempotent.
+
+    All new finite operations share min(10 seconds, remaining phase time), the original
+    120-second startup and separate 30-second teardown totals; status retains 10 seconds and
+    stop 30 seconds. A staging syscall can return after cancellation. Keep its descriptor and
+    serialization authority until it returns, dispose of late acquired handles, forbid later
+    launch and retain uncertain effects for fresh recovery. No late reply can overwrite a
+    completed record, resume launch or replace the reported cause. Reuse the existing budget
+    engine and controlled-time/barrier tests rather than sleeping for production deadlines.
+
+    Commit executable contracts and unit tests first with compilable, refusing stubs for the
+    missing seam, then implement it. New positive controls must fail at their copy, exact-mount,
+    ordering or recovery assertion, not at compilation, missing setup or a skipped test. Keep
+    the existing passing lifecycle controls as regressions and report them honestly. Use these
+    named tests so the ledger cannot pass merely because go test matches no new tests:
+
+    In disk, TestCredentialStagingContract runs the same port/porttest contract as subtests
+    memory and disk. Cover each kind and both together, exact byte preservation including a
+    final newline, sizes 1 and 65536, independent commands and unchanged original sources.
+    Cover intent-before-effects, no-grant no-op, non-tmpfs refusal, occupied directory/file,
+    symlinks, wrong ownership/modes, short reads/writes, read or metadata revalidation failure,
+    partial staging, failed unlink and safe repeated cleanup. A recording test reporter must
+    show the shared oracle rejects a faulty fake, including one that trims the final newline.
+    Test-only temporary roots and filesystem observations let disk tests exercise the adapter
+    without Docker, privilege or a real state folder; they are not production flags and prove
+    no kernel mount behaviour. Unsupported OS is an input value, not a runtime.GOOS branch in
+    logic; any build-tagged shim contains only the unavailable call, not decisions.
+
+    In docker, TestCredentialMountContract runs one shared contract as memory and sdk subtests
+    against the I/O-free engine fake and the existing local Engine API fixture. Assert exact
+    create/inspect mounts, unchanged hardening and literal argv, both token kinds and no-grant
+    compatibility. Change each inspected source, target, type, read-only flag and ownership
+    independently with a healthy control, requiring refusal before any start. Observe every
+    API request and response, including errors, rather than just the final create body.
+    TestCredentialUncertainStartContract, also memory and sdk, scripts mount acquisition before
+    a lost acknowledgement and delayed start completion after unlink. It must observe the
+    retained bytes through the simulated acquired reference, one create/start only, original-ID
+    reconciliation, observed exit or explicit uncertainty, and both successful and failed
+    cleanup. A fake that deletes its acquired reference on pathname unlink must fail. The SDK
+    fixture models this lifecycle; it is not real-engine evidence.
+
+    In domain, TestCredentialLifecycle drives the registered Runner and shared Recovery through
+    all preparation/start/detector/cleanup boundaries using the stateful fake. Include stop
+    winning the operation lock before start, controller loss before unlink, partial publication,
+    unavailable observations, foreign/substituted staging, independent sessions, and every
+    combination of worker present/absent and staging present/absent/unknown. Assert mutation
+    order, no launch after a pre-start refusal, exact retry and no invented workload success.
+    TestCredentialBudgets uses controlled time and barriers for cancelled/late staging reads,
+    writes, unlink, intent saves and start replies, proving the original limits and retained
+    handle lifetimes without long sleeps. Existing finite-launch, registered-run, anchor,
+    recovery and cancellation tests remain live.
+
+    In port, TestCredentialProgress holds immutable ownership and terminal completion through
+    every credential progress transition. In codec, TestCredentialRecords round-trips the new
+    metadata, refuses missing/unknown/mistyped fields, invalid kinds/paths, changed authority and
+    impossible completion, and preserves existing records. In disk,
+    TestCredentialRecoveryStore exercises durable publication, interrupted updates and reopening
+    against the same store contract on memory and disk. No serialization may include the read
+    buffer, source capability or content-derived approval value.
+
+    TestCredentialProvisioningAbsence in docker searches raw synthetic markers and their base64
+    encodings at all three offsets in recorded Engine API traffic, configuration, labels and
+    adapter failures. The staging, recovery-store and codec tests search their own real output
+    surfaces, including fixture state and checkout files; domain tests check controller results
+    and fake-recorded configuration/recovery metadata. Use fresh synthetic markers in private
+    temporary fixtures and seed
+    positive controls for every detector so empty searches cannot pass. Tests never import a
+    sibling adapter to assemble this evidence; only cmd assembles adapters, including in the
+    consuming slices' integrated tests. The marker must remain in its source and legitimately
+    acquired worker reference until removal, but no staged pathname may remain after acknowledged
+    startup cleanup or confirmed teardown. Assertions report the surface, never the marker or
+    complete record contents. This is provisioning-path evidence only; the integrated searches
+    over all approval/snapshot/recovery records, command diagnostics and checkout files remain
+    required of slice-31/33. Arbitrary workload output is unredacted, and their ADR hostname-marker
+    refusal-log probe still waits on question 6.
+
+    Real Docker staged-bind acceptance, worker read-only access, cross-project isolation,
+    hash-only proof of bytes after mount acquisition/lost acknowledgement, and disappearance
+    after confirmed teardown remain required CI-only evidence with slice-31/33's black-box
+    scenarios. Do not run a daemon here, add an unguarded engine test to the unit suite, or
+    substitute this fake/SDK evidence for that handoff. A rejected bind or a staged copy that
+    outlives its worker reopens ADR 0025's mechanism; no fallback is authorized. This task adds
+    no scenario IDs and does not activate credential delivery in run, status or stop.
+
+    The check below uses only Go and portable shell/awk already present in task CI. It runs the
+    session unit suite once without the race detector and requires passing reports for every
+    new test and both shared-contract backends; missing or skipped tests fail. Before this
+    spec, go test -count=1 ./internal/engine/session/... passes in all eight packages, so that
+    command alone is only a regression check. The strengthened check fails on the missing
+    credential test reports, not on a credential assertion. The implementer must supply the
+    assertion-level red described above, then passing evidence; the drafting failure is not a
+    substitute. No feature-suite run, engine run, local mutation run or generated proof belongs
+    to this documentation change. Hooks and CI retain their existing wider gates and CI alone
+    judges fresh changed-code proof.
+
+    Use test then chore commits for the internal seam, each with Task T-48 so its ledger check
+    is selected when the implementer owns the item; an Item-only footer does not select task
+    checks. Public behaviour belongs in the consuming slices' scenario-driven commits. Record
+    implemented-versus-proposed status in ADR 0025 and arc42 with that implementation, retaining
+    their unresolved questions and native-evidence limits. This draft commits only T-48's ledger
+    entry as docs with Item T-48 and leaves every sibling entry untouched.
 - id: T-49
   type: test
   title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
@@ -7902,18 +8097,88 @@
   type: ci
   title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
   why: >
-    T-45's rule keeps every engine shard's step under 180 seconds and moves whole feature files
-    between shards on measured times. The other shard is over it: on main at 83e4bc1 (run
-    43837945423) all 40 of its scenarios passed, the suite took 171.2 s and the step 180.84 s, so
-    the job failed with nothing red ('the log holds no go-test failure line; its last line: PASS').
-    It ran 143.9 s at a36768a, the first run with slice-27's eight egress scenarios live, and 90 to
-    140 s before them; T-55's and T-57's warm-ups added a few seconds since. The run after it
-    (43837968367 at 2897e10) failed ID-EGRESS-14 with 'recorded completed 10 connections for 11
-    exchanges', which a shard this full may explain. slice-28 adds egress lifecycle scenarios and
-    slice-37 terminal ones, so the next engine slices land on a shard with no room. Move
-    egress.feature whole to a fourth shard on these measurements, with the shard inventory pins, as
-    slice-27's own notes said to do when the shard neared the gate; and place
-    egress_lifecycle.feature and the terminal feature by the same rule. The 180-second gate, the
-    scenarios and the fixture limits do not change.
-  done_when:
-    - run: go test ./features -count=1 -run 'TestEngineShards'
+    On main at 83e4bc1, run 43837945423 passed all 40 scenarios in Engine shard (other).
+    The suite took 171.2 s. The step printed "engine step timing: duration_ms=180840 outcome=failed".
+    Earlier that day the step took 143.9 s at a36768a, the first run with slice-27's eight
+    egress rows live, and 111 s and 90 s before them. Under T-45's measured
+    180-second step rule and decision 0028, the coordinator settled the move on 2026-11-16 at
+    09:44 UTC. Run 43837968367 at 2897e10 separately reported an ID-EGRESS-14 connection-count
+    failure. This task addresses the measured step overrun.
+
+    In one ci commit with --task T-59, add a fourth include named egress to the existing
+    engine-shard matrix in .github/workflows/ci.yml. Move the whole features/egress.feature
+    from other to egress using the basename egress.feature as its only file on this tree.
+    Keep offline.feature in offline and lifecycle.feature in lifecycle. The other shard keeps
+    anchors.feature, checkout-overlap.feature, doctor.feature, hardlinks.feature, recovery.feature,
+    session.feature and sockets.feature. At this baseline the resulting live row counts are 24
+    offline, 19 lifecycle, 32 other and 8 egress. Update the current shard lists and measurement
+    example in features/README.md and the inventory under Future behaviour evidence in
+    docs/architecture/arc42.md to match the matrix.
+
+    All four includes run the same job on separate native ubuntu-latest runners with fail-fast
+    false. Each gets the checkout at the tested SHA, Go setup, read-only preflight, fixture
+    preparation and its outputs, and the step-local feature and manual red selectors. Preparation
+    emits the existing "engine warm-up timing:" and "engine product warm-up timing:" lines.
+    TestFeatures emits "engine suite warm-up timing:" before its first selected row. Preserve the
+    failure diagnostics and unconditional fixture cleanup. The step fails above 180000 ms including
+    compilation. Keep the 10-minute job, 5-minute step, 4-minute test and all fixture limits.
+    Use the existing scenarios and assertions intact.
+
+    The engine job named Engine scenarios (Linux amd64) needs only engine-shard. Its Require
+    every engine shard step reads ${{ needs.engine-shard.result }} into SHARD_RESULT and accepts
+    only success. The fourth include feeds this same matrix result. Preserve the aggregate's
+    always() and event guard, the ci gate and the release dependency.
+
+    In features/engine_shards_test.go update TestEngineShards' exact name set, the in-memory
+    shardBaseline and the controls for extra or renamed shards. Pin the egress shard's complete
+    set of parsed basenames regardless of list order or whitespace. Reject a swap with a file
+    in other even if all four shards are nonempty and every file appears once. Also reject
+    an unrelated file in egress, the old three-shard layout and a fifth shard. Pin the
+    offline, lifecycle and other shards' complete sets the same way, and reject a file moved
+    whole from other into offline or lifecycle, where every file still appears exactly once,
+    so the placement rule behind the 180-second budget holds. Keep the real
+    partition check against the unsharded selection. It covers every effective @engine file
+    (live or @wip) exactly once, live row counts and IDs, and the nested ID-LIFECYCLE-09 and
+    ID-LIFECYCLE-13 schedule. Preserve the selector and aggregate negative controls.
+
+    In testShardPartition log strings.Join(files, " ") using the files already parsed with
+    strings.Fields(entry.Features), so each shard lists all its files on one line.
+    Add a "multiline egress report" subtest to TestEngineShards.
+    Parse an in-memory egress entry whose features value is a YAML literal block with
+    egress_lifecycle.feature on the first line and egress.feature on the second. Use the same
+    report formatter as the real partition and assert that its single line ends with
+    " in egress_lifecycle.feature egress.feature". The control can run before slice-28 lands.
+
+    When slice-28 merges main, it places its whole features/egress_lifecycle.feature alongside
+    egress.feature in egress and updates its inventory pins. This supersedes its earlier other
+    assignment. When slice-37 merges main, it places its whole features/run_terminal.feature
+    in other, where the seven remaining files previously ran in 111 s and 90 s. Each slice adds
+    its file on its own branch. Only files present on this tree belong in T-59's matrix. Use the
+    per-shard step timings on the pushed heads to judge those placements and any later whole-file
+    move. Each shard must pass within the same 180-second gate.
+
+    At a399bbf TestEngineShards passes and reports egress.feature among other's 40 rows. In a
+    scratch partition with slice-28's file, both spellings of the two-file list selected the same
+    27 rows. The placement assertion passed on the space-separated list and missed egress.feature
+    on the literal block's continuation line. The check below preserves go test's exit status,
+    checks placement only in the real partition, and requires the multiline control to pass.
+    It rejects unrelated files and allows slice-28's file once the inventory includes it.
+    Before implementation it exits 1 for the absent egress shard and the missing control.
+    Run it before changing the matrix and again with the new pins.
+
+    TestEngineSuiteWarmup creates its synthetic approval under the literal /tmp even when TMPDIR
+    is set. On the review runner, /tmp had UID 65534 and mode 1777. The product returned
+    run.approval-invalid before the recorder saw a create. On runners with an untrusted /tmp,
+    run the features self-tests below in a private mount namespace with a mode-0700 /tmp owned
+    by the test user. For example, set `cache=$(go env GOCACHE)` and prefix the features command with
+    `bwrap --ro-bind / / --dev /dev --bind "$cache" "$cache" --perms 0700 --tmpfs /tmp --`.
+
+    In the same implementation attempt run the workflow's engine-free self-tests locally with
+    go test ./features -count=1 -run
+    '^(TestEngine|TestFeatureSignalDiagnostics|TestLifecycleSignalWindow|TestPlatformSelection)'
+    and go test ./tools/release -count=1 -run '^TestReleaseWorkflow$'. All mutation proof runs
+    in CI alone, as the root AGENTS.md evidence workflow holds: an agent makes no local
+    mutation run and commits no generated mutation or coverage evidence before reporting
+    done, and a changed function's proof waits for the pinned itos-cc run at the pushed
+    head. The loop checks the four native timings, aggregate and required proof in CI at the
+    pushed head.

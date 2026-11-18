@@ -39,10 +39,14 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 	if !r.ValidHome(c.binding) {
 		return "", port.HomeRefused
 	}
-	if (r.Schema == 3) != (c.binding.Egress != (port.EgressGrant{})) {
+	if !r.ValidCredentials(c.binding) || r.Schema == 4 && !r.Credentials.Ready() {
+		return "", port.CredentialRefused
+	}
+
+	if r.HasEgress() != (c.binding.Egress != (port.EgressGrant{})) {
 		return "", port.Refused
 	}
-	if (r.Schema != 2 && r.Schema != 3) || !r.ValidAnchor(c.binding) || r.Anchor.Stage != "owned" {
+	if (r.Schema != 2 && r.Schema != 3 && r.Schema != 4) || !r.ValidAnchor(c.binding) || r.Anchor.Stage != "owned" {
 		return "", port.MountRefused
 	}
 	if !c.pin.Unchanged() {
@@ -99,11 +103,14 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		// so the approved executable /tmp must name exec explicitly.
 		Tmpfs: map[string]string{"/tmp": "rw,exec,nosuid,nodev,mode=1777"},
 	}
-	if r.Schema == 3 {
+	if r.HasEgress() {
 		host.NetworkMode = container.NetworkMode(r.Egress.Internal.Name)
 	}
 	if c.binding.Home {
 		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: r.Home.Name, Target: "/home/itos", VolumeOptions: &mount.VolumeOptions{NoCopy: true}})
+	}
+	for _, credential := range r.Credentials.Mounts() {
+		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeBind, Source: credential.Source, Target: credential.Target, ReadOnly: true})
 	}
 	result, err := c.api.ContainerCreate(call, client.ContainerCreateOptions{Name: r.Name, Config: config, HostConfig: host, NetworkingConfig: networking})
 	if err != nil || !c.pin.Unchanged() || !port.HexID(result.ID) {
@@ -154,7 +161,7 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 		!safeHomeWorkerHost(r.HostConfig, c.record) || !safeHomeMounts(r.Mounts, c.record) {
 		return port.IsolationUnverified
 	}
-	if c.record.Schema == 3 {
+	if c.record.HasEgress() {
 		if !egressEndpoints(r.NetworkSettings, map[string]string{c.record.Egress.Internal.Name: c.record.Egress.Internal.ID}) {
 			return port.IsolationUnverified
 		}
@@ -180,44 +187,76 @@ func sameEnvironment(a, b []string) bool {
 	return slices.Equal(a, b)
 }
 
-func safeHost(h *container.HostConfig, root string) bool {
+func safeHost(h *container.HostConfig, root string, credentials ...port.CredentialMount) bool {
 	if h.NetworkMode != "none" || !h.ReadonlyRootfs || h.Privileged || h.AutoRemove || h.PublishAllPorts ||
 		len(h.CapAdd) != 0 || !slices.Equal(h.CapDrop, []string{"ALL"}) || len(h.GroupAdd) != 0 ||
 		h.PidsLimit == nil || *h.PidsLimit != 4096 || h.RestartPolicy.Name != "no" ||
 		h.PidMode != "" || h.IpcMode != "private" || h.UTSMode != "" || h.UsernsMode != "" || h.CgroupnsMode != "private" ||
 		len(h.Devices) != 0 || len(h.DeviceRequests) != 0 || len(h.DeviceCgroupRules) != 0 || len(h.PortBindings) != 0 ||
 		len(h.Binds) != 0 || len(h.VolumesFrom) != 0 || len(h.Links) != 0 || len(h.ExtraHosts) != 0 ||
-		len(h.Sysctls) != 0 || h.Init == nil || *h.Init || h.LogConfig.Type != "none" || len(h.Mounts) != 1 ||
+		len(h.Sysctls) != 0 || h.Init == nil || *h.Init || h.LogConfig.Type != "none" || len(h.Mounts) != 1+len(credentials) ||
 		len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] != "rw,exec,nosuid,nodev,mode=1777" {
 		return false
 	}
 	if len(h.SecurityOpt) != 1 || (h.SecurityOpt[0] != "no-new-privileges" && h.SecurityOpt[0] != "no-new-privileges=true") {
 		return false
 	}
-	return safeAnchorMount(h.Mounts[0], root)
+	seen := map[string]bool{}
+	anchor := false
+	for _, m := range h.Mounts {
+		if safeVolumeMount(m, root, "/workspace") && !anchor {
+			anchor = true
+			continue
+		}
+		matched := false
+		for _, credential := range credentials {
+			if !seen[credential.Kind] && safeCredentialMount(m, credential) {
+				seen[credential.Kind] = true
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return anchor && len(seen) == len(credentials)
 }
 
-func safeAnchorMount(m mount.Mount, root string) bool {
-	return root != "" && m.Type == mount.TypeVolume && m.Source == root && m.Target == "/workspace" && !m.ReadOnly &&
+func safeVolumeMount(m mount.Mount, source, target string) bool {
+	return source != "" && m.Type == mount.TypeVolume && m.Source == source && m.Target == target && !m.ReadOnly &&
 		m.BindOptions == nil && m.VolumeOptions != nil && m.VolumeOptions.NoCopy && m.VolumeOptions.Subpath == "" &&
 		m.VolumeOptions.DriverConfig == nil && len(m.VolumeOptions.Labels) == 0
 }
 
-func safeMounts(mounts []container.MountPoint, root string) bool {
-	bind, tmp := false, false
+func safeMounts(mounts []container.MountPoint, root, homeName string, credentials ...port.CredentialMount) bool {
+	seen := map[string]bool{}
+	bind, tmp, home := false, false, false
 	for _, m := range mounts {
 		switch {
 		case m.Type == mount.TypeVolume && m.Name == root && m.Driver == "local" && m.Destination == "/workspace" && m.RW && (m.Propagation == "" || m.Propagation == mount.PropagationRPrivate) && !bind:
 			bind = true
+		case homeName != "" && !home && m.Destination == "/home/itos" && m.Type == mount.TypeVolume && m.Name == homeName && m.Driver == "local" && m.RW && (m.Propagation == "" || m.Propagation == mount.PropagationRPrivate):
+			home = true
 		case m.Type == mount.TypeTmpfs && m.Destination == "/tmp" && !tmp:
 			tmp = true
 		default:
-			return false
+			matched := false
+			for _, credential := range credentials {
+				if !seen[credential.Kind] && m.Type == mount.TypeBind && m.Source == credential.Source && m.Destination == credential.Target && !m.RW && m.Name == "" && m.Driver == "" && (m.Propagation == "" || m.Propagation == mount.PropagationRPrivate) {
+					seen[credential.Kind] = true
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return false
+			}
 		}
 	}
 	// Docker represents HostConfig.Tmpfs separately on some API versions. The
 	// exact tmpfs options are always verified in HostConfig before start.
-	return bind
+	return bind && home == (homeName != "") && len(seen) == len(credentials)
 }
 
 type attachment struct {

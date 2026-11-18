@@ -8,6 +8,37 @@ import (
 	"testing"
 )
 
+func TestHomeAndCredentialMountsSurviveInspection(t *testing.T) {
+	fixture := credentialSDKFixture(t)
+	fixture.Binding.Home = true
+	token := strings.Repeat("a", 64)
+	fixture.Record.Home = port.HomeReference{Scope: token, ID: token, Name: "itos-container-home-" + token, Created: "generation-1"}
+	ctx := t.Context()
+	c, failure := fixture.Engine.OpenRun(ctx, fixture.Binding)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	defer c.Close()
+	argv := []string{"probe"}
+	id, failure := c.CreateRun(ctx, fixture.Record, argv)
+	if failure != "" {
+		t.Fatal(failure)
+	}
+	if failure := c.VerifyRun(ctx, id, argv); failure != "" {
+		t.Fatalf("worker boundary verification failed: %s", failure)
+	}
+	o, status := c.Inspect(ctx, id)
+	if status != port.Observed || !o.AnchorExact || o.AnchorName != fixture.Record.Anchor.Name ||
+		!o.HomeExact || o.HomeName != fixture.Record.Home.Name || !fixture.Record.OwnsCredentialMounts(o) {
+		t.Fatal("inspection did not recover the approved workspace, home and credential mounts")
+	}
+	fixture.Defect("host duplicate")
+	o, status = c.Inspect(ctx, id)
+	if status != port.Observed || o.HomeExact || o.CredentialExact || c.VerifyRun(ctx, id, argv) != port.IsolationUnverified {
+		t.Fatal("an extra home mount passed worker inspection")
+	}
+}
+
 func TestHomeWorkerRequiresBothExactRequestedMounts(t *testing.T) {
 	id := strings.Repeat("a", 64)
 	r := port.Record{Home: port.HomeReference{Scope: id, ID: id, Name: "itos-container-home-" + id}}

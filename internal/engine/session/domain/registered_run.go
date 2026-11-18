@@ -160,7 +160,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		// Stop already won a transition. Observe its result without repeating or
 		// rewriting cleanup; an unstarted workload never becomes successful.
 		result.Outcome = port.Incomplete
-		observed := (Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, Homes: s.Homes}).status(teardown, id)
+		observed := (Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, Homes: s.Homes, Credentials: s.Credentials}).status(teardown, id)
 		result.Cleanup = port.Incomplete
 		if len(observed.Failures) == 0 && len(observed.Entries) == 1 && observed.Entries[0].Cleanup == "complete" {
 			result.Cleanup = port.Complete
@@ -170,7 +170,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		}
 		return result
 	}
-	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, Homes: s.Homes, immediate: result.Outcome == port.MountRefused && result.Started}
+	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, Homes: s.Homes, Credentials: s.Credentials, immediate: result.Outcome == port.MountRefused && result.Started}
 	// The output subscription is independent of termination and removal. A blocked
 	// consumer must never hold the operation lock or prevent owned cleanup.
 	drain := startDrain(teardown, attachment)
@@ -218,7 +218,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	return result
 }
 
-func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, streams port.Streams) (port.RunConnection, port.Attachment, string, port.Outcome) {
+func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, streams port.Streams) (connection port.RunConnection, attachment port.Attachment, worker string, outcome port.Outcome) {
 	entry, failure := s.Registry.Open(ctx, id, false)
 	if failure != "" {
 		return nil, nil, "", failure
@@ -257,12 +257,15 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 			return c, nil, "", failure
 		}
 	}
-	resource, failure := createRegistered(ctx, entry, c, s.Workspace, argv)
+	resource, failure := createRegistered(ctx, entry, c, s.Workspace, argv, s.prepareCredentials)
 	if failure == "" && intent.Binding().Home {
 		failure = c.VerifyRun(ctx, resource, argv)
 	}
 	if failure == "" && intent.Binding().Home {
 		failure = s.Homes.verify(ctx, entry, c, true)
+	}
+	if failure != "" {
+		_ = cleanupCredentials(ctx, entry.Intent(), s.Credentials)
 	}
 	entry.Close()
 	if failure != "" {
@@ -278,6 +281,12 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 		return c, nil, "", failure
 	}
 	defer entry.Close()
+	defer func() {
+		f := cleanupCredentials(ctx, entry.Intent(), s.Credentials)
+		if outcome == "" && f != "" {
+			outcome = f
+		}
+	}()
 	if entry.Record().State != "ready" {
 		return c, nil, "", launchSuperseded
 	}
@@ -355,7 +364,7 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	}
 	return c, a, resource, ""
 }
-func createRegistered(ctx context.Context, entry port.Session, c port.RunConnection, workspace port.Workspace, argv []string) (string, port.Outcome) {
+func createRegistered(ctx context.Context, entry port.Session, c port.RunConnection, workspace port.Workspace, argv []string, credentialPreparation ...func(context.Context, port.Intent) port.Outcome) (string, port.Outcome) {
 	i := entry.Intent()
 	if failure := entry.ValidateLaunch(); failure != "" {
 		return "", failure
@@ -370,6 +379,13 @@ func createRegistered(ctx context.Context, entry port.Session, c port.RunConnect
 		}
 		if failure := prepareEgress(ctx, i, c); failure != "" {
 			return "", failure
+		}
+		if len(credentialPreparation) != 0 {
+			if failure := credentialPreparation[0](ctx, i); failure != "" {
+				return "", failure
+			}
+		} else if i.Binding().StagingKinds != (port.CredentialKinds{}) {
+			return "", port.CredentialRefused
 		}
 		r = i.Record()
 		// Once this durable write succeeds a lost create reply is uncertain.

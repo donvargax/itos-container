@@ -182,7 +182,8 @@ func (s Homes) checkClaim(ctx context.Context, scope port.HomeScope, g port.Home
 	expected := b.Intent(token)
 	expected.Schema, expected.Stage, expected.ContainerID = r.Schema, r.Stage, r.ContainerID
 	expected.Anchor, expected.Egress, expected.Home = r.Anchor, r.Egress, r.Home
-	if r != expected || !r.ValidHome(b) || !r.ValidAnchor(b) || !r.ValidEgress(b) || r.Project != scope.Project || r.UID != scope.UID || r.GID != scope.GID || r.Endpoint != scope.Engine.Endpoint || r.EngineID != scope.Engine.ID || s.Codec.Scope(b) != scope.Scope || r.Home.Scope != scope.Scope || r.Home.ID != g.ID || r.Home.Name != g.Name || r.Home.Created != "" && r.Home.Created != g.Created {
+	expected.Credentials = r.Credentials
+	if r != expected || !r.ValidHome(b) || !r.ValidCredentials(b) || !r.ValidAnchor(b) || !r.ValidEgress(b) || r.Project != scope.Project || r.UID != scope.UID || r.GID != scope.GID || r.Endpoint != scope.Engine.Endpoint || r.EngineID != scope.Engine.ID || s.Codec.Scope(b) != scope.Scope || r.Home.Scope != scope.Scope || r.Home.ID != g.ID || r.Home.Name != g.Name || r.Home.Created != "" && r.Home.Created != g.Created {
 		return port.Invalid
 	}
 	if originalOverlap(claim.StateRoot, b.Checkout.Root) {

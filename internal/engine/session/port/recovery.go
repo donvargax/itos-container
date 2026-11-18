@@ -66,6 +66,7 @@ type RunRegistry interface {
 
 type RecoveryEntry struct {
 	Home              *HomeDisclosure            `json:"home,omitempty"`
+	Staging           string                     `json:"staging,omitempty"`
 	Egress            *EgressDisclosure          `json:"egress,omitempty"`
 	Credentials       []approval.CredentialGrant `json:"credentials,omitempty"`
 	CredentialNetwork bool                       `json:"-"`
