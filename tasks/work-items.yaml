@@ -606,6 +606,12 @@ items:
       VolumeCreate. This item already covers safe retirement when durable evidence proves a create
       was never issued. A name-only lookup that finds no volume cannot rule out a late allocation.
       Any broader reclaim rule needs the person’s decision.
+
+      This recovery item already covers uncertain creates that leave a session stuck. Add the case
+      where VolumeCreate was dispatched, its reply was lost, and later lookups continue to find no
+      volume. HOME-10 covers a volume that eventually appears. The person must settle what evidence
+      permits releasing the claim while a delayed allocation is still possible. Elapsed time and
+      repeated name-only misses do not establish that the create has finished.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
