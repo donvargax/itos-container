@@ -61,14 +61,30 @@ var shardOtherFiles = []string{
 	"recovery.feature", "session.feature", "sockets.feature",
 }
 
-// egressShardFiles is the egress shard's complete pinned set: every engine feature file
-// that is neither offline's, lifecycle's nor one of shardOtherFiles, however the list is
-// ordered or spaced. On this tree that is egress.feature alone; slice-28's
-// egress_lifecycle.feature joins it when that file lands on this tree (T-59's placement).
+// egressShardFiles is the egress shard's complete pinned set: egress.feature, plus
+// egress_lifecycle.feature while the engine inventory has it, so slice-28's file joins
+// this shard when it lands on this tree (T-59's placement). The pin is this explicit
+// allowlist, never the inventory's leftover: a new engine file is not allowed to hide
+// in egress (slice-37's run_terminal.feature belongs in other, never here) and fails
+// visibly until a shard's set or a new shard takes it.
 func egressShardFiles(engine []string) []string {
-	return slices.DeleteFunc(slices.Clone(engine), func(name string) bool {
-		return name == "offline.feature" || name == "lifecycle.feature" || slices.Contains(shardOtherFiles, name)
-	})
+	files := []string{"egress.feature"}
+	if slices.Contains(engine, "egress_lifecycle.feature") {
+		files = append(files, "egress_lifecycle.feature")
+	}
+	return files
+}
+
+// egressShardIssue reports how the egress shard's parsed files got differ from its
+// pinned set for the engine inventory engine, or "" when got is that set, whatever
+// the list's order or whitespace.
+func egressShardIssue(got, engine []string) string {
+	slices.Sort(got)
+	if slices.Equal(got, egressShardFiles(engine)) {
+		return ""
+	}
+	return "egress shard files: the pinned set is " + strings.Join(egressShardFiles(engine), " ") +
+		", whatever the list's order or whitespace"
 }
 
 // shardReportLine is the one-line shard report of the real partition: every file the
@@ -135,11 +151,10 @@ func engineShardIssues(data []byte) []string {
 		if entry.Shard != "egress" {
 			continue
 		}
-		got := strings.Fields(entry.Features)
-		slices.Sort(got)
-		require(err == nil && slices.Equal(got, egressShardFiles(want)),
-			"egress shard files: the pinned set is "+strings.Join(egressShardFiles(want), " ")+
-				", whatever the list's order or whitespace")
+		require(err == nil, "egress shard files: the pin needs the engine inventory")
+		if issue := egressShardIssue(strings.Fields(entry.Features), want); issue != "" {
+			issues = append(issues, issue)
+		}
 	}
 
 	enabled := ""
@@ -248,6 +263,24 @@ func TestEngineShards(t *testing.T) {
 			t.Errorf("the report does not list every file of the literal block: %q", line)
 		}
 	})
+	t.Run("not-yet-listed egress file", func(t *testing.T) {
+		// The pin is an explicit allowlist, never the inventory's leftover, so a new
+		// engine file no shard's set lists yet (slice-37's run_terminal.feature, on a
+		// branch before it extends other) cannot hide in egress: its presence there is
+		// an issue, and the pinned set the issue names never includes the new file.
+		engine, err := realEngineFeatures()
+		if err != nil {
+			t.Fatal(err)
+		}
+		engine = append(engine, "run_terminal.feature")
+		issue := egressShardIssue([]string{"egress.feature", "run_terminal.feature"}, engine)
+		if issue == "" {
+			t.Error("the egress pin allowed a not-yet-listed engine file")
+		}
+		if strings.Contains(issue, "run_terminal.feature") {
+			t.Errorf("the pinned set includes the unrelated file: %q", issue)
+		}
+	})
 	t.Run("broken workflows", func(t *testing.T) {
 		if issues := engineShardIssues(data); len(issues) != 0 {
 			t.Errorf("the unmodified workflow is not clean: %v", issues)
@@ -341,8 +374,8 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 
 // A valid in-memory workflow lets every negative control run before the real
 // workflow has its shards. The offline, lifecycle and other shards hold their fixed
-// file sets and the egress shard every engine feature the first three do not, so the
-// baseline stays valid as feature files are added.
+// file sets and the egress shard its pinned allowlist, so a new engine file fails the
+// baseline visibly until a shard's set or a new shard takes it.
 func shardBaseline(t *testing.T) []byte {
 	t.Helper()
 	engine, err := realEngineFeatures()
