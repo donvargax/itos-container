@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - T-59
   - slice-28
   - T-48
   - slice-34
