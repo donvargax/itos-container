@@ -102,7 +102,7 @@ func TestReadEvidenceRejectsUnverifiedFiles(t *testing.T) {
 		{"at limit", ""}, {"over limit", "state.unsafe"}, {"lstat", "state.unavailable"},
 		{"open", "state.path"}, {"stat", "state.path"}, {"read", "state.unavailable"},
 		{"growth after stat", "state.path"}, {"symlink", "state.path"}, {"mode", "state.unsafe"},
-		{"second link", "state.unsafe"},
+		{"second link", "state.unsafe"}, {"pipe", "state.unsafe"},
 	} {
 		t.Run(tc.fault, func(t *testing.T) {
 			ops := s.operations()
@@ -112,6 +112,18 @@ func TestReadEvidenceRejectsUnverifiedFiles(t *testing.T) {
 				limit--
 			case "lstat":
 				ops.lstat = func(*os.Root, string) (os.FileInfo, error) { return nil, os.ErrPermission }
+			case "pipe":
+				reader, writer, err := os.Pipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = reader.Close() }()
+				defer func() { _ = writer.Close() }()
+				ops.lstat = func(*os.Root, string) (os.FileInfo, error) { return reader.Stat() }
+				ops.openRecord = func(*os.Root, string, int, os.FileMode) (*os.File, error) {
+					t.Fatal("attempted to open a pipe as a refusal log")
+					return nil, os.ErrInvalid
+				}
 			case "open":
 				ops.openRecord = func(*os.Root, string, int, os.FileMode) (*os.File, error) { return nil, os.ErrPermission }
 			case "stat":

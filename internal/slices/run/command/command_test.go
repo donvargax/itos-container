@@ -116,6 +116,15 @@ func TestPrerequisiteWithoutProblemsUsesInternalFallback(t *testing.T) {
 	}
 }
 
+func TestPrerequisiteReportsFieldWithoutAPath(t *testing.T) {
+	err := domain.Prerequisite{View: approval.View{Failure: "identity.mismatch", Field: "user"}}
+	code, problems := command.Classify(err)
+	if code != 1 || len(problems) != 1 || problems[0].Rule != "approval.identity.mismatch" ||
+		!strings.Contains(problems[0].Message, `"user": Manifest user differs`) {
+		t.Fatal(code, problems)
+	}
+}
+
 func TestClassifierHandlesWrappedAndUnknownFailures(t *testing.T) {
 	for _, tc := range []struct {
 		err  error

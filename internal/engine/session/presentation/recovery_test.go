@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	"github.com/donvargax/itos-container/internal/engine/session/presentation"
 )
@@ -92,6 +93,24 @@ func TestPlainRecoveryExplainsEmptyUnknownAndKnownOutcomes(t *testing.T) {
 	r := port.RecoveryResult{Entries: []port.RecoveryEntry{{ID: id, State: "running", Resource: "running", Controller: "absent", Cleanup: "pending", StopCandidate: true, Retry: []string{"itos", "container", "stop", id}}, {ID: strings.Repeat("a", 64), State: "stopped", Resource: "absent", Cleanup: "complete", WorkloadExit: &exit}}}
 	if u.Print(r, false) != 0 || !strings.Contains(out.String(), "workload_exit unknown") || !strings.Contains(out.String(), "workload_exit 7") || !strings.Contains(out.String(), "itos container stop "+id) {
 		t.Fatal(out.String())
+	}
+}
+
+func TestPlainRecoveryShowsCredentialGrantsOnlyForTheirSession(t *testing.T) {
+	var out, diag bytes.Buffer
+	u := presentation.UI{Out: &out, Err: &diag, Credentials: func(grants []approval.CredentialGrant, network bool) []string {
+		if len(grants) != 1 || grants[0].Kind != "github-token" || !network {
+			t.Fatalf("unexpected credential disclosure: %#v, network %t", grants, network)
+		}
+		return []string{"github-token"}
+	}}
+	result := port.RecoveryResult{Entries: []port.RecoveryEntry{
+		{ID: "offline"},
+		{ID: "granted", Credentials: []approval.CredentialGrant{{Kind: "github-token"}}, CredentialNetwork: true},
+	}}
+	if code := u.Print(result, false); code != 0 || strings.Contains(out.String(), "session offline credential grants:") ||
+		!strings.Contains(out.String(), "session granted credential grants:\ngithub-token\n") {
+		t.Fatal(code, out.String(), diag.String())
 	}
 }
 
