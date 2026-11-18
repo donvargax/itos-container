@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 const terminalPayload = "slice-37 stdout\n\r\n\r\x01\x00\x00\x00\x00\x00\x00\x03raw\xff"
@@ -21,6 +21,8 @@ type terminalEngine struct {
 	fault               string
 	exit                int
 	hold                bool
+	expect              int
+	killDelay           time.Duration
 	release             chan struct{}
 	ready               chan struct{}
 	started             sync.Once
@@ -84,11 +86,15 @@ func (f *terminalEngine) serve(a *localOfflineAPI, out http.ResponseWriter, r *h
 			}
 			f.started.Do(func() { close(f.ready) })
 			if f.hold {
-				var input [3]byte
-				_, err := io.ReadFull(conn, input[:])
+				expect := f.expect
+				if expect == 0 {
+					expect = 3
+				}
+				input := make([]byte, expect)
+				_, err := io.ReadFull(conn, input)
 				a.mu.Lock()
 				if err == nil {
-					f.input = string(input[:])
+					f.input = string(input)
 				}
 				a.mu.Unlock()
 				if err == nil {
@@ -100,7 +106,10 @@ func (f *terminalEngine) serve(a *localOfflineAPI, out http.ResponseWriter, r *h
 				<-f.tailStart
 				_, _ = io.WriteString(conn, terminalTailPayload)
 			}
-			_ = conn.(*net.UnixConn).CloseWrite()
+			// The hijacked endpoint may be a raw socket or the TTY escape model.
+			if closer, ok := conn.(interface{ CloseWrite() error }); ok {
+				_ = closer.CloseWrite()
+			}
 		}()
 		if f.fault == "start accepted but its reply times out" {
 			a.mu.Unlock()
@@ -132,7 +141,13 @@ func (f *terminalEngine) serve(a *localOfflineAPI, out http.ResponseWriter, r *h
 		return true
 	case strings.HasSuffix(path, "/kill") && r.Method == "POST":
 		resource["State"] = map[string]any{"Status": "exited", "Running": false, "Pid": 0, "StartedAt": "2026-01-01T00:00:00Z"}
-		f.finish()
+		if f.killDelay > 0 {
+			// The owned signal landed; its wait answer stays pending so a
+			// controller under test remains observably mid-teardown.
+			time.AfterFunc(f.killDelay, f.finish)
+		} else {
+			f.finish()
+		}
 		out.WriteHeader(204)
 		return true
 	case path == "/containers/"+id && r.Method == "DELETE" && f.tailStart != nil:

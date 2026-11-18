@@ -84,6 +84,7 @@ func (w *world) terminalNativeSteps(sc *godog.ScenarioContext, fixture **termina
 	sc.Step(`^terminal run launches the probe with an empty argument spaces and literal wrapper-looking flags$`, func() { n.run("argv", "") })
 	sc.Step(`^terminal run remains quiet beyond startup and call budgets then the harness changes size to 151 by 49 and bursts through 79 by 23 to 167 by 53$`, func() { n.run("resize", "") })
 	sc.Step(`^terminal run reaches the raw probe ready frame and the harness writes bytes 03 04 41 without a newline then a final release frame$`, func() { n.run("raw", "") })
+	sc.Step(`^terminal run reaches the raw probe ready frame and the harness writes bytes 10 11 65 without a newline then a final release frame$`, func() { n.run("detach", "") })
 	sc.Step(`^terminal run reaches the canonical probe ready frame and the harness writes byte 03 followed by a release line after the signal receipt$`, func() { n.run("canonical", "") })
 	sc.Step(`^terminal run reaches the ready frame and the harness sends host signal "([^"]*)" then repeats SIGINT and SIGTERM during cleanup$`, func(signal string) { n.signal = signal; n.run("signal", "") })
 	sc.Step(`^terminal run reaches the ready frame and the harness closes the (shared|stdin|stdout) terminal master while leaving the engine reachable$`, func(lost string) { n.lost = lost; n.run("disconnect", lost) })
@@ -154,6 +155,15 @@ func (w *world) terminalNativeSteps(sc *godog.ScenarioContext, fixture **termina
 		}
 		if !n.progress || !bytes.Equal(n.report.Input, []byte("\x03\x04Arelease\n")) {
 			return fmt.Errorf("raw input was transformed or ended the run: %x", n.report.Input)
+		}
+		return nil
+	})
+	sc.Step(`^the probe records bytes 10 11 65 exactly once before the release frame and remains live until that frame$`, func() error {
+		if err := n.observed(); err != nil {
+			return err
+		}
+		if !n.progress || !bytes.Equal(n.report.Input, []byte("\x10\x11Arelease\n")) {
+			return fmt.Errorf("daemon detach bytes were swallowed or ended the run: %x", n.report.Input)
 		}
 		return nil
 	})
@@ -302,6 +312,15 @@ running:
 					write("\x03\x04A")
 					stage++
 				} else if stage == 1 && bytes.Equal(n.report.Input, []byte("\x03\x04A")) {
+					n.progress = true
+					write("release\n")
+					stage++
+				}
+			case "detach":
+				if stage == 0 {
+					write("\x10\x11A")
+					stage++
+				} else if stage == 1 && bytes.Equal(n.report.Input, []byte("\x10\x11A")) {
 					n.progress = true
 					write("release\n")
 					stage++

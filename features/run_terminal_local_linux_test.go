@@ -350,6 +350,107 @@ func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminal
 		}
 		return nil
 	})
+	sc.Step(`^the fixture writes the daemon's default detach bytes and one further keystroke to the attached workload$`, func() error {
+		f := *fixture
+		f.local = true
+		e := newTerminalEngine()
+		e.hold, e.expect, e.exit = true, 4, 0
+		w.doctor.engine.offline.terminal = e
+		w.doctor.cleanup = append(w.doctor.cleanup, e.finish)
+		stage := 0
+		var writeErr error
+		detachWritten := time.Now()
+		f.action = func(*exec.Cmd) {
+			if writeErr != nil {
+				return
+			}
+			switch stage {
+			case 0:
+				select {
+				case <-e.ready:
+				default:
+					return
+				}
+				_, writeErr = f.master.Write([]byte("\x10\x11A"))
+				detachWritten = time.Now()
+				stage++
+			case 1:
+				// The settle gap leaves a dropped attach time to refuse the
+				// client's next write, as the daemon's detach would.
+				if time.Since(detachWritten) < 300*time.Millisecond {
+					return
+				}
+				_, writeErr = f.master.Write([]byte("B"))
+				stage++
+			case 2:
+				a := w.doctor.engine.offline
+				a.mu.Lock()
+				received := a.terminal.input
+				a.mu.Unlock()
+				if received == "\x10\x11AB" {
+					e.finish()
+					stage++
+				}
+			}
+		}
+		return f.invoke("run --tty -- fixture-workload", "0")
+	})
+	sc.Step(`^the workload receives exactly bytes 10 11 65 66 unfiltered$`, func() error {
+		a := w.doctor.engine.offline
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.terminal == nil || a.terminal.input != "\x10\x11AB" {
+			received := ""
+			if a.terminal != nil {
+				received = a.terminal.input
+			}
+			return fmt.Errorf("detach bytes did not reach the workload: %q", received)
+		}
+		return nil
+	})
+	sc.Step(`^the fixture closes the client master and delivers SIGHUP after owned teardown has begun$`, func() error {
+		f := *fixture
+		f.local = true
+		e := newTerminalEngine()
+		e.hold, e.exit, e.killDelay = true, 17, 2*time.Second
+		w.doctor.engine.offline.terminal = e
+		w.doctor.cleanup = append(w.doctor.cleanup, e.finish)
+		closed, signalled := false, false
+		f.action = func(cmd *exec.Cmd) {
+			select {
+			case <-e.ready:
+			default:
+				return
+			}
+			if !closed {
+				closed = true
+				_ = f.master.Close()
+				f.master = nil
+				return
+			}
+			if signalled {
+				return
+			}
+			// The owned SIGTERM is issued only after the lease reported the
+			// hangup and ended its own hangup subscription, so this signal
+			// provably lands where no subscriber remains without the fix.
+			for _, request := range w.doctor.engine.requests() {
+				if request.PID == cmd.Process.Pid && strings.HasSuffix(request.Path, "/kill") {
+					signalled = true
+					_ = cmd.Process.Signal(syscall.SIGHUP)
+					return
+				}
+			}
+		}
+		return f.invoke("run --tty -- fixture-workload", "0")
+	})
+	sc.Step(`^terminal run reports "run.terminal-disconnected" and returns the workload exit (\d+)$`, func(exit int) error {
+		f := *fixture
+		if f.timedOut || w.exit != exit || !strings.Contains(w.stderr, "run.terminal-disconnected") {
+			return fmt.Errorf("expected run.terminal-disconnected with exit %d, timed out=%t: %s", exit, f.timedOut, w.report())
+		}
+		return nil
+	})
 }
 
 func (f *terminalInvocation) distinctOutput() error {

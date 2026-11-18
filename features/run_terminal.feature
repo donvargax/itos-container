@@ -59,6 +59,15 @@ Feature: An explicitly selected terminal for an owned foreground run
   # only stdin's dimensions are measured and validated for the session.
   # Forward bytes without line buffering, filtering, echoing or interpreting
   # Ctrl-C (03), Ctrl-D (04) or an escape sequence as a controller command.
+  # The daemon applies escape-sequence handling to every TTY attach and cannot
+  # disable it: with no detachKeys request it swallows Docker's default ctrl-p,
+  # ctrl-q as a detach and drops the attach while the worker keeps running. Run
+  # therefore pins one long per-run escape value on the attach request; that
+  # exact byte sequence alone detaches, the recorded limitation, and every other
+  # input, bytes 10 11 included, reaches the workload unchanged. The local
+  # recorder models the daemon's escape handling with moby/term (test-only pin
+  # v0.5.2), the library the daemon itself runs, so RUNTTY-20 proves the pinned
+  # value locally and RUNTTY-21 against the real engine.
   # The worker's own terminal line discipline may turn a byte into its own signal
   # or EOF; this is distinct from a host signal or local terminal hangup.
   # Worker stdout/stderr share its PTY and reach controller stdout as ONE raw
@@ -91,7 +100,11 @@ Feature: An explicitly selected terminal for an owned foreground run
   # Passive local hangup of either terminal, including while input/output are idle
   # or input is unread, is run.terminal-disconnected (75). Restore the other
   # terminal if still usable. A controlling-terminal SIGHUP must not terminate
-  # the controller before it can handle that disconnect.
+  # the controller before it can handle that disconnect. That protection lasts
+  # the whole --tty run through diagnostic delivery: the terminal lease ends its
+  # hangup subscription with the disconnect report, so the command's own signal
+  # capture consumes any later hangup signal instead of dying to it while owned
+  # teardown is still running. RUNTTY-22 delivers that late signal explicitly.
   # A failed live terminal observation is run.terminal-unavailable (75), and a
   # failed engine resize is run.terminal-resize (75). These are controller
   # failures, not synthetic child exits or host SIGINT/SIGTERM cancellations.
@@ -400,6 +413,28 @@ Feature: An explicitly selected terminal for an owned foreground run
     And the host terminal adds no echo and terminal run sends no engine signal or cancellation diagnostic
     And terminal run returns zero restores exact host settings and confirms owned cleanup
 
+  # Docker's daemon cannot disable escape handling on a TTY attach (see the
+  # transport decisions above). The fixture's keystroke after the detach attempt
+  # models the client's next write, which the dropped attach fails; a swallowed
+  # 10 11 leaves the workload without its bytes and the run failed, not exited.
+  @slice-37 @ID-RUNTTY-20 @wip @linux @local-engine-fixture
+  Scenario: The daemon's default detach bytes reach the workload as input
+    Given a local terminal-run fixture with shared terminal stdin and stdout
+    When the fixture writes the daemon's default detach bytes and one further keystroke to the attached workload
+    Then the workload receives exactly bytes 10 11 65 66 unfiltered
+    And terminal run returns the observed exit 0 with exact restoration of each host terminal's own saved state
+    And both caller terminal handles remain usable and only owned resources are confirmed absent
+
+  # Same oracle as RUNTTY-08 against the real daemon's own escape handling:
+  # bytes 10 11 must not detach the attach, echo or cancel the controller.
+  @slice-37 @ID-RUNTTY-21 @wip @engine @linux
+  Scenario: Docker's default detach escape remains workload input on a real engine
+    Given a CI terminal-run fixture with a raw input-reporting probe
+    When terminal run reaches the raw probe ready frame and the harness writes bytes 10 11 65 without a newline then a final release frame
+    Then the probe records bytes 10 11 65 exactly once before the release frame and remains live until that frame
+    And the host terminal adds no echo and terminal run sends no engine signal or cancellation diagnostic
+    And terminal run returns zero restores exact host settings and confirms owned cleanup
+
   # A separate canonical/ISIG worker proves actual interactive Ctrl-C semantics.
   # It installs its own SIGINT handler, records once, continues and accepts a
   # later line. An engine kill request or host cancellation cannot supply proof.
@@ -517,6 +552,19 @@ Feature: An explicitly selected terminal for an owned foreground run
       | shared    | shared | signal-ignoring  | unread byte | one SIGKILL   | 137  |
       | distinct  | stdin  | SIGTERM-handling | idle        | no SIGKILL    | 17   |
       | distinct  | stdout | signal-ignoring  | idle        | one SIGKILL   | 137  |
+
+  # The lease's hangup subscription ends with the disconnect report, before
+  # owned cleanup finishes. A shell that resends SIGHUP to its jobs after the
+  # window hangs up must not kill the controller mid-teardown: the run still
+  # reports the disconnect, restores and completes owned removal. The fixture
+  # holds the revalidated worker's wait briefly so the late signal provably
+  # lands while teardown is still running.
+  @slice-37 @ID-RUNTTY-22 @wip @linux @local-engine-fixture
+  Scenario: A late hangup signal cannot kill the controller during owned teardown
+    Given a local terminal-run fixture with shared terminal stdin and stdout
+    When the fixture closes the client master and delivers SIGHUP after owned teardown has begun
+    Then terminal run reports "run.terminal-disconnected" and returns the workload exit 17
+    And both caller terminal handles remain usable and only owned resources are confirmed absent
 
   # Disconnect cannot manufacture an exit or ownership authority. The cleanup
   # failure row retains observed 17, then a fresh status/stop after the fixture
