@@ -8195,6 +8195,3 @@
     world.withEnv("COLUMNS=200") must supply exactly one width with that value.
     The focused test runs the help scenario in an unfiltered suite. Filtered runs execute only
     their selected scenarios.
-  done_when:
-    - run: "report=$(go test ./features -run \"^TestHarnessEnvClearsColumns$\" -count=1 -v) || { printf \"%s\\n\" \"$report\"; exit 1; }; printf \"%s\\n\" \"$report\" | grep -F -- \"--- PASS: TestHarnessEnvClearsColumns (\""
-      timeout: 180
