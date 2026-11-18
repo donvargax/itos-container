@@ -184,7 +184,7 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}
 		runner, _ := sessionServices(service)
 		c.Run.Runner = runner
-		interrupts, release := signals.Capture(context.Background())
+		interrupts, release := signals.Capture(context.Background(), c.Run.TTY)
 		defer release()
 		c.Run.Context = interrupts
 		ui.Classify = runcommand.Classify

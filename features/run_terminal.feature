@@ -559,7 +559,7 @@ Feature: An explicitly selected terminal for an owned foreground run
   # reports the disconnect, restores and completes owned removal. The fixture
   # holds the revalidated worker's wait briefly so the late signal provably
   # lands while teardown is still running.
-  @slice-37 @ID-RUNTTY-22 @wip @linux @local-engine-fixture
+  @slice-37 @ID-RUNTTY-22 @linux @local-engine-fixture
   Scenario: A late hangup signal cannot kill the controller during owned teardown
     Given a local terminal-run fixture with shared terminal stdin and stdout
     When the fixture closes the client master and delivers SIGHUP after owned teardown has begun

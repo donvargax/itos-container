@@ -85,7 +85,7 @@ func TestLocalRunCommand(t *testing.T) {
 	service, _ := approvalServices("run", os.Stdin, os.Stdout, os.Stderr)
 	runner, _ := sessionServices(service)
 	runner.Workspace = &sessiondisk.Workspace{ProcessOpen: localProcessOpen, MountStat: localMountStat(os.Getenv("SLICE_17_LOCAL_MOUNT_ROOT"))}
-	ctx, release := signals.Capture(context.Background())
+	ctx, release := signals.Capture(context.Background(), c.Run.TTY)
 	c.Run.Approval = approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}}
 	c.Run.Snapshots = disk.Snapshots{Store: service.Store.(disk.Store), Records: canonical.JSON{}}
 	c.Run.Runner, c.Run.Context = runner, ctx
