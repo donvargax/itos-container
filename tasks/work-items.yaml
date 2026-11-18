@@ -2205,6 +2205,11 @@ items:
       of the failed jobs passed. The other shard took 144 s of its 180 s gate in that run, with
       slice-27's egress rows now live, so a timing dependence under a fuller shard is the first
       thing to check. One occurrence; record the next with its run before repairing anything.
+
+      The existing item tracks intermittent failures in ID-OVERLAP-06. Run 44286115510 failed the
+      activity check, which 369b58b changed to retry. The cleanup check still samples the daemon
+      once to confirm a 404 for the original worker ID. No cleanup failure has been observed. If one
+      occurs, record the CI run on this item.
   - id: p2-repair-platform-ci-fixtures
     title: Repair shell and Windows assumptions in portability fixtures
     phase: 1
