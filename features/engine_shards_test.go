@@ -75,16 +75,28 @@ func egressShardFiles(engine []string) []string {
 	return files
 }
 
+// The offline and lifecycle shards' fixed sets: one whole feature file each (T-59).
+var (
+	shardOfflineFiles   = []string{"offline.feature"}
+	shardLifecycleFiles = []string{"lifecycle.feature"}
+)
+
+// shardFileIssue reports how the shard's parsed files got differ from its pinned
+// set want, or "" when got is that set, whatever the list's order or whitespace.
+func shardFileIssue(shard string, got, want []string) string {
+	slices.Sort(got)
+	if slices.Equal(got, want) {
+		return ""
+	}
+	return "shard " + shard + " files: the pinned set is " + strings.Join(want, " ") +
+		", whatever the list's order or whitespace"
+}
+
 // egressShardIssue reports how the egress shard's parsed files got differ from its
 // pinned set for the engine inventory engine, or "" when got is that set, whatever
 // the list's order or whitespace.
 func egressShardIssue(got, engine []string) string {
-	slices.Sort(got)
-	if slices.Equal(got, egressShardFiles(engine)) {
-		return ""
-	}
-	return "egress shard files: the pinned set is " + strings.Join(egressShardFiles(engine), " ") +
-		", whatever the list's order or whitespace"
+	return shardFileIssue("egress", got, egressShardFiles(engine))
 }
 
 // shardReportLine is the one-line shard report of the real partition: every file the
@@ -148,11 +160,21 @@ func engineShardIssues(data []byte) []string {
 		require(count < 2, "feature in two shards: "+name)
 	}
 	for _, entry := range include {
-		if entry.Shard != "egress" {
+		var pinned []string
+		switch entry.Shard {
+		case "offline":
+			pinned = shardOfflineFiles
+		case "lifecycle":
+			pinned = shardLifecycleFiles
+		case "other":
+			pinned = shardOtherFiles
+		case "egress":
+			require(err == nil, "shard egress files: the pin needs the engine inventory")
+			pinned = egressShardFiles(want)
+		default:
 			continue
 		}
-		require(err == nil, "egress shard files: the pin needs the engine inventory")
-		if issue := egressShardIssue(strings.Fields(entry.Features), want); issue != "" {
+		if issue := shardFileIssue(entry.Shard, strings.Fields(entry.Features), pinned); issue != "" {
 			issues = append(issues, issue)
 		}
 	}
@@ -471,13 +493,21 @@ func testBrokenShardWorkflows(t *testing.T) {
 			j.Strategy.Matrix.Include = append(j.Strategy.Matrix.Include, shardEntry{Shard: "extra", Features: "doctor.feature"})
 		})},
 		{"a renamed shard", "exactly four named shards", editShard(func(j *workflowJob) { j.Strategy.Matrix.Include[0].Shard = "first" })},
-		{"a file swapped between egress and other", "egress shard files", func(w *engineWorkflow) {
+		{"a file swapped between egress and other", "shard egress files", func(w *engineWorkflow) {
 			replaceFeatures("egress", "egress.feature", "anchors.feature")(w)
 			replaceFeatures("other", "anchors.feature", "egress.feature")(w)
 		}},
-		{"an unrelated file in the egress shard", "egress shard files", func(w *engineWorkflow) {
+		{"an unrelated file in the egress shard", "shard egress files", func(w *engineWorkflow) {
 			replaceFeatures("egress", "egress.feature", "egress.feature recovery.feature")(w)
 			replaceFeatures("other", "recovery.feature", "")(w)
+		}},
+		{"a file moved from other to offline", "shard offline files", func(w *engineWorkflow) {
+			replaceFeatures("other", "hardlinks.feature", "")(w)
+			replaceFeatures("offline", "offline.feature", "offline.feature hardlinks.feature")(w)
+		}},
+		{"a file moved from other to lifecycle", "shard lifecycle files", func(w *engineWorkflow) {
+			replaceFeatures("other", "hardlinks.feature", "")(w)
+			replaceFeatures("lifecycle", "lifecycle.feature", "lifecycle.feature hardlinks.feature")(w)
 		}},
 		{"the aggregate without always()", "aggregate guard", editAggregate(func(j *workflowJob) { j.If = eventGuard })},
 		{"the aggregate without the event guard", "aggregate guard", editAggregate(func(j *workflowJob) { j.If = "${{ always() }}" })},
