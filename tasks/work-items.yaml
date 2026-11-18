@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - slice-28
-  - slice-34
   - slice-32
   - slice-35
   - slice-40
