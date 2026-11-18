@@ -91,7 +91,8 @@ func TestPlainRecoveryExplainsEmptyUnknownAndKnownOutcomes(t *testing.T) {
 	exit := 7
 	id := strings.Repeat("b", 64)
 	r := port.RecoveryResult{Entries: []port.RecoveryEntry{{ID: id, State: "running", Resource: "running", Controller: "absent", Cleanup: "pending", StopCandidate: true, Retry: []string{"itos", "container", "stop", id}}, {ID: strings.Repeat("a", 64), State: "stopped", Resource: "absent", Cleanup: "complete", WorkloadExit: &exit}}}
-	if u.Print(r, false) != 0 || !strings.Contains(out.String(), "workload_exit unknown") || !strings.Contains(out.String(), "workload_exit 7") || !strings.Contains(out.String(), "itos container stop "+id) {
+	if u.Print(r, false) != 0 || !strings.Contains(out.String(), "workload_exit unknown") || !strings.Contains(out.String(), "workload_exit 7") ||
+		!strings.Contains(out.String(), "itos container stop "+id) || strings.Count(out.String(), "itos container stop ") != 1 {
 		t.Fatal(out.String())
 	}
 }
@@ -124,9 +125,11 @@ func TestPlainRefusalEvidenceAndGap(t *testing.T) {
 		n       *uint64
 		missing []port.RefusalGap
 		records string
+		ranges  string
 	}{
-		{"unknown", nil, nil, "unknown"},
-		{"gapped", &count, gaps, "3"},
+		{"unknown", nil, nil, "unknown", ""},
+		{"gapped", &count, gaps[:1], "3", "2-4"},
+		{"gapped", &count, gaps, "3", "2-4,7-7"},
 	} {
 		t.Run(tc.state, func(t *testing.T) {
 			result := port.RecoveryResult{Entries: []port.RecoveryEntry{{ID: id, Egress: &port.EgressDisclosure{RefusalLog: &port.RefusalLogReport{State: tc.state, Path: path, Records: tc.n, Missing: tc.missing}}}}}
@@ -140,11 +143,13 @@ func TestPlainRefusalEvidenceAndGap(t *testing.T) {
 			if c := ui.Print(result, false); c != wantCode || !strings.Contains(out.String(), `refusal log: "/private/line\nlog" state `+tc.state+"\n") || !strings.Contains(out.String(), "stored records: "+tc.records+"\n") {
 				t.Fatal(c, out.String(), diag.String())
 			}
-			if strings.Contains(out.String(), "missing sequences: 2-4,7-7\n") != (tc.state == "gapped") {
+			if tc.ranges == "" && strings.Contains(out.String(), "missing sequences:") {
 				t.Fatal(out.String())
 			}
-			if tc.state == "gapped" && (!strings.Contains(diag.String(), `"/private/line\nlog" is missing sequences 2-4,7-7`) || !strings.Contains(diag.String(), id) || !strings.Contains(diag.String(), "cannot be recovered")) {
-				t.Fatal(diag.String())
+			if tc.ranges != "" && (!strings.Contains(out.String(), "missing sequences: "+tc.ranges+"\n") ||
+				!strings.Contains(diag.String(), `"/private/line\nlog" is missing sequences `+tc.ranges+";") ||
+				!strings.Contains(diag.String(), id) || !strings.Contains(diag.String(), "cannot be recovered")) {
+				t.Fatal(out.String(), diag.String())
 			}
 		})
 	}

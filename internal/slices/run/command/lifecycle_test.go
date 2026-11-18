@@ -52,6 +52,7 @@ func TestLifecycleResultPrecedence(t *testing.T) {
 		{"zero", session.RunResult{Signal: "SIGTERM", Exited: true}, 0, []string{"run.cancelled SIGTERM", "workload outcome 0"}},
 		{"nonzero", session.RunResult{Signal: "SIGINT", Exited: true, Exit: 17, Stream: session.StreamTimeout}, 17, []string{"run.cancelled SIGINT", "workload outcome 17", "run.stream-timeout"}},
 		{"stream failure", session.RunResult{Exited: true, Stream: session.StreamTimeout}, 75, []string{"run.stream-timeout"}},
+		{"stream operation timeout", session.RunResult{Exited: true, Stream: session.CallTimeout}, 75, []string{"run.call-timeout"}},
 		{"lost engine", session.RunResult{Result: session.Result{Outcome: session.EngineLost}}, 75, []string{"run.engine-lost", "unknown"}},
 		{"teardown timeout", session.RunResult{Teardown: session.TeardownTimeout}, 75, []string{"run.teardown-timeout"}},
 		{"lost engine then timeout", session.RunResult{Result: session.Result{Outcome: session.EngineLost}, Teardown: session.TeardownTimeout}, 75, []string{"run.engine-lost", "run.teardown-timeout"}},
