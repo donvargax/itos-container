@@ -11,10 +11,11 @@ import (
 
 // Recovery observes and removes registered sessions; it has no launch path.
 type Recovery struct {
-	Refusals  port.RefusalLog
-	Registry  port.Registry
-	Engine    port.RunEngine
-	immediate bool
+	Credentials port.CredentialStager
+	Refusals    port.RefusalLog
+	Registry    port.Registry
+	Engine      port.RunEngine
+	immediate   bool
 }
 
 func recoveryResult() port.RecoveryResult {
@@ -51,12 +52,16 @@ func (s Recovery) Status(ctx context.Context) port.RecoveryResult {
 	return r
 }
 func (s Recovery) status(ctx context.Context, id string) port.RecoveryResult {
+	ctx = context.WithValue(ctx, credentialRecoveryKey{}, credentialRecoveryState{s.Credentials})
 	entry, failure := s.Registry.Open(ctx, id, true)
 	if failure != "" {
 		return recoveryFailure(id, failure)
 	}
 	defer entry.Close()
 	e, failure := sessionEntry(entry)
+	if f := s.credentialPresence(ctx, entry, &e); f != "" && failure == "" {
+		failure = f
+	}
 	binding := entry.Intent().Binding()
 	for _, grant := range binding.Credentials {
 		if grant.Kind != "" {
@@ -207,6 +212,7 @@ func (s Recovery) Stop(ctx context.Context, id string) port.RecoveryResult {
 	return s.stop(ctx, id, "SIGTERM", nil, true)
 }
 func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove bool) port.RecoveryResult {
+	ctx = context.WithValue(ctx, credentialRecoveryKey{}, credentialRecoveryState{s.Credentials})
 	report := port.RefusalReport{}
 	ctx = context.WithValue(ctx, egressRecoveryKey{}, egressRecoveryState{log: s.Refusals, report: &report})
 	if !port.HexID(id) {
@@ -254,6 +260,11 @@ func (s Recovery) stop(ctx context.Context, id, signal string, exit *int, remove
 				failure = f
 			}
 		}
+	}
+	if f := s.credentialPresence(ctx, entry, &e); f != "" && failure == "" {
+		failure = f
+		e.Cleanup = "unknown"
+		e.State = "failed"
 	}
 	e.WorkloadExit = entry.Record().WorkloadExit
 	finishEntry(&e)
