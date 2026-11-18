@@ -248,7 +248,7 @@ func (f *homeLocalFixture) seedHomeSession(t *testing.T, state string) (string, 
 		value := 7
 		r.WorkloadExit = &value
 		f.m.files.Sessions[f.m.index().Project+"/"+id].Data = f.m.registry.Codec.EncodePublic(r)
-	case "running after controller loss", "running with live controller", "running after controller death":
+	case "running after controller loss", "running with live controller", "running after controller death", "running with a held session operation lock":
 		o.Status, o.Running, o.Started, o.PID = "running", true, true, 123
 	}
 	// These states have a durable home claim but no observed worker yet.

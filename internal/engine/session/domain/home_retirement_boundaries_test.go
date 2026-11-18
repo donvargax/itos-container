@@ -119,7 +119,7 @@ func TestHomeRetirementRevalidatesEveryDestructiveBoundary(t *testing.T) {
 }
 
 func TestHomeCatalogOrdersAllGenerationsAndReportsObservationFailures(t *testing.T) {
-	for _, fault := range []string{"sorted", "changed", "engine check", "no capability", "unissued", "allocation absent"} {
+	for _, fault := range []string{"sorted", "changed", "engine check", "no capability", "unissued", "allocation absent", "delayed create landed"} {
 		t.Run(fault, func(t *testing.T) {
 			x := domainHomeFixture()
 			g := x.seed()
@@ -150,6 +150,15 @@ func TestHomeCatalogOrdersAllGenerationsAndReportsObservationFailures(t *testing
 				s.Generations[0].Created = ""
 				delete(x.engine.Homes, g.Name)
 				want = port.Incomplete
+			case "delayed create landed":
+				// The create reached the engine with the exact token and scope
+				// labels, but its reply was lost before Created was recorded:
+				// reconcile adopts exactly this observation from an intent
+				// generation, so the catalog must report the pending
+				// allocation, never a foreign volume.
+				s.Generations[0].Stage = "intent"
+				s.Generations[0].Created = ""
+				want = port.Incomplete
 			}
 			x.store.Scopes[s.Scope] = s
 			result := x.h.ListHomes(t.Context())
@@ -157,6 +166,9 @@ func TestHomeCatalogOrdersAllGenerationsAndReportsObservationFailures(t *testing
 				t.Fatal(result, want)
 			}
 			if fault == "sorted" && (len(result.Homes) != 2 || result.Homes[0].ID != g.ID || result.Homes[1].ID != strings.Repeat("f", 64)) {
+				t.Fatal(result)
+			}
+			if fault == "delayed create landed" && (len(result.Homes) != 1 || result.Homes[0].State != "present") {
 				t.Fatal(result)
 			}
 		})

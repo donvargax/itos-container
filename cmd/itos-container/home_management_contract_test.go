@@ -270,10 +270,31 @@ func homeClaimFence(t *testing.T, reference string) {
 		id, worker, g := f.seedHomeSession(t, reference)
 		manager := homeOtherState(t, f)
 		manager.consent = homeLocalConsent{yes: true}
+		var entry sp.Intent
+		if reference == "running with a held session operation lock" {
+			// The claiming session's operation holds its intents entry lock
+			// for the operation's whole lifetime, as a live run, stop or
+			// status of that project does. Claim evidence must be judged
+			// without that lock: the consented action names the in-use home
+			// within the operation budget, never the lock as a temporary
+			// failure, and the home stays intact.
+			opened, failure := f.m.registry.Store.Open(context.Background(), sp.Reference(f.m.c.Project, strings.Repeat("b", 63)+"1"))
+			if failure != "" || opened == nil {
+				t.Fatal("held session entry", failure)
+			}
+			entry = opened
+		}
 		before := len(f.engine.Events)
+		start := time.Now()
 		e := manager.retire(t, g.ID, action, 1)
 		if manager.lastRule != "recovery.home-in-use" {
 			t.Fatal("known claim lost its diagnosis", manager.lastRule)
+		}
+		if entry != nil && time.Since(start) > 10*time.Second {
+			t.Fatal("claim judgment waited out the operation budget")
+		}
+		if entry != nil {
+			entry.Close()
 		}
 		wantWorkers := 1
 		if reference == "uncertain worker create" || reference == "paused launch before worker create" {
@@ -451,6 +472,19 @@ func homeInvalidAction(t *testing.T, condition string) {
 			s.Generations[0].Initialized = false
 			f.putScope(s)
 			delete(f.engine.Homes, g.Name)
+			before = homeScopeBytes(f)
+		case "delayed create landed at intent":
+			// The create reached the engine with the exact token and scope
+			// labels and its reply was lost, so no Created is recorded. The
+			// owned observation must not read as a foreign volume: management
+			// reports the pending allocation as temporary, exactly as the
+			// claiming session's stop resolves it.
+			want = 75
+			s := f.scope()
+			s.Generations[0].Created = ""
+			s.Generations[0].Stage = "intent"
+			s.Generations[0].Initialized = false
+			f.putScope(s)
 			before = homeScopeBytes(f)
 		case "claim state root unavailable":
 			want = 75
