@@ -247,14 +247,16 @@ func moduleRoot() (string, error) {
 // hook's GIT_DIR, the caller's ITOS_CONTAINER_ settings, CI's), with no
 // global or system git config and a fixed identity, and the caller's PATH
 // without its claude, its itos, its itos extensions or a git that is an itos
-// (callerPath).
+// (callerPath). The caller's terminal width (COLUMNS) is left out too, so help
+// wraps as it does under CI; a scenario that names a width sets it itself.
 func (w *world) env() []string {
 	var env []string
 	for _, kv := range os.Environ() {
 		name, _, _ := strings.Cut(kv, "=")
 		if strings.HasPrefix(name, "GIT_") || strings.HasPrefix(name, "ITOS_") ||
 			strings.HasPrefix(name, "ITOS_CONTAINER_") || strings.HasPrefix(name, "GITHUB_") ||
-			strings.HasPrefix(name, "GH_") || name == "CI" || strings.EqualFold(name, "PATH") {
+			strings.HasPrefix(name, "GH_") || name == "CI" || strings.EqualFold(name, "PATH") ||
+			strings.EqualFold(name, "COLUMNS") {
 			continue
 		}
 		env = append(env, kv)
