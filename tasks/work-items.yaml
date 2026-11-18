@@ -194,6 +194,11 @@ items:
       per-slice red-evidence and history notes out of it (the commits and run numbers already record
       them), keep only the standing harness rules, and add a doc-caps entry with headroom over the
       shortened size so later slices cannot grow it back.
+
+      This item already covers scenario guidance in features/README.md. Include a review rule there:
+      when a spec claims an exact mount option string produces a particular behavior, cite the
+      relevant engine source or a native CI observation. The executable /tmp spec shows why omitting
+      noexec is insufficient evidence.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -1673,6 +1678,17 @@ items:
       failure. The reading confirms or refutes the hypothesis on the next cold run. The remedy is
       not this item's: it belongs to p2-first-engine-row-slow-create, added by the same triage, and
       the warm cache to p2-ci-go-build-cache-rolling-key.
+
+      This item already publishes timing notices on green and failed engine runs. Include
+      registration duration and elapsed time from registration completion to create submission for
+      passing controls, so a failed control can be compared with a passing row from the same run.
+      Use the same phase boundaries and units for both outcomes.
+
+      This item already covers registration timing and the launch details visible in CI annotations.
+      When registration times out, include the last observed step (reservation, storage
+      registration, or admission publication) and its elapsed time on the launch line. That gives
+      the reader evidence the five-call engine journal cannot supply and fits q-65’s instrumentation
+      decision.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
@@ -2219,6 +2235,17 @@ items:
       passed, so this is not the first-row failure T-54, T-55 and T-57 dealt with. The journal
       printed with the failure omits entries 2 to 18, which hold the launch itself. One occurrence;
       with the next, read the full journal for which call took the time before choosing anything.
+
+      Include the ID-LIFECYCLE-12 healthy control in the existing startup-timeout investigation. In
+      run 43981890039 at c84b238, create was submitted 2.6 s into the 3 s budget and the engine
+      answered in 49 ms. Measure elapsed time from registration completion to create submission
+      alongside registration itself. That will let the two failures be compared before choosing a
+      remedy. T-50 is merged, and q-65 scoped its instrumentation to registration.
+
+      This investigation already tracks run 43981890039. Its healthy control submitted create 2.6 s
+      into the 3 s startup budget, and the engine answered in 49 ms. Include the separate 1 s
+      registration timeout when comparing where startup time went. The coordinator can use those
+      measurements to judge budget headroom. q-70 authorized reruns only for the slow first create.
   - id: T-58
     title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
     phase: 1
