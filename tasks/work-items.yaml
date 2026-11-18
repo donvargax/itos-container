@@ -774,7 +774,7 @@ items:
     title: Release notes leave out merges of main into an item branch
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-profile-non-engine-feature-suite
