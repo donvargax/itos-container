@@ -783,6 +783,9 @@ items:
       type, or classifies merges by their first parent's type. A merge of main into an item branch
       changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
       own subject names the item).
+    deferred: >
+      Reserved for an external contribution. The coordinator will resume this item when the patch
+      arrives.
   - id: p2-profile-non-engine-feature-suite
     title: Profile the non-engine feature suite and cut its roughly 300 s wall time
     phase: 1
