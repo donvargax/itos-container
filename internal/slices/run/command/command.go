@@ -114,15 +114,13 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 	if result.Stream != "" && code == 0 {
 		code, _ = Classify(runFailure{result.Stream, result.Reference, result.SessionID, false})
 	}
+	// A gap takes precedence over a cleanup retry but preserves the primary
+	// run, stream or teardown failure.
+	if result.RefusalLog.Outcome == session.RefusalLogGap && code == 0 {
+		code = 1
+	}
 	if result.Reference != "" && result.Cleanup != session.Complete && code == 0 {
 		code, _ = Classify(runFailure{result.Cleanup, result.Reference, result.SessionID, true})
-	}
-	// A committed gap is its own diagnosis: cleanup may still be complete or
-	// separately failing, but neither a temporary retry nor an unobserved exit
-	// may stand in for evidence this run knows it lost. An observed nonzero
-	// workload exit and a cancellation still take their own precedence below.
-	if result.RefusalLog.Outcome == session.RefusalLogGap {
-		code = 1
 	}
 	if result.Signal != "" && !result.Exited {
 		code = 130
@@ -167,7 +165,7 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 			ui.Fail(runFailure{result.Teardown, result.Reference, result.SessionID, false}, false)
 		}
 		if result.RefusalLog.Outcome == session.RefusalLogGap {
-			ui.Fail(refusalGapFailure{result.RefusalLog, result.Reference, result.SessionID, result.RefusalLog.Path, result.RefusalLog.Gaps}, false)
+			ui.Fail(refusalGapFailure{result.RefusalLog, result.Reference, result.SessionID}, false)
 		}
 		if result.Reference != "" && result.Cleanup != session.Complete {
 			ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
@@ -201,9 +199,8 @@ func (f operationFailure) Unwrap() error { return f.runFailure }
 // reference and session name the original run, its path the protected
 // destination the copy published.
 type refusalGapFailure struct {
-	report                     session.RefusalReport
-	reference, sessionID, path string
-	gaps                       []session.RefusalGap
+	report               session.RefusalReport
+	reference, sessionID string
 }
 
 func (refusalGapFailure) Error() string { return "a committed refusal log is missing sequences" }
@@ -251,13 +248,10 @@ func Classify(err error) (int, []cli.Problem) {
 	var refusalGap refusalGapFailure
 	if errors.As(err, &refusalGap) {
 		rule := "run.refusal-log-gap"
-		message := rule + " " + strconv.QuoteToASCII(refusalGap.reference) + ": committed refusal log " + strconv.Quote(refusalGap.path) +
-			" is missing sequences " + gapRanges(refusalGap.gaps) + "; the lost records cannot be recovered by retrying" +
+		message := rule + " " + strconv.QuoteToASCII(refusalGap.reference) + ": committed refusal log " + strconv.Quote(refusalGap.report.Path) +
+			" is missing sequences " + gapRanges(refusalGap.report.Gaps) + "; the lost records cannot be recovered by retrying" +
 			"; session " + refusalGap.sessionID
 		fix := "Inspect the stored log at its protected destination; a retry cannot restore bytes the source never delivered."
-		if session.HexID(refusalGap.sessionID) {
-			fix = "Use the same effective project: itos container stop " + refusalGap.sessionID
-		}
 		return 1, []cli.Problem{{Rule: rule, Exit: 1, Message: message, Fix: fix}}
 	}
 	var run runFailure

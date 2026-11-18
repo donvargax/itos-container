@@ -125,3 +125,40 @@ func TestUnreadDiagnosticUsesRemainingTeardown(t *testing.T) {
 		})
 	}
 }
+
+func TestRefusalGapPreservesPrimaryExitAndNamesLostEvidence(t *testing.T) {
+	id := strings.Repeat("a", 64)
+	report := session.RefusalReport{Outcome: session.RefusalLogGap, Path: "/private/line\nlog", Gaps: []session.RefusalGap{{First: 2, Last: 5}, {First: 9, Last: 9}}}
+	for _, tc := range []struct {
+		name   string
+		result session.RunResult
+		code   int
+	}{
+		{"gap", session.RunResult{}, 1},
+		{"engine unavailable", session.RunResult{Result: session.Result{Outcome: session.EngineLost}}, 75},
+		{"teardown timeout", session.RunResult{Teardown: session.TeardownTimeout}, 75},
+		{"workload exit", session.RunResult{Exited: true, Exit: 17}, 17},
+		{"cancellation", session.RunResult{Signal: "SIGINT"}, 130},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := tc.result
+			r.RefusalLog, r.SessionID, r.Reference, r.Cleanup = report, id, "intent", session.Complete
+			var errout strings.Builder
+			if got := reportRun(&cli.UI{Stderr: &errout, Classify: Classify}, r); got != tc.code {
+				t.Fatalf("exit = %d, want %d", got, tc.code)
+			}
+			text := errout.String()
+			for _, want := range []string{"run.refusal-log-gap", id, `"/private/line\nlog"`, "2-5,9-9", "cannot be recovered"} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("missing %q from %q", want, text)
+				}
+			}
+			if strings.Contains(text, "itos container stop") && tc.name == "gap" {
+				t.Fatalf("completed cleanup advised another stop: %q", text)
+			}
+		})
+	}
+	if (refusalGapFailure{}).Error() != "a committed refusal log is missing sequences" {
+		t.Fatal("missing gap error description")
+	}
+}
