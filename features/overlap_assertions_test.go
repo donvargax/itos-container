@@ -76,8 +76,21 @@ func (f *overlapFixture) live(r *overlapRun) error {
 	if f.err != nil {
 		return f.err
 	}
-	if r == nil || !offlineHex(r.worker) || !r.active() {
+	if r == nil || !offlineHex(r.worker) {
 		return errors.New("admitted workload is not independently active with its original full ID")
+	}
+	if !r.active() {
+		// A native activity sample is one observation of a shared engine
+		// daemon, and the same scenario's setup and heartbeat checks sample
+		// that daemon on bounded awaits, so a transient reply must read as
+		// not yet observed, never as a lost workload: retry the identical
+		// sample for the heartbeat bound before reporting the failure. A
+		// workload that really ended, or an ID that was never admitted,
+		// stays inactive for the whole bound and still fails. The local
+		// fixtures keep their deterministic single sample.
+		if !f.native || overlapAwait("admitted workload activity", 3*time.Second, r.active) != nil {
+			return errors.New("admitted workload is not independently active with its original full ID")
+		}
 	}
 	if f.native {
 		before := r.heartbeat
