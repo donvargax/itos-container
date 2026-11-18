@@ -43,7 +43,7 @@ func stopAndCopyProxy(ctx context.Context, i port.Intent, c port.RunConnection, 
 	}
 	if evidence.State == "stored" || evidence.State == "gapped" {
 		if evidence.State == "gapped" {
-			*state.report = port.RefusalReport{Outcome: port.RefusalLogGap, Gaps: evidence.Missing, Records: valueOf(evidence.Records), Path: evidence.Path}
+			*state.report = port.RefusalReport{Outcome: port.RefusalLogGap, Gaps: evidence.Missing, Path: evidence.Path}
 		}
 		return ""
 	}
@@ -77,12 +77,4 @@ func stopAndCopyProxy(ctx context.Context, i port.Intent, c port.RunConnection, 
 		*state.report = report
 	}
 	return ""
-}
-
-// valueOf reads a report's optional record count.
-func valueOf(records *uint64) uint64 {
-	if records == nil {
-		return 0
-	}
-	return *records
 }

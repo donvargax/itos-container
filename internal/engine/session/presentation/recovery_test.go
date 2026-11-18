@@ -94,3 +94,39 @@ func TestPlainRecoveryExplainsEmptyUnknownAndKnownOutcomes(t *testing.T) {
 		t.Fatal(out.String())
 	}
 }
+
+func TestPlainRefusalEvidenceAndGap(t *testing.T) {
+	id := strings.Repeat("a", 64)
+	count := uint64(3)
+	path := "/private/line\nlog"
+	gaps := []port.RefusalGap{{First: 2, Last: 4}, {First: 7, Last: 7}}
+	for _, tc := range []struct {
+		state   string
+		n       *uint64
+		missing []port.RefusalGap
+		records string
+	}{
+		{"unknown", nil, nil, "unknown"},
+		{"gapped", &count, gaps, "3"},
+	} {
+		t.Run(tc.state, func(t *testing.T) {
+			result := port.RecoveryResult{Entries: []port.RecoveryEntry{{ID: id, Egress: &port.EgressDisclosure{RefusalLog: &port.RefusalLogReport{State: tc.state, Path: path, Records: tc.n, Missing: tc.missing}}}}}
+			wantCode := 0
+			if tc.state == "gapped" {
+				result.Failures = []port.RecoveryFailure{{Outcome: port.RefusalLogGap, Session: id, Path: path, Gaps: tc.missing}}
+				wantCode = 1
+			}
+			var out, diag bytes.Buffer
+			ui := presentation.UI{Out: &out, Err: &diag}
+			if c := ui.Print(result, false); c != wantCode || !strings.Contains(out.String(), `refusal log: "/private/line\nlog" state `+tc.state+"\n") || !strings.Contains(out.String(), "stored records: "+tc.records+"\n") {
+				t.Fatal(c, out.String(), diag.String())
+			}
+			if strings.Contains(out.String(), "missing sequences: 2-4,7-7\n") != (tc.state == "gapped") {
+				t.Fatal(out.String())
+			}
+			if tc.state == "gapped" && (!strings.Contains(diag.String(), `"/private/line\nlog" is missing sequences 2-4,7-7`) || !strings.Contains(diag.String(), id) || !strings.Contains(diag.String(), "cannot be recovered")) {
+				t.Fatal(diag.String())
+			}
+		})
+	}
+}

@@ -289,10 +289,8 @@ func refusalReportJSON(digest string, report port.RefusalReport) []byte {
 	for _, gap := range report.Gaps {
 		missing = append(missing, map[string]uint64{"first": gap.First, "last": gap.Last})
 	}
-	data, err := json.Marshal(map[string]any{"schema": 1, "sha256": digest, "records": report.Records, "missing": missing})
-	if err != nil {
-		return []byte("{}")
-	}
+	// The fixed schema contains only strings, integer fields and ranges of integers.
+	data, _ := json.Marshal(map[string]any{"schema": 1, "sha256": digest, "records": report.Records, "missing": missing})
 	return data
 }
 

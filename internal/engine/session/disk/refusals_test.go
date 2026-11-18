@@ -392,3 +392,33 @@ func TestRefusalLogReadDerivesEvidence(t *testing.T) {
 		t.Fatalf("missing committed log = %#v, %s", evidence, failure)
 	}
 }
+
+func TestRefusalLogReadInvalidMetadataAndUnavailableEvidence(t *testing.T) {
+	f := refusalLogFixture()
+	read := func(id string, want sp.Outcome) {
+		t.Helper()
+		report, failure := f.log.Read(t.Context(), id)
+		if failure != want || report.State != "unknown" || report.Records != nil || report.Missing == nil || len(report.Missing) != 0 {
+			t.Fatalf("read = %#v, %s; want unknown, %s", report, failure, want)
+		}
+	}
+	read("invalid", sp.Invalid)
+	f.log.Store.Input.Root = "relative"
+	read(f.id, sp.Refused)
+	f = refusalLogFixture()
+	f.files.Failure = "state.unavailable"
+	read(f.id, sp.Incomplete)
+	f.files.Failure = ""
+	f.copyAll(t, `{"seq":0}`+"\n"+`{"seq":-1}`+"\n"+`{"seq":1.5}`+"\n")
+	entry := f.files.Sessions[f.key+"/"+f.id]
+	good := string(entry.Report)
+	digestAt := strings.Index(good, `"sha256":"`) + len(`"sha256":"`)
+	for _, bad := range []string{
+		"{", strings.Replace(good, `"schema":1`, `"schema":2`, 1),
+		strings.Replace(good, `"records":3`, `"records":null`, 1),
+		good[:digestAt] + good[digestAt+1:], good[:digestAt] + "x" + good[digestAt+1:],
+	} {
+		entry.Report = []byte(bad)
+		read(f.id, "")
+	}
+}
