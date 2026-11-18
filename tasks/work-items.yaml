@@ -2199,6 +2199,10 @@ items:
       foundation maintenance: no supplied evidence shows it blocks the charter's current
       harness-home step. Require focused regressions and platform CI evidence without weakening
       assertions or claiming additional container-host support.
+
+      Commit aaf919c makes runFixtureWarmupShell pass --binary to jq on every platform to handle
+      Windows line endings. The existing item covers this fixture. Check the wrapper on macos-latest
+      before attributing a dispatch failure to it.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
