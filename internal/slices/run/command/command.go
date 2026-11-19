@@ -93,7 +93,11 @@ func (c CLI) Run(ui *cli.UI) int {
 			if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
 				// A host signal that landed during acquisition keeps the
 				// run.cancelled result every later startup phase reports.
-				return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+				result := session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)}
+				if terminalRollbackFailed(err) {
+					result.Restore = session.TerminalRestore
+				}
+				return reportRun(ui, result)
 			}
 			return reportRunError(ui, session.RunResult{}, err)
 		}

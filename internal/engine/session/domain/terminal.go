@@ -181,16 +181,32 @@ func (s Runner) resizeOwned(ctx context.Context, reference, id string, size term
 		return port.TerminalResize
 	}
 	defer c.Close()
-	o, status := c.Inspect(call, id)
-	if status != port.Observed || o.ID != id || !owns(r, o) || !o.StatePresent || !o.Running {
-		return port.TerminalResize
+	running, failure := resizeTargetRunning(call, c, r)
+	if failure != "" || !running {
+		return failure
 	}
 	t := c.(port.TerminalConnection) // finiteEngine always supplies this capability
 	if f := t.Resize(call, id, size); f != "" {
 		if f == port.CallTimeout {
 			return f
 		}
+		// The worker may have exited after inspection but before the daemon
+		// handled the resize. Leave its authoritative wait subscribed.
+		if running, failure := resizeTargetRunning(call, c, r); !running && failure == "" {
+			return ""
+		}
 		return port.TerminalResize
 	}
 	return ""
+}
+
+func resizeTargetRunning(ctx context.Context, c port.RunConnection, r port.Record) (bool, port.Outcome) {
+	o, status := c.Inspect(ctx, r.ContainerID)
+	if status != port.Observed || o.ID != r.ContainerID || !owns(r, o) || !o.StatePresent {
+		return false, port.TerminalResize
+	}
+	if !o.Running && o.Status != "exited" {
+		return false, port.TerminalResize
+	}
+	return o.Running, ""
 }

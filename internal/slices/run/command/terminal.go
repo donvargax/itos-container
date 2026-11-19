@@ -2,7 +2,10 @@ package command
 
 import (
 	"context"
+	"errors"
+
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
+	session "github.com/donvargax/itos-container/internal/engine/session/port"
 	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
 
@@ -10,47 +13,46 @@ func acquireTerminal(startup context.Context, provider terminal.Provider) (termi
 	if provider == nil {
 		return nil, &terminal.Failure{Kind: terminal.InvalidTerminal}
 	}
-	// Acquisition shares startup's budget, but the acquired observer must outlive
-	// startup and host cancellation until the lifecycle explicitly restores it.
-	lifetime, cancel := context.WithCancel(context.WithoutCancel(startup))
-	type acquired struct {
-		lease terminal.Lease
-		err   error
-	}
-	started, pending := make(chan struct{}), make(chan acquired, 1)
-	r, err := budget.Acquire(startup, "terminal acquisition", func(context.Context) acquired {
-		close(started)
-		l, e := provider.Acquire(lifetime)
-		a := acquired{l, e}
-		pending <- a
-		return a
-	}, func(acquired) {
-		// A late lease is closed by acquireTerminal itself before it returns;
-		// closing here as well would close one lease twice.
-	})
-	if err != nil {
-		cancel()
-		// Join a started acquisition so a late lease is closed and its raw
-		// state rolled back before this process can return. The provider's
-		// own work is finite; a refusal that never began has nothing to join.
-		select {
-		case <-started:
-			a := <-pending
-			if a.lease != nil {
-				a.lease.Close()
-			}
-		default:
-		}
+	if err := budget.Cause(startup); err != nil {
 		return nil, err
 	}
-	if r.err != nil {
-		if r.lease != nil {
-			r.lease.Close()
-		}
+	// The acquired observer must outlive startup until the lifecycle restores it.
+	lifetime, cancel := context.WithCancel(context.WithoutCancel(startup))
+	var lease terminal.Lease
+	var acquireErr error
+	done := make(chan struct{})
+	go func() {
+		lease, acquireErr = provider.Acquire(lifetime)
+		close(done)
+	}()
+	_, cause := budget.Call(startup, "terminal acquisition", func(context.Context) struct{} {
+		<-done
+		return struct{}{}
+	})
+	if cause != nil {
 		cancel()
-		return nil, r.err
+		// Join even if the provider is still rolling back a partial acquisition.
+		<-done
+	} else if acquireErr == nil {
+		return terminalLease{lease, cancel}, nil
+	} else {
+		cause = acquireErr
+		cancel()
 	}
-	return terminalLease{r.lease, cancel}, nil
+
+	closeFailed := lease != nil && lease.Close().RestoreErr != nil
+	if !terminalRollbackFailed(cause) && (closeFailed || terminalRollbackFailed(acquireErr)) {
+		cause = errors.Join(cause, runFailure{outcome: session.TerminalRestore})
+	}
+	return nil, cause
+}
+
+// The provider can report rollback itself, or the command can discover it
+// while closing a provisional lease after the acquisition budget ended.
+func terminalRollbackFailed(err error) bool {
+	var failure *terminal.Failure
+	return errors.Is(err, runFailure{outcome: session.TerminalRestore}) ||
+		(errors.As(err, &failure) && failure.RestoreErr != nil)
 }
 
 // terminalLease ends the acquisition lifetime after the leased observer ends.
