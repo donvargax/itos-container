@@ -208,6 +208,15 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 	}
 	out.WriteHeader(status)
 	_, _ = out.Write(response)
+	// The observation barrier for a pre-create revalidation: the admission
+	// inspection has been answered from the original authority, and only the
+	// product's next revalidation can see what the fixture substituted.
+	if a.w.exec != nil && a.w.execSubstitutionArmed() && a.w.exec.substituteBoundary == "before exec create" &&
+		entry.Method == "GET" && entry.Path == "/containers/"+a.w.exec.worker+"/json" {
+		if err := a.w.execSubstitute(); err != nil {
+			a.problem = err
+		}
+	}
 }
 
 func (a *sessionAPI) allowed(r *http.Request, entry sessionRequest) bool {

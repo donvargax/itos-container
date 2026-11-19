@@ -177,7 +177,7 @@ Feature: Execute literal argv in a live owned foreground session
   # Observation barriers mutate only fixture authority, after a successful
   # admission inspection. The healthy sibling control must start and exit 23;
   # a fixture that prevents all exec calls cannot prove these revalidations.
-  @ID-EXEC-04 @wip @slice-38
+  @ID-EXEC-04 @wip @slice-38 @linux
   Scenario Outline: Exec revalidates authority before each launch mutation
     Given an exec admission fixture that substitutes "<authority>" at "<boundary>"
     When the exec attempt and its unchanged control run through both local backends

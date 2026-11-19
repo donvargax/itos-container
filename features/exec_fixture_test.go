@@ -30,6 +30,12 @@ type execWorld struct {
 	lease                            *execLease
 	restore                          []func()
 	engineUnavailable                bool
+	substituteAuthority              string
+	substituteBoundary               string
+	substituted                      bool
+	execLie                          string
+	execExit                         int
+	execStdout, execStderr           string
 }
 
 type execBackend struct {
@@ -41,11 +47,14 @@ type execBackend struct {
 
 // execProbeRequest is what the harness asks the command assembly to run.
 type execProbeRequest struct {
-	Backend, Condition string
-	SessionID, Worker  string
-	Argv               []string
-	Stdin              string
-	Output             string
+	Backend, Condition  string
+	SessionID, Worker   string
+	Argv                []string
+	Stdin               string
+	Output              string
+	Authority, Boundary string
+	Exit                int
+	Stdout, Stderr      string
 }
 
 // execProbeReport is the assembly's own observation of the invocation.
@@ -302,6 +311,40 @@ func (w *world) execLeaseBinary() (string, error) {
 	})
 }
 
+// execSubstitute mutates exactly one fact of the fixture's original
+// authority at an observation barrier, after a successful admission
+// inspection. The next revalidation must refuse it.
+func (w *world) execSubstitute() error {
+	e := w.exec
+	switch e.substituteAuthority {
+	case "protected intent":
+		intent := w.sessionExpectedRecord("owned", e.worker)
+		intent["fingerprint"] = "sha256:" + approvalHash(map[string]any{"slice-38-substituted": e.id})
+		if err := writeManifestFixture(w.sessionRecordPath(), approvalJSON(intent), 0600); err != nil {
+			return err
+		}
+	case "full worker ID and labels":
+		c := w.session.api.local[e.worker]
+		c["Id"] = strings.Repeat("e", 64)
+		object(object(c["Config"])["Labels"])["io.itos-container.intent"] = "foreign"
+	case "pinned engine socket":
+		intent := w.sessionExpectedRecord("owned", e.worker)
+		intent["engine_endpoint"] = "unix:///slice-38-replaced-socket"
+		if err := writeManifestFixture(w.sessionRecordPath(), approvalJSON(intent), 0600); err != nil {
+			return err
+		}
+	case "original daemon identity":
+		w.doctor.engine.info["ID"] = "other-daemon"
+	}
+	e.substituted = true
+	return nil
+}
+
+func (w *world) execSubstitutionArmed() bool {
+	e := w.exec
+	return e != nil && e.substituteAuthority != "" && !e.substituted
+}
+
 func (w *world) closeExec() error {
 	if w.exec == nil {
 		return nil
@@ -322,10 +365,11 @@ func (w *world) closeExec() error {
 	return result
 }
 
-// execInvoke runs the command assembly's exec probe for one backend. A
-// missing probe, or one that never published a report, is recorded as data:
-// the behaviour assertions in Then must fail, not the invocation step.
-func (w *world) execInvoke(backend string, request execProbeRequest) error {
+// execInvoke runs the command assembly's exec probe once and files the
+// observation under key. A missing probe, or one that never published a
+// report, is recorded as data: the behaviour assertions in Then must fail,
+// not the invocation step.
+func (w *world) execInvoke(key, backend string, request execProbeRequest) error {
 	bin, err := w.sessionProbeBinary()
 	if err != nil {
 		return err
@@ -340,8 +384,13 @@ func (w *world) execInvoke(backend string, request execProbeRequest) error {
 	request.Condition = w.exec.condition
 	request.Argv = w.exec.argv
 	request.Stdin = w.exec.stdin
-	request.Output = filepath.Join(w.dir, "slice-38-"+backend+"-report.json")
-	input := filepath.Join(w.dir, "slice-38-"+backend+"-input.json")
+	if w.exec.substituteAuthority != "" {
+		request.Authority, request.Boundary = w.exec.substituteAuthority, w.exec.substituteBoundary
+	}
+	request.Exit = w.exec.execExit
+	request.Stdout, request.Stderr = w.exec.execStdout, w.exec.execStderr
+	request.Output = filepath.Join(w.dir, "slice-38-"+key+"-report.json")
+	input := filepath.Join(w.dir, "slice-38-"+key+"-input.json")
 	if err := os.WriteFile(input, approvalJSON(request), 0600); err != nil {
 		return err
 	}
@@ -354,8 +403,8 @@ func (w *world) execInvoke(backend string, request execProbeRequest) error {
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = w.doctor.checkout
 	cmd.Env = w.coverageEnv(sessionChildEnvironment(os.Environ()))
-	for key, value := range w.doctor.env {
-		cmd.Env = setEnv(cmd.Env, key, value)
+	for name, value := range w.doctor.env {
+		cmd.Env = setEnv(cmd.Env, name, value)
 	}
 	cmd.Env = setEnv(cmd.Env, "ITOS_ROOT", w.doctor.checkout)
 	cmd.Env = setEnv(cmd.Env, "SLICE_38_EXEC_INPUT", input)
@@ -394,7 +443,7 @@ func (w *world) execInvoke(backend string, request execProbeRequest) error {
 			return fmt.Errorf("exec assembly subprocess failed: %w\n%s", runErr, transcript.String())
 		}
 	}
-	w.exec.results[backend] = b
+	w.exec.results[key] = b
 	return nil
 }
 
@@ -405,7 +454,7 @@ func (w *world) execEachBackends(extra func(execProbeRequest) execProbeRequest) 
 		if extra != nil {
 			request = extra(request)
 		}
-		if err := w.execInvoke(backend, request); err != nil {
+		if err := w.execInvoke(backend, backend, request); err != nil {
 			return err
 		}
 	}

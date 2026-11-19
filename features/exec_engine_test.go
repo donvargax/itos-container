@@ -35,6 +35,31 @@ func (a *sessionAPI) serveExecCreate(out http.ResponseWriter, request *http.Requ
 		"Cmd": body["Cmd"], "Env": body["Env"], "User": body["User"], "WorkingDir": body["WorkingDir"],
 		"AttachStdin": body["AttachStdin"], "AttachStdout": body["AttachStdout"], "AttachStderr": body["AttachStderr"],
 		"Tty": body["Tty"], "ExitCode": nil, "ExitPresent": false}
+	if e := a.w.exec; e != nil {
+		if e.execLie == "returned exec belongs to another container" {
+			instance["Container"] = strings.Repeat("f", 64)
+		}
+		if e.execLie == "returned exec ID differs from the created ID" {
+			instance["ID"] = approvalHash(map[string]any{"slice-38-lying-exec": execID})
+		}
+		programme := []any{}
+		if e.execStdout != "" {
+			programme = append(programme, []any{float64(1), e.execStdout})
+		}
+		if e.execStderr != "" {
+			programme = append(programme, []any{float64(2), e.execStderr})
+		}
+		instance["streams"] = programme
+		instance["programmedExit"] = float64(e.execExit)
+		// The observation barrier for a pre-start revalidation: the create
+		// reply carries what the product asked for, and only its next
+		// revalidation can see the substituted authority.
+		if a.w.execSubstitutionArmed() && e.substituteBoundary == "before exec start" {
+			if err := a.w.execSubstitute(); err != nil {
+				a.problem = err
+			}
+		}
+	}
 	a.execs[execID] = instance
 	header := make(http.Header)
 	header.Set("Content-Type", "application/json")
@@ -122,6 +147,12 @@ func (a *sessionAPI) execStart(out http.ResponseWriter, request *http.Request, i
 			putUint32(frame[4:], uint32(len(stream)-1))
 			_, _ = conn.Write(append(frame, stream[1:]...))
 		}
+		a.mu.Lock()
+		instance["Running"] = false
+		instance["ExitPresent"] = true
+		exit, _ := instance["programmedExit"].(float64)
+		instance["ExitCode"] = exit
+		a.mu.Unlock()
 	}()
 }
 
