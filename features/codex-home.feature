@@ -14,6 +14,11 @@ Feature: Codex starts from approved defaults in its private persistent home
   # checkout-overlap.feature for the rules reused below.
   # Read against 8413500, this branch's merge of main 6798ca3. slice-34 and
   # slice-27 are done there. These scenarios use no credential grant or account.
+  # This revision of 7d76508 answers its spec review. It adds sealed per-run
+  # observation windows, refusal canaries and ordered Responses exchanges to
+  # CODEXHOME-09. It adds 110 s and 115 s deadline rows to CODEXHOME-06, and
+  # malformed-header, extra-entry and delivered-fault readback rows. It also
+  # specifies the Codex image handoff, cleanup and budgets.
   #
   # Placement. The local scenarios CODEXHOME-01..07 are here. The native ones,
   # CODEXHOME-08..10, are in harness-home.feature beside HOME-13/14. That file is
@@ -140,7 +145,8 @@ Feature: Codex starts from approved defaults in its private persistent home
   #   directory metadata, consume only the first root header within 64 KiB including
   #   extended headers, then close, as slice-34 does; never inventory its children.
   #   Bound the generated-file readback archive to 64 KiB including extended
-  #   headers, reject malformed/truncated/extra entries, never extract to the host.
+  #   headers, reject malformed/truncated/extra entries (classified under Failure
+  #   classification below), never extract to the host.
   #   Readback reads only the generated file, not old contents or sibling state; no
   #   raw contents, engine errors or workload settings enter diagnostics/recovery
   #   records. Recheck boundary after attachment as existing launch does. Existing
@@ -157,10 +163,30 @@ Feature: Codex starts from approved defaults in its private persistent home
   # - A lost copy reply is a prompt transport failure after accepted publication,
   #   not a delayed response: run.home-unavailable (75), as slice-34 classifies
   #   uncertain publication.
-  # - Budget exhaustion retains lifecycle.feature's rules: a seed call alone passing
-  #   its 10 s call deadline is run.call-timeout (75); when the call and the 120 s
-  #   startup deadline expire together, run.startup-timeout (75) takes precedence.
-  #   Neither is reclassified as run.home-unavailable. Show the fixed seed path and
+  # - Readback archive contract, decided here. After a successful publication reply
+  #   the product makes one readback of the generated config.toml. Its archive is an
+  #   observation only when it holds exactly one well-formed tar entry, a regular
+  #   config.toml, with its body fully read, then end-of-archive, all within 64 KiB
+  #   including extended headers. Any of these failures is not an observation and
+  #   gives run.home-unavailable (75): a readback the engine cannot supply, a stream
+  #   cut off mid-entry, a malformed header (bad checksum or an unparsable size
+  #   field), any second entry after config.toml, or more than 64 KiB.
+  #   One well-formed entry whose bytes, owner, mode or kind differ from codex-v1 is a
+  #   confirmed wrong seed: run.isolation-unverified (1), as in CODEXHOME-07. A wrong
+  #   final CODEX_HOME seen by the existing worker inspection is classified the same.
+  # - Budget exhaustion retains lifecycle.feature's rules. The existing runner gives
+  #   each call the lesser of its 10 s call deadline and the startup time remaining
+  #   (session/domain/startup.go startupOperation). Hence:
+  #   a seed call starting at 60 s that stays pending is cancelled at 70 s by its own
+  #   call deadline: run.call-timeout (75);
+  #   a seed call starting at 110 s has both nominal deadlines at 120 s. Startup
+  #   precedence must hold there: cancellation at the original 120 s boundary,
+  #   run.startup-timeout (75), never run.call-timeout;
+  #   a seed call starting at 115 s receives only the 5 s left. It is cancelled at
+  #   120 s, not 125 s: run.startup-timeout (75).
+  #   No readback, inspection, attach or start follows a cancellation, and cleanup
+  #   then finishes within its own 30 s budget. None of these is reclassified as
+  #   run.home-unavailable. Show the fixed seed path and
   #   safe recovery guidance, never an observed target or contents. Preserve existing
   #   ownership-refusal precedence and known workload exits.
   # - A failed/partial/lost copy reply never permits start or an in-invocation
@@ -200,18 +226,85 @@ Feature: Codex starts from approved defaults in its private persistent home
   # TOML document needs no custom parser or new production library. Codex itself
   # parses the effective config in native tests.
   #
-  # Native fixture preparation. The shared `tools/bin/engine-fixture prepare` step
-  # serves every shard and is within this item's paths; its workflow budget is not.
-  # It adds a CI-only Codex 0.167.0 image built from the pinned Linux amd64 release
-  # asset. A SHA-256 recorded in the tree is verified before use, then the image
-  # digest. Codex's Apache-2.0 license/notices are preserved; no floating latest
-  # install. If this cannot be prepared within the existing prepare budget, stop and
-  # report rather than editing .github or another shard.
+  # Native Codex image handoff, decided here. Only CODEXHOME-09 runs Codex;
+  # CODEXHOME-08/10 use the existing shared fixture image and their own probes.
+  # The shared `tools/bin/engine-fixture prepare` step serves every shard and is
+  # within this item's paths. .github, the workflow's four step outputs and the
+  # exact step environment pinned by engine_fixture_test.go are not within them.
+  # - Asset: release tag rust-v0.167.0's asset codex-x86_64-unknown-linux-musl.tar.gz,
+  #   https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-x86_64-unknown-linux-musl.tar.gz
+  #   It must hold exactly one regular member, the static executable
+  #   codex-x86_64-unknown-linux-musl. Otherwise stop and report: never substitute
+  #   another tag, asset, platform, package manager or a latest install.
+  # - Checksum source: the implementer's red test commit adds
+  #   features/testdata/codex-fixture/SHA256SUMS with two lines, the asset's SHA-256
+  #   and the extracted executable's SHA-256. The asset line must equal the sha256
+  #   digest GitHub publishes for that release asset (the releases API asset
+  #   "digest" field), cross-checked by a local sha256sum of the downloaded bytes.
+  #   The commit body cites both. CI compares only against this tree file, never a
+  #   digest fetched at run time.
+  # - Preparation: prepare keeps the existing protocol, the shared fixture image and
+  #   exactly its four outputs (image, image_id, uid, gid). After the shared fixture
+  #   is cached and before the attempt registry is removed, it does the following:
+  #   download with curl --proto =https --max-time 30; verify the asset; extract the
+  #   one member to its owned state directory, never a checkout or archive path.
+  #   It then builds features/testdata/codex-fixture/Dockerfile with the existing
+  #   BuildKit-free, empty-config engine wrapper, build arguments and owner label.
+  #   That image is FROM the pinned busybox with the executable root-owned 0555 at
+  #   /usr/local/bin/codex, USER the fixture UID:GID and an empty entrypoint.
+  #   It pushes to a separate itos-fixture-<run>-<attempt>-codex repository on the
+  #   same registry and verifies the manifest and config digests as the shared image
+  #   does. It removes its tag and digest, cold-pulls the digest reference and
+  #   validates it. Only after this whole protocol passes, and before the existing
+  #   output append, it writes codex.reference and codex.iid as regular 0600 files
+  #   in its owned state directory
+  #   $RUNNER_TEMP/T-20-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-engine-fixture.
+  #   Every shard prepares it, since prepare cannot see the matrix. A Codex failure
+  #   fails prepare like any fixture failure, never a skipped or fallback row.
+  # - Discovery and independent verification by CODEXHOME-09's Given: derive that
+  #   directory from GitHub's default RUNNER_TEMP, GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT,
+  #   with no new output or environment pin. Require its owner record to name this
+  #   attempt, and both records to be regular, non-symlink, single-link files of this
+  #   UID, mode 0600. Then inspect the reference through the Engine API. Its Id must
+  #   equal codex.iid and differ from ITOS_CONTAINER_ENGINE_FIXTURE_ID. RepoDigests
+  #   must hold the reference, the platform must be linux/amd64 and the User must be
+  #   the fixture UID:GID. Its RootFS layers must begin with the pinned busybox
+  #   layers. A Given-owned verification container from that Id then prints
+  #   `sha256sum /usr/local/bin/codex` and `codex --version`. It runs with no
+  #   network, a read-only root, all capabilities dropped and no-new-privileges.
+  #   Its output must match the tree's executable line and "codex-cli 0.167.0".
+  #   A missing or mismatched record fails setup loudly; it is never a skip.
+  # - Cleanup: the Given removes its verification container and confirms absence
+  #   before any product run. engine-fixture's failure cleanup and its always()
+  #   cleanup also remove the Codex tag and digest reference. They match them by
+  #   recorded exact identity, as remove_image_ref does, and never touch the pinned
+  #   busybox, the registry or the shared fixture image. The cleanup verdict names
+  #   them. The extracted executable stays in the runner-temp state directory, which
+  #   cleanup retains as today. Product resources and the disposable Codex home
+  #   volumes are reclaimed as in harness-home.feature, after assertions.
+  # - Budgets: the existing 179 s prepare bound, its 4-minute step, the 180 s
+  #   measured engine step and the 4-minute Go test timeout stay unchanged. The Codex
+  #   addition gets at most 60 s inside prepare: 30 s download, then 30 s
+  #   build/push/pull/verify, each under its own timeout. Each CODEXHOME-09 product
+  #   run, Codex shutdown included, is bounded at 20 s.
+  #   CODEXHOME-08..10 together add at most 75 s to the offline shard's measured
+  #   scenario time, as shown by the green run's timing records. If either budget
+  #   cannot hold, stop and report so the host can make a ci commit, as q-76 did.
+  #   Never raise a budget or move a shard here.
+  # - Licensing: no Codex bytes enter the tree, a release or a pushed image outside
+  #   the transient attempt registry. features/README.md records the source, tag,
+  #   checksums and Codex's Apache-2.0 license beside the existing fixture
+  #   provenance. Beside engine_shards_test.go's home red inventory, the implementer
+  #   adds a CODEXHOME one. Red dispatch of the three native IDs must select exactly
+  #   their five rows in the offline shard and none in any other shard. The existing
+  #   HOME inventory stays unchanged.
   #
   # Handoff and evidence rules:
   # - Add all phrases below in a red test commit, @wip retained. Givens ONLY create
   #   private checkouts, literal requests, independently encoded approval/home
   #   records, metadata, faults and sentinels. They never call product commands.
+  #   CODEXHOME-09's Given also verifies the handed-off Codex image as above. That
+  #   is fixture setup, which fails loudly, never a product assertion.
   #   Each When records early refusal/exit/missing probe as data for Then, never
   #   fails merely because product setup cannot yet recognize the new selection.
   # - Both local backends means the existing command test assembly over I/O-free
@@ -329,10 +422,27 @@ Feature: Codex starts from approved defaults in its private persistent home
   # call, at most one readback and no start in the first invocation, no archive
   # copy by stop. The removal fault of the last row persists until the fixture
   # clears it after the first run's result is captured.
-  # Non-timeout faults return before either deadline. The call-timeout row keeps at
-  # least 30 s of startup budget when its call passes 10 s. The startup row places
-  # 115 s of successful progress before seeding and leaves the seed call pending
-  # across both deadlines, under controlled time.
+  # Trace. The recording fixture logs each archive call it RECEIVED and what it
+  # delivered: no reply, a partial store, a lost reply or a 2xx reply. For readback
+  # rows it also logs that the injected fault went out on that one readback. For the
+  # oversize row the body is 1 MiB and the product closes the stream before the
+  # fixture finishes writing it. A readback row passes only after one successful
+  # publication reply and then one readback that delivered its fault. A refusal
+  # before any readback cannot pass a readback row.
+  # Readback rows follow the header's readback archive contract. The malformed
+  # header row is a config.toml header with a corrupted checksum. The extra entry
+  # row is a complete, correct config.toml entry followed by a second regular entry
+  # named other, then end-of-archive. So a reader that stops after the first entry
+  # still fails it. The truncated row ends the stream mid-body.
+  # Deadlines, under the controlled time of lifecycle_budget_steps_test.go: the
+  # non-timeout faults return before either deadline. Each timeout row places
+  # successful progress before seeding so that its publication call starts at the
+  # stated time and stays pending.
+  # The 110 s row makes both nominal deadlines coincide at 120 s and proves startup
+  # precedence. The 115 s row proves the call gets only the remaining startup time.
+  # "with no later launch work" means no readback, inspection, attach or start after
+  # the stated end, including when the pending call is released later. Cleanup
+  # finishing within its own 30 s is measured from that end.
   # The early run is a fresh run of the same checkout after the faults clear and
   # before stop. In the confirmed rows it is an ordinary seeded run. In the last
   # row the held checkout reservation must refuse it before any create or copy.
@@ -340,31 +450,42 @@ Feature: Codex starts from approved defaults in its private persistent home
   Scenario Outline: Incomplete seeding never authorizes a worker start
     Given a Codex seed fixture with one-shot fault "<fault>" a timely Codex control and unrelated retained markers
     When the faulted seed launch runs then the faults clear and an early run a fresh stop of the first session and a later run follow through both local backends
-    Then the first run reports "<diagnostic>" with exit <exit> after exactly one config publication call at most one readback and no start while the timely control starts
+    Then the first run reports "<diagnostic>" with exit <exit> and no start after the fixture traced "<trace>" while the timely control starts
+    And its seed call ended "<end>" with no later launch work and its cleanup attempt ended within its separate 30 second budget
     And its cleanup "<cleanup>" while the home and unrelated markers are retained and no workload exit is claimed
     And the early run "<early>"
     And the fresh stop makes no archive copy or start and removes only an exact first-session worker that still remains
     And the later run regenerates and verifies the complete config before starting only after first-session worker absence is confirmed
 
     Examples:
-      | fault                                                         | diagnostic           | exit | cleanup                                                                   | early                                                               |
-      | seed copy fails before writing                                | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
-      | seed copy stores a partial archive then its transport fails   | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
-      | seed copy is accepted but its reply is lost                   | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
-      | generated config readback is unavailable                      | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
-      | readback archive is truncated                                 | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
-      | readback exceeds the 64 KiB limit                             | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
-      | seed call alone exceeds its 10 second call deadline           | run.call-timeout     | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
-      | seed call is pending when call and startup deadlines expire   | run.startup-timeout  | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
-      | seed copy fails before writing and worker removal leaves it   | run.home-unavailable | 75   | reports run.cleanup-temporary with its session ID and exact stop retry    | reports run.checkout-overlap with exit 1 before any create or copy  |
+      | fault                                                       | diagnostic           | exit | trace                                                                 | end                                                                            | cleanup                                                                | early                                                              |
+      | seed copy fails before writing                              | run.home-unavailable | 75   | one failed publication call and no readback                           | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | seed copy stores a partial archive then its transport fails | run.home-unavailable | 75   | one partially stored publication call and no readback                 | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | seed copy is accepted but its reply is lost                 | run.home-unavailable | 75   | one accepted publication call with a lost reply and no readback       | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | generated config readback is unavailable                    | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | readback archive is truncated mid-entry                     | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | readback archive has a malformed header                     | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | readback archive has an extra entry after config.toml       | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | readback exceeds the 64 KiB limit                           | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | seed call starts at 60 seconds and stays pending            | run.call-timeout     | 75   | one pending publication call and no readback                          | at 70 seconds by its own call deadline                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | seed call starts at 110 seconds and stays pending           | run.startup-timeout  | 75   | one pending publication call and no readback                          | at the original 120 second startup boundary where both deadlines coincide      | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | seed call starts at 115 seconds and stays pending           | run.startup-timeout  | 75   | one pending publication call and no readback                          | at the original 120 second startup boundary after only its remaining 5 seconds | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | seed copy fails before writing and worker removal leaves it | run.home-unavailable | 75   | one failed publication call and no readback                           | before either deadline                                                         | reports run.cleanup-temporary with its session ID and exact stop retry | reports run.checkout-overlap with exit 1 before any create or copy |
 
   # The truncated-readback row has a successful copy reply; the injected readback
-  # holds a valid shortened config.toml entry, so it is a confirmed wrong seed.
+  # holds one well-formed but shortened config.toml entry, so under the header's
+  # readback archive contract it is a confirmed wrong seed, unlike CODEXHOME-06's
+  # stream cut off mid-entry. Each row's fixture traces one successful publication
+  # reply and one readback, then delivers its defect. Config defects arrive in that
+  # readback's single entry; the CODEX_HOME defect arrives in the post-attach worker
+  # inspection, after a correct readback. A refusal before the defect was delivered
+  # cannot pass.
   @wip @slice-35 @ID-CODEXHOME-07 @local-engine-fixture @linux
   Scenario Outline: Final inspection verifies the actual Codex seed boundary
     Given a Codex seed fixture reporting successful copy but final defect "<defect>" and an independent correctly inspected Codex control
     When both launches reach post-attach verification through both local backends
     Then the defective boundary reports run.isolation-unverified with exit 1 and no start while the correct Codex control starts
+    And the fixture traced one successful publication and one readback before delivering that defect to the product
     And the unstarted owned worker is cleaned and the home is retained without diagnostic copies of file contents or raw engine errors
 
     Examples:
@@ -374,6 +495,7 @@ Feature: Codex starts from approved defaults in its private persistent home
       | readback shows a truncated config       |
       | generated config has wrong owner        |
       | generated config has wrong mode         |
+      | readback entry is an empty directory    |
 
   # Native evidence for this slice is in harness-home.feature, beside HOME-13/14,
   # because that file is in the offline engine shard: CODEXHOME-08 (first instructions

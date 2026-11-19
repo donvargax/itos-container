@@ -641,50 +641,98 @@ Feature: An approved persistent home for one checkout's harness
     And each later probe sees only its own persistent marker with no host image or checkout configuration imported
     And actual argv and hardening are unchanged and all session resources are absent before fixture cleanup while both homes remain
 
-  # The REAL pinned Codex 0.167.0 runs under an approved allowlist Codex home. The
-  # fixture's literal argv is its own launcher in the fixture image. The launcher
-  # waits at the harness's route-readiness barrier, the existing egress "attach"
-  # barrier of egress_native_run_test.go. The harness then attaches the approved
-  # proxy to the fake Responses endpoint and the recorders. The launcher proves each
-  # route with one readiness request through the proxy, and only after release
-  # does it exec codex with literal arguments. A missed barrier, failed readiness
-  # or early Codex start fails the row. Test-only DNS/CA controls serve the fake.
-  # There is no model, account, provider login, API key or internet request. The
-  # custom provider in literal argv uses requires_openai_auth=false, a fixed local
-  # model description and the fake URL; it overrides none of the seeded settings.
-  # Effective settings come from the pinned app-server's config/read and
-  # experimentalFeature/list.
-  # Resume: the first `codex exec --json` turn carries prompt nonce N1, and its
-  # tool call writes a private home marker. The harness captures the thread ID from
-  # that run's thread.started event. A fresh product run then executes
-  # `codex exec resume <captured ID>` with nonce N2, and its tool call rereads the
-  # marker. The resumed run must report the same thread ID, and its Responses
-  # request must carry N1 and the first tool output as prior context. A second
-  # fresh thread rereading the marker cannot pass. The fake emits a deterministic
-  # tool call and completion and never invokes a model.
-  # Traffic claims are limited to what headless exec observably does through normal
-  # shutdown. The expected set, fixed in the fixture before the red run, is each
-  # turn's POST to the fake's Responses path and nothing else. If pinned Codex needs
-  # another fake path, stop and report rather than widen the set. This row does not
-  # claim to exercise the update checker, which in the pinned source is on the TUI
+  # The REAL pinned Codex 0.167.0 runs under an approved allowlist Codex home, from
+  # the image handed off as codex-home.feature's header specifies. The fixture's
+  # literal argv is its own static launcher, installed in the checkout as the HOME
+  # probes are. There is no model, account, provider login, API key or internet
+  # request. Test-only DNS aliases and a fixture CA serve the fake. The CA reaches
+  # Codex through the variable the pinned source reads for extra roots; if 0.167.0
+  # has none, stop and report. The custom provider in literal argv is set with -c.
+  # It uses wire_api "responses" over HTTPS streaming, requires_openai_auth=false, a
+  # fixed local model description and the fake URL, and it overrides no seeded
+  # setting. Effective settings come from the pinned app-server's config/read and
+  # experimentalFeature/list over stdio. The approved allowlist holds the fake's
+  # name and the update, analytics and plugin host names the pinned source uses.
+  # The fixture records them with source links before the red run, as aliases of
+  # incidental-service recorders. Every other name is refused by the product proxy.
+  #
+  # Observation windows. There are three seeded product runs: S queries settings,
+  # T1 runs a fresh turn and T2 resumes it. Each uses its own nonce and two windows.
+  # The harness follows the product proxy's log stream from proxy start; the proxy
+  # logs each refusal (egress.feature). Every recorder keeps an append-only
+  # transcript.
+  # - Readiness window: the launcher waits at the existing egress "attach" barrier
+  #   of egress_native_run_test.go, and the harness attaches the proxy to the
+  #   fixture networks. After release the launcher makes one readiness request per
+  #   route through the proxy. It then CONNECTs to the unlisted
+  #   before-<nonce>.refused.example, which must receive 403, and waits at the
+  #   "codex" barrier. The harness confirms each readiness request in its recorder
+  #   and that before-canary refusal in the followed log. It then seals the window
+  #   by recording every transcript and log cursor, and releases.
+  # - Codex window: the launcher runs codex as its child with literal arguments and
+  #   waits for its exit, the normal shutdown flush included. It then sends one
+  #   nonce canary per recorder and CONNECTs to after-<nonce>.refused.example, which
+  #   must receive 403. It waits at a "seal" barrier until the harness has observed
+  #   those canaries and that refusal, and then exits with Codex's status. Only then
+  #   may product cleanup remove the proxy.
+  # The before canary proves that this run's refusals are visible. The after canary
+  # proves the log was still captured after Codex shut down, so a log that ended
+  # early cannot read as complete. A missed barrier, missing canary, failed
+  # readiness, or a Codex start before the "codex" release fails the row.
+  # Readiness and canary traffic belong to their windows; they are never counted as
+  # Codex traffic. Each product run is bounded at 20 s.
+  #
+  # Ordered exchanges. The fake serves only this script and answers anything else
+  # with HTTP 400, recorded as unexpected. Before the red run the fixture fixes the
+  # Responses path and the shell tool that the pinned exec advertises.
+  # - S runs `codex app-server`: initialize, config/read and experimentalFeature/list,
+  #   then stdin closes. Its Codex window holds no Responses request.
+  # - T1 runs `codex exec --json` with prompt nonce N1.
+  #   E1: a POST whose input ends with the N1 user message and holds no tool output.
+  #   The reply streams one call C1 of that shell tool, writing N1 to
+  #   /home/itos/slice-35-marker, then response.completed.
+  #   E2: a POST whose input adds C1 and C1's function_call_output reporting success.
+  #   The reply streams the message done-N1, then response.completed.
+  # - T2 runs `codex exec resume <ID> --json` with prompt nonce N2. The harness takes
+  #   the ID from T1's thread.started event.
+  #   E3: a POST whose input holds, in order, the N1 message, C1, C1's output,
+  #   done-N1 and a final N2 user message. The reply streams call C2, reading the
+  #   marker.
+  #   E4: a POST holding E3's input plus C2 and C2's output, which contains N1.
+  #   The reply streams done-N2, then response.completed.
+  # T1's Codex window holds exactly E1 then E2, each once, and T2's exactly E3 then
+  # E4. Any of these fails the row: a repeated POST (a retry), another path or
+  # method, a WebSocket upgrade, an exchange out of order, an incidental-recorder
+  # request, or any proxy refusal other than the after canary.
+  # If pinned Codex needs another fake path, stop and report rather than widen the
+  # set. Both turns must end with turn.completed and exit 0. T2 must report the
+  # captured thread ID. A second fresh thread that rereads the marker cannot pass E3.
+  # The update checker is not claimed to run. In the pinned source it is on the TUI
   # path and also depends on build type and cached version state:
   # https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/tui/src/updates.rs#L24
-  # Nor does it claim analytics or plugin request paths that headless startup may
-  # never reach. Those settings are proven by Codex's own effective-settings report
-  # against the unseeded control, never by absent traffic. Recorder canaries, sent
-  # separately, prove only that the recorders are live. Missing reports, refused
-  # requests, timeouts and empty transcripts are never success. The whole fixture
-  # interaction is bounded, including the normal shutdown flush.
+  # Nor are analytics or plugin requests that headless startup may never reach.
+  # Codex's own effective-settings report proves those settings; absent traffic
+  # never does. Absent traffic proves only that nothing unwanted was sent, refused
+  # or not, within the sealed seeded windows.
+  # Unseeded control: an independent plain-home checkout, separately approved with
+  # the same allowlist, runs only S's settings query. It runs after all three seeded
+  # Codex windows are sealed, through its own proxy. Its traffic and refusals are
+  # never attributed to a seeded window or asserted absent. Its config/read must show
+  # no layer from a seeded config.toml. It must differ from codex-v1 in
+  # check_for_update_on_startup, sandbox_mode and approval_policy, at the defaults the
+  # fixture fixes from the pinned source before the red run.
+  # Missing reports, timeouts and empty transcripts are never success.
   @wip @slice-35 @ID-CODEXHOME-09 @engine @linux
   Scenario: Pinned Codex starts and resumes against a fake service without unwanted startup traffic
-    Given a CI Codex 0.167.0 image an approved Codex home a controlled Responses endpoint and incidental-service recorders behind a fixture route-readiness barrier
-    When product runs query Codex effective settings then run a fresh fake turn and resume its captured thread ID each starting Codex only after the barrier confirms every route
-    And an independent unseeded plain-home control run reports its Codex effective settings
-    Then Codex reports all codex-v1 effective settings and disabled plugin features while the unseeded control reports differing defaults
-    And the resumed run reports the captured thread ID and its fake request carries the first turn's nonce and tool output
-    And both turns complete without login onboarding or tool approval input and their tool calls write then reread the same private home marker
-    And through normal shutdown the recorders observe only the expected fake Responses requests and no other destination
-    And separately sent recorder canaries are observed and no real credential account or service was used and product session cleanup is confirmed
+    Given a CI Codex 0.167.0 image verified from its recorded fixture identity an approved Codex home a scripted Responses endpoint incidental-service recorders and a followed proxy refusal log behind readiness Codex and seal barriers
+    When three seeded product runs query Codex effective settings then run a fresh fake turn and resume its captured thread ID each within its own readiness and Codex observation windows
+    And an independent unseeded plain-home control checkout reports its Codex effective settings only after every seeded window is sealed
+    Then Codex reports all codex-v1 effective settings and disabled plugin features while the unseeded control reports its differing defaults
+    And each seeded readiness window holds every route's readiness request and its before canary refusal and no Codex process started before its release
+    And the fresh turn's Codex window holds exactly its prompt POST then its tool-output POST and the resumed turn's holds exactly its context POST then its tool-output POST while the settings window holds no Responses request
+    And the resumed run reports the captured thread ID and rereads the marker the first turn wrote without login onboarding or tool approval input
+    And each seeded Codex window ends with its recorder canaries and after canary refusal with no other refusal recorder request or destination through Codex shutdown
+    And no real credential account or service was used and product session cleanup is confirmed
 
   # A real archive extractor must refuse symlinks and replace a regular file
   # without writing through another hard link. Pure metadata fakes cannot prove it.
