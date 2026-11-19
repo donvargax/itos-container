@@ -11,6 +11,10 @@ import (
 // Inspect validates policy without inspecting its requested manifest.
 func Inspect(policies port.Policies) policy.Result { return policies.Inspect() }
 
+// lastMetadataVersion is the newest policy version whose credential sources
+// this scope inspects by metadata alone.
+const lastMetadataVersion = 3
+
 // InspectCredentials pins the effective root before its policy is read and
 // holds it until the sources are observed, so both describe one tree. A root
 // that cannot be pinned refuses without a policy read. Sources are never
@@ -23,6 +27,11 @@ func InspectCredentials(policies port.Policies, sources port.Credentials) (polic
 	p := Inspect(policies)
 	if p.Policy == nil || len(p.Issues) != 0 {
 		return p, nil
+	}
+	if p.Policy.Version > lastMetadataVersion {
+		// A newer file is valid, but its kinds have no source rules here yet;
+		// observing only their metadata would pass a source the grant forbids.
+		return policy.Result{Issues: []policy.Issue{{Kind: policy.Version, Path: []string{"version"}, Version: p.Policy.Version}}}, nil
 	}
 	r := sources.Inspect(p.Policy.Credentials)
 	return p, &r

@@ -39,7 +39,15 @@ func PoliciesContract(t Reporter, open func(Fixture) port.Policies) {
 		{Issues: []policy.Issue{{Kind: policy.Missing}}, Result: policy.Result{Issues: []policy.Issue{{Kind: policy.Missing}}}},
 		{Issues: []policy.Issue{{Kind: policy.Unreadable}}, Result: policy.Result{Issues: []policy.Issue{{Kind: policy.Unreadable}}}},
 		{Value: policy.Value{Kind: policy.Object, Fields: map[string]policy.Value{
-			"version": {Kind: policy.Number, Number: policy.Decimal{Coefficient: "4", Exponent: "0"}},
+			"version": {Kind: policy.Number, Number: policy.Decimal{Coefficient: "4", Exponent: "0"}}, "manifest": {Kind: policy.String, Text: "a.json"},
+			"credentials": {Kind: policy.Array, Items: []policy.Value{{Kind: policy.Object, Fields: map[string]policy.Value{
+				"kind": {Kind: policy.String, Text: "opencode-auth"}, "source": {Kind: policy.String, Text: "/h/.local/share/opencode/auth.json"},
+				"provider": {Kind: policy.String, Text: "opencode-go"},
+			}}}},
+		}}, Result: policy.Result{Policy: &policy.Policy{Version: 4, Manifest: "a.json", Network: policy.Network{Mode: "offline"},
+			Credentials: []policy.Credential{{Kind: "opencode-auth", Source: "/h/.local/share/opencode/auth.json", Provider: "opencode-go"}}}}},
+		{Value: policy.Value{Kind: policy.Object, Fields: map[string]policy.Value{
+			"version": {Kind: policy.Number, Number: policy.Decimal{Coefficient: "5", Exponent: "0"}},
 		}}, Result: policy.Result{Issues: []policy.Issue{{Kind: policy.Version, Path: []string{"version"}}}}},
 	}
 	for _, fixture := range fixtures {

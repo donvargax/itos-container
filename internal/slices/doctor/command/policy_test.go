@@ -135,3 +135,39 @@ func TestPolicyPlainHomeStorageAndRefusal(t *testing.T) {
 		t.Fatal(code, diagnostic.String())
 	}
 }
+
+// A grant names its provider only where the kind has one. JSON omits the empty
+// field; plain output prints the line directly after that grant's source.
+func TestPolicyShowsTheProviderOfAGrantThatHasOne(t *testing.T) {
+	result := port.Result{Policy: &port.Policy{Version: 4, Manifest: "a.json", Network: port.Network{Mode: "offline"}, Credentials: []port.Credential{
+		{Kind: "opencode-auth", Source: "/h/.local/share/opencode/auth.json", Provider: "opencode-go"},
+		{Kind: "github-token", Source: "/vault/g"},
+	}}}
+	var stdout, stderr bytes.Buffer
+	if code := presentPolicy(&cli.UI{Stdout: &stdout, Stderr: &stderr}, result, false); code != 0 {
+		t.Fatalf("exit %d: %q", code, stderr.String())
+	}
+	want := "Policy only\nversion: 4\nmanifest: a.json\nnetwork.mode: offline\n" +
+		"credentials.github-token.source: /vault/g\n" +
+		"credentials.opencode-auth.source: /h/.local/share/opencode/auth.json\n" +
+		"credentials.opencode-auth.provider: opencode-go\n" +
+		"Host readiness and approval were not checked\n"
+	if stdout.String() != want {
+		t.Fatalf("plain output %q, want %q", stdout.String(), want)
+	}
+	stdout.Reset()
+	if code := presentPolicy(&cli.UI{Stdout: &stdout, Stderr: &stderr}, result, true); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	var output struct {
+		Policy struct{ Credentials []map[string]string }
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatal(err)
+	}
+	got := output.Policy.Credentials
+	if len(got) != 2 || len(got[0]) != 2 || got[0]["kind"] != "github-token" ||
+		got[1]["kind"] != "opencode-auth" || got[1]["provider"] != "opencode-go" || len(got[1]) != 3 {
+		t.Fatalf("credentials %#v", got)
+	}
+}

@@ -349,6 +349,11 @@ before manifest, engine or host state access, including with an approval or no g
 File-only scopes accept its requests without inspecting the named host files. No token
 is delivered and no real credential use is authorized by these observations.
 
+Policy version 4 adds the `opencode-auth` request, with its `provider`, described in the
+[configuration contract](CONFIG.md#policy-version-4-opencode-login-request). Only
+`doctor --policy-only` reads a version 4 file yet and shows the provider beside the source;
+every other scope, including `doctor --credentials-only`, refuses it with `policy.version`.
+
 ## Names, help and arguments
 
 These are design requirements, not assertions that the container commands exist:

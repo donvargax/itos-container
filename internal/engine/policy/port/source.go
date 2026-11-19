@@ -67,6 +67,7 @@ const (
 	CredentialDuplicate
 	CredentialSource
 	HomeStorage
+	CredentialProvider
 )
 
 // Issue locates one failure using decoded path components. Version is the
@@ -107,6 +108,9 @@ type Home struct {
 type Credential struct {
 	Kind   string `json:"kind"`
 	Source string `json:"source"`
+	// Provider names the one entry of a multi-provider source that a grant
+	// covers. Only the opencode-auth kind has one; other kinds leave it empty.
+	Provider string `json:"provider,omitempty"`
 }
 
 // Network describes the requested network boundary. Allow holds the canonical

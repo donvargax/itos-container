@@ -16,7 +16,8 @@ the checkout as its only host mount, a non-root identity and owned cleanup. Linu
 with native Docker is a target requiring passing runtime evidence, not a supported-host
 claim. A version-2 allowlist run starts an owned proxy and isolated internal network.
 Ordinary doctor, approve and run share readiness checks and effective settings. Version 3 adds
-named credential requests and metadata-only inspection, without approval or delivery.
+named credential requests and metadata-only inspection, without approval or delivery. Version 4
+adds one OpenCode login request, which only `doctor --policy-only` reads yet.
 Credential delivery/accounts, network Git, LAN ingress, Compose and other platforms
 remain deferred. Describing the wider pilot does not authorize its later slices or settle an open security decision.
 Real-engine scenarios run only in CI.
@@ -308,9 +309,9 @@ A fix names the schema the file was read against. For a version 2 file read by
 offline or allowlist mode. The one exception is the refusal below, which run gives a
 valid version 2 file: its fix says `use policy version 1, or read
 what a version 2 file requests with doctor --policy-only`. Where no supported version was
-read, the fix names all supported versions: `use policy version 1, 2 or 3` for an
+read, the fix names all supported versions: `use policy version 1, 2, 3 or 4` for an
 unsupported number, and
-`use the field type defined by policy version 1, 2 or 3` for a wrongly typed version or a
+`use the field type defined by policy version 1, 2, 3 or 4` for a wrongly typed version or a
 root that is not an object.
 
 Doctor and approve accept a valid version 2 policy. Canonical schema 1 uses
@@ -513,7 +514,7 @@ New exit-2 policy rules are `policy.credentials_empty` at `/credentials`,
 `policy.credential_source` at its `/source`. Missing fields, wrong types and extra keys
 use the existing required/type/unknown-key rules. Independent problems are collected
 without partial effective data or rejected values in diagnostics. Fixes name the declared
-schema; unsupported-version fixes name versions 1, 2 and 3.
+schema; unsupported-version fixes name versions 1, 2, 3 and 4.
 
 `doctor --credentials-only` reads the policy of the effective root (absolute `ITOS_ROOT`,
 otherwise the working directory) through a pin of that root, never from a different working
@@ -648,6 +649,44 @@ manifest/source/engine/state access, even with approval or no grants. Delivery a
 live-account questions remain with their owning increments; these records grant no
 implemented delivery.
 
+## Policy version 4: OpenCode login request
+
+[Version 4's schema](schemas/itos-container-v4.schema.json) keeps version 3's shape and adds
+the kind `opencode-auth`, at most once like every kind. Its closed entry requires `kind`,
+`source` and `provider`; the other kinds still take only `kind` and `source`, so none can
+carry a provider. `source` follows version 3's literal path grammar and names the trusted
+host account home's `.local/share/opencode/auth.json`; the file-only scope checks the path's
+syntax and never looks up a home, so a source anywhere else is refused only when it is
+checked against the host. `provider` is one nonempty, case-sensitive literal provider ID of
+at most 64 ASCII letters, digits, dots, underscores or hyphens, beginning with a letter or
+digit. There is no wildcard, list, model name, separator or implicit choice, and the provider is
+never read from the source. Versions 1 to 3 keep their forms and refuse the kind.
+
+```yaml
+version: 4
+manifest: .devcontainer/devcontainer.json
+credentials:
+  - kind: opencode-auth
+    source: /home/person/.local/share/opencode/auth.json
+    provider: opencode-go
+```
+
+A missing provider is `policy.required` at `/credentials/N/provider`, a wrongly typed one
+`policy.type`, and one that is empty, too long or outside that grammar the new
+`policy.credential_provider`, all exit 2. A second `opencode-auth` entry is
+`policy.credential_duplicate` at its own `/kind`, whatever provider it names. The kind's own
+fix lists the three kinds. `doctor --policy-only` shows each request, with the provider
+beside the opencode-auth source. Nothing else accepts a version 4 file yet: doctor, approve,
+run and `doctor --credentials-only` refuse it with `policy.version`, exit 2, before any
+source, manifest, engine or state access, and the fix points at `doctor --policy-only`.
+
+Which account a grant authorizes is open. Version 4 reads only the legacy file entry for the
+named provider. Whether to support accounts that exist only in OpenCode's SQLite store, how
+one approved account among several for a provider would be selected and exported without
+giving the worker the host database, and who owns OAuth refresh, concurrent updates and
+revocation are decisions for the person. Until then a missing file or a stale key cannot
+fall back to the database, an interactive login, a host callback or a write back to the host.
+
 ## Remaining specification work
 
 [Approval canonicalization, state and identity](../features/approval.feature) are now
@@ -662,7 +701,7 @@ supplies no runtime isolation evidence.
 
 ## Harness home request
 
-Policy versions 1, 2 and 3 accept optional `home: {storage: volume}`. The object
+Policy versions 1, 2, 3 and 4 accept optional `home: {storage: volume}`. The object
 is closed and `storage` is required; null, tmpfs, host paths, names and driver
 options are refused. Omitting `home` preserves the earlier policy and approval
 bytes. File-only doctor reports only the normalized request, without inspecting

@@ -32,6 +32,8 @@ func Inspect(source port.Source, names port.Names) port.Result {
 		return inspectFields(root, 2, names)
 	case port.Decimal{Coefficient: "3", Exponent: "0"}:
 		return inspectFields(root, 3, names)
+	case port.Decimal{Coefficient: "4", Exponent: "0"}:
+		return inspectFields(root, 4, names)
 	}
 	return refused(port.Version, "version")
 }
@@ -41,7 +43,7 @@ func Inspect(source port.Source, names port.Names) port.Result {
 func inspectFields(root port.Value, version int, names port.Names) port.Result {
 	policy := port.Policy{Version: version, Network: port.Network{Mode: "offline"}}
 	keys := []string{"version", "manifest", "network", "home"}
-	if version == 3 {
+	if version >= 3 {
 		keys = append(keys, "credentials")
 	}
 	issues := unknown(root, nil, version, keys...)
@@ -68,9 +70,9 @@ func inspectFields(root port.Value, version int, names port.Names) port.Result {
 		}
 		issues = append(issues, found...)
 	}
-	if credentials, exists := root.Fields["credentials"]; version == 3 && exists {
+	if credentials, exists := root.Fields["credentials"]; version >= 3 && exists {
 		var found []port.Issue
-		policy.Credentials, found = inspectCredentials(credentials)
+		policy.Credentials, found = inspectCredentials(credentials, version)
 		issues = append(issues, found...)
 	}
 	if home, exists := root.Fields["home"]; exists {

@@ -61,3 +61,22 @@ func TestCredentialInspectionRefusedRootReadsNoPolicy(t *testing.T) {
 		t.Fatalf("refused root was used: reads %d, calls %v, events %v", policies.Reads, sources.Calls, sources.Events)
 	}
 }
+
+// A version this scope has no source rules for is refused before any source is
+// observed, with the version it read, never checked by the older metadata rules.
+func TestCredentialInspectionRefusesANewerPolicyVersionBeforeObservingSources(t *testing.T) {
+	grants := []policy.Credential{{Kind: "opencode-auth", Source: "/h/.local/share/opencode/auth.json", Provider: "opencode-go"}}
+	sources := &porttest.Credentials{}
+	p, c := domain.InspectCredentials(&porttest.Policies{Result: policy.Result{Policy: &policy.Policy{Version: 4, Credentials: grants}}, Root: sources}, sources)
+	want := policy.Result{Issues: []policy.Issue{{Kind: policy.Version, Path: []string{"version"}, Version: 4}}}
+	if !reflect.DeepEqual(p, want) || c != nil || len(sources.Calls) != 0 {
+		t.Fatalf("a version 4 request reached source observation: %#v %#v %#v", p, c, sources.Calls)
+	}
+	if want := []string{"pin", "policy", "close"}; !reflect.DeepEqual(sources.Events, want) || sources.Pinned {
+		t.Fatalf("events %v, still pinned %t", sources.Events, sources.Pinned)
+	}
+	p, c = domain.InspectCredentials(&porttest.Policies{Result: policy.Result{Policy: &policy.Policy{Version: 3, Credentials: grants[:0]}}, Root: sources}, sources)
+	if p.Policy == nil || c == nil {
+		t.Fatalf("version 3 lost its source inspection: %#v %#v", p, c)
+	}
+}

@@ -84,10 +84,15 @@ func Diagnostic(issue Issue) Problem {
 		p.Rule, p.Message, p.Fix = "credentials_empty", "Credential requests are empty", "request at least one source, or omit credentials"
 	case CredentialKind:
 		p.Rule, p.Message, p.Fix = "credential_kind", "Credential kind is unsupported", "use claude-token or github-token"
+		if issue.Version >= 4 {
+			p.Fix = "use claude-token, github-token or opencode-auth"
+		}
 	case CredentialDuplicate:
 		p.Rule, p.Message, p.Fix = "credential_duplicate", "Credential kind repeats an earlier entry", "request each credential kind once"
 	case CredentialSource:
 		p.Rule, p.Message, p.Fix = "credential_source", "Credential source path is invalid", "use a literal absolute path of at most 4095 UTF-8 bytes without empty or dot components, backslashes or controls"
+	case CredentialProvider:
+		p.Rule, p.Message, p.Fix = "credential_provider", "Credential provider is not one literal provider ID", "name one provider by a literal ID of at most 64 ASCII letters, digits, dots, underscores or hyphens, beginning with a letter or digit, without wildcards"
 	case HomeStorage:
 		p.Rule, p.Message, p.Fix = "home_storage", "Home storage is unsupported", "use home.storage volume, or omit home"
 	default:
@@ -102,7 +107,7 @@ func Diagnostic(issue Issue) Problem {
 // against, or both supported ones where it declared none.
 func versions(version int) string {
 	if version == 0 {
-		return "1, 2 or 3"
+		return "1, 2, 3 or 4"
 	}
 	return strconv.Itoa(version)
 }
