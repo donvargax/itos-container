@@ -114,12 +114,16 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	if result.Outcome != "" {
 		result.MountDiagnostic = state.mountDiagnostic
 	}
-	if failure != port.Refused && failure != port.IsolationUnverified {
-		if loss != "" {
+	if loss != "" {
+		switch failure {
+		case port.Refused, port.IsolationUnverified, port.MountRefused, launchSuperseded:
+			// Keep the launch decision. A refused mount needs immediate removal
+			// and a superseding stop owns its cleanup.
+		default:
 			result.Outcome = loss
-		} else if startup.Err() != nil {
-			result.Outcome = startupFailure(startup)
 		}
+	} else if startup.Err() != nil && failure != port.Refused && failure != port.IsolationUnverified {
+		result.Outcome = startupFailure(startup)
 	}
 	end()
 	if c != nil {
