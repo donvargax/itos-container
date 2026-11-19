@@ -825,7 +825,7 @@ Feature: An approved persistent home for one checkout's harness
       | a symbolic link in place of auth.json                      | "credential.symlink" for the approved source path         | 1    | the host database and the symlink target           |
       | group-readable auth.json                                   | "credential.permissions" for the approved source path     | 1    | the host database and the group-readable auth.json |
       | auth.json with malformed JSON                              | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
-      | another provider only                                      | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
+      | auth.json has only a valid API-key entry for OpenCode-Go   | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
       | duplicate JSON members for the selected provider           | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
       | duplicate key fields inside the selected entry             | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
       | an empty key for the selected provider                     | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
@@ -868,7 +868,8 @@ Feature: An approved persistent home for one checkout's harness
     And the same checks find none in either checkout's approval or live session records, doctor or status output or run diagnostics so far
     And the same checks detect each marker and encoding in its independent control
     When both granted workers exit normally and their run commands return
-    Then immediate read-only inspection of the first checkout's original retained database finds the pre-existing account ID and no row for that worker's staged credential ID
+    Then the same marker checks rescan every file in both checkout trees and find no synthetic marker
+    And immediate read-only inspection of the first checkout's original retained database finds the pre-existing account ID and no row for that worker's staged credential ID
     And the first worker's granted key is absent from that database and its SQLite sidecars
     And each session's protected egress-refusals.jsonl contains the refusal for the harmless hostname its worker requested
     And for both runs the same marker checks find no synthetic markers in the full refusal log, final diagnostics or final session records
