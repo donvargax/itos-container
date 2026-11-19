@@ -11,10 +11,15 @@
 // for one reader would change every readiness caller and fake. The runtimes
 // are therefore read through the SDK, on a transport that dials only the
 // validated socket and refuses to start or to return once the session reports
-// the socket changed, so both reads reach the daemon that was validated.
-// Whatever fails to read, decode or arrive is an unreadable inventory
+// the socket changed. A socket path does not name a daemon, though: another
+// daemon can come to answer on it between the two reads, and an inventory
+// without runsc from that daemon would confirm nothing about the validated
+// one. The second response is therefore accepted only if its ID, OSType and
+// Architecture equal, byte for byte, the ones the validating read returned;
+// otherwise the inventory is unreadable.
+// Whatever fails to read, decode, match or arrive is an unreadable inventory
 // (RuntimeInspect or Cancelled); only a decoded, non-null map without the key
-// runsc confirms the runtime's absence.
+// runsc, from the validated daemon, confirms the runtime's absence.
 package docker
 
 import (
@@ -84,10 +89,19 @@ func (r Runtimes) Runsc(ctx context.Context) (port.Registration, port.Failure) {
 	}
 	defer func() { _ = api.Close() }()
 	result, err := api.Info(ctx, client.InfoOptions{})
-	if err != nil || !pin.Unchanged() {
+	if err != nil || !pin.Unchanged() || !sameDaemon(info, result.Info) {
 		return unreadable(ctx)
 	}
 	return registration(result.Info.Runtimes)
+}
+
+// sameDaemon reports whether the runtimes read came from the daemon the
+// readiness session validated. The comparison is exact: both reads decode the
+// same response fields, so a daemon that answers them differently is not the
+// one that was validated, and a missing ID, which a validated daemon never has,
+// never matches.
+func sameDaemon(validated rp.Info, read system.Info) bool {
+	return read.ID == validated.ID && read.OSType == validated.OS && read.Architecture == validated.Architecture
 }
 
 func unreadable(ctx context.Context) (port.Registration, port.Failure) {
