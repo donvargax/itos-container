@@ -90,6 +90,11 @@ func (c CLI) Run(ui *cli.UI) int {
 		var err error
 		lease, err = acquireTerminal(startup, c.Terminal)
 		if err != nil {
+			if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
+				// A host signal that landed during acquisition keeps the
+				// run.cancelled result every later startup phase reports.
+				return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+			}
 			return reportRunError(ui, session.RunResult{}, err)
 		}
 	}
