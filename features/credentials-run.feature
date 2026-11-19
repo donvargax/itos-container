@@ -182,21 +182,50 @@ Feature: Deliver the approved Claude token to one owned run
   # outside every checkout, so their fixture edits are not checkout events. The
   # only fixture edits inside a checkout are three policy edits, each a single
   # journaled operation on that checkout's exact itos-container.yaml path: 05's
-  # policy row rewrites it in place while run is held at its post-freeze
-  # barrier; 10 rewrites the first project's in place after every earlier run's
-  # controller has exited and before the later run starts; 12 unlinks it after
-  # the killed controller has been reaped and before any fresh status or stop.
+  # policy row replaces it while run is held at its post-freeze barrier; 10
+  # replaces the first project's after every earlier run's controller has
+  # exited and before the later run starts; 12 unlinks it after the killed
+  # controller has been reaped and before any fresh status or stop.
+  # A replacement never writes through the policy path. The harness writes and
+  # closes the new policy in a staging file in the private fixture root outside
+  # every checkout, checks it shares the checkout's st_dev (else a fixture
+  # blocker), records its inode and SHA-256, and then makes exactly one
+  # rename(2) over the policy path. An unlink is exactly one unlink(2). The
+  # harness's edit helper journals every mutating syscall it issues in a
+  # bracket, with its path, and the bracket requires exactly one rename or one
+  # unlink there and no open-for-write, write or truncate. That journal, not
+  # the inotify count, attributes the fixture's own mutation.
   # One inotify instance per checkout keeps its events in order. The harness
   # brackets each edit with uniquely named begin and end sentinel creates in the
   # control directory, and in the same When calibrates the expected event kinds
-  # and count by performing the identical operation (same open flags and one
-  # write of the same size, or one unlink) on a calibration file there. Inside a
-  # bracket the policy path must show exactly that calibrated sequence, and no
-  # other unjournaled event may appear. The observer stays armed throughout.
-  # Any other checkout event, an extra or out-of-bracket event on the policy
-  # path, a missing bracketed edit, an unjournaled name or an overflow fails
+  # by the identical operation on a calibration file there: one rename of a
+  # staged file over an existing one, or one unlink. Inside a bracket the
+  # policy path must show exactly that calibrated move-to or delete event and
+  # no modify, close-write, attrib or create event. Every other writer is
+  # accounted for by event kind: a write, truncate or recreation on that name
+  # by anyone emits an event the calibrated sequence lacks, and coalescing can
+  # merge repeats only into one such event, never into the expected one. A
+  # second rename carries its own cookie and a second delete needs a create
+  # between them, so neither coalesces into the calibrated event. Every other
+  # writer is also held for the bracket: each product process the harness
+  # launched is reaped or parked at its journaled, unreleased barrier, and each
+  # live worker's cooperative probe is parked at a barrier that writes nothing.
+  # After the end sentinel the policy path's inode and SHA-256 equal the staged
+  # file's, or the path is absent after an unlink. The observer stays armed
+  # throughout. Any other checkout event, an extra or out-of-bracket event on
+  # the policy path, a missing or extra journaled mutation, a changed staged
+  # result, a missing bracketed edit, an unjournaled name or an overflow fails
   # every provisioning-surface assertion, even when the final marker scan and
   # checkout comparison pass.
+  # The red-first test commit also adds an engine-free harness regression,
+  # TestCredentialRunPolicyEditBracket, run by ordinary go test over a
+  # disposable checkout with the observer armed. Its negative controls open the
+  # policy file once and make two writes through that one descriptor inside one
+  # bracket: before a scheduled replacement, after it on the new file, and
+  # before a scheduled unlink. Each must fail the bracket check. Its positive
+  # control, the calibrated single replacement or unlink alone, must pass. It
+  # tests the harness, so it passes before and after the work and is not
+  # scenario red evidence.
   # Include proxy stdout, its Docker log and retained refusal log in 08's allowlist
   # row, whose ordinary refusal hostname contains NO marker. Require a nonempty
   # observed refusal and a successful controlled TLS exchange, not empty logs.
