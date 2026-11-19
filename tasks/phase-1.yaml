@@ -8299,34 +8299,62 @@
     selected, validated native Docker daemon. The pinned Moby client v0.6.2 and API v1.56.1
     already read GET /info and decode its Runtimes map. The current readiness adapter retains
     only identity and platform fields from this response.
-    An exact, case-sensitive runsc key in the observed map selects gVisor, regardless of the
-    default runtime. A reported map without that key, including an explicit empty map, confirms
-    neither backend. A missing or null map, a decode or request error, or cancellation yields
-    detection failure. The ABI query and daemon inspection are the detector's only I/O.
+    Inspect the entry registered under the exact name runsc, regardless of the default runtime.
+    Docker lets the operator choose that name independently of the executable or shim.
+    Select gVisor when exactly one identity field is nonempty and matches its rule. For path,
+    accept runsc or an absolute Linux path with final component runsc. For runtimeType, accept
+    io.containerd.runsc.v1 or an absolute Linux path with final component containerd-shim-runsc-v1.
+    Compare names case-sensitively. If the runsc entry reports an unrecognized identity or both
+    fields are nonempty, return a typed inspection failure with no selection. Return the same
+    failure when /info reports the key but omits the executable and shim identities. A reported
+    map without the runsc key, including an explicit empty map, confirms neither backend.
+    A missing or null map, a decode or request error, or cancellation yields inspection failure.
+    The ABI query and daemon inspection are the detector's only I/O.
+    [Docker runtime configuration](https://docs.docker.com/reference/cli/dockerd/#configure-runtimes-using-daemonjson),
+    [gVisor containerd shim](https://gvisor.dev/docs/user_guide/containerd/quick_start/).
 
     Put the in-memory fakes and shared observation contracts in port/porttest. Run each contract
-    against its fake and its concrete adapter. Supply controlled syscall results at the native
-    boundary. Check the version-query arguments, both absence errnos, EPERM and an invalid ABI.
-    Exercise the real SDK decoder against fixture-only Engine API responses. Include runsc
-    registered alongside a different default runtime, a lookalike key, an empty inventory,
-    omitted and null inventories, invalid response data and a cancelled read. Have the fixture
-    reject unexpected requests. These tests run independently of the machine's ABI and runtimes.
+    against its fake and its concrete adapter. In native's TestLandlockABIProbe, supply controlled
+    syscall results and check the version-query arguments, both absence errnos, EPERM and an
+    invalid ABI. In docker's TestRunscRegistration, send fixture /info responses through the
+    pinned SDK decoder. Accept each supported identity form with runc as the default runtime.
+    In the contradictory_path subtest, return {"Runtimes":{"runsc":{"path":"/usr/bin/runc"}}}
+    and require a typed inspection failure with no selection. Require the same result for
+    runtimeType io.containerd.runc.v2, a runsc path paired with that foreign shim, and an empty
+    runsc entry. A lookalike key carrying a valid runsc path and an empty inventory each report
+    absence. Cover omitted and null inventories, invalid response data and a cancelled read.
+    Have the fixture reject unexpected requests. These tests run independently of the machine's
+    ABI and runtimes.
 
-    In the domain tests assert the result and which probes ran. Cover ABI 8, 9 and a newer ABI,
-    both backends present, each alone, and neither. An ABI probe failure stops selection even
-    with runsc registered. A required runtime lookup that fails also leaves no usable backend.
+    In the domain's TestBackendSelection, assert the result and which probes ran. Cover ABI 8,
+    ABI 9 and a newer ABI, both backends present, each alone, and neither. An ABI probe failure
+    stops selection even with runsc registered. A failed runtime lookup also leaves no selection.
     Include an unsupported platform and a pre-cancelled call with neither probe touched. Change
     the observations between calls and require the new result even after an earlier success.
 
-    The package check below currently exits 1 because internal/engine/checkoutsockets does not
-    exist. First commit the tests and minimal compiling stubs with test --item T-64. Record
-    failures at the selection and adapter assertions, then implement with chore --task T-64 and
-    run the same tests to green. Slice-42 owns doctor reporting, slice-43 approval and slice-44
-    run admission. Slice-45 reports the frozen selection. ID-SOCKETS-01 covers the startup scan.
+    The check runs every checkoutsockets package once and requires Go to report a pass for
+    each named test and the contradictory_path subtest in its own package. It currently
+    exits 1 because internal/engine/checkoutsockets does not exist. A buildable package with
+    no tests produces no matching pass events. First commit the tests and minimal compiling
+    stubs with test --item T-64. Record the failing selection and syscall assertions. A Docker
+    stub that accepts the runsc name alone must fail contradictory_path at its typed-failure
+    assertion. Implement with chore --task T-64 and run the same tests to green.
+    Slice-42 owns doctor reporting, slice-43 approval and slice-44 run admission.
+    Slice-45 reports the frozen selection. ID-SOCKETS-01 covers the startup scan.
     T-65 owns the worker init. Runtime proof for ID-SOCKETS-02/03 belongs to slice-46 on the
     person's Landlock host and slice-47 under gVisor in hosted CI.
   done_when:
-    - run: go test -count=1 ./internal/engine/checkoutsockets/...
+    - run: |-
+        report=$(go test -count=1 -json ./internal/engine/checkoutsockets/...) || {
+          printf '%s\n' "$report"
+          exit 1
+        }
+        printf '%s\n' "$report" | jq -es '
+          [.[] | select(.Action == "pass" and .Test != null) | (.Package + "/" + .Test)] as $passed
+          | ["domain/TestBackendSelection", "native/TestLandlockABIProbe",
+             "docker/TestRunscRegistration", "docker/TestRunscRegistration/contradictory_path"]
+          | map("github.com/donvargax/itos-container/internal/engine/checkoutsockets/" + .) - $passed
+          | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
 - id: T-65
   type: chore
   title: Build the trusted Landlock worker init
