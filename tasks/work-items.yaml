@@ -2436,3 +2436,14 @@ items:
       attached exec commands. Prove ID-SOCKETS-02 and ID-SOCKETS-03 on the person’s ABI 9+ host,
       including worker-private IPC and checkout edits. Record the temporary hosted-CI exception in
       weakened-gates.md. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: p1-run-gvisor-checkout-sockets
+    title: Enforce checkout socket denial with the approved gVisor fallback
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-run-checkout-socket-admission]
+    kind: idea
+    why: >
+      Launch and verify the worker under runsc when Landlock ABI 9 is unavailable. Prove
+      ID-SOCKETS-02 and ID-SOCKETS-03 in hosted CI with their positive controls, and verify that a
+      runsc failure stops startup. Broken down from p1-checkout-socket-kernel-enforcement.
