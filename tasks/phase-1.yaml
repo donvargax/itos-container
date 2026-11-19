@@ -8276,11 +8276,109 @@
   type: chore
   title: Detect the available checkout socket backend
   why: >
-    Give doctor, approve and run one shared selection rule. Prefer Landlock ABI 9 or later, then an
-    available runsc runtime. Test both backends, confirmed absence and failed detection through the
-    engine port and its adapters. Broken down from p1-checkout-socket-kernel-enforcement.
+    T-64 supplies detection for p1-checkout-socket-kernel-enforcement. Milestone two, step 5 of
+    docs/charter.md requires doctor, approve and run to agree on which backend the host offers.
+    Only confirmed absence of both permits asking for consent to "late host sockets reachable".
+    Give these callers one read-only detector under internal/engine/checkoutsockets. Its domain
+    selects from observations behind ports. Its port owns the typed outcomes Landlock, gVisor
+    and neither available. A typed inspection failure carries no selection. The zero value cannot
+    certify absence. Observe afresh within each caller's inspection deadline so a change since
+    approval is visible to run. An already cancelled call fails before either probe.
+
+    On the supported Linux amd64 host, the native adapter asks the running kernel for its
+    highest Landlock ABI with landlock_create_ruleset(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION).
+    Use the syscall number and version flag from the pinned golang.org/x/sys v0.48.0. ABI 9
+    introduced LANDLOCK_ACCESS_FS_RESOLVE_UNIX. Select Landlock at ABI 9 or higher and finish
+    without consulting the runtime list. A positive ABI below 9, ENOSYS (unimplemented) or
+    EOPNOTSUPP (disabled) permits the fallback lookup. Any other error, or a successful reply
+    with a nonpositive ABI, stops detection. Take the platform as input and return failure
+    before I/O for unsupported platforms. Keep the build-specific code to the syscall wrapper.
+    [Kernel ABI query](https://docs.kernel.org/userspace-api/landlock.html#landlock-abi-versions).
+
+    For the fallback, give the docker adapter a read-only Info capability for the caller's
+    selected, validated native Docker daemon. The pinned Moby client v0.6.2 and API v1.56.1
+    already read GET /info and decode its Runtimes map. The current readiness adapter retains
+    only identity and platform fields from this response. At the revision supplying API v1.56.1,
+    Moby copies path and runtimeArgs from each configured runtime into /info and omits runtimeType.
+    Configuring runsc with only runtimeType io.containerd.runsc.v1 therefore leaves the runsc
+    entry without an executable or shim identity.
+    [Moby's /info implementation](https://github.com/moby/moby/blob/14ebc602124e280ef4ae3e1a8e688dac1255baa6/daemon/info_unix.go#L52-L60).
+
+    Select gVisor only for a path-based registration under the exact name runsc, regardless of
+    the default runtime. The operator can assign that name to any executable. The reported path
+    must be runsc or an absolute Linux path with final component runsc. Compare names
+    case-sensitively. A missing, empty or unrecognized path, or a nonempty runtimeType on the
+    runsc entry, yields a typed inspection failure with no selection. A reported map without
+    the runsc key, including an explicit empty map, confirms neither backend.
+    A missing or null map, a decode or request error, or cancellation yields inspection failure.
+    The ABI query and daemon inspection are the detector's only I/O.
+    [Docker runtime configuration](https://docs.docker.com/reference/cli/dockerd/#configure-runtimes-using-daemonjson).
+
+    Before selecting gVisor, inspect the complete runtimeArgs list on the matching runsc entry.
+    An empty list, including an omitted field, uses runsc's default host-uds policy of none.
+    Also accept the exact one-element list ["--host-uds=none"]. For every other list, return
+    a typed inspection failure with no selection. This covers arguments that permit host socket
+    access and arguments whose effect on that policy the detector cannot establish.
+    [gVisor's host socket policy](https://github.com/google/gvisor/blob/a05ab5909d2518dd541a1eb4396057e9292f4178/runsc/config/flags.go#L158).
+
+    Put the in-memory fakes and shared observation contracts in port/porttest. Run each contract
+    against its fake and its concrete adapter. In native's TestLandlockABIProbe, supply controlled
+    syscall results and check the version-query arguments, both absence errnos, EPERM and an
+    invalid ABI.
+
+    In docker's TestRunscRegistration, send /info fixtures through the pinned SDK decoder.
+    Keep runc registered and set DefaultRuntime to runc while varying the Runtimes.runsc entry.
+    In path_registration, {"path":"runsc"} and {"path":"/usr/local/bin/runsc"} each confirm
+    gVisor. Repeat the absolute-path control with runtimeArgs [] and ["--host-uds=none"].
+    Change only runtimeArgs on that control for two refusal cases. In socket_permitting_args,
+    use ["--host-uds=open"]. In unknown_args, try ["--unknown-fixture-flag"] alone and then
+    with "--host-uds=none" prepended. Each must return a typed inspection failure with no selection.
+    In shim_only_registration, send {} for the runsc entry, as Moby does for the shim-only
+    registration with no reported status. In contradictory_path, send {"path":"/usr/bin/runc"}.
+    Require the same typed failure with no selection for both registrations.
+    Also require that failure for synthetic entries reporting runtimeType io.containerd.runsc.v1
+    or io.containerd.runc.v2 alone, or a runsc path paired with the foreign shim. A lookalike
+    key carrying a valid runsc path and an empty inventory each report absence. Cover omitted
+    and null inventories, invalid response data and a cancelled read.
+    Have the fixture reject unexpected requests. These tests run independently of the machine's
+    ABI and runtimes.
+
+    In the domain's TestBackendSelection, assert the result and which probes ran. Cover ABI 8,
+    ABI 9 and a newer ABI, both backends present, each alone, and neither. An ABI probe failure
+    stops selection even with runsc registered. A failed runtime lookup also leaves no selection.
+    Include an unsupported platform and a pre-cancelled call with neither probe touched. Change
+    the observations between calls and require the new result even after an earlier success.
+
+    The check runs every checkoutsockets package once and requires Go to report a pass for
+    each named test and all five named Docker subtests in their own packages. It currently
+    exits 1 because internal/engine/checkoutsockets does not exist. A buildable package with
+    no tests produces no matching pass events. First commit the tests and minimal compiling
+    stubs with test --item T-64. Record the failing selection and syscall assertions. A Docker
+    stub that accepts the runsc name alone must fail the typed-failure assertions in both
+    shim_only_registration and contradictory_path. Selecting gVisor from its path alone must
+    pass path_registration and fail the typed-failure assertions in
+    socket_permitting_args and unknown_args. Implement with chore --task T-64 and run the
+    same tests to green.
+    Slice-42 owns doctor reporting, slice-43 approval and slice-44 run admission.
+    Slice-45 reports the frozen selection. ID-SOCKETS-01 covers the startup scan.
+    T-65 owns the worker init. Runtime proof for ID-SOCKETS-02/03 belongs to slice-46 on the
+    person's Landlock host and slice-47 under gVisor in hosted CI.
   done_when:
-    - run: go test -count=1 ./internal/engine/checkoutsockets/...
+    - run: |-
+        report=$(go test -count=1 -json ./internal/engine/checkoutsockets/...) || {
+          printf '%s\n' "$report"
+          exit 1
+        }
+        printf '%s\n' "$report" | jq -es '
+          [.[] | select(.Action == "pass" and .Test != null) | (.Package + "/" + .Test)] as $passed
+          | ["domain/TestBackendSelection", "native/TestLandlockABIProbe",
+             "docker/TestRunscRegistration", "docker/TestRunscRegistration/path_registration",
+             "docker/TestRunscRegistration/shim_only_registration",
+             "docker/TestRunscRegistration/contradictory_path",
+             "docker/TestRunscRegistration/socket_permitting_args",
+             "docker/TestRunscRegistration/unknown_args"]
+          | map("github.com/donvargax/itos-container/internal/engine/checkoutsockets/" + .) - $passed
+          | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
 - id: T-65
   type: chore
   title: Build the trusted Landlock worker init
