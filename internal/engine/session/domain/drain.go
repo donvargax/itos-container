@@ -8,7 +8,7 @@ import (
 	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
 
-func startDrain(ctx context.Context, a port.Attachment, lease terminal.Lease) <-chan port.Outcome {
+func startDrain(ctx context.Context, a port.Attachment, lease terminal.Lease, runOutcome port.Outcome) <-chan port.Outcome {
 	done := make(chan port.Outcome, 1)
 	drain, cancel := context.WithTimeout(ctx, budget.CallDuration)
 	go func() {
@@ -35,6 +35,11 @@ func startDrain(ctx context.Context, a port.Attachment, lease terminal.Lease) <-
 			// returns can hold the daemon's exit response behind output that
 			// the caller will never read. Close never waits on caller I/O.
 			a.Close()
+			// A lost terminal can fail a pending read or write. Drain retains
+			// that forwarding error even after the run has classified its cause.
+			if failure == port.ExecutionFailed && (runOutcome == port.TerminalDisconnected || runOutcome == port.TerminalUnavailable) {
+				failure = ""
+			}
 		}
 	}()
 	return done

@@ -178,7 +178,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, Homes: s.Homes, Credentials: s.Credentials, immediate: result.Started && (result.Outcome == port.MountRefused || racedStart)}
 	// The output subscription is independent of termination and removal. A blocked
 	// consumer must never hold the operation lock or prevent owned cleanup.
-	drain := startDrain(teardown, attachment, streams.Terminal)
+	drain := startDrain(teardown, attachment, streams.Terminal, result.Outcome)
 	if !result.Exited && attachment != nil && !recovery.immediate {
 		prepared := recovery.stop(teardown, id, signal, nil, false)
 		if len(prepared.Entries) == 1 && prepared.Entries[0].WorkloadExit != nil {
