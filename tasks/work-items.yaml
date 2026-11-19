@@ -1713,7 +1713,7 @@ items:
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [slice-30, T-48]
     kind: slice
     why: >
