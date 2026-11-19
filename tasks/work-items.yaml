@@ -2244,6 +2244,11 @@ items:
       shared sandbox. It calls for documenting the ancestor-ownership requirement and using
       ID-EGRESS-09 to verify that a disposable fixture reaches its behavior assertion with
       production checks intact.
+
+      This item already records that `/` and `/tmp` appear as UID 65534 in the loop sandbox,
+      blocking approval-backed tests before they reach their assertions. It names ID-EGRESS-09 as
+      the check that a worker can produce local red/green evidence with the production ownership
+      checks intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
