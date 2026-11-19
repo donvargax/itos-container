@@ -134,6 +134,56 @@ func TestRegisteredLaunchStopsAtClientLossDuringCreateOrAttach(t *testing.T) {
 	}
 }
 
+func TestTerminalLossCancelsPendingStart(t *testing.T) {
+	for _, accepted := range []bool{false, true} {
+		t.Run(map[bool]string{false: "before acceptance", true: "after acceptance"}[accepted], func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				runner, frozen, registry, engine, id := registeredLifecycleFixture()
+				provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+				lease, err := provider.Acquire(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer lease.Close()
+
+				// Hold the engine reply past hangup. Recovery must finish even
+				// if the request already made a signal-ignoring worker live.
+				reply := make(chan struct{})
+				disconnect := func() {
+					provider.Hangup(false)
+					<-reply
+				}
+				engine.IgnoreSignal, engine.WaitUntilCancel = true, true
+				if accepted {
+					engine.AfterStart = disconnect
+				} else {
+					engine.After = func(event string) {
+						if event == "start" {
+							disconnect()
+						}
+					}
+				}
+				result := make(chan port.RunResult, 1)
+				go func() { result <- runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{Terminal: lease}) }()
+				<-lease.Done()
+				synctest.Wait()
+				if len(result) == 0 {
+					t.Error("terminal disconnect left startup waiting for the engine reply or grace deadline")
+				}
+				close(reply)
+				got := <-result
+				if got.Outcome != port.TerminalDisconnected || got.Cleanup != port.Complete || got.ID != engine.CreateID {
+					t.Errorf("raced start lost the disconnect or owned cleanup: %+v", got)
+				}
+				synctest.Wait()
+				if slices.Contains(engine.Events, "SIGKILL") != accepted || len(engine.Resources) != 0 || len(engine.Anchors) != 0 || registry.Locks[id] {
+					t.Errorf("late start reply left a resource or signalled the wrong worker: %v", engine.Events)
+				}
+			})
+		})
+	}
+}
+
 func TestStreamFailureRechecksTerminalBeforeDelayedNotification(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
