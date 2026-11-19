@@ -13,6 +13,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -361,6 +362,10 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		switch operation {
 		case "attach":
 			for key, values := range r.URL.Query() {
+				if key == "detachKeys" && a.terminal && object(observed["Config"])["Tty"] == true &&
+					slices.Equal(values, []string{fixtureTerminalDetachKeys}) {
+					continue
+				}
 				if (key != "stream" && key != "stdin" && key != "stdout" && key != "stderr" && key != "logs") || len(values) != 1 || (values[0] != "1" && values[0] != "0" && values[0] != "true" && values[0] != "false") {
 					return false
 				}
