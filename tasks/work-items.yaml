@@ -2348,8 +2348,8 @@ items:
   - id: T-65
     title: Build the trusted Landlock worker init
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: slice-42
