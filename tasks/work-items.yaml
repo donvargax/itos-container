@@ -2328,3 +2328,7 @@ items:
       The approvalProblem scenario step checks the prerequisite diagnostic and exit code but can
       pass even when the command asks for consent. Add a focused regression and make the step detect
       an unexpected consent prompt in the approval and hardlink refusal cases.
+
+      The existing item covers this exact gap. The approvalProblem step should fail if an approval
+      or hardlink prerequisite refusal prompts for consent, even when the diagnostic and exit code
+      are correct.
