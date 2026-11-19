@@ -8243,10 +8243,43 @@
   type: test
   title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
   why: >
-    The approvalNoRecord feature step returns success when the approval record is absent, even if
-    frozen input was published. Pin that false success with a focused regression in the features
-    package and make the step reject the leftover frozen input. Preserve the valid refusal where
-    neither artifact exists.
+    The live step "no approval record or frozen input is produced" calls approvalNoRecord in
+    features/approval_assertions_test.go. Under the fixture's itos-container state directory,
+    approvals/<project>/current.json and snapshots/<project>/<generation>.json are separate
+    files. The helper returns nil as soon as current.json is absent, so a refused command can
+    leave frozen input behind and still pass the step.
+
+    Add TestApprovalNoRecordRejectsFrozenInput in the features package. Call approvalNoRecord
+    directly on a private temporary state fixture. Leave current.json absent and create an empty
+    snapshot directory for the project. Require the helper to succeed. Write a synthetic frozen
+    snapshot to 1.json in that directory as the only change and require the helper to return an
+    error. Run the test before changing the helper. The empty control must pass and the snapshot
+    assertion must fail because it receives nil. Then make the missing-record branch reject frozen
+    input from any generation. A missing or empty snapshot directory counts as absence. Rerun the
+    same test and require both assertions to pass.
+
+    Preserve the existing-record checks. A record with a captured baseline still requires
+    approvalSameTree. An unexpected record without a baseline still fails, and other lookup errors
+    still propagate. Keep the replacement target comparison and its approvalNoRecord fallback when
+    there is no replacement. Rerun the live scenarios with their existing steps and examples in
+    approval.feature (ID-APPROVAL-05, ID-APPROVAL-13, ID-APPROVAL-15, ID-APPROVAL-16,
+    ID-APPROVAL-19, ID-APPROVAL-27, ID-APPROVAL-47, ID-APPROVAL-48 and ID-APPROVAL-55) and
+    hardlinks.feature (ID-HARDLINK-05). The prerequisite step's check for an unexpected consent
+    prompt belongs to p2-approval-prerequisite-step-checks-no-consent-prompt.
+
+    The ledger check requires a successful Go run and a PASS for the named test. Go exits zero
+    when the test is missing, so its exit status alone would accept a run with no assertions.
+    This task has no dependencies and stays unowned during specification and review. Only the
+    contributor takes the task after spec approval.
+    The implementer may commit freely in its workspace. The host makes the landing commits.
   done_when:
-    - run: go test ./features -run '^TestApprovalNoRecordRejectsFrozenInput$'
+    - run: |-
+        report=$(go test ./features -count=1 -v -run '^TestApprovalNoRecordRejectsFrozenInput$') || {
+          printf '%s\n' "$report"
+          exit 1
+        }
+        printf '%s\n' "$report" | grep '^--- PASS: TestApprovalNoRecordRejectsFrozenInput (' || {
+          echo 'Missing a passing TestApprovalNoRecordRejectsFrozenInput.'
+          exit 1
+        }
       timeout: 180
