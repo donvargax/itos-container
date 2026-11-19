@@ -2023,6 +2023,10 @@ items:
       as T-21 did for @wip scenarios; or both. Neither is a redraw to escape a failure. The same
       item settles one sentence in AGENTS.md: whether `itos-cc mutation list`, which runs no test,
       may be used locally to see the sites, given that local mutation runs are forbidden.
+
+      AGENTS.md already prohibits local mutation runs. Correct the conflicting 09:23 instruction in
+      the slice-37 repair brief. The existing item covers redraws and the narrower open question of
+      whether agents may list mutation sites locally.
   - id: T-54
     title: Each engine shard warms the engine with one create and remove before its first engine row
     phase: 1
