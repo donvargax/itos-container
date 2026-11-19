@@ -97,7 +97,7 @@ engine_warmup_request() {
        DnsSearch:null, ExtraHosts:null, GroupAdd:null, IpcMode:"private", Cgroup:"",
        Links:null, OomScoreAdj:0, PidMode:"", Privileged:false, PublishAllPorts:false,
        ReadonlyRootfs:true, SecurityOpt:["no-new-privileges"],
-       Tmpfs:{"/tmp":"rw,nosuid,nodev,mode=1777"}, UTSMode:"", UsernsMode:"", ShmSize:0,
+       Tmpfs:{"/tmp":"rw,exec,nosuid,nodev,mode=1777"}, UTSMode:"", UsernsMode:"", ShmSize:0,
        Isolation:"", CpuShares:0, Memory:0, NanoCpus:0, CgroupParent:"", BlkioWeight:0,
        BlkioWeightDevice:null, BlkioDeviceReadBps:null, BlkioDeviceWriteBps:null,
        BlkioDeviceReadIOps:null, BlkioDeviceWriteIOps:null, CpuPeriod:0, CpuQuota:0,
@@ -123,7 +123,7 @@ engine_warmup_container_owned() {
     length == 1 and .[0].Name == $name and .[0].Image == $image and
     .[0].Config.Labels == $labels and
     .[0].HostConfig.Mounts == [{Type:"volume",Source:$volume,Target:"/workspace",VolumeOptions:{NoCopy:true}}] and
-    .[0].HostConfig.Tmpfs == {"/tmp":"rw,nosuid,nodev,mode=1777"} and
+    .[0].HostConfig.Tmpfs == {"/tmp":"rw,exec,nosuid,nodev,mode=1777"} and
     ([.[0].Mounts[]? | select(.Type == "volume" and .Name == $volume and .Driver == "local" and
       .Destination == "/workspace" and .RW == true and (.Propagation == "" or .Propagation == "rprivate"))] | length == 1) and
     ([.[0].Mounts[]? | select(.Type == "tmpfs" and .Destination == "/tmp")] | length <= 1) and

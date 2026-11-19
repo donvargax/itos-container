@@ -27,8 +27,10 @@ func TestPublicStopAcceptsOnlyValidObservedWorkloadExits(t *testing.T) {
 				if failure != "" || i.Stage != "owned" || i.ContainerID != strings.Repeat("2", 64) {
 					t.Fatal("invalid wait result lost owned recovery evidence", i, failure)
 				}
-			} else if len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" || result.Entries[0].WorkloadExit == nil || *result.Entries[0].WorkloadExit != exit || r.State != "stopped" || r.WorkloadExit == nil || *r.WorkloadExit != exit || len(engine.Resources) != 0 {
-				t.Fatal("valid boundary exit was rejected or lost during cleanup", result, r)
+			} else if len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" || result.Entries[0].WorkloadExit != nil || r.State != "stopped" || r.WorkloadExit != nil || len(engine.Resources) != 0 {
+				// No controller is present at this stop, so the exit its own
+				// signal causes stays unknown workload knowledge.
+				t.Fatal("valid boundary exit became workload knowledge or failed cleanup", result, r)
 			}
 			if registry.Locks[id] || !slices.Equal(engine.Events, []string{"open", "SIGTERM", "wait"}) {
 				t.Fatal("exit validation retained the lock or repeated termination", engine.Events)
@@ -93,7 +95,7 @@ func TestPublicStopRequiresDurableOwnershipBeforeMutation(t *testing.T) {
 
 			registry.Store.Fault = ""
 			result = s.Stop(t.Context(), id)
-			if len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" || result.Entries[0].WorkloadExit == nil || *result.Entries[0].WorkloadExit != 7 || len(engine.Resources) != 0 {
+			if len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" || result.Entries[0].WorkloadExit != nil || registry.Records[id].WorkloadExit != nil || len(engine.Resources) != 0 {
 				t.Fatal("failed ownership publication prevented a verified retry", result)
 			}
 		})
@@ -244,7 +246,7 @@ func TestPublicStopRetainsWorkerStillRunningAfterUncertainKill(t *testing.T) {
 
 	engine.WaitFailure, engine.After, engine.BeforeInspect = "", nil, nil
 	result = s.Stop(t.Context(), id)
-	if len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" || result.Entries[0].WorkloadExit == nil || *result.Entries[0].WorkloadExit != 7 || len(engine.Resources) != 0 {
+	if len(result.Failures) != 0 || len(result.Entries) != 1 || result.Entries[0].Cleanup != "complete" || result.Entries[0].WorkloadExit != nil || registry.Records[id].WorkloadExit != nil || len(engine.Resources) != 0 {
 		t.Fatal("uncertain kill prevented a later verified cleanup", result)
 	}
 }

@@ -15,6 +15,24 @@ mutation:
       - features/testdata/**
       - tools/bin/scenario-list
   exceptions:
+    - file: internal/engine/session/port/credentials.go
+      function: github.com/donvargax/itos-container/internal/engine/session/port.Record#credentialTransition
+      hash: 1434fcddac1597d1
+      line_in_function: 40
+      column: 71
+      original: "&&"
+      replacement: "||"
+      reason: Both staging values have already passed Valid, immutable directory and kinds match, and the origin is intent. Changing the final conjunction inside the parentheses only adds cases with an empty destination inode. Valid permits that only for intent or absent staging with empty device and files. The absent case already passes the original expression. The intent case is identical to the origin and returned true at the earlier a == b check. Owned staging has a nonempty inode and already passes both expressions. Thus no reachable transition result changes.
+      line_text: return (b.Stage == "owned" || b.Stage == "absent" && b.Device == "" && b.Inode == "") && r.Stage == n.Stage && r.ContainerID == n.ContainerID
+    - file: internal/engine/session/docker/run.go
+      function: github.com/donvargax/itos-container/internal/engine/session/docker#safeHost
+      hash: f3697e81bc31de7d
+      line_in_function: 22
+      column: 14
+      original: "false"
+      replacement: "true"
+      reason: The earlier guard requires exactly 1+n mounts for n credential arguments. Each matched iteration consumes either the one anchor or one previously unseen credential kind. Initializing matched to true can only bypass the immediate refusal for an unmatched mount; that mount consumes a slot without adding an anchor or seen kind. The final anchor && len(seen) == len(credentials) then necessarily returns false, because the remaining slots cannot supply the missing 1+n distinct matches. Thus both versions reject every unmatched mount and accept exactly the same fully matched inputs, with no observable side effects.
+      line_text: matched := false
     - file: internal/release/release.go
       function: github.com/donvargax/itos-container/internal/release#Newest
       hash: 169323ab8c351ad2
@@ -105,3 +123,75 @@ mutation:
       replacement: "false"
       reason: "This sibling of the CI-reported after-key insertion also writes an unread set value. keys is a local map: assigning false still inserts every before key, the second loop adds all after keys, and the final loop ranges over keys only. Shared keys may be overwritten and before-only values remain false, but neither value is read or escapes. The key union and every resulting Change are identical for all inputs. Exact-result tests cover removed, added, shared and nested keys; no behavioral test can distinguish this mutation."
       line_text: keys[key] = true
+    - file: internal/engine/session/docker/run.go
+      function: github.com/donvargax/itos-container/internal/engine/session/docker#safeHost
+      hash: f3697e81bc31de7d
+      line_in_function: 34
+      column: 16
+      original: "&&"
+      replacement: "||"
+      reason: The earlier length guard requires 1+n mounts for n credential arguments. Every accepted loop iteration consumes either the single anchor (guarded by !anchor) or one previously unseen credential kind. There are at most n such kinds; duplicates only reduce that bound and force rejection. Reaching this return therefore proves anchor is true and len(seen) equals n for every input. Both operands are true, so replacing && with || changes no result or effect. No behavioral test can distinguish it.
+      line_text: return anchor && len(seen) == len(credentials)
+    - file: internal/engine/session/port/egress_transition.go
+      function: github.com/donvargax/itos-container/internal/engine/session/port.Record#egressTransition
+      hash: 0576ee156823f24b
+      line_in_function: 27
+      column: 19
+      original: "||"
+      replacement: "&&"
+      reason: After schema 4 normalization, the earlier branches already handle two non-3 schemas and every schema-2 origin, and the next record has passed ValidEgressShape. Replacing this first || with && can proceed further only when exactly one remaining schema is 3 and the original record also has valid egress shape. The non-3 record must then have an empty EgressRecord, whereas the schema-3 record must have all three nonempty resource names. The first differing resource therefore fails the unchanged name-equality check below. Both versions return false with no effects. When both schemas are 3 the unchanged original-shape guard decides identically. No input changes the transition result.
+      line_text: if r.Schema != 3 || n.Schema != 3 || !r.ValidEgressShape() {
+    - file: internal/engine/session/disk/credentials.go
+      function: github.com/donvargax/itos-container/internal/engine/session/disk.Credentials#heldDirectory
+      hash: 4e005fac0b7efd48
+      line_in_function: 15
+      column: 94
+      original: "0"
+      replacement: "1"
+      reason: The production openFile operation is os.Root.OpenFile with O_RDONLY, O_DIRECTORY and O_NOFOLLOW and no creation flag. Its permission argument applies only to file creation; both 0 and 1 pass the Root.OpenFile permission-bit validation. Both versions therefore open the same existing directory, or return the same missing-path or unsafe-path error, without creating anything or changing permissions. All descriptor identity, ownership, entry and cleanup checks receive the same file. An injected test that only checks the unused argument would not establish changed behavior.
+      line_text: file, err := calls.openFile(base, name, os.O_RDONLY|credentialDirectory|credentialNoFollow, 0)
+    - file: internal/engine/session/port/egress.go
+      function: github.com/donvargax/itos-container/internal/engine/session/port.Record#ValidEgressShape
+      hash: 89cc4bcbf53452eb
+      line_in_function: 31
+      column: 35
+      original: "1"
+      replacement: "0"
+      reason: This loop runs only when the current resource v.Stage is absent. Replacing values[i+1:] with values[i+0:] adds exactly that current resource before the same later resources. For the added iteration, later.Stage is absent, so the unchanged condition later.Stage != empty && later.Stage != absent is false. The iteration has no side effects; every later resource and every subsequent check is identical. Thus all record-validation results are unchanged for every input, including partially removed egress resources.
+      line_text: for _, later := range values[i+1:] {
+    - file: internal/engine/session/codec/json.go
+      function: github.com/donvargax/itos-container/internal/engine/session/codec.JSON#Decode
+      hash: 79e034e52b3a9d7e
+      line_in_function: 3
+      column: 18
+      original: "0"
+      replacement: "1"
+      reason: Only input lengths zero and one change the early branch. Neither can encode a JSON object containing the required session fields. An initialized codec still returns the empty Record and port.Invalid when the pure manifest parser refuses or reports a non-object; even a parser reporting every required field, with or without the optional home object, passes only pure field-shape checks and then reaches json.Unmarshal, which rejects every such input, so the home-field validation this slice added reads no state and cannot turn those bytes into a record. Longer inputs take identical paths. No I/O or persisted state changes. TestCredentialRecordsRejectEmptyAndSingleByteInputs checks all 257 short inputs with a valid-record parser value, covering the independent decoding refusal. Thus the mutation changes only where invalid input is refused.
+      line_text: if len(data) == 0 || len(data) > 65536 {
+    - file: internal/engine/session/disk/credential_sources.go
+      function: github.com/donvargax/itos-container/internal/engine/session/disk.CheckedSources#Revalidate
+      hash: 58f6cde84de7eba2
+      line_in_function: 46
+      column: 13
+      original: "true"
+      replacement: "false"
+      reason: "This assignment is reached only when a prior capability is held and every metadata comparison succeeded. The immediately preceding capture.release closes all newly captured handles and sets capture.selected to nil. Replacing true with false only runs the deferred capture.release again: its range over nil closes no handles, and assigning nil again changes no state. The original s.held and s.checked remain untouched, all return values and filesystem calls are identical, and earlier failure paths are unchanged. TestCredentialCheckedSourcesRecheckRetainedMetadata and the retained-inode controls verify original handle preservation and complete release with either value. No behavior can distinguish this second empty release."
+      line_text: success = true
+    - file: internal/slices/stop/terminal/consent.go
+      function: github.com/donvargax/itos-container/internal/slices/stop/terminal.Consent#Review
+      hash: 2e9e1bdb33164db1
+      line_in_function: 9
+      column: 28
+      original: "1"
+      replacement: "0"
+      reason: "The buffer only lets the reader goroutine complete its send after the select has already returned on cancellation, so it exits instead of blocking. That completion is the only difference: every returned decision, prompt byte and terminal read is identical. A live context receives the same answer value through the same select whether the send must rendezvous or completes into the buffer, and a context that is cancelled before, during or after the prompt returns false through the same ctx.Done case either way. Nothing joins the goroutine, receives from the channel again, or observes its exit; its bufio reader is discarded with the call. The package tests drive real ptys with no goroutine-leak detector, so no black-box test can distinguish the two versions. This entry is the reviewed CI survivor from the slice-34 proof run."
+      line_text: answer := make(chan bool, 1)
+    - file: cmd/itos-container/main.go
+      function: github.com/donvargax/itos-container/cmd/itos-container#run
+      hash: 3a774b65f8844ebd
+      line_in_function: 21
+      column: 15
+      original: ">"
+      replacement: ">="
+      reason: run replaces an empty args with the one-element --help line before anything parses, so len(args) is at least one wherever this guard is evaluated. Both len(args) > 0 and the mutant len(args) >= 0 are therefore always true there, and the args[0] comparison plus every following completion, parse and dispatch path is identical for every input, including an empty command line. No observable result can differ, so no test can fail on the mutant.
+      line_text: if len(args) > 0 && args[0] == "__complete" {

@@ -83,6 +83,10 @@ func (e *Engine) Open(selection, root string, budget time.Duration) (port.Sessio
 	return e.Session, port.None
 }
 
+func (e *Engine) OpenCatalog(selection string, budget time.Duration) (port.Session, port.Failure) {
+	return e.Open(selection, "", budget)
+}
+
 // Session holds observed data independently from the domain's decisions. The
 // shared contract checks the same mapping and error outcomes on the SDK adapter.
 type Session struct {

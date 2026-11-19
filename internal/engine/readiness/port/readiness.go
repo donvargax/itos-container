@@ -80,6 +80,13 @@ type Engine interface {
 	Open(selection, checkout string, budget time.Duration) (Session, Failure)
 }
 
+// CatalogEngine opens a local socket without consulting a checkout that may
+// no longer exist. Callers must match its endpoint and daemon ID against the
+// original protected catalog binding before inspecting or mutating resources.
+type CatalogEngine interface {
+	OpenCatalog(selection string, budget time.Duration) (Session, Failure)
+}
+
 // Session exposes only inspection; there is no acquisition or mutation method.
 type Session interface {
 	Endpoint() string

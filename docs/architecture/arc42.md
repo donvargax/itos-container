@@ -9,6 +9,12 @@ overturns it, as [the egress proxy record](../decisions/0022-egress-proxy.md) sa
 The credentials design added by T-47 is also **proposed**, not accepted; the person
 confirms or overturns [the credentials record](../decisions/0025-credentials-passed-in.md).
 It defines two token kinds, no Codex delivery, and no permission to use real credentials.
+The harness-home design in [decision 0030](../decisions/0030-persistent-harness-home.md)
+was **selected by the coordinator in q-73 (2026-11-16 01:50 UTC)** on the person's
+standing instruction, for the person to ratify. Slice-34 implements retention,
+consented reset/deletion and missing-storage recovery. The local memory and
+protected disk/SDK fixtures pass; native green evidence remains with CI, so
+this implementation does not yet establish container-host support.
 
 The [charter](../charter.md) selects the milestone from the binding
 [pilot contract](../plans/container-pilot.md); the [plan](../../PLAN.md) records that
@@ -39,10 +45,13 @@ resources, and boundaries that can be tested independently and at runtime.
 The required public operation is `itos container run -- <argv...>`: preserve explicit
 arguments, run under an approved non-root identity, keep the checkout as the only host
 filesystem mount, and remove owned ephemeral resources when foreground work ends.
-Preserve checkout edits. A2 selects ephemeral tmpfs and excludes persistent worker
-volumes, caches and profiles this milestone. Host approval, frozen configuration and
-recovery records persist separately, outside the checkout. Init is deferred and no
-lifecycle hooks run in this milestone.
+Preserve checkout edits. A2 selects ephemeral tmpfs for the first-milestone profile.
+The charter's second-milestone harness home has an implemented opt-in exception in
+[decision 0030](../decisions/0030-persistent-harness-home.md): retain one approved
+per-checkout local volume, with explicit consented retirement. Omitted-home runs
+retain A2's exclusion of persistent worker volumes, caches and profiles. Host approval,
+frozen configuration and recovery records persist separately, outside the checkout
+and worker home. Init is deferred and no lifecycle hooks run in this milestone.
 
 Count, version and completion are implemented foundation and must remain intact.
 Policy validation in doctor, including `doctor --policy-only`, is implemented by
@@ -187,7 +196,12 @@ Its context differs from the diagram above only for a run whose approved policy 
 names: one owned proxy container, on its own egress network, reaches the listed names on
 port 443, and the worker, on an internal network with no gateway, reaches only that proxy.
 An offline run creates no proxy and no session network, and stays on `NetworkMode` `none`.
-Init, lifecycle hooks and persistent worker project state are also deferred. Isolates,
+Init and lifecycle hooks remain deferred. Persistent worker state is **proposed**
+only for slice-34's approved harness-home profile: one private local volume, no
+host-home mount or checkout data directory. Ordinary cleanup retains it; explicit
+terminal-consented reset/deletion can reclaim it after session claims are cleared.
+This extends the second milestone's context, not the omitted-home profile, and is
+unimplemented and unproven. Isolates,
 WASM, a restricted shell and a capability broker remain deferred research. Later pilot
 components and experiments require their own authorization and specifications.
 
@@ -260,7 +274,9 @@ record schemas. Settled choices constrain them without proving their implementat
 | Credential requests (in `internal/engine/policy`) | Implemented by slice-29 after T-47 and slice-25 | Version 3 extends slice-25's version 2 with optional closed credentials entries, exactly `kind` and literal absolute `source`; two token kinds, no Codex kind. | Versions 1/2 retain their meaning; shared pure validation, schema and file-only doctor modes. [T-47](../decisions/0025-credentials-passed-in.md). |
 | Credential source observation (in `internal/engine/readiness`) | Implemented by slice-29; synthetic observation evidence | Shared descriptor-based metadata checks for doctor, approve and run: no symlinks, trusted ancestors, private owned regular single-link files outside checkout and control state, bounded size and distinct inodes. Exclude root, descendant and file aliases through checkout inventory and state filesystem-coordinate projections. | Reuse the bounded checkout metadata scan; incomplete required evidence refuses. Decision 0027 specifies two bounded mount observations, pin/mapping rechecks and state subtrees independent of other projects' writes/history. No state enumeration, content read, hash or log; own port and disk adapter beside checkout inspection. Only run later reads the checked inode. Evidence remains a dependency of slice-30, T-48 and slice-31/33. |
 | Credential approval (in `internal/engine/approval`) | Implemented by slice-30 | Bind sorted `{kind, source, target}` grants, never contents, with `offline-credentials-v1` or `allowlist-credentials-v1`; review scope and exposure; apply q-52's terminal rule. | Reuse slice-26 canonicalization, differences and presentation. No-grant profiles keep their identity; source-content changes do not change approval. |
-| Credential staging (in `internal/engine/session`) | **Proposed**, T-48 | Intent before private `/dev/shm` staging, exact read-only file mounts, verification before start, unlink after the start attempt and owned recovery. | Session ports, I/O-free fake, disk/Docker adapters and shared contract; slice-31/33 consume it. Lost acknowledgement after mount acquisition must retain uncertainty; Codex file delivery waits on question 1. |
+| Credential staging (in `internal/engine/session`) | Implemented by T-48; synthetic unit evidence, unbound | Intent before private `/dev/shm` staging, exact read-only file mounts, verification before start, unlink after the start attempt and owned recovery. | Session ports, I/O-free fake, disk/Docker adapters and shared contract; slice-31/33 consume it. Lost acknowledgement after mount acquisition must retain uncertainty; Codex file delivery waits on question 1. |
+| Persistent harness home (in `internal/engine/session`) | **Implemented; native green pending**, slice-34 | Per-checkout generation allocation, initialization, cross-state-root session claims, exact ownership, retention and consented retirement; protected catalog and scope lock under the fixed account-home control boundary. | Own domain/port, disk/Docker and existing encoding/entropy adapters; I/O-free porttest fake and shared adapter contracts. Policy/approval retain validation and canonicalization. Only cmd assembles. [Decision 0030](../decisions/0030-persistent-harness-home.md). |
+| Home integration in existing run/doctor/approve/status/stop slices | **Implemented; native green pending**, slice-34 | Review/freeze the opt-in home grant; run consumes it; session status/stop retain home storage. Separate `status --homes` discovery and `stop --home <id> --reset\|--delete` provide explicit person-controlled retirement. | Shared session/policy/approval ports, no slice-to-slice imports. Stop's terminal consent uses its own port and named adapter, wired by cmd; no engine I/O in handlers. |
 
 Arrows below mean **proposed dependency on domain/port contracts**, not adapter imports
 or runtime permission. Doctor composes readiness and approval inspection; readiness
@@ -367,7 +383,7 @@ milestone stages. Several extend doctor; slice-4 adds approve and approval inspe
 | T-47 — proposed credentials decision | Charter step 2 of the second milestone and q-52 | [Record](../decisions/0025-credentials-passed-in.md) for sources, per-command staging, approval, uncertain starts, refusal-log conflict and six questions. Documentation only. |
 | slice-29 — credential requests and metadata inspection | T-47 and slice-25 (both landed; registry dependency edge remains coordinator-owned) | Version 3's closed source requests, policy/manifest parsing and the separate credentials-only doctor scope. Shared readiness uses bounded checkout inventory and state mount projections, with concurrent-write and retained-history controls alongside descendant/file-alias refusals. Synthetic CLI and fake/disk observation contracts exercise this increment; downstream admission remains gated. No Codex kind until T-47 question 1 is answered. Ordinary doctor, approve and run retain the version-3 gate; slice-30 owns approval integration. [Decision 0027](../decisions/0027-credential-source-inspection.md) reconciles T-47's source rule and increment table. |
 | slice-30 — proposed credential approval | slice-29 and slice-26 | Canonical grants, profiles, review, status and q-52's terminal rule; help and `docs/security.md`. Delivery remains gated. |
-| T-48 — proposed session credential seam | T-47 and slice-29's state-side exclusion decision | Staging and recovery port, fake, adapter and shared contract, including lost start acknowledgement after mount acquisition. Bind-mounted Codex file half waits on question 1. |
+| T-48 — implemented session credential seam, unbound | T-47 and slice-29's state-side exclusion decision | Staging and recovery port, fake, adapter and shared contract, including lost start acknowledgement after mount acquisition. Bind-mounted Codex file half waits on question 1. |
 | slice-31 — proposed Claude token delivery | slice-30 and T-48 | CI-only synthetic proof of approved read-only copies, project separation, absence checks and uncertain-start cleanup; refusal-log absence waits on question 6 and logging specs. |
 | slice-32 — blocked Codex sharing | slice-30 and T-48; T-47 question 1 | No Codex kind or delivery until the person answers the atomic-replacement incompatibility and amends the charter as needed. |
 | slice-33 — proposed GitHub token delivery | slice-31 | Reuse staging with a distinct grant; workload exports `GH_TOKEN` from its fixed file. CI-only synthetic proof includes uncertain start and, after question 6, the hostname-marker probe. |
@@ -541,6 +557,20 @@ terminal gap remains. Slice-30 carries the rule and disclosure into help/securit
    [The failure-cleanup decision](../decisions/0009-foreground-failure-cleanup.md)
    records the review fixes and their local controller proof.
 
+For slice-34's home profile (**implemented; native green pending**), frozen approval also binds
+`home: {storage: volume, target: /home/itos, lifetime: project, mode: "0700"}` and
+the fixed HOME/XDG mappings. Under a scope lock independent of selected state roots,
+publish a durable generation claim before allocation or mounting. Persist allocation
+intent before Engine create, then the complete observed ownership tuple before mount;
+initialize only a new owned volume through bounded archive operations on the unstarted
+worker. Independently inspect mount, root metadata and environment before start.
+Existing no-home mount assertions remain exact; a separate home profile permits only
+this additional managed volume. `/tmp` stays a separate executable tmpfs. Normal exit,
+failure and session stop remove ephemeral resources while retaining the home; a missing
+recorded home refuses reuse until explicit consented reset, never automatic replacement.
+See [decision 0030](../decisions/0030-persistent-harness-home.md) and the
+[home specification](../../features/harness-home.feature) for the protocol and evidence requirements.
+
 ### State and result interpretation
 
 Slice-17's selected change to the sequence above is pending native proof. Publish
@@ -587,7 +617,7 @@ These are T-11's interface meanings, not a storage schema or proof of a transiti
 | ready | Boundaries verified and ownership durable; launch proceeds directly, with no lifecycle hooks. Failure/cancellation enters stopping. |
 | running | Foreground launched under frozen settings. Observed exit/cancellation enters stopping; controller/engine loss is not observed termination. |
 | stopping | Bounded owned cleanup, including partial startup and already stopped workers. Confirmed completion reaches stopped; incomplete cleanup reaches failed. |
-| stopped | Required ephemeral cleanup confirmed, including recorded resources confirmed absent. Workload result and checkout edits remain; no persistent worker state or restart authorized. |
+| stopped | Required ephemeral cleanup confirmed, including recorded resources confirmed absent. Workload result and checkout edits remain; no restart authorized. The opt-in home profile retains its separately owned persistent home; no-home runs retain A2's ephemeral worker state. |
 | failed | Startup/controller failure or incomplete cleanup. Report present/uncertain resources separately; later authorized stop may resume stopping. Never imply removal from this state name. |
 
 Preserve an observed nonzero workload exit even when cleanup fails, with a separate
@@ -639,7 +669,44 @@ cleanup using revalidated trusted ownership and concrete resource identity. Refu
 wrong-user, foreign, mismatched or ambiguous resources; labels/names only corroborate
 ownership. Confirmed-absent recorded resources are safe on repeated stop; an unreachable
 engine does not establish absence. Never prune unrelated resources or remove shared
-images or checkout edits. Worker tmpfs is ephemeral; persistent worker state is excluded.
+images or checkout edits. Worker tmpfs is ephemeral. The opt-in home profile retains
+its separately recorded volume; ordinary session stop never removes it.
+
+Slice-34's home recovery and management are **implemented; native green pending**, as recorded in
+[decision 0030](../decisions/0030-persistent-harness-home.md). Home-bearing session
+status reports present/absent/unknown separately from worker cleanup and preserves
+the original workload outcome. Missing or substituted storage never causes an
+automatic replacement. Pending allocation must be reconciled without blind retries.
+
+The explicit `status --homes` mode lists the current host UID's protected home
+catalog across checkouts and state roots, including obsolete generations and
+tombstones, without opening current checkout data or scanning engine labels. It
+does not widen ordinary session discovery. A different recorded daemon stays
+unknown until the person selects that original local engine. `stop --home <id>
+--reset` and `--delete` are separate, exact-generation actions, with review of the
+original binding and permanent data loss followed by terminal y/N consent. JSON
+does not bypass consent; there is no bulk, force or unattended approval route.
+
+Management revalidates protected ownership and the complete volume tuple after
+consent and immediately before removal. It refuses any active/incomplete session
+claim, including another state root, dead controller, exited/unstarted worker or
+uncertain create. Ordinary stop must first confirm worker absence or fenced
+no-create cancellation. A scope lock and durable pending action serialize new
+claims with retirement without taking another session's operation lock; no lock
+spans the prompt or foreground wait, and no state transaction spans an engine call.
+
+Persist the consented action before non-forced exact-volume deletion, confirm
+absence and publish completion durably. Reset reserves one successor token in its
+intent and publishes that unallocated generation; only a later approved run creates
+its storage. Delete instead disables the scope until a separate consented reset.
+Fully owned missing storage can be retired after consent without a delete call;
+name-only absence cannot retire uncertain allocation. Obsolete GID/checkout/daemon
+scopes remain reclaimable from original ownership without current approval or Git.
+Retain tombstones, pending actions and exact retries through interruptions. Each
+unfinished retry needs renewed consent; old-ID completed retries never destroy a
+successor or allocate another. No management action stops workers, changes approval
+or treats an unavailable engine as absence. Review/status use 10 seconds; mutation
+uses a fresh 30-second total after consent, with 10-second call limits inside it.
 
 Place recovery records beside approvals in protected host state. Slice-11 uses
 independent random 32-byte lowercase hex IDs and seven-field records referring to
@@ -828,6 +895,18 @@ evidence. Slice-31 owns `claude-token` and slice-33 `github-token`, using T-48's
 session seam. Codex has no kind or delivery pending question 1. The person's question 5
 must be answered before any real credential is used, including a smoke check.
 
+T-48 implements steps 2–5 at the shared session seam, tested with an in-memory
+filesystem/engine, temporary staging roots and a local Engine API fixture. It reuses
+the registered runner, intent operation lock and shared recovery path. Schema 4 adds
+staging directory/file identities and progress while preserving schemas 1–3 and T-40's
+optional egress authority. `CheckedSources` retains metadata-only descriptors from the
+existing readiness observation and repeats the complete source/exclusion observation
+before copying. Only the disk adapter handles the token buffer. Recovery's staging
+presence is independent of worker presence; completion requires absence of both plus
+all other owned resources. This seam is unbound: command admission, approval and the
+real-engine behavior below still belong to the consuming slices. The implementation
+and its limits are recorded in [ADR 0025](../decisions/0025-credentials-passed-in.md#t-48-implementation-status).
+
 1. **Validate and freeze grants.** Slice-29 initially admits version 3 only in doctor's
    file-only modes; ordinary doctor, approve and run refuse it with `policy.version`.
    Slice-30 admits inspection and approval only after slice-29 specifies and proves
@@ -905,8 +984,9 @@ settings require independent runtime probes; inspecting a flag cannot prove enfo
 | Untrusted checkout | Source, request policy and restricted manifest; writable by the worker. | Its only host directory, mounted through the descriptor-backed owned volume; proposed credential grants add staged single-file binds only. Substitution protection requires native proof. |
 | Local engine image store | Approved cached manifest digest, checked for architecture, compatibility and metadata. | The person pulls the manifest's digest and approval binds that content. Control commands inspect, never pull/build/substitute, keeping acquisition a deliberate host operation. Slice-3 owns checks; T-20 owns fixture preparation. |
 | Worker | Host UID/GID override image identity; manifest user values must match, no chown. Read-only root, `no-new-privileges`, no administrative capabilities, sudo, host namespaces or engine/SSH-agent sockets. **Proposed** grants expose only approved mode-`0400` read-only token files under `/run/itos-container/credentials`, never original sources; private IPC keeps host `/dev/shm` inaccessible. | Required from first instruction; pids limit 4096, no memory or CPU quota claim. Offline proof is separate from slice-31/33's still-unproven credential boundary. |
-| Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its sole nonrecursive directory bind source. Proposed credential profiles add read-only binds of staged files, not writable credential volumes. | No persistent worker volumes/caches/profiles, host `/tmp` or host-wide chown. A2's offline limits hold; T-47 names the credential proposal's contract exceptions. |
-| Host `/dev/shm` staging (**proposed**, T-48) | One random host-UID-owned `0700` directory per run; exclusive `0400` token copies, tmpfs verified. Durable intent names it before creation; each worker gets only its own file mounts. | Rootful dockerd in the host mount namespace is assumed. Host swap can persist bytes. Unlink after the start attempt does not revoke acquired mounts; completion needs worker and staging removal, with recovery on uncertainty. |
+| Container-managed storage | Ephemeral tmpfs and the owned anchor control volume; checkout writes survive on its sole nonrecursive directory bind source. Proposed credential profiles add read-only binds of staged files. The home profile (**implemented; native green pending**) adds one owned local volume at `/home/itos`, NoCopy, UID:GID and `0700`, retained across sessions. | A2 still holds for omitted-home runs; [decision 0030](../decisions/0030-persistent-harness-home.md) limits its exception to approved harness state. No host home, host `/tmp`, shared cache or host-wide chown. Home storage is worker data, never control authority. |
+| Home catalog and generation claims (implemented, slice-34) | Protected current bindings, generation records/tombstones and persistent scope locks under the fixed account-home coordination boundary, independent of XDG state roots; inaccessible to workers. | Separate from persistent home bytes. Exact ownership and claims govern reuse/retirement; reset/deletion require terminal consent and no retained session claim. No automatic garbage collection or engine-wide adoption. |
+| Host `/dev/shm` staging (T-48 adapter built, runtime unproven) | One random host-UID-owned `0700` directory per run; exclusive `0400` token copies, tmpfs verified. Durable intent names it before creation; each worker gets only its own file mounts. | Rootful dockerd in the host mount namespace is assumed. Host swap can persist bytes. Unlink after the start attempt does not revoke acquired mounts; completion needs worker and staging removal, with recovery on uncertainty. |
 | Worker network boundary, offline run | `NetworkMode` `none`, inspected before start; no external network path or published port from the first instruction. | Independent network/DNS probes must prove denial through controller loss. An offline run has no proxy, guard or session network; `NetworkMode` `none` is confined to offline runs. |
 | Session networks, egress run (created by T-40's session engine, bound by slice-27) | Two owned per-session bridge networks. The internal one has Internal true, IPv6 off and `com.docker.network.bridge.gateway_mode_ipv4=isolated`, so its bridge has no address; the worker joins it alone. The egress one is a plain bridge with IPv6 off and only the proxy on it. | Docker 28.0 or newer, else an unavailable control. Docker's embedded resolver at 127.0.0.11 stays, with no route behind it; AC-11 is the result to prove (q-50, provisional). Nothing is proven until slice-27 runs on the real engine. |
 | Egress proxy container (created by T-40's session engine, bound by slice-27) | Runs the host's own static Linux amd64 itos-container executable as `__egress-proxy`; that read-only bind mount is its only mount. Both networks, no published port, listening on 3128, forwarding sysctl off. The root filesystem is the inert pinned busybox. Host UID/GID, read-only root, CapDrop ALL, no-new-privileges, pids limit 4096, no restart, no checkout, state volume or socket. | The person pulls the image; commands only inspect it, and approval binds its digest. Platforms other than Linux amd64 cannot run egress this way. The worker cannot reach the executable, Cmd or Env. Refusal records land in the json-file log and, at teardown, in `egress-refusals.jsonl`. |
@@ -1173,11 +1253,12 @@ runtime scenarios remain CI-only.
 | --- | --- | --- |
 | [Charter](../charter.md) and [pilot contract](../plans/container-pilot.md) | Binding scope and required boundary | The charter selects the offline milestone; later pilot components remain deferred. Acceptance does not expand that scope. |
 | [T-14 accepted decision](../decisions/0001-enforce-slice-and-engine-boundaries.md) and [Slices](../architecture.md#slices) | Accepted package/enforcement design | Reuse the existing arrows, exact allowlist and fixtures. No competing layout or enforcement proposal. |
-| [T-11 lifecycle](../plans/offline-run-lifecycle.md) | Recorded interfaces and future cases, narrowed by later decisions | Preserve argv/JSON, outcome precedence and recovery obligations. No hooks or persistent worker state this milestone; settled choices replace the corresponding open questions. |
+| [T-11 lifecycle](../plans/offline-run-lifecycle.md) | Recorded interfaces and future cases, narrowed by later decisions | Preserve argv/JSON, outcome precedence and recovery obligations. No hooks or persistent worker state in the first-milestone profile; the selected second-milestone home exception is recorded below. Settled choices replace the corresponding open questions. |
 | Policy/manifest/readiness/approval/session decomposition | Accepted current design hypothesis | Responsibility names and dependencies guide implementation; remaining exact contracts still need owning specs. |
 | [slice-1 and slice-5](../../tasks/work-items.yaml) | Implemented | Strict policy validation and parser-wide structural bounds; v4 policy parser, independent v3 tooling. |
 | A1, revised [q-2 and q-52](../../tasks/asks.yaml) | Person's settled approval answers; q-52 revisits A1 for grants | Bare terminal approve displays effective settings/differences then y/N; no prompt again until settings change and no hash typing. The optional exact-fingerprint route is confined to offline settings without credentials; network or credential grants require terminal consent. Canonical JSON SHA-256, protected host state and the faked-terminal caveat remain. Grant enforcement belongs to slice-26/27/30. |
-| A2 | Person's settled milestone state choice | Checkout edits survive; ephemeral tmpfs, no persistent worker volumes/caches/profiles. Host approval/snapshot/recovery state remains separate. Init and lifecycle hooks are deferred. |
+| A2 | Person's settled first-milestone state choice; selected second-milestone exception below | Checkout edits survive; omitted-home runs use ephemeral tmpfs with no persistent worker volumes/caches/profiles. Host approval/snapshot/recovery state remains separate. Init and lifecycle hooks are deferred. |
+| [Harness-home record (slice-34)](../decisions/0030-persistent-harness-home.md) | **Selected by coordinator q-73, 2026-11-16 01:50 UTC**, on the person's standing instruction, for the person to ratify; implemented with native green pending | Charter milestone two step 3 permits a private home. Use an opt-in per-checkout local volume, exact recorded ownership, retained session-independent state, cross-root claims and terminal-consented reset/deletion including missing-storage recovery and obsolete-scope reclamation. No further storage-lifetime answer blocks implementation. Overrides only A2's exclusion for this profile. No automatic replacement, implicit deletion, dependency addition or passing runtime evidence. |
 | A3 | Person's settled controller-loss choice | Leave worker isolated until stop; status identifies lost-controller sessions as candidates. No watchdog, immediate cleanup, restart or invented child exit. |
 | A4 | Person's settled resource choice | Pids limit 4096, no memory or CPU quota claim; distinct from parser and CI budgets. |
 | Effective UID and host UID/GID | Settled loop choice; specified in slice-4, consumed by slices 8/10 | Refuse root; resolve omissions to effective host UID, override image user and require manifest equality without chown. [Allocation decision](../decisions/0003-approval-identity-and-frozen-input.md) supersedes slices 3/8 as resolver owners. |
@@ -1287,10 +1368,11 @@ with no red input. The failed dispatch is never a merge/closure prerequisite or 
 
 T-16 implemented the engine-test tier. [features/README.md](../../features/README.md)
 is its operational authority: ordinary, smoke, coverage and mutation runs exclude
-`@engine`. The dedicated engine tier runs in three engine shards
-([T-45's decision](../decisions/0024-engine-tier-shards.md)): a matrix of the
+`@engine`. The dedicated engine tier runs in four engine shards
+([T-45's decision](../decisions/0024-engine-tier-shards.md), the fourth added by T-59):
+a matrix of the
 `engine-shard` job, each shard a native runner and daemon of whole feature files
-(offline, lifecycle and other) with a 180-second step budget, and no feature split. The
+(offline, lifecycle, other and egress) with a 180-second step budget, and no feature split. The
 `Engine scenarios (Linux amd64)` job only aggregates them: it needs the shards alone and
 fails unless every shard succeeded, and `ci` requires its success. Each shard enables
 `ITOS_CONTAINER_ENGINE_TESTS=1` only under the guarded Linux amd64 GitHub Actions
@@ -1367,7 +1449,7 @@ The six credential questions above are detailed in
 | Checkout identity | The safely resolved checkout and its relevant identity, not a folder basename or unchecked path. Rules remain open. |
 | Project identity | Separation of a checkout's user/engine context and protected host records from another project's; exact binding belongs to slice-3/4. |
 | Session identity | One owned foreground run and its concrete resources/recovery reference, not authority to adopt similarly labelled resources. |
-| Persistent state | This milestone preserves checkout edits and protected host control records. Persistent worker volumes, caches and profiles belong to later scope; credentials remain excluded. |
+| Persistent state | Checkout edits and protected host control records survive. Slice-34 implements a separately owned harness-home volume retained across sessions, with consented retirement; native green remains pending. Its contents are hostile worker data, never host control authority. Omitted-home runs retain A2's ephemeral worker state. |
 | Ephemeral state | Worker tmpfs and owned session resources removed or confirmed absent during cleanup. |
 | Fake/contract evidence | Tests of decisions and agreed port behaviour using I/O-free in-memory implementations and adapter contract suites; not runtime isolation proof. |
 | HTTP Engine API fixture | Adapter-owned test support providing controlled HTTP responses/failures to the real Docker client without a daemon; mapping and transport evidence, not a domain fake or isolation proof. |

@@ -10,7 +10,7 @@ import (
 )
 
 func (c *runConnection) workerNetwork(ctx context.Context, r port.Record) (*network.NetworkingConfig, string, port.Outcome) {
-	if r.Schema != 3 {
+	if !r.HasEgress() {
 		return nil, "", ""
 	}
 	if !r.ValidEgress(c.binding) || r.Egress.Proxy.Stage != "owned" {
@@ -35,13 +35,13 @@ func (c *runConnection) workerNetwork(ctx context.Context, r port.Record) (*netw
 	return &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{r.Egress.Internal.Name: {NetworkID: r.Egress.Internal.ID}}}, ep.IPAddress.String(), ""
 }
 func safeWorkerHost(h *container.HostConfig, r port.Record) bool {
-	if r.Schema != 3 {
-		return safeHost(h, r.Anchor.Name)
+	if !r.HasEgress() {
+		return safeHost(h, r.Anchor.Name, r.Credentials.Mounts()...)
 	}
 	if h.NetworkMode != container.NetworkMode(r.Egress.Internal.Name) || len(h.DNS) != 0 || len(h.DNSSearch) != 0 || len(h.DNSOptions) != 0 {
 		return false
 	}
 	offline := *h
 	offline.NetworkMode = "none"
-	return safeHost(&offline, r.Anchor.Name)
+	return safeHost(&offline, r.Anchor.Name, r.Credentials.Mounts()...)
 }

@@ -146,7 +146,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		}
 		if result.Outcome != "" {
 			failure := runFailure{result.Outcome, result.Reference, result.SessionID, false}
-			if result.MountDiagnostic.Check != "" {
+			if session.HexID(result.HomeID) && (result.Outcome == session.HomeRefused || result.Outcome == session.HomeUnavailable) {
+				ui.Fail(homeFailure{failure, result.HomeID}, false)
+			} else if result.MountDiagnostic.Check != "" {
 				ui.Fail(mountFailure{failure, result.MountDiagnostic}, false)
 			} else if result.Operation != "" {
 				ui.Fail(operationFailure{failure, result.Operation}, false)
@@ -182,6 +184,13 @@ type operationFailure struct {
 	runFailure
 	operation string
 }
+
+type homeFailure struct {
+	runFailure
+	id string
+}
+
+func (f homeFailure) Unwrap() error { return f.runFailure }
 
 func (f operationFailure) Unwrap() error { return f.runFailure }
 
@@ -225,7 +234,7 @@ func Classify(err error) (int, []cli.Problem) {
 		}
 		code, cause := 75, "temporary"
 		switch run.outcome {
-		case session.Refused, session.Unsafe, session.RegistrationOwnership, session.MountRefused:
+		case session.HomeRefused, session.Refused, session.Unsafe, session.RegistrationOwnership, session.MountRefused:
 			code, cause = 1, "ownership"
 		case session.Invalid:
 			code, cause = 2, "configuration"
@@ -237,7 +246,7 @@ func Classify(err error) (int, []cli.Problem) {
 			code = 1
 		case session.IsolationUnverified:
 			code = 1
-		case session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,
+		case session.HomeUnavailable, session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,
 			session.MountWrite, session.MountUncertain,
 			session.Uncertain, session.Incomplete, session.IsolationInspection, session.ExecutionFailed, session.StreamTimeout, session.EngineLost, session.TeardownTimeout:
 			// Known transient failures retain their temporary classification.
@@ -266,6 +275,12 @@ func Classify(err error) (int, []cli.Problem) {
 		if session.HexID(run.sessionID) {
 			fix = "Use the same effective project: itos container stop " + run.sessionID
 			message += "; " + fix
+		}
+		var home homeFailure
+		if errors.As(err, &home) {
+			guidance := "Retained home " + home.id + "; inspect with itos container status --homes. After session cleanup, the person may consent to discarding its state with: itos container stop --home " + home.id + " --reset"
+			fix += ". " + guidance
+			message += "; " + guidance
 		}
 		return code, []cli.Problem{{Rule: rule, Exit: code, Message: message, Fix: fix}}
 	}
