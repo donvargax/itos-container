@@ -1975,6 +1975,16 @@ items:
       reaching the parser. Add a regression with a selector that matches zero Go tests. The harness
       should report the affected scenario ID and missing probe before evaluating the product
       assertion.
+
+      That item already names TestDoctorStepDefinitions (features/doctor_harness_test.go:177) as one
+      of the six per-slice step checks. It also leaves to its spec whether those checks fold into
+      one check that fails only for the scenarios a selector names and only reports the other @wip
+      scenarios. That is the fix asked for here. The new information is the cost today. Because the
+      doctor check needs exactly one definition for every pickle in doctor.feature, @wip included, a
+      drafter's spec-only commit to doctor.feature turns go test ./features red. No doctor spec can
+      be drafted until this is fixed, and that includes slice-42's. Whichever way the spec goes
+      (fold the check in, or have it select IDs or skip @wip the way the harness-home and offline
+      checks do), it should unblock slice-42's draft first.
   - id: p2-code-proof-draw-stable-across-main-merges
     title: The code proof's draw stays put when main is merged into an item's branch, so a repair is judged on the sites that failed
     phase: 1
