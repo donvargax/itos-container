@@ -2250,6 +2250,10 @@ items:
       hit the same ancestor-ownership check as approval fixtures. Use ID-EGRESS-09 to verify that
       the chosen fixture environment reaches its behavior assertion with production ownership checks
       intact.
+
+      This item already tracks approval and recovery fixtures failing because the local runner
+      reports UID 65534 for `/` and `/tmp`. It names ID-EGRESS-09 as the check that a suitably
+      mapped runner reaches the behavior assertion with production ownership checks intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
