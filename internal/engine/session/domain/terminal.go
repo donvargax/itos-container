@@ -56,6 +56,16 @@ func lostClientTerminal(lease terminal.Lease) port.Outcome {
 
 var errLaunchObservationEnded = errors.New("terminal launch observation ended")
 
+type terminalLaunchOutput struct {
+	writer   port.Writer
+	launched <-chan struct{}
+}
+
+func (o terminalLaunchOutput) Write(p []byte) (int, error) {
+	<-o.launched
+	return o.writer.Write(p)
+}
+
 // Keep in-flight launch calls cancellable until the foreground wait takes over.
 // The final poll also catches a loss whose periodic notification is still pending.
 func watchLaunchTerminal(ctx context.Context, lease terminal.Lease) (context.Context, func() port.Outcome) {

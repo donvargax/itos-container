@@ -122,6 +122,9 @@ Feature: An explicitly selected terminal for an owned foreground run
   # daemon may already have started the worker. Reconcile the recorded ID
   # immediately and remove the freshly verified owned worker without grace.
   # Once start is acknowledged, the ordinary foreground grace applies.
+  # Attach before start to retain the first output. Hold terminal output
+  # until launch has settled, so this grace also applies to a client that
+  # disconnects as soon as it sees the worker's ready frame.
   # On terminal loss/failure send SIGTERM once to the freshly revalidated owned
   # live primary, allow the original 10 s grace INCLUDING delivery time, then
   # SIGKILL once only if fresh ownership and running state still permit it.

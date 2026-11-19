@@ -322,6 +322,14 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if failure := lostClientTerminal(streams.Terminal); failure != "" {
 		return c, nil, "", failure
 	}
+	if streams.Terminal != nil && streams.Out != nil {
+		// The attach stream can carry a worker's first frame before Start
+		// replies. Let the client see it only once launch has settled, so
+		// reacting to that frame gets normal foreground signal and exit handling.
+		launched := make(chan struct{})
+		streams.Out = terminalLaunchOutput{streams.Out, launched}
+		defer close(launched)
+	}
 	var a port.Attachment
 	failure = startupOperation(ctx, "attach establishment", func(call context.Context) port.Outcome {
 		var f port.Outcome

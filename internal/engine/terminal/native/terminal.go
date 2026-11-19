@@ -148,12 +148,10 @@ func (l *lease) Check() port.Cause {
 		if endpoint == nil {
 			continue
 		}
-		var hungup bool
-		err := endpoint.control(func(fd int) error {
-			var e error
-			hungup, e = disconnected(fd)
-			return e
-		})
+		hungup, err := endpoint.pollHangup()
+		for errors.Is(err, syscall.EINTR) {
+			hungup, err = endpoint.pollHangup()
+		}
 		if hungup {
 			return port.Hangup
 		}
@@ -162,6 +160,16 @@ func (l *lease) Check() port.Cause {
 		}
 	}
 	return ""
+}
+
+func (l *lease) pollHangup() (bool, error) {
+	var hungup bool
+	err := l.control(func(fd int) error {
+		var err error
+		hungup, err = disconnected(fd)
+		return err
+	})
+	return hungup, err
 }
 
 // control pins the caller's descriptor for each syscall without File.Fd's
@@ -232,11 +240,7 @@ func (l *lease) observe(ctx context.Context) port.Result {
 			return sizeErr
 		})
 		if err == nil && !hungup && l.output != nil {
-			err = l.output.control(func(fd int) error {
-				var e error
-				hungup, e = disconnected(fd)
-				return e
-			})
+			hungup, err = l.output.pollHangup()
 		}
 		if errors.Is(err, syscall.EINTR) {
 			continue
