@@ -2379,3 +2379,14 @@ items:
       The init must apply the pathname-socket restriction before executing the literal workload
       argv. Test argument preservation and verify that a failed restriction prevents workload
       execution. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: p1-doctor-checkout-socket-backend
+    title: Report the checkout socket backend in doctor
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-detect-checkout-socket-backend]
+    kind: idea
+    why: >
+      Let the person see which backend a run would use before approving it. Cover Landlock, gVisor
+      and a host with neither backend through doctor’s read-only inspection. Broken down from
+      p1-checkout-socket-kernel-enforcement.
