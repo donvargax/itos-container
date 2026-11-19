@@ -2247,6 +2247,11 @@ items:
       dispatch, check the fixture’s ancestor ownership and report the first rejected path and UID.
       Use ID-EGRESS-09 to confirm the selected worker can reach its behavior assertion before
       assigning it local red/green evidence.
+
+      This item already tracks UID 65534 on state-root ancestors and uses ID-EGRESS-09 to verify
+      that a local fixture reaches its assertion with production ownership checks intact. Three
+      consecutive sessions hit the same blocker, leaving the RUNTTY-20 and RUNTTY-22 assertions
+      unchecked until CI.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
