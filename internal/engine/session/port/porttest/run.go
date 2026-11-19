@@ -136,10 +136,8 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 	}
 	if c.terminal.Valid() {
 		streams.Err = streams.Out
-		go a.forwardOutput(streams)
-	} else {
-		a.forwardOutput(streams)
 	}
+	go a.forwardOutput(streams)
 	return a, ""
 }
 
