@@ -218,7 +218,7 @@ func TestLaterHostSignalCannotReplaceTerminalFailure(t *testing.T) {
 }
 
 func TestResizeReconcilesObservedExitAndHostCancellation(t *testing.T) {
-	for _, fault := range []string{"successful resize races exit", "failed resize races exit", "host signal during resize"} {
+	for _, fault := range []string{"successful resize races exit", "failed resize races exit", "worker removed after observed exit", "host signal during resize"} {
 		t.Run(fault, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				runner, registry, engine, _, id := registeredSessionFixture(t)
@@ -246,6 +246,11 @@ func TestResizeReconcilesObservedExitAndHostCancellation(t *testing.T) {
 				engine.BeforeResize = func() {
 					close(release)
 					synctest.Wait() // The authoritative wait completes during resize.
+					if fault == "worker removed after observed exit" {
+						// A concurrent removal leaves no worker to reinspect. The
+						// completed wait still supplies its authoritative exit.
+						delete(engine.Resources, worker)
+					}
 				}
 				if fault == "failed resize races exit" {
 					engine.ResizeFailure = port.TerminalResize
