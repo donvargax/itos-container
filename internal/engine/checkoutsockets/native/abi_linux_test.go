@@ -106,16 +106,35 @@ func TestLandlockABIProbe(t *testing.T) {
 	})
 }
 
+// kernelAnswer makes the version query itself, straight through the pinned
+// golang.org/x/sys and not through the probe's seam, and maps the reply by the
+// specification's rules: ENOSYS and EOPNOTSUPP mean absent, another errno is a
+// query failure, a reply of zero or less is invalid, and anything else is the
+// level. The running kernel does not change its answer between two calls.
+func kernelAnswer() (port.ABI, port.Failure) {
+	reply, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, 0, 0, unix.LANDLOCK_CREATE_RULESET_VERSION)
+	switch {
+	case errno == unix.ENOSYS || errno == unix.EOPNOTSUPP:
+		return port.ABI{Absent: true}, port.None
+	case errno != 0:
+		return port.ABI{}, port.ABIQuery
+	case int(reply) <= 0:
+		return port.ABI{}, port.ABIInvalid
+	}
+	return port.ABI{Level: int(reply)}, port.None
+}
+
 // The real wrapper reaches the running kernel, so the answer depends on the
-// machine: any coherent observation passes, and no answer is invented.
+// machine, but never differs from what the kernel itself says: a probe bound to
+// the wrong trap or to a stub fails here on a host whose answer is not the one
+// the stub would give.
 func TestProbeReachesTheRunningKernel(t *testing.T) {
+	wantABI, wantFailure := kernelAnswer()
+	t.Logf("the running kernel answers %+v, %v", wantABI, wantFailure)
 	for name, probe := range map[string]Probe{"New": New(), "zero value": {}} {
 		abi, failure := probe.LandlockABI(context.Background())
-		coherent := (failure == port.None && abi.Absent && abi.Level == 0) ||
-			(failure == port.None && !abi.Absent && abi.Level > 0) ||
-			(failure != port.None && abi == port.ABI{} && (failure == port.ABIQuery || failure == port.ABIInvalid))
-		if !coherent {
-			t.Errorf("%s observed %+v, %v", name, abi, failure)
+		if abi != wantABI || failure != wantFailure {
+			t.Errorf("%s observed %+v, %v; the kernel answers %+v, %v", name, abi, failure, wantABI, wantFailure)
 		}
 	}
 }
