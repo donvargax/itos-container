@@ -2115,17 +2115,9 @@ items:
     title: Run an owned foreground workload with a TTY
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-56]
     kind: slice
-    why: >
-      Was p1-run-interactive-terminal.
-      Extend the run slice and shared session engine with terminal attachment, initial dimensions,
-      resizes and Ctrl-C as input. Specify terminal selection and JSON refusal before
-      implementation. Restore the terminal and stop the workload after client disconnect using
-      slice-12's bounded cancellation and ownership rules; preserve noninteractive behavior and exit
-      precedence. Require black-box red/green scenarios, with real-engine evidence only in CI.
-      Broken down from p1-interactive-tty.
   - id: slice-38
     title: Execute literal argv within a running owned session
     phase: 1
