@@ -1985,6 +1985,14 @@ items:
       be drafted until this is fixed, and that includes slice-42's. Whichever way the spec goes
       (fold the check in, or have it select IDs or skip @wip the way the harness-home and offline
       checks do), it should unblock slice-42's draft first.
+
+      That item's last paragraph already records this. TestDoctorStepDefinitions needs exactly one
+      definition for every pickle in doctor.feature, @wip included, so a spec-only commit to
+      doctor.feature turns `go test ./features` red, and the spec should unblock slice-42's draft
+      first. New cost since then: slice-42's doctor scenarios went into sockets.feature to get
+      around the check, and slice-43 to slice-45 will hit the same limit. When this item is
+      specified, decide whether those scenarios move back to doctor.feature once the check skips or
+      selects @wip pickles.
   - id: p2-code-proof-draw-stable-across-main-merges
     title: The code proof's draw stays put when main is merged into an item's branch, so a repair is judged on the sites that failed
     phase: 1
