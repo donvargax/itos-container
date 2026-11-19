@@ -8324,13 +8324,23 @@
     created outside its domain, wherever that socket lies. Sockets the workload or its descendants
     create stay reachable, which keeps worker-private IPC, and file access is unchanged. Then it
     sets PR_SET_NO_NEW_PRIVS, calls landlock_restrict_self(fd, 0) and closes the ruleset
-    descriptor. A failure in any of these is landlock-failed. There is no best-effort mode: a
+    descriptor. The landlock adapter's Restrict does exactly this sequence, each raw call once:
+    create, set no_new_privs, restrict, close. A create failure stops with no further call. A
+    no_new_privs or restrict failure closes the descriptor and stops, and a close error during
+    that cleanup does not replace the first failure. A close failure after a successful restrict
+    is also a failure. Every failure is landlock-failed. The sequence and its cleanup live in an
+    untagged adapter file over an unexported set of raw-call functions, and the `_linux.go` file
+    only supplies the real ones. There is no best-effort mode: a
     kernel below ABI 9 never gets a weaker ruleset. Scopes (abstract sockets, signals) and other
     file rights are left out on purpose. They are protections the charter has not decided, and a
-    handled file right without rules would block checkout edits. Last comes exec. An argv[0] that
-    contains a slash is used as given. Otherwise it is looked up in the inherited PATH as
-    os/exec.LookPath does, and a match found only through a relative PATH entry (exec.ErrDot)
-    counts as not found. execve gets the resolved path, the argv exactly as received with argv[0]
+    handled file right without rules would block checkout edits. Last come lookup and exec, two
+    process-port operations. Lookup ends before any execve. An argv[0] that contains a slash is
+    returned unchanged without touching the filesystem. Otherwise it is looked up in the inherited
+    PATH as os/exec.LookPath does. The resolved path must be absolute. A relative result is not
+    found, whether or not LookPath reports exec.ErrDot, since GODEBUG=execerrdot=0 suppresses that
+    error. Lookup returns the path or port.ErrNotFound. Exec is one execve of that path. ENOENT
+    from execve returns port.ErrNotFound, and any other error returns as itself.
+    execve gets the resolved path, the argv exactly as received with argv[0]
     still literal, and the environment exactly as received. The init never forks: it replaces
     itself, so the workload keeps its PID (PID 1 in the worker), signals, wait and exit status,
     which slice-10 to slice-17 rely on. Apart from PATH for the lookup, the init reads no file,
@@ -8340,12 +8350,14 @@
     Each refusal writes exactly one line to stderr, `itos-container-init: <code>`, with nothing
     from argv, the environment or errno text. Usage, landlock-unavailable and landlock-failed exit
     125, not-found exits 127 and exec-failed exits 126, following Docker's own codes for its
-    errors, a command it cannot invoke and a command not found. An Exec that returns at all, even
-    with nil, is exec-failed. A workload can exit with the same codes, and telling an init refusal
-    from a workload exit is slice-46's concern.
+    errors, a command it cannot invoke and a command not found. Any Lookup error is not-found, and
+    so is an Exec that returns port.ErrNotFound. An Exec that returns any other error, or returns
+    nil, is exec-failed. So a missing bare name and a missing slash path exit 127, and a
+    non-executable explicit path exits 126. A workload can exit with the same codes, and telling
+    an init refusal from a workload exit is slice-46's concern.
 
     A Landlock domain and no_new_privs belong to one thread, and only the thread that calls execve
-    hands its credentials to the workload. So the handler reads the ABI, restricts and execs
+    hands its credentials to the workload. So the handler reads the ABI, restricts, looks up and execs
     synchronously on main's locked thread, and starts no goroutine. AllThreadsSyscall is rejected:
     it returns ENOTSUP when cgo is enabled, as go test may build. golang.org/x/sys moves from
     v0.48.0 to v0.49.0, the first release with unix.LANDLOCK_ACCESS_FS_RESOLVE_UNIX (0x10000, the
@@ -8360,36 +8372,55 @@
 
     The init runs only on Linux. The command and slice still build for every inherited target
     (linux, darwin, windows), and there the init refuses with landlock-unavailable. x/sys/unix and
-    the raw calls live only in thin `_linux.go` files with no mutation site. `_other.go` files
-    return port.ErrUnavailable. Ordering and errno classification stay in untagged files, using
-    syscall errno values, and nothing branches on runtime.GOOS. Built with CGO_ENABLED=0, the init
+    the raw calls live only in thin `_linux.go` files with no mutation site. In `_other.go` files
+    every method of both adapters (ABI, Restrict, Lookup and Exec) returns port.ErrUnavailable,
+    since Go's syscall.Exec cannot replace a process on Windows. Ordering and errno
+    classification stay in untagged files, using syscall errno values, and nothing branches on runtime.GOOS. Built with CGO_ENABLED=0, the init
     is a static ELF, so slice-46 can mount it in any approved image. Lines that need gosec
     exceptions (unsafe pointers for the raw calls, and exec) take a targeted //nolint:gosec with
     the reason, on those lines alone.
 
     These named tests must run and pass, with none skipped. TestStartRestrictsBeforeExec (domain,
-    porttest fakes) covers the order ABI, restrict, exec on success and each failure row. Its rows
-    are unavailable, ABI 8, an ABI read error, a restrict error, not-found and an exec error. Exec
-    is never called after a restriction failure. It receives argv equal to the input and as an
-    independent copy, and each port method is called at most once. TestCommandRefusals (command)
+    porttest fakes) covers the order ABI, restrict, lookup, exec on success and each failure row.
+    Its rows are unavailable, ABI 8, an ABI read error and a restrict error, none of which calls
+    Lookup or Exec. A Lookup error gives not-found and no Exec. Exec returning port.ErrNotFound
+    gives not-found, and Exec returning another error or nil gives exec-failed. Exec receives the
+    path Lookup returned, argv equal to the input and as an independent copy, and each port method
+    is called at most once. TestCommandRefusals (command)
     checks that each usage case calls no port, that each failure gives its one line and exit code,
     that a nil Exec return is exec-failed, and that stderr holds nothing from argv.
     TestLandlockContract runs the shared contract against the fake and against the real adapter.
+    It also drives the adapter's Restrict over recording raw-call fakes, on every OS. The success
+    row sees create, set no_new_privs, restrict and close in that order, once each. Create gets
+    an attribute with handled_access_fs exactly RESOLVE_UNIX and net and scoped zero, and set,
+    restrict and close get the created descriptor. The failure rows are create (no later call),
+    no_new_privs (then close), restrict (then close), a cleanup close that also fails, and close
+    after a successful restrict. Each returns an error and makes no call beyond those named.
     The real adapter runs only in a child re-exec of the test binary, which forwards
     -test.gocoverdir as internal/engine/terminal/native/terminal_linux_test.go does and returns
-    normally. The test process itself is never restricted. The child compares the adapter's ABI
+    normally. The test process itself is never restricted. The child's test goroutine calls
+    runtime.LockOSThread before its first Landlock call and never unlocks. It does its ABI
+    measurement, Restrict and every socket probe on that goroutine and starts no other for them,
+    since a Landlock domain belongs to one thread. The child compares the adapter's ABI
     with its own independent measurement. On ABI 9 or later, after Restrict, a stream connect and a
     datagram sendto to sockets the child made before Restrict fail with EACCES, while a stream
-    socket made after Restrict accepts a connection. On ABI 1 to 8 Restrict returns an error.
+    socket made after Restrict accepts a connection into its listen backlog. Also after Restrict,
+    and before any exec, no entry in /proc/self/fd links to anon_inode:landlock-ruleset. On ABI 1
+    to 8 Restrict returns an error.
     Where Landlock is unavailable both calls return ErrUnavailable.
 
-    TestExecPreservesArgvAndEnv runs the real process adapter in a child re-exec. Its target is
+    TestExecPreservesArgvAndEnv makes its replacement and byte-preservation assertions on Linux.
+    There it runs the real process adapter in a child re-exec. Its target is
     the test binary in a helper mode that reports os.Args and os.Environ. The argv rows are an
     empty element, spaces, a tab, a newline, a leading `-`, a second `--`, `--help`, a non-UTF-8
     byte, a bare argv[0] found through PATH and seen literally, and a path with a slash. The
-    environment must come through exactly, including a value holding `=` and an empty value. A
-    bare name not on PATH and a non-executable file return their failures in-process, since a
-    failed execve replaces nothing.
+    environment must come through exactly, including a value holding `=` and an empty value. The
+    failures return in the child, since a failed execve replaces nothing. A bare name not on PATH
+    gives Lookup port.ErrNotFound. A bare name present only in a relative PATH entry gives Lookup
+    port.ErrNotFound both by default and in a child started with GODEBUG=execerrdot=0. A missing
+    slash path is returned unchanged by Lookup, and Exec then gives port.ErrNotFound. A
+    non-executable explicit path makes Exec return an error other than port.ErrNotFound. Off Linux
+    the same test asserts that Lookup and Exec both return port.ErrUnavailable, with no child.
 
     TestInitBinary (cmd) builds the init with CGO_ENABLED=0 and -trimpath, adding -cover and
     GOCOVERDIR when -test.gocoverdir is set so refusal runs keep main's counters. For a Linux
@@ -8402,16 +8433,28 @@
     Argv and environment come through end to end, bare argv[0] included. The workload, and a child
     it starts, get EACCES on a stream connect and a datagram sendto to sockets the test process
     made, while the workload's own socket works. /proc/self/status shows NoNewPrivs 1, and no
-    descriptor links to anon_inode:landlock-ruleset. Launched from a helper that has stacked 16
-    Landlock layers, the kernel's limit, the init's restriction fails: exit 125,
-    landlock-failed, marker absent. A missing bare name exits 127 not-found and a non-executable
-    file exits 126 exec-failed.
+    descriptor links to anon_inode:landlock-ruleset. The layer-exhaustion row launches the init
+    from a helper mode of the test binary. The helper calls runtime.LockOSThread first and holds
+    it through exec. It sets no_new_privs and restricts itself again and again with the init's own
+    ruleset until landlock_restrict_self reports E2BIG, the kernel's layer limit. That fills
+    whatever slots remain, so layers the helper inherited do not matter. Any other error, or 17
+    calls without E2BIG, fails setup. Then the helper execs the init from the same thread, and the
+    init's restriction fails: exit 125, landlock-failed, marker absent. A missing bare name exits
+    127 not-found. So does a bare name present only in a relative PATH entry, by default and with
+    GODEBUG=execerrdot=0 in the init's environment. A missing slash path exits 127 not-found, and
+    a non-executable explicit path exits 126 exec-failed.
 
     The tests need no engine, network, model, account or credential. They use private temporary
     directories and bounded waits. The branch follows the measured kernel, never a runner label.
     In CI the runner's ABI picks the branch. The person's ABI 9+ host and this workspace take the
     enforcement branch (the drafter measured ABI 10 here on 2026-11-19). The implementer reports
-    which branch ran where. Before the work the check fails at package discovery, which is
+    which branch ran where. The ledger check accepts the refusal branch so that ordinary hosted
+    CI below ABI 9 stays green, and a refusal-only run proves no enforcement. So T-65 is accepted
+    only with one run of this ledger command on the person's ABI 9+ host. That run must log
+    `workerinit kernel branch: landlock ABI <n>, enforcement` with n at least 9 and pass
+    TestLandlockContract and TestInitBinary. The implementer makes that run in its workspace on
+    that host and reports those three lines. It needs neither Docker nor slice-46's scenarios.
+    Before the work the check fails at package discovery, which is
     evidence of absence, not a failing assertion. The implementer therefore first makes a test
     commit with the tests and minimal compiling stubs, records each named test's assertion
     failure, then implements until the same tests pass.
