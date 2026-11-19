@@ -2357,3 +2357,14 @@ items:
       The existing item covers this exact gap. The approvalProblem step should fail if an approval
       or hardlink prerequisite refusal prompts for consent, even when the diagnostic and exit code
       are correct.
+  - id: p1-detect-checkout-socket-backend
+    title: Detect the available checkout socket backend
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Give doctor, approve and run one shared selection rule. Prefer Landlock ABI 9 or later, then
+      an available runsc runtime. Test both backends, confirmed absence and failed detection through
+      the engine port and its adapters. Broken down from p1-checkout-socket-kernel-enforcement.
