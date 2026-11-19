@@ -650,37 +650,65 @@ Feature: An approved persistent home for one checkout's harness
   # has none, stop and report. The custom provider in literal argv is set with -c.
   # It uses wire_api "responses" over HTTPS streaming, requires_openai_auth=false, a
   # fixed local model description and the fake URL, and it overrides no seeded
-  # setting. Effective settings come from the pinned app-server's config/read and
-  # experimentalFeature/list over stdio. The approved allowlist holds the fake's
-  # name and the update, analytics and plugin host names the pinned source uses.
-  # The fixture records them with source links before the red run, as aliases of
-  # incidental-service recorders. Every other name is refused by the product proxy.
+  # setting. Effective settings come from the pinned app-server over stdio:
+  # config/read with includeLayers true, and experimentalFeature/list. The
+  # approved allowlist holds the fake's name, the update, analytics and plugin host
+  # names the pinned source uses, and one fixture name,
+  # upstream-canary.slice-35.test. The fixture records the source-derived names
+  # with source links before the red run, as aliases of incidental-service
+  # recorders. upstream-canary.slice-35.test deliberately has no DNS alias. Every
+  # other name is refused by the product proxy.
   #
   # Observation windows. There are three seeded product runs: S queries settings,
   # T1 runs a fresh turn and T2 resumes it. Each uses its own nonce and two windows.
-  # The harness follows the product proxy's log stream from proxy start; the proxy
-  # logs each refusal (egress.feature). Every recorder keeps an append-only
-  # transcript.
+  # Two independent observation paths cover every way Codex could reach out.
+  # - Proxy log. The harness follows the product proxy's complete log stream from
+  #   proxy start. That covers ready, refused, upstream-failed and log-full records
+  #   (internal/engine/egress/port), not refusals alone. Every record's seq must be
+  #   consecutive from the ready record, with no gap, repeat or log-full record,
+  #   through the after canary. A gap or a missing after canary means unobserved
+  #   records, and fails the row. An approved name whose DNS or dial fails, or a
+  #   tunnel whose upstream write fails, appears here as upstream-failed even
+  #   though no recorder sees it (tcp/conn.go).
+  # - Recorder connections. Every recorder keeps an append-only transcript of each
+  #   accepted TCP connection, its TLS handshake outcome and every HTTP request on
+  #   it. A connection that sends no request, or fails its handshake after a
+  #   successful CONNECT, still appears here as a connection.
+  # Both paths are exercised by fixture canaries outside each Codex window:
   # - Readiness window: the launcher waits at the existing egress "attach" barrier
   #   of egress_native_run_test.go, and the harness attaches the proxy to the
-  #   fixture networks. After release the launcher makes one readiness request per
-  #   route through the proxy. It then CONNECTs to the unlisted
-  #   before-<nonce>.refused.example, which must receive 403, and waits at the
-  #   "codex" barrier. The harness confirms each readiness request in its recorder
-  #   and that before-canary refusal in the followed log. It then seals the window
-  #   by recording every transcript and log cursor, and releases.
+  #   fixture networks. After release the launcher, through the proxy, in order:
+  #   makes one readiness HTTPS request per route; opens one connection-only canary
+  #   per incidental recorder (CONNECT, a completed TLS handshake, then close with
+  #   no request); CONNECTs to the approved upstream-canary.slice-35.test, which
+  #   must receive 502; and CONNECTs to the unlisted before-<nonce>.refused.example,
+  #   which must receive 403. It then waits at the "codex" barrier. The harness
+  #   confirms each readiness request and each connection-only canary in its
+  #   recorder. Each product run starts its own proxy, so the harness confirms that
+  #   run's readiness-window proxy log is exactly ready, then
+  #   upstream-failed with reason dns for upstream-canary.slice-35.test, then
+  #   refused with reason not-listed for before-<nonce>.refused.example. It then
+  #   seals the window by recording every transcript and log cursor, and releases.
   # - Codex window: the launcher runs codex as its child with literal arguments and
   #   waits for its exit, the normal shutdown flush included. It then sends one
-  #   nonce canary per recorder and CONNECTs to after-<nonce>.refused.example, which
-  #   must receive 403. It waits at a "seal" barrier until the harness has observed
-  #   those canaries and that refusal, and then exits with Codex's status. Only then
-  #   may product cleanup remove the proxy.
-  # The before canary proves that this run's refusals are visible. The after canary
-  # proves the log was still captured after Codex shut down, so a log that ended
-  # early cannot read as complete. A missed barrier, missing canary, failed
-  # readiness, or a Codex start before the "codex" release fails the row.
+  #   nonce canary request per recorder, each on its own new connection, and
+  #   CONNECTs to after-<nonce>.refused.example, which must receive 403. It waits
+  #   at a "seal" barrier until the harness has observed those canaries and that
+  #   refusal, and then exits with Codex's status. Only then may product cleanup
+  #   remove the proxy.
+  # The readiness canaries prove that each path records this run's traffic of
+  # every kind: a refusal, an upstream failure and a request-less connection. The
+  # after canary proves the log was still captured after Codex shut down, so a log
+  # that ended early cannot read as complete. A missed barrier, missing canary,
+  # failed readiness, or a Codex start before the "codex" release fails the row.
   # Readiness and canary traffic belong to their windows; they are never counted as
-  # Codex traffic. Each product run is bounded at 20 s.
+  # Codex traffic.
+  # Each seeded Codex window's complete proxy log is exactly one record: refused
+  # with reason not-listed for after-<nonce>.refused.example, whose seq directly
+  # follows the readiness window's last record. Each incidental recorder's
+  # Codex-window transcript is exactly one connection carrying exactly its nonce
+  # canary request. The fake's Codex-window transcript holds only the scripted
+  # exchanges below and its own canary. Each product run is bounded at 20 s.
   #
   # Ordered exchanges. The fake serves only this script and answers anything else
   # with HTTP 400, recorded as unexpected. Before the red run the fixture fixes the
@@ -702,8 +730,10 @@ Feature: An approved persistent home for one checkout's harness
   #   The reply streams done-N2, then response.completed.
   # T1's Codex window holds exactly E1 then E2, each once, and T2's exactly E3 then
   # E4. Any of these fails the row: a repeated POST (a retry), another path or
-  # method, a WebSocket upgrade, an exchange out of order, an incidental-recorder
-  # request, or any proxy refusal other than the after canary.
+  # method, a WebSocket upgrade, or an exchange out of order. So does any Codex
+  # window proxy record other than the after canary (an upstream-failed, log-full,
+  # extra refused record or a seq gap), or any incidental-recorder connection
+  # other than its canary's, with or without a request.
   # If pinned Codex needs another fake path, stop and report rather than widen the
   # set. Both turns must end with turn.completed and exit 0. T2 must report the
   # captured thread ID. A second fresh thread that rereads the marker cannot pass E3.
@@ -711,27 +741,45 @@ Feature: An approved persistent home for one checkout's harness
   # path and also depends on build type and cached version state:
   # https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/tui/src/updates.rs#L24
   # Nor are analytics or plugin requests that headless startup may never reach.
-  # Codex's own effective-settings report proves those settings; absent traffic
-  # never does. Absent traffic proves only that nothing unwanted was sent, refused
-  # or not, within the sealed seeded windows.
-  # Unseeded control: an independent plain-home checkout, separately approved with
-  # the same allowlist, runs only S's settings query. It runs after all three seeded
-  # Codex windows are sealed, through its own proxy. Its traffic and refusals are
-  # never attributed to a seeded window or asserted absent. Its config/read must show
-  # no layer from a seeded config.toml. It must differ from codex-v1 in
-  # check_for_update_on_startup, sandbox_mode and approval_policy, at the defaults the
-  # fixture fixes from the pinned source before the red run.
+  # Codex's own settings report proves those settings; absent traffic never does.
+  # Absent traffic proves only that nothing unwanted was sent, refused or not,
+  # within the sealed seeded windows.
+  #
+  # Settings evidence. The pinned config/read serializes the merged ConfigToml,
+  # whose fields are optional; Codex applies runtime defaults later, so config/read
+  # reports no unseeded default:
+  # https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/app-server/src/config_manager_service.rs#L125-L178
+  # https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/core/src/config/mod.rs#L3726-L3738
+  # S therefore requests includeLayers true. Before the red run the fixture fixes
+  # the pinned protocol's exact layer-source encoding for a user layer. If 0.167.0's
+  # config/read has no includeLayers or user layer, stop and report.
+  # - Seeded S: the merged config holds every codex-v1 key at its exact value. The
+  #   layers hold exactly one user layer, whose source file is
+  #   /home/itos/.codex/config.toml and whose config is exactly the codex-v1 table.
+  #   No other layer sets any codex-v1 key; the -c provider layer sets only the
+  #   provider. experimentalFeature/list reports plugins and remote_plugin disabled.
+  # - Unseeded control: an independent plain-home checkout, separately approved
+  #   with the same allowlist, runs only S's settings query. It runs after all three
+  #   seeded Codex windows are sealed, through its own proxy. Its traffic and
+  #   refusals are never attributed to a seeded window or asserted absent. No layer
+  #   in its config/read sets any codex-v1 key. A user layer, if the pinned loader
+  #   lists one for the missing /home/itos/.codex/config.toml, has an empty config.
+  #   In its merged config every codex-v1 key, at its dotted path, is absent or JSON
+  #   null; any concrete value fails the control.
+  # Runtime defaults that Codex applies after config/read are asserted for neither
+  # run. The seeded sandbox_mode and approval_policy are observed at runtime by
+  # T1's shell call running and reporting success with no approval input (E2).
   # Missing reports, timeouts and empty transcripts are never success.
   @wip @slice-35 @ID-CODEXHOME-09 @engine @linux
   Scenario: Pinned Codex starts and resumes against a fake service without unwanted startup traffic
-    Given a CI Codex 0.167.0 image verified from its recorded fixture identity an approved Codex home a scripted Responses endpoint incidental-service recorders and a followed proxy refusal log behind readiness Codex and seal barriers
-    When three seeded product runs query Codex effective settings then run a fresh fake turn and resume its captured thread ID each within its own readiness and Codex observation windows
-    And an independent unseeded plain-home control checkout reports its Codex effective settings only after every seeded window is sealed
-    Then Codex reports all codex-v1 effective settings and disabled plugin features while the unseeded control reports its differing defaults
-    And each seeded readiness window holds every route's readiness request and its before canary refusal and no Codex process started before its release
+    Given a CI Codex 0.167.0 image verified from its recorded fixture identity an approved Codex home a scripted Responses endpoint connection-recording incidental-service recorders and a followed complete proxy log behind readiness Codex and seal barriers
+    When three seeded product runs query Codex layered settings then run a fresh fake turn and resume its captured thread ID each within its own readiness and Codex observation windows
+    And an independent unseeded plain-home control checkout reports its Codex layered settings only after every seeded window is sealed
+    Then the seeded settings attribute every codex-v1 value to the one seeded user layer with plugin features disabled while the unseeded control has no layer setting a codex-v1 key and leaves each unset
+    And each seeded readiness window holds every route's readiness request and connection-only canary and a complete proxy log of ready then the upstream canary failure then the before canary refusal and no Codex process started before its release
     And the fresh turn's Codex window holds exactly its prompt POST then its tool-output POST and the resumed turn's holds exactly its context POST then its tool-output POST while the settings window holds no Responses request
     And the resumed run reports the captured thread ID and rereads the marker the first turn wrote without login onboarding or tool approval input
-    And each seeded Codex window ends with its recorder canaries and after canary refusal with no other refusal recorder request or destination through Codex shutdown
+    And each seeded Codex window's complete proxy log is only its after canary refusal with consecutive sequence numbers and each incidental recorder holds only its canary connection through Codex shutdown
     And no real credential account or service was used and product session cleanup is confirmed
 
   # A real archive extractor must refuse symlinks and replace a regular file

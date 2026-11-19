@@ -14,11 +14,13 @@ Feature: Codex starts from approved defaults in its private persistent home
   # checkout-overlap.feature for the rules reused below.
   # Read against 8413500, this branch's merge of main 6798ca3. slice-34 and
   # slice-27 are done there. These scenarios use no credential grant or account.
-  # This revision of 7d76508 answers its spec review. It adds sealed per-run
-  # observation windows, refusal canaries and ordered Responses exchanges to
-  # CODEXHOME-09. It adds 110 s and 115 s deadline rows to CODEXHOME-06, and
-  # malformed-header, extra-entry and delivered-fault readback rows. It also
-  # specifies the Codex image handoff, cleanup and budgets.
+  # This revision of ae92c8b answers that draft's spec review. It judges readback
+  # archive validity before seed validity, so a wrong-kind entry has one
+  # classification (CODEXHOME-06/07). It makes CODEXHOME-09 check the complete
+  # proxy log and connection-level recorder traces, and read Codex's layered
+  # settings. It records Codex image ownership before each acquisition and adds a
+  # cleanup failure control. It covers ordinary doctor and approve for the scoped
+  # reservation (CODEXHOME-02).
   #
   # Placement. The local scenarios CODEXHOME-01..07 are here. The native ones,
   # CODEXHOME-08..10, are in harness-home.feature beside HOME-13/14. That file is
@@ -52,6 +54,10 @@ Feature: Codex starts from approved defaults in its private persistent home
   #   reaches the worker as before. No other CODEX_ name becomes reserved, and
   #   manifest.feature's context-free reserved list and its rows are unchanged.
   #   Run's existing version-3 refusal before manifest access keeps its precedence.
+  #   Approve reports the reservation before any review prompt and writes no
+  #   approval. CODEXHOME-01 covers doctor --manifest-only and CODEXHOME-02 covers
+  #   ordinary doctor and approve, each beside an accepted plain-home control with
+  #   the same manifest. CODEXHOME-03 covers run, beside a successful Codex launch.
   # - Add to slice-34's effective home object exactly
   #   harness:{kind:"codex",seed:"codex-v1",target:"/home/itos/.codex"}.
   #   Retain the selected home profile name and other fields. This nested revision
@@ -158,22 +164,32 @@ Feature: Codex starts from approved defaults in its private persistent home
   #   environment/seed uses run.isolation-unverified (1).
   # - A partial write means the copy call stored part of the archive and then its
   #   transport failed: no successful reply, so run.home-unavailable (75). A
-  #   successful copy reply whose readback then shows wrong or truncated bytes is a
-  #   confirmed wrong seed, so run.isolation-unverified (1), as in CODEXHOME-07.
+  #   successful copy reply whose readback is a valid archive showing wrong or
+  #   shortened bytes is a confirmed wrong seed, so run.isolation-unverified (1),
+  #   as in CODEXHOME-07.
   # - A lost copy reply is a prompt transport failure after accepted publication,
   #   not a delayed response: run.home-unavailable (75), as slice-34 classifies
   #   uncertain publication.
   # - Readback archive contract, decided here. After a successful publication reply
-  #   the product makes one readback of the generated config.toml. Its archive is an
-  #   observation only when it holds exactly one well-formed tar entry, a regular
-  #   config.toml, with its body fully read, then end-of-archive, all within 64 KiB
-  #   including extended headers. Any of these failures is not an observation and
-  #   gives run.home-unavailable (75): a readback the engine cannot supply, a stream
-  #   cut off mid-entry, a malformed header (bad checksum or an unparsable size
-  #   field), any second entry after config.toml, or more than 64 KiB.
-  #   One well-formed entry whose bytes, owner, mode or kind differ from codex-v1 is a
-  #   confirmed wrong seed: run.isolation-unverified (1), as in CODEXHOME-07. A wrong
-  #   final CODEX_HOME seen by the existing worker inspection is classified the same.
+  #   the product makes one readback of the generated config.toml. It judges archive
+  #   validity first and seed validity only on a valid archive; no entry is judged
+  #   by both, so each readback has exactly one classification.
+  #   Archive validity. The readback is an observation only when, within 64 KiB
+  #   including extended headers, it holds exactly one well-formed tar entry for
+  #   the requested path, with that entry's body (if any) fully read, then
+  #   end-of-archive. The entry's name must be exactly config.toml. A directory
+  #   entry may instead carry the one trailing slash tar gives directories, i.e.
+  #   config.toml/. Nothing else counts as an observation; each of these gives
+  #   run.home-unavailable (75): a readback the engine cannot supply, a stream cut
+  #   off mid-entry, a malformed header (bad checksum or an unparsable size field),
+  #   an entry with any other name, any second entry (including a directory's
+  #   child), or more than 64 KiB.
+  #   Seed validity. The one entry of a valid archive must be a regular file with
+  #   exactly the codex-v1 bytes, the approved UID:GID and mode 0600. Any other
+  #   kind (a directory, symlink or other non-regular entry named as above), other
+  #   bytes (including a complete but shorter body), owner or mode is a confirmed
+  #   wrong seed: run.isolation-unverified (1), as in CODEXHOME-07. A wrong final
+  #   CODEX_HOME seen by the existing worker inspection is classified the same.
   # - Budget exhaustion retains lifecycle.feature's rules. The existing runner gives
   #   each call the lesser of its 10 s call deadline and the startup time remaining
   #   (session/domain/startup.go startupOperation). Hence:
@@ -255,10 +271,22 @@ Feature: Codex starts from approved defaults in its private persistent home
   #   It pushes to a separate itos-fixture-<run>-<attempt>-codex repository on the
   #   same registry and verifies the manifest and config digests as the shared image
   #   does. It removes its tag and digest, cold-pulls the digest reference and
-  #   validates it. Only after this whole protocol passes, and before the existing
-  #   output append, it writes codex.reference and codex.iid as regular 0600 files
-  #   in its owned state directory
-  #   $RUNNER_TEMP/T-20-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-engine-fixture.
+  #   validates it.
+  #   Ownership records. Each Codex image identity is recorded before the step that
+  #   could leave it behind, as the shared fixture records repository, tag,
+  #   build.iid and reference. All are regular 0600 files in the owned state
+  #   directory $RUNNER_TEMP/T-20-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-engine-fixture.
+  #   Before the build it writes codex.repository (the Codex repository) and then
+  #   codex.tag (its :fixture tag). The build writes the full built ID to
+  #   codex.build.iid through --iidfile, so the ID is recorded as soon as the build
+  #   completes and before the push. After manifest verification, and before the
+  #   tag and digest are removed and the digest reference is cold-pulled, it writes
+  #   that digest reference to codex.digest. These four are cleanup records only,
+  #   never a handoff.
+  #   Handoff. Only after the whole protocol passes, including the cold-pull
+  #   validation, and before the existing output append, it writes codex.reference
+  #   and codex.iid in the same directory. A failure at any earlier point leaves no
+  #   handoff record.
   #   Every shard prepares it, since prepare cannot see the matrix. A Codex failure
   #   fails prepare like any fixture failure, never a skipped or fallback row.
   # - Discovery and independent verification by CODEXHOME-09's Given: derive that
@@ -276,12 +304,45 @@ Feature: Codex starts from approved defaults in its private persistent home
   #   A missing or mismatched record fails setup loudly; it is never a skip.
   # - Cleanup: the Given removes its verification container and confirms absence
   #   before any product run. engine-fixture's failure cleanup and its always()
-  #   cleanup also remove the Codex tag and digest reference. They match them by
-  #   recorded exact identity, as remove_image_ref does, and never touch the pinned
-  #   busybox, the registry or the shared fixture image. The cleanup verdict names
-  #   them. The extracted executable stays in the runner-temp state directory, which
-  #   cleanup retains as today. Product resources and the disposable Codex home
-  #   volumes are reclaimed as in harness-home.feature, after assertions.
+  #   cleanup also remove the Codex tag and digest reference named by codex.tag and
+  #   codex.digest, whichever records exist. They remove each reference only after
+  #   an inspection whose Id equals codex.build.iid and differs from the pinned
+  #   busybox and registry IDs, as remove_image_ref does. A reference that
+  #   inspection shows is already absent needs no removal. A present reference
+  #   with another Id fails cleanup without removing it. A missing record means
+  #   that identity was never acquired. The Codex removal never removes the pinned
+  #   busybox or registry images, another reference in the Codex repository, or
+  #   the shared fixture's references, which keep their existing cleanup rule.
+  #   The cleanup verdict names the Codex references. The extracted executable stays in
+  #   the runner-temp state directory, which cleanup retains as today. Product
+  #   resources and the disposable Codex home volumes are reclaimed as in
+  #   harness-home.feature, after assertions.
+  # - Cleanup failure control, a check rather than a scenario. In the red test
+  #   commit the implementer adds an ordinary local Go test beside
+  #   engine_fixture_test.go. It runs `tools/bin/engine-fixture cleanup` with CI
+  #   identity variables and private RUNNER_TEMP and GITHUB_WORKSPACE values. Its
+  #   PATH is hermetic: a recording fake docker plus links to the script's other
+  #   required tools only, so no real engine socket is reachable. It covers two
+  #   seeded failure states:
+  #   (a) failed after tagging: codex.repository, codex.tag and codex.build.iid
+  #   exist, the Codex push failed and no codex.digest exists;
+  #   (b) failed after the cold pull: all four records exist and the pulled
+  #   image's validation failed.
+  #   Each state also holds the shared fixture's records, a decoy tag in the Codex
+  #   repository with the same Id, and the pinned busybox and registry images.
+  #   Cleanup must remove exactly the recorded Codex references the fake engine
+  #   holds, each after an identity-matching inspection. It must leave the decoy,
+  #   busybox and registry. It must write no handoff record or step output, and
+  #   its verdict must name the Codex references. A third state, whose codex.tag
+  #   resolves to another Id, must fail cleanup with no Codex removal.
+  #   A static order guard, like the existing preparation-order check, requires
+  #   in prepare: codex.repository and codex.tag before the Codex build, --iidfile
+  #   codex.build.iid on that build, codex.digest before the Codex tag removal and
+  #   cold pull, and the handoff after the Codex cold-pull validation and before
+  #   the output append. Each negative control edits the script and must fail one
+  #   of these checks: matching removal by repository name, skipping a Codex
+  #   record in cleanup, writing codex.digest after the cold pull, or writing the
+  #   handoff before validation.
   # - Budgets: the existing 179 s prepare bound, its 4-minute step, the 180 s
   #   measured engine step and the 4-minute Go test timeout stay unchanged. The Codex
   #   addition gets at most 60 s inside prepare: 30 s download, then 30 s
@@ -350,13 +411,22 @@ Feature: Codex starts from approved defaults in its private persistent home
       | 2       |
       | 3       |
 
+  # The reservation pair is two separate checkouts. Each is otherwise valid for
+  # ordinary doctor and approve, and each manifest sets CODEX_HOME to the same
+  # literal value: one requests a Codex home, the other a plain home. The Codex
+  # one fails today with policy.unknown_key at /home/harness, not with
+  # manifest.reserved; the plain control passes today and fails if the
+  # reservation is global. Approve's refusal must come before its review prompt.
   @wip @slice-35 @ID-CODEXHOME-02 @local-engine-fixture @linux
   Scenario: Approval binds and discloses the generated Codex defaults
-    Given Codex home review fixtures with independently recorded plain and Codex approvals and isolated consent terminals
+    Given Codex home review fixtures with independently recorded plain and Codex approvals isolated consent terminals and Codex and plain-home reservation checkouts whose manifests set CODEX_HOME
     When doctor and consenting approve review Codex seeding and run attempts both changed and matching selections
     Then review and the new approval contain the exact codex-v1 home settings and regeneration disclosure with a changed fingerprint
     And adding and removing the harness without consent report changed approval at /home/harness before mutation while matching controls start
     And review creates no home or seed and requesting a plain home after seeding leaves retained files and generation intact
+    When ordinary doctor and consenting approve read both reservation checkouts
+    Then the Codex reservation checkout reports manifest.reserved at /containerEnv/CODEX_HOME with exit 2 from doctor and from approve before any prompt and no approval is written
+    And the plain-home reservation checkout's doctor reports no manifest problem and its approval records effective containerEnv retaining CODEX_HOME with its literal value
 
   # Local launch and state lifetime. The policy, not argv[0], selects seeding.
   # The codex_Home sibling is an independent version 1 Codex checkout; its refusal
@@ -429,11 +499,14 @@ Feature: Codex starts from approved defaults in its private persistent home
   # fixture finishes writing it. A readback row passes only after one successful
   # publication reply and then one readback that delivered its fault. A refusal
   # before any readback cannot pass a readback row.
-  # Readback rows follow the header's readback archive contract. The malformed
-  # header row is a config.toml header with a corrupted checksum. The extra entry
-  # row is a complete, correct config.toml entry followed by a second regular entry
-  # named other, then end-of-archive. So a reader that stops after the first entry
-  # still fails it. The truncated row ends the stream mid-body.
+  # Readback rows are archive-validity failures under the header's readback
+  # archive contract; none reaches seed validity. The malformed header row is a
+  # config.toml header with a corrupted checksum. The extra entry row is a
+  # complete, correct config.toml entry followed by a second regular entry named
+  # other, then end-of-archive. So a reader that stops after the first entry
+  # still fails it. The wrong-name row is one complete entry with the codex-v1
+  # bytes, approved owner and mode 0600, but named other.toml. The truncated row
+  # ends the stream mid-body.
   # Deadlines, under the controlled time of lifecycle_budget_steps_test.go: the
   # non-timeout faults return before either deadline. Each timeout row places
   # successful progress before seeding so that its publication call starts at the
@@ -466,20 +539,25 @@ Feature: Codex starts from approved defaults in its private persistent home
       | readback archive is truncated mid-entry                     | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
       | readback archive has a malformed header                     | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
       | readback archive has an extra entry after config.toml       | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
+      | readback archive entry is not named config.toml             | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
       | readback exceeds the 64 KiB limit                           | run.home-unavailable | 75   | one successful publication then one readback that delivered the fault | before either deadline                                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
       | seed call starts at 60 seconds and stays pending            | run.call-timeout     | 75   | one pending publication call and no readback                          | at 70 seconds by its own call deadline                                         | confirms owned session absence                                         | seeds verifies and starts                                          |
       | seed call starts at 110 seconds and stays pending           | run.startup-timeout  | 75   | one pending publication call and no readback                          | at the original 120 second startup boundary where both deadlines coincide      | confirms owned session absence                                         | seeds verifies and starts                                          |
       | seed call starts at 115 seconds and stays pending           | run.startup-timeout  | 75   | one pending publication call and no readback                          | at the original 120 second startup boundary after only its remaining 5 seconds | confirms owned session absence                                         | seeds verifies and starts                                          |
       | seed copy fails before writing and worker removal leaves it | run.home-unavailable | 75   | one failed publication call and no readback                           | before either deadline                                                         | reports run.cleanup-temporary with its session ID and exact stop retry | reports run.checkout-overlap with exit 1 before any create or copy |
 
-  # The truncated-readback row has a successful copy reply; the injected readback
-  # holds one well-formed but shortened config.toml entry, so under the header's
-  # readback archive contract it is a confirmed wrong seed, unlike CODEXHOME-06's
-  # stream cut off mid-entry. Each row's fixture traces one successful publication
-  # reply and one readback, then delivers its defect. Config defects arrive in that
-  # readback's single entry; the CODEX_HOME defect arrives in the post-attach worker
-  # inspection, after a correct readback. A refusal before the defect was delivered
-  # cannot pass.
+  # Every config row's readback passes archive validity under the header's
+  # readback archive contract: a complete, well-formed archive holding one entry
+  # for the requested path and then end-of-archive, within 64 KiB. Only seed
+  # validity fails. The truncated-readback row's single entry is complete and
+  # well-formed but holds a shortened body, unlike CODEXHOME-06's stream cut off
+  # mid-entry. The directory row's single entry is a directory header named
+  # config.toml/ with size 0 and no child entry. The symlink row's single entry is
+  # a symlink header named config.toml whose target is ../outside. Each row's
+  # fixture traces one successful publication reply and one readback, then
+  # delivers its defect. Config defects arrive in that readback's single entry;
+  # the CODEX_HOME defect arrives in the post-attach worker inspection, after a
+  # correct readback. A refusal before the defect was delivered cannot pass.
   @wip @slice-35 @ID-CODEXHOME-07 @local-engine-fixture @linux
   Scenario Outline: Final inspection verifies the actual Codex seed boundary
     Given a Codex seed fixture reporting successful copy but final defect "<defect>" and an independent correctly inspected Codex control
@@ -489,13 +567,14 @@ Feature: Codex starts from approved defaults in its private persistent home
     And the unstarted owned worker is cleaned and the home is retained without diagnostic copies of file contents or raw engine errors
 
     Examples:
-      | defect                                  |
-      | CODEX_HOME still names the image home   |
-      | config has the old enabled settings     |
-      | readback shows a truncated config       |
-      | generated config has wrong owner        |
-      | generated config has wrong mode         |
-      | readback entry is an empty directory    |
+      | defect                                    |
+      | CODEX_HOME still names the image home     |
+      | config has the old enabled settings       |
+      | readback shows a truncated config         |
+      | generated config has wrong owner          |
+      | generated config has wrong mode           |
+      | readback entry is a config.toml directory |
+      | readback entry is a config.toml symlink   |
 
   # Native evidence for this slice is in harness-home.feature, beside HOME-13/14,
   # because that file is in the offline engine shard: CODEXHOME-08 (first instructions
