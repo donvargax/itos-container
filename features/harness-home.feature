@@ -624,6 +624,88 @@ Feature: An approved persistent home for one checkout's harness
     And neither worker can read the other home or the synthetic host-home sentinel and a same-home read control succeeds
     And cleanup preserves both checkout edits and both homes while removing both sessions
 
+  # Slice-35 native Codex seeding. These three rows are slice-35's, not slice-34's.
+  # Their rules, settings and handoff are in codex-home.feature's header. They sit
+  # here because this file is already in the offline engine shard (see that header's
+  # Placement). Every phrase is NEW. TestHomeNativeStepDefinitions selects only HOME
+  # IDs and its step count stays unchanged. Native assertions precede fixture
+  # cleanup, which only reclaims independently tracked disposable resources.
+  #
+  # Native evidence proves files visible to the actual non-root first instruction,
+  # not merely bytes supplied to a recording Engine API.
+  @wip @slice-35 @ID-CODEXHOME-08 @engine @linux
+  Scenario: Native first instructions see private Codex defaults across runs and checkouts
+    Given two CI Codex home checkouts with independently approved images non-root IDs and isolated host image and checkout sentinels
+    When literal worker probes inspect the initial Codex files write private markers and rerun each checkout
+    Then every probe reads the complete codex-v1 settings with the approved ownership modes and CODEX_HOME before doing other work
+    And each later probe sees only its own persistent marker with no host image or checkout configuration imported
+    And actual argv and hardening are unchanged and all session resources are absent before fixture cleanup while both homes remain
+
+  # The REAL pinned Codex 0.167.0 runs under an approved allowlist Codex home. The
+  # fixture's literal argv is its own launcher in the fixture image. The launcher
+  # waits at the harness's route-readiness barrier, the existing egress "attach"
+  # barrier of egress_native_run_test.go. The harness then attaches the approved
+  # proxy to the fake Responses endpoint and the recorders. The launcher proves each
+  # route with one readiness request through the proxy, and only after release
+  # does it exec codex with literal arguments. A missed barrier, failed readiness
+  # or early Codex start fails the row. Test-only DNS/CA controls serve the fake.
+  # There is no model, account, provider login, API key or internet request. The
+  # custom provider in literal argv uses requires_openai_auth=false, a fixed local
+  # model description and the fake URL; it overrides none of the seeded settings.
+  # Effective settings come from the pinned app-server's config/read and
+  # experimentalFeature/list.
+  # Resume: the first `codex exec --json` turn carries prompt nonce N1, and its
+  # tool call writes a private home marker. The harness captures the thread ID from
+  # that run's thread.started event. A fresh product run then executes
+  # `codex exec resume <captured ID>` with nonce N2, and its tool call rereads the
+  # marker. The resumed run must report the same thread ID, and its Responses
+  # request must carry N1 and the first tool output as prior context. A second
+  # fresh thread rereading the marker cannot pass. The fake emits a deterministic
+  # tool call and completion and never invokes a model.
+  # Traffic claims are limited to what headless exec observably does through normal
+  # shutdown. The expected set, fixed in the fixture before the red run, is each
+  # turn's POST to the fake's Responses path and nothing else. If pinned Codex needs
+  # another fake path, stop and report rather than widen the set. This row does not
+  # claim to exercise the update checker, which in the pinned source is on the TUI
+  # path and also depends on build type and cached version state:
+  # https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/tui/src/updates.rs#L24
+  # Nor does it claim analytics or plugin request paths that headless startup may
+  # never reach. Those settings are proven by Codex's own effective-settings report
+  # against the unseeded control, never by absent traffic. Recorder canaries, sent
+  # separately, prove only that the recorders are live. Missing reports, refused
+  # requests, timeouts and empty transcripts are never success. The whole fixture
+  # interaction is bounded, including the normal shutdown flush.
+  @wip @slice-35 @ID-CODEXHOME-09 @engine @linux
+  Scenario: Pinned Codex starts and resumes against a fake service without unwanted startup traffic
+    Given a CI Codex 0.167.0 image an approved Codex home a controlled Responses endpoint and incidental-service recorders behind a fixture route-readiness barrier
+    When product runs query Codex effective settings then run a fresh fake turn and resume its captured thread ID each starting Codex only after the barrier confirms every route
+    And an independent unseeded plain-home control run reports its Codex effective settings
+    Then Codex reports all codex-v1 effective settings and disabled plugin features while the unseeded control reports differing defaults
+    And the resumed run reports the captured thread ID and its fake request carries the first turn's nonce and tool output
+    And both turns complete without login onboarding or tool approval input and their tool calls write then reread the same private home marker
+    And through normal shutdown the recorders observe only the expected fake Responses requests and no other destination
+    And separately sent recorder canaries are observed and no real credential account or service was used and product session cleanup is confirmed
+
+  # A real archive extractor must refuse symlinks and replace a regular file
+  # without writing through another hard link. Pure metadata fakes cannot prove it.
+  # In the hard-link row the product run's OWN worker probe reads config.toml. An
+  # independent safe control cannot establish what the replacement worker saw.
+  # The sentinel's link count may fall to one; its bytes, owner, mode and mtime
+  # may not change.
+  @wip @slice-35 @ID-CODEXHOME-10 @engine @linux
+  Scenario Outline: Native seed publication cannot overwrite an unrelated target
+    Given a disposable CI retained Codex home with "<entry>" an unrelated sentinel auth path sentinels and an independent safe Codex control
+    When the product attempts native seeding with a literal config probe and the control runs before fixture cleanup
+    Then the native result is "<result>" and the safe control starts with verified codex-v1 settings
+    And the unrelated sentinel and auth paths retain their original bytes metadata and targets and the home is retained
+    And no refused worker starts and all owned session resources are confirmed absent before fixture cleanup
+
+    Examples:
+      | entry                                   | result                                                                                                                      |
+      | config symlink to a checkout sentinel   | run.home-refused with exit 1 before write or start                                                                          |
+      | Codex directory symlink to the checkout | run.home-refused with exit 1 before write or start                                                                          |
+      | config hard link to a home sentinel     | exit 0 and its own probe reads complete codex-v1 bytes with approved owner mode one link and an inode distinct from the sentinel |
+
   # Controller death cannot supply retry output: use the independently captured
   # protected registration, then explicitly invoke fresh status and stop.
   @slice-34 @ID-HOME-15 @engine

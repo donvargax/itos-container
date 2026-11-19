@@ -6,28 +6,47 @@ Feature: Codex starts from approved defaults in its private persistent home
 
   # Slice-35 specification only; every step phrase below is NEW. No implementation,
   # step definitions or observed red/green evidence accompanies this draft.
-  # Authorities: charter milestone two step 3; architecture.md Slices; slice-34's
-  # harness-home.feature and decision 0028; slice-32's credentials-codex.feature
-  # and decision 0030; offline.feature, run.feature and egress.feature.
-  # Read against main d95856b2e594a2fc80625ff3b976a8ebebaa3378,
-  # slice-34 68be535a07039b29ae294f7d72e4be00b6881e6f,
-  # slice-32 20cb15bfaacf8f1d8b7f210f8eea8087b4f92b89 and
-  # slice-27 9ee8751184313d9961dae4a76baa4d4aa40b5068.
-  # These are design inputs, not claims that their unfinished behavior has landed.
-  # Consume slice-34 first. CODEXHOME-09 additionally needs slice-27's working
-  # approved proxy route. No real-account or credential-delivery dependency is
-  # introduced: all these scenarios use no credential grants or real accounts.
+  # Authorities: charter milestone two steps 2 and 3; architecture.md Slices;
+  # decision 0030 and harness-home.feature for the landed persistent home (slice-34);
+  # decision 0028 and egress.feature for egress run wiring (slice-27); decision 0025
+  # question 1, q-72 and the charter's step 2 for the Codex credential directory;
+  # manifest.feature, offline.feature, lifecycle.feature, recovery.feature and
+  # checkout-overlap.feature for the rules reused below.
+  # Read against 8413500, this branch's merge of main 6798ca3. slice-34 and
+  # slice-27 are done there. These scenarios use no credential grant or account.
+  #
+  # Placement. The local scenarios CODEXHOME-01..07 are here. The native ones,
+  # CODEXHOME-08..10, are in harness-home.feature beside HOME-13/14. That file is
+  # already in the offline engine shard. TestEngineShards (engine_shards_test.go)
+  # puts every file with an @engine case, live or @wip, in exactly one pinned shard
+  # set, and .github is outside this item's paths. So this file keeps no @engine case
+  # and needs no shard assignment. Do not weaken that inventory check. If measured
+  # offline-shard time later needs a move, the host makes it as a ci commit with the
+  # inventory pins, as q-76 did for slice-34. A feature file is never split.
+  #
+  # Commits. The implementer may commit freely in its workspace; the host makes the
+  # landing commits and handles itos, submission, publication and review.
   #
   # Selection and approval, decided here:
   # - Extend the closed home object with optional harness: codex, a literal
   #   case-sensitive string, only alongside storage: volume. Apply to supported
-  #   versions 1/2/3; a later version 4 uses the same shape when slice-32 lands.
+  #   versions 1/2/3; any later policy version adopts this shape in its own spec.
   #   No argv sniffing, host Codex discovery, auto-install, manifest lifecycle
   #   command, top-level harness key or caller-selected seed path/content.
   # - File-only doctor retains harness: codex in its normalized home object.
   #   Null/non-string is policy.type at /home/harness; another string (including
   #   empty) is policy.home_harness there, exit 2. Missing storage retains
   #   policy.required at /home/storage. Duplicate/unknown fields keep their rules.
+  # - Manifest reservation is scoped to the Codex selection. Every command that
+  #   validates the manifest with the policy (doctor --manifest-only, doctor,
+  #   approve, run) applies it. With harness: codex, a containerEnv name equal to
+  #   CODEX_HOME under the existing ASCII case folding (so CODEX_HOME and codex_Home)
+  #   reports manifest.reserved at /containerEnv/<name> as written, exit 2, through
+  #   the existing manifest problem envelope. With an omitted or plain home the same
+  #   manifest stays valid: the variable is retained in effective containerEnv and
+  #   reaches the worker as before. No other CODEX_ name becomes reserved, and
+  #   manifest.feature's context-free reserved list and its rows are unchanged.
+  #   Run's existing version-3 refusal before manifest access keeps its precedence.
   # - Add to slice-34's effective home object exactly
   #   harness:{kind:"codex",seed:"codex-v1",target:"/home/itos/.codex"}.
   #   Retain the selected home profile name and other fields. This nested revision
@@ -62,7 +81,7 @@ Feature: Codex starts from approved defaults in its private persistent home
   #   metrics_exporter = "none"
   #   log_user_prompt = false
   #
-  # Codex source baseline is rust-v0.167.0, also selected by decision 0030:
+  # Codex source baseline is rust-v0.167.0, the release decision 0025 examined:
   # https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/core/config.schema.json
   # Official configuration reference, consulted for meanings, not a version pin:
   # https://learn.chatgpt.com/docs/config-file/config-reference
@@ -79,25 +98,30 @@ Feature: Codex starts from approved defaults in its private persistent home
   # The approved image supplies Codex. Missing Codex keeps ordinary workload exit
   # semantics. Production does not execute it to discover versions or settings.
   #
+  # Credentials. This slice delivers none and prescribes no credential layout. The
+  # q-72 dedicated directory and its worker-side arrangement belong to slice-32.
+  # Here auth.json and auth.lock inside .codex, whatever their kind (absent, regular
+  # file or symlink), are never read, created, resolved, repaired, truncated or
+  # removed. Their bytes, metadata and link targets are preserved.
+  #
   # Initialization and repeat-run decisions:
   # - With the frozen Codex selection, override any image CODEX_HOME with the
   #   literal /home/itos/.codex. Slice-34's HOME/XDG/TMPDIR mappings are unchanged.
-  #   Manifest CODEX_ variables stay reserved. Seed even for a non-Codex argv:
-  #   selection is explicit, never an implicit launcher or shell/argv rewrite.
+  #   A manifest cannot supply CODEX_HOME under this selection (see above). Seed even
+  #   for a non-Codex argv: selection is explicit, never an implicit launcher or
+  #   shell/argv rewrite.
   # - After durable worker/home ownership and before ANY worker start, create a
   #   missing .codex directory as approved UID:GID, mode 0700, and publish only
-  #   config.toml as that owner, mode 0600. Regenerate this one file on every run,
-  #   including a run reusing a home created before this feature. Previous custom
-  #   content in this reserved generated file is replaced, not merged or imported.
-  #   Users who choose this profile use explicit Codex argv options for overrides.
+  #   config.toml as that owner, mode 0600. When .codex already exists the archive
+  #   holds config.toml alone, so no directory header is applied to existing state.
+  #   Regenerate this one file on every run, including a run reusing a home created
+  #   before this feature. Previous custom content in this reserved generated file
+  #   is replaced, not merged or imported. Users who choose this profile use explicit
+  #   Codex argv options for overrides.
   # - Preserve unrelated files' bytes and metadata, including sessions, history,
   #   caches, preferences in other files and other harnesses' state. Here metadata
   #   means UID/GID, mode, mtime and symlink target. Normal parent timestamps and
   #   link-count/ctime changes when removing the old config name are permitted.
-  #   Never read, create, resolve, repair, truncate or remove auth.json/auth.lock.
-  #   Those paths may be
-  #   links prepared by the separate slice-32 integration to its approved directory
-  #   and lock targets; CODEX_HOME is never that shared credential directory.
   #   Disabling/re-enabling seeding, image changes and new approval generations do
   #   not reset state or select another volume. A new checkout gets its own home.
   # - Use slice-34's bounded Engine archive seam on the unstarted owned worker.
@@ -117,25 +141,40 @@ Feature: Codex starts from approved defaults in its private persistent home
   #   extended headers, then close, as slice-34 does; never inventory its children.
   #   Bound the generated-file readback archive to 64 KiB including extended
   #   headers, reject malformed/truncated/extra entries, never extract to the host.
-  #   Readback reads
-  #   only the generated file, not old contents or sibling state; no raw contents,
-  #   engine errors or workload settings enter diagnostics/recovery records.
-  #   Recheck boundary after attachment as existing launch does. Existing home
-  #   claims exclude another worker/retirement while seeding; do not weaken them.
-  # - Unsafe seed paths use run.home-refused (1); unavailable copy/inspection or
-  #   an unconfirmed write uses run.home-unavailable (75); a confirmed wrong
-  #   final environment/seed uses run.isolation-unverified (1). Budget exhaustion
-  #   retains run.call-timeout or run.startup-timeout (75), with startup taking
-  #   precedence when both deadlines expire, as lifecycle.feature requires.
-  #   It must not be reclassified as run.home-unavailable. Show the fixed
-  #   seed path and safe recovery guidance, never an observed target or contents.
-  #   Preserve existing ownership-refusal precedence and known workload exits.
+  #   Readback reads only the generated file, not old contents or sibling state; no
+  #   raw contents, engine errors or workload settings enter diagnostics/recovery
+  #   records. Recheck boundary after attachment as existing launch does. Existing
+  #   home claims exclude another worker/retirement while seeding; do not weaken them.
+  #
+  # Failure classification:
+  # - Unsafe seed paths use run.home-refused (1). Unavailable copy/inspection or an
+  #   unconfirmed write uses run.home-unavailable (75). A confirmed wrong final
+  #   environment/seed uses run.isolation-unverified (1).
+  # - A partial write means the copy call stored part of the archive and then its
+  #   transport failed: no successful reply, so run.home-unavailable (75). A
+  #   successful copy reply whose readback then shows wrong or truncated bytes is a
+  #   confirmed wrong seed, so run.isolation-unverified (1), as in CODEXHOME-07.
+  # - A lost copy reply is a prompt transport failure after accepted publication,
+  #   not a delayed response: run.home-unavailable (75), as slice-34 classifies
+  #   uncertain publication.
+  # - Budget exhaustion retains lifecycle.feature's rules: a seed call alone passing
+  #   its 10 s call deadline is run.call-timeout (75); when the call and the 120 s
+  #   startup deadline expire together, run.startup-timeout (75) takes precedence.
+  #   Neither is reclassified as run.home-unavailable. Show the fixed seed path and
+  #   safe recovery guidance, never an observed target or contents. Preserve existing
+  #   ownership-refusal precedence and known workload exits.
   # - A failed/partial/lost copy reply never permits start or an in-invocation
-  #   retry. Teardown retains the home, removes owned session resources, or keeps
-  #   their exact stop retry on uncertainty. A later run may regenerate after
-  #   prior worker absence is confirmed; stop/status never seed or start a worker.
-  #   No success marker in hostile home state authorizes skipping verification.
-  #   Calls share existing 10 s call/120 s startup totals; cancellation/expiry
+  #   retry. Each invocation makes at most one config publication call and at most
+  #   one readback. Teardown retains the home and removes owned session resources.
+  #   When worker absence cannot be confirmed, run reports existing
+  #   run.cleanup-temporary separately, with its registered session ID and exact
+  #   stop retry. The checkout reservation is held through that incomplete cleanup,
+  #   as checkout-overlap.feature requires. Until then another run of that checkout
+  #   reports run.checkout-overlap (1) before any create, archive copy or start.
+  #   Stop/status never seed or start a worker. Stop removes only the exact retained
+  #   worker and confirms its absence; only a later run then regenerates. No success
+  #   marker in hostile home state authorizes skipping verification.
+  # - Calls share existing 10 s call/120 s startup totals; cancellation/expiry
   #   fences later start. Cleanup keeps its independent 30 s budget. No new timer
   #   resets, unbounded readback or workload lifetime limit.
   #
@@ -145,21 +184,29 @@ Feature: Codex starts from approved defaults in its private persistent home
   # Existing internal/slices/status and internal/slices/stop consume shared session
   # recovery for seed failures, retaining read-only status and seed-free stop.
   # No new command slice is created; command handlers stay thin.
-  # internal/engine/policy owns the closed harness selection; internal/engine/approval
-  # owns canonical/frozen settings, differences and disclosure. Reuse read-only
-  # identity/image observations in internal/engine/readiness, without seeding there.
+  # internal/engine/policy owns the closed harness selection; internal/engine/manifest
+  # takes the selection as a value for the scoped CODEX_HOME reservation, keeping
+  # its context-free rule unchanged; internal/engine/approval owns canonical/frozen
+  # settings, differences and disclosure. Reuse read-only identity/image observations
+  # in internal/engine/readiness, without seeding there.
   # Refine slice-34's internal/engine/session domain/port contracts and Docker
   # adapter for seed sequencing, bounded archive publication and verification;
   # reuse its disk ownership/claims/recovery mechanism and internal/engine/budget.
   # Only cmd binds adapters. Domain/port fakes are I/O-free, with one shared seed
   # contract against fake and Docker adapter. No slice imports another. Update
   # arc42's existing home building block/runtime description and CLI/CONFIG in the
-  # implementation PR; no departure from decision 0028's storage/claims mechanism.
+  # implementation PR; no departure from decision 0030's storage/claims mechanism.
   # Reuse Moby client v0.6.2/API v1.56.1 and Go 1.27.4 archive/tar: a fixed literal
   # TOML document needs no custom parser or new production library. Codex itself
-  # parses the effective config in native tests. The CI-only fixture pins Codex
-  # 0.167.0, verifies its release checksum and image digest before test execution,
-  # and preserves its Apache-2.0 license/notices. No floating latest install.
+  # parses the effective config in native tests.
+  #
+  # Native fixture preparation. The shared `tools/bin/engine-fixture prepare` step
+  # serves every shard and is within this item's paths; its workflow budget is not.
+  # It adds a CI-only Codex 0.167.0 image built from the pinned Linux amd64 release
+  # asset. A SHA-256 recorded in the tree is verified before use, then the image
+  # digest. Codex's Apache-2.0 license/notices are preserved; no floating latest
+  # install. If this cannot be prepared within the existing prepare budget, stop and
+  # report rather than editing .github or another shard.
   #
   # Handoff and evidence rules:
   # - Add all phrases below in a red test commit, @wip retained. Givens ONLY create
@@ -170,49 +217,39 @@ Feature: Codex starts from approved defaults in its private persistent home
   # - Both local backends means the existing command test assembly over I/O-free
   #   ports and real disk/Moby with a recording Unix HTTP Engine fixture. See
   #   offline_launch_steps_test.go, session_harness_test.go and slice-34's
-  #   harness_home_policy_steps_test.go/harness_home_native_*_test.go. New feature
-  #   assertions inspect public CLI results and independent artifact/API traces,
-  #   never product functions or a production-generated expected config.
+  #   harness_home_policy_steps_test.go/harness_home_local_steps_test.go. Timeout
+  #   rows use the controlled time of lifecycle_budget_steps_test.go. Assertions
+  #   inspect public CLI results and independent artifact/API traces, never product
+  #   functions or a production-generated expected config.
   # - Refusal/fault cases need an independent successful CODEX home control, not
   #   merely a plain-home run. Otherwise a blanket refusal can falsely pass.
   #   Seed synthetic retained state directly; first-run success is not a Given.
   # - Local assertions prove orchestration only. Engine rows run exclusively in
-  #   CI; agents have no socket. Native assertions precede fixture cleanup, which
-  #   only reclaims independently tracked disposable resources. Seed-path safety
-  #   is observed at the real boundary, not inferred from an Engine request.
-  # - CODEXHOME-09 runs the REAL pinned harness with a fake Responses endpoint
-  #   allowed through slice-27's proxy and test-only DNS/CA controls. No model,
-  #   account, provider login, API key or internet request. Custom provider config
-  #   in the fixture's literal argv uses requires_openai_auth=false, a fixed local
-  #   model description and the fake URL; it must not override the seeded settings.
-  #   The fake emits a deterministic tool call and completion, never invokes a
-  #   model. All incidental destinations terminate at controlled recorders or
-  #   are observed refusals; direct network escape is not a testing shortcut.
-  # - Inspect Codex's own effective settings (config/read and
-  #   experimentalFeature/list in the pinned app-server protocol) as well as exec
-  #   behavior. An independent
-  #   unseeded home control must show differing effective defaults. A completed
-  #   fake response and a tool-created home marker establish actual startup and
-  #   command execution without the inner sandbox/approval wait. No-traffic alone
-  #   is insufficient: exec need not exercise the TUI's update-check code path.
-  #   Bound the entire fixture interaction, include the normal shutdown flush,
-  #   and send recorder canaries separately to prove observation is live. Missing
-  #   reports, refused requests, timeouts and empty transcripts are never success.
-  # - Before activation, assign this file to exactly one engine shard, add the
-  #   smoke selection and retain all no-harness HOME cases unchanged. Neighbours:
-  #   HOME-01..15/24, POLICY/MANIFEST reserved-variable cases, APPROVAL/RUN frozen
-  #   input and literal argv cases, OFFLINE/ANCHOR/LIFECYCLE/RECOVERY, EGRESS, and
-  #   CODEXAUTH once integrated. Preserve slice-32's auth/lock path responsibility;
-  #   this file supplies its private CODEX_HOME destination, not auth delivery.
+  #   CI; agents have no socket. Seed-path safety is observed at the real boundary
+  #   in harness-home.feature's native rows, not inferred from an Engine request.
+  # - Auth path sentinels are a regular auth.json and an auth.lock symlink to an
+  #   outside sentinel, both inside .codex; neither layout is a credential contract.
+  # - The smoke manifest needs a selection only when a scenario here goes live.
+  #   Neighbours: HOME-01..15/24, POLICY/MANIFEST reserved-variable cases
+  #   (MANIFEST-15 unchanged), APPROVAL/RUN frozen input and literal argv cases,
+  #   OFFLINE/ANCHOR/LIFECYCLE/RECOVERY/OVERLAP and EGRESS.
 
-  # Policy and consent. First Then is red on the new harness selection, not on
-  # a malformed-input refusal that the old parser already supplies.
+  # Policy, manifest and consent. First Then is red on the new harness selection,
+  # not on a malformed-input refusal that the old parser already supplies.
+  # Malformed requests cover null, list, boolean, empty string, "Codex", "other",
+  # absent storage, duplicate harness and a source/config/target key in home.
+  # The two manifests each set one variable, CODEX_HOME or codex_Home, to a literal
+  # value. The omitted- and plain-home rows are controls: they pass today and fail
+  # a global reservation.
   @wip @slice-35 @ID-CODEXHOME-01
   Scenario Outline: Codex seeding is an explicit closed home selection
-    Given a Codex home policy fixture for version <version> with omitted plain Codex and malformed harness requests
+    Given a Codex home policy fixture for version <version> with omitted plain Codex and malformed harness requests and CODEX_HOME and codex_Home manifests
     When file-only doctor reads each Codex home policy request
     Then only the Codex selection adds harness codex to normalized home and omitted and plain home outputs are unchanged
     And every malformed selection has the specified rule subject and exit without engine state or harness access
+    When manifest-only doctor reads both CODEX_HOME manifests under the omitted plain and Codex home selections
+    Then under the Codex selection each manifest reports manifest.reserved at its own containerEnv name with exit 2 and no engine access
+    And under the omitted and plain home selections both manifests are valid with that variable and value in effective containerEnv
 
     Examples:
       | version |
@@ -220,8 +257,6 @@ Feature: Codex starts from approved defaults in its private persistent home
       | 2       |
       | 3       |
 
-  # Malformed requests cover null, list, boolean, empty string, "Codex", "other",
-  # absent storage, duplicate harness and a source/config/target key in home.
   @wip @slice-35 @ID-CODEXHOME-02 @local-engine-fixture @linux
   Scenario: Approval binds and discloses the generated Codex defaults
     Given Codex home review fixtures with independently recorded plain and Codex approvals and isolated consent terminals
@@ -231,13 +266,16 @@ Feature: Codex starts from approved defaults in its private persistent home
     And review creates no home or seed and requesting a plain home after seeding leaves retained files and generation intact
 
   # Local launch and state lifetime. The policy, not argv[0], selects seeding.
+  # The codex_Home sibling is an independent version 1 Codex checkout; its refusal
+  # must come before any engine mutation, beside the image-environment override.
   @wip @slice-35 @ID-CODEXHOME-03 @local-engine-fixture @linux
   Scenario: Frozen Codex defaults exist before the literal workload starts
-    Given a Codex launch fixture with an empty owned home conflicting image CODEX_HOME and literal non-Codex argv containing empty spaced and shell-looking arguments
+    Given a Codex launch fixture with an empty owned home conflicting image CODEX_HOME and literal non-Codex argv containing empty spaced and shell-looking arguments and a sibling Codex checkout whose manifest sets codex_Home
     When run selects Codex settings then requests change to a plain home before launch through both local backends
     Then the first start follows durable ownership and verified codex-v1 bytes and metadata with CODEX_HOME /home/itos/.codex
     And create and start preserve every literal argument and the approved home hardening without helpers hooks or image entrypoints
     And a fresh independently approved plain-home run keeps its old environment and does not seed while the selected snapshot is unchanged
+    And the sibling run reports manifest.reserved at /containerEnv/codex_Home with exit 2 before any engine mutation
 
   # Observe the first workload's edit before invoking another controller. The
   # replacement is the independent literal check_for_update_on_startup = true;
@@ -249,13 +287,13 @@ Feature: Codex starts from approved defaults in its private persistent home
   # still must publish it again, distinguishing unconditional from repair-only seeding.
   @wip @slice-35 @ID-CODEXHOME-04 @local-engine-fixture @linux
   Scenario Outline: Every selected run refreshes only the generated config
-    Given a retained Codex home fixture with "<config>" and independent session history cache other-harness and auth-link sentinels
+    Given a retained Codex home fixture with "<config>" and independent session history cache other-harness and auth path sentinels
     When the first selected run records its initial config then its workload "<edit>" through both local backends
     Then the first workload saw the complete codex-v1 config and independent inspection before another run confirms "<retained>"
     When two fresh Codex run controllers reuse that home without further config edits and a separate checkout runs through both local backends
     Then every selected run publishes and verifies complete codex-v1 bytes and approved metadata before start including the third run with already correct config
     And all three runs use the original home while every unrelated sentinel remains byte and metadata identical
-    And the separate checkout receives its own seeded home without the retained markers and no auth target is read or changed
+    And the separate checkout receives its own seeded home without the retained markers and no auth path or its target is read or changed
     And all session cleanups retain their homes without any home reset or volume removal
 
     Examples:
@@ -285,27 +323,43 @@ Feature: Codex starts from approved defaults in its private persistent home
       | config has another owner          |
       | config mode is 0666               |
 
-  # Non-timeout faults return before either deadline. A lost copy reply is a
-  # prompt transport failure after accepted publication, not a delayed response.
-  # Exhausting the original startup budget retains the lifecycle timeout diagnostic.
+  # Every fault is one-shot: it affects exactly one engine call and then the
+  # engine is healthy. A retry inside the failing invocation would therefore
+  # succeed and start, so the oracle counts calls: exactly one config publication
+  # call, at most one readback and no start in the first invocation, no archive
+  # copy by stop. The removal fault of the last row persists until the fixture
+  # clears it after the first run's result is captured.
+  # Non-timeout faults return before either deadline. The call-timeout row keeps at
+  # least 30 s of startup budget when its call passes 10 s. The startup row places
+  # 115 s of successful progress before seeding and leaves the seed call pending
+  # across both deadlines, under controlled time.
+  # The early run is a fresh run of the same checkout after the faults clear and
+  # before stop. In the confirmed rows it is an ordinary seeded run. In the last
+  # row the held checkout reservation must refuse it before any create or copy.
   @wip @slice-35 @ID-CODEXHOME-06 @local-engine-fixture @linux
   Scenario Outline: Incomplete seeding never authorizes a worker start
-    Given a Codex seed fixture with fault "<fault>" a timely Codex control and unrelated retained markers
-    When seed launch fails then the fault clears and fresh stop recovers it before a later run through both local backends
-    Then the first run reports "<diagnostic>" with exit <exit> and no start within the original budget while the timely control starts
-    And cleanup preserves home state and either confirms owned session absence or retains the exact stop retry without claiming a workload exit
-    And stop never seeds and only the later run after confirmed worker absence regenerates and verifies the complete config before starting
+    Given a Codex seed fixture with one-shot fault "<fault>" a timely Codex control and unrelated retained markers
+    When the faulted seed launch runs then the faults clear and an early run a fresh stop of the first session and a later run follow through both local backends
+    Then the first run reports "<diagnostic>" with exit <exit> after exactly one config publication call at most one readback and no start while the timely control starts
+    And its cleanup "<cleanup>" while the home and unrelated markers are retained and no workload exit is claimed
+    And the early run "<early>"
+    And the fresh stop makes no archive copy or start and removes only an exact first-session worker that still remains
+    And the later run regenerates and verifies the complete config before starting only after first-session worker absence is confirmed
 
     Examples:
-      | fault                                     | diagnostic           | exit |
-      | seed copy fails before writing            | run.home-unavailable | 75   |
-      | seed copy returns after a partial write   | run.home-unavailable | 75   |
-      | copy succeeds but its reply is lost       | run.home-unavailable | 75   |
-      | generated config readback is unavailable  | run.home-unavailable | 75   |
-      | readback archive is truncated             | run.home-unavailable | 75   |
-      | readback exceeds the 64 KiB limit         | run.home-unavailable | 75   |
-      | seed call exhausts remaining startup time | run.startup-timeout  | 75   |
+      | fault                                                         | diagnostic           | exit | cleanup                                                                   | early                                                               |
+      | seed copy fails before writing                                | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
+      | seed copy stores a partial archive then its transport fails   | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
+      | seed copy is accepted but its reply is lost                   | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
+      | generated config readback is unavailable                      | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
+      | readback archive is truncated                                 | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
+      | readback exceeds the 64 KiB limit                             | run.home-unavailable | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
+      | seed call alone exceeds its 10 second call deadline           | run.call-timeout     | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
+      | seed call is pending when call and startup deadlines expire   | run.startup-timeout  | 75   | confirms owned session absence                                            | seeds verifies and starts                                           |
+      | seed copy fails before writing and worker removal leaves it   | run.home-unavailable | 75   | reports run.cleanup-temporary with its session ID and exact stop retry    | reports run.checkout-overlap with exit 1 before any create or copy  |
 
+  # The truncated-readback row has a successful copy reply; the injected readback
+  # holds a valid shortened config.toml entry, so it is a confirmed wrong seed.
   @wip @slice-35 @ID-CODEXHOME-07 @local-engine-fixture @linux
   Scenario Outline: Final inspection verifies the actual Codex seed boundary
     Given a Codex seed fixture reporting successful copy but final defect "<defect>" and an independent correctly inspected Codex control
@@ -314,43 +368,14 @@ Feature: Codex starts from approved defaults in its private persistent home
     And the unstarted owned worker is cleaned and the home is retained without diagnostic copies of file contents or raw engine errors
 
     Examples:
-      | defect                                |
-      | CODEX_HOME still names the image home |
-      | config has the old enabled settings   |
-      | generated config has wrong owner      |
-      | generated config has wrong mode       |
+      | defect                                  |
+      | CODEX_HOME still names the image home   |
+      | config has the old enabled settings     |
+      | readback shows a truncated config       |
+      | generated config has wrong owner        |
+      | generated config has wrong mode         |
 
-  # Native evidence proves files visible to the actual non-root first instruction,
-  # not merely bytes supplied to a recording Engine API.
-  @wip @slice-35 @ID-CODEXHOME-08 @engine @linux
-  Scenario: Native first instructions see private Codex defaults across runs and checkouts
-    Given two CI Codex home checkouts with independently approved images non-root IDs and isolated host image and checkout sentinels
-    When literal worker probes inspect the initial Codex files write private markers and rerun each checkout
-    Then every probe reads the complete codex-v1 settings with the approved ownership modes and CODEX_HOME before doing other work
-    And each later probe sees only its own persistent marker with no host image or checkout configuration imported
-    And actual argv and hardening are unchanged and all session resources are absent before fixture cleanup while both homes remain
-
-  @wip @slice-35 @ID-CODEXHOME-09 @engine @linux
-  Scenario: Pinned Codex starts and resumes against a fake service without unwanted startup activity
-    Given a CI Codex 0.167.0 image an approved Codex home a controlled Responses endpoint and independently observable incidental-service recorders
-    When product runs query Codex effective settings then execute and resume a deterministic fake turn and an independent unseeded control is observed
-    Then Codex reports all codex-v1 effective settings and disabled plugin features while the unseeded control reports differing defaults
-    And both fake turns complete without login onboarding or tool approval input and their tool calls write and reread the same private home marker
-    And only the expected fake model requests occur with no update analytics telemetry or plugin startup request through normal shutdown
-    And recorder canaries are observed separately and no real service credentials or account was used and product session cleanup is confirmed
-
-  # A real archive extractor must refuse symlinks and replace a regular file
-  # without writing through another hard link. Pure metadata fakes cannot prove it.
-  @wip @slice-35 @ID-CODEXHOME-10 @engine @linux
-  Scenario Outline: Native seed publication cannot overwrite an unrelated target
-    Given a disposable CI retained Codex home with "<entry>" an unrelated sentinel and an independent safe Codex control
-    When the product attempts native seeding and the control runs before fixture cleanup
-    Then the native result is "<result>" and the safe control starts with verified codex-v1 settings
-    And the unrelated sentinel and auth links retain their original bytes metadata and targets and the home is retained
-    And no refused worker starts and all owned session resources are confirmed absent before fixture cleanup
-
-    Examples:
-      | entry                                   | result                                             |
-      | config symlink to a checkout sentinel   | run.home-refused with exit 1 before write or start |
-      | Codex directory symlink to the checkout | run.home-refused with exit 1 before write or start |
-      | config hard link to a home sentinel     | exit 0 with a distinct generated config inode      |
+  # Native evidence for this slice is in harness-home.feature, beside HOME-13/14,
+  # because that file is in the offline engine shard: CODEXHOME-08 (first instructions
+  # across runs and checkouts), CODEXHOME-09 (pinned Codex against a fake service)
+  # and CODEXHOME-10 (archive replacement cannot overwrite an unrelated target).
