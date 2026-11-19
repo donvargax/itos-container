@@ -656,20 +656,56 @@ Feature: An approved persistent home for one checkout's harness
   # names the pinned source uses, and one fixture name,
   # upstream-canary.slice-35.test. The fixture records the source-derived names
   # with source links before the red run, as aliases of incidental-service
-  # recorders. upstream-canary.slice-35.test deliberately has no DNS alias. Every
-  # other name is refused by the product proxy.
+  # recorders. Every other name is refused by the product proxy.
+  #
+  # Closed-port canary. upstream-canary.slice-35.test is the Docker alias of a
+  # fixture-owned canary container on the public fixture network, at its own fixed
+  # address outside the proxy's special table (tcp/dial.go). Its only process is
+  # the pinned busybox sleeping, so nothing listens on any port. The proxy's dial
+  # to port 443 is answered by that container's kernel with a reset. The proxy
+  # therefore logs upstream-failed with reason connect (tcp/dial.go connect),
+  # never dns, and answers 502. The fixture confirms receipt with a Given-owned
+  # one-shot pinned-busybox container that shares the canary's network namespace,
+  # reads Tcp OutRsts from /proc/net/snmp and exits. It has no network of its own,
+  # a read-only root, all capabilities dropped and no-new-privileges. It reads at
+  # each readiness window's attach barrier and again at its seal. The count must
+  # have grown, and nothing else connects to that container.
+  #
+  # Relay fence. The launcher includes a fixture-owned loopback relay. It reads
+  # the product-set HTTPS_PROXY (http://<proxy>:3128, session/docker/run.go) and
+  # carries every worker connection to the product proxy: Codex's and the
+  # launcher's own canaries. Codex alone gets HTTP_PROXY, HTTPS_PROXY and their
+  # lower-case forms naming a relay listener on 127.0.0.1, closed when Codex
+  # exits. Its environment is otherwise unchanged. The launcher's canaries use
+  # the same forwarding without that listener. For each connection the relay
+  # opens one proxy connection and copies bytes both ways. When its own side
+  # ends, it half-closes toward the proxy and reads until the proxy closes. It
+  # never resets a proxy connection. It counts each relayed connection and its
+  # bytes each way, tagged Codex or launcher, and whether the proxy closed it.
+  # The proxy writes every connection's record before it closes that client
+  # socket. Records precede answers, and release is deferred (tcp/conn.go
+  # handle). A half-close carries through splice (tcp/splice.go), and every
+  # recorder closes a connection on client EOF after recording it. So once the
+  # proxy has closed every relayed connection of a window, every record for those
+  # connections is in the proxy's stdout. A fence holds when every connection the
+  # relay opened so far has been closed by the proxy. The launcher reports each
+  # fence's counts at the next barrier. A fence missing within the run's 20 s
+  # bound fails the row; a grandchild of Codex holding a connection open counts
+  # as missing.
   #
   # Observation windows. There are three seeded product runs: S queries settings,
   # T1 runs a fresh turn and T2 resumes it. Each uses its own nonce and two windows.
   # Two independent observation paths cover every way Codex could reach out.
-  # - Proxy log. The harness follows the product proxy's complete log stream from
-  #   proxy start. That covers ready, refused, upstream-failed and log-full records
-  #   (internal/engine/egress/port), not refusals alone. Every record's seq must be
-  #   consecutive from the ready record, with no gap, repeat or log-full record,
-  #   through the after canary. A gap or a missing after canary means unobserved
-  #   records, and fails the row. An approved name whose DNS or dial fails, or a
-  #   tunnel whose upstream write fails, appears here as upstream-failed even
-  #   though no recorder sees it (tcp/conn.go).
+  # - Proxy log. The harness follows the product proxy's complete log stream, its
+  #   container stdout, from proxy start until that follow ends with the proxy's
+  #   stop in product cleanup. An error or timeout is not an end. Serve writes no
+  #   record after it returns (tcp/proxy.go). The stream covers ready, refused,
+  #   upstream-failed and log-full records (internal/engine/egress/port), not
+  #   refusals alone. Every record's seq must be consecutive from the ready record
+  #   to the stream's end, with no gap, repeat or log-full record. A gap, a missing
+  #   after canary or any record after it fails the row. An approved name whose DNS
+  #   or dial fails, or a tunnel whose upstream write fails, appears here as
+  #   upstream-failed even though no recorder sees it (tcp/conn.go).
   # - Recorder connections. Every recorder keeps an append-only transcript of each
   #   accepted TCP connection, its TLS handshake outcome and every HTTP request on
   #   it. A connection that sends no request, or fails its handshake after a
@@ -677,38 +713,63 @@ Feature: An approved persistent home for one checkout's harness
   # Both paths are exercised by fixture canaries outside each Codex window:
   # - Readiness window: the launcher waits at the existing egress "attach" barrier
   #   of egress_native_run_test.go, and the harness attaches the proxy to the
-  #   fixture networks. After release the launcher, through the proxy, in order:
+  #   fixture networks. After release the launcher, through the relay, in order:
   #   makes one readiness HTTPS request per route; opens one connection-only canary
   #   per incidental recorder (CONNECT, a completed TLS handshake, then close with
   #   no request); CONNECTs to the approved upstream-canary.slice-35.test, which
-  #   must receive 502; and CONNECTs to the unlisted before-<nonce>.refused.example,
-  #   which must receive 403. It then waits at the "codex" barrier. The harness
-  #   confirms each readiness request and each connection-only canary in its
-  #   recorder. Each product run starts its own proxy, so the harness confirms that
-  #   run's readiness-window proxy log is exactly ready, then
-  #   upstream-failed with reason dns for upstream-canary.slice-35.test, then
-  #   refused with reason not-listed for before-<nonce>.refused.example. It then
-  #   seals the window by recording every transcript and log cursor, and releases.
+  #   must receive 502. It then opens the straddle control and sends it only part
+  #   of a head: the CONNECT line for the unlisted straddle-<nonce>.refused.example
+  #   and its Host header, without the final blank line. Next it CONNECTs to the
+  #   unlisted before-<nonce>.refused.example, which must receive 403, and waits at
+  #   a "straddle" barrier. The harness releases it only after it has observed the
+  #   before canary's record. The launcher then sends the straddle's blank line,
+  #   well inside the proxy's 10 s head deadline (tcp/proxy.go headWait), and the
+  #   straddle must receive 403. It waits for the fence and reports it at the
+  #   "codex" barrier. The harness confirms each readiness request and each
+  #   connection-only canary in its recorder, and the canary container's receipt.
+  #   Each product run starts its own proxy, so the harness confirms that run's
+  #   readiness-window proxy log is exactly, in order: ready; upstream-failed with
+  #   reason connect for upstream-canary.slice-35.test port 443; refused with
+  #   reason not-listed for before-<nonce>.refused.example; and refused with reason
+  #   not-listed for straddle-<nonce>.refused.example. The straddle attempt starts
+  #   before the before canary and ends after it. So a harness that sealed the
+  #   window at that canary would carry the straddle record into the Codex window
+  #   and fail there. The fence must count every launcher connection as closed by
+  #   the proxy. The harness then seals the window by recording every transcript
+  #   and log cursor, and releases.
   # - Codex window: the launcher runs codex as its child with literal arguments and
-  #   waits for its exit, the normal shutdown flush included. It then sends one
-  #   nonce canary request per recorder, each on its own new connection, and
-  #   CONNECTs to after-<nonce>.refused.example, which must receive 403. It waits
-  #   at a "seal" barrier until the harness has observed those canaries and that
-  #   refusal, and then exits with Codex's status. Only then may product cleanup
-  #   remove the proxy.
+  #   waits for its exit, the normal shutdown flush included. It then closes
+  #   Codex's relay listener and waits for the Codex fence: every Codex connection
+  #   the relay opened has been closed by the proxy. Only after that fence does it
+  #   send one nonce canary request per recorder, each on its own new connection,
+  #   and CONNECT to after-<nonce>.refused.example, which must receive 403. It
+  #   waits for a second fence over those canaries and reports both fences at a
+  #   "seal" barrier. The harness releases seal only after it has observed those
+  #   canaries and that refusal and checked both fences. The launcher then exits
+  #   with Codex's status. Only then may product cleanup remove the proxy. The
+  #   Codex-window assertions run after the log follow has ended and product
+  #   cleanup is confirmed.
+  #   Every Codex connection that sent a byte must match exactly one fake-recorder
+  #   connection in the Codex window, and their counts must be equal. A Codex
+  #   connection that sent no byte is counted and reported. The proxy logs nothing
+  #   for it (tcp/conn.go readHead), so it is never counted as traffic.
   # The readiness canaries prove that each path records this run's traffic of
   # every kind: a refusal, an upstream failure and a request-less connection. The
-  # after canary proves the log was still captured after Codex shut down, so a log
-  # that ended early cannot read as complete. A missed barrier, missing canary,
-  # failed readiness, or a Codex start before the "codex" release fails the row.
+  # straddle proves that records can follow a window's closing canary and that the
+  # fence and log assertions catch them. The after canary proves the log was still
+  # captured after Codex shut down, so a log that ended early cannot read as
+  # complete. A missed barrier, missing canary or fence, failed readiness, or a
+  # Codex start before the "codex" release fails the row.
   # Readiness and canary traffic belong to their windows; they are never counted as
   # Codex traffic.
   # Each seeded Codex window's complete proxy log is exactly one record: refused
-  # with reason not-listed for after-<nonce>.refused.example, whose seq directly
-  # follows the readiness window's last record. Each incidental recorder's
-  # Codex-window transcript is exactly one connection carrying exactly its nonce
-  # canary request. The fake's Codex-window transcript holds only the scripted
-  # exchanges below and its own canary. Each product run is bounded at 20 s.
+  # with reason not-listed for after-<nonce>.refused.example. Its seq directly
+  # follows the readiness window's last record, the straddle refusal. The followed
+  # stream then ends at the proxy's stop with no further record. Each incidental
+  # recorder's Codex-window transcript is exactly one closed connection carrying
+  # exactly its nonce canary request. The fake's Codex-window transcript holds
+  # only closed connections with the scripted exchanges below and its own canary.
+  # Each product run is bounded at 20 s, both fences and the straddle included.
   #
   # Ordered exchanges. The fake serves only this script and answers anything else
   # with HTTP 400, recorded as unexpected. Before the red run the fixture fixes the
@@ -772,14 +833,14 @@ Feature: An approved persistent home for one checkout's harness
   # Missing reports, timeouts and empty transcripts are never success.
   @wip @slice-35 @ID-CODEXHOME-09 @engine @linux
   Scenario: Pinned Codex starts and resumes against a fake service without unwanted startup traffic
-    Given a CI Codex 0.167.0 image verified from its recorded fixture identity an approved Codex home a scripted Responses endpoint connection-recording incidental-service recorders and a followed complete proxy log behind readiness Codex and seal barriers
+    Given a CI Codex 0.167.0 image verified from its recorded fixture identity an approved Codex home a scripted Responses endpoint connection-recording incidental-service recorders a closed-port upstream canary a fenced loopback relay and a followed complete proxy log behind readiness straddle Codex and seal barriers
     When three seeded product runs query Codex layered settings then run a fresh fake turn and resume its captured thread ID each within its own readiness and Codex observation windows
     And an independent unseeded plain-home control checkout reports its Codex layered settings only after every seeded window is sealed
     Then the seeded settings attribute every codex-v1 value to the one seeded user layer with plugin features disabled while the unseeded control has no layer setting a codex-v1 key and leaves each unset
-    And each seeded readiness window holds every route's readiness request and connection-only canary and a complete proxy log of ready then the upstream canary failure then the before canary refusal and no Codex process started before its release
+    And each seeded readiness window holds every route's readiness request and connection-only canary and a fenced complete proxy log of ready then the received closed-port canary's connect failure then the before canary refusal then the straddling refusal and no Codex process started before its release
     And the fresh turn's Codex window holds exactly its prompt POST then its tool-output POST and the resumed turn's holds exactly its context POST then its tool-output POST while the settings window holds no Responses request
     And the resumed run reports the captured thread ID and rereads the marker the first turn wrote without login onboarding or tool approval input
-    And each seeded Codex window's complete proxy log is only its after canary refusal with consecutive sequence numbers and each incidental recorder holds only its canary connection through Codex shutdown
+    And each seeded Codex window's relay fence closed every Codex connection before its after canary and its proxy log to the proxy's stop is only that refusal with consecutive sequence numbers and each incidental recorder holds only its canary connection
     And no real credential account or service was used and product session cleanup is confirmed
 
   # A real archive extractor must refuse symlinks and replace a regular file
