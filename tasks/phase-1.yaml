@@ -8211,9 +8211,31 @@
   type: ci
   title: Clarify how branch syncs contribute to release version counts
   why: >
-    PR 69's second local review found that release totals beside listed totals can read as the
-    syncs' own contribution and can repeat identical numbers for untyped syncs. Pin the mixed and
-    untyped cases in the release tool's tests. See PR 69 discussion in comment 6988903923.
-  done_when:
-    - run: go test ./tools/bin/release-notes -count=1
-      timeout: 180
+    The release-notes tool already identifies merges of main into an item branch by Git parentage,
+    so this wording change has no prerequisites. The opening counts and What changed exclude those
+    syncs. The release-version tool reads the full range. Today the notes put that range's totals
+    after "includes branch syncs" whenever a sync is present. Five listed feats and one sync feat can
+    read as six feats from syncs. An untyped, nonbreaking sync repeats the listed totals and
+    qualifies the Upgrading text even when the whole range has no breaking changes.
+    [PR 69, comment 6988903923](https://github.com/donvargax/itos-container/pull/69#issuecomment-6988903923).
+
+    In notes.render, count the omitted syncs' own feats, fixes and breaking changes. For both first
+    and tagged releases, name their nonzero contributions and all three totals for the full range
+    in the opening paragraph. For the mixed history, write "Omitted branch syncs add 1 feat,
+    bringing the totals for the version calculation to 6 feats, 0 fixes and 0 breaking changes."
+    Omit this sentence when all three contributions are zero. In Upgrading, say "No listed change
+    is breaking." only when an omitted sync is breaking and no listed change is.
+    If no commit is breaking, the assurance covers every commit since the start of the range.
+
+    Assert the rendered Markdown in both TestSyncMergesLeftOut histories. The first release lists
+    nine commits and the release after v0.1.0 lists eight. In each, require five listed feats,
+    the sentence attributing one of the six feats to syncs, and the assurance that no commit since
+    the first commit or tag is breaking. Add an "untyped sync" case after v0.1.0 with one listed
+    feat and a single untyped, nonbreaking sync. Require the listed counts just once, no sync
+    sentence, and "No commit since v0.1.0 is a breaking change." Assert the contribution of a fix
+    sync and of a breaking-only sync in separate cases. With no listed break, only the latter
+    qualifies the Upgrading text. In checkSyncMergeVersionExplanation, assert the new sentence for
+    zero listed feats and one sync feat. The feat still explains the minor release when a module moves.
+
+    Run the package check with the new assertions first. The mixed and untyped cases must each
+    fail on the current wording and pass with the same assertions after the renderer changes.

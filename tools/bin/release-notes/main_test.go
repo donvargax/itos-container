@@ -293,9 +293,79 @@ func TestSyncMergesLeftOut(t *testing.T) {
 			if !strings.Contains(got, want) {
 				t.Errorf("the notes lack %q:\n%s", want, got)
 			}
+			requireText(t, got,
+				"Omitted branch syncs add 1 feat, bringing the totals for the version calculation to 6 feats, 0 fixes and 0 breaking changes.",
+				"No commit since "+since+" is a breaking change.")
+			if strings.Contains(got, "No listed change is breaking.") {
+				t.Errorf("the notes qualify the assurance though no commit is breaking:\n%s", got)
+			}
 		})
 	}
+	t.Run("untyped sync", func(t *testing.T) {
+		got := renderTaggedSync(t, "Refresh the item")
+		const listed = "1 feat, 0 fixes and 0 breaking changes"
+		if n := strings.Count(got, listed); n != 1 {
+			t.Errorf("the notes state the listed counts %d times, want once:\n%s", n, got)
+		}
+		requireText(t, got, "No commit since v0.1.0 is a breaking change.")
+		for _, unwanted := range []string{"Omitted branch syncs", "No listed change is breaking."} {
+			if strings.Contains(got, unwanted) {
+				t.Errorf("the notes hold %q for a sync that contributes nothing:\n%s", unwanted, got)
+			}
+		}
+	})
+	t.Run("fix sync", func(t *testing.T) {
+		got := renderTaggedSync(t, "fix: catch up")
+		requireText(t, got,
+			"Omitted branch syncs add 1 fix, bringing the totals for the version calculation to 1 feat, 1 fix and 0 breaking changes.",
+			"No commit since v0.1.0 is a breaking change.")
+		if strings.Contains(got, "No listed change is breaking.") {
+			t.Errorf("the notes qualify the assurance though no commit is breaking:\n%s", got)
+		}
+	})
+	t.Run("breaking-only sync", func(t *testing.T) {
+		got := renderTaggedSync(t, "refactor!: catch up")
+		requireText(t, got,
+			"Omitted branch syncs add 1 breaking change, bringing the totals for the version calculation to 1 feat, 0 fixes and 1 breaking change.",
+			"No listed change is breaking.")
+		if strings.Contains(got, "No commit since v0.1.0 is a breaking change.") {
+			t.Errorf("the notes assure that no commit is breaking:\n%s", got)
+		}
+	})
 	t.Run("version calculation", checkSyncMergeVersionExplanation)
+}
+
+// renderTaggedSync renders the release after v0.1.0 of one listed feat whose
+// item branch merged main under the sync subject, landed on main by its own
+// merge. Both merges are --no-ff, so the sync is not on main's first-parent line.
+func renderTaggedSync(t *testing.T, sync string) string {
+	t.Helper()
+	repo := releasetest.Example(t, true)
+	empty := func(message string) {
+		releasetest.Git(t, repo, "commit", "--quiet", "--allow-empty", "-m", message)
+	}
+	merge := func(message, branch string) {
+		releasetest.Git(t, repo, "merge", "--quiet", "--no-ff", "--no-edit", "-m", message, branch)
+	}
+	releasetest.Git(t, repo, "checkout", "--quiet", "-b", "topic")
+	empty("feat: topic thing")
+	releasetest.Git(t, repo, "checkout", "--quiet", "main")
+	empty("docs: main moves on past topic")
+	releasetest.Git(t, repo, "checkout", "--quiet", "topic")
+	merge(sync, "main")
+	releasetest.Git(t, repo, "checkout", "--quiet", "main")
+	merge("docs: land topic", "topic")
+	t.Chdir(repo)
+	list, err := commits("v0.1.0..HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := notes{From: "v0.1.0", Version: "0.2.0", Repository: repository, Commits: list}
+	got, err := n.render()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
 }
 
 // A typed sync contributes to the version even if a dependency also moved.
@@ -324,7 +394,7 @@ func checkSyncMergeVersionExplanation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	requireText(t, got, "0 feats, 0 fixes and 0 breaking changes", "The version calculation includes branch syncs: 1 feat, 0 fixes and 0 breaking changes.")
+	requireText(t, got, "0 feats, 0 fixes and 0 breaking changes", "Omitted branch syncs add 1 feat, bringing the totals for the version calculation to 1 feat, 0 fixes and 0 breaking changes.")
 	if strings.Contains(got, "which makes a patch") {
 		t.Errorf("described the minor release as a dependency patch:\n%s", got)
 	}

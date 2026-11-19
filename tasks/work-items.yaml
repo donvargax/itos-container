@@ -2242,6 +2242,11 @@ items:
       documenting the fixture prerequisite in `features/README.md` and using ID-EGRESS-09 to verify
       that a suitable environment reaches the behavior assertion with production ownership checks
       intact.
+
+      This item already tracks approval fixtures failing when `/` and `/tmp` appear as UID 65534. At
+      dispatch, check the fixture’s ancestor ownership and report the first rejected path and UID.
+      Use ID-EGRESS-09 to confirm the selected worker can reach its behavior assertion before
+      assigning it local red/green evidence.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
@@ -2315,8 +2320,8 @@ items:
   - id: T-62
     title: Clarify how branch syncs contribute to release version counts
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: p3-release-notes-first-parent-fixture
