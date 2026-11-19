@@ -60,6 +60,28 @@ func TestRunRefusesEngineWithoutTerminalCapabilityBeforeCreate(t *testing.T) {
 	}
 }
 
+func TestTerminalResizeIsBoundedByTheFiniteCallTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		runner, _, engine, _, id := registeredSessionFixture(t)
+		runner.Engine = finiteEngine{runner.Engine}
+		c, a, worker, failure := runner.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{})
+		if failure != "" {
+			t.Fatal(failure)
+		}
+		defer c.Close()
+		defer a.Close()
+		engine.BeforeResize = func() { time.Sleep(budget.CallDuration + time.Second) }
+		start := time.Now()
+		got := c.(finiteConnection).Resize(t.Context(), worker, terminal.Dimensions{Columns: 113, Rows: 37})
+		if got != port.CallTimeout || time.Since(start) != budget.CallDuration {
+			t.Fatalf("a stalled resize was not bounded: %s after %s", got, time.Since(start))
+		}
+		// Let the abandoned call finish before the bubble ends.
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+	})
+}
+
 func TestMissingTerminalCapabilityRefuses(t *testing.T) {
 	c := finiteConnection{RunConnection: noTerminalConnection{}}
 	if f := c.SetTerminal(terminal.Dimensions{Columns: 113, Rows: 37}); f != port.TerminalUnavailable {
@@ -423,7 +445,7 @@ func TestResizeReconcilesObservedExitAndHostCancellation(t *testing.T) {
 }
 
 func TestResizeRequiresFreshOwnedRunningSession(t *testing.T) {
-	for _, change := range []string{"healthy", "already bounded", "invalid size", "unavailable registry", "changed session", "stopped session", "unavailable engine", "nil engine", "foreign worker", "stopped worker"} {
+	for _, change := range []string{"healthy", "already bounded", "invalid size", "unavailable registry", "changed session", "stopped session", "unavailable engine", "nil engine", "foreign worker", "stopped worker", "daemon call timeout"} {
 		t.Run(change, func(t *testing.T) {
 			s, registry, engine, _, id := registeredSessionFixture(t)
 			c, a, worker, f := s.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{})
@@ -460,6 +482,9 @@ func TestResizeRequiresFreshOwnedRunningSession(t *testing.T) {
 				engine.OpenFailure = port.EngineLost
 			case "nil engine":
 				engine.OpenNil = true
+			case "daemon call timeout":
+				engine.ResizeFailure = port.CallTimeout
+				want = port.CallTimeout
 			case "foreign worker":
 				r := engine.Resources[worker]
 				r.Name = "foreign"
