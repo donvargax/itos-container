@@ -624,3 +624,10 @@ func TestEngineFixtureManifestValidation(t *testing.T) {
 		requireFixture(t, err != nil && strings.Contains(stderr, "engine-fixture: smoke output") && strings.Contains(stderr, "observed="), "smoke output failure missing observation: %v %s", err, stderr)
 	}
 }
+
+func fixtureJSON(t *testing.T, value any) string {
+	t.Helper()
+	data, err := json.Marshal(value)
+	requireFixture(t, err == nil, "%v", err)
+	return string(data)
+}

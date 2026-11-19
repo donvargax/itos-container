@@ -11,7 +11,7 @@ Feature: Share the approved Codex login through one dedicated writable directory
   # Do not pin an old in-place writer, create a worker login/API key, copy in/back,
   # or ask question 1 again. Question 5 still bars ALL real credentials, including
   # a person's smoke check. No scenario calls Codex, a provider, account or model.
-  # Decision 0030-codex-shared-directory records the architecture amendment.
+  # Decision 0032-codex-shared-directory records the architecture amendment.
   #
   # Drafting baselines (read their current successors before implementation):
   # main dc5b9d440798bf5959acd8185c6e4a12a70f3050;

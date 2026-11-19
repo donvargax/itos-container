@@ -26,7 +26,7 @@ func Diagnostic(issue Issue) Problem {
 	case HostUnsupported:
 		p.Rule, p.Message, p.Fix = "host.unsupported", "Host is outside the inspection target", "use Linux amd64 with native Docker"
 	case CheckoutRoot:
-		p.Rule, p.Exit, p.Message, p.Fix = "checkout.root", 2, "Checkout root is not absolute", "set ITOS_ROOT to the absolute checkout root"
+		p.Rule, p.Exit, p.Message, p.Fix = "checkout.root", 2, "Checkout root must be absolute and at most 4095 bytes", "set ITOS_ROOT to an absolute checkout root of at most 4095 bytes"
 	case CheckoutUnavailable:
 		p.Rule, p.Exit, p.Message, p.Fix = "checkout.unavailable", 3, "Checkout root is unavailable", "provide a readable checkout directory"
 	case CheckoutLayout:
@@ -69,13 +69,22 @@ func Diagnostic(issue Issue) Problem {
 		p.Rule, p.Message, p.Fix = "image.platform", "Cached image platform is incompatible", "prepare the exact requested Linux amd64 image outside doctor"
 	case ImageUser:
 		p.Rule, p.Message, p.Fix = "image.user", "Image user does not match the manifest's numeric identity request", "prepare an image with a positive numeric UID matching each specified manifest user"
+	case EgressExecutable:
+		p.Rule, p.Exit, p.Message, p.Fix = "egress-executable", 3, "This program cannot be delivered to the egress proxy", "use the installed static Linux amd64 release of itos-container, from a path outside the checkout"
+	case EgressEngine:
+		p.Rule, p.Exit, p.Message, p.Fix = "egress-engine", 3, "Engine cannot supply the isolated egress network", "use native Docker 28.0 or newer with negotiated API 1.48 or newer"
+	case EgressImage:
+		p.Rule, p.Exit, p.Message, p.Fix = "egress-image", 3, "Cached proxy image is unusable", "restore the verified cached Linux amd64 proxy image"
+		p.Image = issue.Subject
+	case EgressImageMissing:
+		p.Rule, p.Exit, p.Message, p.Fix = "image.missing", 3, "Requested proxy image is not cached", "docker pull "+issue.Subject
 	default:
 		p.Rule, p.Exit, p.Message, p.Fix = "internal", 70, "Unknown inspection failure", "report this as a bug"
 	}
 	switch {
 	case strings.HasPrefix(p.Rule, "checkout."):
 		p.Path = &issue.Subject
-	case strings.HasPrefix(p.Rule, "image."):
+	case strings.HasPrefix(p.Rule, "image."), issue.Kind == EgressImage:
 		p.Image = issue.Subject
 	default:
 		p.Field = issue.Subject
@@ -101,6 +110,11 @@ func Problems(result Result) []Problem {
 	}
 	for _, issue := range result.Issues {
 		out = append(out, Diagnostic(issue))
+	}
+	if result.Credentials != nil {
+		for _, issue := range result.Credentials.Issues {
+			out = append(out, CredentialDiagnostic(issue))
+		}
 	}
 	return out
 }

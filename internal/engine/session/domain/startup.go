@@ -11,12 +11,14 @@ import (
 
 type startupKey struct{}
 type startupState struct {
+	homeID          string
 	binding         port.Binding
 	record          port.Record
 	mountDiagnostic port.MountDiagnostic
 	detectorExit    *int
 	operation       string
 	started         bool
+	acknowledged    bool
 	failure         port.Outcome
 }
 

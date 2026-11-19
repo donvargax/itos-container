@@ -36,25 +36,34 @@ type Result struct {
 }
 
 type Record struct {
-	Egress         EgressRecord `json:"egress,omitzero"`
-	Anchor         Anchor       `json:"anchor,omitzero"`
-	Schema         int          `json:"schema"`
-	Project        string       `json:"project"`
-	Generation     string       `json:"generation"`
-	Fingerprint    string       `json:"fingerprint"`
-	Snapshot       string       `json:"snapshot"`
-	UID            string       `json:"uid"`
-	GID            string       `json:"gid"`
-	Endpoint       string       `json:"engine_endpoint"`
-	EngineID       string       `json:"engine_id"`
-	Name           string       `json:"name"`
-	ImageReference string       `json:"image_reference"`
-	ImageID        string       `json:"image_id"`
-	ContainerID    string       `json:"container_id"`
-	Stage          string       `json:"stage"`
+	Home           HomeReference     `json:"home,omitzero"`
+	Credentials    CredentialStaging `json:"credentials,omitzero"`
+	Egress         EgressRecord      `json:"egress,omitzero"`
+	Anchor         Anchor            `json:"anchor,omitzero"`
+	Schema         int               `json:"schema"`
+	Project        string            `json:"project"`
+	Generation     string            `json:"generation"`
+	Fingerprint    string            `json:"fingerprint"`
+	Snapshot       string            `json:"snapshot"`
+	UID            string            `json:"uid"`
+	GID            string            `json:"gid"`
+	Endpoint       string            `json:"engine_endpoint"`
+	EngineID       string            `json:"engine_id"`
+	Name           string            `json:"name"`
+	ImageReference string            `json:"image_reference"`
+	ImageID        string            `json:"image_id"`
+	ContainerID    string            `json:"container_id"`
+	Stage          string            `json:"stage"`
 }
 
 type Binding struct {
+	Home bool
+	// StagingKinds selects delivery independently of the approved grant metadata.
+	StagingKinds CredentialKinds
+	// Schema-1 credential grants have at most two known kinds. Fixed storage
+	// keeps bindings independently owned and comparable during revalidation.
+	Credentials                                           [2]approval.CredentialGrant
+	CredentialNetwork                                     bool
 	Egress                                                EgressGrant
 	Frozen                                                approval.Frozen
 	Checkout                                              readiness.CheckoutIdentity
@@ -107,8 +116,9 @@ type Store interface {
 func (r Record) ValidTransition(next Record) bool {
 	expected := r
 	expected.Stage, expected.ContainerID = next.Stage, next.ContainerID
-	expected.Schema, expected.Anchor, expected.Egress = next.Schema, next.Anchor, next.Egress
-	if next != expected || !r.anchorTransition(next) || !r.egressTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
+	expected.Schema, expected.Anchor, expected.Egress, expected.Credentials = next.Schema, next.Anchor, next.Egress, next.Credentials
+	expected.Home = next.Home
+	if !r.CredentialShape() || !next.CredentialShape() || next != expected || !r.homeTransition(next) || !r.anchorTransition(next) || !r.egressTransition(next) || !r.credentialTransition(next) || (r.ContainerID != "" && next.ContainerID != r.ContainerID) {
 		return false
 	}
 	switch r.Stage {
@@ -116,7 +126,7 @@ func (r Record) ValidTransition(next Record) bool {
 		return next.ContainerID == "" && (next.Stage == "reserved" || next.Stage == "intent" || next.Stage == "cancelled") &&
 			(next.Schema == 1 || next.Stage == "reserved" || (next.Stage == "intent" && next.Anchor.Stage == "owned") || next.Stage == "cancelled")
 	case "cancelled", "absent":
-		return next.Stage == r.Stage && next.ContainerID == r.ContainerID && (next == r || r.Schema >= 2 && r.anchorTransition(next))
+		return next.Stage == r.Stage && next.ContainerID == r.ContainerID && (next == r || r.Schema >= 2 && r.anchorTransition(next) || next.Home != r.Home && r.homeTransition(next))
 	default:
 		return HexID(next.ContainerID) && (next.Stage == "owned" || next.Stage == "absent")
 	}
@@ -124,7 +134,7 @@ func (r Record) ValidTransition(next Record) bool {
 
 // Completed includes cancellation proven before create, never an unknown create.
 func (r Record) Completed() bool {
-	return r.EgressGone() && r.ValidEgressShape() && (r.Schema == 1 || r.Anchor.Stage == "absent") && ((r.Stage == "absent" && HexID(r.ContainerID)) || (r.Stage == "cancelled" && r.ContainerID == ""))
+	return (r.Schema != 4 || r.Credentials.Valid() && r.Credentials.Stage == "absent") && r.EgressGone() && r.ValidEgressShape() && (r.Schema == 1 || r.Anchor.Stage == "absent") && ((r.Stage == "absent" && HexID(r.ContainerID)) || (r.Stage == "cancelled" && r.ContainerID == ""))
 }
 
 type Intent interface {
@@ -136,6 +146,10 @@ type Intent interface {
 }
 
 type Observation struct {
+	HomeName                    string
+	HomeExact                   bool
+	CredentialMounts            [2]CredentialMount
+	CredentialExact             bool
 	Kind, Session               string
 	AnchorName                  string
 	AnchorExact                 bool

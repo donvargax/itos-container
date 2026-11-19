@@ -3,6 +3,7 @@ package features
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/moby/term"
 )
 
 // Local transport fixture for the older invocation/preflight scenarios. It
@@ -30,6 +33,7 @@ type localOfflineAPI struct {
 	problem          error
 	recovery         *foregroundRecovery
 	attachBarrier    func(string, string)
+	terminal         *terminalEngine
 }
 
 func (w *world) localOfflineFixture() {
@@ -106,6 +110,9 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	token, _ := object(object(resource["Config"])["Labels"])["io.itos-container.intent"].(string)
+	if a.terminal != nil && a.terminal.serve(a, out, r, id, resource) {
+		return true
+	}
 	switch {
 	case len(parts) == 2 && parts[1] == "json" && r.Method == "GET":
 		_ = json.NewEncoder(out).Encode(resource)
@@ -119,6 +126,15 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		if err != nil {
 			a.problem = err
 			return true
+		}
+		if object(resource["Config"])["Tty"] == true {
+			escaped, escapeErr := newDetachEscapeConn(conn, r.URL.Query().Get("detachKeys"))
+			if escapeErr != nil {
+				a.problem = fmt.Errorf("invalid TTY attach escape sequence: %w", escapeErr)
+				_ = conn.Close()
+				return true
+			}
+			conn = escaped
 		}
 		a.attached[id] = conn
 		_, _ = buf.WriteString("HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
@@ -264,6 +280,43 @@ func (a *localOfflineAPI) serve(out http.ResponseWriter, r *http.Request) bool {
 		http.Error(out, "forbidden", http.StatusForbidden)
 	}
 	return true
+}
+
+// A TTY attach models the daemon's copyEscapable exactly: the client's input
+// runs through the same escape proxy the daemon itself runs, with the request's
+// detachKeys or, absent those, the daemon's default ctrl-p,ctrl-q. The full
+// sequence is swallowed and the connection dropped, as the daemon returns an
+// EscapeError and closes the attached streams while the worker keeps running.
+type detachEscapeConn struct {
+	net.Conn
+	proxy io.Reader
+}
+
+func newDetachEscapeConn(conn net.Conn, keys string) (net.Conn, error) {
+	if keys == "" {
+		keys = "ctrl-p,ctrl-q"
+	}
+	escape, err := term.ToBytes(keys)
+	if err != nil {
+		return nil, err
+	}
+	return &detachEscapeConn{Conn: conn, proxy: term.NewEscapeProxy(conn, escape)}, nil
+}
+
+func (c *detachEscapeConn) Read(p []byte) (int, error) {
+	n, err := c.proxy.Read(p)
+	var escape term.EscapeError
+	if errors.As(err, &escape) {
+		_ = c.Close()
+	}
+	return n, err
+}
+
+func (c *detachEscapeConn) CloseWrite() error {
+	if closer, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return closer.CloseWrite()
+	}
+	return nil
 }
 
 func (a *localOfflineAPI) record(token, stage, id string) error {

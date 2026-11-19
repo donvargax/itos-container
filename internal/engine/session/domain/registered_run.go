@@ -32,9 +32,6 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	defer end()
 	state := &startupState{}
 	startup = context.WithValue(startup, startupKey{}, state)
-	gate := make(chan struct{}, 1)
-	gate <- struct{}{}
-	s.Workspace = finiteWorkspace{s.Workspace, startup, gate}
 	result := port.RunResult{}
 	id, failure := s.Entropy.Token()
 	if failure != "" || !port.HexID(id) {
@@ -102,8 +99,14 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		s.Registry = bound.ForRun(frozen)
 	}
 	result.Reference, result.SessionID = port.Reference(frozen.Frozen.Project, token), id
-	c, attachment, resource, failure := s.registeredLaunch(startup, id, argv, streams)
+	launch, finishLaunch := watchLaunchTerminal(startup, streams.Terminal)
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
+	s.Workspace = finiteWorkspace{s.Workspace, launch, gate}
+	c, attachment, resource, failure := s.registeredLaunch(launch, id, argv, streams)
+	loss, cancelled := finishLaunch()
 	result.ID, result.Outcome = resource, failure
+	result.HomeID = state.homeID
 	result.Started, result.Operation = state.started, state.operation
 	if state.detectorExit != nil {
 		result.Exit, result.Exited = *state.detectorExit, true
@@ -111,7 +114,9 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	if result.Outcome != "" {
 		result.MountDiagnostic = state.mountDiagnostic
 	}
-	if startup.Err() != nil && failure != port.Refused && failure != port.IsolationUnverified {
+	if loss != "" {
+		result.Outcome = launchOutcome(failure, loss, cancelled)
+	} else if startup.Err() != nil && failure != port.Refused && failure != port.IsolationUnverified {
 		result.Outcome = startupFailure(startup)
 	}
 	end()
@@ -122,11 +127,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		defer attachment.Close()
 	}
 	if result.Outcome == "" && !result.Exited {
-		if binding.Egress != (port.EgressGrant{}) {
-			result.Exit, result.Exited, result.Outcome = s.waitEgress(ctx, c, attachment, state.binding, state.record)
-		} else {
-			result.Exit, result.Exited, result.Outcome = s.waitRun(ctx, c, attachment, id, result.ID)
-		}
+		result.Exit, result.Exited, result.Outcome, result.Operation = s.waitForeground(ctx, c, attachment, streams.Terminal, state.binding, state.record, id, result.ID)
 	}
 	teardown, finish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer finish()
@@ -152,14 +153,14 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		}
 	}
 	signal := "SIGTERM"
-	if interrupted, ok := context.Cause(ctx).(port.Interrupt); ok {
-		signal = interrupted.Signal
+	if result.Signal != "" {
+		signal = result.Signal
 	}
 	if result.Outcome == launchSuperseded {
 		// Stop already won a transition. Observe its result without repeating or
 		// rewriting cleanup; an unstarted workload never becomes successful.
 		result.Outcome = port.Incomplete
-		observed := (Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals}).status(teardown, id)
+		observed := (Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, Homes: s.Homes, Credentials: s.Credentials}).status(teardown, id)
 		result.Cleanup = port.Incomplete
 		if len(observed.Failures) == 0 && len(observed.Entries) == 1 && observed.Entries[0].Cleanup == "complete" {
 			result.Cleanup = port.Complete
@@ -169,10 +170,13 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		}
 		return result
 	}
-	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, immediate: result.Outcome == port.MountRefused && result.Started}
+	// A cancelled start request may already have made the worker live. Use
+	// immediate owned teardown if the controller never acknowledged a live TTY.
+	racedStart := loss != "" && !state.acknowledged
+	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, Homes: s.Homes, Credentials: s.Credentials, immediate: result.Started && (result.Outcome == port.MountRefused || racedStart)}
 	// The output subscription is independent of termination and removal. A blocked
 	// consumer must never hold the operation lock or prevent owned cleanup.
-	drain := startDrain(teardown, attachment)
+	drain := startDrain(teardown, attachment, streams.Terminal, result.Outcome)
 	if !result.Exited && attachment != nil && !recovery.immediate {
 		prepared := recovery.stop(teardown, id, signal, nil, false)
 		if len(prepared.Entries) == 1 && prepared.Entries[0].WorkloadExit != nil {
@@ -217,7 +221,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	return result
 }
 
-func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, streams port.Streams) (port.RunConnection, port.Attachment, string, port.Outcome) {
+func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, streams port.Streams) (connection port.RunConnection, attachment port.Attachment, worker string, outcome port.Outcome) {
 	entry, failure := s.Registry.Open(ctx, id, false)
 	if failure != "" {
 		return nil, nil, "", failure
@@ -242,11 +246,43 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 		return nil, nil, "", failure
 	}
 	defer closeAnchorWorkspace(c, s.Workspace)
+	if streams.Terminal != nil {
+		// The finite engine always supplies this capability; a connection that
+		// lacks it refuses in its own SetTerminal.
+		if failure := c.(port.TerminalConnection).SetTerminal(streams.Terminal.Initial()); failure != "" {
+			entry.Close()
+			return c, nil, "", failure
+		}
+		// A client that is already gone must not have its worker created.
+		if failure := lostClientTerminal(streams.Terminal); failure != "" {
+			entry.Close()
+			return c, nil, "", failure
+		}
+	}
 	if ctx.Err() != nil {
 		entry.Close()
 		return c, nil, "", startupFailure(ctx)
 	}
-	resource, failure := createRegistered(ctx, entry, c, s.Workspace, argv)
+	if intent.Binding().Home {
+		if s.Homes == nil {
+			entry.Close()
+			return c, nil, "", port.HomeUnavailable
+		}
+		if failure = s.Homes.prepare(ctx, entry, c); failure != "" {
+			entry.Close()
+			return c, nil, "", failure
+		}
+	}
+	resource, failure := createRegistered(ctx, entry, c, s.Workspace, argv, s.prepareCredentials)
+	if failure == "" && intent.Binding().Home {
+		failure = c.VerifyRun(ctx, resource, argv)
+	}
+	if failure == "" && intent.Binding().Home {
+		failure = s.Homes.verify(ctx, entry, c, true)
+	}
+	if failure != "" {
+		_ = cleanupCredentials(ctx, entry.Intent(), s.Credentials)
+	}
 	entry.Close()
 	if failure != "" {
 		return c, nil, "", failure
@@ -261,6 +297,12 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 		return c, nil, "", failure
 	}
 	defer entry.Close()
+	defer func() {
+		f := cleanupCredentials(ctx, entry.Intent(), s.Credentials)
+		if outcome == "" && f != "" {
+			outcome = f
+		}
+	}()
 	if entry.Record().State != "ready" {
 		return c, nil, "", launchSuperseded
 	}
@@ -270,6 +312,18 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	}
 	if failure = startupOperation(ctx, "boundary inspection", func(call context.Context) port.Outcome { return c.VerifyRun(call, resource, argv) }); failure != "" {
 		return c, nil, "", failure
+	}
+	// A client that hung up across the create edge must not be attached to.
+	if failure := lostClientTerminal(streams.Terminal); failure != "" {
+		return c, nil, "", failure
+	}
+	if streams.Terminal != nil && streams.Out != nil {
+		// The attach stream can carry a worker's first frame before Start
+		// replies. Let the client see it only once launch has settled, so
+		// reacting to that frame gets normal foreground signal and exit handling.
+		launched := make(chan struct{})
+		streams.Out = terminalLaunchOutput{streams.Out, launched}
+		defer close(launched)
 	}
 	var a port.Attachment
 	failure = startupOperation(ctx, "attach establishment", func(call context.Context) port.Outcome {
@@ -298,8 +352,17 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if failure = verifyEgressStart(ctx, intent, c); failure != "" {
 		return c, a, "", failure
 	}
+	if intent.Binding().Home {
+		if failure = s.Homes.verify(ctx, entry, c, false); failure != "" {
+			return c, a, "", failure
+		}
+	}
 	if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
 		state.binding, state.record = intent.Binding(), intent.Record()
+	}
+	// A client that hung up across the attach edge must not be started for.
+	if failure := lostClientTerminal(streams.Terminal); failure != "" {
+		return c, a, "", failure
 	}
 	if failure = startupOperation(ctx, "start acknowledgement", func(call context.Context) port.Outcome {
 		if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
@@ -315,7 +378,21 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if ctx.Err() != nil {
 		return c, a, resource, port.ExecutionFailed
 	}
+	if loss := lostClientTerminal(streams.Terminal); loss != "" {
+		return c, a, resource, loss
+	}
+	if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
+		state.acknowledged = true
+	}
 	detector, failure := detectAnchor(ctx, intent, c, s.Workspace)
+	if context.Cause(ctx) == errLaunchObservationEnded {
+		// The client's loss ended the detector's own observation, so a refusal
+		// found here says nothing about the mount, and no verdict can be saved
+		// through the cancelled launch. Report the loss and let the acknowledged
+		// worker take its owned grace period.
+		recordMountDiagnostic(ctx, port.MountDiagnostic{})
+		return c, a, resource, lostClientTerminal(streams.Terminal)
+	}
 	r := entry.Record()
 	r.MountDetector = detector
 	if failure == "" {
@@ -333,7 +410,7 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	}
 	return c, a, resource, ""
 }
-func createRegistered(ctx context.Context, entry port.Session, c port.RunConnection, workspace port.Workspace, argv []string) (string, port.Outcome) {
+func createRegistered(ctx context.Context, entry port.Session, c port.RunConnection, workspace port.Workspace, argv []string, credentialPreparation ...func(context.Context, port.Intent) port.Outcome) (string, port.Outcome) {
 	i := entry.Intent()
 	if failure := entry.ValidateLaunch(); failure != "" {
 		return "", failure
@@ -348,6 +425,13 @@ func createRegistered(ctx context.Context, entry port.Session, c port.RunConnect
 		}
 		if failure := prepareEgress(ctx, i, c); failure != "" {
 			return "", failure
+		}
+		if len(credentialPreparation) != 0 {
+			if failure := credentialPreparation[0](ctx, i); failure != "" {
+				return "", failure
+			}
+		} else if i.Binding().StagingKinds != (port.CredentialKinds{}) {
+			return "", port.CredentialRefused
 		}
 		r = i.Record()
 		// Once this durable write succeeds a lost create reply is uncertain.

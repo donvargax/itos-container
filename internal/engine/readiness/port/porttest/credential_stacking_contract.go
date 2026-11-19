@@ -10,8 +10,8 @@ import (
 
 func credentialStackingContract(t Reporter, observe func(*CredentialFiles, []policy.Credential, port.CredentialInput) port.CredentialResult, grants []policy.Credential, input port.CredentialInput) {
 	input.AccountState = "/fixed"
-	// nfsd is the NFS server's own control filesystem, not an NFS mount.
-	for _, filesystem := range []string{"overlay", "fuse", "fuseblk", "fuse.bindfs", "fuse.sshfs", "fuseblk.ntfs", "nfs", "nfs4", "9p", "nfsd", "ext4"} {
+	// Every unnamed type is refused, including nfsd; controls use the three named types.
+	for _, filesystem := range []string{"overlay", "fuse", "fuseblk", "fuse.bindfs", "fuse.sshfs", "fuseblk.ntfs", "nfs", "nfs4", "9p", "nfsd", "tmpfs", "cifs", "smb3", "ceph", "virtiofs", "ecryptfs", "zfs", "unlistedfs", "EXT4", "ext4", "btrfs", "xfs"} {
 		for _, point := range []string{"/", "/checkout", "/checkout/private", "/checkout/private/token", "/state", "/state/private", "/fixed", "/fixed/private", "/vault", "/vault/token", "/unrelated", "/checkout-sibling", "/state-sibling", "/fixed-sibling"} {
 			for _, observation := range []string{"both", "first", "final"} {
 				f := CredentialFixture()
@@ -21,7 +21,7 @@ func credentialStackingContract(t Reporter, observe func(*CredentialFiles, []pol
 				for i := range f.MountsText {
 					kind := filesystem
 					if observation == "first" && i == 1 || observation == "final" && i == 0 {
-						kind = "tmpfs"
+						kind = "ext4"
 					}
 					f.MountsText[i] += "2 1 0:64 / " + point + " rw - " + kind + " backing rw\n"
 				}
@@ -32,7 +32,7 @@ func credentialStackingContract(t Reporter, observe func(*CredentialFiles, []pol
 					}
 				}
 				var want []port.CredentialIssue
-				if filesystem != "ext4" && filesystem != "nfsd" && point != "/unrelated" && !strings.HasSuffix(point, "-sibling") {
+				if filesystem != "ext4" && filesystem != "btrfs" && filesystem != "xfs" && point != "/unrelated" && !strings.HasSuffix(point, "-sibling") {
 					want = []port.CredentialIssue{{Rule: "credential.filesystem", Index: 0}}
 				}
 				got := observe(f, grants, input)
@@ -86,7 +86,7 @@ func credentialStackingContract(t Reporter, observe func(*CredentialFiles, []pol
 			if layout == "source ancestor" {
 				// A normal file bind covers the source itself; its ancestor still
 				// sits on the overlay and must prevent an exclusion proof.
-				f.MountsText[i] += "3 2 0:1 /vault/token /vault/token rw - tmpfs tmpfs rw\n"
+				f.MountsText[i] += "3 2 0:1 /vault/token /vault/token rw - ext4 ext4 rw\n"
 				n := f.Nodes["/vault/token"]
 				n.MountID = 3
 				f.Nodes[n.Path] = n
@@ -94,7 +94,7 @@ func credentialStackingContract(t Reporter, observe func(*CredentialFiles, []pol
 			if strings.HasPrefix(layout, "covered") {
 				// No held boundary descriptor uses the hidden row's ID 2;
 				// the full table must still reserve its backing.
-				f.MountsText[i] += "3 1 0:1 " + point + " " + point + " rw - tmpfs tmpfs rw\n"
+				f.MountsText[i] += "3 1 0:1 " + point + " " + point + " rw - ext4 ext4 rw\n"
 				if n, exists := f.Nodes[point]; exists {
 					n.MountID = 3
 					f.Nodes[point] = n

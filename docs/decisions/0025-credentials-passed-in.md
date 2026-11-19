@@ -1,7 +1,7 @@
 # T-47: credentials passed in per command, approval and the remaining decisions
 
 **Codex amendment, 2026-11-16:** q-72 and the person's amended charter settle
-question 1. [Decision 0030](0030-codex-shared-directory.md) and slice-32's scenarios
+question 1. [Decision 0032](0032-codex-shared-directory.md) and slice-32's scenarios
 supersede this record's Codex wait instructions and unselected alternatives: share
 the existing login through a dedicated read-write directory and the shared lock.
 The person prepares the host symlink. Policy version 4, directory/lock identity
@@ -18,7 +18,7 @@ readings are not runtime evidence or a container-host support claim.
 The workload remains the worker's main process, invoked as literal argv. Credentials
 arrive per command, outside the checkout and without their values entering the create
 configuration or `docker inspect`. The two token kinds below have a proposed delivery;
-Codex's later delivery spec is in decision 0030. Real credentials remain barred pending
+Codex's later delivery spec is in decision 0032. Real credentials remain barred pending
 question 5, including a person's smoke check. Synthetic scenarios need neither an account nor a real model.
 
 ## Codex: the charter's single-file premise no longer holds
@@ -46,7 +46,7 @@ describes the file store and refresh, but does not make a bind-mounted file comp
 with atomic replacement.
 
 Only the person can change the charter; that amendment has now landed. The source
-finding stands, but question 1's wait is superseded by decision 0030. Version 3 and
+finding stands, but question 1's wait is superseded by decision 0032. Version 3 and
 slice-29 still define no Codex kind; slice-32 specifies it in version 4. The older
 registry's single-file wording is not permission to restore the in-place premise.
 
@@ -101,7 +101,7 @@ Entries retain their written order for diagnostics; everywhere else they are a s
 keyed by kind. Parsing a valid file reads no host source. Collect located problems
 at `/credentials/<index>/kind` or `/source` as in version 1, never echoing a rejected
 value. Slice-29 owns rule IDs, the version 3 schema beside version 2's, and the changes
-to `docs/CONFIG.md` and `docs/CLI.md`. Decision 0030 now specifies the Codex kind in
+to `docs/CONFIG.md` and `docs/CLI.md`. Decision 0032 now specifies the Codex kind in
 version 4; version 3 continues to refuse it as unknown.
 
 Doctor, approve and run share one source observation in readiness, beside slice-20's
@@ -273,6 +273,48 @@ T-48 and slice-31 must prove this on the real engine in CI. A rejected staged bi
 a copy that outlives its worker reopens the mechanism with that evidence; it does not
 select a fallback.
 
+## T-48 implementation status
+
+The token-only session seam is implemented, without command wiring or real-engine
+acceptance. This records implementation of the delivery proposal above; it does not
+change the charter, the six questions below or the native-evidence requirements.
+
+`session/disk.CheckedSources` retains the source descriptors from the existing
+readiness observation, including decision 0027's complete exclusion checks. Revalidation
+repeats the complete observation and compares against retained original identities
+when the capability has already been checked. The
+copying adapter reopens only `/proc/self/fd/<n>`, checks metadata and observed size
+before and after its one read, and clears its one bounded buffer on every return.
+The capability is separate from `Binding`, intent records and engine requests.
+
+Schema 4 extends the protected session intent with the staging directory, selected
+kinds, directory device/inode, each staged file's device/inode and progress. Schema 3
+remains T-40's egress encoding; schema 4 can retain that same egress authority. Existing
+schemas retain their meaning. Directory intent precedes mkdir; directory and file
+identity publications precede copying. A collision is never reused. Recovery refuses
+unrecorded or substituted entries rather than adopting them by name or recursively
+deleting them. A crash before a newly created identity is durably published can retain
+uncertain evidence; an absent pathname alone never supplies a workload result.
+
+The registered runner stages before create, verifies individual read-only binds and
+unlinks after the start wait and applicable detector. Source handles and the operation
+lock outlive a cancelled copy or publication until its operation returns. Late replies
+cannot resume launch. Recovery observes staging independently as present, absent or
+unknown and requires confirmed worker, staging, egress and anchor removal before
+completion. Its original public session ID and stop retry survive incomplete cleanup.
+
+The shared memory/disk copy contract preserves final newlines and boundary sizes.
+The memory/SDK mount and uncertain-start contracts inspect independent observations,
+including acquired references surviving unlink, delayed start and failed removal.
+Controlled-time tests cover late reads, copies, unlink and intent publication; existing
+startup, cancellation, recovery and egress tests remain regression controls. Synthetic
+marker searches cover provisioning traffic and failures, staging output and controller
+metadata, with positive detector controls. These unit fixtures do not prove Docker's
+kernel mount behavior, cross-project runtime isolation or integrated absence across all
+approval, snapshot, diagnostics, checkout and refusal-log surfaces. Slice-31/33 still
+own those CI-only scenarios; question 6 still gates the integrated refusal-log claim.
+No Codex delivery or real credential use is enabled.
+
 ## Delivery alternatives rejected in the ledger's source review
 
 These are source-based reasons, not experiments run for T-47:
@@ -352,7 +394,7 @@ revisit the limitation. T-47 edits neither that document nor slice-26's older sp
 | --- | --- | --- |
 | slice-29 | `doctor --policy-only` and `--manifest-only` parse valid version 3; `--credentials-only` uses the shared metadata observation without manifest/engine/approval checks | Ordinary doctor, approve and run refuse with `policy.version`. No Codex kind. [Decision 0027](0027-credential-source-inspection.md) fixes the scope and state projections. |
 | slice-30 | Ordinary doctor and approve inspect version 3 and its grants after slice-29 proves the specified state-side exclusion | Run refuses any kind whose delivery is absent and any allowlist until slice-27, before the manifest, engine and host state. |
-| T-48 and slice-31 | Shared staging seam, then `claude-token` delivery with synthetic proof | `github-token` until slice-33; Codex until slice-32's decision-0030 implementation and proof; real credentials pending question 5. |
+| T-48 and slice-31 | Shared staging seam, then `claude-token` delivery with synthetic proof | `github-token` until slice-33; Codex until slice-32's decision-0032 implementation and proof; real credentials pending question 5. |
 | slice-33 | `github-token` through the same staging seam | No SSH identity, live-account trial or unproven credential-absence claim. |
 
 ## Provisioning redaction and the refusal-log conflict
@@ -453,7 +495,7 @@ here for the coordinating loop; no unanswered question is silently resolved by t
 
 | Question | What needs the person's answer | What waits |
 | --- | --- | --- |
-| 1. Codex login sharing — answered | q-72 and the 2026-11-16 charter amendment select the dedicated read-write directory and shared lock, with the host symlink prepared by the person. Decision 0030 specifies version 4, identity-bound approval, pre-start/final checks and the interval they cannot protect. Old-writer pinning, worker login/API key and copy-in/back are rejected. | Slice-32 now has its spec; implementation still depends on slice-30 and T-48. Real use still waits on question 5. |
+| 1. Codex login sharing — answered | q-72 and the 2026-11-16 charter amendment select the dedicated read-write directory and shared lock, with the host symlink prepared by the person. Decision 0032 specifies version 4, identity-bound approval, pre-start/final checks and the interval they cannot protect. Old-writer pinning, worker login/API key and copy-in/back are rejected. | Slice-32 now has its spec; implementation still depends on slice-30 and T-48. Real use still waits on question 5. |
 | 2. Refresh and revocation | Neither token kind refreshes. Provider revocation is external. Removing a grant requires approval without it before the next run, while a live session keeps its copy. Is that sufficient, and who owns refresh for a future kind that supports it? | Refresh/revocation promises beyond this per-command copy contract and later credential kinds. |
 | 3. Deletion and account management | No command creates, rotates or deletes an original source; only staged copies are managed here. Should account-management commands exist, or is source-file deletion the person's act? | Account/profile management commands and deletion promises. |
 | 4. GitHub scope | No scope or expiry is required or checked; checking would require a GitHub call. Should approval require a fine-grained token restricted to the checkout's repository, or an expiry? | Any such GitHub scope/expiry guarantee; delivery alone supplies none. |
@@ -476,7 +518,7 @@ T-47 does not edit it or the charter.
   on directly reading/writing host-side sources still hold for both token kinds.
   They, and the prohibition on sharing a writable credential store between projects,
   give way to the charter's Codex read-write directory exception, specified by
-  decision 0030 after q-72. This is shared exposure, not proof of the original AC-29.
+  decision 0032 after q-72. This is shared exposure, not proof of the original AC-29.
 - Credentials and Git's unresolved safe provisioning, callback, refresh and
   account-source updates, the corresponding "Decisions still open" entry, and
   Experiments item 3: this proposal selects provisioning for two token kinds only.
@@ -503,9 +545,9 @@ specs, not proof, charter amendments or authorization to use real credentials.
 | --- | --- |
 | slice-29 | Wait for both T-47 and slice-25's version 2; take the closed version 3 shape, metadata scope and refusal gates. Implement and prove decision 0027's bounded state mount projections with concurrent writers and accumulated unrelated history before downstream handoff; the host-wide scan is withdrawn. Omit the Codex kind its older why named. |
 | slice-30 | Wait for slice-29's source-exclusion evidence before admitting grants. Take canonical grants, profiles, review and q-52; update help and `docs/security.md`. |
-| T-48 | Take slice-29's state-side exclusion specification in decision 0027, retaining its shared validation and proof dependency. Stage tokens and recover through session ports, fake and adapter. Slice-32 extends the seam for external directory/lock sources under decision 0030; question 1 is answered. Its older "failed delivery stops the workload before it starts" applies only before a start attempt. Add acquired-mount/lost-acknowledgement coverage. |
+| T-48 | Take slice-29's state-side exclusion specification in decision 0027, retaining its shared validation and proof dependency. Stage tokens and recover through session ports, fake and adapter. Slice-32 extends the seam for external directory/lock sources under decision 0032; question 1 is answered. Its older "failed delivery stops the workload before it starts" applies only before a start attempt. Add acquired-mount/lost-acknowledgement coverage. |
 | slice-31 and slice-33 | Wait for slice-29's source-exclusion design and evidence, then prove token delivery, isolation and uncertain-start cleanup in CI. For slice-33, "where gh expects it" means `GH_TOKEN` exported by workload argv from its file. Neither can claim refusal-log absence before question 6 and its proof. |
-| slice-32 | Question 1 is answered; implement decision 0030's version-4 shared-directory spec after slice-30 and T-48. The old in-place-write premise remains invalid. |
+| slice-32 | Question 1 is answered; implement decision 0032's version-4 shared-directory spec after slice-30 and T-48. The old in-place-write premise remains invalid. |
 | slice-26 and slice-27 | Apply q-52 wherever the first network-granting approval lands; slice-26's branch spec still calls the approver open. |
 | T-39 and slice-28 | Reconcile question 6's eventual answer in the logging contract before downstream credential claims. Decision 0022 is unchanged here. |
 

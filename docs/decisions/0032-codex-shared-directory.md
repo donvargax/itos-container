@@ -5,7 +5,7 @@
 Specified on 2026-11-16; **not implemented or runtime evidence**. The normative
 scenarios and implementation handoff are in
 [credentials-codex.feature](../../features/credentials-codex.feature), all `@wip`.
-Slice-30 and T-48 are still being built. Their branch baselines are recorded there;
+Slice-30 and T-48 were in progress when this spec was drafted. Their branch baselines are recorded there;
 the implementer must consume their finished contracts, not replace their work.
 
 The coordinator's 2026-11-16 00:50 UTC answer settles q-72 and

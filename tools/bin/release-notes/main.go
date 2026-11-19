@@ -148,6 +148,7 @@ func (n *notes) readMoved(to string) error {
 type commit struct {
 	SHA, Header, Type, Breaking string // Breaking: what its footer asks, or its header for a !
 	message                     string
+	sync                        bool // a merge of main into an item branch, left out of the notes
 }
 
 type footer struct {
@@ -184,13 +185,58 @@ func lastRelease(rev, own string) (string, error) {
 	return release.Newest(tags), nil
 }
 
-// commits lists the range's commits, each with its type and what it breaks.
+// commits lists the range's commits, each with its type and what it breaks,
+// and marks the merges of main into an item branch (see syncMerges).
 func commits(rng string) ([]commit, error) {
 	out, err := command("git", "log", "--reverse", "--format=%H%x1f%B%x1e", rng)
 	if err != nil {
 		return nil, err
 	}
-	return parseLog(out), nil
+	list := parseLog(out)
+	to := rng
+	if at := strings.LastIndex(rng, ".."); at >= 0 {
+		to = rng[at+2:]
+	}
+	line, err := command("git", "rev-list", "--first-parent", to)
+	if err != nil {
+		return nil, err
+	}
+	merges, err := command("git", "rev-list", "--merges", "--parents", rng)
+	if err != nil {
+		return nil, err
+	}
+	sync := syncMerges(line, merges)
+	for i := range list {
+		list[i].sync = sync[list[i].SHA]
+	}
+	return list, nil
+}
+
+// syncMerges names the merges that bring main into an item branch, from the
+// first-parent line of the range's end (git rev-list --first-parent <to>, main's
+// own history) and the range's merges with their parents (git rev-list --merges
+// --parents). Where a merge sits decides, never its subject or its first
+// parent's type: a sync merge is off main's line and takes a later parent from
+// it, while the merge that lands an item is on that line and is a change.
+func syncMerges(line, merges string) map[string]bool {
+	onLine := make(map[string]bool)
+	for _, sha := range strings.Fields(line) {
+		onLine[sha] = true
+	}
+	sync := make(map[string]bool)
+	for _, record := range strings.Split(merges, "\n") {
+		shas := strings.Fields(record)
+		if len(shas) < 3 || onLine[shas[0]] {
+			continue
+		}
+		for _, parent := range shas[2:] {
+			if onLine[parent] {
+				sync[shas[0]] = true
+				break
+			}
+		}
+	}
+	return sync
 }
 
 // parseLog reads git log's records, oldest first, into commits.
@@ -359,7 +405,7 @@ func (n renderedNotes) document() (string, error) {
 
 const notesTemplate = `# itos-container {{.Version}}
 
-Cut by CI from the {{plural (len .Commits) "commit" "commits"}} since {{since}}: {{if .DependencyPatch}}no feat, no fix and no breaking change, but the binary is built from what moved beneath it, which makes a patch{{if .Moved}}: {{join .Moved "; "}}{{end}}.{{else}}{{plural (count "feat") "feat" "feats"}}, {{plural (count "fix") "fix" "fixes"}} and {{plural (count "breaking") "breaking change" "breaking changes"}}, {{if .From}}where a breaking change makes a major release, a feat a minor one and a fix a patch.{{else}}the initial version is 0.1.0 for any releasable history, including fixes and breaking changes.{{end}}{{end}}{{if .From}} Every change: {{history}}{{else}} Complete history: {{history}}{{end}}
+Cut by CI from the {{plural (len .Commits) "commit" "commits"}} since {{since}}: {{if .DependencyPatch}}no feat, no fix and no breaking change, but the binary is built from what moved beneath it, which makes a patch{{if .Moved}}: {{join .Moved "; "}}{{end}}.{{else}}{{plural (count "feat") "feat" "feats"}}, {{plural (count "fix") "fix" "fixes"}} and {{plural (count "breaking") "breaking change" "breaking changes"}}, {{if .From}}where a breaking change makes a major release, a feat a minor one and a fix a patch.{{else}}the initial version is 0.1.0 for any releasable history, including fixes and breaking changes.{{end}}{{end}}{{if .SyncCounts}} {{.SyncCounts}}{{end}}{{if .From}} Every change: {{history}}{{else}} Complete history: {{history}}{{end}}
 {{if .Omitted}}
 Some entries were omitted to keep these notes below 125000 bytes. Read the complete history: {{history}}
 {{end}}
@@ -385,7 +431,7 @@ See https://github.com/{{.Repository}}/blob/v{{.Version}}/docs/security.md.
 {{- if .MigrationOmitted}} Some migration instructions were omitted; read the complete history before upgrading: {{history}}
 {{- else if and .DependencyPatch (not .Upgrading)}} Nothing to change: no commit since {{since}} is a breaking change, and none has an ` + "`Upgrading:`" + ` footer asking for anything.
 {{- else}}
-{{- if eq (count "breaking") 0}} No commit since {{since}} is a breaking change.{{end}}
+{{- if eq (count "breaking") 0}}{{if .SyncBreaking}} No listed change is breaking.{{else}} No commit since {{since}} is a breaking change.{{end}}{{end}}
 {{- end}}
 {{- range .Breaking}}
    - Breaking, {{short .SHA}} ` + "`{{.Header}}`" + `:

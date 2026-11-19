@@ -8,11 +8,17 @@ import (
 )
 
 type CLI struct {
-	Context      context.Context           `kong:"-"`
-	Service      port.Recovery             `kong:"-"`
-	Presentation port.RecoveryPresentation `kong:"-"`
-	JSON         bool                      `name:"json" negatable:"" help:"Print one schema-1 JSON object."`
-	Args         []string                  `arg:"" optional:"" sep:"none" help:"Exactly one full 64-digit lowercase hexadecimal session ID."`
+	Homes            port.HomeManagement       `kong:"-"`
+	HomePresentation port.HomePresentation     `kong:"-"`
+	Consent          port.HomeConsent          `kong:"-"`
+	Home             string                    `name:"home" help:"Select one retained home by its complete ID."`
+	Reset            bool                      `name:"reset" help:"Retire this home and reserve an empty successor after terminal consent."`
+	Delete           bool                      `name:"delete" help:"Retire this home and disable its scope after terminal consent."`
+	Context          context.Context           `kong:"-"`
+	Service          port.Recovery             `kong:"-"`
+	Presentation     port.RecoveryPresentation `kong:"-"`
+	JSON             bool                      `name:"json" negatable:"" help:"Print one schema-1 JSON object."`
+	Args             []string                  `arg:"" optional:"" sep:"none" help:"Exactly one full 64-digit lowercase hexadecimal session ID."`
 }
 
 func (CLI) Help() string {
@@ -28,6 +34,9 @@ func (c CLI) Run() int {
 	ctx := c.Context
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if c.Home != "" || c.Reset || c.Delete {
+		return c.HomePresentation.PrintHomes(domain.Home(ctx, c.Homes, c.Home, c.Args, c.Reset, c.Delete, c.Consent), c.JSON)
 	}
 	return c.Presentation.Print(domain.Stop(ctx, c.Service, c.Args), c.JSON)
 }

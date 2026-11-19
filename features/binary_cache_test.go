@@ -14,6 +14,10 @@ import (
 // successful builds are immutable and shared outside the scenario checkouts.
 var featureBinaryBuilds sync.Map
 
+// TestMain owns this private directory for the entire test process. Standalone
+// fixtures may share immutable executables but never state or coverage output.
+var standaloneProbeDir string
+
 func featureBinary(path string, build func(string) error) (string, error) {
 	for {
 		done := make(chan struct{})
@@ -114,5 +118,40 @@ func TestFeatureBinaryFailedBuildIsNotCached(t *testing.T) {
 	data, readErr := os.ReadFile(path)
 	if err != nil || readErr != nil || string(data) != "complete" {
 		t.Error("failed build poisoned cache", err, readErr, string(data))
+	}
+}
+
+func TestStandaloneSessionProbeSurvivesFixtureCleanup(t *testing.T) {
+	root, err := moduleRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first string
+	var original os.FileInfo
+	t.Run("first fixture", func(t *testing.T) {
+		w := &world{root: root, dir: t.TempDir()}
+		first, err = w.sessionProbeBinary()
+		if err != nil {
+			t.Fatal(err)
+		}
+		original, err = os.Stat(first)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	if t.Failed() {
+		return
+	}
+	if _, err := os.Stat(first); err != nil {
+		t.Fatal("fixture cleanup discarded the reusable test assembly", err)
+	}
+	w := &world{root: root, dir: t.TempDir()}
+	second, err := w.sessionProbeBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reused, err := os.Stat(second)
+	if err != nil || !os.SameFile(original, reused) {
+		t.Fatal("independent fixtures rebuilt the same test assembly", err)
 	}
 }

@@ -15,8 +15,11 @@ type Storage struct {
 	Failure     port.Failure
 }
 type Directory struct {
+	ReadFailures                           map[string]port.Failure
+	Execution                              bool
 	Files                                  map[string][]byte
 	ReadFailure, WriteFailure, SyncFailure port.Failure
+	PublishFailure                         port.Failure
 	Changed, Locked                        bool
 }
 
@@ -46,12 +49,13 @@ func (s *Storage) Open(ctx context.Context, c port.Candidate, collection string,
 		return nil, "state.unavailable"
 	}
 	d.Locked = true
+	d.Execution = collection == "intents"
 	return d, ""
 }
 func (d *Directory) Close()          { d.Locked = false }
 func (d *Directory) Unchanged() bool { return !d.Changed }
 func (d *Directory) Read(name string) ([]byte, port.Failure) {
-	if !strings.HasSuffix(name, ".json") || len(name) <= 5 || strings.Trim(strings.TrimSuffix(name, ".json"), "0123456789abcdef") != "" {
+	if (!strings.HasSuffix(name, ".json") || len(name) <= 5 || strings.Trim(strings.TrimSuffix(name, ".json"), "0123456789abcdef") != "") && (!d.Execution || !port.ExecutionName(name)) {
 		return nil, "state.invalid"
 	}
 	if d.Changed {
@@ -59,6 +63,9 @@ func (d *Directory) Read(name string) ([]byte, port.Failure) {
 	}
 	if d.ReadFailure != "" {
 		return nil, d.ReadFailure
+	}
+	if f := d.ReadFailures[name]; f != "" {
+		return nil, f
 	}
 	if d.Files[name] == nil {
 		return nil, ""
@@ -80,7 +87,7 @@ func (d *Directory) Publish(name string, previous, next []byte) port.Failure {
 		return d.WriteFailure
 	}
 	d.Files[name] = append([]byte{}, next...)
-	return ""
+	return d.PublishFailure
 }
 func (d *Directory) Sync(name string, expected []byte) port.Failure {
 	old, f := d.Read(name)
@@ -131,5 +138,14 @@ func StorageContract(t Reporter, open func() (port.Storage, port.Candidate)) {
 	}
 	if f = d.Sync("1.json", []byte("second")); f != "" {
 		t.Errorf("sync %s", f)
+	}
+	name := strings.Repeat("a", 64) + ".egress.json"
+	if f = d.Publish(name, nil, []byte("execution")); f != "" {
+		t.Errorf("execution publication %s", f)
+	}
+	for _, invalid := range []string{"../" + name, "1.egress.json", strings.Repeat("A", 64) + ".egress.json", name + ".json"} {
+		if _, f = d.Read(invalid); f != "state.invalid" {
+			t.Errorf("execution name accepted: %s, %s", invalid, f)
+		}
 	}
 }

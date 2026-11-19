@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/alecthomas/kong"
@@ -16,6 +17,7 @@ import (
 	sessiondisk "github.com/donvargax/itos-container/internal/engine/session/disk"
 	sp "github.com/donvargax/itos-container/internal/engine/session/port"
 	sf "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
+	terminalnative "github.com/donvargax/itos-container/internal/engine/terminal/native"
 	runcommand "github.com/donvargax/itos-container/internal/slices/run/command"
 	"github.com/donvargax/itos-container/internal/slices/run/signals"
 )
@@ -59,7 +61,20 @@ func TestLocalRunCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ui := &cli.UI{In: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Classify: runcommand.Classify}
+	in, out := os.Stdin, os.Stdout
+	if alias := os.Getenv("SLICE_37_TERMINAL_ALIAS"); alias != "" {
+		file, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = file.Close() }()
+		if alias == "stdin" {
+			in = file
+		} else {
+			out = file
+		}
+	}
+	ui := &cli.UI{In: in, Stdout: out, Stderr: os.Stderr, Classify: runcommand.Classify}
 	_, err = parser.Parse(runOptions(args))
 	if stopped >= 0 {
 		os.Exit(stopped)
@@ -70,11 +85,12 @@ func TestLocalRunCommand(t *testing.T) {
 	service, _ := approvalServices("run", os.Stdin, os.Stdout, os.Stderr)
 	runner, _ := sessionServices(service)
 	runner.Workspace = &sessiondisk.Workspace{ProcessOpen: localProcessOpen, MountStat: localMountStat(os.Getenv("SLICE_17_LOCAL_MOUNT_ROOT"))}
-	ctx, release := signals.Capture(context.Background())
+	ctx, release := signals.Capture(context.Background(), c.Run.TTY)
 	c.Run.Approval = approval.Preflight{Service: service, Local: service.Readiness.(ap.StagedReadiness), Canonical: canonical.JSON{}}
 	c.Run.Snapshots = disk.Snapshots{Store: service.Store.(disk.Store), Records: canonical.JSON{}}
 	c.Run.Runner, c.Run.Context = runner, ctx
 	c.Run.InheritedJSON = os.Getenv("ITOS_JSON") == "1"
+	c.Run.Terminal = terminalnative.NewPair(in, out, runtime.GOOS)
 	code := c.Run.Run(ui)
 	release()
 	os.Exit(code)

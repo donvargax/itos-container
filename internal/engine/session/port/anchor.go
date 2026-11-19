@@ -67,7 +67,7 @@ func (r Record) ValidAnchor(b Binding) bool {
 		return r.Anchor == (Anchor{})
 	}
 	a := r.Anchor
-	return (r.Schema == 2 || r.Schema == 3) && HexID(a.Session) && a.Name == "itos-container-anchor-"+r.NameToken() &&
+	return (r.Schema == 2 || r.Schema == 3 || r.Schema == 4) && HexID(a.Session) && a.Name == "itos-container-anchor-"+r.NameToken() &&
 		DescriptorPath(a.Source) && a.Device == b.Checkout.Device && a.Inode == b.Checkout.Inode &&
 		a.Device != "" && a.Inode != "" && ((a.Stage == "intent" && a.Created == "") ||
 		((a.Stage == "owned" || a.Stage == "absent") && a.Created != ""))
@@ -88,7 +88,10 @@ func (r Record) anchorTransition(next Record) bool {
 				next.Stage == r.Stage && next.ContainerID == "" && next.Anchor.Stage == "intent" && next.Anchor.Created == "" &&
 				HexID(next.Anchor.Session) && next.Anchor.Name == "itos-container-anchor-"+r.NameToken() && DescriptorPath(next.Anchor.Source)
 	}
-	if next.Schema != r.Schema && (r.Schema != 2 || next.Schema != 3) {
+	sameSchema := next.Schema == r.Schema
+	egressUpgrade := r.Schema == 2 && next.Schema == 3
+	credentialUpgrade := (r.Schema == 2 || r.Schema == 3) && next.Schema == 4
+	if !sameSchema && !egressUpgrade && !credentialUpgrade {
 		return false
 	}
 	a, n := r.Anchor, next.Anchor

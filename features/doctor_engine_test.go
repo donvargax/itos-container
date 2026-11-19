@@ -36,6 +36,9 @@ func (l *doctorListener) Accept() (net.Conn, error) {
 }
 
 type doctorAPI struct {
+	credentialBodies         bool
+	bodyJournal              []string
+	bodyError                error
 	mu                       sync.Mutex
 	socket                   string
 	server                   *http.Server
@@ -54,6 +57,7 @@ type doctorAPI struct {
 	expectedImage            string
 	runBarrier               func(int)
 	offline                  *localOfflineAPI
+	egress                   *localEgressAPI
 }
 
 func newDoctorAPI(image string) *doctorAPI {
@@ -81,7 +85,7 @@ func (w *world) doctorLocalAPI(paused bool) error {
 
 func (w *world) startDoctorAPI(a *doctorAPI) error {
 	// Keep Unix paths short even under a long TMPDIR or Go test name.
-	dir, err := os.MkdirTemp("/tmp", "slice-3-api-")
+	dir, err := os.MkdirTemp(w.fixtureSocketRoot(), "slice-3-api-")
 	if err != nil {
 		return err
 	}
@@ -117,13 +121,17 @@ func doctorAllowedRequest(r doctorRequest, image string, allowImage bool) bool {
 	return path == "/version" || path == "/info" || (allowImage && path == "/images/"+image+"/json")
 }
 
-func (a *doctorAPI) serve(out http.ResponseWriter, r *http.Request) {
+func (a *doctorAPI) serveEngine(out http.ResponseWriter, r *http.Request) {
 	pid, _ := r.Context().Value(runPeerKey{}).(int)
 	record := doctorRequest{r.Method, r.URL.Path, r.URL.RawQuery, pid}
 	a.mu.Lock()
 	a.journal = append(a.journal, record)
-	offline := a.offline
+	offline, egress := a.offline, a.egress
 	a.mu.Unlock()
+	// An allowlist fixture owns its networks, proxy and both image responses.
+	if egress != nil && egress.serve(out, r) {
+		return
+	}
 	if offline != nil && offline.serve(out, r) {
 		return
 	}

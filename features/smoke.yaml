@@ -24,6 +24,10 @@
   scenarios:
     - id: "@ID-COUNT-01"
       why: count's whole path in one run, the counts on stdout and the hint on stderr, the file read through the disk adapter and the output shaped
+- file: run_terminal.feature
+  scenarios:
+    - id: "@ID-RUNTTY-01"
+      why: explicit terminal selection, literal argv, raw output and restoration through the local engine recorder
 - file: cli.feature
   scenarios:
     - id: "@ID-CLI-01"
@@ -40,6 +44,10 @@
   scenarios:
     - id: "@ID-CREDENTIALS-16"
       why: metadata inspection reports both requests without reading or retaining synthetic token contents or contacting an engine
+- file: credentials-approval.feature
+  scenarios:
+    - id: "@ID-CREDAPPROVAL-05"
+      why: terminal review discloses the exact credential grants and exposure limits before consent publishes only approval state without reading source data
 - file: manifest.feature
   scenarios:
     - id: "@ID-MANIFEST-01"
@@ -104,3 +112,11 @@
   scenarios:
     - id: "@ID-SOCKETS-01"
       why: checkout Unix sockets cause typed refusal before any worker create while preserving host listeners in the guarded CI engine tier
+- file: egress.feature
+  scenarios:
+    - id: "@ID-EGRESS-07"
+      why: the file's only live scenario until the allowlist run is built, and fast with no engine; the proxy executable rule and its ELF adapter admit the static control and refuse each unsafe delivery. Choose the run through the proxy in its place once that is live
+- file: harness-home.feature
+  scenarios:
+    - id: "@ID-HOME-01"
+      why: closed home policy validation and unchanged omitted-home defaults without state or engine access

@@ -25,12 +25,22 @@ type runAPI struct {
 	mu            sync.Mutex
 	resource      *container.InspectResponse
 	attached      net.Conn
+	attach        []attachEscapeWire
 	defect        func(*container.InspectResponse)
 	readInput     bool
 	closeInput    bool
 	input         []byte
 	signals       []string
 	signalTargets []string
+	resizes       []string
+}
+
+// attachEscapeWire is one attach request's escape-sequence request as the
+// daemon would read it: whether a detachKeys parameter was sent at all, and
+// its exact value.
+type attachEscapeWire struct {
+	value string
+	sent  bool
 }
 
 func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
@@ -78,6 +88,7 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 			}
 			_ = json.NewEncoder(w).Encode(observed)
 		case strings.HasSuffix(path, "/attach"):
+			a.attach = append(a.attach, attachEscapeWire{value: r.URL.Query().Get("detachKeys"), sent: r.URL.Query().Has("detachKeys")})
 			conn, buf, err := w.(http.Hijacker).Hijack()
 			if err != nil {
 				t.Error(err)
@@ -100,8 +111,12 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 					t.Error(err)
 				}
 			}
-			writeFrame(a.attached, 1, []byte("stdout\x00\xff"))
-			writeFrame(a.attached, 2, []byte("stderr\x00\xfe"))
+			if a.resource.Config.Tty {
+				_, _ = a.attached.Write([]byte("stdout\x00\xffstderr\x00\xfe"))
+			} else {
+				writeFrame(a.attached, 1, []byte("stdout\x00\xff"))
+				writeFrame(a.attached, 2, []byte("stderr\x00\xfe"))
+			}
 			if a.closeInput {
 				_ = a.attached.(*net.UnixConn).CloseWrite()
 			} else {
@@ -110,6 +125,9 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 			w.WriteHeader(204)
 		case strings.HasSuffix(path, "/wait"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 7})
+		case strings.HasSuffix(path, "/resize"):
+			a.resizes = append(a.resizes, r.URL.RawQuery)
+			w.WriteHeader(200)
 		case strings.HasSuffix(path, "/kill"):
 			a.signals = append(a.signals, r.URL.Query().Get("signal"))
 			a.signalTargets = append(a.signalTargets, strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/kill"))
@@ -223,14 +241,21 @@ func TestVerifyActualBoundary(t *testing.T) {
 		"published port": func(r *container.InspectResponse) {
 			r.NetworkSettings.Ports = network.PortMap{network.MustParsePort("8080/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: "18080"}}}
 		},
-		"root":            func(r *container.InspectResponse) { r.Config.User = "0:0" },
-		"gid":             func(r *container.InspectResponse) { r.Config.User = "1000:0" },
-		"group":           func(r *container.InspectResponse) { r.HostConfig.GroupAdd = []string{"0"} },
-		"root filesystem": func(r *container.InspectResponse) { r.HostConfig.ReadonlyRootfs = false },
-		"bind":            func(r *container.InspectResponse) { r.HostConfig.Binds = []string{"/:/host"} },
-		"source":          func(r *container.InspectResponse) { r.HostConfig.Mounts[0].Source = "/host" },
-		"anchor subpath":  func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.Subpath = "replacement" },
-		"anchor copy":     func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.NoCopy = false },
+		"port binding": func(r *container.InspectResponse) {
+			r.HostConfig.PortBindings = network.PortMap{network.MustParsePort("8080/tcp"): {{HostPort: "18080"}}}
+		},
+		"publish all ports": func(r *container.InspectResponse) { r.HostConfig.PublishAllPorts = true },
+		"root":              func(r *container.InspectResponse) { r.Config.User = "0:0" },
+		"gid":               func(r *container.InspectResponse) { r.Config.User = "1000:0" },
+		"group":             func(r *container.InspectResponse) { r.HostConfig.GroupAdd = []string{"0"} },
+		"root filesystem":   func(r *container.InspectResponse) { r.HostConfig.ReadonlyRootfs = false },
+		"bind":              func(r *container.InspectResponse) { r.HostConfig.Binds = []string{"/:/host"} },
+		"volumes from":      func(r *container.InspectResponse) { r.HostConfig.VolumesFrom = []string{"foreign"} },
+		"links":             func(r *container.InspectResponse) { r.HostConfig.Links = []string{"foreign"} },
+		"extra hosts":       func(r *container.InspectResponse) { r.HostConfig.ExtraHosts = []string{"foreign:127.0.0.1"} },
+		"source":            func(r *container.InspectResponse) { r.HostConfig.Mounts[0].Source = "/host" },
+		"anchor subpath":    func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.Subpath = "replacement" },
+		"anchor copy":       func(r *container.InspectResponse) { r.HostConfig.Mounts[0].VolumeOptions.NoCopy = false },
 		"propagation": func(r *container.InspectResponse) {
 			r.HostConfig.Mounts[0].BindOptions = &mount.BindOptions{Propagation: "shared"}
 		},
@@ -257,12 +282,24 @@ func TestVerifyActualBoundary(t *testing.T) {
 		"seccomp": func(r *container.InspectResponse) {
 			r.HostConfig.SecurityOpt = append(r.HostConfig.SecurityOpt, "seccomp=unconfined")
 		},
-		"pid": func(r *container.InspectResponse) { r.HostConfig.PidMode = "host" },
-		"ipc": func(r *container.InspectResponse) { r.HostConfig.IpcMode = "host" },
-		"uts": func(r *container.InspectResponse) { r.HostConfig.UTSMode = "host" },
+		"pid":              func(r *container.InspectResponse) { r.HostConfig.PidMode = "host" },
+		"ipc":              func(r *container.InspectResponse) { r.HostConfig.IpcMode = "host" },
+		"uts":              func(r *container.InspectResponse) { r.HostConfig.UTSMode = "host" },
+		"user namespace":   func(r *container.InspectResponse) { r.HostConfig.UsernsMode = "host" },
+		"cgroup namespace": func(r *container.InspectResponse) { r.HostConfig.CgroupnsMode = "host" },
 		"device": func(r *container.InspectResponse) {
 			r.HostConfig.Devices = []container.DeviceMapping{{PathOnHost: "/dev/x"}}
 		},
+		"device request": func(r *container.InspectResponse) {
+			r.HostConfig.DeviceRequests = []container.DeviceRequest{{Driver: "foreign"}}
+		},
+		"device rules": func(r *container.InspectResponse) { r.HostConfig.DeviceCgroupRules = []string{"a"} },
+		"sysctl": func(r *container.InspectResponse) {
+			r.HostConfig.Sysctls = map[string]string{"net.ipv4.ip_forward": "1"}
+		},
+		"absent init":      func(r *container.InspectResponse) { r.HostConfig.Init = nil },
+		"enabled init":     func(r *container.InspectResponse) { enabled := true; r.HostConfig.Init = &enabled },
+		"absent pids":      func(r *container.InspectResponse) { r.HostConfig.PidsLimit = nil },
 		"pids":             func(r *container.InspectResponse) { n := int64(4095); r.HostConfig.PidsLimit = &n },
 		"restart":          func(r *container.InspectResponse) { r.HostConfig.RestartPolicy.Name = "always" },
 		"autoremove":       func(r *container.InspectResponse) { r.HostConfig.AutoRemove = true },

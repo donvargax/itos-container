@@ -11,6 +11,38 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/readiness/port/porttest"
 )
 
+func TestCredentialPolicyPinRetainsItsDescriptorIdentity(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux descriptor identities")
+	}
+	c := &Checkout{}
+	if _, failure := c.PinnedIdentity(); failure != port.CheckoutUnavailable {
+		t.Fatal(failure)
+	}
+	root := t.TempDir()
+	if failure := c.Pin(root); failure != port.None {
+		t.Fatal(failure)
+	}
+	original, failure := c.PinnedIdentity()
+	if failure != port.None || original.Root != root || original.Device == "" || original.Inode == "" {
+		t.Fatal(original, failure)
+	}
+	if err := os.Rename(root, root+"-pinned"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root + "-pinned") })
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if retained, failure := c.PinnedIdentity(); failure != port.None || retained != original {
+		t.Fatal(retained, failure)
+	}
+	c.Close()
+	if _, failure := c.PinnedIdentity(); failure != port.CheckoutUnavailable {
+		t.Fatal(failure)
+	}
+}
+
 func TestPinAndInspectHandleFailures(t *testing.T) {
 	path := checkoutFixture(t)
 	c := &Checkout{}

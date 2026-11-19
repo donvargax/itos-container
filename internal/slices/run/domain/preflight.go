@@ -84,6 +84,9 @@ func PreflightContext(ctx context.Context, a port.Approval, snapshots approval.S
 	if failure != "" {
 		return approval.Durable{}, SnapshotRefusal{Failure: failure, Reference: durable.Reference}
 	}
+	if view.Inspection.ProxyImage != nil {
+		durable.ProxyImageID = view.Inspection.ProxyImage.ID
+	}
 	return durable, nil
 }
 

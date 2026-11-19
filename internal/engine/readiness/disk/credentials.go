@@ -236,3 +236,11 @@ func (f *CredentialFiles) Close(h port.CredentialHandle) {
 		delete(f.handles, h)
 	}
 }
+
+func (f *CredentialFiles) ReadPath(h port.CredentialHandle) (string, bool) {
+	p := f.handles[h]
+	if p == nil {
+		return "", false
+	}
+	return "/proc/self/fd/" + strconv.FormatUint(uint64(p.file.Fd()), 10), true
+}
