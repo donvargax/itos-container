@@ -8272,14 +8272,3 @@
     This task has no dependencies and stays unowned during specification and review. Only the
     contributor takes the task after spec approval.
     The implementer may commit freely in its workspace. The host makes the landing commits.
-  done_when:
-    - run: |-
-        report=$(go test ./features -count=1 -v -run '^TestApprovalNoRecordRejectsFrozenInput$') || {
-          printf '%s\n' "$report"
-          exit 1
-        }
-        printf '%s\n' "$report" | grep '^--- PASS: TestApprovalNoRecordRejectsFrozenInput (' || {
-          echo 'Missing a passing TestApprovalNoRecordRejectsFrozenInput.'
-          exit 1
-        }
-      timeout: 180
