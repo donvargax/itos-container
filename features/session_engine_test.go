@@ -39,6 +39,7 @@ type sessionAPI struct {
 	problem  error
 	attached net.Conn
 	volumes  map[string]map[string]any
+	execs    map[string]map[string]any
 }
 
 func (w *world) startSessionAPI() error {
@@ -52,7 +53,7 @@ func (w *world) startSessionAPI() error {
 	if err != nil {
 		return err
 	}
-	a := &sessionAPI{w: w, observed: map[string]map[string]any{}, local: map[string]map[string]any{}, absent: map[string]bool{}}
+	a := &sessionAPI{w: w, observed: map[string]map[string]any{}, local: map[string]map[string]any{}, absent: map[string]bool{}, execs: map[string]map[string]any{}}
 	a.server = &http.Server{Handler: http.HandlerFunc(a.serve), ReadHeaderTimeout: time.Second}
 	w.session.api = a
 	w.doctor.env["DOCKER_HOST"] = "unix://" + path
@@ -107,6 +108,19 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 	}
 	if a.w.recoveryLocal != nil && strings.HasPrefix(entry.Path, "/containers/") {
 		a.serveRecovery(out, request, entry, index)
+		return
+	}
+	if a.w.exec != nil && a.w.exec.engineUnavailable {
+		a.requests[index].Status = http.StatusServiceUnavailable
+		http.Error(out, "engine unavailable slice-38-api-body-marker", http.StatusServiceUnavailable)
+		return
+	}
+	if a.w.exec != nil && strings.HasPrefix(entry.Path, "/containers/") && strings.HasSuffix(entry.Path, "/exec") {
+		a.serveExecCreate(out, request, entry, index)
+		return
+	}
+	if a.w.exec != nil && strings.HasPrefix(entry.Path, "/exec/") {
+		a.serveExec(out, request, entry, index)
 		return
 	}
 	if a.w.session.offline && strings.HasPrefix(entry.Path, "/containers/") {

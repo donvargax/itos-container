@@ -95,7 +95,7 @@ Feature: Execute literal argv in a live owned foreground session
   # There is exactly one public session ID before -- and a nonempty executable
   # after it. A later argument cannot replace an empty executable. No abbreviations,
   # names, worker IDs, environment/user overrides or missing separator inference.
-  @ID-EXEC-01 @wip @slice-38
+  @ID-EXEC-01 @wip @slice-38 @linux
   Scenario Outline: Exec requires a full session ID and an explicit command
     Given an exec invocation fixture with isolated state and access recorders
     When the exec CLI receives "<arguments>" with ITOS_JSON "0"
@@ -123,7 +123,7 @@ Feature: Execute literal argv in a live owned foreground session
   # The new assertion parses ALL stdout as one schema-1 object, ok false,
   # exactly one problem with rule/exit plus nonempty message and fix. The fix
   # names removal of --json and ITOS_JSON=1; stderr also explains the refusal.
-  @ID-EXEC-02 @wip @slice-38
+  @ID-EXEC-02 @wip @slice-38 @linux
   Scenario Outline: Exec refuses JSON before session lookup or workload parsing
     Given an exec invocation fixture with isolated state and access recorders
     When the exec CLI receives "<arguments>" with ITOS_JSON "<inherited>"
@@ -144,7 +144,7 @@ Feature: Execute literal argv in a live owned foreground session
   # it retains before-snapshots and unrelated resources. No current checkout
   # config is needed to seed a session. A wrong-user row uses injected host
   # identity in the command assembly, never an actual account or credentials.
-  @ID-EXEC-03 @wip @slice-38
+  @ID-EXEC-03 @wip @slice-38 @linux
   Scenario Outline: Exec admits only an unambiguous live owned session
     Given an exec admission fixture with condition "<condition>"
     When the exec CLI requests a probe in the fixture session through both local backends

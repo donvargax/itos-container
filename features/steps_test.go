@@ -54,6 +54,7 @@ type world struct {
 	anchorLocalRecovery *anchorRecoveryLocal
 	recovery            *recoveryNative
 	recoveryLocal       *recoveryLocal
+	exec                *execWorld
 	lifecycle           *lifecycleNative
 	loss                *lifecycleLoss
 	overlap             *overlapFixture
@@ -91,7 +92,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		// Before the world is reset, whatever the row's outcome: a failing row is the
 		// one whose offsets matter, and godog skips the steps after a failure.
 		ctx = withSignalOffsets(ctx, w.lifecycle.signalOffsets())
-		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative())
+		sessionErr := errors.Join(w.closeExec(), w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative())
 		w.closeCredentials()
 		w.closeDoctor()
 		w.closePolicy()
@@ -193,6 +194,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w.doctorSteps(sc)
 	w.runSteps(sc)
 	w.execInvocationSteps(sc)
+	w.execSteps(sc)
 	w.approvalSteps(sc)
 	w.credentialApprovalSteps(sc)
 	w.sessionSteps(sc)
