@@ -936,60 +936,72 @@ Feature: An approved persistent home for one checkout's harness
       | normal exit                         |
       | controller loss followed by stop    |
 
-  # Each row starts from its own session. In both confirmed rows the engine
-  # answers not-found for the recorded full worker ID throughout. All other
-  # session resources are accounted for, so only the retained account can block
-  # cleanup in those rows. The unconfirmed row withholds that answer until the
-  # stop retry. Inspect read-only copies of the database and sidecars as in 08.
+  # Each row starts from its own session with all other resources accounted for.
+  # The engine answers not-found for the full worker ID in the confirmed rows.
+  # In the unconfirmed rows only inspection of that ID is unavailable until the
+  # final stop retry. The worker that never imported the login has a writable
+  # home throughout. Only the full-ID inspection result changes between retries.
+  # Inspect read-only copies as in 08. A present login requires the staged
+  # credential ID's row to contain the granted key. An absent login requires
+  # both a missing row and absence of the key throughout the retained home,
+  # including the database and its SQLite sidecars.
   # As in HOME-12, changing the host state root still selects the original volume.
   # Keep each row's grant-free policy and approval fixed across all three runs.
   # /bin/true can exit successfully even with the database read-only.
   @wip @slice-40 @ID-OPENCODELOGIN-09 @local-engine-fixture
   Scenario Outline: Incomplete OpenCode cleanup blocks home reuse until the original session is recovered
-    Given a synthetic OpenCode session in the original host XDG_STATE_HOME with an independently recorded owned worker, a retained home and an acquired login whose staged pathname is gone
+    Given a synthetic OpenCode session in the original host XDG_STATE_HOME with an independently recorded owned worker and a retained home
+    And the worker acquired the read-only login mount before the host staging pathname was unlinked
+    And the worker <import history> the staged account before controller loss
     And a second, empty host XDG_STATE_HOME for the same checkout, account home, UID/GID and daemon
-    And the retained worker database contains the imported account for that grant, its synthetic key and an unrelated session with a known ID, title and message
-    And the retained database, its directory and its SQLite sidecars are read-only to cleanup
+    And the retained worker database contains an unrelated session with a known ID, title and message
+    And the retained database, its directory and any SQLite sidecars are <access> to cleanup
     And the checkout now requests a different OpenCode provider
-    When the fixture snapshots the retained OpenCode database and its sidecars before the first stop
-    Then the account with the imported credential ID in that snapshot contains the granted synthetic key
+    When the fixture snapshots the retained home and probes the store with cleanup's permissions before the first stop
+    Then read-only inspection of the snapshot reports the staged login as <login>
+    And the probe finds the database, its directory and any SQLite sidecars <access>
+    And the engine recorder shows the original worker acquired the login mount and a separate lookup finds its host staging pathname absent
     When a fresh stop for that session runs in the original host XDG_STATE_HOME with worker absence <confirmation>
     And fresh status inspects the session under the same conditions
     Then status shows the frozen OpenCode provider and reports the original worker as "<resource>"
     And the engine recorder shows worker absence was <confirmation> for the recorded full ID during the first stop
     And the first stop exits nonzero and both commands report incomplete cleanup for the original session
     And each command gives exactly the retry argv "itos", "container", "stop" and the original session ID
-    When the checkout selects a version 1 offline policy for the original home while the retained store is still read-only
+    When the checkout selects a version 1 offline policy for the original home
     And the fixture independently records a matching grant-free approval for that checkout and policy in each host XDG_STATE_HOME
     And the run controller selects the <run root> host XDG_STATE_HOME
     And itos-container runs with "run -- /bin/true"
     Then the grant-free run exits nonzero and the engine recorder counts zero worker start requests during that run
-    And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
-    When the fixture makes the retained database, its directory and its SQLite sidecars writable to cleanup
+    And read-only inspection of the retained home still reports the staged login as <login>
+    When a fresh controller executes the reported stop retry in the original host XDG_STATE_HOME with worker absence still <confirmation>
+    Then that retry exits nonzero, reports incomplete cleanup and gives the same stop retry argv for the original session
+    When the fixture lifts any write restriction it set on the retained database, its directory and its SQLite sidecars
     Then an independent probe with cleanup's permissions opens the retained database file read-write and closes it without writing
-    And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
+    And read-only inspection of the retained home still reports the staged login as <login>
     When the run controller selects the <run root> host XDG_STATE_HOME
     And itos-container runs with "run -- /bin/true"
     Then the grant-free run exits nonzero and the engine recorder counts zero worker start requests during that run
-    And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
+    And read-only inspection of the retained home still reports the staged login as <login>
     When a fresh controller in the original host XDG_STATE_HOME executes the reported stop retry with the engine answering not-found for the recorded full worker ID
     Then immediate read-only inspection finds no imported account in the retained OpenCode database
     And the granted key is absent from the database, its SQLite sidecars and the rest of the retained OpenCode data
     And the same database still contains the unrelated session with its original ID, title and message
     And the retry exits 0 and reports cleanup complete for the original session
+    And the engine recorder shows the retry confirmed absence by the original full worker ID
     And independent inspection confirms the worker and staging are absent
     And the original home volume is still present and the host login is byte-for-byte intact
-    And neither stop starts a worker, rereads a host credential or invents a workload exit
+    And no stop starts a worker, rereads a host credential or invents a workload exit
     When the run controller selects the <run root> host XDG_STATE_HOME
     And itos-container runs with "run -- /bin/true"
     Then it exits with code 0
     And the engine recorder shows that run started a new worker with the original volume mounted at "/home/itos" and no credential mounts
 
     Examples:
-      | confirmation | resource | run root |
-      | confirmed    | absent   | original |
-      | confirmed    | absent   | second   |
-      | unconfirmed  | unknown  | original |
+      | import history | access    | login   | confirmation | resource | run root |
+      | imported       | read-only | present | confirmed    | absent   | original |
+      | imported       | read-only | present | confirmed    | absent   | second   |
+      | imported       | read-only | present | unconfirmed  | unknown  | original |
+      | never imported | writable  | absent  | unconfirmed  | unknown  | second   |
 
   # Management runs only on independently tracked disposable CI homes. Observe
   # active-worker refusal and a successful control before harness teardown.
