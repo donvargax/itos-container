@@ -2401,3 +2401,15 @@ items:
       Show the selected backend during review and record it in the approval. When neither backend is
       available, require explicit consent to “late host sockets reachable”. Cover reapproval after
       the selection changes. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: p1-run-checkout-socket-admission
+    title: Require matching socket approval before worker creation
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-approve-checkout-socket-backend]
+    kind: idea
+    why: >
+      Compare the host’s current selection with the approval before creating a worker and freeze the
+      choice in the session record. Prove that startup-scan-only operation requires explicit
+      weaker-mode consent, including when an older approval exists. Broken down from
+      p1-checkout-socket-kernel-enforcement.
