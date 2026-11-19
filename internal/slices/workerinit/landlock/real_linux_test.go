@@ -197,8 +197,10 @@ func TestRealCalls(t *testing.T) {
 	if abi == 0 {
 		return
 	}
-	if err := c.restrict(-1, 0); !errors.Is(err, syscall.EBADF) {
-		t.Errorf("restrict(-1) = %v; want EBADF", err)
+	// The kernel checks no_new_privs before the descriptor: EPERM without it
+	// (and without CAP_SYS_ADMIN), EBADF otherwise.
+	if err := c.restrict(-1, 0); !errors.Is(err, syscall.EBADF) && !errors.Is(err, syscall.EPERM) {
+		t.Errorf("restrict(-1) = %v; want EBADF or EPERM", err)
 	}
 	if _, err := c.create(rulesetAttr{}, 0xffff); !errors.Is(err, syscall.EINVAL) {
 		t.Errorf("create with unknown flags = %v; want EINVAL", err)
