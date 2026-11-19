@@ -385,6 +385,14 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 		state.acknowledged = true
 	}
 	detector, failure := detectAnchor(ctx, intent, c, s.Workspace)
+	if context.Cause(ctx) == errLaunchObservationEnded {
+		// The client's loss ended the detector's own observation, so a refusal
+		// found here says nothing about the mount, and no verdict can be saved
+		// through the cancelled launch. Report the loss and let the acknowledged
+		// worker take its owned grace period.
+		recordMountDiagnostic(ctx, port.MountDiagnostic{})
+		return c, a, resource, lostClientTerminal(streams.Terminal)
+	}
 	r := entry.Record()
 	r.MountDetector = detector
 	if failure == "" {
