@@ -320,6 +320,58 @@ func TestResizeRequiresFreshOwnedRunningSession(t *testing.T) {
 	}
 }
 
+func TestResizeKeepsWaitForWorkerThatAlreadyExited(t *testing.T) {
+	for _, when := range []string{"before inspection", "during resize"} {
+		t.Run(when, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				runner, _, engine, _, id := registeredSessionFixture(t)
+				provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+				lease, err := provider.Acquire(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer lease.Close()
+				c, a, worker, failure := runner.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{Terminal: lease})
+				if failure != "" {
+					t.Fatal(failure)
+				}
+				defer c.Close()
+				defer a.Close()
+				release := make(chan struct{})
+				engine.WaitRelease, engine.Exit = release, 0
+				stopWorker := func() {
+					o := engine.Resources[worker]
+					o.Running, o.Status, o.PID = false, "exited", 0
+					engine.Resources[worker] = o
+				}
+				engine.After = func(event string) {
+					if event == "wait" {
+						if when == "before inspection" {
+							stopWorker()
+						}
+						provider.Resize(terminal.Dimensions{Columns: 167, Rows: 53})
+					}
+				}
+				resized := false
+				engine.BeforeResize = func() {
+					resized = true
+					stopWorker()
+				}
+				engine.ResizeFailure = port.TerminalResize
+				go func() {
+					time.Sleep(time.Second) // The wait reply trails the engine state change.
+					close(release)
+				}()
+				exit, exited, got, _ := runner.waitForeground(t.Context(), c, a, lease, port.Binding{}, port.Record{}, id, worker)
+				<-release
+				if !exited || exit != 0 || got != "" || resized != (when == "during resize") {
+					t.Fatalf("resize raced pending exit: exit=%d observed=%v outcome=%s resized=%v", exit, exited, got, resized)
+				}
+			})
+		})
+	}
+}
+
 func TestResizeBoundsUnresponsiveSessionAcquisition(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, registry, _, _, id := registeredSessionFixture(t)

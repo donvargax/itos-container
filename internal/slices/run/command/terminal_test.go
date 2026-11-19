@@ -141,6 +141,56 @@ type interruptingTerminal struct {
 	signal    string
 }
 
+type acquireFunc func(context.Context) (terminal.Lease, error)
+
+func (f acquireFunc) Acquire(ctx context.Context) (terminal.Lease, error) { return f(ctx) }
+
+func TestInterruptedAcquisitionReportsRollbackAlongsideCause(t *testing.T) {
+	for _, cause := range []string{"signal", "timeout", "provider error"} {
+		for _, source := range []string{"lease close", "provider rollback"} {
+			t.Run(cause+"/"+source, func(t *testing.T) {
+				synctest.Test(t, func(t *testing.T) {
+					parent, cancel := context.WithCancelCause(t.Context())
+					defer cancel(nil)
+					restoreErr := errors.New("private terminal state")
+					provider := acquireFunc(func(lifetime context.Context) (terminal.Lease, error) {
+						var lease terminal.Lease
+						failure := &terminal.Failure{Kind: terminal.AcquisitionFailed}
+						if source == "lease close" {
+							fake := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}, RestoreError: restoreErr}
+							var err error
+							lease, err = fake.Acquire(lifetime)
+							if err != nil {
+								return nil, err
+							}
+						} else {
+							failure.RestoreErr = restoreErr
+						}
+						if cause == "signal" {
+							cancel(sp.Interrupt{Signal: "SIGTERM"})
+						}
+						if cause != "provider error" {
+							<-lifetime.Done()
+							if lease != nil {
+								return lease, nil
+							}
+						}
+						return lease, failure
+					})
+					c := CLI{TTY: true, Terminal: provider, Context: parent, Approval: startupApprovalFixture(), Snapshots: &af.Snapshots{}, Runner: &rf.Runner{}, Args: []string{"--", "probe"}}
+					var diagnostics strings.Builder
+					code := c.Run(&cli.UI{Stderr: &diagnostics, Classify: Classify})
+					want := map[string]string{"signal": "run.cancelled SIGTERM", "timeout": "run.call-timeout; operation terminal acquisition", "provider error": "run.terminal-unavailable"}[cause]
+					got := diagnostics.String()
+					if code != 75 || !strings.Contains(got, want) || strings.Count(got, "run.terminal-restore") != 1 || strings.Contains(got, restoreErr.Error()) {
+						t.Errorf("exit %d, diagnostics %q; want exit 75 with %q and one restoration diagnostic", code, got, want)
+					}
+				})
+			})
+		}
+	}
+}
+
 func (p interruptingTerminal) Acquire(ctx context.Context) (terminal.Lease, error) {
 	p.interrupt(sp.Interrupt{Signal: p.signal})
 	<-ctx.Done()
