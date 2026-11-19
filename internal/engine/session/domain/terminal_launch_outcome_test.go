@@ -169,3 +169,46 @@ func TestLaunchOutcomeJoinsLaunchDecisionWithClientLoss(t *testing.T) {
 		})
 	}
 }
+
+// The client's loss can end the very observation of the mount detector. The
+// refusal that cancellation produces says nothing about the checkout, so the
+// run reports the loss and the started worker keeps the owned grace period.
+func TestHangupCancellingTheMountDetectorReportsTheLoss(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		runner, frozen, registry, engine, id := registeredLifecycleFixture()
+		provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+		lease, err := provider.Acquire(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer lease.Close()
+
+		started, lost := false, false
+		engine.AfterStart = func() { started = true }
+		engine.BeforeInspect = func() {
+			if !started || lost {
+				return
+			}
+			// The detector's first observation finds launch already cancelled.
+			lost = true
+			provider.Hangup(false)
+			<-lease.Done()
+			synctest.Wait()
+		}
+		engine.Exit, engine.WaitUntilCancel = 17, true
+		got := runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{Terminal: lease})
+		if !lost {
+			t.Fatal("the detector never observed the worker")
+		}
+		if got.Outcome != port.TerminalDisconnected || got.MountDiagnostic != (port.MountDiagnostic{}) {
+			t.Errorf("an interrupted detector reported a mount refusal: %+v", got)
+		}
+		if !got.Exited || got.Exit != 17 || got.Cleanup != port.Complete ||
+			!slices.Contains(engine.Events, "SIGTERM") || slices.Contains(engine.Events, "SIGKILL") {
+			t.Errorf("the started worker lost its owned grace period: %+v %v", got, engine.Events)
+		}
+		if registry.Records[id].MountDetector != "" || len(engine.Resources) != 0 || len(engine.Anchors) != 0 {
+			t.Errorf("an unfinished detector left a verdict or an owned resource: %q %v", registry.Records[id].MountDetector, engine.Events)
+		}
+	})
+}
