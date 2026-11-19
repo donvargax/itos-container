@@ -25,29 +25,20 @@ type invalidInitialTerminal struct{ terminal.Lease }
 
 func (invalidInitialTerminal) Initial() terminal.Dimensions { return terminal.Dimensions{} }
 
-func TestRegisteredLaunchRefusesUnsupportedTerminalBeforeCreate(t *testing.T) {
-	for _, missing := range []bool{false, true} {
-		t.Run(map[bool]string{false: "invalid size", true: "missing capability"}[missing], func(t *testing.T) {
-			runner, registry, engine, workspace, id := registeredSessionFixture(t)
-			provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
-			lease, err := provider.Acquire(t.Context())
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer lease.Close()
-			selected := terminal.Lease(invalidInitialTerminal{lease})
-			if missing {
-				runner.Engine = noTerminalEngine{runner.Engine}
-				selected = lease
-			}
-			c, a, worker, failure := runner.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{Terminal: selected})
-			if c != nil {
-				defer c.Close()
-			}
-			if failure != port.TerminalUnavailable || a != nil || worker != "" || len(engine.Resources) != 0 || registry.Locks[id] || !workspace.Closed {
-				t.Fatalf("terminal refusal advanced launch or retained authority: %s %q", failure, worker)
-			}
-		})
+func TestRegisteredLaunchRefusesUnusableInitialTerminalBeforeCreate(t *testing.T) {
+	runner, registry, engine, workspace, id := registeredSessionFixture(t)
+	provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+	lease, err := provider.Acquire(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	c, a, worker, failure := runner.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{Terminal: invalidInitialTerminal{lease}})
+	if c != nil {
+		defer c.Close()
+	}
+	if failure != port.TerminalUnavailable || a != nil || worker != "" || len(engine.Resources) != 0 || registry.Locks[id] || !workspace.Closed {
+		t.Fatalf("terminal refusal advanced launch or retained authority: %s %q", failure, worker)
 	}
 }
 

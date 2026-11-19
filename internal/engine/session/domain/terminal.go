@@ -68,9 +68,11 @@ func (o terminalLaunchOutput) Write(p []byte) (int, error) {
 
 // Keep in-flight launch calls cancellable until the foreground wait takes over.
 // The final poll also catches a loss whose periodic notification is still pending.
-func watchLaunchTerminal(ctx context.Context, lease terminal.Lease) (context.Context, func() port.Outcome) {
+// Its second result reports whether the lease cancelled launch before the poll:
+// only then did the loss cause the launch outcome rather than follow it.
+func watchLaunchTerminal(ctx context.Context, lease terminal.Lease) (context.Context, func() (loss port.Outcome, cancelled bool)) {
 	if lease == nil {
-		return ctx, func() port.Outcome { return "" }
+		return ctx, func() (port.Outcome, bool) { return "", false }
 	}
 	launch, cancel := context.WithCancelCause(ctx)
 	done := make(chan struct{})
@@ -82,14 +84,34 @@ func watchLaunchTerminal(ctx context.Context, lease terminal.Lease) (context.Con
 		case <-launch.Done():
 		}
 	}()
-	return launch, func() port.Outcome {
+	return launch, func() (port.Outcome, bool) {
+		cancelled := context.Cause(launch) == errLaunchObservationEnded
 		cancel(errLaunchObservationEnded)
 		<-done
 		if context.Cause(launch) == errLaunchObservationEnded {
-			return lostClientTerminal(lease)
+			return lostClientTerminal(lease), cancelled
 		}
-		return ""
+		return "", false
 	}
+}
+
+// launchOutcome joins a launch decision with a client loss found when launch
+// ended. A loss that cancelled launch explains whatever it returned. One found
+// only by the final poll follows a decision launch reached on its own, which
+// keeps its own cause: the typed refusal, its exit status and its guidance.
+func launchOutcome(failure, loss port.Outcome, cancelled bool) port.Outcome {
+	switch failure {
+	case "":
+		return loss
+	case port.Refused, port.IsolationUnverified, port.MountRefused, launchSuperseded:
+		// A refused mount needs immediate removal and a superseding stop owns
+		// its cleanup, whichever of them the loss followed.
+		return failure
+	}
+	if cancelled {
+		return loss
+	}
+	return failure
 }
 
 // waitForeground owns terminal events only while the command is live. It joins

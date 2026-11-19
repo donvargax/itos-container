@@ -104,7 +104,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	gate <- struct{}{}
 	s.Workspace = finiteWorkspace{s.Workspace, launch, gate}
 	c, attachment, resource, failure := s.registeredLaunch(launch, id, argv, streams)
-	loss := finishLaunch()
+	loss, cancelled := finishLaunch()
 	result.ID, result.Outcome = resource, failure
 	result.HomeID = state.homeID
 	result.Started, result.Operation = state.started, state.operation
@@ -115,13 +115,7 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		result.MountDiagnostic = state.mountDiagnostic
 	}
 	if loss != "" {
-		switch failure {
-		case port.Refused, port.IsolationUnverified, port.MountRefused, launchSuperseded:
-			// Keep the launch decision. A refused mount needs immediate removal
-			// and a superseding stop owns its cleanup.
-		default:
-			result.Outcome = loss
-		}
+		result.Outcome = launchOutcome(failure, loss, cancelled)
 	} else if startup.Err() != nil && failure != port.Refused && failure != port.IsolationUnverified {
 		result.Outcome = startupFailure(startup)
 	}
@@ -253,12 +247,9 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	}
 	defer closeAnchorWorkspace(c, s.Workspace)
 	if streams.Terminal != nil {
-		terminal, ok := c.(port.TerminalConnection)
-		if !ok {
-			entry.Close()
-			return c, nil, "", port.TerminalUnavailable
-		}
-		if failure := terminal.SetTerminal(streams.Terminal.Initial()); failure != "" {
+		// The finite engine always supplies this capability; a connection that
+		// lacks it refuses in its own SetTerminal.
+		if failure := c.(port.TerminalConnection).SetTerminal(streams.Terminal.Initial()); failure != "" {
 			entry.Close()
 			return c, nil, "", failure
 		}

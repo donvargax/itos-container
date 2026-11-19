@@ -97,9 +97,11 @@ func TestLateHangupPreservesHomeAndCredentialRefusals(t *testing.T) {
 				case "home":
 					x := domainHomeFixture()
 					g := x.seed()
-					o := x.engine.Homes[g.Name]
-					o.Created = "replacement"
-					x.engine.Homes[g.Name] = o
+					// A retained home whose root another party opened up is
+					// refused once the worker exists, before it can start.
+					r := x.engine.Roots[g.Name]
+					r.Mode = 0777
+					x.engine.Roots[g.Name] = r
 					runner, frozen, registry, engine = x.runner, x.frozen, x.registry, x.engine.RunEngine
 				case "credential":
 					runner, frozen, registry, engine, _ = registeredLifecycleFixture()
@@ -130,6 +132,40 @@ func TestLateHangupPreservesHomeAndCredentialRefusals(t *testing.T) {
 					t.Errorf("refused launch kept owned resources: %v", engine.Events)
 				}
 			})
+		})
+	}
+}
+
+func TestLaunchOutcomeJoinsLaunchDecisionWithClientLoss(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		failure   port.Outcome
+		loss      port.Outcome
+		cancelled bool
+		want      port.Outcome
+	}{
+		{"no loss keeps no outcome", "", "", false, ""},
+		{"no loss never invents an outcome from cancellation", "", "", true, ""},
+		{"loss after a launched worker", "", port.TerminalDisconnected, false, port.TerminalDisconnected},
+		{"loss that cancelled a launched worker", "", port.TerminalDisconnected, true, port.TerminalDisconnected},
+		{"loss only found by the final poll keeps a refusal", port.HomeRefused, port.TerminalDisconnected, false, port.HomeRefused},
+		{"loss only found by the final poll keeps a credential refusal", port.CredentialRefused, port.TerminalUnavailable, false, port.CredentialRefused},
+		{"loss only found by the final poll keeps an unavailable engine", port.Incomplete, port.TerminalDisconnected, false, port.Incomplete},
+		{"loss that cancelled launch explains its failure", port.Incomplete, port.TerminalDisconnected, true, port.TerminalDisconnected},
+		{"loss that cancelled launch replaces an unavailable home", port.HomeUnavailable, port.TerminalUnavailable, true, port.TerminalUnavailable},
+		{"workspace refusal stands", port.Refused, port.TerminalDisconnected, false, port.Refused},
+		{"workspace refusal stands over a cancelling loss", port.Refused, port.TerminalDisconnected, true, port.Refused},
+		{"unverified isolation stands", port.IsolationUnverified, port.TerminalDisconnected, false, port.IsolationUnverified},
+		{"unverified isolation stands over a cancelling loss", port.IsolationUnverified, port.TerminalDisconnected, true, port.IsolationUnverified},
+		{"mount refusal stands", port.MountRefused, port.TerminalDisconnected, false, port.MountRefused},
+		{"mount refusal stands over a cancelling loss", port.MountRefused, port.TerminalDisconnected, true, port.MountRefused},
+		{"superseding stop stands", launchSuperseded, port.TerminalDisconnected, false, launchSuperseded},
+		{"superseding stop stands over a cancelling loss", launchSuperseded, port.TerminalDisconnected, true, launchSuperseded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := launchOutcome(tc.failure, tc.loss, tc.cancelled); got != tc.want {
+				t.Fatalf("launchOutcome(%q, %q, %v) = %q, want %q", tc.failure, tc.loss, tc.cancelled, got, tc.want)
+			}
 		})
 	}
 }
