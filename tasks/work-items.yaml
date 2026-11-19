@@ -2340,3 +2340,14 @@ items:
       PR 69's second local review identified a topology missing from the regression: a nested merge
       can start an item branch at main's tip. It should remain listed when only its first parent is
       on main's line. See PR 69 discussion in comment 6988903923.
+  - id: p2-approval-prerequisite-step-checks-no-consent-prompt
+    title: Check that approval prerequisite failures do not request consent
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The approvalProblem scenario step checks the prerequisite diagnostic and exit code but can
+      pass even when the command asks for consent. Add a focused regression and make the step detect
+      an unexpected consent prompt in the approval and hardlink refusal cases.
