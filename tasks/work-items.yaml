@@ -2383,14 +2383,15 @@ items:
       Let the person see which backend a run would use before approving it. Cover Landlock, gVisor
       and a host with neither backend through doctor’s read-only inspection. Broken down from
       p1-checkout-socket-kernel-enforcement.
-  - id: p1-approve-checkout-socket-backend
+  - id: slice-43
     title: Bind the checkout socket backend to approval
     phase: 1
     owner: null
     status: todo
     depends_on: [T-64]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-approve-checkout-socket-backend.
       Show the selected backend during review and record it in the approval. When neither backend is
       available, require explicit consent to “late host sockets reachable”. Cover reapproval after
       the selection changes. Broken down from p1-checkout-socket-kernel-enforcement.
@@ -2399,7 +2400,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-approve-checkout-socket-backend]
+    depends_on: [slice-43]
     kind: idea
     why: >
       Compare the host’s current selection with the approval before creating a worker and freeze the
