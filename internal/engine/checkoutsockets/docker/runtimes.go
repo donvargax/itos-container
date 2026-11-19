@@ -1,5 +1,9 @@
 // Package docker reads the runtime registrations of the caller's native Docker
-// daemon through the pinned SDK. It issues one read-only /info request.
+// daemon through the pinned SDK. A lookup is read-only and makes four daemon
+// requests, all bound to the call's context: the readiness engine's ping, which
+// negotiates the API version, its GET /version and GET /info, which validate
+// the daemon as native, and this adapter's own GET /info, which reports the
+// runtimes.
 package docker
 
 import (
@@ -40,8 +44,15 @@ func (r Runtimes) Runsc(ctx context.Context) (port.Registration, port.Failure) {
 		return unreadable(ctx)
 	}
 	defer pin.Close()
-	version, versionFailure := pin.Version()
-	info, infoFailure := pin.Info()
+	// The session keeps the lifetime its establishment was given, which can
+	// outlast this call: only a view bound to the call's context ends with it.
+	requests, ok := pin.(rp.ContextSession)
+	if !ok {
+		return unreadable(ctx)
+	}
+	inspect := requests.ForContext(ctx)
+	version, versionFailure := inspect.Version()
+	info, infoFailure := inspect.Info()
 	if versionFailure != rp.None || infoFailure != rp.None || readiness.ValidateEngine(version, info) != rp.None {
 		return unreadable(ctx)
 	}
