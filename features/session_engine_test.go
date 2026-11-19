@@ -115,6 +115,13 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 		http.Error(out, "engine unavailable slice-38-api-body-marker", http.StatusServiceUnavailable)
 		return
 	}
+	if a.w.exec != nil && !a.w.exec.faultCleared && a.w.exec.cleanupFault == "worker removal unavailable" &&
+		entry.Method == "DELETE" && entry.Path == "/containers/"+a.w.exec.worker {
+		a.requests[index].Status = http.StatusServiceUnavailable
+		a.w.exec.markedDelivered++
+		http.Error(out, "engine failure slice-38-api-body-marker", http.StatusServiceUnavailable)
+		return
+	}
 	if a.w.exec != nil && strings.HasPrefix(entry.Path, "/containers/") && strings.HasSuffix(entry.Path, "/exec") {
 		a.serveExecCreate(out, request, entry, index)
 		return

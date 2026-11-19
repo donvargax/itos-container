@@ -287,7 +287,7 @@ Feature: Execute literal argv in a live owned foreground session
   # started work; lost start/attach acknowledgement CAN. The latter must stop
   # the session even if no exec bytes or running observation ever arrive. Each
   # fault row pairs with a healthy probe to reject fixture-only failures.
-  @ID-EXEC-08 @wip @slice-38
+  @ID-EXEC-08 @wip @slice-38 @linux
   Scenario Outline: Exec bounds launch uncertainty without retrying a possible command
     Given a live exec fixture with launch fault "<fault>" and a healthy control
     And the exec fixture stages distinct synthetic argv caller-environment API-body stdout and stderr markers
@@ -318,7 +318,7 @@ Feature: Execute literal argv in a live owned foreground session
   # borrow primary exit 0. A stopped exec with missing exit data but healthy
   # streams needs no session teardown: it reports uncertainty and leaves the
   # primary running. An unknown result alone is not a disconnect.
-  @ID-EXEC-09 @wip @slice-38
+  @ID-EXEC-09 @wip @slice-38 @linux
   Scenario Outline: Exec preserves observed exits and keeps unknown results honest
     Given a started exec fixture with event "<event>" and exit observation "<observed>"
     And the exec fixture stages distinct synthetic argv caller-environment API-body stdout and stderr markers
@@ -345,7 +345,7 @@ Feature: Execute literal argv in a live owned foreground session
   # mutation, even after the exec has run. Observed exec 23 still wins the refusal.
   # The fresh retry happens after clearing only the injected fault/substitution;
   # it consumes original authority without current approval and preserves edits.
-  @ID-EXEC-10 @wip @slice-38
+  @ID-EXEC-10 @wip @slice-38 @linux
   Scenario Outline: Exec cleanup failure keeps original recovery authority
     Given a started exec fixture with observed exit <observed> and cancellation cleanup fault "<fault>"
     And the exec fixture stages distinct synthetic argv caller-environment API-body stdout and stderr markers

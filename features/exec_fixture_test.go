@@ -1,7 +1,6 @@
 package features
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,6 +40,19 @@ type execWorld struct {
 	stopReady, stopRelease           chan struct{}
 	stopSignaled                     bool
 	independentStopExit              int
+	markers                          []string
+	launchFault                      string
+	eventSchedule                    string
+	exitObservation                  string
+	cleanupFault                     string
+	markedDelivered                  int
+	faultCleared                     bool
+	captures                         []map[string]string
+	prefixObserved                   chan struct{}
+	prefixOnce                       func()
+	opLockLease                      *execLease
+	statusExit                       int
+	statusOut, statusErr             string
 	envExtra                         map[string]string
 	inputWatch                       *sessionReadWatch
 	frozenEnv                        []string
@@ -52,36 +64,6 @@ type execBackend struct {
 	subprocess   doctorResult
 	report       execProbeReport
 	execRequests []sessionRequest
-}
-
-// execProbeRequest is what the harness asks the command assembly to run.
-type execProbeRequest struct {
-	Backend, Condition  string
-	SessionID, Worker   string
-	Argv                []string
-	Stdin               string
-	Output              string
-	Authority, Boundary string
-	Exit                int
-	Stdout, Stderr      string
-	Event               string
-	EventBoundary       string
-	StopBoundary        string
-}
-
-// execProbeReport is the assembly's own observation of the invocation.
-type execProbeReport struct {
-	Exit                          int
-	Stdout, Stderr, Rule          string
-	ExecCreate, ExecStart         bool
-	StartedExecs                  int
-	Signalled, Removed, Restarted bool
-	Session                       string
-	LateReply                     bool
-	Argv                          []string
-	Env                           []string
-	User, WorkingDir              string
-	StopExit                      int
 }
 
 type execLease struct {
@@ -102,7 +84,7 @@ func (w *world) execFixture(condition string) error {
 	if err := w.doctorSentinels(); err != nil {
 		return err
 	}
-	w.exec = &execWorld{condition: condition, results: map[string]execBackend{}}
+	w.exec = &execWorld{condition: condition, results: map[string]execBackend{}, envExtra: map[string]string{}}
 	if err := w.execSeedSession(); err != nil {
 		return err
 	}
@@ -363,7 +345,7 @@ func (w *world) execSettingsFixture(change string) error {
 	if err := w.doctorSentinels(); err != nil {
 		return err
 	}
-	w.exec = &execWorld{results: map[string]execBackend{}, execExit: 0,
+	w.exec = &execWorld{results: map[string]execBackend{}, envExtra: map[string]string{}, execExit: 0,
 		execStdout: "slice-38-settings-stdout\n", execStderr: "slice-38-settings-stderr\n",
 		frozenEnv: []string{"HOME=/tmp", "SLICE_38_LITERAL_ENV=slice-38 literal value", "TMPDIR=/tmp"}}
 	w.exec.frozenUser = w.approval.uid + ":" + w.approval.gid
@@ -485,145 +467,19 @@ func (w *world) closeExec() error {
 			_ = lease.cmd.Process.Kill()
 		}
 	}
+	if lease := w.exec.opLockLease; lease != nil {
+		_ = lease.stdin.Close()
+		select {
+		case <-lease.done:
+		case <-time.After(5 * time.Second):
+			result = errors.Join(result, errors.New("operation lock holder did not exit"))
+			_ = lease.cmd.Process.Kill()
+		}
+	}
 	for _, restore := range w.exec.restore {
 		restore()
 	}
 	return result
-}
-
-// execInvoke runs the command assembly's exec probe once and files the
-// observation under key. A missing probe, or one that never published a
-// report, is recorded as data: the behaviour assertions in Then must fail,
-// not the invocation step.
-func (w *world) execInvoke(key, backend string, request execProbeRequest) error {
-	handle, err := w.execProbeStart(key, backend, request)
-	if err != nil {
-		return err
-	}
-	return w.execProbeWait(handle)
-}
-
-type execProbeHandle struct {
-	key, backend string
-	request      execProbeRequest
-	cmd          *exec.Cmd
-	cancel       context.CancelFunc
-	wait         chan error
-	waitErr      error
-	exited       bool
-	transcript   strings.Builder
-	pre          int
-}
-
-func (w *world) execProbeStart(key, backend string, request execProbeRequest) (*execProbeHandle, error) {
-	bin, err := w.sessionProbeBinary()
-	if err != nil {
-		return nil, err
-	}
-	s := w.session
-	s.api.mu.Lock()
-	pre := len(s.api.requests)
-	s.api.mu.Unlock()
-	request.Backend = backend
-	request.SessionID = w.exec.id
-	request.Worker = w.exec.worker
-	request.Condition = w.exec.condition
-	request.Argv = w.exec.argv
-	request.Stdin = w.exec.stdin
-	if w.exec.substituteAuthority != "" {
-		request.Authority, request.Boundary = w.exec.substituteAuthority, w.exec.substituteBoundary
-	}
-	request.Exit = w.exec.execExit
-	request.Stdout, request.Stderr = w.exec.execStdout, w.exec.execStderr
-	request.Event, request.EventBoundary = w.exec.event, w.exec.boundary
-	request.StopBoundary = w.exec.stopBoundary
-	request.Output = filepath.Join(w.dir, "slice-38-"+key+"-report.json")
-	input := filepath.Join(w.dir, "slice-38-"+key+"-input.json")
-	if err := os.WriteFile(input, approvalJSON(request), 0600); err != nil {
-		return nil, err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	args := []string{"-test.run=^TestPublicExecCommand$", "-test.count=1"}
-	if cover := w.coverageDir(); cover != "" {
-		args = append(args, "-test.gocoverdir="+cover)
-	}
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Dir = w.doctor.checkout
-	cmd.Env = w.coverageEnv(sessionChildEnvironment(os.Environ()))
-	for name, value := range w.doctor.env {
-		cmd.Env = setEnv(cmd.Env, name, value)
-	}
-	for name, value := range w.exec.envExtra {
-		cmd.Env = setEnv(cmd.Env, name, value)
-	}
-	cmd.Env = setEnv(cmd.Env, "ITOS_ROOT", w.doctor.checkout)
-	cmd.Env = setEnv(cmd.Env, "SLICE_38_EXEC_INPUT", input)
-	handle := &execProbeHandle{key: key, backend: backend, request: request, cmd: cmd, cancel: cancel, pre: pre, wait: make(chan error, 1)}
-	cmd.Stdout, cmd.Stderr = &handle.transcript, &handle.transcript
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	if err := w.startLocalCommand(cmd); err != nil {
-		cancel()
-		return nil, err
-	}
-	_ = stdin.Close()
-	return handle, nil
-}
-
-// execProbeWait joins the probe and files its observation under the handle's
-// key. A probe that published no report is recorded as missing evidence.
-func (w *world) execProbeWait(handle *execProbeHandle) error {
-	var runErr error
-	if handle.exited {
-		runErr = handle.waitErr
-	} else {
-		runErr = handle.cmd.Wait()
-	}
-	defer handle.cancel()
-	b := execBackend{subprocess: doctorResult{exit: -1}}
-	if state := handle.cmd.ProcessState; state != nil {
-		b.subprocess.exit = state.ExitCode()
-	}
-	b.subprocess.stdout, b.subprocess.stderr = handle.transcript.String(), ""
-	s := w.session
-	s.api.mu.Lock()
-	b.execRequests = append([]sessionRequest{}, s.api.requests[handle.pre:]...)
-	s.api.mu.Unlock()
-	report, readErr := os.ReadFile(handle.request.Output)
-	if readErr == nil {
-		if err := json.Unmarshal(report, &b.report); err != nil {
-			return err
-		}
-	} else if !os.IsNotExist(readErr) {
-		return readErr
-	} else {
-		b.missing = true
-	}
-	if runErr != nil {
-		var exit *exec.ExitError
-		if !errors.As(runErr, &exit) {
-			return fmt.Errorf("exec assembly subprocess failed: %w\n%s", runErr, handle.transcript.String())
-		}
-	}
-	w.exec.results[handle.key] = b
-	return nil
-}
-
-// execEachBackends runs the probe through both local backends.
-func (w *world) execEachBackends(extra func(execProbeRequest) execProbeRequest) error {
-	for _, backend := range []string{"memory", "disk"} {
-		request := execProbeRequest{}
-		if extra != nil {
-			request = extra(request)
-		}
-		if err := w.execInvoke(backend, backend, request); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // execBackendResult is what a Then step judges: the assembly's report when it
