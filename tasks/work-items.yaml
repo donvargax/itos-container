@@ -2395,14 +2395,15 @@ items:
       Show the selected backend during review and record it in the approval. When neither backend is
       available, require explicit consent to “late host sockets reachable”. Cover reapproval after
       the selection changes. Broken down from p1-checkout-socket-kernel-enforcement.
-  - id: p1-run-checkout-socket-admission
+  - id: slice-44
     title: Require matching socket approval before worker creation
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-43]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-run-checkout-socket-admission.
       Compare the host’s current selection with the approval before creating a worker and freeze the
       choice in the session record. Prove that startup-scan-only operation requires explicit
       weaker-mode consent, including when an older approval exists. Broken down from
@@ -2412,7 +2413,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-run-checkout-socket-admission]
+    depends_on: [slice-44]
     kind: idea
     why: >
       Read the frozen session record so status still reports “late host sockets reachable” for a
@@ -2423,7 +2424,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [T-65, p1-run-checkout-socket-admission, slice-38]
+    depends_on: [T-65, slice-44, slice-38]
     kind: idea
     why: >
       Mount the trusted init read-only and apply it before both foreground and independently
@@ -2435,7 +2436,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-run-checkout-socket-admission]
+    depends_on: [slice-44]
     kind: idea
     why: >
       Launch and verify the worker under runsc when Landlock ABI 9 is unavailable. Prove
