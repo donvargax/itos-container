@@ -24,7 +24,13 @@ Feature: Deliver the approved Claude token to one owned run
   # logging remains. p1-platform-log-redaction owns scrubbing and the adversarial
   # hostname-marker probe; neither blocks this slice. Preserve that disclosure,
   # do not hash hostnames here, and do not claim general AC-36 closure. Reconcile
-  # the stale question-6 prose in ADR 0025/arc42 with q-56 at implementation.
+  # the stale question-6 prose in ADR 0025/arc42 with q-56 at implementation, and
+  # in the same feat commit revise AC-36's own row in docs/plans/container-pilot.md
+  # to q-56's wording: credential absence from persisted logs is a platform
+  # guarantee kept by the persisting layer, not by each writer, and until
+  # p1-platform-log-redaction lands a workload can place credential bytes in a
+  # verbatim refused hostname persisted in proxy and refusal logs. That row cites
+  # q-56; the broader redaction proof stays with that follow-up.
   # No real credential, provider/model call, login, refresh, Codex kind, GitHub
   # delivery, automatic environment export, harness init or new privilege belongs
   # here. ADR 0025 question 5 still bars real-credential use, including smoke runs.
@@ -139,11 +145,19 @@ Feature: Deliver the approved Claude token to one owned run
   # bypassed gate, production test flag, host mount operation or real engine.
   # Raw UID/mount/alias/error observations use slice-29's fake/adapter protocol;
   # positive and negative inputs share the same route. Distinguish that evidence
-  # from native mounts. A source pin swap barrier in 05 runs AFTER the final
+  # from native mounts. 05's pathname row barrier runs AFTER the final
   # complete validation but BEFORE data reopen; rename the old source to a safe
   # sibling (keep one link), then replace its original name. The checked inode
-  # still qualifies; reading by pathname would return different bytes.
+  # still qualifies; reading by pathname would return different bytes. 05's
+  # policy row barrier runs after durable snapshot publication and BEFORE the
+  # runner's delivery-phase source revalidation and selection; it rewrites the
+  # policy's Claude grant to a second valid private synthetic source. Selection
+  # from the frozen grant and retained pin never opens or walks that second one.
   # Faults after copying/read-only inspect are synchronized, never timed sleeps.
+  # 06's size row uses the copying adapter's read seam: the read returns exactly
+  # the original size, then the fixture changes the size before the final
+  # descriptor stat, so only post-read metadata revalidation can refuse it. Its
+  # boundary evidence is both journaled observations and the refusal before start.
   # In 06, inspected-mount faults affect the pre-start verification response;
   # subsequent cleanup observations expose the actual owned resource unchanged.
   # Source-size edits are fixture effects, not forbidden product modifications.
@@ -159,6 +173,14 @@ Feature: Deliver the approved Claude token to one owned run
   # files for EVERY detector. Scan all request/response metadata (including error
   # bodies), full worker inspect, text/JSON status, doctor/approve output, run/stop
   # diagnostics, approval/snapshot/intent/recovery and all checkout/state files.
+  # Checkout absence is also continuous, not only final: each When first arms a
+  # recursive inotify write observer on every checkout directory (create,
+  # modify, attrib, close-write, moves, delete and queue overflow) and proves it
+  # with a fixture-made transient create, write and remove of its own. Later
+  # fixture or probe control writes go only to one fixture control directory and
+  # are journaled by exact name. Any other checkout event, an unjournaled name or
+  # an overflow fails every provisioning-surface assertion, even when the final
+  # marker scan and checkout comparison pass.
   # Include proxy stdout, its Docker log and retained refusal log in 08's allowlist
   # row, whose ordinary refusal hostname contains NO marker. Require a nonempty
   # observed refusal and a successful controlled TLS exchange, not empty logs.
@@ -173,7 +195,37 @@ Feature: Deliver the approved Claude token to one owned run
   # messages identify the leaking surface, never print markers or full records.
   #
   # @engine means guarded Linux amd64 native Docker CI ONLY, using the cached
-  # image, non-root host UID/GID and independently verified source filesystem.
+  # image and non-root host UID/GID. Native fixture: one private 0700 root under
+  # /var/tmp, as slice-29's credential fixture uses, holds the checkout, the
+  # selected XDG_STATE_HOME, the source directory and the account home that the
+  # existing engine probe assembly receives as SLICE_21_ACCOUNT_HOME. Only that
+  # seam relocates the fixed <account home>/.local/state/itos-container boundary;
+  # a private HOME or XDG_STATE_HOME does not, and the runner's real account
+  # state is never used. Before any product command the Given independently
+  # verifies, by its own statfs, statx(STATX_MNT_ID) and mountinfo parse and
+  # never the product observer, for the source, checkout, selected state root,
+  # fixed account state root and every ancestor of each: ext4, btrfs or xfs; a
+  # mount ID naming exactly one row with a path root; no row of any other type
+  # at, below or covering those four paths; every ancestor owned by root or the
+  # host UID and not group/other-writable unless root-owned sticky; and /dev/shm
+  # a root-owned sticky tmpfs. It records the result as data. When verification
+  # failed, the When runs no product command and the first Then reports a
+  # fixture blocker naming only path, type and UID; that is never red evidence,
+  # and the allowlist is never weakened to admit a runner. Each @engine When then
+  # runs JSON doctor on every fixture checkout before run. Doctor's readiness
+  # passes today, so it proves the fixture clears shared readiness and an
+  # unrelated readiness refusal cannot stand in for the credential red.
+  #
+  # Shard placement is the host's before red dispatch: .github is outside this
+  # item's paths. TestEngineShards fails on this file until the whole
+  # credentials-run.feature joins the offline shard, in ci.yml's matrix entry and
+  # in shardOfflineFiles with its inventory, negative-control and selector
+  # regressions, plus a slice-31 placement note in decision 0024 citing measured
+  # offline step times. Keep four shards, the unchanged 180-second step gate and
+  # whole files. Red dispatch and activation must each show the offline shard
+  # selecting exactly the ten CREDRUN-08 to -12 rows (3, 2, 1, 2, 2) and no other
+  # shard selecting any. If measured time leaves no room, stop for the coordinator.
+  #
   # Helpers built by the harness run only inside disposable workers. No real
   # service/credential, pull/build, fallback image or agent Docker access. The
   # allowlist row reuses slice-27's isolated fake endpoint and positive controls.
@@ -181,13 +233,13 @@ Feature: Deliver the approved Claude token to one owned run
   # cleanup is never evidence of product teardown. No credential bytes are
   # deliberately written into the checkout, even for a negative-control probe.
   #
-  # Supersession only in the implementing feat commit: replace the supported
-  # version-3 run rows of CREDENTIALS-13/14 and CREDAPPROVAL-17 with these cases;
-  # preserve malformed-policy and unsupported-kind early refusal coverage. Remove
-  # the blanket temporary version-3 run warning for supported requests, retain a
+  # Supersession only in the implementing feat commit: replace exactly
+  # CREDENTIALS-13's obsolete blanket version-3 run-gate rows and CREDAPPROVAL-17's
+  # Claude row with these cases. Preserve CREDENTIALS-14, CREDAPPROVAL-18 and -19
+  # unchanged, and CREDAPPROVAL-17's GitHub and mixed-kind rows. Remove the
+  # blanket temporary version-3 run warning for supported requests, retain a
   # truthful GitHub delivery warning for requests still gated, and keep every
-  # consent/exposure/log disclosure. CREDAPPROVAL-18/19's grant-change comparisons
-  # now reach public run for supported requests; unavailable kinds remain gated.
+  # consent/exposure/log disclosure.
   # Do not change neighbours in this drafting commit. Neighbours include
   # credentials-policy/approval, approval, run/run-preflight, offline, lifecycle,
   # recovery/control-state and egress scenarios plus the readiness raw/source and
@@ -196,10 +248,14 @@ Feature: Deliver the approved Claude token to one owned run
   #
   # Commit missing steps red first with @wip retained. Remove @wip for local
   # assertion-level red/green runs; use only coordinator-dispatched CI for engine
-  # red/green evidence. Today's version-3 gate makes 01..12 fail at their first
-  # Then (or their first control Then); 13 fails at missing help and 14 at the
-  # missing public staging projection. These are expected failures, not executed
-  # evidence. No local mutation or whole-features race run.
+  # red/green evidence. Today's version-3 gate makes 01..07 fail at their first
+  # Then (or their first control Then); 08..12's first Then is the fixture and
+  # doctor control, which passes today, and they fail at the next Then. 13 fails
+  # at missing help and 14 at the missing public staging projection. These are
+  # expected failures, not executed evidence. No local mutation or
+  # whole-features race run. The implementer may commit freely in its own
+  # workspace; the host makes the landing commits and handles itos, submission,
+  # publication and review.
 
   # Admission and exact per-command configuration, with a no-grant control.
   @wip @slice-31 @ID-CREDRUN-01 @local-engine-fixture @linux
@@ -277,16 +333,25 @@ Feature: Deliver the approved Claude token to one owned run
       | fixed account state descendant bind alias | credential.location    |
 
   # A pathname reopen would copy the replacement, even though the old pin is safe.
+  # Rereading the current policy after the freeze would select the second source.
   @wip @slice-31 @ID-CREDRUN-05 @local-engine-fixture @linux
-  Scenario: Token copying reads the checked inode rather than a replacement pathname
+  Scenario Outline: Token copying reads the frozen grant's checked inode, never a later policy or pathname
     Given a local Claude run fixture requesting "claude" with an independently matching generation 4 approval
-    And the fixture will rebind the source name after final validation while preserving the checked inode at a safe sibling
+    And the fixture will "<substitution>"
     When the real run command executes the fixture's literal probe argv
     Then the staged Claude bytes equal the original checked bytes including final newlines and differ from the replacement
-    And the source data reopen uses only the retained descriptor and both original and replacement sources are unchanged
+    And the substitution barrier was reached at its scheduled boundary
+    And the replacement source was never opened walked or read and both original and replacement sources are unchanged
+    And the source data reopen uses only the retained descriptor
+    And its protected snapshot and session record keep the original frozen Claude grant and source path at generation 4
     And the local Claude run completes owned execution with exit 0 using profile "offline-credentials-v1"
     And all source handles and owned staged paths are released after their operations finish
     And all cooperative credential provisioning surfaces contain no synthetic marker
+
+    Examples:
+      | substitution                                                                                            |
+      | rebind the source name after final validation while preserving the checked inode at a safe sibling      |
+      | repoint the policy grant to a second valid source after durable freeze and before delivery revalidation |
 
   @wip @slice-31 @ID-CREDRUN-06 @local-engine-fixture @linux
   Scenario Outline: Failed copying or an unsafe credential mount never starts the workload
@@ -304,7 +369,7 @@ Feature: Deliver the approved Claude token to one owned run
       | fault                                           | rule                       | exit |
       | checked source data open denied                 | run.credential-refused     | 1    |
       | short read of the checked source                | run.credential-refused     | 1    |
-      | checked source size changes during reading      | run.credential-refused     | 1    |
+      | source size changes after a full original read  | run.credential-refused     | 1    |
       | staging root is not tmpfs                       | run.credential-unavailable | 3    |
       | short write into the newly owned staged file    | run.credential-unavailable | 3    |
       | inspected Claude bind is writable               | run.isolation-unverified   | 1    |
@@ -333,7 +398,8 @@ Feature: Deliver the approved Claude token to one owned run
     Given a CI Claude checkout with a private synthetic source and matching "<network>" approval
     And the cooperative credential probe and every marker detector have independent positive controls
     When the product inspects with doctor and matching terminal approve then runs the credential probe through active status and workload exit <exit>
-    Then the worker reports the exact source hash including final newlines from the fixed Claude path as the non-root host UID
+    Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+    And the worker reports the exact source hash including final newlines from the fixed Claude path as the non-root host UID
     And native inspection and worker probes show one read-only mode-0400 regular Claude file and all existing hardening
     And write attempts fail and the original host source its sibling and host staging directory cannot be opened from the worker
     And no controller-set environment or argv contains a token or automatically exports CLAUDE_CODE_OAUTH_TOKEN
@@ -353,8 +419,9 @@ Feature: Deliver the approved Claude token to one owned run
   Scenario Outline: A live worker keeps its copy and the next run reads the rotated source
     Given a CI Claude checkout with a private synthetic source and matching "offline" approval
     And a second distinct synthetic source value is reserved for rotation by "<rotation>"
-    When the product starts a waiting hash probe then the fixture rotates the source and releases a second read
-    Then both reads in that worker report the original hash and the source reports only the rotated value
+    When the product inspects with JSON doctor then starts a waiting hash probe then the fixture rotates the source and releases a second read
+    Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+    And both reads in that worker report the original hash and the source reports only the rotated value
     When that worker exits and the product runs a fresh hash probe without another approval
     Then the fresh worker reports the rotated hash through a newly staged Claude file
     And both runs keep the original approval fingerprint and generation without a consent prompt
@@ -369,24 +436,38 @@ Feature: Deliver the approved Claude token to one owned run
   Scenario: One project's grant cannot supply another worker or a later no-grant run
     Given two independent CI Claude projects with distinct synthetic sources and separately matching approvals
     And a third independent approved version three project requests no credentials
-    When the product runs their probes concurrently and stops the first project while the other probes remain active
-    Then each credential worker reports only its own source hash and cannot open the other project's source or staged path
+    When the product inspects every project with JSON doctor then runs their probes concurrently and stops the first project while the other probes remain active
+    Then the native fixture verification passed and JSON doctor reported every readiness check and each Claude source ready
+    And each credential worker reports only its own source hash and cannot open the other project's source or staged path
     And the no-grant worker executes its probe and cannot open either token or the fixed Claude path
     And stopping the first project removes only its resources while the second still reads its original copy
-    When the remaining probes finish and the first project is independently approved without grants for another run
-    Then the later run executes without source reads staging credential mounts or residual token access
+    When the remaining probes finish and the fixture removes the first project's grant and independently seeds its matching no-grant approval
+    And the product runs the no-grant token probe in the first project's same checkout and project identity
+    Then that later run has a fresh session and its probe reports a nonce-bearing denial from the fixed Claude path
+    And that later run executes without source reads staging credential mounts or residual token access
     And every run confirms its owned cleanup without modifying any original source or leaking a marker through provisioning
 
   # The read is deliberately released AFTER unlink. The runtime has acquired its
   # mount, but the controller never receives the successful start acknowledgement.
+  # Staged unlink follows the start wait and precedes every request that could
+  # end the original worker. The recorder holds the first such request (kill,
+  # stop, signal or forced remove) before forwarding it, confirms staged unlink,
+  # releases the probe, captures its hash, then forwards the held request. The
+  # hold is bounded at half the engine tier's call budget; at that bound it
+  # forwards and records expiry, which fails the hash Then. Existing call,
+  # startup and teardown budgets are unchanged. The removal fault applies only
+  # to removal requests after that release, so both rows reach the barrier.
   # Missing start/barrier/hash evidence is a failing Then, never a skipped probe.
   @wip @slice-31 @ID-CREDRUN-11 @engine @linux
   Scenario Outline: Lost start acknowledgement cannot turn unlink into proof of no execution
     Given a CI Claude checkout with a private synthetic source and matching "offline" approval
     And the engine recorder will lose the start acknowledgement after mount acquisition and delay the probe until staged unlink
+    And the engine recorder will hold the first request that could end the original worker until the delayed probe reports
     And original worker removal will be "<removal>" until the explicit stop retry
-    When the product attempts the credential run and the recorder releases the delayed hash probe after unlink
-    Then the acquired worker mount supplies the exact source hash despite absent staged paths and the lost acknowledgement
+    When the product inspects with JSON doctor then attempts the credential run while the recorder releases the delayed hash probe after unlink
+    Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+    And the recorder held the first worker-ending request until confirmed unlink and the probe's hash report within its bound
+    And the acquired worker mount supplies the exact source hash despite absent staged paths and the lost acknowledgement
     And exactly one start was attempted and reconciliation uses only the original owned full worker ID
     And run reports an observed workload outcome or explicit uncertainty without inferring success or non-execution from unlink
     And cleanup reports "<cleanup>" only from worker and staging observations within existing budgets
@@ -403,8 +484,9 @@ Feature: Deliver the approved Claude token to one owned run
   Scenario Outline: A fresh controller recovers staged credentials without the mutable request or source
     Given a CI Claude checkout with a private synthetic source and matching "offline" approval
     And the controller will be killed at "<barrier>" with its original staging identity durably recorded
-    When the product attempts the run then the fixture kills that controller and removes the source current policy and active approval
-    Then original protected session evidence identifies the staged credential and every acquired owned resource without source bytes
+    When the product inspects with JSON doctor then attempts the run then the fixture kills that controller and removes the source current policy and active approval
+    Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+    And original protected session evidence identifies the staged credential and every acquired owned resource without source bytes
     When fresh product processes request plain and JSON status then stop the original session twice
     Then both status modes show the frozen Claude grant and credential staging "present" without claiming completion
     And stop confirms worker staging and all other owned resources absent using only original protected authority
