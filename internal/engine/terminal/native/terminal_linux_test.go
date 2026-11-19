@@ -114,6 +114,7 @@ func TestTerminalChild(t *testing.T) {
 	t.Run("poll_system_error", pollSystemError)
 	t.Run("cancel_before_raw", cancelBeforeRaw)
 	t.Run("interrupted_observation", interruptedObservation)
+	t.Run("interrupted_check", interruptedCheck)
 }
 
 func pairFixture(layout string) porttest.Factory {

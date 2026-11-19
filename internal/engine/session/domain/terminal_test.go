@@ -184,6 +184,63 @@ func TestTerminalLossCancelsPendingStart(t *testing.T) {
 	}
 }
 
+type terminalFrames chan string
+
+func (frames terminalFrames) Write(p []byte) (int, error) {
+	frames <- string(p)
+	return len(p), nil
+}
+
+func TestDisconnectOnFirstTerminalOutputRetainsForegroundExit(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		ignore bool
+		exit   int
+	}{
+		{"handles SIGTERM", false, 17},
+		{"ignores SIGTERM", true, 137},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				runner, frozen, _, engine, _ := registeredLifecycleFixture()
+				provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+				lease, err := provider.Acquire(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer lease.Close()
+				reply, started := make(chan struct{}), make(chan struct{})
+				engine.AfterStart = func() { close(started); <-reply }
+				engine.Output = []byte("ready\n")
+				engine.Exit, engine.IgnoreSignal, engine.WaitUntilCancel = tc.exit, tc.ignore, true
+				out := make(terminalFrames, 1)
+				result := make(chan port.RunResult, 1)
+				go func() {
+					result <- runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{Terminal: lease, Out: out})
+				}()
+				<-started
+				// React to the ready frame as soon as the client sees it.
+				// Hold the engine reply while any early output is delivered.
+				go func() {
+					if frame := <-out; frame != "ready\n" {
+						t.Errorf("unexpected terminal output %q", frame)
+					}
+					provider.Hangup(false)
+				}()
+				synctest.Wait()
+				close(reply)
+				got := <-result
+				if got.Outcome != port.TerminalDisconnected || !got.Exited || got.Exit != tc.exit || got.Cleanup != port.Complete {
+					t.Fatalf("disconnect on first output: %+v", got)
+				}
+				if !slices.Contains(engine.Events, "SIGTERM") || slices.Contains(engine.Events, "SIGKILL") != tc.ignore {
+					t.Fatalf("ready worker lost foreground grace: %v", engine.Events)
+				}
+			})
+		})
+	}
+}
+
 func TestStartReconcilesLeaseBeforeDelayedNotification(t *testing.T) {
 	for _, hostSignal := range []bool{false, true} {
 		t.Run(map[bool]string{false: "terminal loss", true: "host signal first"}[hostSignal], func(t *testing.T) {
