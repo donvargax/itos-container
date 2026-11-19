@@ -2027,6 +2027,10 @@ items:
       AGENTS.md already prohibits local mutation runs. Correct the conflicting 09:23 instruction in
       the slice-37 repair brief. The existing item covers redraws and the narrower open question of
       whether agents may list mutation sites locally.
+
+      This item already identifies the conflicting slice-37 repair brief. Align the brief with
+      AGENTS.md, which assigns mutation proof to CI and prohibits local mutation runs. The narrower
+      open question is whether implementers may list mutation sites locally without running tests.
   - id: T-54
     title: Each engine shard warms the engine with one create and remove before its first engine row
     phase: 1
