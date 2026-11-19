@@ -6,6 +6,7 @@ package features
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -100,8 +101,12 @@ func (w *world) execEventReady(backend string) error {
 	}
 	go func() { handle.wait <- handle.cmd.Wait() }()
 	if err := w.execAwaitEvent(handle, request.Ready, sink); err != nil {
+		handle.cancel()
 		handle.exited, handle.waitErr = true, <-handle.wait
-		return w.execProbeWait(handle)
+		return errors.Join(err, w.execProbeWait(handle))
+	}
+	if !handle.exited {
+		handle.exited, handle.waitErr = true, <-handle.wait
 	}
 	if err := w.execProbeWait(handle); err != nil {
 		return err
