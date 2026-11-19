@@ -932,12 +932,12 @@ Feature: An approved persistent home for one checkout's harness
       | normal exit                         |
       | controller loss followed by stop    |
 
-  # Each row starts from its own session. Confirmed absence requires a
-  # not-found reply for the recorded full worker ID. All other session resources
-  # are accounted for, so only the retained account can prevent completion
-  # in that row. The unconfirmed row also withholds full-ID inspection until
-  # the stop retry. Inspect read-only copies of the database and sidecars as in 08.
-  # Both run attempts use the same grant-free policy, approval and checkout.
+  # Each row starts from its own session. In the confirmed row the engine
+  # answers not-found for the recorded full worker ID throughout. All other
+  # session resources are accounted for, so only the retained account can block
+  # cleanup in that row. The unconfirmed row withholds that answer until the
+  # stop retry. Inspect read-only copies of the database and sidecars as in 08.
+  # All three runs use the same grant-free policy, approval, checkout and home.
   # /bin/true can exit successfully even with the database read-only.
   @wip @slice-40 @ID-OPENCODELOGIN-09 @local-engine-fixture
   Scenario Outline: Incomplete OpenCode cleanup blocks home reuse until the original session is recovered
@@ -957,7 +957,13 @@ Feature: An approved persistent home for one checkout's harness
     And itos-container runs with "run -- /bin/true"
     Then the grant-free run exits nonzero and the engine recorder counts zero worker start requests during that run
     And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
-    When the fixture <repair> and a fresh controller executes the reported stop retry
+    When the fixture makes the retained database, its directory and its SQLite sidecars writable to cleanup
+    Then an independent probe with cleanup's permissions opens the retained database file read-write and closes it without writing
+    And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
+    When itos-container runs with "run -- /bin/true"
+    Then the grant-free run exits nonzero and the engine recorder counts zero worker start requests during that run
+    And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
+    When a fresh controller executes the original session's reported stop retry with the engine answering not-found for the recorded full worker ID
     Then immediate read-only inspection finds no imported account in the retained OpenCode database
     And the granted key is absent from the database, its SQLite sidecars and the rest of the retained OpenCode data
     And the same database still contains the unrelated session with its original ID, title and message
@@ -969,9 +975,9 @@ Feature: An approved persistent home for one checkout's harness
     And the engine recorder shows that run started a new worker with the original volume mounted at "/home/itos" and no credential mounts
 
     Examples:
-      | confirmation | resource | repair                                                                     |
-      | confirmed    | absent   | makes only the retained store writable                                     |
-      | unconfirmed  | unknown  | makes the retained store writable and restores worker absence confirmation |
+      | confirmation | resource |
+      | confirmed    | absent   |
+      | unconfirmed  | unknown  |
 
   # Management runs only on independently tracked disposable CI homes. Observe
   # active-worker refusal and a successful control before harness teardown.
