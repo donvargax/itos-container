@@ -36,6 +36,10 @@ type execWorld struct {
 	execLie                          string
 	execExit                         int
 	execStdout, execStderr           string
+	envExtra                         map[string]string
+	inputWatch                       *sessionReadWatch
+	frozenEnv                        []string
+	frozenUser, frozenWorkspace      string
 }
 
 type execBackend struct {
@@ -59,14 +63,16 @@ type execProbeRequest struct {
 
 // execProbeReport is the assembly's own observation of the invocation.
 type execProbeReport struct {
-	Exit                             int
-	Stdout, Stderr, Rule             string
-	ExecCreate, ExecStart            bool
-	StartedExecs                     int
-	Signalled, Removed, Restarted    bool
-	Session                          string
-	LateReply                        bool
-	MarkedErrors, MarkedStdoutMarker string
+	Exit                          int
+	Stdout, Stderr, Rule          string
+	ExecCreate, ExecStart         bool
+	StartedExecs                  int
+	Signalled, Removed, Restarted bool
+	Session                       string
+	LateReply                     bool
+	Argv                          []string
+	Env                           []string
+	User, WorkingDir              string
 }
 
 type execLease struct {
@@ -232,23 +238,7 @@ func (w *world) execAdmissionCondition(condition string) error {
 			return err
 		}
 	}
-	var err error
-	e.before, err = w.sessionProtected()
-	if err != nil {
-		return err
-	}
-	e.immutable = map[string]string{}
-	for path, value := range e.before {
-		if path == filepath.Join(w.execSessionDir(), "controller.lock") {
-			continue
-		}
-		e.immutable[path] = value
-	}
-	e.resourcesBefore = map[string]string{}
-	for id, c := range s.api.local {
-		e.resourcesBefore[id] = string(approvalJSON(c))
-	}
-	return nil
+	return w.execCaptureBefore()
 }
 
 func (w *world) execSnapshotText() string {
@@ -340,6 +330,133 @@ func (w *world) execSubstitute() error {
 	return nil
 }
 
+// execSettingsFixture seeds a live owned session whose frozen grant carries
+// the original non-root identity, a workspace subdirectory and a literal
+// environment including the profile's reserved HOME and TMPDIR, then applies
+// one current-input change the frozen grant must ignore. The watch observes
+// current approval and credential bytes: no exec operation may read them.
+func (w *world) execSettingsFixture(change string) error {
+	if err := w.sessionFixture(false, "0022"); err != nil {
+		return err
+	}
+	d := w.doctor
+	d.manifest["workspaceFolder"] = "/workspace/slice-38-sub"
+	d.manifest["containerEnv"] = map[string]any{"SLICE_38_LITERAL_ENV": "slice-38 literal value", "HOME": "/tmp", "TMPDIR": "/tmp"}
+	if err := w.writeDoctorCheckout(d.checkout); err != nil {
+		return err
+	}
+	if err := w.approvalOracle(); err != nil {
+		return err
+	}
+	if err := w.approvalSeed("1", false); err != nil {
+		return err
+	}
+	if err := w.doctorSentinels(); err != nil {
+		return err
+	}
+	w.exec = &execWorld{results: map[string]execBackend{}, execExit: 0,
+		execStdout: "slice-38-settings-stdout\n", execStderr: "slice-38-settings-stderr\n",
+		frozenEnv: []string{"HOME=/tmp", "SLICE_38_LITERAL_ENV=slice-38 literal value", "TMPDIR=/tmp"}}
+	w.exec.frozenUser = w.approval.uid + ":" + w.approval.gid
+	w.exec.frozenWorkspace = "/workspace/slice-38-sub"
+	if err := w.execSeedSession(); err != nil {
+		return err
+	}
+	if err := w.execCurrentChange(change); err != nil {
+		return err
+	}
+	if err := w.execHoldLease(); err != nil {
+		return err
+	}
+	credential := filepath.Join(d.env["SLICE_21_ACCOUNT_HOME"], "slice-38-credentials.json")
+	if err := writeManifestFixture(credential, []byte("slice-38 credential bytes"), 0600); err != nil {
+		return err
+	}
+	targets := []string{credential}
+	// A row that removes the current approval leaves nothing to watch there;
+	// its own absence is the current-input change under test.
+	if _, err := os.Stat(w.approval.record); err == nil {
+		targets = append(targets, w.approval.record)
+	}
+	watch, err := execWatchPaths(targets...)
+	if err != nil {
+		return err
+	}
+	w.exec.inputWatch = watch
+	return w.execCaptureBefore()
+}
+
+// execCurrentChange corrupts only current inputs the frozen grant replaces:
+// policy, manifest, current approval or the caller's own environment.
+func (w *world) execCurrentChange(change string) error {
+	switch change {
+	case "invalid policy and manifest":
+		if err := os.WriteFile(filepath.Join(w.doctor.checkout, "itos-container.yaml"), []byte("{bad policy\n"), 0600); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(w.doctor.checkout, ".devcontainer/devcontainer.json"), []byte("{bad"), 0600)
+	case "replacement approval with wider permissions":
+		settings := approvalClone(w.approval.settings)
+		object(settings["policy"])["network"] = map[string]any{"mode": "allowlist", "allow": []string{"slice-38-wide.example"}}
+		object(settings["manifest"])["containerEnv"] = map[string]any{"SLICE_38_WIDER": "wider"}
+		record := map[string]any{"schema": 1, "project": w.approval.project, "generation": "2", "fingerprint": "sha256:" + approvalHash(settings), "settings": settings}
+		return os.WriteFile(w.approval.record, approvalJSON(record), 0600)
+	case "current approval removed":
+		return os.Remove(w.approval.record)
+	case "caller environment contains override values":
+		w.exec.envExtra = map[string]string{"HOME": "/slice-38-caller-home", "TMPDIR": "/slice-38-caller-tmp",
+			"SLICE_38_LITERAL_ENV": "slice-38 caller override", "SLICE_38_WORKSPACE": "/workspace/caller"}
+		return nil
+	case "offline policy changed to allowlist":
+		return os.WriteFile(filepath.Join(w.doctor.checkout, "itos-container.yaml"),
+			[]byte("version: 1\nmanifest: .devcontainer/devcontainer.json\nnetwork:\n  mode: allowlist\n  allow:\n    - slice-38-allowed.example\n"), 0600)
+	case "allowlist policy widened with another host":
+		return os.WriteFile(filepath.Join(w.doctor.checkout, "itos-container.yaml"),
+			[]byte("version: 1\nmanifest: .devcontainer/devcontainer.json\nnetwork:\n  mode: allowlist\n  allow:\n    - slice-38-allowed.example\n    - slice-38-another.example\n"), 0600)
+	default:
+		return fmt.Errorf("unknown current input change %q", change)
+	}
+}
+
+func execWatchPaths(paths ...string) (*sessionReadWatch, error) {
+	fd, err := sessionInotifyInit()
+	if err != nil {
+		return nil, err
+	}
+	watch := &sessionReadWatch{file: os.NewFile(uintptr(fd), "slice-38-input-watch"), paths: map[int32]string{}}
+	for _, path := range paths {
+		id, err := sessionInotifyAdd(fd, path)
+		if err != nil {
+			_ = watch.file.Close()
+			return nil, err
+		}
+		watch.paths[int32(id)] = path
+	}
+	return watch, nil
+}
+
+// execCaptureBefore records the protected trees and engine resources a
+// successful or refused exec must leave alone.
+func (w *world) execCaptureBefore() error {
+	var err error
+	w.exec.before, err = w.sessionProtected()
+	if err != nil {
+		return err
+	}
+	w.exec.immutable = map[string]string{}
+	for path, value := range w.exec.before {
+		if path == w.exec.leasePath {
+			continue
+		}
+		w.exec.immutable[path] = value
+	}
+	w.exec.resourcesBefore = map[string]string{}
+	for id, c := range w.session.api.local {
+		w.exec.resourcesBefore[id] = string(approvalJSON(c))
+	}
+	return nil
+}
+
 func (w *world) execSubstitutionArmed() bool {
 	e := w.exec
 	return e != nil && e.substituteAuthority != "" && !e.substituted
@@ -404,6 +521,9 @@ func (w *world) execInvoke(key, backend string, request execProbeRequest) error 
 	cmd.Dir = w.doctor.checkout
 	cmd.Env = w.coverageEnv(sessionChildEnvironment(os.Environ()))
 	for name, value := range w.doctor.env {
+		cmd.Env = setEnv(cmd.Env, name, value)
+	}
+	for name, value := range w.exec.envExtra {
 		cmd.Env = setEnv(cmd.Env, name, value)
 	}
 	cmd.Env = setEnv(cmd.Env, "ITOS_ROOT", w.doctor.checkout)

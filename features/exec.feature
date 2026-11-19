@@ -198,7 +198,7 @@ Feature: Execute literal argv in a live owned foreground session
   # the exec request it actually received. The primary remains live throughout.
   # Empty, whitespace, Unicode, quote and shell-looking argv must survive exactly;
   # --help/--json/--no-json/-- after the separator are workload data only.
-  @ID-EXEC-05 @wip @slice-38
+  @ID-EXEC-05 @wip @slice-38 @linux
   Scenario Outline: Exec preserves literal argv streams and its own exit status
     Given a live exec fixture whose primary stays running and whose exec exits <exit>
     And the exec argument array is JSON
@@ -221,7 +221,7 @@ Feature: Execute literal argv in a live owned foreground session
   # Changes below affect only current request/approval or caller environment.
   # Exec inherits existing container environment and mounts; it does not import
   # the caller's env, reread credential sources or provision new credentials.
-  @ID-EXEC-06 @wip @slice-38
+  @ID-EXEC-06 @wip @slice-38 @linux
   Scenario Outline: Exec uses the frozen grant even after current inputs change
     Given a live exec fixture with original frozen settings and "<change>"
     When the exec CLI requests a settings probe through both local backends
